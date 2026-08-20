@@ -30,9 +30,13 @@ COMMAND_ID = uuid4()
 
 
 class FakeOperatorActionService:
-    def __init__(self) -> None:
+    def __init__(self, *, deployment_verified=True) -> None:
         self.calls = []
         self.last_idempotency_key = None
+        self.deployment_verified = deployment_verified
+
+    def deployment_readiness(self):
+        return self.deployment_verified
 
     def adapter_readiness(self):
         return {operation_key: True for operation_key in ACTION_POLICIES}
@@ -388,7 +392,8 @@ def _sales_dispatch_payload():
 
 @pytest.fixture
 def enabled_boundary(monkeypatch):
-    monkeypatch.setattr(mcp_actions, "CANONICAL_BASELINE_DEPLOYMENT_VERIFIED", True)
+    # The injected fake service proves the deployed boundary for route tests.
+    yield
 
 
 def test_registry_and_strict_models_are_derived_from_exact_machine_contract():
@@ -1431,7 +1436,7 @@ def test_service_and_operator_delegation_are_both_required(monkeypatch):
 
 
 def test_default_readiness_fails_closed_with_explicit_blockers(monkeypatch):
-    fake = FakeOperatorActionService()
+    fake = FakeOperatorActionService(deployment_verified=False)
     holder = {
         "value": _context(
             "automation.command.status.get", "automation.command.view"

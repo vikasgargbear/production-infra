@@ -1805,6 +1805,18 @@ def test_runtime_database_readiness_requires_exact_nonowner_runtime_url(monkeypa
         "postgresql://erp_runtime:secret@db.example.test:5432/erp",
     )
     assert runtime_database_configured() is True
+    monkeypatch.setenv(
+        RUNTIME_DATABASE_URL_ENV,
+        "postgresql://erp_runtime.abcdefghijklmnopqrst:secret@"
+        "aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+    )
+    assert runtime_database_configured() is True
+    monkeypatch.setenv(
+        RUNTIME_DATABASE_URL_ENV,
+        "postgresql://erp_runtime.wrong:secret@"
+        "aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+    )
+    assert runtime_database_configured() is False
 
 
 def test_runtime_session_proof_rejects_superuser_or_bypassrls():
@@ -3210,6 +3222,14 @@ def test_calculator_database_requires_the_isolated_principal(monkeypatch):
     assert calculator_database_configured() is False
     with pytest.raises(RuntimeError, match="erp_calculator"):
         calculator_session_factory()
+
+    calculator_session_factory.cache_clear()
+    monkeypatch.setenv(
+        CALCULATOR_DATABASE_URL_ENV,
+        "postgresql://erp_calculator.abcdefghijklmnopqrst:secret@"
+        "aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+    )
+    assert calculator_database_configured() is True
 
     calculator_session_factory.cache_clear()
     monkeypatch.setenv(

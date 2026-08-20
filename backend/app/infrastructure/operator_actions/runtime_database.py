@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from sqlalchemy import text
 
@@ -15,6 +16,7 @@ from ...domain.operator_actions.models import (
 
 
 RUNTIME_DATABASE_URL_ENV = "DATABASE_URL"
+PROJECT_REF_RE = re.compile(r"^[a-z0-9]{20}$")
 
 VERIFY_RUNTIME_PRINCIPAL_SQL = text(
     """
@@ -33,9 +35,24 @@ def runtime_database_configured() -> bool:
     if not value or "[YOUR-" in value:
         return False
     try:
-        return urlparse(value).username == "erp_runtime"
+        parsed = urlparse(value)
     except ValueError:
         return False
+    username = unquote(parsed.username or "")
+    direct = username == "erp_runtime"
+    pooler_prefix, separator, project_ref = username.partition(".")
+    pooler = (
+        separator == "."
+        and pooler_prefix == "erp_runtime"
+        and PROJECT_REF_RE.fullmatch(project_ref) is not None
+        and (parsed.hostname or "").endswith(".pooler.supabase.com")
+    )
+    return (
+        parsed.scheme in {"postgres", "postgresql", "postgresql+psycopg2"}
+        and (direct or pooler)
+        and bool(parsed.hostname)
+        and bool(parsed.path.strip("/"))
+    )
 
 
 def assert_runtime_principal(session: Any) -> None:

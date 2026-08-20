@@ -41,9 +41,6 @@ router = APIRouter(
     include_in_schema=False,
 )
 
-# A runtime environment variable cannot claim that a schema deployment was
-# reviewed. A release must change this constant together with durable evidence.
-CANONICAL_BASELINE_DEPLOYMENT_VERIFIED = False
 ACTION_TOKEN_PROFILE = "canonical_operator_delegation_v1"
 PREVIEW_HASH_PATTERN = r"^sha256:[0-9a-f]{64}$"
 IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
@@ -262,8 +259,8 @@ def get_action_context(
     )
 
 
-def _require_release_gate() -> None:
-    if not CANONICAL_BASELINE_DEPLOYMENT_VERIFIED:
+def _require_release_gate(service: OperatorActionService) -> None:
+    if not service.deployment_readiness():
         _raise_action_error(
             OperatorActionError(
                 ActionErrorCode.POLICY_BLOCKED,
@@ -372,7 +369,7 @@ def prepare_action(
 ) -> PreparedCommandResponse:
     operation_key = command_type.value
     policy = ACTION_POLICIES[operation_key]
-    _require_release_gate()
+    _require_release_gate(service)
     _require_authority(context, operation_key)
     if context.delegated_command_request_id is not None:
         _raise_action_error(
@@ -429,7 +426,7 @@ def approve_command(
     service: OperatorActionService = Depends(get_operator_action_service),
 ) -> CommandExecutionResponse:
     operation_key = "automation.command.approve"
-    _require_release_gate()
+    _require_release_gate(service)
     _require_authority(context, operation_key)
     _require_command_binding(context, command_request_id)
     _require_adapter(service, operation_key)
@@ -456,7 +453,7 @@ def execute_command(
     service: OperatorActionService = Depends(get_operator_action_service),
 ) -> CommandExecutionResponse:
     operation_key = "automation.command.execute"
-    _require_release_gate()
+    _require_release_gate(service)
     _require_authority(context, operation_key)
     _require_command_binding(context, command_request_id)
     _require_adapter(service, operation_key)
@@ -482,7 +479,7 @@ def get_command_status(
     service: OperatorActionService = Depends(get_operator_action_service),
 ) -> CommandStatusResponse:
     operation_key = "automation.command.status.get"
-    _require_release_gate()
+    _require_release_gate(service)
     _require_authority(context, operation_key)
     _require_command_binding(context, command_request_id)
     _require_adapter(service, operation_key)
@@ -510,7 +507,7 @@ def action_readiness(
     operation_key = "automation.command.status.get"
     _require_authority(context, operation_key)
     blockers: list[str] = []
-    if not CANONICAL_BASELINE_DEPLOYMENT_VERIFIED:
+    if not service.deployment_readiness():
         blockers.append("canonical baseline deployment is not verified")
     readiness = service.adapter_readiness()
     missing = sorted(

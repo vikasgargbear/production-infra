@@ -95,6 +95,34 @@ _ACTIVATE_CONTEXT_SQL = text(
     "SELECT erp_security.activate_context(:auth_user_id, :org_id)"
 )
 
+_DEPLOYMENT_READINESS_SQL = text(
+    """
+    SELECT
+      (SELECT version_num='20260820_0001'
+         FROM "public"."alembic_version"
+        LIMIT 1)
+      AND (SELECT count(*)=110
+             FROM information_schema.tables
+            WHERE table_schema IN (
+              'core','parties','catalog','hr','inventory','sales',
+              'procurement','finance','tax','compliance','automation','calculation'
+            )
+              AND table_type='BASE TABLE')
+      AND pg_catalog.to_regprocedure(
+            'erp_security.activate_context(uuid,uuid)'
+          ) IS NOT NULL
+      AND EXISTS (
+            SELECT 1
+              FROM pg_catalog.pg_proc procedure
+              JOIN pg_catalog.pg_namespace namespace
+                ON namespace.oid=procedure.pronamespace
+             WHERE namespace.nspname='erp_automation_commands'
+               AND procedure.proname='prepare_operator_command'
+          )
+      AS ready
+    """
+)
+
 _AUTHORIZE_SQL = text(
     """
     SELECT grant_row.branch_id
@@ -337,6 +365,18 @@ class SqlAlchemyOperatorActionService:
             else runtime_principal_configured
         )
         self._bindings = dict(bindings)
+
+    def deployment_readiness(self) -> bool:
+        if not self._runtime_principal_configured:
+            return False
+        try:
+            with self._session_factory() as session:
+                with session.begin():
+                    assert_runtime_principal(session)
+                    row = session.execute(_DEPLOYMENT_READINESS_SQL).mappings().one()
+                    return row["ready"] is True
+        except Exception:
+            return False
 
     def adapter_readiness(self) -> Mapping[str, bool]:
         readiness = {

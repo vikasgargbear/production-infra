@@ -17,6 +17,8 @@ from .models import (
 
 
 class OperatorActionService(Protocol):
+    def deployment_readiness(self) -> bool: ...
+
     def adapter_readiness(self) -> Mapping[str, bool]: ...
 
     def prepare(
@@ -56,6 +58,9 @@ class OperatorActionService(Protocol):
 
 class UnavailableOperatorActionService:
     """Production default until reviewed canonical command adapters are wired."""
+
+    def deployment_readiness(self) -> bool:
+        return False
 
     def adapter_readiness(self) -> Mapping[str, bool]:
         return {operation_key: False for operation_key in ACTION_POLICIES}
