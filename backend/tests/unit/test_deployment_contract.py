@@ -217,6 +217,7 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "if: inputs.reset_disposable_data == true" in workflow
     assert "Refuse any target except the reviewed free staging project" in workflow
     assert "DROP TABLE IF EXISTS public.alembic_version" in workflow
+    assert "DROP EXTENSION IF EXISTS btree_gist" in workflow
     assert "GRANT %I TO %I" in workflow
     assert "DROP ROLE IF EXISTS erp_runtime" in workflow
     assert "to_regclass('auth.users') IS NOT NULL" in workflow

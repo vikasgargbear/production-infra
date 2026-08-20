@@ -194,6 +194,7 @@ jobs:
             parties,
             core
           CASCADE;
+          DROP EXTENSION IF EXISTS btree_gist;
           DROP TABLE IF EXISTS public.alembic_version;
           DO $reset_canonical_roles$
           DECLARE
