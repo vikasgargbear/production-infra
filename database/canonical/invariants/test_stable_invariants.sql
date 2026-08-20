@@ -184,7 +184,7 @@ INSERT INTO parties.parties (org_id, id, party_kind, legal_name, status)
 VALUES (
     '00000000-0000-0000-0000-000000000010',
     '00000000-0000-0000-0000-000000000040',
-    'organization', 'Fixture Party', 'active'
+    'organization', 'Fixture Party', 'draft'
 );
 INSERT INTO parties.addresses (
     org_id, id, party_id, address_kind, line1, city, state_code,
