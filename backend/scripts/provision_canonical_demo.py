@@ -307,25 +307,30 @@ def canonical_dataset_bytes(connection) -> bytes:
         return cursor.fetchone()[0].encode("utf-8")
 
 
-def import_tax_release(connection, source: bytes, dataset_bytes: bytes) -> None:
+def demo_tax_release_exists(connection) -> bool:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT id FROM core.reference_data_releases WHERE id=%s",
             (IDS["tax_release"],),
         )
-        if cursor.fetchone():
-            cursor.execute(
-                """
-                SELECT count(*) FROM tax.tax_code_versions
-                 WHERE id=%s AND release_id=%s AND code='481910'
-                   AND cgst_rate=6 AND sgst_rate=6 AND igst_rate=12 AND cess_rate=0
-                   AND status='active'
-                """,
-                (IDS["tax_version"], IDS["tax_release"]),
-            )
-            if cursor.fetchone() != (1,):
-                raise RuntimeError("existing demo tax release differs from the reviewed fixture")
-            return
+        if cursor.fetchone() is None:
+            return False
+        cursor.execute(
+            """
+            SELECT count(*) FROM tax.tax_code_versions
+             WHERE id=%s AND release_id=%s AND code='481910'
+               AND cgst_rate=6 AND sgst_rate=6 AND igst_rate=12 AND cess_rate=0
+               AND status='active'
+            """,
+            (IDS["tax_version"], IDS["tax_release"]),
+        )
+        if cursor.fetchone() != (1,):
+            raise RuntimeError("existing demo tax release differs from the reviewed fixture")
+        return True
+
+
+def import_tax_release(connection, source: bytes, dataset_bytes: bytes) -> None:
+    with connection.cursor() as cursor:
         cursor.execute(
             """
             SELECT erp_regulatory_commands.import_tax_release(
@@ -670,10 +675,12 @@ def main() -> int:
 
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         bootstrap_identity(bootstrap)
+        release_exists = demo_tax_release_exists(bootstrap)
     with psycopg2.connect(required("ERP_REGULATORY_IMPORTER_DATABASE_URL")) as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
         (evidence_dir / "hsn-481910-demo.json").write_bytes(dataset_bytes)
-        import_tax_release(importer, source, dataset_bytes)
+        if not release_exists:
+            import_tax_release(importer, source, dataset_bytes)
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         seed_business_master(bootstrap)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
