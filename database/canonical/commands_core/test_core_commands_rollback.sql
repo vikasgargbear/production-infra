@@ -10,12 +10,13 @@ BEGIN
       JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace
      WHERE namespace.nspname='erp_core_commands'
        AND proc.proname IN (
-         'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms'
+         'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms',
+         'complete_retention_case'
        )
        AND proc.prosecdef
        AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
-    IF runtime_commands<>4 THEN
-        RAISE EXCEPTION 'expected four private-definer core commands, found %',runtime_commands;
+    IF runtime_commands<>5 THEN
+        RAISE EXCEPTION 'expected five private-definer core commands, found %',runtime_commands;
     END IF;
 
     SELECT count(*) INTO exposed_helpers
@@ -23,7 +24,8 @@ BEGIN
       JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace
      WHERE namespace.nspname='erp_core_commands'
        AND proc.proname NOT IN (
-         'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms'
+         'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms',
+         'complete_retention_case'
        )
        AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
     IF exposed_helpers<>0 THEN
@@ -35,10 +37,10 @@ BEGIN
      WHERE tgname IN (
        'access_grants_lifecycle_guard','document_sequences_command_guard','settings_version_guard',
        'parties_lifecycle_identity_guard','customer_accounts_lifecycle_guard',
-       'supplier_accounts_lifecycle_guard'
+       'supplier_accounts_lifecycle_guard','data_retention_cases_command_guard'
      ) AND NOT tgisinternal;
-    IF guard_triggers<>6 THEN
-        RAISE EXCEPTION 'expected six core command guards, found %',guard_triggers;
+    IF guard_triggers<>7 THEN
+        RAISE EXCEPTION 'expected seven core command guards, found %',guard_triggers;
     END IF;
 
     IF pg_catalog.has_table_privilege('erp_app','erp_core_commands.command_scopes','SELECT,INSERT,UPDATE,DELETE') THEN

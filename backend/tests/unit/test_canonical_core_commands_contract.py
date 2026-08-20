@@ -172,3 +172,7 @@ def test_postgres_fixture_is_rollback_only() -> None:
     assert "prosecdef" in fixture
     assert "has_function_privilege" in fixture
     assert "command_scopes" in fixture
+    assert "complete_retention_case" in fixture
+    assert "runtime_commands<>5" in fixture
+    assert "data_retention_cases_command_guard" in fixture
+    assert "guard_triggers<>7" in fixture
