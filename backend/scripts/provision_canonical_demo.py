@@ -396,12 +396,24 @@ def seed_business_master(connection) -> None:
                 created_by_membership_id, updated_by_membership_id
             ) VALUES (
                 %s, %s, 'organization', %s, %s, 'resident', 'company',
-                'unverified', 'active', %s, %s
+                'unverified', 'draft', %s, %s
             ) ON CONFLICT (org_id, id) DO NOTHING
             """,
             [
                 (IDS["org"], party_id, name, pan, IDS["membership"], IDS["membership"])
                 for party_id, name, pan in parties
+            ],
+        )
+        cursor.executemany(
+            """
+            UPDATE parties.parties
+               SET status='active', row_version=row_version+1,
+                   updated_by_membership_id=%s
+             WHERE org_id=%s AND id=%s AND status='draft'
+            """,
+            [
+                (IDS["membership"], IDS["org"], party_id)
+                for party_id, _name, _pan in parties
             ],
         )
         cursor.execute(
