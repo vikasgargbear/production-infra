@@ -364,13 +364,20 @@ jobs:
              AND pg_terminate_backend(activity.pid)
           SQL
           )
-          curl --fail --silent --show-error \
+          cleanup_response=$(mktemp)
+          cleanup_status=$(curl --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             --header 'Content-Type: application/json' \
             --data "$(jq -nc --arg query "$cleanup_query" '{query:$query,read_only:false}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query" \
-            >/dev/null
+            --output "$cleanup_response" \
+            --write-out '%{http_code}')
+          if [[ "$cleanup_status" != 2* ]]; then
+            detail=$(tr '\n' ' ' <"$cleanup_response" | head -c 1500)
+            echo "::error title=Canonical staging session cleanup failed::HTTP $cleanup_status: $detail"
+            exit 1
+          fi
 
       - name: Provision isolated staging login credentials
         if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true
