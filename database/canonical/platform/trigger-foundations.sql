@@ -1,6 +1,6 @@
 -- Canonical trigger-plumbing foundations
 -- REVIEWED FOUNDATION ONLY: no trigger_plumbing blocker is resolved by this file.
--- canonical_catalog_sha256: e2f908741acf454236a12114acf3e22dc3d5f23725086b15d9c79e31e8eada66
+-- canonical_catalog_sha256: 3f30c1df4f77348d7763f63f3f1f7d82ec575b974610a9f0975d3ad3e461f84c
 -- Apply only after a disposable canonical baseline and security contract exist.
 
 BEGIN;

@@ -293,6 +293,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "terminal_response_body" in reconciliation
     assert "goods_receipt_post_current" in reconciliation
     assert "commercial_sales_post_current" in reconciliation
+    assert "return_rounding_current" in reconciliation
+    assert "constraint_targets" in reconciliation
+    assert "ck_sales_returns_rounding_policy" in reconciliation
+    assert "ck_procurement_purchase_returns_rounding_policy" in reconciliation
     assert "v_purchase_order_id" in reconciliation
     assert "portal_parser_ownership_current" in reconciliation
     assert "portal_parser_scope_current" in reconciliation

@@ -3514,7 +3514,7 @@
         },
         {
           "name": "ck_sales_returns_rounding_policy",
-          "expression": "rounding_policy IN ('none','nearest_rupee') AND ((rounding_policy='none' AND rounding_adjustment=0 AND grand_total=net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) OR (rounding_policy='nearest_rupee' AND grand_total=round(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END),0) AND rounding_adjustment=grand_total-(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) AND abs(rounding_adjustment)<=0.50))"
+          "expression": "rounding_policy IN ('none','nearest_rupee') AND grand_total=net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)+rounding_adjustment AND ((rounding_policy='none' AND rounding_adjustment=0) OR (rounding_policy='nearest_rupee' AND abs(rounding_adjustment)<=0.50))"
         },
         {
           "name": "ck_sales_returns_tax_charge_mechanism",

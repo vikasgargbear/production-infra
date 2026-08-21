@@ -44,7 +44,7 @@
   ],
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "65165bd8f0befe3901907f7018fcd2c4dc6eb10886e8302511630001720b1d47",
+  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
   "generic_adjustment_tax_boundary": {
     "blocked_count": 0,
     "blocked_invariants": {},
@@ -550,6 +550,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "1e7d8c9ac6ed31fbc0d9e673d3ef844f593493dbd01a8c933ccbe5f6102d5516",
+  "source_manifest_sha256": "65e46e02377960f12bf08599003af806093477e8d27a863576ffd4341556bd06",
   "target_resolved_count_after_catalog_correction": 11
 }

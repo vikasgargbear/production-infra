@@ -281,7 +281,12 @@ def test_headers_persist_zero_rated_rounding_and_reverse_charge_context(name: st
     assert "zero_rated_payment_mode IN ('not_applicable','without_payment','with_igst')" in checks
     assert "tax_charge_mechanism IN ('normal','reverse_charge')" in checks
     assert "rounding_policy IN ('none','nearest_rupee')" in checks
-    assert "rounding_adjustment=grand_total-" in checks
+    if name in {"sales.returns", "procurement.purchase_returns"}:
+        assert "grand_total=net_value_total+" in checks
+        assert "+rounding_adjustment" in checks
+        assert "grand_total=round(" not in checks
+    else:
+        assert "rounding_adjustment=grand_total-" in checks
     assert all(token in rules for token in (
         "zero_rated", "without_payment", "with_igst",
         "tax_charge_mechanism", "recipient_assessed_tax_total", "rounding_policy",

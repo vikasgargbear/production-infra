@@ -14,7 +14,7 @@
       "reason": "No reviewed effective-dated CDSCO and NDPS ingredient classification authority is present. Core commands must not fabricate legal classifications or weaken the existing activation preflight."
     }
   },
-  "catalog_sha256": "65165bd8f0befe3901907f7018fcd2c4dc6eb10886e8302511630001720b1d47",
+  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
   "dependencies": {
     "audit": "erp_plumbing.audit_row_mutation binds each mutation to app.request_id and optional app.command_request_id",
     "authorization": "erp_security.has_permission evaluates grant valid_from_at/expires_at at transaction time",

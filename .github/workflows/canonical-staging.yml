@@ -521,6 +521,9 @@ jobs:
                  position('supplier_invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_supplier_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_supplier_post_current,
                  position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0
                    AND position('sales.invoice_lines invoice_product_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_sales_post_current,
+                 (SELECT count(*)=2 AND pg_catalog.bool_and(position('round(' IN pg_catalog.pg_get_constraintdef(constraint_row.oid))=0)
+                    FROM pg_catalog.pg_constraint AS constraint_row
+                   WHERE constraint_row.conname IN ('ck_sales_returns_rounding_policy','ck_procurement_purchase_returns_rounding_policy')) AS return_rounding_current,
                  position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
                    AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_supplier_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_invoice_artifacts_current,
                  NOT EXISTS (
@@ -567,7 +570,7 @@ jobs:
             --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$definition_state" \
-            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .commercial_supplier_post_current? == true and .commercial_sales_post_current? == true and .commercial_invoice_artifacts_current? == true and .portal_parser_ownership_current? == true and .portal_parser_scope_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .dispatch_fefo_current? == true and .sales_invoice_revenue_account_current? == true and .trade_direct_invoice_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
+            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .commercial_supplier_post_current? == true and .commercial_sales_post_current? == true and .return_rounding_current? == true and .commercial_invoice_artifacts_current? == true and .portal_parser_ownership_current? == true and .portal_parser_scope_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .dispatch_fefo_current? == true and .sales_invoice_revenue_account_current? == true and .trade_direct_invoice_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
               "$definition_state" >/dev/null; then
             echo "Control plane verified reviewed command definitions are already current"
             exit 0
@@ -692,6 +695,37 @@ jobs:
               selected.append(
                   matches[0].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
               )
+          constraint_targets = (
+              (
+                  "database/canonical/domains/sales.json",
+                  "sales",
+                  "returns",
+                  "ck_sales_returns_rounding_policy",
+              ),
+              (
+                  "database/canonical/domains/procurement.json",
+                  "procurement",
+                  "purchase_returns",
+                  "ck_procurement_purchase_returns_rounding_policy",
+              ),
+          )
+          for path, schema, table, constraint_name in constraint_targets:
+              domain = json.loads(pathlib.Path(path).read_text())
+              relation = next(
+                  item
+                  for item in domain["tables"]
+                  if item["name"] == f"{schema}.{table}"
+              )
+              constraint = next(
+                  item
+                  for item in relation["constraints"]
+                  if item["name"] == constraint_name
+              )
+              selected.append(
+                  f'ALTER TABLE "{schema}"."{table}" DROP CONSTRAINT "{constraint_name}";\n'
+                  f'ALTER TABLE "{schema}"."{table}" ADD CONSTRAINT "{constraint_name}" '
+                  f'CHECK ({constraint["expression"]})'
+              )
           pathlib.Path(sys.argv[1]).write_text(
               "SET ROLE erp_migration_owner;\n"
               + ";\n".join(selected)
@@ -730,6 +764,9 @@ jobs:
             "$PSYCOPG_DATABASE_URL")" = "t"
           test "$(psql -X -Atqc \
             "SELECT position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AND position('sales.invoice_lines invoice_product_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0" \
+            "$PSYCOPG_DATABASE_URL")" = "t"
+          test "$(psql -X -Atqc \
+            "SELECT count(*)=2 AND pg_catalog.bool_and(position('round(' IN pg_catalog.pg_get_constraintdef(constraint_row.oid))=0) FROM pg_catalog.pg_constraint AS constraint_row WHERE constraint_row.conname IN ('ck_sales_returns_rounding_policy','ck_procurement_purchase_returns_rounding_policy')" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           cleanup_migration_membership
           trap - EXIT
