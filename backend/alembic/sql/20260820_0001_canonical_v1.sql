@@ -19961,11 +19961,11 @@ BEGIN
        OR p_input->>'operation'<>'procurement.supplier_invoice.post'
        OR p_input->>'resource_type'<>'supplier_invoice'
        OR p_input->>'resource_id'<>p_resource_id::text
-       OR (p_input->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (p_input->>'aggregate_version')::bigint IS DISTINCT FROM CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END
        OR p_output->>'operation'<>'procurement.supplier_invoice.post'
        OR p_output->>'resource_type'<>'supplier_invoice'
        OR p_output->>'resource_id'<>p_resource_id::text
-       OR (p_output->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (p_output->>'aggregate_version')::bigint IS DISTINCT FROM CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{document,gst_type}' IS DISTINCT FROM
@@ -20487,11 +20487,11 @@ BEGIN
        OR p_input->>'operation'<>'sales.invoice.post'
        OR p_input->>'resource_type'<>'sales_invoice'
        OR p_input->>'resource_id'<>p_resource_id::text
-       OR (p_input->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (p_input->>'aggregate_version')::bigint IS DISTINCT FROM CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END
        OR p_output->>'operation'<>'sales.invoice.post'
        OR p_output->>'resource_type'<>'sales_invoice'
        OR p_output->>'resource_id'<>p_resource_id::text
-       OR (p_output->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (p_output->>'aggregate_version')::bigint IS DISTINCT FROM CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{document,gst_type}' IS DISTINCT FROM

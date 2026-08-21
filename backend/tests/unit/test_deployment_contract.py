@@ -272,6 +272,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert ".trade_current? == true" in reconciliation
     assert ".goods_receipt_post_current? == true" in reconciliation
     assert ".commercial_supplier_post_current? == true" in reconciliation
+    assert ".commercial_invoice_artifacts_current? == true" in reconciliation
     assert ".compliance_current? == true" in reconciliation
     assert ".plumbing_current? == true" in reconciliation
     assert reconciliation.count("CREATE OR REPLACE FUNCTION") == 1
@@ -280,6 +281,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
     assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation
+    assert '"erp_commercial_commands"."assert_sales_invoice_artifact"' in reconciliation
+    assert '"erp_commercial_commands"."assert_supplier_invoice_artifact"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
     assert '"erp_plumbing"."enqueue_state_outbox"' in reconciliation
     assert 'artifact.get("platform_enforcements")' in reconciliation
