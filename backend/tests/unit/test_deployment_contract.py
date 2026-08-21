@@ -291,6 +291,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_commercial_commands"."post_purchase_return"' in reconciliation
     assert '"erp_commercial_commands"."assert_sales_invoice_artifact"' in reconciliation
     assert '"erp_commercial_commands"."assert_supplier_invoice_artifact"' in reconciliation
+    assert '"erp_commercial_commands"."assert_sales_return_artifact"' in reconciliation
+    assert '"erp_commercial_commands"."assert_purchase_return_artifact"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
     assert '"erp_plumbing"."enqueue_state_outbox"' in reconciliation
     assert 'artifact.get("platform_enforcements")' in reconciliation
@@ -301,6 +303,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "sales_return_receipt_current" in reconciliation
     assert "sales_return_draft_current" in reconciliation
     assert "commercial_return_post_current" in reconciliation
+    assert "commercial_return_artifacts_current" in reconciliation
     assert "constraint_targets" in reconciliation
     assert 'relation["checks"]' in reconciliation
     assert "ck_sales_returns_rounding_policy" in reconciliation

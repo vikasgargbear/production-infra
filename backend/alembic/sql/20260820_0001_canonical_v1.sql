@@ -19280,10 +19280,12 @@ BEGIN
        OR input_doc#>>'{reversal,gst_tax_treatment}' IS DISTINCT FROM header.gst_tax_treatment
        OR output_doc->>'gst_tax_treatment' IS DISTINCT FROM header.gst_tax_treatment
        OR input_doc->>'resource_type'<>'purchase_return' OR input_doc->>'resource_id'<>resource_id::text
-       OR (input_doc->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (input_doc->>'aggregate_version')::bigint IS DISTINCT FROM
+          (CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END)
        OR output_doc->>'operation'<>'procurement.purchase_return.post' OR output_doc->>'resource_type'<>'purchase_return'
        OR output_doc->>'resource_id'<>resource_id::text
-       OR (output_doc->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (output_doc->>'aggregate_version')::bigint IS DISTINCT FROM
+          (CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END)
        OR output_doc->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR ROW((output_doc#>>'{totals,net_value_total}')::numeric,(output_doc#>>'{totals,gst_taxable_total}')::numeric,
               (output_doc#>>'{totals,cgst_total}')::numeric,(output_doc#>>'{totals,sgst_total}')::numeric,
@@ -21245,10 +21247,12 @@ BEGIN
        OR input_doc#>>'{reversal,gst_tax_treatment}' IS DISTINCT FROM header.gst_tax_treatment
        OR output_doc->>'gst_tax_treatment' IS DISTINCT FROM header.gst_tax_treatment
        OR input_doc->>'resource_type'<>'sales_return' OR input_doc->>'resource_id'<>resource_id::text
-       OR (input_doc->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (input_doc->>'aggregate_version')::bigint IS DISTINCT FROM
+          (CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END)
        OR output_doc->>'operation'<>'sales.return.post' OR output_doc->>'resource_type'<>'sales_return'
        OR output_doc->>'resource_id'<>resource_id::text
-       OR (output_doc->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version
+       OR (output_doc->>'aggregate_version')::bigint IS DISTINCT FROM
+          (CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END)
        OR output_doc->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR ROW((output_doc#>>'{totals,net_value_total}')::numeric,(output_doc#>>'{totals,gst_taxable_total}')::numeric,
               (output_doc#>>'{totals,cgst_total}')::numeric,(output_doc#>>'{totals,sgst_total}')::numeric,

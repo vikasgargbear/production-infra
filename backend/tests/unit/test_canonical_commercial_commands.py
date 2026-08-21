@@ -267,6 +267,7 @@ def test_generated_sql_is_fail_closed_and_covers_accounting_edge_cases() -> None
     assert "FROM sales.return_lines return_adjustment_line" in sql
     assert "FROM procurement.purchase_return_lines return_adjustment_line" in sql
     assert sql.count("original_open finance.open_items%ROWTYPE; posting_line record;") == 2
+    assert sql.count("header.status='posted' THEN header.row_version-1") >= 4
     assert "EXECUTE FORMAT" not in sql.upper()
     assert "EXECUTE IMMEDIATE" not in sql.upper()
     assert "consume_artifact" in sql
