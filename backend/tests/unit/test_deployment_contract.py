@@ -369,6 +369,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "\ndef seed_purchase_return_portal_evidence", 1
     )[0]
     assert "SET CONSTRAINTS ALL DEFERRED" not in portal_seed
+    assert "ON CONFLICT (org_id,registration_id,period_start,period_end) DO NOTHING" in portal_seed
+    assert "demo GSTR-2B return period was not created or resolved" in portal_seed
     for operation in (
         "sales.dispatch.prepare",
         "sales.invoice.prepare",

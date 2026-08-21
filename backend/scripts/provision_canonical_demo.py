@@ -1630,13 +1630,30 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
             ) VALUES (
                 %s,%s,%s,DATE '2026-08-01',DATE '2026-08-31',DATE '2026-09-20',
                 'monthly','open',%s,%s
-            ) ON CONFLICT (org_id,id) DO NOTHING
+            ) ON CONFLICT (org_id,registration_id,period_start,period_end) DO NOTHING
+            RETURNING id
             """,
             (
                 IDS["org"], return_period_id, IDS["org_gst_registration"],
                 IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
+        inserted_period = cursor.fetchone()
+        if inserted_period is None:
+            cursor.execute(
+                """
+                SELECT id
+                  FROM tax.return_periods
+                 WHERE org_id=%s AND registration_id=%s
+                   AND period_start=DATE '2026-08-01'
+                   AND period_end=DATE '2026-08-31'
+                """,
+                (IDS["org"], IDS["org_gst_registration"]),
+            )
+            inserted_period = cursor.fetchone()
+        if inserted_period is None:
+            raise RuntimeError("demo GSTR-2B return period was not created or resolved")
+        return_period_id = str(inserted_period[0])
         cursor.execute(
             """
             INSERT INTO tax.portal_documents (
