@@ -321,6 +321,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET FALSE" in reconciliation
     assert "--single-transaction" in reconciliation
+    assert "Canonical command reconciliation failure" in reconciliation
+    assert "--echo-errors" in reconciliation
     assert "pg_catalog.greatest(" in reconciliation
     assert "pg_catalog.least(" in reconciliation
     assert "isolated_role_count" in workflow
