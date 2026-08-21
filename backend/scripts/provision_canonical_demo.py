@@ -116,6 +116,7 @@ REQUIRED_PERMISSIONS = (
     "finance.supplier_advance.create",
     "finance.supplier_payment.create",
     "inventory.adjustment.create",
+    "inventory.batch.manage",
     "catalog.product.manage",
     "automation.command.approve",
     "automation.command.execute",
@@ -1877,6 +1878,69 @@ def reconcile_goods_receipt(connection, resource_id: str) -> dict[str, Any]:
         }
 
 
+def release_received_batch(connection, goods_receipt_id: str, batch_id: str) -> dict[str, Any]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute("SELECT set_config('app.request_id', %s, true)", (IDS["request"],))
+        cursor.execute(
+            """
+            SELECT batch.id,batch.status,batch.row_version,batch.released_at,
+                   batch.released_by_membership_id,balance.on_hand_quantity
+              FROM inventory.batches AS batch
+              JOIN procurement.goods_receipt_lines AS line
+                ON line.org_id=batch.org_id AND line.batch_id=batch.id
+              JOIN procurement.goods_receipts AS receipt
+                ON receipt.org_id=line.org_id AND receipt.id=line.goods_receipt_id
+              JOIN inventory.stock_balances AS balance
+                ON balance.org_id=line.org_id AND balance.location_id=line.location_id
+               AND balance.product_id=line.product_id AND balance.batch_id=line.batch_id
+             WHERE batch.org_id=%s AND batch.id=%s
+               AND receipt.id=%s AND receipt.status='posted'
+               AND line.qc_status='accepted' AND line.rejected_quantity=0
+               AND line.location_id=%s AND balance.on_hand_quantity>0
+             FOR UPDATE OF batch
+            """,
+            (IDS["org"], batch_id, goods_receipt_id, IDS["saleable_location"]),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("demo batch lacks posted QC-accepted receipt evidence")
+        if row[1] == "quarantined":
+            cursor.execute(
+                """
+                UPDATE inventory.batches
+                   SET status='released',released_at=transaction_timestamp(),
+                       released_by_membership_id=%s,updated_at=transaction_timestamp(),
+                       updated_by_membership_id=%s,row_version=row_version+1
+                 WHERE org_id=%s AND id=%s AND status='quarantined' AND row_version=%s
+                RETURNING id,status,row_version,released_at,released_by_membership_id
+                """,
+                (
+                    IDS["reviewer_membership"], IDS["reviewer_membership"],
+                    IDS["org"], batch_id, row[2],
+                ),
+            )
+            released = cursor.fetchone()
+            if released is None:
+                raise RuntimeError("demo batch release lost its locked lifecycle version")
+        elif row[1] == "released" and row[3] is not None and row[4] is not None:
+            released = row[:5]
+        else:
+            raise RuntimeError("demo batch is not in a releasable lifecycle state")
+        return {
+            "id": str(released[0]),
+            "status": released[1],
+            "row_version": str(released[2]),
+            "released_at": released[3].isoformat(),
+            "released_by_membership_id": str(released[4]),
+            "on_hand_quantity": str(row[5]),
+            "quality_evidence": "posted_qc_accepted_goods_receipt",
+        }
+
+
 def reconcile_supplier_invoice(connection, resource_id: str) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
@@ -2701,6 +2765,13 @@ def main() -> int:
         receipt_reconciliation = reconcile_goods_receipt(
             runtime, receipt_journey["executed"]["resource_id"]
         )
+        batch_release_reconciliation = release_received_batch(
+            runtime, receipt_reconciliation["id"], receipt_reconciliation["batch_id"]
+        )
+    (evidence_dir / "canonical-demo-batch-release.json").write_text(
+        json.dumps(batch_release_reconciliation, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         portal_evidence = seed_supplier_invoice_portal_evidence(bootstrap)
@@ -2859,6 +2930,7 @@ def main() -> int:
         "purchase_order_reconciliation": purchase_reconciliation,
         "supplier_advance_reconciliation": advance_reconciliation,
         "goods_receipt_reconciliation": receipt_reconciliation,
+        "batch_release_reconciliation": batch_release_reconciliation,
         "supplier_invoice_reconciliation": supplier_invoice_reconciliation,
         "supplier_payment_reconciliation": supplier_payment_reconciliation,
         "sales_order_reconciliation": reconciliation,

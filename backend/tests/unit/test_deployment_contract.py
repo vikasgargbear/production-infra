@@ -351,6 +351,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     provisioner = _read("backend/scripts/provision_canonical_demo.py")
     assert '"sales.order.manage"' in provisioner
     assert '"internal.sequence.allocate"' in provisioner
+    assert '"inventory.batch.manage"' in provisioner
     activation = provisioner.split("def activate_demo_product", 1)[1].split(
         "\ndef token", 1
     )[0]
@@ -399,6 +400,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "purchase_order_reconciliation",
         "supplier_advance_reconciliation",
         "goods_receipt_reconciliation",
+        "batch_release_reconciliation",
         "supplier_invoice_reconciliation",
         "supplier_payment_reconciliation",
         "sales_order_reconciliation",
