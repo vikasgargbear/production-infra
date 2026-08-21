@@ -102,7 +102,7 @@ export const RevenueChart = React.memo<RevenueChartProps>(({
         };
 
         const tooltipProps = {
-            formatter: (value: number | string | Array<number | string> | undefined) => {
+            formatter: (value: number | string | ReadonlyArray<number | string> | undefined) => {
                 const formattedValue = typeof value === 'number'
                     ? value.toLocaleString('en-IN')
                     : Array.isArray(value)
