@@ -137,6 +137,7 @@ def test_purchase_return_prepare_and_execute_reauthorize_exact_invoiced_lineage(
         "purchase-return draft line cardinality changed",
         "purchase-return submission transition lost its draft",
         "purchase-return approval transition lost its submitted state",
+        "movement_started_at,document_type,document_number",
         "parent.portal_document_type='gstr2b'",
         "parent.registration_id=original_tax.registration_id",
         "line.document_type='credit_note'",

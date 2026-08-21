@@ -4890,6 +4890,7 @@ DECLARE request_document jsonb; resolved_document jsonb; current_resolution json
         input_document jsonb; output_document jsonb; totals jsonb; resolved_line jsonb; calculated_line jsonb;
         existing automation.command_requests%ROWTYPE; sequence_id uuid; return_number text; fiscal_year integer;
         claim_id uuid; replay_id uuid; aggregate_hash bytea; requested_total numeric(20,2); return_line_id uuid;
+        movement_time timestamptz:=pg_catalog.transaction_timestamp();
 BEGIN
   IF SESSION_USER<>'erp_calculator' OR purchase_return_id IS NULL OR inventory_document_id IS NULL OR command_id IS NULL
      OR artifact_id IS NULL OR request_id IS NULL OR adjustment_note_id IS NULL OR journal_id IS NULL OR event_id IS NULL
@@ -4957,7 +4958,7 @@ BEGIN
     origin_city,origin_state_code,origin_pincode,destination_address_line1,destination_address_line2,destination_city,
     destination_state_code,destination_pincode,transport_mode,distance_km,transporter_party_id,transporter_name_snapshot,
     transporter_gstin_snapshot,vehicle_number_snapshot,vehicle_type_snapshot,transport_document_number_snapshot,transport_document_date,
-    document_type,document_number,fiscal_year,document_date,status,reason_code,currency_code,costing_method_snapshot,
+    movement_started_at,document_type,document_number,fiscal_year,document_date,status,reason_code,currency_code,costing_method_snapshot,
     total_abs_base_quantity,total_value,purchase_return_id,approved_at,approved_by_membership_id)
   SELECT organization_id,inventory_document_id,(resolved_document->>'branch_id')::uuid,true,resolved_document#>>'{origin,line1}',
     resolved_document#>>'{origin,line2}',resolved_document#>>'{origin,city}',resolved_document#>>'{origin,state_code}',resolved_document#>>'{origin,pincode}',
@@ -4966,7 +4967,7 @@ BEGIN
     (resolved_document->>'distance_km')::numeric,NULLIF(resolved_document->>'transporter_party_id','')::uuid,
     resolved_document->>'transporter_name',resolved_document->>'transporter_gstin',resolved_document->>'vehicle_number',
     resolved_document->>'vehicle_type',resolved_document->>'transport_document_number',NULLIF(resolved_document->>'transport_document_date','')::date,
-    'purchase_return_issue',return_number,fiscal_year,(resolved_document->>'return_date')::date,'approved','purchase_return','INR',
+    movement_time,'purchase_return_issue',return_number,fiscal_year,(resolved_document->>'return_date')::date,'approved','purchase_return','INR',
     'moving_weighted_average',sum((value->>'base_billed_quantity')::numeric+(value->>'base_free_quantity')::numeric),
     sum((value->>'extended_cost')::numeric),purchase_return_id,pg_catalog.transaction_timestamp(),membership_id
     FROM pg_catalog.jsonb_array_elements(resolved_document->'lines');
