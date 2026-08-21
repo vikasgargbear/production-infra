@@ -835,6 +835,8 @@ def test_sales_return_prepare_and_execute_pin_lineage_tax_and_cost_atomically() 
         '"resolve_sales_return_prepare"',
         '"persist_sales_return_prepare"',
         '"assert_sales_return_draft"',
+        "line.id=(expected.value->>'line_id')::uuid",
+        "mismatch_category=",
         "capability.capability_code='sales.return.prepare'",
         "erp_security.has_permission('sales.return.post',requested_branch_id)",
         "status='posted' AND invoice_type='tax_invoice'",
