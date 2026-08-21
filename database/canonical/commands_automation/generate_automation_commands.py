@@ -4339,7 +4339,9 @@ END
             '"assert_sales_return_draft"(organization_id uuid, sales_return_id uuid, inventory_document_id uuid, resolution jsonb)',
             "void",
             '''
-DECLARE bad_count bigint; mismatch_code text; header sales.returns%ROWTYPE; document inventory.inventory_documents%ROWTYPE;
+DECLARE expected_count bigint:=0; expected_line jsonb; header sales.returns%ROWTYPE;
+        document inventory.inventory_documents%ROWTYPE; prepared_return_line sales.return_lines%ROWTYPE;
+        prepared_inventory_line inventory.inventory_document_lines%ROWTYPE;
 BEGIN
   SELECT * INTO STRICT header FROM sales.returns WHERE org_id=organization_id AND id=sales_return_id FOR UPDATE;
   SELECT * INTO STRICT document FROM inventory.inventory_documents WHERE org_id=organization_id AND id=inventory_document_id FOR UPDATE;
@@ -4349,57 +4351,40 @@ BEGIN
      OR document.sales_return_id IS DISTINCT FROM header.id OR document.document_type<>'sales_return_receipt'
      OR document.status<>'approved' OR document.branch_id IS DISTINCT FROM header.branch_id THEN
     RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-return header or owned inventory draft changed'; END IF;
-  SELECT count(*) INTO bad_count FROM pg_catalog.jsonb_array_elements(resolution->'lines') expected(value)
-   FULL JOIN sales.return_lines line ON line.org_id=organization_id AND line.return_id=sales_return_id
-     AND line.id=(expected.value->>'line_id')::uuid
-   LEFT JOIN inventory.inventory_document_lines inventory_line ON inventory_line.org_id=line.org_id
-     AND inventory_line.inventory_document_id=inventory_document_id AND inventory_line.sales_return_line_id=line.id
-   WHERE expected.value IS NULL OR line.id IS NULL OR inventory_line.id IS NULL
-      OR ROW(line.invoice_line_id,line.invoice_dispatch_allocation_id,line.product_id,line.batch_id,line.disposition_location_id,line.disposition,
-             line.billed_quantity,line.free_quantity,line.uom_conversion_factor,line.base_billed_quantity,line.base_free_quantity,
-             line.final_residual,inventory_line.movement_kind,inventory_line.product_id,inventory_line.batch_id,
-             inventory_line.to_location_id,inventory_line.base_quantity,inventory_line.unit_cost,inventory_line.extended_cost)
-         IS DISTINCT FROM ROW((expected.value->>'original_invoice_line_id')::uuid,(expected.value->>'invoice_dispatch_allocation_id')::uuid,(expected.value->>'product_id')::uuid,
-             (expected.value->>'batch_id')::uuid,(expected.value->>'to_location_id')::uuid,'return_to_stock',
-             (expected.value->>'billed_quantity')::numeric,(expected.value->>'free_quantity')::numeric,
-             (expected.value->>'uom_conversion_factor')::numeric,(expected.value->>'base_billed_quantity')::numeric,
-             (expected.value->>'base_free_quantity')::numeric,(expected.value->>'final_residual')::boolean,'receipt',
-             (expected.value->>'product_id')::uuid,(expected.value->>'batch_id')::uuid,(expected.value->>'to_location_id')::uuid,
-             (expected.value->>'base_billed_quantity')::numeric+(expected.value->>'base_free_quantity')::numeric,
-             (expected.value->>'unit_cost')::numeric,(expected.value->>'extended_cost')::numeric);
-  IF bad_count<>0 OR (SELECT count(*) FROM sales.return_lines WHERE org_id=organization_id AND return_id=sales_return_id)
-      <>pg_catalog.jsonb_array_length(resolution->'lines') THEN
-    SELECT CASE
-      WHEN expected.value IS NULL THEN 'unexpected_return_line'
-      WHEN line.id IS NULL THEN 'missing_return_line'
-      WHEN inventory_line.id IS NULL THEN 'missing_inventory_line'
-      WHEN ROW(line.invoice_line_id,line.invoice_dispatch_allocation_id,line.product_id,line.batch_id,
-               line.disposition_location_id,line.disposition)
-        IS DISTINCT FROM ROW((expected.value->>'original_invoice_line_id')::uuid,
-               (expected.value->>'invoice_dispatch_allocation_id')::uuid,(expected.value->>'product_id')::uuid,
-               (expected.value->>'batch_id')::uuid,(expected.value->>'to_location_id')::uuid,'return_to_stock') THEN 'return_lineage'
-      WHEN ROW(line.billed_quantity,line.free_quantity,line.uom_conversion_factor,line.base_billed_quantity,
-               line.base_free_quantity,line.final_residual)
-        IS DISTINCT FROM ROW((expected.value->>'billed_quantity')::numeric,(expected.value->>'free_quantity')::numeric,
-               (expected.value->>'uom_conversion_factor')::numeric,(expected.value->>'base_billed_quantity')::numeric,
-               (expected.value->>'base_free_quantity')::numeric,(expected.value->>'final_residual')::boolean) THEN 'return_quantity'
-      WHEN ROW(inventory_line.movement_kind,inventory_line.product_id,inventory_line.batch_id,inventory_line.to_location_id)
-        IS DISTINCT FROM ROW('receipt',(expected.value->>'product_id')::uuid,(expected.value->>'batch_id')::uuid,
-               (expected.value->>'to_location_id')::uuid) THEN 'inventory_lineage'
-      WHEN inventory_line.base_quantity IS DISTINCT FROM
-        (expected.value->>'base_billed_quantity')::numeric+(expected.value->>'base_free_quantity')::numeric THEN 'inventory_quantity'
-      WHEN ROW(inventory_line.unit_cost,inventory_line.extended_cost)
-        IS DISTINCT FROM ROW((expected.value->>'unit_cost')::numeric,(expected.value->>'extended_cost')::numeric) THEN 'inventory_cost'
-      ELSE 'cardinality'
-    END INTO mismatch_code
-      FROM pg_catalog.jsonb_array_elements(resolution->'lines') expected(value)
-      FULL JOIN sales.return_lines line ON line.org_id=organization_id AND line.return_id=sales_return_id
-        AND line.id=(expected.value->>'line_id')::uuid
-      LEFT JOIN inventory.inventory_document_lines inventory_line ON inventory_line.org_id=line.org_id
-        AND inventory_line.inventory_document_id=inventory_document_id AND inventory_line.sales_return_line_id=line.id
-     LIMIT 1;
-    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-return draft differs from locked resolution ('||coalesce(mismatch_code,'cardinality')||')',
-      DETAIL='mismatch_category='||coalesce(mismatch_code,'cardinality'); END IF;
+  FOR expected_line IN SELECT value FROM pg_catalog.jsonb_array_elements(resolution->'lines') LOOP
+    expected_count:=expected_count+1;
+    SELECT persisted_return.* INTO STRICT prepared_return_line FROM sales.return_lines persisted_return
+     WHERE persisted_return.org_id=organization_id AND persisted_return.return_id=sales_return_id
+       AND persisted_return.id=(expected_line->>'line_id')::uuid FOR SHARE;
+    SELECT persisted_inventory.* INTO STRICT prepared_inventory_line FROM inventory.inventory_document_lines persisted_inventory
+     WHERE persisted_inventory.org_id=organization_id AND persisted_inventory.inventory_document_id=inventory_document_id
+       AND persisted_inventory.sales_return_line_id=prepared_return_line.id FOR SHARE;
+    IF ROW(prepared_return_line.invoice_line_id,prepared_return_line.invoice_dispatch_allocation_id,
+           prepared_return_line.product_id,prepared_return_line.batch_id,prepared_return_line.disposition_location_id,
+           prepared_return_line.disposition,prepared_return_line.billed_quantity,prepared_return_line.free_quantity,
+           prepared_return_line.uom_conversion_factor,prepared_return_line.base_billed_quantity,
+           prepared_return_line.base_free_quantity,prepared_return_line.final_residual,
+           prepared_inventory_line.movement_kind,prepared_inventory_line.product_id,prepared_inventory_line.batch_id,
+           prepared_inventory_line.to_location_id,prepared_inventory_line.base_quantity,
+           prepared_inventory_line.unit_cost,prepared_inventory_line.extended_cost)
+       IS DISTINCT FROM ROW((expected_line->>'original_invoice_line_id')::uuid,
+           (expected_line->>'invoice_dispatch_allocation_id')::uuid,(expected_line->>'product_id')::uuid,
+           (expected_line->>'batch_id')::uuid,(expected_line->>'to_location_id')::uuid,'return_to_stock',
+           (expected_line->>'billed_quantity')::numeric,(expected_line->>'free_quantity')::numeric,
+           (expected_line->>'uom_conversion_factor')::numeric,(expected_line->>'base_billed_quantity')::numeric,
+           (expected_line->>'base_free_quantity')::numeric,(expected_line->>'final_residual')::boolean,'receipt',
+           (expected_line->>'product_id')::uuid,(expected_line->>'batch_id')::uuid,(expected_line->>'to_location_id')::uuid,
+           (expected_line->>'base_billed_quantity')::numeric+(expected_line->>'base_free_quantity')::numeric,
+           (expected_line->>'unit_cost')::numeric,(expected_line->>'extended_cost')::numeric) THEN
+      RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-return persisted line differs from locked resolution'; END IF;
+  END LOOP;
+  IF expected_count=0
+     OR expected_count<>(SELECT count(*) FROM sales.return_lines persisted_return
+                          WHERE persisted_return.org_id=organization_id AND persisted_return.return_id=sales_return_id)
+     OR expected_count<>(SELECT count(*) FROM inventory.inventory_document_lines persisted_inventory
+                          WHERE persisted_inventory.org_id=organization_id
+                            AND persisted_inventory.inventory_document_id=inventory_document_id) THEN
+    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-return draft line cardinality changed'; END IF;
 END
 '''),
         *_function(
