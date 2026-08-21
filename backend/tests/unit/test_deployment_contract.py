@@ -271,6 +271,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert ".core_current? == true and .automation_current? == true" in reconciliation
     assert ".trade_current? == true" in reconciliation
     assert ".goods_receipt_post_current? == true" in reconciliation
+    assert ".commercial_supplier_post_current? == true" in reconciliation
     assert ".compliance_current? == true" in reconciliation
     assert ".plumbing_current? == true" in reconciliation
     assert reconciliation.count("CREATE OR REPLACE FUNCTION") == 1
@@ -278,6 +279,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
+    assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
     assert '"erp_plumbing"."enqueue_state_outbox"' in reconciliation
     assert 'artifact.get("platform_enforcements")' in reconciliation
@@ -293,7 +295,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "trade_trigger_helpers_current" in reconciliation
     assert "guard_source_inventory_ownership" in reconciliation
     assert "guard_posted_landed_allocation" in reconciliation
-    assert '"t|t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
+    assert '"t|t|t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
     assert "resolve_inventory_adjustment_prepare" in reconciliation
     assert "controlled_batched_movement" in reconciliation
     assert "resolve_goods_receipt_prepare" in reconciliation

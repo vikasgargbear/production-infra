@@ -920,8 +920,8 @@ BEGIN
        AND association.branch_id=header.branch_id AND association.status='active'
        AND association.effective_from<=header.{document_date}
        AND (association.effective_to IS NULL OR association.effective_to>=header.{document_date}) FOR SHARE;
-    SELECT min(version.effective_from) INTO tax_effective FROM {line_table} line JOIN tax.tax_code_versions version ON version.id=line.tax_code_version_id
-      WHERE line.org_id=organization_id AND line.{parent}=resource_id AND version.status='active'
+    SELECT min(version.effective_from) INTO tax_effective FROM {line_table} tax_line JOIN tax.tax_code_versions version ON version.id=tax_line.tax_code_version_id
+      WHERE tax_line.org_id=organization_id AND tax_line.{parent}=resource_id AND version.status='active'
         AND version.effective_from<=header.{document_date} AND (version.effective_to IS NULL OR version.effective_to>=header.{document_date})
       HAVING count(DISTINCT version.ruleset_version)=1 AND min(version.ruleset_version)=header.calculation_ruleset_version
         AND count(*)=(SELECT count(*) FROM {line_table} expected WHERE expected.org_id=organization_id AND expected.{parent}=resource_id);

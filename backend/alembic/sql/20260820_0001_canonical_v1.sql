@@ -20165,8 +20165,8 @@ BEGIN
        AND association.branch_id=header.branch_id AND association.status='active'
        AND association.effective_from<=header.supplier_invoice_date
        AND (association.effective_to IS NULL OR association.effective_to>=header.supplier_invoice_date) FOR SHARE;
-    SELECT min(version.effective_from) INTO tax_effective FROM procurement.supplier_invoice_lines line JOIN tax.tax_code_versions version ON version.id=line.tax_code_version_id
-      WHERE line.org_id=organization_id AND line.supplier_invoice_id=resource_id AND version.status='active'
+    SELECT min(version.effective_from) INTO tax_effective FROM procurement.supplier_invoice_lines tax_line JOIN tax.tax_code_versions version ON version.id=tax_line.tax_code_version_id
+      WHERE tax_line.org_id=organization_id AND tax_line.supplier_invoice_id=resource_id AND version.status='active'
         AND version.effective_from<=header.supplier_invoice_date AND (version.effective_to IS NULL OR version.effective_to>=header.supplier_invoice_date)
       HAVING count(DISTINCT version.ruleset_version)=1 AND min(version.ruleset_version)=header.calculation_ruleset_version
         AND count(*)=(SELECT count(*) FROM procurement.supplier_invoice_lines expected WHERE expected.org_id=organization_id AND expected.supplier_invoice_id=resource_id);
@@ -20691,8 +20691,8 @@ BEGIN
        AND association.branch_id=header.branch_id AND association.status='active'
        AND association.effective_from<=header.invoice_date
        AND (association.effective_to IS NULL OR association.effective_to>=header.invoice_date) FOR SHARE;
-    SELECT min(version.effective_from) INTO tax_effective FROM sales.invoice_lines line JOIN tax.tax_code_versions version ON version.id=line.tax_code_version_id
-      WHERE line.org_id=organization_id AND line.invoice_id=resource_id AND version.status='active'
+    SELECT min(version.effective_from) INTO tax_effective FROM sales.invoice_lines tax_line JOIN tax.tax_code_versions version ON version.id=tax_line.tax_code_version_id
+      WHERE tax_line.org_id=organization_id AND tax_line.invoice_id=resource_id AND version.status='active'
         AND version.effective_from<=header.invoice_date AND (version.effective_to IS NULL OR version.effective_to>=header.invoice_date)
       HAVING count(DISTINCT version.ruleset_version)=1 AND min(version.ruleset_version)=header.calculation_ruleset_version
         AND count(*)=(SELECT count(*) FROM sales.invoice_lines expected WHERE expected.org_id=organization_id AND expected.invoice_id=resource_id);
