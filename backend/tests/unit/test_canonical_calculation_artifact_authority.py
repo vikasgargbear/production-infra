@@ -394,6 +394,7 @@ def test_generator_is_catalog_bound_and_runtime_cannot_mint_or_consume():
     mapping = json.loads(mapping_text)
 
     assert "SESSION_USER<>'erp_calculator'" in sql_text
+    assert "purchase return is not submitted" in sql_text
     assert 'TO "erp_calculator"' in sql_text
     assert 'issue_artifact"' in sql_text
     assert 'issue_artifact"' not in "\n".join(

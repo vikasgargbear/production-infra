@@ -515,7 +515,7 @@ BEGIN
         SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
           FROM procurement.purchase_returns WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
         candidate.purchase_return_id := p_resource_id;
-        IF actual_status IS DISTINCT FROM 'approved' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase return is not approved'; END IF;
+        IF actual_status IS DISTINCT FROM 'submitted' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase return is not submitted'; END IF;
       WHEN 'adjustment_note' THEN
         IF p_operation<>'finance.adjustment_note.post' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
         SELECT coalesce(sales_invoice.branch_id,supplier_invoice.branch_id),note.row_version,note.status
