@@ -11190,9 +11190,12 @@ BEGIN
   SELECT * INTO STRICT organization FROM core.organizations WHERE id=organization_id AND status='active'
     AND country_code='IN' AND base_currency='INR' FOR SHARE;
   SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=branch_id AND status='active' FOR SHARE;
-  SELECT * INTO STRICT location FROM inventory.locations WHERE org_id=organization_id AND id=location_id
-    AND branch_id=branch.id AND status='active' AND location_type='saleable' AND allows_sale
-    AND NOT allows_negative_stock AND temperature_min_c IS NULL AND temperature_max_c IS NULL FOR SHARE;
+  SELECT * INTO STRICT location FROM inventory.locations AS candidate_location
+   WHERE candidate_location.org_id=organization_id AND candidate_location.id=location_id
+    AND candidate_location.branch_id=branch.id AND candidate_location.status='active'
+    AND candidate_location.location_type='saleable' AND candidate_location.allows_sale
+    AND NOT candidate_location.allows_negative_stock AND candidate_location.temperature_min_c IS NULL
+    AND candidate_location.temperature_max_c IS NULL FOR SHARE;
   SELECT * INTO STRICT evidence FROM core.attachments WHERE org_id=organization_id AND id=evidence_id
     AND evidence_kind='inventory_cycle_count_sheet' AND status IN ('verified','retained')
     AND verified_at IS NOT NULL AND verified_at<=pg_catalog.transaction_timestamp()
@@ -11259,12 +11262,16 @@ BEGIN
        WHERE recall_batch.org_id=organization_id AND recall_batch.batch_id=batch.id
          AND recall.status IN ('initiated','in_progress') AND recall_batch.status IN ('identified','quarantined');
       IF recall_count<>0 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='recalled lot cannot be cycle-counted into available stock'; END IF;
-      SELECT * INTO STRICT balance FROM inventory.stock_balances WHERE org_id=organization_id
-        AND branch_id=branch.id AND location_id=location.id AND product_id=product.id AND batch_id=batch.id
-        AND on_hand_quantity>0 AND inventory_value>0 AND average_unit_cost>0 FOR UPDATE;
-      SELECT * INTO STRICT last_ledger FROM inventory.stock_ledger_entries WHERE org_id=organization_id
-        AND id=balance.last_ledger_entry_id AND branch_id=branch.id AND location_id=location.id
-        AND product_id=product.id AND batch_id=batch.id AND posted_at<=counted_at FOR SHARE;
+      SELECT * INTO STRICT balance FROM inventory.stock_balances AS stock_balance
+       WHERE stock_balance.org_id=organization_id AND stock_balance.branch_id=branch.id
+        AND stock_balance.location_id=location.id AND stock_balance.product_id=product.id
+        AND stock_balance.batch_id=batch.id AND stock_balance.on_hand_quantity>0
+        AND stock_balance.inventory_value>0 AND stock_balance.average_unit_cost>0 FOR UPDATE;
+      SELECT * INTO STRICT last_ledger FROM inventory.stock_ledger_entries AS ledger_entry
+       WHERE ledger_entry.org_id=organization_id AND ledger_entry.id=balance.last_ledger_entry_id
+        AND ledger_entry.branch_id=branch.id AND ledger_entry.location_id=location.id
+        AND ledger_entry.product_id=product.id AND ledger_entry.batch_id=batch.id
+        AND ledger_entry.posted_at<=counted_at FOR SHARE;
       SELECT count(*) INTO pending_count FROM inventory.inventory_document_lines pending_line
         JOIN inventory.inventory_documents pending ON pending.org_id=pending_line.org_id AND pending.id=pending_line.inventory_document_id
        WHERE pending_line.org_id=organization_id AND pending.id<>inventory_document_id
