@@ -1,0 +1,54 @@
+name: Refresh frontend dependency lock
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-frontend-lock-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Resolve the patched dependency graph
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Verify reproducible installation
+        run: npm ci --ignore-scripts
+      - name: Reject remaining high or critical advisories
+        run: |
+          npm audit --json > "$RUNNER_TEMP/frontend-audit.json" || {
+            jq -r '.vulnerabilities | to_entries[] |
+              select(.value.severity == "high" or .value.severity == "critical") |
+              "::error title=Unresolved \(.value.severity) advisory::\(.key) \(.value.range)"' \
+              "$RUNNER_TEMP/frontend-audit.json"
+            exit 1
+          }
+      - name: Verify the production bundle
+        env:
+          CI: "true"
+        run: npm run build
+      - name: Commit the generated lock and remove this one-shot workflow
+        working-directory: .
+        run: |
+          rm .github/workflows/refresh-frontend-lock.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add frontend/package-lock.json .github/workflows/refresh-frontend-lock.yml
+          git commit -m "fix: patch frontend build dependencies"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
