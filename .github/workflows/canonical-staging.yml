@@ -1048,6 +1048,8 @@ jobs:
               --apply \
               --deploy \
               --deploy-service aasopharma-api-pilot \
+              --deploy-service aasopharma-erp-pilot \
+              --deploy-service aasopharma-mcp-pilot \
               --cancel-stale-deploys \
               --branch "$GITHUB_REF_NAME" \
               --commit-id "$deploy_sha" \
@@ -1080,7 +1082,6 @@ jobs:
                 *) all_live=false ;;
               esac
             done < <(jq -r '.services as $services | .deployed | to_entries[] |
-              select(.key == "aasopharma-api-pilot") |
               [.key, $services[.key].id, .value.id] | @tsv' staging-evidence/render-pilot.json)
             if [ "$all_live" = true ]; then
               break
