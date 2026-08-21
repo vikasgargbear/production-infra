@@ -4589,27 +4589,23 @@ BEGIN
     AND address_kind IN ('registered','shipping','warehouse') AND status='active'
     AND (valid_from IS NULL OR valid_from<=return_date) AND (valid_until IS NULL OR valid_until>=return_date) FOR SHARE;
   IF transporter_party_id IS NOT NULL THEN
-    SELECT count(*) INTO candidate_count FROM parties.parties AS resolved_transporter
-     WHERE resolved_transporter.org_id=organization_id AND resolved_transporter.id=transporter_party_id
-       AND resolved_transporter.status='active';
-    IF candidate_count<>1 THEN
-      RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='purchase return requires exactly one active transporter party'; END IF;
-    SELECT resolved_transporter.* INTO STRICT transporter FROM parties.parties AS resolved_transporter
-     WHERE resolved_transporter.org_id=organization_id AND resolved_transporter.id=transporter_party_id
-       AND resolved_transporter.status='active' ORDER BY resolved_transporter.id LIMIT 1 FOR SHARE;
+    SELECT * INTO STRICT transporter FROM parties.parties WHERE org_id=organization_id AND id=transporter_party_id
+      AND status='active' FOR SHARE;
     SELECT * INTO transporter_registration FROM parties.tax_registrations WHERE org_id=organization_id AND party_id=transporter.id
       AND registration_type='GSTIN' AND status='active' AND (valid_from IS NULL OR valid_from<=return_date)
       AND (valid_until IS NULL OR valid_until>=return_date) ORDER BY id LIMIT 1 FOR SHARE;
   END IF;
-  SELECT * INTO STRICT original_tax FROM tax.documents WHERE org_id=organization_id AND supplier_invoice_id=invoice.id
-    AND direction='inward' AND document_effect='original' FOR SHARE;
+  SELECT tax_document.* INTO STRICT original_tax FROM tax.documents tax_document
+   WHERE tax_document.org_id=organization_id AND tax_document.supplier_invoice_id=invoice.id
+     AND tax_document.direction='inward' AND tax_document.document_effect='original' FOR SHARE;
   SELECT * INTO STRICT supplier_registration FROM parties.tax_registrations WHERE org_id=organization_id
     AND id=invoice.supplier_tax_registration_id AND party_id=supplier.party_id AND registration_type='GSTIN'
     AND registration_number=original_tax.counterparty_gstin AND status='active' AND verified_at IS NOT NULL
     AND taxpayer_type IN ('regular','casual') AND (valid_from IS NULL OR valid_from<=return_date)
     AND (valid_until IS NULL OR valid_until>=return_date) FOR SHARE;
-  SELECT * INTO STRICT original_artifact FROM calculation.artifacts WHERE org_id=organization_id AND supplier_invoice_id=invoice.id
-    AND operation='procurement.supplier_invoice.post' AND status='consumed' FOR SHARE;
+  SELECT artifact.* INTO STRICT original_artifact FROM calculation.artifacts artifact
+   WHERE artifact.org_id=organization_id AND artifact.supplier_invoice_id=invoice.id
+     AND artifact.operation='procurement.supplier_invoice.post' AND artifact.status='consumed' FOR SHARE;
   SELECT * INTO STRICT original_event FROM finance.accounting_events event
    WHERE event.org_id=organization_id AND event.supplier_invoice_id=invoice.id FOR SHARE;
   SELECT * INTO STRICT original_open FROM finance.open_items open_item
@@ -4731,9 +4727,11 @@ BEGIN
     SELECT * INTO STRICT invoice_allocation FROM procurement.supplier_invoice_receipt_allocations WHERE org_id=organization_id
       AND id=(requested_line->>'supplier_invoice_receipt_allocation_id')::uuid
       AND goods_receipt_line_id=(requested_line->>'goods_receipt_line_id')::uuid FOR UPDATE;
-    SELECT * INTO STRICT source FROM procurement.supplier_invoice_lines WHERE org_id=organization_id
-      AND id=invoice_allocation.supplier_invoice_line_id AND supplier_invoice_id=invoice.id AND line_kind='product'
-      AND inventory_cost_treatment='capitalize' AND itc_eligibility='eligible' AND tax_charge_mechanism='normal' FOR SHARE;
+    SELECT invoice_line.* INTO STRICT source FROM procurement.supplier_invoice_lines invoice_line
+     WHERE invoice_line.org_id=organization_id AND invoice_line.id=invoice_allocation.supplier_invoice_line_id
+       AND invoice_line.supplier_invoice_id=invoice.id AND invoice_line.line_kind='product'
+       AND invoice_line.inventory_cost_treatment='capitalize' AND invoice_line.itc_eligibility='eligible'
+       AND invoice_line.tax_charge_mechanism='normal' FOR SHARE;
     IF EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(request_document->'lines') other(value)
       JOIN procurement.supplier_invoice_receipt_allocations other_allocation ON other_allocation.org_id=organization_id
         AND other_allocation.id=(other.value->>'supplier_invoice_receipt_allocation_id')::uuid
