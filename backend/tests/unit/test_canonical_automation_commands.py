@@ -650,6 +650,7 @@ def test_sales_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "INSERT INTO inventory.inventory_document_lines",
         "erp_calculation_authority.issue_artifact",
         "erp_commercial_commands.post_sales_invoice(",
+        "(resolved_document->>'branch_id')::uuid,false,'sales_return_receipt'",
     ):
         assert fragment in mapping
     function_at = mapping.index(

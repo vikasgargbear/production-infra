@@ -9609,7 +9609,7 @@ BEGIN
   INSERT INTO inventory.inventory_documents(org_id,id,branch_id,physical_movement_required,document_type,document_number,fiscal_year,
     document_date,status,reason_code,currency_code,costing_method_snapshot,total_abs_base_quantity,total_value,sales_return_id,
     approved_at,approved_by_membership_id)
-  SELECT organization_id,inventory_document_id,(resolved_document->>'branch_id')::uuid,true,'sales_return_receipt',return_number,
+  SELECT organization_id,inventory_document_id,(resolved_document->>'branch_id')::uuid,false,'sales_return_receipt',return_number,
     fiscal_year,(resolved_document->>'return_date')::date,'approved','sales_return','INR','moving_weighted_average',
     sum((value->>'base_billed_quantity')::numeric+(value->>'base_free_quantity')::numeric),sum((value->>'extended_cost')::numeric),
     sales_return_id,pg_catalog.transaction_timestamp(),membership_id FROM pg_catalog.jsonb_array_elements(resolved_document->'lines');
