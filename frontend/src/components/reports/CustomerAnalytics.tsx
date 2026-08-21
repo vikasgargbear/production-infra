@@ -482,7 +482,7 @@ const CustomerAnalytics: React.FC = () => {
                   tooltip: {
                     callbacks: {
                       label: (context) => {
-                        return `₹${(context.parsed.y / 100000).toFixed(1)}L`;
+                        return `₹${((context.parsed.y ?? 0) / 100000).toFixed(1)}L`;
                       }
                     }
                   }

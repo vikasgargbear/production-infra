@@ -391,7 +391,7 @@ const FinancialReport: React.FC = () => {
                       tooltip: {
                         callbacks: {
                           label: (context) => {
-                            return `${context.dataset.label}: ₹${(context.parsed.y / 100000).toFixed(1)}L`;
+                            return `${context.dataset.label}: ₹${((context.parsed.y ?? 0) / 100000).toFixed(1)}L`;
                           }
                         }
                       }
@@ -513,7 +513,7 @@ const FinancialReport: React.FC = () => {
                   tooltip: {
                     callbacks: {
                       label: (context) => {
-                        return `${context.dataset.label}: ₹${(context.parsed.y / 1000).toFixed(0)}K`;
+                        return `${context.dataset.label}: ₹${((context.parsed.y ?? 0) / 1000).toFixed(0)}K`;
                       }
                     }
                   }

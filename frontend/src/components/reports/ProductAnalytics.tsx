@@ -387,7 +387,7 @@ const ProductAnalytics: React.FC = () => {
                     tooltip: {
                       callbacks: {
                         label: (context) => {
-                          return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                          return `${context.dataset.label}: ${formatCurrency(context.parsed.y ?? 0)}`;
                         }
                       }
                     }

@@ -480,7 +480,7 @@ const ProfitLossStatement: React.FC = () => {
                       tooltip: {
                         callbacks: {
                           label: (context) => {
-                            return `${context.dataset.label}: ₹${context.parsed.y.toLocaleString('en-IN')}`;
+                            return `${context.dataset.label}: ₹${(context.parsed.y ?? 0).toLocaleString('en-IN')}`;
                           }
                         }
                       }
@@ -510,7 +510,7 @@ const ProfitLossStatement: React.FC = () => {
                       tooltip: {
                         callbacks: {
                           label: (context) => {
-                            return `₹${context.parsed.y.toLocaleString('en-IN')}`;
+                            return `₹${(context.parsed.y ?? 0).toLocaleString('en-IN')}`;
                           }
                         }
                       }
