@@ -8178,7 +8178,8 @@ BEGIN
     END LOOP;
 
     WITH requested AS (
-      SELECT source.product_id,(allocation.value->>'batch_id')::uuid batch_id,
+      SELECT source.product_id AS requested_product_id,
+             (allocation.value->>'batch_id')::uuid AS requested_batch_id,
              sum(pg_catalog.round(((allocation.value->>'billed_quantity')::numeric+
                  (allocation.value->>'free_quantity')::numeric)*source.uom_conversion_factor,6)) requested_base
         FROM pg_catalog.jsonb_array_elements(request_document->'lines') AS line(value)
@@ -8186,24 +8187,30 @@ BEGIN
         CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(line.value->'batch_allocations') AS allocation(value)
        GROUP BY source.product_id,(allocation.value->>'batch_id')::uuid
     ), totals AS (
-      SELECT product_id,sum(requested_base) requested_base FROM requested GROUP BY product_id
+      SELECT requested_product_id,sum(requested_base) AS total_requested_base
+        FROM requested GROUP BY requested_product_id
     ), eligible AS (
-      SELECT balance.product_id,balance.batch_id,balance.on_hand_quantity,batch.expires_on,
-             coalesce(sum(balance.on_hand_quantity) OVER (
-               PARTITION BY balance.product_id ORDER BY batch.expires_on,balance.batch_id
+      SELECT stock.product_id AS eligible_product_id,stock.batch_id AS eligible_batch_id,
+             stock.on_hand_quantity,eligible_batch.expires_on,
+             coalesce(sum(stock.on_hand_quantity) OVER (
+               PARTITION BY stock.product_id ORDER BY eligible_batch.expires_on,stock.batch_id
                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_available
-        FROM inventory.stock_balances balance JOIN inventory.batches batch
-          ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
-        JOIN totals ON totals.product_id=balance.product_id
-       WHERE balance.org_id=organization_id AND balance.location_id=from_location_id
-         AND balance.on_hand_quantity>0 AND batch.lot_kind='manufacturer_batch'
-         AND batch.status='released' AND batch.released_at IS NOT NULL
-         AND batch.expires_on IS NOT NULL AND dispatch_date<batch.expires_on
+        FROM inventory.stock_balances AS stock
+        JOIN inventory.batches AS eligible_batch
+          ON eligible_batch.org_id=stock.org_id AND eligible_batch.id=stock.batch_id
+        JOIN totals ON totals.requested_product_id=stock.product_id
+       WHERE stock.org_id=organization_id AND stock.location_id=from_location_id
+         AND stock.on_hand_quantity>0 AND eligible_batch.lot_kind='manufacturer_batch'
+         AND eligible_batch.status='released' AND eligible_batch.released_at IS NOT NULL
+         AND eligible_batch.expires_on IS NOT NULL AND dispatch_date<eligible_batch.expires_on
     )
     SELECT count(*) INTO bad_count FROM eligible
-      JOIN totals USING(product_id) LEFT JOIN requested USING(product_id,batch_id)
+      JOIN totals ON totals.requested_product_id=eligible.eligible_product_id
+      LEFT JOIN requested
+        ON requested.requested_product_id=eligible.eligible_product_id
+       AND requested.requested_batch_id=eligible.eligible_batch_id
      WHERE coalesce(requested.requested_base,0) IS DISTINCT FROM
-       greatest(least(totals.requested_base-eligible.prior_available,eligible.on_hand_quantity),0);
+       greatest(least(totals.total_requested_base-eligible.prior_available,eligible.on_hand_quantity),0);
     IF bad_count<>0 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='explicit dispatch batches do not follow FEFO across available released stock';
     END IF;
