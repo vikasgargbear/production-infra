@@ -72,7 +72,20 @@ jobs:
       - name: Resolve the patched dependency graph
         run: npm install --package-lock-only --ignore-scripts
       - name: Verify reproducible installation
-        run: npm ci --ignore-scripts
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          npm ci --ignore-scripts 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Frontend lock reproducibility failure::{text}")
+          PY
+            exit 1
+          }
       - name: Reject remaining high or critical advisories
         run: |
           npm audit --json > "$RUNNER_TEMP/frontend-audit.json" || {
