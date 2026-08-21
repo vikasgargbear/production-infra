@@ -5370,7 +5370,7 @@ BEGIN
         IF request_row.capability_code<>'procurement.purchase_return.prepare'
            OR request_row.target_resource_type<>'purchase_return'
            OR request_row.target_row_version IS DISTINCT FROM purchase_return.row_version
-           OR purchase_return.status<>'approved' OR purchase_return.branch_id IS DISTINCT FROM request_row.branch_id
+           OR purchase_return.status<>'submitted' OR purchase_return.branch_id IS DISTINCT FROM request_row.branch_id
            OR request_document->>'purchase_return_id' IS DISTINCT FROM request_row.target_resource_id::text
            OR request_document->>'inventory_document_id' IS DISTINCT FROM inventory_document_id::text
            OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
@@ -5665,6 +5665,11 @@ BEGIN
           organization_id,valuation_sequence_id,
           extensions.digest(request_row.idempotency_key_hash||pg_catalog.convert_to(':purchase-return-journal','UTF8'),'sha256'),
           request_row.expires_at);
+        UPDATE procurement.purchase_returns
+           SET status='approved',updated_at=pg_catalog.transaction_timestamp(),updated_by_membership_id=actor_id
+         WHERE org_id=organization_id AND id=request_row.target_resource_id
+           AND status='submitted' AND row_version=request_row.target_row_version;
+        IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-return approval transition lost its submitted state'; END IF;
         PERFORM pg_catalog.set_config('app.request_id',calculation_artifact.request_id::text,true);
         PERFORM erp_commercial_commands.post_purchase_return(
           organization_id,request_row.target_resource_id,calculation_artifact.id,actor_id,
@@ -10004,11 +10009,13 @@ SECURITY DEFINER
 SET search_path = ''
 AS $function$
 #variable_conflict use_variable
-DECLARE bad_count bigint; header procurement.purchase_returns%ROWTYPE; document inventory.inventory_documents%ROWTYPE;
+DECLARE expected_count bigint:=0; expected_line jsonb; header procurement.purchase_returns%ROWTYPE;
+        document inventory.inventory_documents%ROWTYPE; prepared_return_line procurement.purchase_return_lines%ROWTYPE;
+        prepared_inventory_line inventory.inventory_document_lines%ROWTYPE;
 BEGIN
   SELECT * INTO STRICT header FROM procurement.purchase_returns WHERE org_id=organization_id AND id=purchase_return_id FOR UPDATE;
   SELECT * INTO STRICT document FROM inventory.inventory_documents WHERE org_id=organization_id AND id=inventory_document_id FOR UPDATE;
-  IF header.status<>'approved' OR header.return_source_kind<>'invoiced'
+  IF header.status NOT IN ('draft','submitted') OR header.return_source_kind<>'invoiced'
      OR header.supplier_invoice_id IS DISTINCT FROM (resolution->>'supplier_invoice_id')::uuid
      OR header.gst_tax_treatment IS DISTINCT FROM resolution->>'gst_tax_treatment'
      OR header.gst_adjustment_rule_version_id IS DISTINCT FROM (resolution->>'gst_adjustment_rule_version_id')::uuid
@@ -10024,28 +10031,39 @@ BEGIN
             resolution->>'transporter_name',resolution->>'transporter_gstin',resolution->>'vehicle_number',resolution->>'vehicle_type',
             resolution->>'transport_document_number',NULLIF(resolution->>'transport_document_date','')::date) THEN
     RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-return header, logistics, or inventory draft changed'; END IF;
-  SELECT count(*) INTO bad_count FROM pg_catalog.jsonb_array_elements(resolution->'lines') expected(value)
-   FULL JOIN procurement.purchase_return_lines line ON line.org_id=organization_id AND line.purchase_return_id=purchase_return_id
-     AND line.supplier_invoice_receipt_allocation_id=(expected.value->>'supplier_invoice_receipt_allocation_id')::uuid
-   LEFT JOIN inventory.inventory_document_lines inventory_line ON inventory_line.org_id=line.org_id
-     AND inventory_line.inventory_document_id=inventory_document_id AND inventory_line.purchase_return_line_id=line.id
-   WHERE expected.value IS NULL OR line.id IS NULL OR inventory_line.id IS NULL
-      OR ROW(line.goods_receipt_line_id,line.product_id,line.batch_id,line.from_location_id,line.billed_quantity,line.free_quantity,
-             line.uom_conversion_factor,line.base_billed_quantity,line.base_free_quantity,line.final_residual,
-             inventory_line.movement_kind,inventory_line.product_id,inventory_line.batch_id,inventory_line.from_location_id,
-             inventory_line.base_quantity,inventory_line.unit_cost,inventory_line.extended_cost)
-         IS DISTINCT FROM ROW((expected.value->>'goods_receipt_line_id')::uuid,(expected.value->>'product_id')::uuid,
-             (expected.value->>'batch_id')::uuid,(expected.value->>'from_location_id')::uuid,(expected.value->>'billed_quantity')::numeric,
-             (expected.value->>'free_quantity')::numeric,(expected.value->>'uom_conversion_factor')::numeric,
-             (expected.value->>'base_billed_quantity')::numeric,(expected.value->>'base_free_quantity')::numeric,
-             (expected.value->>'final_residual')::boolean,'issue',(expected.value->>'product_id')::uuid,
-             (expected.value->>'batch_id')::uuid,(expected.value->>'from_location_id')::uuid,
-             (expected.value->>'base_billed_quantity')::numeric+(expected.value->>'base_free_quantity')::numeric,
-             (expected.value->>'unit_cost')::numeric,(expected.value->>'extended_cost')::numeric);
-  IF bad_count<>0 OR (SELECT count(*) FROM procurement.purchase_return_lines stored
-                       WHERE stored.org_id=organization_id AND stored.purchase_return_id=purchase_return_id)
-      <>pg_catalog.jsonb_array_length(resolution->'lines') THEN
-    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-return line, allocation, batch, quantity, or MWA draft changed'; END IF;
+  FOR expected_line IN SELECT value FROM pg_catalog.jsonb_array_elements(resolution->'lines') LOOP
+    expected_count:=expected_count+1;
+    SELECT persisted_return.* INTO STRICT prepared_return_line FROM procurement.purchase_return_lines persisted_return
+     WHERE persisted_return.org_id=organization_id AND persisted_return.purchase_return_id=purchase_return_id
+       AND persisted_return.id=(expected_line->>'line_id')::uuid FOR SHARE;
+    SELECT persisted_inventory.* INTO STRICT prepared_inventory_line FROM inventory.inventory_document_lines persisted_inventory
+     WHERE persisted_inventory.org_id=organization_id AND persisted_inventory.inventory_document_id=inventory_document_id
+       AND persisted_inventory.purchase_return_line_id=prepared_return_line.id FOR SHARE;
+    IF ROW(prepared_return_line.goods_receipt_line_id,prepared_return_line.product_id,prepared_return_line.batch_id,
+           prepared_return_line.from_location_id,prepared_return_line.billed_quantity,prepared_return_line.free_quantity,
+           prepared_return_line.uom_conversion_factor,prepared_return_line.base_billed_quantity,
+           prepared_return_line.base_free_quantity,prepared_return_line.final_residual,
+           prepared_inventory_line.movement_kind,prepared_inventory_line.product_id,prepared_inventory_line.batch_id,
+           prepared_inventory_line.from_location_id,prepared_inventory_line.base_quantity,
+           prepared_inventory_line.unit_cost,prepared_inventory_line.extended_cost)
+       IS DISTINCT FROM ROW((expected_line->>'goods_receipt_line_id')::uuid,(expected_line->>'product_id')::uuid,
+           (expected_line->>'batch_id')::uuid,(expected_line->>'from_location_id')::uuid,
+           (expected_line->>'billed_quantity')::numeric,(expected_line->>'free_quantity')::numeric,
+           (expected_line->>'uom_conversion_factor')::numeric,(expected_line->>'base_billed_quantity')::numeric,
+           (expected_line->>'base_free_quantity')::numeric,(expected_line->>'final_residual')::boolean,'issue',
+           (expected_line->>'product_id')::uuid,(expected_line->>'batch_id')::uuid,(expected_line->>'from_location_id')::uuid,
+           (expected_line->>'base_billed_quantity')::numeric+(expected_line->>'base_free_quantity')::numeric,
+           (expected_line->>'unit_cost')::numeric,(expected_line->>'extended_cost')::numeric) THEN
+      RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-return persisted line differs from locked resolution'; END IF;
+  END LOOP;
+  IF expected_count=0
+     OR expected_count<>(SELECT count(*) FROM procurement.purchase_return_lines persisted_return
+                          WHERE persisted_return.org_id=organization_id
+                            AND persisted_return.purchase_return_id=purchase_return_id)
+     OR expected_count<>(SELECT count(*) FROM inventory.inventory_document_lines persisted_inventory
+                          WHERE persisted_inventory.org_id=organization_id
+                            AND persisted_inventory.inventory_document_id=inventory_document_id) THEN
+    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-return draft line cardinality changed'; END IF;
 END
 $function$;
 ALTER FUNCTION "erp_automation_commands"."assert_purchase_return_draft"(organization_id uuid, purchase_return_id uuid, inventory_document_id uuid, resolution jsonb) OWNER TO "erp_migration_owner";
@@ -10119,7 +10137,7 @@ BEGIN
   VALUES(organization_id,purchase_return_id,(resolved_document->>'branch_id')::uuid,(resolved_document->>'supplier_account_id')::uuid,
     'invoiced',(resolved_document->>'supplier_invoice_id')::uuid,NULLIF(request_document->>'supplier_credit_note_portal_line_id','')::uuid,
     return_number,fiscal_year,(resolved_document->>'return_date')::date,resolved_document->>'reason_code',
-    (resolved_document->>'gst_adjustment_rule_version_id')::uuid,resolved_document->>'gst_tax_treatment','approved',
+    (resolved_document->>'gst_adjustment_rule_version_id')::uuid,resolved_document->>'gst_tax_treatment','draft',
     resolved_document->>'ruleset_version',resolved_document->>'zero_rated_payment_mode',resolved_document->>'tax_charge_mechanism',
     (totals->>'net_value_total')::numeric,(totals->>'gst_taxable_total')::numeric,(totals->>'cgst_total')::numeric,
     (totals->>'sgst_total')::numeric,(totals->>'igst_total')::numeric,(totals->>'cess_total')::numeric,
@@ -10174,6 +10192,10 @@ BEGIN
   END LOOP;
   PERFORM erp_commercial_commands.assert_purchase_return_artifact(organization_id,purchase_return_id,input_document,output_document);
   PERFORM "erp_automation_commands"."assert_purchase_return_draft"(organization_id,purchase_return_id,inventory_document_id,resolved_document);
+  UPDATE procurement.purchase_returns
+     SET status='submitted',updated_at=pg_catalog.transaction_timestamp(),updated_by_membership_id=membership_id
+   WHERE org_id=organization_id AND id=purchase_return_id AND status='draft' AND row_version=1;
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-return submission transition lost its draft'; END IF;
   aggregate_hash:="erp_automation_commands"."aggregate_version_hash"('purchase_return',purchase_return_id,1);
   PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.purchase_return.prepare',
     (resolved_document->>'branch_id')::uuid,NULL,purchase_return_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
