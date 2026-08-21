@@ -100,7 +100,20 @@ jobs:
       - name: Verify the production bundle
         env:
           CI: "true"
-        run: npm run build
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          npm run build 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Frontend patched bundle failure::{text}")
+          PY
+            exit 1
+          }
       - name: Commit the generated dependency lock
         working-directory: .
         run: |
