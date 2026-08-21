@@ -102,6 +102,16 @@ IDS = {
     "rounding_gain_account": "d3210000-0000-7000-8000-000000000012",
     "rounding_loss_account": "d3210000-0000-7000-8000-000000000013",
 }
+INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
+    ZoneInfo("Asia/Kolkata")
+).date()
+DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
+IDS["cycle_count_evidence"] = str(
+    uuid5(
+        NAMESPACE_URL,
+        f"canonical-staging-cycle-count:{IDS['org']}:{DEMO_RUN_ID}:{INDIA_BUSINESS_DATE.isoformat()}",
+    )
+)
 
 REQUIRED_PERMISSIONS = (
     "sales.order.create",
@@ -852,10 +862,10 @@ def seed_end_to_end_master(connection) -> None:
             cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
 
         attachments = (
-            (IDS["tax_profile_evidence"], "supplier_tax_profile", "supplier-pan-verification.json"),
-            (IDS["fiscal_fact_evidence"], "organization_fiscal_tax_profile", "fy-2026-tax-facts.json"),
-            (IDS["cycle_count_evidence"], "inventory_cycle_count_sheet", "cycle-count-sheet.json"),
-            (IDS["recipient_itc_evidence"], "recipient_itc_reversal", "recipient-itc-reversal.json"),
+            (IDS["tax_profile_evidence"], "supplier_tax_profile", "supplier-pan-verification.json", SOURCE_RETRIEVED_ON),
+            (IDS["fiscal_fact_evidence"], "organization_fiscal_tax_profile", "fy-2026-tax-facts.json", SOURCE_RETRIEVED_ON),
+            (IDS["cycle_count_evidence"], "inventory_cycle_count_sheet", "cycle-count-sheet.json", INDIA_BUSINESS_DATE),
+            (IDS["recipient_itc_evidence"], "recipient_itc_reversal", "recipient-itc-reversal.json", SOURCE_RETRIEVED_ON),
         )
         cursor.executemany(
             """
@@ -873,9 +883,9 @@ def seed_end_to_end_master(connection) -> None:
                 (
                     IDS["org"], attachment_id, f"demo/{filename}", filename,
                     f"canonical-demo:{evidence_kind}", evidence_kind,
-                    SOURCE_RETRIEVED_ON, date(2034, 8, 20), IDS["reviewer_membership"],
+                    document_date, date(2034, 8, 20), IDS["reviewer_membership"],
                 )
-                for attachment_id, evidence_kind, filename in attachments
+                for attachment_id, evidence_kind, filename, document_date in attachments
             ],
         )
 
@@ -2736,6 +2746,8 @@ def inventory_adjustment_payload(batch_id: str, counted_base_quantity: str) -> d
     counted_instant = datetime.now(timezone.utc)
     counted_at = counted_instant.isoformat()
     adjustment_date = counted_instant.astimezone(ZoneInfo("Asia/Kolkata")).date()
+    if adjustment_date != INDIA_BUSINESS_DATE:
+        raise RuntimeError("India-local business date changed during demo provisioning")
     counted_packs = str(
         (Decimal(counted_base_quantity) + Decimal("1")) / Decimal("10")
     )

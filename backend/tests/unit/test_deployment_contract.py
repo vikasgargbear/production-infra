@@ -402,6 +402,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'invoice_reconciliation["dispatch_allocations"]' in provisioner
     assert 'ZoneInfo("Asia/Kolkata")' in provisioner
     assert '"adjustment_date": adjustment_date.isoformat()' in provisioner
+    assert 'canonical-staging-cycle-count:' in provisioner
+    assert '"inventory_cycle_count_sheet", "cycle-count-sheet.json", INDIA_BUSINESS_DATE' in provisioner
     assert '"allocated_base_billed_quantity": line["base_billed_quantity"]' in provisioner
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
