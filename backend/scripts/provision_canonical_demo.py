@@ -1443,7 +1443,7 @@ def assert_unavailable_actions(connection) -> dict[str, Any]:
             },
             json={},
         )
-        if response.status_code != 409 or "COMMAND_ADAPTER_UNAVAILABLE" not in response.text:
+        if response.status_code != 503 or "COMMAND_ADAPTER_UNAVAILABLE" not in response.text:
             raise RuntimeError(
                 f"{operation} did not fail closed at its unavailable adapter boundary"
             )

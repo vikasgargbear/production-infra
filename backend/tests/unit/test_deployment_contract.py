@@ -487,6 +487,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "item.original_amount" not in provisioner
     assert "item.outstanding_amount" not in provisioner
     assert "COMMAND_ADAPTER_UNAVAILABLE" in provisioner
+    assert 'response.status_code != 503' in provisioner
     assert provisioner.count("DEMOB1234C") == 1
     assert provisioner.count("DEMOC5678D") == 4
     assert provisioner.count("27DEMOC5678D1Z5") == 3
