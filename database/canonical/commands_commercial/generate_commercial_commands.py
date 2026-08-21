@@ -1488,6 +1488,7 @@ def _return_artifact_assertion(*, sales: bool) -> list[str]:
         if sales
         else "IF header.return_source_kind='invoiced' THEN PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(organization_id::text||original.id::text,734821)); END IF;"
     )
+    postable_statuses = "'draft','approved','posted'" if sales else "'draft','submitted','approved','posted'"
 
     return _function(
         f"{name}(organization_id uuid, resource_id uuid, input_doc jsonb, output_doc jsonb)",
@@ -1497,7 +1498,7 @@ DECLARE header {header_table}%ROWTYPE; original {original_header}%ROWTYPE;
         expected_lines bigint; bad_count bigint; cumulative_grand numeric(20,2); cumulative_rounding numeric(20,2);
 BEGIN
     SELECT * INTO STRICT header FROM {header_table} WHERE org_id=organization_id AND id=resource_id FOR UPDATE;
-    IF header.status NOT IN ('draft','approved','posted') THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return is not postable or posted'; END IF;
+    IF header.status NOT IN ({postable_statuses}) THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return is not postable or posted'; END IF;
     {original_lock}
     {cross_adjustment_lock}
     PERFORM erp_calculation_authority.assert_input_schema(input_doc);

@@ -527,7 +527,8 @@ jobs:
                  position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
                    AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_supplier_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_invoice_artifacts_current,
                  position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
-                   AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_return_artifacts_current,
+                   AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
+                   AND position('header.status NOT IN (''draft'',''submitted'',''approved'',''posted'')' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_return_artifacts_current,
                  NOT EXISTS (
                    SELECT 1 FROM pg_catalog.pg_trigger
                     WHERE tgrelid='tax.portal_documents'::regclass
@@ -837,7 +838,7 @@ jobs:
             "SELECT position('FROM sales.return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AND position('FROM procurement.purchase_return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_purchase_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           test "$(psql -X -Atqc \
-            "SELECT position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0" \
+            "SELECT position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AND position('header.status NOT IN (''draft'',''submitted'',''approved'',''posted'')' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           cleanup_migration_membership
           trap - EXIT

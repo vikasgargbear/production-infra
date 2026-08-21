@@ -41,6 +41,7 @@ def test_commercial_readiness_artifacts_are_deterministic() -> None:
     assert "FROM sales.invoice_lines invoice_product_line" in mapping
     assert "FROM sales.invoice_lines line WHERE line.org_id=organization_id" not in mapping
     assert mapping.count("header.status='posted' THEN header.row_version-1") >= 4
+    assert "header.status NOT IN ('draft','submitted','approved','posted')" in mapping
     parsed = json.loads(manifest)
     assert parsed["mapping_sha256"] == hashlib.sha256(mapping.encode()).hexdigest()
     assert parsed["implementation_status"] == "implemented"

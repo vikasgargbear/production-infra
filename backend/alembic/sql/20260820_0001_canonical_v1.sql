@@ -19297,7 +19297,7 @@ DECLARE header procurement.purchase_returns%ROWTYPE; original procurement.suppli
         expected_lines bigint; bad_count bigint; cumulative_grand numeric(20,2); cumulative_rounding numeric(20,2);
 BEGIN
     SELECT * INTO STRICT header FROM procurement.purchase_returns WHERE org_id=organization_id AND id=resource_id FOR UPDATE;
-    IF header.status NOT IN ('draft','approved','posted') THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return is not postable or posted'; END IF;
+    IF header.status NOT IN ('draft','submitted','approved','posted') THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return is not postable or posted'; END IF;
     IF header.return_source_kind='invoiced' THEN
       SELECT * INTO STRICT original FROM procurement.supplier_invoices WHERE org_id=organization_id AND id=header.supplier_invoice_id FOR UPDATE;
     END IF;
