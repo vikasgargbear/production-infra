@@ -408,6 +408,15 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n                SOURCE_RETRIEVED_ON,\n                None," in adjustment_import
     assert '"gst_tax_treatment": "statutory"' in provisioner
     assert "supplier_challan_number" in provisioner
+    receipt_payload = provisioner.split("def goods_receipt_payload", 1)[1].split(
+        "\ndef seed_supplier_invoice_portal_evidence", 1
+    )[0]
+    assert '"free_quantity": "5"' in receipt_payload
+    supplier_invoice_payload = provisioner.split("def supplier_invoice_payload", 1)[1].split(
+        "\ndef supplier_payment_payload", 1
+    )[0]
+    assert '"free_quantity": "2.5"' in supplier_invoice_payload
+    assert '"allocated_base_free_quantity": "2.5"' in supplier_invoice_payload
     assert "dispatch_delivery_challan_number" in provisioner
     assert "purchase_return_delivery_challan_number" in provisioner
     assert "purchase_order.purchase_order_number" in provisioner

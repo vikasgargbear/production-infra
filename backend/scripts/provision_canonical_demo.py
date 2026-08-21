@@ -1575,7 +1575,7 @@ def goods_receipt_payload(purchase_order_id: str, purchase_order_line_id: str) -
                         "received_quantity": "100",
                         "accepted_quantity": "100",
                         "rejected_quantity": "0",
-                        "free_quantity": "0",
+                        "free_quantity": "5",
                         "qc_status": "accepted",
                         "to_location_id": IDS["saleable_location"],
                     }
@@ -1768,7 +1768,7 @@ def supplier_invoice_payload(
         "lines": [
             {
                 "billed_quantity": "50",
-                "free_quantity": "0",
+                "free_quantity": "2.5",
                 "free_supply_tax_treatment": "excluded_from_taxable_value",
                 "quoted_unit_rate": "100.0000",
                 "price_basis": "tax_exclusive",
@@ -1780,7 +1780,7 @@ def supplier_invoice_payload(
                 "document_discount_eligible": True,
                 "goods_receipt_line_id": goods_receipt_line_id,
                 "allocated_base_billed_quantity": "50",
-                "allocated_base_free_quantity": "0",
+                "allocated_base_free_quantity": "2.5",
                 "product_inventory_cost_treatment": "capitalize",
                 "itc_eligibility": "eligible",
                 "itc_eligibility_basis": "taxable_resale_not_blocked_under_section_17",
