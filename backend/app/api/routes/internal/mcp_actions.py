@@ -390,7 +390,7 @@ def prepare_action(
                 metadata={"errors": exc.errors(include_url=False)},
             ),
         ) from exc
-    validated_payload = payload.model_dump(mode="python")
+    validated_payload = payload.model_dump(mode="python", exclude_none=True)
     try:
         validate_prepare_payload_semantics(operation_key, payload)
     except ValueError as exc:

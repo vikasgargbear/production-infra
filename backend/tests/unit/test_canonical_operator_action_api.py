@@ -800,6 +800,9 @@ def test_invoice_prepare_accepts_each_reviewed_fulfillment_mode(
     assert "idempotency_key" not in business_payload
     assert business_payload["tax_charge_mechanism"] == "normal"
     assert business_payload["lines"][0]["fulfillment_source"] == fulfillment_source
+    if fulfillment_source == "dispatch_allocated":
+        assert "from_location_id" not in business_payload
+        assert "logistics" not in business_payload
 
 
 def test_invoice_prepare_fails_closed_for_unreviewed_sez_without_payment(

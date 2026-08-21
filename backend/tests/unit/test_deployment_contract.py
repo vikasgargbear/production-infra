@@ -373,6 +373,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'join_transaction_mode="create_savepoint"' in preflight
     assert "outer_transaction.rollback()" in preflight
     assert "SqlAlchemyOperatorActionService" in preflight
+    assert "PREPARE_PAYLOAD_MODELS[operation].model_validate(payload)" in provisioner
+    assert 'model_dump(mode="python", exclude_none=True)' in provisioner
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner

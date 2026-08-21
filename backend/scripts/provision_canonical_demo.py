@@ -1286,7 +1286,7 @@ def preflight_action(operation: str, payload: dict[str, Any]) -> None:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from app.domain.operator_actions.contract import ACTION_POLICIES
+    from app.domain.operator_actions.contract import ACTION_POLICIES, PREPARE_PAYLOAD_MODELS
     from app.infrastructure.operator_actions.service import SqlAlchemyOperatorActionService
 
     runtime_engine = create_engine(required("ERP_RUNTIME_DATABASE_URL"), pool_pre_ping=True)
@@ -1306,10 +1306,16 @@ def preflight_action(operation: str, payload: dict[str, Any]) -> None:
             runtime_principal_configured=True,
         )
         policy = ACTION_POLICIES[operation]
+        validated_payload = PREPARE_PAYLOAD_MODELS[operation].model_validate(payload)
+        service_payload = validated_payload.model_dump(mode="python", exclude_none=True)
         prepared = service.prepare(
             policy=policy,
-            payload={key: value for key, value in payload.items() if key != "idempotency_key"},
-            idempotency_key=payload["idempotency_key"],
+            payload={
+                key: value
+                for key, value in service_payload.items()
+                if key != "idempotency_key"
+            },
+            idempotency_key=service_payload["idempotency_key"],
             context=action_context(operation, policy.permission),
         )
         if prepared.command_request_id is None or not prepared.preview_hash.startswith("sha256:"):
