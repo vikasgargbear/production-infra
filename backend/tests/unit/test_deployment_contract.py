@@ -295,6 +295,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "commercial_sales_post_current" in reconciliation
     assert "return_rounding_current" in reconciliation
     assert "constraint_targets" in reconciliation
+    assert 'relation["checks"]' in reconciliation
     assert "ck_sales_returns_rounding_policy" in reconciliation
     assert "ck_procurement_purchase_returns_rounding_policy" in reconciliation
     assert "v_purchase_order_id" in reconciliation

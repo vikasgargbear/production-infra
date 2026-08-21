@@ -718,7 +718,7 @@ jobs:
               )
               constraint = next(
                   item
-                  for item in relation["constraints"]
+                  for item in relation["checks"]
                   if item["name"] == constraint_name
               )
               selected.append(
