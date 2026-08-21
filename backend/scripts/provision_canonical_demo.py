@@ -2342,14 +2342,11 @@ def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT dispatch.id,dispatch.dispatch_number,dispatch.status,
-                   line.id AS dispatch_line_id,line.base_billed_quantity,
-                   line.base_free_quantity,document.id AS inventory_document_id,
+                   document.id AS inventory_document_id,
                    count(DISTINCT ledger.id) AS ledger_count,
                    coalesce(sum(ledger.value_delta),0) AS inventory_value_delta,
                    count(DISTINCT event.id) AS valuation_event_count
               FROM sales.dispatches AS dispatch
-              JOIN sales.dispatch_lines AS line
-                ON line.org_id=dispatch.org_id AND line.dispatch_id=dispatch.id
               JOIN inventory.inventory_documents AS document
                 ON document.org_id=dispatch.org_id AND document.sales_dispatch_id=dispatch.id
               JOIN inventory.stock_ledger_entries AS ledger
@@ -2359,13 +2356,12 @@ def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
                AND event.inventory_document_id=document.id
                AND event.event_type='inventory_valuation'
              WHERE dispatch.org_id=%s AND dispatch.id=%s
-             GROUP BY dispatch.org_id,dispatch.id,line.org_id,line.id,
-                      document.org_id,document.id
+             GROUP BY dispatch.org_id,dispatch.id,document.org_id,document.id
             """,
             (IDS["org"], resource_id),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "posted" or row[7] < 1 or row[8] >= 0 or row[9] != 1:
+        if row is None or row[2] != "posted" or row[4] < 1 or row[5] >= 0 or row[6] != 1:
             raise RuntimeError("executed demo sales dispatch did not reconcile")
         columns = [item.name for item in cursor.description]
         result = {
@@ -2374,27 +2370,45 @@ def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
         }
         cursor.execute(
             """
-            SELECT inventory_line.batch_id,inventory_line.base_quantity
-              FROM inventory.inventory_document_lines AS inventory_line
-             WHERE inventory_line.org_id=%s
+            SELECT line.id AS dispatch_line_id,line.line_number,line.batch_id,
+                   line.billed_quantity,line.free_quantity,line.base_billed_quantity,
+                   line.base_free_quantity,inventory_line.id AS inventory_line_id,
+                   inventory_line.base_quantity,inventory_line.unit_cost,
+                   inventory_line.extended_cost,ledger.quantity_delta,ledger.value_delta
+              FROM sales.dispatch_lines AS line
+              JOIN inventory.inventory_document_lines AS inventory_line
+                ON inventory_line.org_id=line.org_id
                AND inventory_line.inventory_document_id=%s
-               AND inventory_line.sales_dispatch_line_id=%s
-             ORDER BY inventory_line.base_quantity DESC,inventory_line.batch_id
+               AND inventory_line.sales_dispatch_line_id=line.id
+              JOIN inventory.stock_ledger_entries AS ledger
+                ON ledger.org_id=inventory_line.org_id
+               AND ledger.inventory_document_line_id=inventory_line.id
+               AND ledger.entry_kind='issue'
+             WHERE inventory_line.org_id=%s
+               AND line.dispatch_id=%s
+             ORDER BY line.line_number,line.id
             """,
-            (IDS["org"], result["inventory_document_id"], result["dispatch_line_id"]),
+            (result["inventory_document_id"], IDS["org"], resource_id),
         )
-        dispatched_batches = cursor.fetchall()
-        if not dispatched_batches or len(dispatched_batches) != int(result["ledger_count"]):
+        columns = [item.name for item in cursor.description]
+        dispatched_lines = [dict(zip(columns, item)) for item in cursor.fetchall()]
+        if not dispatched_lines or len(dispatched_lines) != int(result["ledger_count"]):
             raise RuntimeError("executed demo sales dispatch lacks batch lineage")
-        result["batch_allocations"] = [
-            {"batch_id": str(batch_id), "base_quantity": str(base_quantity)}
-            for batch_id, base_quantity in dispatched_batches
+        for line in dispatched_lines:
+            if (
+                line["base_quantity"] != line["base_billed_quantity"] + line["base_free_quantity"]
+                or line["quantity_delta"] != -line["base_quantity"]
+                or line["value_delta"] != -line["extended_cost"]
+            ):
+                raise RuntimeError("executed demo sales dispatch batch quantities or values differ")
+        result["dispatch_lines"] = [
+            {key: str(value) if value is not None else None for key, value in line.items()}
+            for line in dispatched_lines
         ]
-        result["return_batch_id"] = str(dispatched_batches[0][0])
         return result
 
 
-def sales_invoice_payload(dispatch_line_id: str) -> dict[str, Any]:
+def sales_invoice_payload(dispatch_lines: list[dict[str, str]]) -> dict[str, Any]:
     return {
         "idempotency_key": f"demo-sales-invoice-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
@@ -2427,10 +2441,11 @@ def sales_invoice_payload(dispatch_line_id: str) -> dict[str, Any]:
                 "fulfillment_source": "dispatch_allocated",
                 "dispatch_allocations": [
                     {
-                        "dispatch_line_id": dispatch_line_id,
-                        "allocated_base_billed_quantity": "12",
-                        "allocated_base_free_quantity": "2",
+                        "dispatch_line_id": line["dispatch_line_id"],
+                        "allocated_base_billed_quantity": line["base_billed_quantity"],
+                        "allocated_base_free_quantity": line["base_free_quantity"],
                     }
+                    for line in dispatch_lines
                 ],
             }
         ],
@@ -2445,8 +2460,7 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
             SELECT invoice.id,invoice.invoice_number,invoice.status,
                    invoice.net_value_total,invoice.cgst_total,invoice.sgst_total,
                    invoice.rounding_adjustment,invoice.grand_total,
-                   line.id AS invoice_line_id,
-                   allocation.id AS invoice_dispatch_allocation_id,
+                   line.id AS invoice_line_id,line.uom_conversion_factor,
                    item.id AS open_item_id,
                    item.principal_amount-coalesce((
                      SELECT sum(posted_allocation.amount)
@@ -2460,8 +2474,6 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
               FROM sales.invoices AS invoice
               JOIN sales.invoice_lines AS line
                 ON line.org_id=invoice.org_id AND line.invoice_id=invoice.id
-              JOIN sales.invoice_dispatch_allocations AS allocation
-                ON allocation.org_id=invoice.org_id AND allocation.invoice_line_id=line.id
               JOIN finance.accounting_events AS event
                 ON event.org_id=invoice.org_id AND event.sales_invoice_id=invoice.id
               JOIN finance.open_items AS item
@@ -2470,7 +2482,7 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
                 ON tax_document.org_id=invoice.org_id AND tax_document.sales_invoice_id=invoice.id
              WHERE invoice.org_id=%s AND invoice.id=%s
              GROUP BY invoice.org_id,invoice.id,line.org_id,line.id,
-                      allocation.org_id,allocation.id,item.org_id,item.id
+                      item.org_id,item.id
             """,
             (IDS["org"], resource_id),
         )
@@ -2478,10 +2490,35 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
         if row is None or row[2] != "posted" or row[12:] != (1, 1):
             raise RuntimeError("executed demo sales invoice did not reconcile")
         columns = [item.name for item in cursor.description]
-        return {
+        result = {
             key: str(value) if value is not None else None
             for key, value in zip(columns, row)
         }
+        cursor.execute(
+            """
+            SELECT allocation.id AS invoice_dispatch_allocation_id,
+                   allocation.dispatch_line_id,allocation.allocated_base_billed_quantity,
+                   allocation.allocated_base_free_quantity,dispatch_line.batch_id
+              FROM sales.invoice_dispatch_allocations AS allocation
+              JOIN sales.dispatch_lines AS dispatch_line
+                ON dispatch_line.org_id=allocation.org_id AND dispatch_line.id=allocation.dispatch_line_id
+             WHERE allocation.org_id=%s AND allocation.invoice_line_id=%s
+             ORDER BY dispatch_line.line_number,allocation.id
+            """,
+            (IDS["org"], result["invoice_line_id"]),
+        )
+        allocation_columns = [item.name for item in cursor.description]
+        allocations = [dict(zip(allocation_columns, item)) for item in cursor.fetchall()]
+        if not allocations:
+            raise RuntimeError("executed demo sales invoice lacks dispatch allocations")
+        result["dispatch_allocations"] = [
+            {
+                **{key: str(value) if value is not None else None for key, value in allocation.items()},
+                "uom_conversion_factor": result["uom_conversion_factor"],
+            }
+            for allocation in allocations
+        ]
+        return result
 
 
 def customer_receipt_payload(open_item_id: str) -> dict[str, Any]:
@@ -2502,9 +2539,19 @@ def customer_receipt_payload(open_item_id: str) -> dict[str, Any]:
 def sales_return_payload(
     invoice_id: str,
     invoice_line_id: str,
-    invoice_dispatch_allocation_id: str,
-    batch_id: str,
+    dispatch_allocations: list[dict[str, str]],
 ) -> dict[str, Any]:
+    allocation = max(
+        dispatch_allocations,
+        key=lambda item: Decimal(item["allocated_base_billed_quantity"]),
+    )
+    conversion_factor = Decimal(allocation["uom_conversion_factor"])
+    billed_quantity = min(
+        Decimal("4"),
+        Decimal(allocation["allocated_base_billed_quantity"]) / conversion_factor,
+    )
+    if billed_quantity <= 0:
+        raise RuntimeError("demo invoice has no billed dispatch quantity available to return")
     return {
         "idempotency_key": f"demo-sales-return-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
@@ -2517,12 +2564,12 @@ def sales_return_payload(
         "lines": [
             {
                 "original_invoice_line_id": invoice_line_id,
-                "invoice_dispatch_allocation_id": invoice_dispatch_allocation_id,
-                "billed_quantity": "4",
+                "invoice_dispatch_allocation_id": allocation["invoice_dispatch_allocation_id"],
+                "billed_quantity": str(billed_quantity),
                 "free_quantity": "0",
                 "batch_allocation": {
-                    "batch_id": batch_id,
-                    "billed_quantity": "4",
+                    "batch_id": allocation["batch_id"],
+                    "billed_quantity": str(billed_quantity),
                     "free_quantity": "0",
                 },
                 "to_location_id": IDS["quarantine_location"],
@@ -2912,7 +2959,7 @@ def main() -> int:
             runtime, dispatch_journey["executed"]["resource_id"]
         )
 
-    invoice_request = sales_invoice_payload(dispatch_reconciliation["dispatch_line_id"])
+    invoice_request = sales_invoice_payload(dispatch_reconciliation["dispatch_lines"])
     preflight_action("sales.invoice.prepare", invoice_request)
     invoice_journey = exercise_action(
         evidence_dir,
@@ -2943,8 +2990,7 @@ def main() -> int:
     sales_return_request = sales_return_payload(
         invoice_reconciliation["id"],
         invoice_reconciliation["invoice_line_id"],
-        invoice_reconciliation["invoice_dispatch_allocation_id"],
-        dispatch_reconciliation["return_batch_id"],
+        invoice_reconciliation["dispatch_allocations"],
     )
     preflight_action("sales.return.prepare", sales_return_request)
     sales_return_journey = exercise_action(

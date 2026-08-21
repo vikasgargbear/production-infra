@@ -393,7 +393,9 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "conversion.multiplier" in provisioner
     assert "conversion.conversion_factor" not in provisioner
     assert "ORDER BY batch.expires_on,batch.id" in provisioner
-    assert 'dispatch_reconciliation["return_batch_id"]' in provisioner
+    assert 'dispatch_reconciliation["dispatch_lines"]' in provisioner
+    assert 'invoice_reconciliation["dispatch_allocations"]' in provisioner
+    assert '"allocated_base_billed_quantity": line["base_billed_quantity"]' in provisioner
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
