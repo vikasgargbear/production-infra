@@ -286,6 +286,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
     assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation
     assert '"erp_commercial_commands"."post_sales_invoice"' in reconciliation
+    assert '"erp_commercial_commands"."post_sales_return"' in reconciliation
+    assert '"erp_commercial_commands"."post_purchase_return"' in reconciliation
     assert '"erp_commercial_commands"."assert_sales_invoice_artifact"' in reconciliation
     assert '"erp_commercial_commands"."assert_supplier_invoice_artifact"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
@@ -296,6 +298,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "commercial_sales_post_current" in reconciliation
     assert "return_rounding_current" in reconciliation
     assert "sales_return_receipt_current" in reconciliation
+    assert "commercial_return_post_current" in reconciliation
     assert "constraint_targets" in reconciliation
     assert 'relation["checks"]' in reconciliation
     assert "ck_sales_returns_rounding_policy" in reconciliation
