@@ -2251,7 +2251,65 @@ def reconcile(connection, execution: dict[str, Any]) -> dict[str, Any]:
         return result
 
 
-def sales_dispatch_payload(sales_order_id: str, sales_order_line_id: str, batch_id: str) -> dict[str, Any]:
+def resolve_fefo_dispatch_allocations(connection) -> list[dict[str, str]]:
+    billed_remaining = Decimal("12")
+    free_remaining = Decimal("2")
+    allocations: list[dict[str, str]] = []
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT batch.id,balance.on_hand_quantity,conversion.conversion_factor
+              FROM inventory.stock_balances AS balance
+              JOIN inventory.batches AS batch
+                ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
+              JOIN catalog.uom_conversions AS conversion
+                ON conversion.org_id=balance.org_id AND conversion.id=%s
+             WHERE balance.org_id=%s AND balance.branch_id=%s
+               AND balance.location_id=%s AND balance.product_id=%s
+               AND balance.on_hand_quantity>0
+               AND batch.lot_kind='manufacturer_batch'
+               AND batch.status='released' AND batch.released_at IS NOT NULL
+               AND batch.expires_on>%s
+             ORDER BY batch.expires_on,batch.id
+            """,
+            (
+                IDS["uom_conversion"], IDS["org"], IDS["branch"],
+                IDS["saleable_location"], IDS["product"], SOURCE_RETRIEVED_ON,
+            ),
+        )
+        candidates = cursor.fetchall()
+
+    for batch_id, on_hand_quantity, conversion_factor in candidates:
+        available = Decimal(on_hand_quantity) / Decimal(conversion_factor)
+        billed = min(billed_remaining, available)
+        billed_remaining -= billed
+        available -= billed
+        free = min(free_remaining, available)
+        free_remaining -= free
+        if billed > 0 or free > 0:
+            allocations.append(
+                {
+                    "batch_id": str(batch_id),
+                    "billed_quantity": str(billed),
+                    "free_quantity": str(free),
+                }
+            )
+        if billed_remaining == 0 and free_remaining == 0:
+            break
+    if billed_remaining != 0 or free_remaining != 0:
+        raise RuntimeError("demo FEFO stock cannot fulfill the sales dispatch")
+    return allocations
+
+
+def sales_dispatch_payload(
+    sales_order_id: str,
+    sales_order_line_id: str,
+    batch_allocations: list[dict[str, str]],
+) -> dict[str, Any]:
     return {
         "idempotency_key": f"demo-sales-dispatch-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
@@ -2263,9 +2321,7 @@ def sales_dispatch_payload(sales_order_id: str, sales_order_line_id: str, batch_
                 "sales_order_line_id": sales_order_line_id,
                 "billed_quantity": "12",
                 "free_quantity": "2",
-                "batch_allocations": [
-                    {"batch_id": batch_id, "billed_quantity": "12", "free_quantity": "2"}
-                ],
+                "batch_allocations": batch_allocations,
             }
         ],
         "logistics": {
@@ -2309,13 +2365,33 @@ def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
             (IDS["org"], resource_id),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "posted" or row[7] != 1 or row[8] >= 0 or row[9] != 1:
+        if row is None or row[2] != "posted" or row[7] < 1 or row[8] >= 0 or row[9] != 1:
             raise RuntimeError("executed demo sales dispatch did not reconcile")
         columns = [item.name for item in cursor.description]
-        return {
+        result = {
             key: str(value) if value is not None else None
             for key, value in zip(columns, row)
         }
+        cursor.execute(
+            """
+            SELECT inventory_line.batch_id,inventory_line.base_quantity
+              FROM inventory.inventory_document_lines AS inventory_line
+             WHERE inventory_line.org_id=%s
+               AND inventory_line.inventory_document_id=%s
+               AND inventory_line.sales_dispatch_line_id=%s
+             ORDER BY inventory_line.base_quantity DESC,inventory_line.batch_id
+            """,
+            (IDS["org"], result["inventory_document_id"], result["dispatch_line_id"]),
+        )
+        dispatched_batches = cursor.fetchall()
+        if not dispatched_batches or len(dispatched_batches) != int(result["ledger_count"]):
+            raise RuntimeError("executed demo sales dispatch lacks batch lineage")
+        result["batch_allocations"] = [
+            {"batch_id": str(batch_id), "base_quantity": str(base_quantity)}
+            for batch_id, base_quantity in dispatched_batches
+        ]
+        result["return_batch_id"] = str(dispatched_batches[0][0])
+        return result
 
 
 def sales_invoice_payload(dispatch_line_id: str) -> dict[str, Any]:
@@ -2819,8 +2895,10 @@ def main() -> int:
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         reconciliation = reconcile(runtime, journey["executed"])
 
+    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+        dispatch_allocations = resolve_fefo_dispatch_allocations(runtime)
     dispatch_request = sales_dispatch_payload(
-        reconciliation["id"], reconciliation["line_ids"][0], receipt_reconciliation["batch_id"]
+        reconciliation["id"], reconciliation["line_ids"][0], dispatch_allocations
     )
     preflight_action("sales.dispatch.prepare", dispatch_request)
     dispatch_journey = exercise_action(
@@ -2866,7 +2944,7 @@ def main() -> int:
         invoice_reconciliation["id"],
         invoice_reconciliation["invoice_line_id"],
         invoice_reconciliation["invoice_dispatch_allocation_id"],
-        receipt_reconciliation["batch_id"],
+        dispatch_reconciliation["return_batch_id"],
     )
     preflight_action("sales.return.prepare", sales_return_request)
     sales_return_journey = exercise_action(

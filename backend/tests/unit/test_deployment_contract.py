@@ -375,6 +375,9 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "SqlAlchemyOperatorActionService" in preflight
     assert "PREPARE_PAYLOAD_MODELS[operation].model_validate(payload)" in provisioner
     assert 'model_dump(mode="python", exclude_none=True)' in provisioner
+    assert "resolve_fefo_dispatch_allocations" in provisioner
+    assert "ORDER BY batch.expires_on,batch.id" in provisioner
+    assert 'dispatch_reconciliation["return_batch_id"]' in provisioner
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
