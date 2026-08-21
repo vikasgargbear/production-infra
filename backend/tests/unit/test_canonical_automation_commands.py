@@ -253,6 +253,7 @@ def test_inventory_cycle_count_gain_prepare_and_execute_are_closed_and_atomic() 
         '"resolve_inventory_adjustment_prepare"',
         '"persist_inventory_adjustment_prepare"',
         '"assert_inventory_adjustment_draft"',
+        "SESSION_USER<>'erp_runtime'",
         "capability.capability_code='inventory.adjustment.prepare'",
         "evidence_kind='inventory_cycle_count_sheet'",
         "adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE 'Asia/Kolkata')::date",

@@ -4020,7 +4020,7 @@ DECLARE request_document jsonb:=pg_catalog.convert_from(request_bytes,'UTF8')::j
         aggregate_hash bytea; document_sequence_id uuid; journal_sequence_id uuid;
         document_number text; journal_number text; fiscal_year integer; resolved_line jsonb;
 BEGIN
-  IF pg_catalog.session_user<>'erp_runtime' OR command_id IS NULL OR journal_id IS NULL OR event_id IS NULL
+  IF SESSION_USER<>'erp_runtime' OR command_id IS NULL OR journal_id IS NULL OR event_id IS NULL
      OR pg_catalog.octet_length(key_hash)<>32 OR expires_at<=pg_catalog.transaction_timestamp()
      OR request_document->>'inventory_document_id' IS DISTINCT FROM inventory_document_id::text
      OR request_document->>'journal_id' IS DISTINCT FROM journal_id::text
