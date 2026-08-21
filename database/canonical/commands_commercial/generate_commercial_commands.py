@@ -814,10 +814,10 @@ def _invoice_command(*, sales: bool) -> list[str]:
         else "eligible_cgst,eligible_sgst,eligible_igst,eligible_cess"
     )
     inventory_before = (
-        '''SELECT EXISTS(SELECT 1 FROM sales.invoice_lines line WHERE line.org_id=organization_id AND line.invoice_id=resource_id
-                           AND line.line_kind='product' AND NOT EXISTS (
+        '''SELECT EXISTS(SELECT 1 FROM sales.invoice_lines invoice_product_line WHERE invoice_product_line.org_id=organization_id AND invoice_product_line.invoice_id=resource_id
+                           AND invoice_product_line.line_kind='product' AND NOT EXISTS (
                              SELECT 1 FROM sales.invoice_dispatch_allocations allocation
-                              WHERE allocation.org_id=line.org_id AND allocation.invoice_line_id=line.id)),
+                              WHERE allocation.org_id=invoice_product_line.org_id AND allocation.invoice_line_id=invoice_product_line.id)),
                  EXISTS(SELECT 1 FROM sales.invoice_dispatch_allocations allocation JOIN sales.invoice_lines invoice_line ON invoice_line.org_id=allocation.org_id AND invoice_line.id=allocation.invoice_line_id WHERE invoice_line.org_id=organization_id AND invoice_line.invoice_id=resource_id)
             INTO product_lines,allocated_lines;
         IF product_lines<>(inventory_document_id IS NOT NULL) THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='direct sales invoice inventory ownership mismatch'; END IF;

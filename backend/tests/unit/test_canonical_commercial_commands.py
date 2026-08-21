@@ -38,6 +38,8 @@ def test_commercial_readiness_artifacts_are_deterministic() -> None:
     assert "FROM procurement.supplier_invoice_lines tax_line JOIN tax.tax_code_versions" in mapping
     assert "FROM sales.invoice_lines tax_line JOIN tax.tax_code_versions" in mapping
     assert "FROM procurement.supplier_invoice_lines line JOIN tax.tax_code_versions" not in mapping
+    assert "FROM sales.invoice_lines invoice_product_line" in mapping
+    assert "FROM sales.invoice_lines line WHERE line.org_id=organization_id" not in mapping
     assert mapping.count("header.status='posted' THEN header.row_version-1") >= 4
     parsed = json.loads(manifest)
     assert parsed["mapping_sha256"] == hashlib.sha256(mapping.encode()).hexdigest()

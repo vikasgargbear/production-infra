@@ -519,7 +519,8 @@ jobs:
                  position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS trade_current,
                  position('v_purchase_order_id' IN pg_catalog.pg_get_functiondef('erp_trade_commands.post_goods_receipt(uuid,uuid,uuid,uuid,bytea,bytea,timestamptz)'::regprocedure))>0 AS goods_receipt_post_current,
                  position('supplier_invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_supplier_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_supplier_post_current,
-                 position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_sales_post_current,
+                 position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0
+                   AND position('sales.invoice_lines invoice_product_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_sales_post_current,
                  position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
                    AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_supplier_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_invoice_artifacts_current,
                  NOT EXISTS (
@@ -728,7 +729,7 @@ jobs:
             "SELECT position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' THEN' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))>0 AND position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' AND NEW.sales_invoice_id' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))=0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           test "$(psql -X -Atqc \
-            "SELECT position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0" \
+            "SELECT position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AND position('sales.invoice_lines invoice_product_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           cleanup_migration_membership
           trap - EXIT
