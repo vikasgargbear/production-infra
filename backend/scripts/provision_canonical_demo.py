@@ -579,7 +579,7 @@ def adjustment_dataset_bytes(connection) -> bytes:
             "portal_evidence_required": False,
             "tax_effect": "statutory",
             "effective_from": SOURCE_RETRIEVED_ON.isoformat(),
-            "effective_to": SOURCE_RETRIEVED_ON.isoformat(),
+            "effective_to": "",
         },
         {
             "id": IDS["purchase_return_rule"],
@@ -594,7 +594,7 @@ def adjustment_dataset_bytes(connection) -> bytes:
             "portal_evidence_required": True,
             "tax_effect": "statutory",
             "effective_from": SOURCE_RETRIEVED_ON.isoformat(),
-            "effective_to": SOURCE_RETRIEVED_ON.isoformat(),
+            "effective_to": "",
         },
     ]
     with connection.cursor() as cursor:
@@ -647,7 +647,7 @@ def import_adjustment_release(
                 psycopg2.Binary(hashlib.sha256(dataset_bytes).digest()),
                 ADJUSTMENT_SOURCE_PUBLICATION_DATE,
                 SOURCE_RETRIEVED_ON,
-                SOURCE_RETRIEVED_ON,
+                None,
                 IDS["reviewer_user"],
                 IDS["request"],
             ),

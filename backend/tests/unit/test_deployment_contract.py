@@ -401,6 +401,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         assert reconciliation in provisioner
     assert "import_gst_adjustment_rule_release" in provisioner
     assert "gst-council-return-of-goods-faq.pdf" in provisioner
+    assert provisioner.count('"effective_to": ""') >= 2
+    adjustment_import = provisioner.split("def import_adjustment_release", 1)[1].split(
+        "\ndef seed_business_master", 1
+    )[0]
+    assert "ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n                SOURCE_RETRIEVED_ON,\n                None," in adjustment_import
     assert '"gst_tax_treatment": "statutory"' in provisioner
     assert "supplier_challan_number" in provisioner
     assert "dispatch_delivery_challan_number" in provisioner
