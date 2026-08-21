@@ -90,7 +90,7 @@ jobs:
           }
       - name: Reject remaining high or critical advisories
         run: |
-          npm audit --json > "$RUNNER_TEMP/frontend-audit.json" || {
+          npm audit --audit-level=high --json > "$RUNNER_TEMP/frontend-audit.json" || {
             jq -r '.vulnerabilities | to_entries[] |
               select(.value.severity == "high" or .value.severity == "critical") |
               "::error title=Unresolved \(.value.severity) advisory::\(.key) \(.value.range)"' \
