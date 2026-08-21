@@ -862,15 +862,34 @@ def seed_end_to_end_master(connection) -> None:
             cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
 
         attachments = (
-            (IDS["tax_profile_evidence"], "supplier_tax_profile", "supplier-pan-verification.json", SOURCE_RETRIEVED_ON),
-            (IDS["fiscal_fact_evidence"], "organization_fiscal_tax_profile", "fy-2026-tax-facts.json", SOURCE_RETRIEVED_ON),
+            (
+                IDS["tax_profile_evidence"],
+                "supplier_tax_profile",
+                "supplier-pan-verification.json",
+                SOURCE_RETRIEVED_ON,
+                "supplier_tax_profile",
+            ),
+            (
+                IDS["fiscal_fact_evidence"],
+                "organization_fiscal_tax_profile",
+                "fy-2026-tax-facts.json",
+                SOURCE_RETRIEVED_ON,
+                "organization_fiscal_tax_profile",
+            ),
             (
                 IDS["cycle_count_evidence"],
                 "inventory_cycle_count_sheet",
                 f"cycle-count-sheet-{DEMO_RUN_ID}.json",
                 INDIA_BUSINESS_DATE,
+                f"inventory_cycle_count_sheet:{DEMO_RUN_ID}",
             ),
-            (IDS["recipient_itc_evidence"], "recipient_itc_reversal", "recipient-itc-reversal.json", SOURCE_RETRIEVED_ON),
+            (
+                IDS["recipient_itc_evidence"],
+                "recipient_itc_reversal",
+                "recipient-itc-reversal.json",
+                SOURCE_RETRIEVED_ON,
+                "recipient_itc_reversal",
+            ),
         )
         cursor.executemany(
             """
@@ -887,10 +906,10 @@ def seed_end_to_end_master(connection) -> None:
             [
                 (
                     IDS["org"], attachment_id, f"demo/{filename}", filename,
-                    f"canonical-demo:{evidence_kind}", evidence_kind,
+                    f"canonical-demo:{digest_key}", evidence_kind,
                     document_date, date(2034, 8, 20), IDS["reviewer_membership"],
                 )
-                for attachment_id, evidence_kind, filename, document_date in attachments
+                for attachment_id, evidence_kind, filename, document_date, digest_key in attachments
             ],
         )
 

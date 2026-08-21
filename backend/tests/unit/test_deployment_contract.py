@@ -404,6 +404,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert '"adjustment_date": adjustment_date.isoformat()' in provisioner
     assert 'canonical-staging-cycle-count:' in provisioner
     assert 'f"cycle-count-sheet-{DEMO_RUN_ID}.json"' in provisioner
+    assert 'f"inventory_cycle_count_sheet:{DEMO_RUN_ID}"' in provisioner
     assert '"allocated_base_billed_quantity": line["base_billed_quantity"]' in provisioner
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
