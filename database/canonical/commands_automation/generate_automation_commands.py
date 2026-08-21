@@ -2364,8 +2364,10 @@ BEGIN
        OR (supply_type='sez' AND (zero_mode<>'with_igst' OR customer_registration.state_code<>place_of_supply))
        OR (supply_type<>'sez' AND zero_mode<>'not_applicable') THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='place of supply or zero-rated mode lacks exact supported legal evidence'; END IF;
-    revenue_account:=erp_commercial_commands.resolve_role_account(
-      organization_id,branch_id,'sales_revenue','income','INR',false);
+     SELECT * INTO STRICT revenue_account FROM finance.accounts AS resolved_revenue_account
+      WHERE resolved_revenue_account.org_id=organization_id
+        AND resolved_revenue_account.id=erp_commercial_commands.resolve_role_account(
+          organization_id,branch_id,'sales_revenue','income','INR',false) FOR SHARE;
     IF has_direct THEN
       SELECT * INTO STRICT location FROM inventory.locations
        WHERE org_id=organization_id AND id=from_location_id AND branch_id=branch_id

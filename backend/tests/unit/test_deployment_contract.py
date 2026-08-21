@@ -279,6 +279,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_core_commands"."allocate_document_number"' in reconciliation
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert '"erp_automation_commands"."resolve_sales_dispatch_prepare"' in reconciliation
+    assert '"erp_automation_commands"."resolve_sales_invoice_prepare"' in reconciliation
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
     assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation
@@ -299,7 +300,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "trade_trigger_helpers_current" in reconciliation
     assert "guard_source_inventory_ownership" in reconciliation
     assert "guard_posted_landed_allocation" in reconciliation
-    assert '"t|t|t|t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
+    assert '"t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
     assert "resolve_inventory_adjustment_prepare" in reconciliation
     assert "controlled_batched_movement" in reconciliation
     assert "resolve_goods_receipt_prepare" in reconciliation

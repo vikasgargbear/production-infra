@@ -640,6 +640,7 @@ def test_sales_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "'resource_type','seller_registration_branch'",
         "state_code=place_of_supply",
         "'sales_revenue','income','INR',false",
+        "SELECT * INTO STRICT revenue_account FROM finance.accounts AS resolved_revenue_account",
         "batch.lot_kind='manufacturer_batch'",
         "batch.status='released'",
         "invoice_date<expires_on",
