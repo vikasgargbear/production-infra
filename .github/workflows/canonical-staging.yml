@@ -697,6 +697,14 @@ jobs:
                   'CREATE FUNCTION "erp_automation_commands"."resolve_purchase_return_prepare"',
               ),
               (
+                  "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
+                  'CREATE FUNCTION "erp_automation_commands"."assert_purchase_return_draft"',
+              ),
+              (
+                  "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
+                  'CREATE FUNCTION "erp_automation_commands"."persist_purchase_return_prepare"',
+              ),
+              (
                   "database/canonical/invariants_trade/baseline-trade-enforcements.json",
                   'CREATE FUNCTION "erp_trade_invariants"."guard_direct_invoice_issue"',
               ),
