@@ -527,11 +527,11 @@ def _artifact_assertion(
         .replace("persisted order", "persisted invoice")
         .replace(
             "(p_input->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version",
-            "(p_input->>'aggregate_version')::bigint IS DISTINCT FROM CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END",
+            "(p_input->>'aggregate_version')::bigint IS DISTINCT FROM (CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END)",
         )
         .replace(
             "(p_output->>'aggregate_version')::bigint IS DISTINCT FROM header.row_version",
-            "(p_output->>'aggregate_version')::bigint IS DISTINCT FROM CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END",
+            "(p_output->>'aggregate_version')::bigint IS DISTINCT FROM (CASE WHEN header.status='posted' THEN header.row_version-1 ELSE header.row_version END)",
         )
         .replace(
             "PERFORM erp_calculation_authority.assert_output_schema(output_doc);",
