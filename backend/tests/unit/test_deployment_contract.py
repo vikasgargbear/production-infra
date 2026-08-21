@@ -280,6 +280,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert '"erp_automation_commands"."resolve_sales_dispatch_prepare"' in reconciliation
     assert '"erp_automation_commands"."resolve_sales_invoice_prepare"' in reconciliation
+    assert '"erp_trade_invariants"."guard_direct_invoice_issue"' in reconciliation
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
     assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation

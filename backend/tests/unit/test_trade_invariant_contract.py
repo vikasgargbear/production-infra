@@ -176,6 +176,11 @@ def test_direct_invoice_issue_is_exclusive_and_idempotency_gaps_stay_blocked() -
     assert "direct_count > 1" in direct
     assert "one invoice line cannot be both dispatch allocated and directly issued" in direct
     assert "NEW.document_type <> 'sales_issue'" in direct
+    assert "TG_TABLE_NAME = 'inventory_documents' AND TG_OP <> 'DELETE' THEN" in direct
+    assert (
+        "TG_TABLE_NAME = 'inventory_documents' AND TG_OP <> 'DELETE' AND NEW.sales_invoice_id"
+        not in direct
+    )
     assert "pg_advisory_xact_lock" in direct
     assert "idempotent" in blocked[
         "inventory.inventory_documents:inventory_inventory_documents_invariant_1"

@@ -452,9 +452,11 @@ BEGIN
     ) THEN
         RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'one invoice line cannot be both dispatch allocated and directly issued';
     END IF;
-    IF TG_TABLE_NAME = 'inventory_documents' AND TG_OP <> 'DELETE' AND NEW.sales_invoice_id IS NOT NULL
-       AND (NEW.document_type <> 'sales_issue' OR NEW.branch_id IS DISTINCT FROM invoice_branch) THEN
-        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'direct invoice stock document type or branch is invalid';
+    IF TG_TABLE_NAME = 'inventory_documents' AND TG_OP <> 'DELETE' THEN
+        IF NEW.sales_invoice_id IS NOT NULL
+           AND (NEW.document_type <> 'sales_issue' OR NEW.branch_id IS DISTINCT FROM invoice_branch) THEN
+            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'direct invoice stock document type or branch is invalid';
+        END IF;
     END IF;
     IF TG_OP = 'DELETE' THEN
         RETURN OLD;
