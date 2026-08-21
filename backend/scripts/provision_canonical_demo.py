@@ -19,6 +19,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
+from zoneinfo import ZoneInfo
 
 import jwt
 import pdfplumber
@@ -2732,14 +2733,16 @@ def reconcile_purchase_return(connection, resource_id: str) -> dict[str, Any]:
 
 
 def inventory_adjustment_payload(batch_id: str, counted_base_quantity: str) -> dict[str, Any]:
-    counted_at = datetime.now(timezone.utc).isoformat()
+    counted_instant = datetime.now(timezone.utc)
+    counted_at = counted_instant.isoformat()
+    adjustment_date = counted_instant.astimezone(ZoneInfo("Asia/Kolkata")).date()
     counted_packs = str(
         (Decimal(counted_base_quantity) + Decimal("1")) / Decimal("10")
     )
     return {
         "idempotency_key": f"demo-inventory-adjustment-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "adjustment_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "adjustment_date": adjustment_date.isoformat(),
         "counted_at": counted_at,
         "counted_by_membership_id": IDS["operator_membership"],
         "location_id": IDS["saleable_location"],
