@@ -1867,7 +1867,7 @@ BEGIN
           RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted receipt UOM differs from its locked purchase-order line'; END IF;
         SELECT * INTO STRICT product FROM catalog.products
          WHERE org_id=organization_id AND id=receipt_line.product_id AND id=order_line.product_id
-           AND product_kind='medicine' AND status='active' FOR SHARE;
+           AND product_kind IN ('medicine','medical_device','consumable') AND status='active' FOR SHARE;
         IF line_product_id IS NULL THEN line_product_id:=product.id; line_purchase_order_line_id:=order_line.id;
           line_uom:=receipt_line.uom_code; line_factor:=order_line.uom_conversion_factor;
         ELSIF ROW(line_product_id,line_purchase_order_line_id,line_uom,line_factor)
@@ -7021,6 +7021,7 @@ def generated_artifacts() -> tuple[str, str]:
                 ],
             },
             "supplier_invoice_pilot_scope": {
+                "supported_product_kinds": ["medicine", "medical_device", "consumable"],
                 "supported_supply_types": ["intra_state", "inter_state"],
                 "supported_tax_charge_mechanisms": ["normal"],
                 "required_matching": [

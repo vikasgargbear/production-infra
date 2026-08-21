@@ -303,6 +303,11 @@
         "one_unique_parsed_gstr2b_row"
       ],
       "supported_charge_treatment": "reviewed_charge_codes_expensed_only",
+      "supported_product_kinds": [
+        "medicine",
+        "medical_device",
+        "consumable"
+      ],
       "supported_supply_types": [
         "intra_state",
         "inter_state"
@@ -351,7 +356,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "0f73b180923ed806f8d30ff358434620b32c92835e8a1ad8a1342b467356f6f6",
+  "mapping_sha256": "82f983efa37dc9f4059f24c1b09a5b047fcbbbdcea0467f41cb38ed8904f9b6e",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

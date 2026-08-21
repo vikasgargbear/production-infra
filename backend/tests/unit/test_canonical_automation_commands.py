@@ -792,6 +792,7 @@ def test_supplier_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> N
         "supplier invoice receipt allocations must belong to one purchase order",
         "supplier invoice exceeds separate posted receipt billed or free ceiling",
         "taxable_resale_not_blocked_under_section_17",
+        "product_kind IN ('medicine','medical_device','consumable')",
         "product invoice price variance requires reviewed unsold-stock landed-cost allocation",
         "INSERT INTO procurement.supplier_invoices",
         "INSERT INTO procurement.supplier_invoice_lines",
