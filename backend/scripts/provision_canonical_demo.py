@@ -2262,7 +2262,7 @@ def resolve_fefo_dispatch_allocations(connection) -> list[dict[str, str]]:
         )
         cursor.execute(
             """
-            SELECT batch.id,balance.on_hand_quantity,conversion.conversion_factor
+            SELECT batch.id,balance.on_hand_quantity,conversion.multiplier
               FROM inventory.stock_balances AS balance
               JOIN inventory.batches AS batch
                 ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
