@@ -9564,7 +9564,7 @@ BEGIN
       LEFT JOIN inventory.inventory_document_lines inventory_line ON inventory_line.org_id=line.org_id
         AND inventory_line.inventory_document_id=inventory_document_id AND inventory_line.sales_return_line_id=line.id
      LIMIT 1;
-    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-return draft differs from locked resolution',
+    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-return draft differs from locked resolution ('||coalesce(mismatch_code,'cardinality')||')',
       DETAIL='mismatch_category='||coalesce(mismatch_code,'cardinality'); END IF;
 END
 $function$;
