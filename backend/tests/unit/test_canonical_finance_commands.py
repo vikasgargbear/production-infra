@@ -76,6 +76,11 @@ def test_commands_are_idempotent_and_reconciliation_requires_snapshot_isolation(
     assert "existing=reversal_payment_id AND original.status='reversed'" in sql
     assert "bank parser idempotency payload mismatch" in sql
     assert "portal parser idempotency payload mismatch" in sql
+    assert "existing_line.portal_document_id=parse_portal_document.portal_document_id" in sql
+    assert (
+        "FROM tax.portal_document_lines WHERE org_id=organization_id "
+        "AND portal_document_id=portal_document_id"
+    ) not in sql
     assert "repeatable read" in sql
     assert "serializable" in sql
     assert "reconciliation idempotency key reused with different state" in sql

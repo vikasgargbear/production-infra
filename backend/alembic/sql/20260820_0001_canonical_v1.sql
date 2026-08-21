@@ -22903,7 +22903,10 @@ BEGIN
     SELECT * INTO document FROM tax.portal_documents WHERE org_id=organization_id AND id=portal_document_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='P0002', MESSAGE='portal document not found'; END IF;
     supplied_count:=pg_catalog.jsonb_array_length(parsed_lines);
-    SELECT count(*) INTO existing_count FROM tax.portal_document_lines WHERE org_id=organization_id AND portal_document_id=portal_document_id;
+    SELECT count(*) INTO existing_count
+      FROM tax.portal_document_lines AS existing_line
+     WHERE existing_line.org_id=organization_id
+       AND existing_line.portal_document_id=parse_portal_document.portal_document_id;
     IF document.status='parsed' THEN
         IF existing_count<>supplied_count THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='portal parser idempotency mismatch'; END IF;
         IF EXISTS (
