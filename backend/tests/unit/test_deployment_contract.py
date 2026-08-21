@@ -323,6 +323,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
     assert "resolve_inventory_adjustment_prepare" in reconciliation
     assert "controlled_batched_movement" in reconciliation
+    assert "inventory_adjustment_persist_current" in reconciliation
+    assert "pg_catalog.session_user" in reconciliation
+    assert "SESSION_USER<>''erp_runtime''" in reconciliation
     assert "resolve_goods_receipt_prepare" in reconciliation
     assert "goods_receipt_date_current" in reconciliation
     assert "pg_catalog.current_date" in reconciliation
