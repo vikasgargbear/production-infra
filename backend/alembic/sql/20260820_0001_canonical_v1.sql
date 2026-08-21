@@ -9761,9 +9761,14 @@ BEGIN
     AND address_kind IN ('registered','shipping','warehouse') AND status='active'
     AND (valid_from IS NULL OR valid_from<=return_date) AND (valid_until IS NULL OR valid_until>=return_date) FOR SHARE;
   IF transporter_party_id IS NOT NULL THEN
+    SELECT count(*) INTO candidate_count FROM parties.parties AS resolved_transporter
+     WHERE resolved_transporter.org_id=organization_id AND resolved_transporter.id=transporter_party_id
+       AND resolved_transporter.status='active';
+    IF candidate_count<>1 THEN
+      RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='purchase return requires exactly one active transporter party'; END IF;
     SELECT resolved_transporter.* INTO STRICT transporter FROM parties.parties AS resolved_transporter
      WHERE resolved_transporter.org_id=organization_id AND resolved_transporter.id=transporter_party_id
-       AND resolved_transporter.status='active' FOR SHARE;
+       AND resolved_transporter.status='active' ORDER BY resolved_transporter.id LIMIT 1 FOR SHARE;
     SELECT * INTO transporter_registration FROM parties.tax_registrations WHERE org_id=organization_id AND party_id=transporter.id
       AND registration_type='GSTIN' AND status='active' AND (valid_from IS NULL OR valid_from<=return_date)
       AND (valid_until IS NULL OR valid_until>=return_date) ORDER BY id LIMIT 1 FOR SHARE;

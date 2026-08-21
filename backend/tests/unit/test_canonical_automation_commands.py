@@ -131,6 +131,7 @@ def test_purchase_return_prepare_and_execute_reauthorize_exact_invoiced_lineage(
         "request_document->>'return_source_kind'<>'invoiced'",
         "branch_id=requested_branch_id AND status='posted'",
         "resolved_transporter.id=transporter_party_id",
+        "purchase return requires exactly one active transporter party",
         "parent.portal_document_type='gstr2b'",
         "parent.registration_id=original_tax.registration_id",
         "line.document_type='credit_note'",
