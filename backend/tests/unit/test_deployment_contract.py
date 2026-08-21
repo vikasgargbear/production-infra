@@ -284,6 +284,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
     assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation
+    assert '"erp_commercial_commands"."post_sales_invoice"' in reconciliation
     assert '"erp_commercial_commands"."assert_sales_invoice_artifact"' in reconciliation
     assert '"erp_commercial_commands"."assert_supplier_invoice_artifact"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
@@ -291,6 +292,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'artifact.get("platform_enforcements")' in reconciliation
     assert "terminal_response_body" in reconciliation
     assert "goods_receipt_post_current" in reconciliation
+    assert "commercial_sales_post_current" in reconciliation
     assert "v_purchase_order_id" in reconciliation
     assert "portal_parser_ownership_current" in reconciliation
     assert "portal_parser_scope_current" in reconciliation

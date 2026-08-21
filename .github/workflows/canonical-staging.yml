@@ -519,6 +519,7 @@ jobs:
                  position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS trade_current,
                  position('v_purchase_order_id' IN pg_catalog.pg_get_functiondef('erp_trade_commands.post_goods_receipt(uuid,uuid,uuid,uuid,bytea,bytea,timestamptz)'::regprocedure))>0 AS goods_receipt_post_current,
                  position('supplier_invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_supplier_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_supplier_post_current,
+                 position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_sales_post_current,
                  position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
                    AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_supplier_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_invoice_artifacts_current,
                  NOT EXISTS (
@@ -565,7 +566,7 @@ jobs:
             --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$definition_state" \
-            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .commercial_supplier_post_current? == true and .commercial_invoice_artifacts_current? == true and .portal_parser_ownership_current? == true and .portal_parser_scope_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .dispatch_fefo_current? == true and .sales_invoice_revenue_account_current? == true and .trade_direct_invoice_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
+            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .commercial_supplier_post_current? == true and .commercial_sales_post_current? == true and .commercial_invoice_artifacts_current? == true and .portal_parser_ownership_current? == true and .portal_parser_scope_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .dispatch_fefo_current? == true and .sales_invoice_revenue_account_current? == true and .trade_direct_invoice_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
               "$definition_state" >/dev/null; then
             echo "Control plane verified reviewed command definitions are already current"
             exit 0
@@ -600,6 +601,10 @@ jobs:
               (
                   "database/canonical/commands_commercial/baseline-commercial-command-enforcements.json",
                   'CREATE FUNCTION "erp_commercial_commands"."post_supplier_invoice"',
+              ),
+              (
+                  "database/canonical/commands_commercial/baseline-commercial-command-enforcements.json",
+                  'CREATE FUNCTION "erp_commercial_commands"."post_sales_invoice"',
               ),
               (
                   "database/canonical/commands_commercial/baseline-commercial-command-enforcements.json",
@@ -721,6 +726,9 @@ jobs:
             "$PSYCOPG_DATABASE_URL")" = "t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t"
           test "$(psql -X -Atqc \
             "SELECT position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' THEN' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))>0 AND position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' AND NEW.sales_invoice_id' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))=0" \
+            "$PSYCOPG_DATABASE_URL")" = "t"
+          test "$(psql -X -Atqc \
+            "SELECT position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           cleanup_migration_membership
           trap - EXIT
