@@ -556,6 +556,7 @@ jobs:
                  position('(resolved_document->>''branch_id'')::uuid,false,''sales_return_receipt''' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_sales_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS sales_return_receipt_current,
                  position('persisted_return.id=(expected_line->>''line_id'')::uuid' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0
                    AND position('sales-return draft line cardinality changed' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0 AS sales_return_draft_current,
+                 position('ORDER BY id LIMIT 1' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AS purchase_return_resolution_current,
                  position('FROM sales.return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0
                    AND position('FROM procurement.purchase_return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_purchase_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_return_post_current,
                  position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' THEN' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))>0
@@ -577,7 +578,7 @@ jobs:
             --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$definition_state" \
-            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .commercial_supplier_post_current? == true and .commercial_sales_post_current? == true and .return_rounding_current? == true and .commercial_invoice_artifacts_current? == true and .commercial_return_artifacts_current? == true and .portal_parser_ownership_current? == true and .portal_parser_scope_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .dispatch_fefo_current? == true and .sales_invoice_revenue_account_current? == true and .sales_return_receipt_current? == true and .sales_return_draft_current? == true and .commercial_return_post_current? == true and .trade_direct_invoice_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
+            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .commercial_supplier_post_current? == true and .commercial_sales_post_current? == true and .return_rounding_current? == true and .commercial_invoice_artifacts_current? == true and .commercial_return_artifacts_current? == true and .portal_parser_ownership_current? == true and .portal_parser_scope_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .dispatch_fefo_current? == true and .sales_invoice_revenue_account_current? == true and .sales_return_receipt_current? == true and .sales_return_draft_current? == true and .purchase_return_resolution_current? == true and .commercial_return_post_current? == true and .trade_direct_invoice_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
               "$definition_state" >/dev/null; then
             echo "Control plane verified reviewed command definitions are already current"
             exit 0
@@ -684,6 +685,10 @@ jobs:
               (
                   "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
                   'CREATE FUNCTION "erp_automation_commands"."assert_sales_return_draft"',
+              ),
+              (
+                  "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
+                  'CREATE FUNCTION "erp_automation_commands"."resolve_purchase_return_prepare"',
               ),
               (
                   "database/canonical/invariants_trade/baseline-trade-enforcements.json",
@@ -804,6 +809,9 @@ jobs:
             "$PSYCOPG_DATABASE_URL")" = "t"
           test "$(psql -X -Atqc \
             "SELECT position('persisted_return.id=(expected_line->>''line_id'')::uuid' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0 AND position('sales-return draft line cardinality changed' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0" \
+            "$PSYCOPG_DATABASE_URL")" = "t"
+          test "$(psql -X -Atqc \
+            "SELECT position('ORDER BY id LIMIT 1' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
           test "$(psql -X -Atqc \
             "SELECT position('FROM sales.return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AND position('FROM procurement.purchase_return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_purchase_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0" \
