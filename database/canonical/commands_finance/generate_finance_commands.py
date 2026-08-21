@@ -742,6 +742,7 @@ END
             f"""
 DECLARE document tax.portal_documents%ROWTYPE; attachment core.attachments%ROWTYPE;
         actor uuid; item jsonb; supplied_count integer; existing_count integer; parsed_time timestamptz;
+        target_document_id uuid:=portal_document_id;
 BEGIN
     IF organization_id IS DISTINCT FROM erp_security.current_org_id()
        OR NOT erp_security.has_permission('tax.portal.import',NULL::uuid) THEN
@@ -749,26 +750,28 @@ BEGIN
     END IF;
     IF pg_catalog.jsonb_typeof(parsed_lines)<>'array' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='parsed_lines must be an array'; END IF;
     actor:=erp_security.current_membership_id(); parsed_time:=pg_catalog.transaction_timestamp();
-    SELECT * INTO document FROM tax.portal_documents WHERE org_id=organization_id AND id=portal_document_id FOR UPDATE;
+    SELECT * INTO document FROM tax.portal_documents WHERE org_id=organization_id AND id=target_document_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='P0002', MESSAGE='portal document not found'; END IF;
     supplied_count:=pg_catalog.jsonb_array_length(parsed_lines);
     SELECT count(*) INTO existing_count
-      FROM tax.portal_document_lines AS existing_line
+     FROM tax.portal_document_lines AS existing_line
      WHERE existing_line.org_id=organization_id
-       AND existing_line.portal_document_id=parse_portal_document.portal_document_id;
+       AND existing_line.portal_document_id=target_document_id;
     IF document.status='parsed' THEN
         IF existing_count<>supplied_count THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='portal parser idempotency mismatch'; END IF;
         IF EXISTS (
           SELECT 1 FROM pg_catalog.jsonb_array_elements(parsed_lines) payload
           LEFT JOIN tax.portal_document_lines line
-            ON line.org_id=organization_id AND line.portal_document_id=portal_document_id
+            ON line.org_id=organization_id AND line.portal_document_id=target_document_id
            AND line.line_number=(payload.value->>'line_number')::integer
           WHERE line.id IS NULL OR line.source_row_hash IS DISTINCT FROM
             pg_catalog.decode(payload.value->>'source_row_hash','hex')
         ) THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='portal parser idempotency payload mismatch'; END IF;
-        RETURN portal_document_id;
+        RETURN target_document_id;
     END IF;
-    IF document.status<>'imported' OR existing_count<>0 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='portal document is not parseable'; END IF;
+    IF document.status<>'imported' OR existing_count<>0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE=pg_catalog.format(
+          'portal document is not parseable (status=%s, existing_lines=%s)',document.status,existing_count); END IF;
     SELECT * INTO attachment FROM core.attachments WHERE org_id=organization_id AND id=document.source_attachment_id FOR SHARE;
     IF attachment.status NOT IN ('verified','retained') OR attachment.sha256 IS DISTINCT FROM document.source_sha256 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='portal source attachment is not verified';
@@ -780,13 +783,13 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='portal parser line number or source hash duplication';
     END IF;
     INSERT INTO "{FUNCTION_SCHEMA}"."command_scopes" VALUES
-      (pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),'portal_parse',organization_id,portal_document_id);
+      (pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),'portal_parse',organization_id,target_document_id);
     FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(parsed_lines) ORDER BY (value->>'line_number')::integer LOOP
       INSERT INTO tax.portal_document_lines(org_id,id,portal_document_id,line_number,supplier_gstin,
         counterparty_name,invoice_number,invoice_date,document_type,place_of_supply_state_code,
         taxable_amount,cgst_amount,sgst_amount,igst_amount,cess_amount,total_amount,portal_reference,
         source_row_hash,created_by_membership_id)
-      VALUES(organization_id,COALESCE((item->>'id')::uuid,gen_random_uuid()),portal_document_id,
+      VALUES(organization_id,COALESCE((item->>'id')::uuid,gen_random_uuid()),target_document_id,
         (item->>'line_number')::integer,item->>'supplier_gstin',item->>'counterparty_name',
         item->>'invoice_number',(item->>'invoice_date')::date,item->>'document_type',
         item->>'place_of_supply_state_code',(item->>'taxable_amount')::numeric,(item->>'cgst_amount')::numeric,
@@ -794,10 +797,10 @@ BEGIN
         (item->>'total_amount')::numeric,item->>'portal_reference',pg_catalog.decode(item->>'source_row_hash','hex'),actor);
     END LOOP;
     UPDATE tax.portal_documents SET status='parsed',parsed_at=parsed_time,parse_error_code=NULL,parse_error_message=NULL
-      WHERE org_id=organization_id AND id=portal_document_id;
+      WHERE org_id=organization_id AND id=target_document_id;
     DELETE FROM "{FUNCTION_SCHEMA}"."command_scopes" WHERE backend_pid=pg_catalog.pg_backend_pid()
-      AND transaction_id=pg_catalog.txid_current() AND scope='portal_parse' AND org_id=organization_id AND entity_id=portal_document_id;
-    RETURN portal_document_id;
+      AND transaction_id=pg_catalog.txid_current() AND scope='portal_parse' AND org_id=organization_id AND entity_id=target_document_id;
+    RETURN target_document_id;
 END
 """,
             runtime_callable=True,
