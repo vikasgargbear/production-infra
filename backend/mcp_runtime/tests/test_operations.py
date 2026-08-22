@@ -8,6 +8,7 @@ import pytest
 from mcp.server.auth.provider import AccessToken
 
 from aasopharma_mcp.operations import (
+    AuthorizationDenied,
     OPERATIONS,
     OPERATOR_OPERATIONS,
     OperationGateway,
@@ -306,3 +307,38 @@ async def test_operator_schema_rejects_extra_business_fields_before_network() ->
             },
         )
     assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "payload", "expected", "excluded"),
+    (
+        (
+            403,
+            {"detail": "Exactly one active operator agent grant is required"},
+            r"HTTP 403.*Exactly one active operator agent grant is required",
+            None,
+        ),
+        (500, {"detail": "database password leaked"}, "HTTP 500", "password"),
+        (403, ["not a detail object"], "HTTP 403", "not a detail object"),
+    ),
+)
+async def test_operator_grant_rejection_reports_only_safe_authority_detail(
+    status_code: int,
+    payload,
+    expected: str,
+    excluded: str | None,
+) -> None:
+    gateway = OperationGateway(
+        settings(), lambda: Client([Response(status_code, payload)], [])
+    )
+
+    with pytest.raises(AuthorizationDenied, match=expected) as raised:
+        await gateway.execute_operator(
+            OPERATOR_OPERATIONS["erp_operation_status_get"],
+            _access(),
+            {"command_request_id": str(uuid4())},
+        )
+
+    if excluded is not None:
+        assert excluded not in str(raised.value)

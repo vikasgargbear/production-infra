@@ -274,7 +274,18 @@ class OperationGateway:
                 headers={"Authorization": f"Bearer {self.settings.internal_service_token}"},
             )
         if response.status_code != 200:
-            raise AuthorizationDenied("ERP operator grant authority rejected the request")
+            message = (
+                "ERP operator grant authority rejected the request "
+                f"(HTTP {response.status_code})"
+            )
+            if response.status_code in {400, 401, 403, 409, 422, 503}:
+                try:
+                    detail = response.json().get("detail")
+                except (AttributeError, TypeError, ValueError):
+                    detail = None
+                if isinstance(detail, str) and detail:
+                    message = f"{message}: {detail[:256]}"
+            raise AuthorizationDenied(message)
         return _delegated_token(
             response.json(),
             {
