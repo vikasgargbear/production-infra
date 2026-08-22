@@ -108,6 +108,24 @@ test('requires an explicit click and revalidates the proposal before approval', 
 });
 
 
+test('denies through the official SDK without approving or reloading the grant', async () => {
+    render(<OAuthConsentPage />);
+    await screen.findByRole('button', { name: 'Deny' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+
+    await waitFor(() => expect(denyAuthorization).toHaveBeenCalledWith(
+        details.authorization_id,
+        { skipBrowserRedirect: true },
+    ));
+    expect(approveAuthorization).not.toHaveBeenCalled();
+    expect(loadMcpConsentProposal).toHaveBeenCalledTimes(1);
+    expect(redirectToOAuthClient).toHaveBeenCalledWith(
+        'https://chat.example.com/callback?error=access_denied',
+    );
+});
+
+
 test('fails closed when the canonical proposal belongs to another client', async () => {
     (loadMcpConsentProposal as jest.Mock).mockResolvedValue({
         ...proposal,

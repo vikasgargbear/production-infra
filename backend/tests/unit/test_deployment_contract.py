@@ -739,3 +739,21 @@ def test_production_runbook_matches_manual_render_and_fail_closed_migration() ->
     assert "alembic downgrade -1" not in runbook
     assert "alembic downgrade abc123" not in runbook
     assert "no downgrade" in runbook
+
+
+def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
+    workflow = _read(".github/workflows/canonical-staging-oauth.yml")
+
+    assert "environment: canonical-staging" in workflow
+    assert (
+        'test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev'
+        in workflow
+    )
+    assert "https://rgihahbmkrmhitjdjvev.supabase.co" in workflow
+    assert "https://aasopharma-erp-pilot.onrender.com" in workflow
+    assert "oauth_server_enabled: true" in workflow
+    assert "oauth_server_allow_dynamic_registration: false" in workflow
+    assert 'oauth_server_authorization_path: "/oauth/consent"' in workflow
+    assert "for attempt in 1 2 3 4 5" in workflow
+    assert "actions/upload-artifact@v4" in workflow
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow

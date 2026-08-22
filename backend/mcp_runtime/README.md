@@ -33,19 +33,16 @@ is never forwarded to ERP.
 
 ## Release State
 
-The source is not hosted-ready. Supabase DCR is disabled, and this repository
-has no hosted consent/approval UI. Canonical hidden reads and delegated claims
-are implemented, but their schema deployment has not been verified. Code-owned
-gates keep readiness and delegation at `503` until hosted consent, deployment
-evidence, and staging verification exist. Do not register this endpoint with
-ChatGPT or Claude in that state.
-
-The frontend lock currently fixes `@supabase/supabase-js` at `2.57.4`, before
-the official `auth.oauth.getAuthorizationDetails`, `approveAuthorization`, and
-`denyAuthorization` APIs. Consent implementation requires a normal Node 22
-install and reviewed lockfile update to a fixed compatible release at least
-`2.94.1`, followed by UI and denial/approval tests. Do not hand-edit the lock or
-invent direct REST calls when registry access is unavailable.
+The source is not hosted-ready. Supabase DCR is disabled. The hosted consent UI
+and official SDK boundary are implemented, and the lock resolves
+`@supabase/supabase-js` to `2.112.3`; clean Node 22 CI verifies authorization
+detail loading, explicit approval, denial, scope rejection, identity binding,
+type checking, build, and browser E2E. Canonical hidden reads and delegated
+claims are implemented, but live OAuth approval/denial, client registration,
+schema deployment, and ChatGPT/Claude staging evidence are still fail-closed.
+Code-owned gates keep readiness and delegation at `503` until those external
+checks exist. Do not register this endpoint with ChatGPT or Claude in that
+state.
 
 ChatGPT needs `offline_access` for refresh and controlled Business/Enterprise/
 Edu admin or developer-mode rollout; tool snapshots must be frozen for review.

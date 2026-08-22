@@ -6,6 +6,7 @@ import {
     loadMcpConsentProposal,
     parseStandardScopes,
 } from '../oauthConsentClient';
+import { createClient } from '@supabase/supabase-js';
 
 
 const mockGetSession = jest.fn();
@@ -48,6 +49,20 @@ test('uses only the official Supabase OAuth consent methods when available', () 
     };
     mockClient.auth.oauth = oauth;
     expect(getOAuthConsentApi()).toBe(oauth);
+});
+
+
+test('installed Supabase SDK exposes the official OAuth consent methods', () => {
+    const client = createClient(
+        'https://sdk-contract.supabase.co',
+        'contract-only-anon-key',
+        { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const oauth = client.auth.oauth;
+
+    expect(typeof oauth.getAuthorizationDetails).toBe('function');
+    expect(typeof oauth.approveAuthorization).toBe('function');
+    expect(typeof oauth.denyAuthorization).toBe('function');
 });
 
 
