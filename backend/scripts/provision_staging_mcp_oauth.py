@@ -97,7 +97,6 @@ def _service_role_key(management_token: str) -> str:
 
 def _client_shape(client: dict[str, Any]) -> tuple[Any, ...]:
     return (
-        client.get("name"),
         tuple(sorted(client.get("redirect_uris") or ())),
         client.get("client_type"),
         client.get("token_endpoint_auth_method"),
@@ -114,9 +113,15 @@ def _reconcile_client(service_key: str) -> dict[str, Any]:
         include_api_key=True,
     )
     clients = listed.get("clients", []) if isinstance(listed, dict) else []
-    matches = [client for client in clients if client.get("name") == CLIENT_NAME]
+    matches = [
+        client
+        for client in clients
+        if TEST_CALLBACK in (client.get("redirect_uris") or ())
+    ]
     if len(matches) > 1:
-        raise ProvisioningError(f"Duplicate reviewed OAuth clients named {CLIENT_NAME!r}")
+        raise ProvisioningError(
+            f"Duplicate OAuth clients registered for staging callback {TEST_CALLBACK!r}"
+        )
     payload = {
         "name": CLIENT_NAME,
         "redirect_uris": list(REDIRECT_URIS),

@@ -766,6 +766,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert '"token_endpoint_auth_method": "none"' in provisioner
     assert 'headers["apikey"] = token' in provisioner
     assert provisioner.count("include_api_key=True") == 6
+    assert "if TEST_CALLBACK in (client.get(\"redirect_uris\") or ())" in provisioner
+    assert 'client.get("name")' not in provisioner
     assert "oauth_server_allow_dynamic_registration: false" in workflow
     assert '"prompt": "consent"' in exercise
     assert '_decide(session, denial_id, user_access_token, "deny")' in exercise
