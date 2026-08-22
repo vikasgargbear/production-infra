@@ -1148,6 +1148,73 @@ jobs:
              }' staging-evidence/render-pilot.json \
              > staging-evidence/render-pilot-smoke.json
 
+      - name: Enable and verify the reviewed hosted OAuth server boundary
+        if: inputs.provision_demo_data != true
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot.json)
+          test "$frontend_url" = https://aasopharma-erp-pilot.onrender.com
+          payload=$(jq -cn --arg site_url "$frontend_url" '{
+            site_url: $site_url,
+            oauth_server_enabled: true,
+            oauth_server_allow_dynamic_registration: false,
+            oauth_server_authorization_path: "/oauth/consent"
+          }')
+          response=$(curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/auth")
+          jq -e --arg site_url "$frontend_url" '
+            .site_url == $site_url and
+            .oauth_server_enabled == true and
+            .oauth_server_allow_dynamic_registration == false and
+            .oauth_server_authorization_path == "/oauth/consent"
+          ' <<<"$response" >/dev/null
+
+          discovery_url="$SUPABASE_URL/.well-known/oauth-authorization-server/auth/v1"
+          discovery=''
+          for attempt in 1 2 3 4 5; do
+            if discovery=$(curl --fail --silent --show-error --max-time 15 "$discovery_url"); then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo 'OAuth discovery did not become available after five bounded checks' >&2
+              exit 1
+            fi
+            sleep 3
+          done
+          jq -e --arg issuer "$SUPABASE_URL/auth/v1" '
+            .issuer == $issuer and
+            .authorization_endpoint == ($issuer + "/oauth/authorize") and
+            .token_endpoint == ($issuer + "/oauth/token") and
+            (.code_challenge_methods_supported | index("S256")) != null
+          ' <<<"$discovery" >/dev/null
+          curl --fail --silent --show-error --max-time 15 \
+            "$frontend_url/oauth/consent?authorization_id=invalid_contract_probe" \
+            >/dev/null
+          jq -n \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg site_url "$frontend_url" \
+            --arg discovery_url "$discovery_url" \
+            --arg commit_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+            --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              project_ref: $project_ref,
+              site_url: $site_url,
+              authorization_path: "/oauth/consent",
+              dynamic_client_registration: false,
+              discovery_url: $discovery_url,
+              discovery_verified: true,
+              hosted_consent_route_verified: true,
+              commit_sha: $commit_sha,
+              verified_at: $verified_at
+            }' > staging-evidence/canonical-staging-oauth.json
+
       - name: Provision and exercise the disposable demo organization
         if: inputs.provision_demo_data == true
         env:
