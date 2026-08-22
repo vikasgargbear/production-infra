@@ -167,7 +167,10 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
         "email": TEST_EMAIL,
         "password": password,
         "email_confirm": True,
-        "user_metadata": {"purpose": "canonical-staging-mcp-e2e"},
+        "app_metadata": {
+            "purpose": "canonical-staging-mcp-e2e",
+            "organization_id": DEMO_ORG_ID,
+        },
     }
     if matches:
         user = _request_json(

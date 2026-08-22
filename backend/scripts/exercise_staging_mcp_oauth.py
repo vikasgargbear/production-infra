@@ -122,6 +122,25 @@ def _decide(
     return location
 
 
+def _revoke_existing_grant(
+    session: requests.Session,
+    *,
+    client_id: str,
+    access_token: str,
+) -> None:
+    response = session.delete(
+        f"{ISSUER}/user/oauth/grants",
+        params={"client_id": client_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=20,
+    )
+    if not response.ok:
+        raise ExerciseError(
+            f"OAuth grant reset returned HTTP {response.status_code}: "
+            f"{response.text[:500]}"
+        )
+
+
 def _assert_denial_redirect(location: str, state: str) -> None:
     parsed = urlparse(location)
     query = parse_qs(parsed.query)
@@ -253,7 +272,8 @@ def _exercise_mcp(access_token: str) -> tuple[list[str], dict[str, Any]]:
     )
     result = called.get("result")
     if not isinstance(result, dict) or result.get("isError") is True:
-        raise ExerciseError("Live product-search tool returned an error")
+        detail = json.dumps(result, sort_keys=True)[:1000]
+        raise ExerciseError(f"Live product-search tool returned an error: {detail}")
     if "d3000000-0000-7000-8000-000000000015" not in json.dumps(result):
         raise ExerciseError("Live product-search tool did not return the canonical demo product")
     return names, result
@@ -283,6 +303,11 @@ def main() -> int:
     user_access_token = login.json().get("access_token")
     if not isinstance(user_access_token, str) or not user_access_token:
         raise ExerciseError("Staging test login omitted access_token")
+    _revoke_existing_grant(
+        session,
+        client_id=client_id,
+        access_token=user_access_token,
+    )
 
     _, denial_challenge = _pkce()
     denial_state = secrets.token_urlsafe(24)
@@ -353,4 +378,6 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except (ExerciseError, requests.RequestException, ValueError, KeyError) as exc:
         print(f"staging MCP OAuth exercise failed: {exc}", file=sys.stderr)
+        detail = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::error title=Staging MCP OAuth exercise failed::{detail}")
         raise SystemExit(1)

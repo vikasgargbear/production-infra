@@ -40,6 +40,7 @@ async def test_valid_asymmetric_token_checks_issuer_audience_and_required_claims
     config = settings()
     resolver = Resolver()
     subject = str(uuid4())
+    organization_id = str(uuid4())
     calls = []
 
     def decode(token, **kwargs):
@@ -48,6 +49,7 @@ async def test_valid_asymmetric_token_checks_issuer_audience_and_required_claims
             "iss": config.supabase_issuer,
             "aud": config.supabase_audience,
             "sub": subject,
+            "app_metadata": {"organization_id": organization_id},
             "client_id": "chatgpt-installation",
             "scope": "openid offline_access email profile",
             "iat": int(time.time()) - 1,
@@ -58,6 +60,7 @@ async def test_valid_asymmetric_token_checks_issuer_audience_and_required_claims
 
     assert verified is not None
     assert verified.subject == subject
+    assert verified.claims["organization_id"] == organization_id
     assert verified.client_id == "chatgpt-installation"
     assert verified.resource == config.resource_server_url
     assert calls[0][1]["issuer"] == config.supabase_issuer
@@ -84,6 +87,7 @@ async def test_missing_scope_or_non_uuid_subject_is_rejected_without_network() -
         "iss": config.supabase_issuer,
         "aud": config.supabase_audience,
         "client_id": "client",
+        "app_metadata": {"organization_id": str(uuid4())},
         "iat": int(time.time()) - 1,
         "exp": int(time.time()) + 300,
     }
@@ -92,6 +96,7 @@ async def test_missing_scope_or_non_uuid_subject_is_rejected_without_network() -
         dict(base, sub="not-a-uuid", scope="openid offline_access email"),
         dict(base, sub=str(uuid4()), scope="openid offline_access erp.master.read"),
         dict(base, sub=str(uuid4()), scope="openid email"),
+        dict(base, sub=str(uuid4()), scope="openid offline_access", app_metadata={}),
     ):
         verifier = SupabaseTokenVerifier(
             config, Resolver(), lambda *_args, **_kwargs: claims

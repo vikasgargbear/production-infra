@@ -166,6 +166,7 @@ def test_grant_issues_only_canonical_uuid_claims(monkeypatch):
         }
     )
     captured = {}
+    database_calls = []
     monkeypatch.setattr(mcp_agent_grants, "HOSTED_OAUTH_CONSENT_IMPLEMENTED", True)
     monkeypatch.setattr(mcp_agent_grants, "CANONICAL_SCHEMA_DEPLOYMENT_VERIFIED", True)
     monkeypatch.setattr(mcp_agent_grants, "MCP_STAGING_VERIFIED", True)
@@ -185,21 +186,54 @@ def test_grant_issues_only_canonical_uuid_claims(monkeypatch):
         GrantRequest(
             issuer="https://example.supabase.co/auth/v1",
             subject=ids["auth"],
+            organization_id=ids["org"],
             client_id="client-1",
             operation_key="master.products.search",
             capability_code="master.products.search",
             operation_mode="read",
         ),
         HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 48),
-        object(),
+        SimpleNamespace(
+            execute=lambda statement, params=None: database_calls.append(
+                (str(statement), params)
+            )
+        ),
     )
 
     assert response.organization_id == str(ids["org"])
+    assert "erp_security.activate_context" in database_calls[0][0]
+    assert database_calls[0][1] == {
+        "auth_user_id": ids["auth"],
+        "org_id": ids["org"],
+    }
     assert captured["token_profile"] == "canonical_mcp_delegation_v1"
     assert captured["user_id"] == str(ids["user"])
     assert captured["membership_id"] == str(ids["membership"])
     assert captured["agent_grant_id"] == str(ids["grant"])
     assert "role" not in captured and "email" not in captured
+
+
+def test_grant_readiness_checks_authority_without_cross_tenant_enumeration(monkeypatch):
+    calls = []
+
+    def execute(statement, params=None):
+        calls.append((str(statement), params))
+        return SimpleNamespace(scalar=lambda: True)
+
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 48)
+    response = mcp_agent_grants.agent_grant_readiness(
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 48),
+        SimpleNamespace(execute=execute),
+    )
+
+    assert response == {
+        "status": "ready",
+        "grant_authority": "automation.agent_grants",
+    }
+    assert len(calls) == 1
+    assert "to_regclass('automation.agent_grants')" in calls[0][0]
+    assert "SELECT count(*)" not in calls[0][0]
 
 
 class _Result:

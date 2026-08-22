@@ -63,6 +63,7 @@ class OperationGateway:
         payload = {
             "issuer": claims.get("iss"),
             "subject": access.subject,
+            "organization_id": claims.get("organization_id"),
             "client_id": access.client_id,
             "operation_key": operation.key,
             "capability_code": operation.key,
@@ -88,6 +89,7 @@ class OperationGateway:
             raise AuthorizationDenied("ERP agent grant is inactive or insufficient")
         for key, expected_value in (
             ("issuer", claims.get("iss")), ("subject", access.subject),
+            ("organization_id", claims.get("organization_id")),
             ("client_id", access.client_id), ("operation_key", operation.key),
             ("capability_code", operation.key),
         ):

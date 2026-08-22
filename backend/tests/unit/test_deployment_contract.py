@@ -768,8 +768,12 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert provisioner.count("include_api_key=True") == 6
     assert "if TEST_CALLBACK in (client.get(\"redirect_uris\") or ())" in provisioner
     assert 'client.get("name")' not in provisioner
+    assert '"app_metadata": {' in provisioner
+    assert '"organization_id": DEMO_ORG_ID' in provisioner
     assert "oauth_server_allow_dynamic_registration: false" in workflow
     assert '"prompt": "consent"' in exercise
+    assert "_revoke_existing_grant(" in exercise
+    assert 'f"{ISSUER}/user/oauth/grants"' in exercise
     assert '_decide(session, denial_id, user_access_token, "deny")' in exercise
     assert '"method": "tools/list"' in exercise
     assert '"name": "erp_product_search"' in exercise

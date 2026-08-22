@@ -66,6 +66,10 @@ class SupabaseTokenVerifier:
                 options={"require": ["iss", "sub", "aud", "exp", "iat", "client_id"]},
             )
             subject = str(UUID(str(claims["sub"])))
+            app_metadata = claims.get("app_metadata")
+            if not isinstance(app_metadata, dict):
+                return None
+            organization_id = str(UUID(str(app_metadata.get("organization_id"))))
             client_id = claims["client_id"]
             scope_claim = claims.get("scope", "")
             if not isinstance(client_id, str) or not client_id.strip():
@@ -90,6 +94,7 @@ class SupabaseTokenVerifier:
                     "iss": claims["iss"],
                     "aud": claims["aud"],
                     "sub": subject,
+                    "organization_id": organization_id,
                     "client_id": client_id,
                 },
             )

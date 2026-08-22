@@ -42,13 +42,17 @@ class Client:
 
 
 def _access() -> AccessToken:
+    organization_id = str(uuid4())
     return AccessToken(
         token="oauth-bearer-must-not-be-forwarded",
         client_id="claude-installation",
         scopes=["openid", "offline_access", "email"],
         expires_at=int(time.time()) + 300,
         subject=str(uuid4()),
-        claims={"iss": settings().supabase_issuer},
+        claims={
+            "iss": settings().supabase_issuer,
+            "organization_id": organization_id,
+        },
     )
 
 
@@ -86,6 +90,7 @@ async def test_tool_authorizes_app_owned_grant_then_uses_only_delegated_token() 
     assert grant_call[0] == "POST"
     assert grant_call[2]["headers"]["Authorization"].endswith("s" * 48)
     assert grant_call[2]["json"]["capability_code"] == "master.products.search"
+    assert grant_call[2]["json"]["organization_id"] == access.claims["organization_id"]
     assert access.token not in json.dumps(grant_call[2])
     assert api_call[0] == "GET"
     assert api_call[2]["headers"] == {

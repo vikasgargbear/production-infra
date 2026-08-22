@@ -47,6 +47,7 @@ class GrantRequest(BaseModel):
 
     issuer: str = Field(min_length=8, max_length=512)
     subject: UUID
+    organization_id: UUID
     client_id: str = Field(min_length=1, max_length=255)
     operation_key: str = Field(min_length=3, max_length=128)
     capability_code: str = Field(pattern=r"^[a-z][a-z0-9_.]{2,127}$")
@@ -425,7 +426,8 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
               JOIN core.users AS user_row ON user_row.id=membership.user_id
               JOIN core.organizations AS organization
                 ON organization.id=grant_row.org_id
-             WHERE user_row.auth_user_id=:subject
+             WHERE grant_row.org_id=:organization_id
+               AND user_row.auth_user_id=:subject
                AND user_row.status='active' AND membership.status='active'
                AND organization.status='active'
                AND grant_row.client_id=:client_id
@@ -463,6 +465,7 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
             """
         ),
         {
+            "organization_id": request.organization_id,
             "subject": request.subject,
             "client_id": request.client_id,
             "capability_code": request.capability_code,
@@ -494,6 +497,10 @@ def authorize_agent_grant(
     if not allowed_clients or request.client_id not in allowed_clients:
         raise HTTPException(status_code=403, detail="OAuth client is not pre-registered")
 
+    db.execute(
+        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+        {"auth_user_id": request.subject, "org_id": request.organization_id},
+    )
     rows = _grant_rows(db, request, policy.permission_code)
     if len(rows) != 1:
         raise HTTPException(status_code=403, detail="Exactly one active MCP agent grant is required")
@@ -643,21 +650,4 @@ def agent_grant_readiness(
     ).scalar()
     if relations is not True:
         raise HTTPException(status_code=503, detail="Canonical agent-grant authority is unavailable")
-    active = db.execute(
-        text(
-            """
-            SELECT count(*)
-              FROM automation.agent_grants AS grant_row
-             WHERE grant_row.client_id = ANY(CAST(:client_ids AS varchar[]))
-               AND grant_row.status='active'
-               AND grant_row.expires_at>transaction_timestamp()
-            """
-        ),
-        {"client_ids": list(client_ids)},
-    ).scalar()
-    if not active:
-        raise HTTPException(
-            status_code=503,
-            detail="Pre-registered OAuth clients have no active consented ERP agent grant",
-        )
     return {"status": "ready", "grant_authority": "automation.agent_grants"}
