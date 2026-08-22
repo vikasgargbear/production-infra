@@ -106,6 +106,18 @@ INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
 ).date()
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
+for grant_key in (
+    "reviewer_access_grant",
+    "operator_access_grant",
+    "agent_grant",
+    "legacy_approver_agent_grant",
+):
+    IDS[grant_key] = str(
+        uuid5(
+            NAMESPACE_URL,
+            f"canonical-staging:{grant_key}:{IDS['org']}:{DEMO_RUN_ID}",
+        )
+    )
 IDS["cycle_count_evidence"] = str(
     uuid5(
         NAMESPACE_URL,

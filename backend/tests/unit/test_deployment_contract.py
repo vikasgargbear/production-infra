@@ -414,6 +414,14 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
+    for grant_key in (
+        "reviewer_access_grant",
+        "operator_access_grant",
+        "agent_grant",
+        "legacy_approver_agent_grant",
+    ):
+        assert f'"{grant_key}"' in provisioner
+    assert 'f"canonical-staging:{grant_key}:{IDS[\'org\']}:{DEMO_RUN_ID}"' in provisioner
     assert "erp_finance_commands.parse_portal_document" in provisioner
     assert "'imported'" in provisioner
     assert "portal lines require parser command provenance" not in provisioner
@@ -770,6 +778,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert 'client.get("name")' not in provisioner
     assert '"app_metadata": {' in provisioner
     assert '"organization_id": DEMO_ORG_ID' in provisioner
+    assert "canonical-staging-mcp-access:" in provisioner
+    assert "canonical-staging-mcp-agent:" in provisioner
     assert "oauth_server_allow_dynamic_registration: false" in workflow
     assert '"prompt": "consent"' in exercise
     assert "_revoke_existing_grant(" in exercise

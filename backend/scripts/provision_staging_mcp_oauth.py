@@ -10,6 +10,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 import psycopg2
 import requests
 
@@ -26,8 +27,6 @@ REDIRECT_URIS = (
 TEST_EMAIL = "mcp-e2e@canonical-staging.aasopharma.invalid"
 TEST_USER_ID = "d3000000-0000-7000-8000-00000000002a"
 TEST_MEMBERSHIP_ID = "d3000000-0000-7000-8000-00000000002b"
-TEST_ACCESS_GRANT_ID = "d3000000-0000-7000-8000-00000000002c"
-TEST_AGENT_GRANT_ID = "d3000000-0000-7000-8000-00000000002d"
 TEST_REQUEST_ID = "d3000000-0000-7000-8000-00000000002e"
 DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
 DEMO_ROLE_ID = "d3000000-0000-7000-8000-000000000006"
@@ -218,6 +217,13 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
 
 
 def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
+    run_id = os.getenv("GITHUB_RUN_ID", "local")
+    access_grant_id = str(
+        uuid5(NAMESPACE_URL, f"canonical-staging-mcp-access:{DEMO_ORG_ID}:{run_id}")
+    )
+    agent_grant_id = str(
+        uuid5(NAMESPACE_URL, f"canonical-staging-mcp-agent:{DEMO_ORG_ID}:{run_id}")
+    )
     with psycopg2.connect(database_url) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -273,7 +279,7 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                 """,
                 (
                     DEMO_ORG_ID,
-                    TEST_ACCESS_GRANT_ID,
+                    access_grant_id,
                     TEST_MEMBERSHIP_ID,
                     DEMO_ROLE_ID,
                     REVIEWER_MEMBERSHIP_ID,
@@ -296,7 +302,7 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                 """,
                 (
                     DEMO_ORG_ID,
-                    TEST_AGENT_GRANT_ID,
+                    agent_grant_id,
                     TEST_MEMBERSHIP_ID,
                     client_id,
                     CLIENT_NAME,
@@ -318,7 +324,7 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                 [
                     (
                         DEMO_ORG_ID,
-                        TEST_AGENT_GRANT_ID,
+                        agent_grant_id,
                         capability,
                         allow_sensitive,
                         REVIEWER_MEMBERSHIP_ID,
@@ -335,19 +341,12 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                 ) VALUES (
                     %s,%s,%s,'write','consequential_write',%s,
                     '1000000.00','INR',false,'active',%s
-                ) ON CONFLICT (org_id, agent_grant_id, capability_code) DO UPDATE SET
-                    operation_mode=EXCLUDED.operation_mode,
-                    risk_class=EXCLUDED.risk_class,
-                    approval_policy=EXCLUDED.approval_policy,
-                    maximum_amount=EXCLUDED.maximum_amount,
-                    currency_code=EXCLUDED.currency_code,
-                    allow_sensitive_read=EXCLUDED.allow_sensitive_read,
-                    status='active'
+                ) ON CONFLICT (org_id, agent_grant_id, capability_code) DO NOTHING
                 """,
                 [
                     (
                         DEMO_ORG_ID,
-                        TEST_AGENT_GRANT_ID,
+                        agent_grant_id,
                         capability,
                         approval,
                         REVIEWER_MEMBERSHIP_ID,
@@ -362,14 +361,11 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                     risk_class, approval_policy, maximum_amount, currency_code,
                     allow_sensitive_read, status, created_by_membership_id
                 ) VALUES (%s,%s,%s,'read','read_only','none',NULL,NULL,false,'active',%s)
-                ON CONFLICT (org_id, agent_grant_id, capability_code) DO UPDATE SET
-                    operation_mode='read',risk_class='read_only',approval_policy='none',
-                    maximum_amount=NULL,currency_code=NULL,allow_sensitive_read=false,
-                    status='active'
+                ON CONFLICT (org_id, agent_grant_id, capability_code) DO NOTHING
                 """,
                 (
                     DEMO_ORG_ID,
-                    TEST_AGENT_GRANT_ID,
+                    agent_grant_id,
                     STATUS_CAPABILITY,
                     REVIEWER_MEMBERSHIP_ID,
                 ),
@@ -392,7 +388,7 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                    AND capability.status='active'
                  GROUP BY user_row.auth_user_id,grant_row.client_id
                 """,
-                (DEMO_ORG_ID, TEST_USER_ID, TEST_MEMBERSHIP_ID, TEST_AGENT_GRANT_ID),
+                (DEMO_ORG_ID, TEST_USER_ID, TEST_MEMBERSHIP_ID, agent_grant_id),
             )
             expected_capabilities = (
                 len(READ_CAPABILITIES) + len(WRITE_CAPABILITIES) + 1
