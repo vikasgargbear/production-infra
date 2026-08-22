@@ -126,7 +126,9 @@ async def test_tool_authorizes_app_owned_grant_then_uses_only_delegated_token() 
     }
     assert access.token not in json.dumps(api_call[2])
     assert all(
-        operation.path.startswith("/api/internal/mcp/reads/")
+        operation.path.startswith(
+            ("/api/internal/mcp/reads/", "/api/internal/mcp/resolution/")
+        )
         for operation in OPERATIONS.values()
     )
 
@@ -259,22 +261,20 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
     grant = _operator_grant(access, "erp_sales_order_prepare")
     grant["branch_ids"] = [branch_id]
     calls: list[tuple] = []
+    responses = [
+        Response(200, grant),
+        Response(
+            200,
+            {
+                "command_request_id": command_id,
+                "status": "prepared",
+                "preview_hash": "sha256:" + "a" * 64,
+            },
+        ),
+    ]
     gateway = OperationGateway(
         settings(),
-        lambda: Client(
-            [
-                Response(200, grant),
-                Response(
-                    200,
-                    {
-                        "command_request_id": command_id,
-                        "status": "prepared",
-                        "preview_hash": "sha256:" + "a" * 64,
-                    },
-                ),
-            ],
-            calls,
-        ),
+        lambda: Client(responses, calls),
     )
 
     result = await gateway.execute_operator(
