@@ -755,4 +755,17 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert 'oauth_server_authorization_path: "/oauth/consent"' in workflow
     assert "for attempt in 1 2 3 4 5" in workflow
     assert "canonical-staging-oauth.json" in workflow
+    assert "provision_staging_mcp_oauth.py" in workflow
+    assert "exercise_staging_mcp_oauth.py" in workflow
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
+
+    provisioner = _read("backend/scripts/provision_staging_mcp_oauth.py")
+    exercise = _read("backend/scripts/exercise_staging_mcp_oauth.py")
+    assert 'PROJECT_REF = "rgihahbmkrmhitjdjvev"' in provisioner
+    assert '"client_type": "public"' in provisioner
+    assert '"token_endpoint_auth_method": "none"' in provisioner
+    assert "oauth_server_allow_dynamic_registration: false" in workflow
+    assert '"prompt": "consent"' in exercise
+    assert '_decide(session, denial_id, user_access_token, "deny")' in exercise
+    assert '"method": "tools/list"' in exercise
+    assert '"name": "erp_product_search"' in exercise

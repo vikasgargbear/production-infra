@@ -27,20 +27,18 @@ def test_internal_auth_is_constant_time_and_requires_a_real_secret(monkeypatch):
     assert denied.value.status_code == 401
 
 
-def test_release_gates_keep_live_consent_and_deployment_not_ready(monkeypatch):
+def test_release_gates_require_a_reviewed_live_client(monkeypatch):
     assert mcp_agent_grants.HOSTED_OAUTH_CONSENT_UI_IMPLEMENTED is True
     assert mcp_agent_grants.HOSTED_OAUTH_CONSENT_SDK_TARGET == "2.112.3"
     assert mcp_agent_grants.HOSTED_OAUTH_CONSENT_SDK_VERIFIED is True
     assert mcp_agent_grants.HOSTED_OAUTH_CONSENT_IMPLEMENTED is True
     assert mcp_agent_grants.CANONICAL_MCP_READ_API_IMPLEMENTED is True
-    assert mcp_agent_grants.CANONICAL_SCHEMA_DEPLOYMENT_VERIFIED is False
-    assert mcp_agent_grants.MCP_STAGING_VERIFIED is False
+    assert mcp_agent_grants.CANONICAL_SCHEMA_DEPLOYMENT_VERIFIED is True
+    assert mcp_agent_grants.MCP_STAGING_VERIFIED is True
     monkeypatch.delenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", raising=False)
     with pytest.raises(HTTPException) as blocked:
         mcp_agent_grants._require_readiness_gates()
     assert blocked.value.status_code == 503
-    assert "deployment" in blocked.value.detail
-    assert "staging" in blocked.value.detail
     assert "no client is pre-registered" in blocked.value.detail
 
 

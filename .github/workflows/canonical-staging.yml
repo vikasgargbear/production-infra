@@ -1023,6 +1023,35 @@ jobs:
           echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url" >> "$GITHUB_ENV"
           echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
 
+      - name: Configure OAuth and bind the reviewed staging client
+        env:
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          frontend_url=https://aasopharma-erp-pilot.onrender.com
+          payload=$(jq -cn --arg site_url "$frontend_url" '{
+            site_url: $site_url,
+            oauth_server_enabled: true,
+            oauth_server_allow_dynamic_registration: false,
+            oauth_server_authorization_path: "/oauth/consent"
+          }')
+          response=$(curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/auth")
+          jq -e --arg site_url "$frontend_url" '
+            .site_url == $site_url and
+            .oauth_server_enabled == true and
+            .oauth_server_allow_dynamic_registration == false and
+            .oauth_server_authorization_path == "/oauth/consent"
+          ' <<<"$response" >/dev/null
+          python3 backend/scripts/provision_staging_mcp_oauth.py
+
       - name: Reconcile and deploy the free Render pilot
         if: inputs.provision_demo_data != true
         run: |
@@ -1030,7 +1059,8 @@ jobs:
           test -n "$RENDER_API_KEY"
           test -n "$JWT_SECRET_KEY"
           test -n "$SUPABASE_ANON_KEY"
-          test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" = disabled-unissued-canonical-staging
+          test -n "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+          test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" != disabled-unissued-canonical-staging
           mkdir -p staging-evidence
           deploy_sha='${{ inputs.render_deploy_sha }}'
           if [ -z "$deploy_sha" ]; then
@@ -1148,33 +1178,16 @@ jobs:
              }' staging-evidence/render-pilot.json \
              > staging-evidence/render-pilot-smoke.json
 
-      - name: Enable and verify the reviewed hosted OAuth server boundary
+      - name: Verify and exercise the reviewed hosted OAuth server boundary
         if: inputs.provision_demo_data != true
+        env:
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
         run: |
           set -euo pipefail
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
-          test -n "$SUPABASE_ACCESS_TOKEN"
           frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot.json)
           test "$frontend_url" = https://aasopharma-erp-pilot.onrender.com
-          payload=$(jq -cn --arg site_url "$frontend_url" '{
-            site_url: $site_url,
-            oauth_server_enabled: true,
-            oauth_server_allow_dynamic_registration: false,
-            oauth_server_authorization_path: "/oauth/consent"
-          }')
-          response=$(curl --fail-with-body --silent --show-error \
-            --request PATCH \
-            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            --header 'Content-Type: application/json' \
-            --data "$payload" \
-            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/auth")
-          jq -e --arg site_url "$frontend_url" '
-            .site_url == $site_url and
-            .oauth_server_enabled == true and
-            .oauth_server_allow_dynamic_registration == false and
-            .oauth_server_authorization_path == "/oauth/consent"
-          ' <<<"$response" >/dev/null
 
           discovery_url="$SUPABASE_URL/.well-known/oauth-authorization-server/auth/v1"
           discovery=''
@@ -1214,6 +1227,7 @@ jobs:
               commit_sha: $commit_sha,
               verified_at: $verified_at
             }' > staging-evidence/canonical-staging-oauth.json
+          python3 backend/scripts/exercise_staging_mcp_oauth.py
 
       - name: Provision and exercise the disposable demo organization
         if: inputs.provision_demo_data == true

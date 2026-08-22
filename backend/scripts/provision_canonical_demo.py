@@ -36,7 +36,7 @@ ADJUSTMENT_SOURCE_URI = (
     "https://gstcouncil.gov.in/sites/default/files/2024-02/faq-minin.pdf"
 )
 ADJUSTMENT_SOURCE_PUBLICATION_DATE = date(2017, 7, 1)
-CLIENT_ID = "aasopharma-canonical-staging-demo-v2"
+CLIENT_ID = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "").strip()
 
 IDS = {
     "org": "d3000000-0000-7000-8000-000000000001",
@@ -2864,6 +2864,8 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
 
 def main() -> int:
     assert_target()
+    if not CLIENT_ID or CLIENT_ID == "disabled-unissued-canonical-staging":
+        raise RuntimeError("A reviewed staging OAuth client ID is required")
     evidence_dir = Path(required("CANONICAL_DEMO_EVIDENCE_DIR"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
     source = fetch_official_source(evidence_dir)
