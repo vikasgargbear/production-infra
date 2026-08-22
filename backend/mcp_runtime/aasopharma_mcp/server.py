@@ -7,7 +7,8 @@ from typing import Annotated, Any, Literal
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
-from pydantic import AnyHttpUrl, Field
+from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase
+from pydantic import AnyHttpUrl, ConfigDict, Field, create_model
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -20,6 +21,12 @@ from .operations import (
     published_operator_action_tool_names,
 )
 from .operator_actions import OPERATOR_TOOL_DESCRIPTIONS
+
+
+class ExactOperatorArguments(ArgModelBase):
+    """SDK argument base that preserves each top-level field for JSON Schema validation."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
 
 def registered_tool_names() -> tuple[str, ...]:
@@ -224,10 +231,25 @@ def create_app(
         registered = server._tool_manager.get_tool(tool_name)
         if registered is None:
             raise RuntimeError(f"official MCP SDK did not register {tool_name}")
-        # MCP SDK 2.0 derives schemas from signatures but has no public exact-schema
-        # override. The pinned SDK exposes the registered Tool model; fail closed if
-        # that compatibility boundary changes.
+        properties = operation.input_schema.get("properties", {})
+        required = set(operation.input_schema.get("required", ()))
+        if not isinstance(properties, dict) or not properties:
+            raise RuntimeError(f"operator schema for {tool_name} has no properties")
+        model_fields = {
+            field_name: (Any, ... if field_name in required else None)
+            for field_name in properties
+        }
+        exact_argument_model = create_model(
+            f"{tool_name}Arguments",
+            __base__=ExactOperatorArguments,
+            **model_fields,
+        )
+        # MCP SDK 2.0 has no public exact JSON-Schema registration API. Both the
+        # advertised Tool schema and the internal Pydantic argument model must be
+        # replaced at this pinned compatibility boundary; the gateway then performs
+        # recursive Draft 2020-12 validation before authorization or network I/O.
         registered.parameters = dict(operation.input_schema)
+        registered.fn_metadata.arg_model = exact_argument_model
 
     for operator_tool_name in published_operator_action_tool_names():
         register_operator_tool(operator_tool_name)
