@@ -87,7 +87,7 @@ def test_operator_issuer_is_code_gated_and_does_not_enable_write_readiness():
     with pytest.raises(HTTPException) as blocked:
         mcp_agent_grants._require_operator_release_gates()
     assert blocked.value.status_code == 503
-    assert "consent" in blocked.value.detail
+    assert "consent" not in blocked.value.detail
     assert "deployment" in blocked.value.detail
     assert "staging" in blocked.value.detail
     assert "adapters" in blocked.value.detail
