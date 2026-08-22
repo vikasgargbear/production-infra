@@ -257,6 +257,7 @@ class OperationGateway:
             "issuer": claims.get("iss"),
             "subject": access.subject,
             "client_id": access.client_id,
+            "organization_id": organization_id,
             "operation_key": operation.operation_key,
             "capability_code": operation.operation_key,
             "operation_mode": operation_mode,

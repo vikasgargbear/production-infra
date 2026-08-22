@@ -80,6 +80,7 @@ class OperatorGrantRequest(BaseModel):
     issuer: str = Field(min_length=8, max_length=512)
     subject: UUID
     client_id: str = Field(min_length=1, max_length=255)
+    organization_id: UUID
     operation_key: str = Field(pattern=r"^[a-z][a-z0-9_.]{2,127}$")
     capability_code: str = Field(pattern=r"^[a-z][a-z0-9_.]{2,127}$")
     operation_mode: Literal["read", "write"]
@@ -262,7 +263,8 @@ def _operator_grant_rows(
                AND command_membership.id=command_grant.subject_membership_id
               LEFT JOIN core.users AS command_user
                 ON command_user.id=command_membership.user_id
-             WHERE user_row.auth_user_id=:subject
+             WHERE grant_row.org_id=:organization_id
+               AND user_row.auth_user_id=:subject
                AND user_row.status='active' AND membership.status='active'
                AND organization.status='active'
                AND grant_row.client_id=:client_id
@@ -397,6 +399,7 @@ def _operator_grant_rows(
         {
             "subject": request.subject,
             "client_id": request.client_id,
+            "organization_id": request.organization_id,
             "operation_key": request.operation_key,
             "capability_code": request.capability_code,
             "operation_mode": operation_mode,
@@ -603,6 +606,10 @@ def authorize_operator_action(
     if not allowed_clients or request.client_id not in allowed_clients:
         raise HTTPException(status_code=403, detail="OAuth client is not pre-registered")
 
+    db.execute(
+        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+        {"auth_user_id": request.subject, "org_id": request.organization_id},
+    )
     rows = _operator_grant_rows(
         db, request, policy, operation_mode, capability_approval_policy
     )

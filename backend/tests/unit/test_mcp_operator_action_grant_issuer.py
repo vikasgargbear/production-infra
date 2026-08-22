@@ -42,6 +42,7 @@ def _request(operation_key, *, branch_ids=(), command_request_id=None):
         issuer=ISSUER,
         subject=uuid4(),
         client_id=CLIENT_ID,
+        organization_id=uuid4(),
         operation_key=operation_key,
         capability_code=operation_key,
         operation_mode="read" if policy.risk_class == "read_only" else "write",
@@ -133,13 +134,19 @@ def test_prepare_token_is_exact_operation_and_branch_bounded(enabled_issuer, mon
         )
         or "d" * 48,
     )
+    database = _Database([])
 
     response = mcp_agent_grants.authorize_operator_action(
         request,
         HTTPAuthorizationCredentials(scheme="Bearer", credentials=SERVICE_TOKEN),
-        object(),
+        database,
     )
 
+    assert "erp_security.activate_context" in database.calls[0][0]
+    assert database.calls[0][1] == {
+        "auth_user_id": request.subject,
+        "org_id": request.organization_id,
+    }
     assert response.branch_ids == [str(branch_id)]
     assert response.organization_scope is True
     assert response.expires_at == now + 240
@@ -183,7 +190,7 @@ def test_shared_token_derives_branches_and_binds_exact_command(enabled_issuer, m
     response = mcp_agent_grants.authorize_operator_action(
         request,
         HTTPAuthorizationCredentials(scheme="Bearer", credentials=SERVICE_TOKEN),
-        object(),
+        _Database([]),
     )
 
     assert response.command_request_id == str(command_request_id)
@@ -227,9 +234,11 @@ def test_operator_authority_sql_revalidates_rbac_branches_and_approval_separatio
         "command.approval_policy<>'separate_approver'",
         "membership.id<>command.requested_by_membership_id",
         "grant_row.expires_at>transaction_timestamp()",
+        "grant_row.org_id=:organization_id",
     ):
         assert fragment in sql
     assert params["command_request_id"] == command_request_id
+    assert params["organization_id"] == request.organization_id
     assert params["permission_code"] == "automation.command.approve"
 
 

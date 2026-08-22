@@ -216,6 +216,7 @@ async def test_shared_operator_tools_use_action_grant_and_delegated_token(
     assert grant_call[0] == "POST"
     assert grant_call[1].endswith("/api/internal/mcp/agent-grants/authorize-action")
     assert grant_call[2]["json"]["command_request_id"] == command_id
+    assert grant_call[2]["json"]["organization_id"] == access.claims["organization_id"]
     assert action_call[0] == method
     assert action_call[1].endswith(f"/api/internal/mcp/commands/{command_id}{suffix}")
     assert action_call[2]["headers"]["X-MCP-Delegated-Authorization"] == (
@@ -284,6 +285,7 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
 
     assert result["command_request_id"] == command_id
     assert calls[0][2]["json"]["branch_ids"] == [branch_id]
+    assert calls[0][2]["json"]["organization_id"] == access.claims["organization_id"]
     assert calls[1][1].endswith(
         "/api/internal/mcp/actions/sales.order.prepare/prepare"
     )

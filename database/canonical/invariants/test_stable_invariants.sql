@@ -226,6 +226,24 @@ VALUES (
     '00000000-0000-0000-0000-000000000040',
     'organization', 'Fixture Party', 'draft'
 );
+DO $test$
+BEGIN
+    BEGIN
+        UPDATE core.organizations SET pan = 'ABCDE1234'
+         WHERE id = '00000000-0000-0000-0000-000000000010';
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'malformed organization PAN was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+    BEGIN
+        UPDATE parties.parties SET pan = '1234ABCDEZ'
+         WHERE id = '00000000-0000-0000-0000-000000000040';
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'malformed party PAN was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+END
+$test$;
 INSERT INTO parties.addresses (
     org_id, id, party_id, address_kind, line1, city, state_code,
     postal_code, is_primary, valid_from, valid_until
@@ -266,6 +284,40 @@ INSERT INTO parties.tax_registrations (
 DO $test$
 BEGIN
     BEGIN
+        INSERT INTO parties.tax_registrations (
+            org_id, id, party_id, registration_type, registration_number,
+            registered_legal_name, state_code, taxpayer_type, status
+        ) VALUES (
+            '00000000-0000-0000-0000-000000000010',
+            '00000000-0000-0000-0000-000000000044',
+            '00000000-0000-0000-0000-000000000040',
+            'GSTIN', '27INVALIDGSTIN', 'Fixture Party', '27', 'regular',
+            'pending_verification'
+        );
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'malformed GSTIN was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+    BEGIN
+        INSERT INTO parties.tax_registrations (
+            org_id, id, party_id, registration_type, registration_number,
+            registered_legal_name, state_code, taxpayer_type, status
+        ) VALUES (
+            '00000000-0000-0000-0000-000000000010',
+            '00000000-0000-0000-0000-000000000045',
+            '00000000-0000-0000-0000-000000000040',
+            'GSTIN', '27ABCDE1234F1Z5', 'Fixture Party', '29', 'regular',
+            'pending_verification'
+        );
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'GSTIN/state mismatch was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+END
+$test$;
+DO $test$
+BEGIN
+    BEGIN
         UPDATE parties.tax_registrations SET registered_legal_name = 'Changed'
          WHERE id = '00000000-0000-0000-0000-000000000043';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'verified tax identity mutated';
@@ -285,6 +337,17 @@ INSERT INTO catalog.products (
     'FIXTURE-MED', 'medicine', 'Fixture Medicine', 'EA', '3004', 'NONE', false, false,
     'fixture-not-applicable-v1'
 );
+DO $test$
+BEGIN
+    BEGIN
+        UPDATE catalog.products SET hsn_code = '30AB'
+         WHERE id = '00000000-0000-0000-0000-000000000050';
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'malformed HSN was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+END
+$test$;
 
 -- Regulated references are importer-only in production. This rolled-back
 -- fixture seeds the minimum FK authority without claiming an official import.
