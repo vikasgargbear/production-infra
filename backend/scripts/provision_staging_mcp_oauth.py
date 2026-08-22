@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import sys
 from pathlib import Path
@@ -57,11 +58,15 @@ def _request_json(
     *,
     payload: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
+    include_api_key: bool = False,
 ) -> Any:
+    headers = {"Authorization": f"Bearer {token}"}
+    if include_api_key:
+        headers["apikey"] = token
     response = requests.request(
         method,
         url,
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         json=payload,
         params=params,
         timeout=20,
@@ -101,7 +106,13 @@ def _client_shape(client: dict[str, Any]) -> tuple[Any, ...]:
 
 def _reconcile_client(service_key: str) -> dict[str, Any]:
     endpoint = f"{SUPABASE_URL}/auth/v1/admin/oauth/clients"
-    listed = _request_json("GET", endpoint, service_key, params={"per_page": 100})
+    listed = _request_json(
+        "GET",
+        endpoint,
+        service_key,
+        params={"per_page": 100},
+        include_api_key=True,
+    )
     clients = listed.get("clients", []) if isinstance(listed, dict) else []
     matches = [client for client in clients if client.get("name") == CLIENT_NAME]
     if len(matches) > 1:
@@ -116,10 +127,16 @@ def _reconcile_client(service_key: str) -> dict[str, Any]:
         client = matches[0]
         if _client_shape(client) != _client_shape(payload):
             client = _request_json(
-                "PATCH", f"{endpoint}/{client['client_id']}", service_key, payload=payload
+                "PATCH",
+                f"{endpoint}/{client['client_id']}",
+                service_key,
+                payload=payload,
+                include_api_key=True,
             )
     else:
-        client = _request_json("POST", endpoint, service_key, payload=payload)
+        client = _request_json(
+            "POST", endpoint, service_key, payload=payload, include_api_key=True
+        )
     if not isinstance(client, dict) or _client_shape(client) != _client_shape(payload):
         raise ProvisioningError("OAuth client response did not match the reviewed public-client contract")
     client_id = client.get("client_id")
@@ -130,7 +147,13 @@ def _reconcile_client(service_key: str) -> dict[str, Any]:
 
 def _reconcile_test_user(service_key: str, password: str) -> str:
     endpoint = f"{SUPABASE_URL}/auth/v1/admin/users"
-    listed = _request_json("GET", endpoint, service_key, params={"page": 1, "per_page": 1000})
+    listed = _request_json(
+        "GET",
+        endpoint,
+        service_key,
+        params={"page": 1, "per_page": 1000},
+        include_api_key=True,
+    )
     users = listed.get("users", []) if isinstance(listed, dict) else []
     matches = [user for user in users if user.get("email") == TEST_EMAIL]
     if len(matches) > 1:
@@ -143,10 +166,16 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
     }
     if matches:
         user = _request_json(
-            "PUT", f"{endpoint}/{matches[0]['id']}", service_key, payload=payload
+            "PUT",
+            f"{endpoint}/{matches[0]['id']}",
+            service_key,
+            payload=payload,
+            include_api_key=True,
         )
     else:
-        user = _request_json("POST", endpoint, service_key, payload=payload)
+        user = _request_json(
+            "POST", endpoint, service_key, payload=payload, include_api_key=True
+        )
     user_id = user.get("id") if isinstance(user, dict) else None
     if not isinstance(user_id, str) or not user_id.strip():
         raise ProvisioningError("Staging OAuth test user response omitted id")
@@ -296,6 +325,14 @@ def _write_github_env(values: dict[str, str]) -> None:
             handle.write(f"{key}={value}\n")
 
 
+def _redacted_annotation(exc: BaseException) -> str:
+    detail = str(exc)
+    detail = re.sub(r"sb_secret_[A-Za-z0-9._-]+", "[REDACTED]", detail)
+    detail = re.sub(r"eyJ[A-Za-z0-9._-]+", "[REDACTED]", detail)
+    detail = re.sub(r"postgres(?:ql)?://[^\s]+", "[REDACTED_DATABASE_URL]", detail)
+    return detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def main() -> int:
     if _required("CANONICAL_STAGING_PROJECT_REF") != PROJECT_REF:
         raise ProvisioningError("Refusing OAuth provisioning outside the reviewed staging project")
@@ -305,11 +342,15 @@ def main() -> int:
     database_url = _required("PSYCOPG_DATABASE_URL")
     service_key = _service_role_key(management_token)
     print(f"::add-mask::{service_key}")
+    print("Resolved the staging project admin key")
     password = secrets.token_urlsafe(32)
     print(f"::add-mask::{password}")
     client = _reconcile_client(service_key)
+    print("Reconciled the reviewed public OAuth client")
     auth_user_id = _reconcile_test_user(service_key, password)
+    print("Reconciled the disposable OAuth test identity")
     demo_bound = _bind_demo(database_url, client["client_id"], auth_user_id)
+    print("Reconciled the isolated read-only demo grant")
     _write_github_env(
         {
             "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client["client_id"],
@@ -355,4 +396,7 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except (ProvisioningError, requests.RequestException, psycopg2.Error) as exc:
         print(f"staging MCP OAuth provisioning failed: {exc}", file=sys.stderr)
+        print(
+            f"::error title=Staging MCP OAuth provisioning failed::{_redacted_annotation(exc)}"
+        )
         raise SystemExit(1)
