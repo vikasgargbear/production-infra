@@ -137,31 +137,13 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert gateway == {
-        "erp_product_search": (
-            "master.products.search",
-            "erp_product_search",
-            "/api/internal/mcp/reads/products",
-            "catalog.product.manage",
-            100,
-        ),
-        "erp_supplier_search": (
-            "master.suppliers.search",
-            "erp_supplier_search",
-            "/api/internal/mcp/reads/suppliers",
-            "parties.supplier.manage",
-            200,
-        ),
-        "erp_gst_settings_get": (
-            "gst.settings.get",
-            "erp_gst_settings_get",
-            "/api/internal/mcp/reads/gst-settings",
-            "tax.registration.manage",
-            1,
-        ),
-    }
-    for operation_key, _tool, path_value, permission, maximum in gateway.values():
-        policy = CANONICAL_READ_POLICIES[operation_key]
+    assert len(gateway) == 13
+    assert {values[0] for values in gateway.values()} == set(
+        ALL_CANONICAL_READ_POLICIES
+    )
+    for values in gateway.values():
+        operation_key, _tool, path_value, permission, maximum = values[:5]
+        policy = ALL_CANONICAL_READ_POLICIES[operation_key]
         assert path_value == f"/api{policy.path}"
         assert permission == policy.permission_code
         assert maximum == policy.maximum_records
@@ -174,7 +156,8 @@ def test_grant_issues_only_canonical_uuid_claims(monkeypatch):
             "org_id": ids["org"],
             "agent_grant_id": ids["grant"],
             "membership_id": ids["membership"],
-            "branch_id": None,
+            "grant_branch_id": None,
+            "delegated_branch_id": None,
             "canonical_user_id": ids["user"],
             "auth_user_id": ids["auth"],
             "allow_sensitive_read": False,
@@ -303,7 +286,7 @@ def test_delegated_token_parser_requires_bearer_and_canonical_profile(monkeypatc
 
 def test_read_dependency_revalidates_live_canonical_authority(monkeypatch):
     claims = _delegation_claims()
-    database = _Database([[], [SimpleNamespace(_mapping={"branch_id": None, "allow_sensitive_read": False})]])
+    database = _Database([[], [SimpleNamespace(_mapping={"grant_branch_id": None, "allow_sensitive_read": False})]])
     monkeypatch.setattr(mcp_canonical_reads, "_parse_delegated_token", lambda _header: claims)
     monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 48)
 
@@ -362,7 +345,7 @@ def test_read_dependency_rejects_sensitive_or_branch_scope_drift(monkeypatch):
         mcp_canonical_reads, "_parse_delegated_token", lambda _header: supplier_claims
     )
     supplier_db = _Database(
-        [[], [SimpleNamespace(_mapping={"branch_id": None, "allow_sensitive_read": False})]]
+        [[], [SimpleNamespace(_mapping={"grant_branch_id": None, "allow_sensitive_read": False})]]
     )
     with pytest.raises(HTTPException) as sensitive:
         mcp_canonical_reads.get_canonical_delegation(
@@ -370,16 +353,25 @@ def test_read_dependency_rejects_sensitive_or_branch_scope_drift(monkeypatch):
         )
     assert sensitive.value.status_code == 403
 
-    branch_claims = _delegation_claims(branch_id=uuid4())
+    delegated_branch_id = uuid4()
+    branch_claims = _delegation_claims(branch_id=delegated_branch_id)
     monkeypatch.setattr(
         mcp_canonical_reads, "_parse_delegated_token", lambda _header: branch_claims
     )
-    branch_db = _Database(
-        [[], [SimpleNamespace(_mapping={"branch_id": None, "allow_sensitive_read": False})]]
+    branch_db = _Database([[], [SimpleNamespace(
+        _mapping={"grant_branch_id": None, "allow_sensitive_read": False}
+    )]])
+    context = mcp_canonical_reads.get_canonical_delegation(
+        "Bearer delegated", credentials, branch_db
     )
+    assert context.branch_id == delegated_branch_id
+
+    wrong_branch_db = _Database([[], [SimpleNamespace(
+        _mapping={"grant_branch_id": uuid4(), "allow_sensitive_read": False}
+    )]])
     with pytest.raises(HTTPException) as branch:
         mcp_canonical_reads.get_canonical_delegation(
-            "Bearer delegated", credentials, branch_db
+            "Bearer delegated", credentials, wrong_branch_db
         )
     assert branch.value.status_code == 403
 

@@ -59,7 +59,7 @@ def _context(operation_key, branch=True, sensitive=False):
     )
 
 
-def test_ten_planned_resolution_policies_match_operator_contract_and_stay_unpublished():
+def test_ten_resolution_policies_match_operator_contract_and_are_published():
     contract = json.loads(
         (ROOT / "docs/architecture/mcp-operator-actions.json").read_text(encoding="utf-8")
     )
@@ -71,8 +71,8 @@ def test_ten_planned_resolution_policies_match_operator_contract_and_stay_unpubl
         assert policy.permission_code == item["permission"]
         assert policy.maximum_records == item["max_records"]
         assert policy.path.startswith("/internal/mcp/resolution/")
-        assert policy.exposed_in_mcp is False
-        assert policy.readiness_verified is False
+        assert policy.exposed_in_mcp is True
+        assert policy.readiness_verified is True
         assert policy_for(operation_key) is policy
 
     assert set(CANONICAL_READ_POLICIES) == {
@@ -81,7 +81,9 @@ def test_ten_planned_resolution_policies_match_operator_contract_and_stay_unpubl
     service = json.loads(
         (ROOT / "backend/mcp_runtime/service-contract.json").read_text(encoding="utf-8")
     )
-    assert len(service["tools"]) == 3
+    assert {
+        item["tool"] for item in contract["resolution_reads"]
+    }.issubset(service["tools"])
 
 
 def test_ten_resolution_routes_are_hidden_get_only_and_have_no_generic_filter():

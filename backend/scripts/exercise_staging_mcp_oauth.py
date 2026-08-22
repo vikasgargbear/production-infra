@@ -9,11 +9,14 @@ import json
 import os
 import secrets
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 import jwt
+import psycopg2
 import requests
 
 
@@ -23,6 +26,11 @@ ISSUER = f"{SUPABASE_URL}/auth/v1"
 MCP_URL = "https://aasopharma-mcp-pilot.onrender.com/mcp"
 CALLBACK_URL = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
 SCOPES = "openid offline_access"
+DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
+DEMO_BRANCH_ID = "d3000000-0000-7000-8000-000000000005"
+DEMO_CUSTOMER_ACCOUNT_ID = "d3000000-0000-7000-8000-000000000011"
+DEMO_PRODUCT_ID = "d3000000-0000-7000-8000-000000000015"
+DEMO_UOM_CONVERSION_ID = "d3000000-0000-7000-8000-000000000016"
 
 
 class ExerciseError(RuntimeError):
@@ -210,6 +218,26 @@ def _jsonrpc_response(response: requests.Response) -> dict[str, Any]:
     return body
 
 
+def _tool_payload(response: dict[str, Any]) -> dict[str, Any]:
+    result = response.get("result")
+    if not isinstance(result, dict) or result.get("isError") is True:
+        raise ExerciseError(f"Live MCP tool returned an error: {json.dumps(result)[:1000]}")
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict):
+        return structured
+    content = result.get("content")
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                try:
+                    decoded = json.loads(item["text"])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(decoded, dict):
+                    return decoded
+    raise ExerciseError("Live MCP tool response omitted one JSON object payload")
+
+
 def _exercise_mcp(access_token: str) -> tuple[list[str], dict[str, Any]]:
     session = requests.Session()
     session.headers.update(
@@ -252,7 +280,8 @@ def _exercise_mcp(access_token: str) -> tuple[list[str], dict[str, Any]]:
     )
     tools = listed.get("result", {}).get("tools", [])
     names = sorted(tool.get("name") for tool in tools if isinstance(tool, dict))
-    expected = ["erp_gst_settings_get", "erp_product_search", "erp_supplier_search"]
+    contract_path = Path(__file__).parents[1] / "mcp_runtime/service-contract.json"
+    expected = sorted(json.loads(contract_path.read_text(encoding="utf-8"))["tools"])
     if names != expected:
         raise ExerciseError(f"Live MCP registry drifted: {names}")
     called = _jsonrpc_response(
@@ -270,13 +299,122 @@ def _exercise_mcp(access_token: str) -> tuple[list[str], dict[str, Any]]:
             timeout=30,
         )
     )
-    result = called.get("result")
-    if not isinstance(result, dict) or result.get("isError") is True:
-        detail = json.dumps(result, sort_keys=True)[:1000]
-        raise ExerciseError(f"Live product-search tool returned an error: {detail}")
-    if "d3000000-0000-7000-8000-000000000015" not in json.dumps(result):
+    if DEMO_PRODUCT_ID not in json.dumps(called):
         raise ExerciseError("Live product-search tool did not return the canonical demo product")
-    return names, result
+
+    next_id = 4
+
+    def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        nonlocal next_id
+        response = _jsonrpc_response(
+            session.post(
+                MCP_URL,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": next_id,
+                    "method": "tools/call",
+                    "params": {"name": name, "arguments": arguments},
+                },
+                timeout=60,
+            )
+        )
+        next_id += 1
+        return _tool_payload(response)
+
+    customers = call(
+        "erp_customer_search", {"search_term": "CUST-DEMO-001", "limit": 20}
+    )
+    if DEMO_CUSTOMER_ACCOUNT_ID not in json.dumps(customers):
+        raise ExerciseError("Live customer resolution omitted the canonical demo customer")
+
+    run_id = os.getenv("GITHUB_RUN_ID", secrets.token_hex(6))
+    business_date = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+    prepared = call(
+        "erp_sales_order_prepare",
+        {
+            "idempotency_key": f"mcp-live-sales-order-{run_id}",
+            "branch_id": DEMO_BRANCH_ID,
+            "order_date": business_date,
+            "document_discount": {
+                "document_discount_kind": "amount",
+                "document_discount_basis": "taxable_value",
+                "document_discount_value": "25.00",
+            },
+            "rounding_policy": "nearest_rupee",
+            "zero_rated_payment_mode": "not_applicable",
+            "customer_account_id": DEMO_CUSTOMER_ACCOUNT_ID,
+            "lines": [
+                {
+                    "product_id": DEMO_PRODUCT_ID,
+                    "uom_conversion_id": DEMO_UOM_CONVERSION_ID,
+                    "billed_quantity": "12",
+                    "free_quantity": "2",
+                    "free_supply_tax_treatment": "excluded_from_taxable_value",
+                    "quoted_unit_rate": "125.50",
+                    "price_basis": "tax_exclusive",
+                    "line_discount": {
+                        "line_discount_kind": "percent",
+                        "line_discount_basis": "taxable_value",
+                        "line_discount_value": "7.5",
+                    },
+                    "document_discount_eligible": True,
+                }
+            ],
+        },
+    )
+    command_id = prepared.get("command_request_id")
+    preview_hash = prepared.get("preview_hash")
+    if not isinstance(command_id, str) or not isinstance(preview_hash, str):
+        raise ExerciseError("Live prepare omitted command_request_id or preview_hash")
+    approved = call(
+        "erp_operation_approve",
+        {
+            "command_request_id": command_id,
+            "preview_hash": preview_hash,
+            "approval_intent": "approve",
+            "idempotency_key": f"mcp-live-approve-{run_id}",
+        },
+    )
+    executed = call(
+        "erp_operation_execute",
+        {
+            "command_request_id": command_id,
+            "preview_hash": preview_hash,
+            "idempotency_key": f"mcp-live-execute-{run_id}",
+        },
+    )
+    status = call("erp_operation_status_get", {"command_request_id": command_id})
+    if status.get("status") != "succeeded":
+        raise ExerciseError(f"Live command did not succeed: {status}")
+    return names, {
+        "command_request_id": command_id,
+        "prepared": prepared,
+        "approved": approved,
+        "executed": executed,
+        "status": status,
+    }
+
+
+def _reconcile_database(command_id: str) -> dict[str, Any]:
+    with psycopg2.connect(_required("PSYCOPG_DATABASE_URL")) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT command.status, command.target_resource_id::text,
+                       count(order_row.id)
+                  FROM automation.command_requests AS command
+                  LEFT JOIN sales.orders AS order_row
+                    ON order_row.org_id=command.org_id
+                   AND order_row.id=command.target_resource_id
+                 WHERE command.org_id=%s AND command.id=%s
+                 GROUP BY command.status,command.target_resource_id
+                """,
+                (DEMO_ORG_ID, command_id),
+            )
+            row = cursor.fetchone()
+    if row is None or row[0] != "succeeded" or row[2] != 1:
+        raise ExerciseError(f"Database did not reconcile the live MCP sales order: {row}")
+    return {"command_status": row[0], "sales_order_id": row[1], "order_count": row[2]}
 
 
 def main() -> int:
@@ -346,7 +484,8 @@ def main() -> int:
     ready = requests.get(MCP_URL.removesuffix("/mcp") + "/ready", timeout=30)
     if ready.status_code != 200:
         raise ExerciseError(f"MCP readiness remained HTTP {ready.status_code}")
-    tool_names, _ = _exercise_mcp(token["access_token"])
+    tool_names, workflow = _exercise_mcp(token["access_token"])
+    reconciliation = _reconcile_database(workflow["command_request_id"])
     evidence_dir = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
     evidence = {
@@ -363,8 +502,16 @@ def main() -> int:
         "refresh_token_issued": True,
         "mcp_readiness_verified": True,
         "mcp_tools": tool_names,
-        "live_tool_call": "erp_product_search",
+        "live_read_tool_calls": ["erp_product_search", "erp_customer_search"],
         "live_demo_product_verified": True,
+        "live_write_workflow": [
+            "erp_sales_order_prepare",
+            "erp_operation_approve",
+            "erp_operation_execute",
+            "erp_operation_status_get",
+        ],
+        "live_command_request_id": workflow["command_request_id"],
+        "database_reconciliation": reconciliation,
     }
     (evidence_dir / "canonical-staging-mcp-oauth-e2e.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -376,7 +523,13 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (ExerciseError, requests.RequestException, ValueError, KeyError) as exc:
+    except (
+        ExerciseError,
+        requests.RequestException,
+        psycopg2.Error,
+        ValueError,
+        KeyError,
+    ) as exc:
         print(f"staging MCP OAuth exercise failed: {exc}", file=sys.stderr)
         detail = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error title=Staging MCP OAuth exercise failed::{detail}")

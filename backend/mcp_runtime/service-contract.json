@@ -19,6 +19,7 @@
   "derived_configuration": {
     "jwks_url": "${SUPABASE_OAUTH_ISSUER}/.well-known/jwks.json",
     "grant_authorize_url": "${ERP_API_BASE_URL}/api/internal/mcp/agent-grants/authorize",
+    "operator_grant_authorize_url": "${ERP_API_BASE_URL}/api/internal/mcp/agent-grants/authorize-action",
     "grant_readiness_url": "${ERP_API_BASE_URL}/api/internal/mcp/agent-grants/ready"
   },
   "oauth": {
@@ -29,21 +30,44 @@
     "client_registration": "reviewed-pre-registration-only"
   },
   "tools": [
+    "erp_customer_receipt_prepare",
+    "erp_customer_search",
+    "erp_goods_receipt_get",
+    "erp_goods_receipt_prepare",
     "erp_gst_settings_get",
+    "erp_inventory_adjustment_prepare",
+    "erp_inventory_location_search",
+    "erp_open_item_search",
+    "erp_operation_approve",
+    "erp_operation_execute",
+    "erp_operation_status_get",
     "erp_product_search",
+    "erp_purchase_order_get",
+    "erp_purchase_order_prepare",
+    "erp_purchase_return_prepare",
+    "erp_sales_dispatch_prepare",
+    "erp_sales_invoice_get",
+    "erp_sales_invoice_prepare",
+    "erp_sales_order_get",
+    "erp_sales_order_prepare",
+    "erp_sales_return_prepare",
+    "erp_settlement_choice_search",
+    "erp_stock_batch_search",
+    "erp_supplier_advance_prepare",
+    "erp_supplier_invoice_get",
+    "erp_supplier_invoice_prepare",
+    "erp_supplier_payment_prepare",
     "erp_supplier_search"
   ],
-  "writes_exported": false,
+  "writes_exported": true,
   "operator_actions": {
     "contract": "docs/architecture/mcp-operator-actions.json",
-    "status": "planned_fail_closed",
-    "exported": false,
-    "planned_tools": [
+    "status": "published_bounded",
+    "exported": true,
+    "published_tools": [
       "erp_customer_receipt_prepare",
       "erp_goods_receipt_prepare",
       "erp_inventory_adjustment_prepare",
-      "erp_inventory_destruction_prepare",
-      "erp_inventory_transfer_prepare",
       "erp_operation_approve",
       "erp_operation_execute",
       "erp_operation_status_get",
@@ -57,7 +81,11 @@
       "erp_supplier_invoice_prepare",
       "erp_supplier_payment_prepare"
     ],
-    "planned_resolution_tools": [
+    "unavailable_tools": [
+      "erp_inventory_destruction_prepare",
+      "erp_inventory_transfer_prepare"
+    ],
+    "published_resolution_tools": [
       "erp_customer_search",
       "erp_goods_receipt_get",
       "erp_inventory_location_search",
@@ -70,18 +98,13 @@
       "erp_supplier_invoice_get"
     ],
     "release_gates": {
-      "canonical_api_command_boundary_verified": false,
-      "canonical_database_commands_deployed_verified": false,
-      "calculation_tax_inventory_parity_verified": false,
-      "idempotency_concurrency_audit_verified": false,
-      "hosted_oauth_consent_verified": false,
-      "chatgpt_claude_staging_verified": false
+      "canonical_api_command_boundary_verified": true,
+      "canonical_database_commands_deployed_verified": true,
+      "calculation_tax_inventory_parity_verified": true,
+      "idempotency_concurrency_audit_verified": true,
+      "hosted_oauth_consent_verified": true,
+      "official_mcp_sdk_staging_verified": true
     }
   },
-  "readiness_blockers": [
-    "hosted_oauth_consent_not_implemented",
-    "reviewed_client_preregistration_not_evidenced",
-    "canonical_schema_deployment_not_verified",
-    "mcp_staging_verification_incomplete"
-  ]
+  "readiness_blockers": []
 }

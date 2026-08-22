@@ -3,6 +3,7 @@
 from .contract import (
     ACTION_POLICIES,
     PREPARE_PAYLOAD_MODELS,
+    PUBLISHED_OPERATOR_OPERATION_KEYS,
     ActionPolicy,
     OperatorCommandType,
     policy_for,
@@ -24,6 +25,7 @@ from .service import (
 __all__ = [
     "ACTION_POLICIES",
     "PREPARE_PAYLOAD_MODELS",
+    "PUBLISHED_OPERATOR_OPERATION_KEYS",
     "ActionContext",
     "ActionErrorCode",
     "ActionPolicy",

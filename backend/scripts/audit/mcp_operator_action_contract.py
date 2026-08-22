@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit the planned MCP operator-action boundary and its fail-closed state."""
+"""Audit the bounded published MCP operator-action boundary."""
 
 from __future__ import annotations
 
@@ -45,6 +45,15 @@ EXPECTED_SHARED_TOOLS = {
     "erp_operation_execute",
     "erp_operation_status_get",
 }
+EXPECTED_BASE_READ_TOOLS = {
+    "erp_product_search",
+    "erp_supplier_search",
+    "erp_gst_settings_get",
+}
+EXPECTED_UNAVAILABLE_PREPARE_TOOLS = {
+    "erp_inventory_transfer_prepare",
+    "erp_inventory_destruction_prepare",
+}
 EXPECTED_RESOLUTION_TOOLS = {
     "erp_customer_search",
     "erp_inventory_location_search",
@@ -63,7 +72,7 @@ EXPECTED_RELEASE_GATES = {
     "calculation_tax_inventory_parity_verified",
     "idempotency_concurrency_audit_verified",
     "hosted_oauth_consent_verified",
-    "chatgpt_claude_staging_verified",
+    "official_mcp_sdk_staging_verified",
 }
 EXECUTE_FIELDS = {"command_request_id", "preview_hash", "idempotency_key"}
 FORBIDDEN_BUSINESS_INPUT_FIELDS = {
@@ -633,18 +642,18 @@ def validate(
     if document.get("schema_version") != "1.0.0":
         issues.append("operator action schema_version must be 1.0.0")
     publication = document.get("publication", {})
-    if publication.get("operator_actions_exported") is not False:
-        issues.append("operator actions must remain unexported")
-    if publication.get("writes_exported") is not False:
-        issues.append("operator writes must remain unexported")
+    if publication.get("operator_actions_exported") is not True:
+        issues.append("bounded operator actions must be exported")
+    if publication.get("writes_exported") is not True:
+        issues.append("bounded operator writes must be exported")
     if publication.get("fail_closed") is not True:
         issues.append("operator action publication must fail closed")
     gates = publication.get("release_gates", {})
     if set(gates) != EXPECTED_RELEASE_GATES:
         issues.append("operator action release gate set drifted")
     for gate, value in gates.items():
-        if value is not False:
-            issues.append(f"release gate has no checked-in evidence but is enabled: {gate}")
+        if value is not True:
+            issues.append(f"published operator release gate is not verified: {gate}")
 
     prepares = document.get("prepare_actions", [])
     shared = document.get("shared_actions", [])
@@ -660,6 +669,25 @@ def validate(
         issues.append("shared approve/execute/status tool set has drifted")
     if set(resolution_names) != EXPECTED_RESOLUTION_TOOLS:
         issues.append("operator resolution read set is incomplete or has drifted")
+    operation_to_tool = {
+        item.get("operation_key"): item.get("tool")
+        for item in prepares
+        if isinstance(item, dict)
+    }
+    published_prepare_tools = {
+        operation_to_tool.get(operation)
+        for operation in publication.get("published_prepare_operations", [])
+    }
+    unavailable_prepare_tools = {
+        operation_to_tool.get(operation)
+        for operation in publication.get("unavailable_prepare_operations", [])
+    }
+    if published_prepare_tools != (
+        EXPECTED_PREPARE_TOOLS - EXPECTED_UNAVAILABLE_PREPARE_TOOLS
+    ):
+        issues.append("published prepare tool scope drifted")
+    if unavailable_prepare_tools != EXPECTED_UNAVAILABLE_PREPARE_TOOLS:
+        issues.append("unavailable prepare tool scope drifted")
     duplicates = _duplicates((*prepare_names, *shared_names, *resolution_names))
     if duplicates:
         issues.append(f"duplicate planned operator tools: {sorted(duplicates)}")
@@ -670,8 +698,8 @@ def validate(
         issues.append("runtime prepare schemas drifted from architecture contract")
     if set(runtime_shared) != set(shared_names):
         issues.append("runtime shared schemas drifted from architecture contract")
-    if getattr(module, "OPERATOR_ACTIONS_EXPORTED", None) is not False:
-        issues.append("runtime operator action export flag must remain false")
+    if getattr(module, "OPERATOR_ACTIONS_EXPORTED", None) is not True:
+        issues.append("runtime bounded operator action export flag must be true")
     if dict(getattr(module, "RELEASE_GATES", {})) != gates:
         issues.append("runtime release gates drifted from architecture contract")
 
@@ -728,19 +756,26 @@ def validate(
     planned_resolution = set(resolution_names)
     live_tools = set(service.get("tools", []))
     operator_service = service.get("operator_actions", {})
-    if service.get("writes_exported") is not False:
-        issues.append("MCP service contract exports writes")
-    if operator_service.get("exported") is not False:
-        issues.append("MCP service contract exports operator actions")
-    if set(operator_service.get("planned_tools", [])) != planned:
-        issues.append("MCP service planned tool list drifted")
-    if set(operator_service.get("planned_resolution_tools", [])) != planned_resolution:
-        issues.append("MCP service planned resolution tool list drifted")
+    expected_published_actions = published_prepare_tools | EXPECTED_SHARED_TOOLS
+    expected_live_tools = (
+        EXPECTED_BASE_READ_TOOLS
+        | EXPECTED_RESOLUTION_TOOLS
+        | expected_published_actions
+    )
+    if service.get("writes_exported") is not True:
+        issues.append("MCP service contract does not export bounded writes")
+    if operator_service.get("exported") is not True:
+        issues.append("MCP service contract does not export bounded operator actions")
+    if set(operator_service.get("published_tools", [])) != expected_published_actions:
+        issues.append("MCP service published tool list drifted")
+    if set(operator_service.get("unavailable_tools", [])) != EXPECTED_UNAVAILABLE_PREPARE_TOOLS:
+        issues.append("MCP service unavailable tool list drifted")
+    if set(operator_service.get("published_resolution_tools", [])) != planned_resolution:
+        issues.append("MCP service published resolution tool list drifted")
     if operator_service.get("release_gates") != gates:
         issues.append("MCP service operator release gates drifted")
-    leaked = live_tools & (planned | planned_resolution)
-    if leaked:
-        issues.append(f"planned operator tools leaked into live MCP tools: {sorted(leaked)}")
+    if live_tools != expected_live_tools:
+        issues.append("live MCP tool registry drifted from the bounded publication set")
 
     app_operations = application.get("mcp_operations", [])
     if not isinstance(app_operations, list):
@@ -770,7 +805,7 @@ def validate(
         app_operation = app_by_tool.get(tool, {})
         if app_operation.get("resource") != architecture_resources.get(tool):
             issues.append(f"{tool}: app-data workflow owner drifted from operator contract")
-    for tool in live_tools:
+    for tool in EXPECTED_BASE_READ_TOOLS | EXPECTED_RESOLUTION_TOOLS | {"erp_operation_status_get"}:
         app_operation = app_by_tool.get(tool, {})
         if (
             app_operation.get("mode") != "read"
@@ -815,7 +850,8 @@ def main() -> int:
     print(
         "MCP operator action contract: OK "
         f"({len(EXPECTED_RESOLUTION_TOOLS)} resolution reads, "
-        f"{len(EXPECTED_PREPARE_TOOLS)} prepares, 3 shared tools, writes unexported)"
+        f"{len(EXPECTED_PREPARE_TOOLS) - len(EXPECTED_UNAVAILABLE_PREPARE_TOOLS)} "
+        "published prepares, 2 unavailable prepares, 3 shared tools)"
     )
     return 0
 

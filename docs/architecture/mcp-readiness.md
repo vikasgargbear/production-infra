@@ -275,10 +275,10 @@ instructions.
    org/branch tests for every exportable operation.
 3. **Write-safety gate:** implement idempotency, optimistic concurrency,
    preview/commit, immutable audit, and transactional outbox.
-4. **Read-only MCP:** release context, master-data, inventory, finance summary,
-   GST summary, and compliance resources/tools to an allowlisted pilot.
-5. **Controlled writes:** add draft/order tools, then invoices/payments only
-   after calculation parity and failure-injection tests pass.
+4. **Bounded reads:** release master-data and branch-scoped resolution tools to
+   an allowlisted pilot.
+5. **Controlled writes:** publish only reviewed prepare, approval, execution,
+   and status tools after calculation parity and failure-injection tests pass.
 6. **External actions:** evaluate filing, messages, and integrations separately;
    keep them disabled until W3 controls and operational runbooks are proven.
 

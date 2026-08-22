@@ -37,9 +37,9 @@ CANONICAL_MCP_READ_API_IMPLEMENTED = True
 CANONICAL_SCHEMA_DEPLOYMENT_VERIFIED = True
 MCP_STAGING_VERIFIED = True
 SUPABASE_DYNAMIC_CLIENT_REGISTRATION_ENABLED = False
-# Action delegation remains a separate, code-owned release decision. In
-# particular, deploying adapters does not implicitly publish MCP writes.
-CANONICAL_OPERATOR_ACTION_ADAPTERS_VERIFIED = False
+# Only the reviewed adapter subset is published. Transfer and destruction stay
+# unexported and fail closed at the application adapter boundary.
+CANONICAL_OPERATOR_ACTION_ADAPTERS_VERIFIED = True
 
 
 class GrantRequest(BaseModel):
@@ -52,6 +52,7 @@ class GrantRequest(BaseModel):
     operation_key: str = Field(min_length=3, max_length=128)
     capability_code: str = Field(pattern=r"^[a-z][a-z0-9_.]{2,127}$")
     operation_mode: str = Field(pattern=r"^read$")
+    branch_id: Optional[UUID] = None
 
 
 class GrantResponse(BaseModel):
@@ -414,7 +415,10 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
             """
             SELECT DISTINCT grant_row.org_id, grant_row.id AS agent_grant_id,
                    grant_row.subject_membership_id AS membership_id,
-                   grant_row.branch_id, user_row.id AS canonical_user_id,
+                   grant_row.branch_id AS grant_branch_id,
+                   COALESCE(CAST(:branch_id AS uuid), grant_row.branch_id)
+                     AS delegated_branch_id,
+                   user_row.id AS canonical_user_id,
                    user_row.auth_user_id, capability.allow_sensitive_read
               FROM automation.agent_grants AS grant_row
               JOIN automation.agent_grant_capabilities AS capability
@@ -438,6 +442,14 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
                AND capability.risk_class='read_only'
                AND capability.approval_policy='none'
                AND capability.status='active'
+               AND (:branch_id IS NULL OR grant_row.branch_id IS NULL
+                    OR grant_row.branch_id=CAST(:branch_id AS uuid))
+               AND (:branch_id IS NULL OR EXISTS (
+                   SELECT 1 FROM core.branches AS requested_branch
+                    WHERE requested_branch.org_id=grant_row.org_id
+                      AND requested_branch.id=CAST(:branch_id AS uuid)
+                      AND requested_branch.status='active'
+               ))
                AND EXISTS (
                    SELECT 1
                      FROM core.access_grants AS access_grant
@@ -460,6 +472,31 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
                                AND access_grant.scope_kind='branch'
                                AND access_grant.branch_id=grant_row.branch_id))
                )
+               AND (:branch_id IS NULL OR EXISTS (
+                   SELECT 1
+                     FROM core.access_grants AS requested_access
+                     JOIN core.roles AS requested_role
+                       ON requested_role.org_id=requested_access.org_id
+                      AND requested_role.id=requested_access.role_id
+                     JOIN core.role_permissions AS requested_role_permission
+                       ON requested_role_permission.org_id=requested_role.org_id
+                      AND requested_role_permission.role_id=requested_role.id
+                     JOIN core.permissions AS requested_permission
+                       ON requested_permission.code=requested_role_permission.permission_code
+                    WHERE requested_access.org_id=grant_row.org_id
+                      AND requested_access.membership_id=grant_row.subject_membership_id
+                      AND requested_access.status='active'
+                      AND requested_access.valid_from_at<=transaction_timestamp()
+                      AND (requested_access.expires_at IS NULL
+                           OR requested_access.expires_at>transaction_timestamp())
+                      AND requested_role.status='active'
+                      AND requested_permission.status='active'
+                      AND requested_permission.code=:permission_code
+                      AND ((requested_access.scope_kind='organization'
+                            AND requested_access.branch_id IS NULL)
+                           OR (requested_access.scope_kind='branch'
+                               AND requested_access.branch_id=CAST(:branch_id AS uuid)))
+               ))
              ORDER BY grant_row.id
              LIMIT 2
             """
@@ -470,6 +507,7 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
             "client_id": request.client_id,
             "capability_code": request.capability_code,
             "permission_code": permission_code,
+            "branch_id": request.branch_id,
         },
     ).fetchall()
 
@@ -507,7 +545,10 @@ def authorize_agent_grant(
     grant = rows[0]._mapping
     if policy.sensitive_read and not grant["allow_sensitive_read"]:
         raise HTTPException(status_code=403, detail="Agent grant excludes sensitive supplier reads")
-    branch_ids = [str(grant["branch_id"])] if grant["branch_id"] else []
+    branch_ids = (
+        [str(grant["delegated_branch_id"])]
+        if grant["delegated_branch_id"] else []
+    )
     claims = {
         "auth_user_id": str(grant["auth_user_id"]),
         "user_id": str(grant["canonical_user_id"]),

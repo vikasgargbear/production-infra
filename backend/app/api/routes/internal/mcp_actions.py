@@ -1,9 +1,4 @@
-"""Hidden service-to-service boundary for canonical operator commands.
-
-Nothing in this router is part of the public API or live MCP registry. The
-database baseline gate and adapter registry both remain code-owned and fail
-closed until a reviewed deployment wires the canonical command implementations.
-"""
+"""Hidden service-to-service boundary behind published canonical MCP commands."""
 
 from __future__ import annotations
 
@@ -20,6 +15,7 @@ from ....core.auth.jwt_auth import decode_jwt
 from ....domain.operator_actions import (
     ACTION_POLICIES,
     PREPARE_PAYLOAD_MODELS,
+    PUBLISHED_OPERATOR_OPERATION_KEYS,
     ActionContext,
     ActionErrorCode,
     CommandExecution,
@@ -511,7 +507,9 @@ def action_readiness(
         blockers.append("canonical baseline deployment is not verified")
     readiness = service.adapter_readiness()
     missing = sorted(
-        key for key in ACTION_POLICIES if readiness.get(key) is not True
+        key
+        for key in PUBLISHED_OPERATOR_OPERATION_KEYS
+        if readiness.get(key) is not True
     )
     if missing:
         blockers.append("missing canonical command adapters: " + ", ".join(missing))
@@ -524,4 +522,7 @@ def action_readiness(
                 metadata={"missing_adapters": missing},
             ),
         )
-    return {"status": "ready", "registered_operations": sorted(ACTION_POLICIES)}
+    return {
+        "status": "ready",
+        "registered_operations": sorted(PUBLISHED_OPERATOR_OPERATION_KEYS),
+    }

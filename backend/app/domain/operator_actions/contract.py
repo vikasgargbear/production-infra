@@ -1,9 +1,9 @@
 """Typed application contract for reviewed operator actions.
 
-The MCP runtime owns the machine-readable input schemas but does not publish
-them. Compiling those schemas into strict Pydantic models here keeps the future
-UI and MCP transports on one validation contract without coupling either
-transport to a legacy service or database table.
+The MCP runtime owns and publishes the reviewed machine-readable input schemas.
+Compiling those schemas into strict Pydantic models here keeps UI and MCP
+transports on one validation contract without coupling either transport to a
+legacy service or database table.
 """
 
 from __future__ import annotations
@@ -17,7 +17,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, create_model
 
-from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS
+from mcp_runtime.aasopharma_mcp.operator_actions import (
+    PREPARE_ACTIONS,
+    PUBLISHED_PREPARE_TOOL_NAMES,
+)
 
 
 # UUID/date values arrive as JSON strings and must be parsed. Decimal-bearing
@@ -142,6 +145,10 @@ _SHARED_POLICIES = (
     ),
 )
 ACTION_POLICIES.update((policy.operation_key, policy) for policy in _SHARED_POLICIES)
+PUBLISHED_OPERATOR_OPERATION_KEYS = frozenset(
+    PREPARE_ACTIONS[tool_name].operation_key
+    for tool_name in PUBLISHED_PREPARE_TOOL_NAMES
+) | frozenset(policy.operation_key for policy in _SHARED_POLICIES)
 
 
 OperatorCommandType = Enum(

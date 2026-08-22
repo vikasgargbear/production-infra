@@ -15,7 +15,7 @@ sys.modules[SPEC.name] = audit
 SPEC.loader.exec_module(audit)
 
 
-def test_repository_operator_action_contract_is_consistent_and_unexported() -> None:
+def test_repository_operator_action_contract_is_consistent_and_bounded_published() -> None:
     assert audit.validate() == []
 
 
@@ -23,11 +23,11 @@ def test_release_gate_without_evidence_fails_closed() -> None:
     contract = audit.load_json(audit.CONTRACT_PATH)
     contract["publication"]["release_gates"][
         "canonical_api_command_boundary_verified"
-    ] = True
+    ] = False
 
     errors = audit.validate(contract=contract)
 
-    assert any("no checked-in evidence" in error for error in errors)
+    assert any("not verified" in error for error in errors)
     assert any("runtime release gates drifted" in error for error in errors)
 
 

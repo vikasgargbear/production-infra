@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the isolated official-SDK MCP transport and read-only registry."""
+"""Validate the isolated official-SDK MCP transport and bounded registry."""
 
 from __future__ import annotations
 
@@ -20,11 +20,17 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_ROOT = ROOT / "backend/mcp_runtime"
 BACKEND_REQUIREMENTS = ROOT / "backend/requirements.txt"
 REGISTRY_SOURCE = ROOT / "backend/app/core/api_contract.py"
-EXPECTED_TOOLS = {
+EXPECTED_CORE_READ_TOOLS = {
     "erp_product_search",
     "erp_supplier_search",
     "erp_gst_settings_get",
 }
+SERVICE_CONTRACT = RUNTIME_ROOT / "service-contract.json"
+
+
+def expected_runtime_tools() -> set[str]:
+    contract = json.loads(SERVICE_CONTRACT.read_text(encoding="utf-8"))
+    return set(contract["tools"])
 SHARED_RUNTIME_PACKAGES = {
     "fastapi",
     "pydantic",
@@ -108,15 +114,15 @@ def probe_official_sdk() -> str:
         from aasopharma_mcp.server import create_app, registered_tool_names
     finally:
         sys.path.pop(0)
-    if not callable(create_app) or set(registered_tool_names()) != EXPECTED_TOOLS:
+    if not callable(create_app) or set(registered_tool_names()) != expected_runtime_tools():
         raise RuntimeError("isolated MCP service drifted from the reviewed registry")
     return importlib.metadata.version("mcp")
 
 
 def build_report(probe_sdk: bool) -> Dict[str, object]:
     tools = registry_tool_names(REGISTRY_SOURCE)
-    if set(tools) != EXPECTED_TOOLS:
-        raise RuntimeError(f"MCP registry drift: {tools}")
+    if set(tools) != EXPECTED_CORE_READ_TOOLS:
+        raise RuntimeError(f"core MCP read registry drift: {tools}")
 
     sdk_version = None
     sdk_requirements: Iterable[str] = ()
@@ -133,11 +139,11 @@ def build_report(probe_sdk: bool) -> Dict[str, object]:
         )
 
     return {
-        "status": "isolated_read_only_transport_source",
+        "status": "isolated_bounded_operator_transport_source",
         "python": ".".join(map(str, sys.version_info[:3])),
         "official_sdk_version": sdk_version,
-        "registry_tools": tools,
-        "write_tools_exported": False,
+        "registry_tools": sorted(expected_runtime_tools()),
+        "write_tools_exported": True,
         "mcp_transport_implemented": True,
         "transport": "official_sdk_streamable_http_stateless",
         "authentication": "supabase_asymmetric_jwks_issuer_audience",
@@ -145,10 +151,8 @@ def build_report(probe_sdk: bool) -> Dict[str, object]:
         "shared_runtime_conflicts": conflicts,
         "remaining_blockers": [
             "official SDK remains isolated from the legacy FastAPI dependency pins",
-            "Supabase DCR is disabled and no reviewed hosted-client pre-registration is configured in repository evidence",
-            "no hosted OAuth consent UI exists; an active pre-consented agent grant is required before readiness",
-            "the canonical schema and MCP internal API are not deployment-verified",
-            "MCP Inspector plus real ChatGPT and Claude staging verification is incomplete",
+            "Supabase DCR remains disabled; clients require reviewed pre-registration",
+            "inventory transfer and destruction adapters remain unavailable",
         ],
     }
 

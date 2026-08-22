@@ -9,11 +9,11 @@ from aasopharma_mcp.operator_actions import (
     APPROVE_INPUT_SCHEMA,
     EXECUTE_INPUT_SCHEMA,
     OPERATOR_ACTIONS_EXPORTED,
+    PUBLISHED_PREPARE_TOOL_NAMES,
     PREPARE_ACTIONS,
     RELEASE_GATES,
     SHARED_ACTION_SCHEMAS,
     OperatorActionsUnavailable,
-    assert_no_operator_action_exports,
     planned_operator_action_tool_names,
     require_operator_action_publication_ready,
 )
@@ -46,7 +46,7 @@ def _property_names(schema):
     return names
 
 
-def test_operator_actions_are_planned_but_never_live_registered() -> None:
+def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
     service_contract = json.loads(
         (Path(__file__).parents[1] / "service-contract.json").read_text(
             encoding="utf-8"
@@ -59,13 +59,20 @@ def test_operator_actions_are_planned_but_never_live_registered() -> None:
         "erp_operation_execute",
         "erp_operation_status_get",
     }
-    assert OPERATOR_ACTIONS_EXPORTED is False
-    assert not (set(planned_operator_action_tool_names()) & set(live_tools))
-    assert_no_operator_action_exports(live_tools)
+    assert OPERATOR_ACTIONS_EXPORTED is True
+    published = set(PUBLISHED_PREPARE_TOOL_NAMES) | set(SHARED_ACTION_SCHEMAS)
+    assert set(planned_operator_action_tool_names()) & set(live_tools) == published
+    assert EXPECTED_PREPARES - set(PUBLISHED_PREPARE_TOOL_NAMES) == {
+        "erp_inventory_transfer_prepare",
+        "erp_inventory_destruction_prepare",
+    }
+    assert require_operator_action_publication_ready() is None
+    assert all(value is True for value in RELEASE_GATES.values())
 
+    blocked = dict(RELEASE_GATES)
+    blocked["idempotency_concurrency_audit_verified"] = False
     with pytest.raises(OperatorActionsUnavailable, match="not publishable"):
-        require_operator_action_publication_ready()
-    assert all(value is False for value in RELEASE_GATES.values())
+        require_operator_action_publication_ready(blocked)
 
 
 def test_execute_can_only_reference_an_immutable_approved_preview() -> None:
@@ -186,10 +193,10 @@ def test_inventory_adjustment_is_a_hidden_typed_cycle_count_gain() -> None:
     assert "evidence_reference" not in properties
     batch = properties["lines"]["items"]["properties"]["batch_counts"]["items"]
     assert set(batch["required"]) == {"batch_id", "counted_quantity"}
-    assert OPERATOR_ACTIONS_EXPORTED is False
+    assert OPERATOR_ACTIONS_EXPORTED is True
 
 
-def test_supplier_advance_transport_is_single_line_non_cheque_and_stays_hidden() -> None:
+def test_supplier_advance_transport_is_single_line_non_cheque() -> None:
     schema = PREPARE_ACTIONS["erp_supplier_advance_prepare"].input_schema
     properties = schema["properties"]
 
@@ -200,7 +207,7 @@ def test_supplier_advance_transport_is_single_line_non_cheque_and_stays_hidden()
         "purchase_order_line_id",
         "gross_amount",
     }
-    assert OPERATOR_ACTIONS_EXPORTED is False
+    assert OPERATOR_ACTIONS_EXPORTED is True
 
 
 def test_supplier_payment_transport_is_exact_non_cheque_invoice_allocation() -> None:
@@ -214,4 +221,4 @@ def test_supplier_payment_transport_is_exact_non_cheque_invoice_allocation() -> 
     }
     assert "gross_amount" in schema["required"]
     assert "permanently consumed" in properties["external_reference"]["description"]
-    assert OPERATOR_ACTIONS_EXPORTED is False
+    assert OPERATOR_ACTIONS_EXPORTED is True

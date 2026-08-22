@@ -1,16 +1,17 @@
 # AASOPharma MCP Runtime
 
 This isolated Python 3.11 service uses the official MCP SDK's stateless
-Streamable HTTP transport. It exports exactly `erp_product_search`,
-`erp_supplier_search`, and `erp_gst_settings_get`; it has no database connection
-and exports no writes.
+Streamable HTTP transport. It has no database connection. It exports 13 bounded
+canonical reads plus 12 prepare actions and shared approve, execute, and status
+tools through the application-owned delegated command boundary.
 
-The planned operator action schemas live in `aasopharma_mcp/operator_actions.py`
+The operator action schemas live in `aasopharma_mcp/operator_actions.py`
 and are governed by `docs/architecture/mcp-operator-actions.json`. They cover
 sales, procurement, payments, supplier advances, and controlled inventory
-movements through prepare, approve, execute, and status. They are definitions,
-not registered tools: execution can eventually accept only the immutable
-`command_request_id`, `preview_hash`, and `idempotency_key`.
+movements through prepare, approve, execute, and status. Execution accepts only
+the immutable `command_request_id`, `preview_hash`, and `idempotency_key`.
+Inventory transfer and destruction remain unregistered because their canonical
+adapters are incomplete.
 
 ## Configuration
 
@@ -27,22 +28,19 @@ uses `SUPABASE_SERVICE_ROLE_KEY`, `APP_ENV`, or `ENV`. See
 Only ES256/RS256 Supabase tokens with the exact issuer, `authenticated`
 audience, UUID subject, pre-registered client ID, and standard `openid` plus
 `offline_access` scopes are accepted. ERP permission names are not OAuth
-scopes. Each tool separately checks the app-owned active grant, exact read-only
-capability, role permission, expiry, tenant, and branch scope. The OAuth bearer
-is never forwarded to ERP.
+scopes. Each tool separately checks the app-owned active grant, exact capability,
+operation mode, approval policy, permission, expiry, tenant, and branch scope.
+The OAuth bearer is never forwarded to ERP.
 
 ## Release State
 
-The source is not hosted-ready. Supabase DCR is disabled. The hosted consent UI
-and official SDK boundary are implemented, and the lock resolves
+Supabase DCR is disabled. The hosted consent UI and official SDK boundary are
+implemented, and the lock resolves
 `@supabase/supabase-js` to `2.112.3`; clean Node 22 CI verifies authorization
 detail loading, explicit approval, denial, scope rejection, identity binding,
-type checking, build, and browser E2E. Canonical hidden reads and delegated
-claims are implemented, but live OAuth approval/denial, client registration,
-schema deployment, and ChatGPT/Claude staging evidence are still fail-closed.
-Code-owned gates keep readiness and delegation at `503` until those external
-checks exist. Do not register this endpoint with ChatGPT or Claude in that
-state.
+type checking, build, and browser E2E. Code-owned gates and per-capability grants
+keep every unapproved operation fail closed. Published writes always require
+prepare, human approval, and execution.
 
 ChatGPT needs `offline_access` for refresh and controlled Business/Enterprise/
 Edu admin or developer-mode rollout; tool snapshots must be frozen for review.

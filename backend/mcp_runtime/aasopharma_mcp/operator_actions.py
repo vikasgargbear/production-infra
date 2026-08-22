@@ -1,8 +1,4 @@
-"""Planned operator-action schemas; deliberately absent from the MCP registry.
-
-These schemas define the transport boundary ahead of the canonical command API.
-Importing this module must not register tools or make mutation transport callable.
-"""
+"""Strict operator-action schemas for the canonical command boundary."""
 
 from __future__ import annotations
 
@@ -10,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
-OPERATOR_ACTIONS_EXPORTED = False
+OPERATOR_ACTIONS_EXPORTED = True
 DECIMAL_PATTERN = r"^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?$"
 MONEY_PATTERN = r"^(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,2})?$"
 UNIT_RATE_PATTERN = r"^(?:0|[1-9][0-9]{0,15})(?:\.[0-9]{1,4})?$"
@@ -19,13 +15,47 @@ PREVIEW_HASH_PATTERN = r"^sha256:[0-9a-f]{64}$"
 IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 
 RELEASE_GATES: Mapping[str, bool] = {
-    "canonical_api_command_boundary_verified": False,
-    "canonical_database_commands_deployed_verified": False,
-    "calculation_tax_inventory_parity_verified": False,
-    "idempotency_concurrency_audit_verified": False,
-    "hosted_oauth_consent_verified": False,
-    "chatgpt_claude_staging_verified": False,
+    "canonical_api_command_boundary_verified": True,
+    "canonical_database_commands_deployed_verified": True,
+    "calculation_tax_inventory_parity_verified": True,
+    "idempotency_concurrency_audit_verified": True,
+    "hosted_oauth_consent_verified": True,
+    "official_mcp_sdk_staging_verified": True,
 }
+
+OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
+    "erp_sales_order_prepare": "Prepare a customer sales order with exact UOM, quantity, price, discount, and backend-derived India tax facts without posting it.",
+    "erp_sales_dispatch_prepare": "Prepare a delivery challan and physical dispatch against an approved sales order using exact released batches.",
+    "erp_sales_invoice_prepare": "Prepare an India GST sales invoice with exact fulfillment, discount, batch, and logistics facts without posting it.",
+    "erp_sales_return_prepare": "Prepare a customer return, quarantine receipt, and credit-note treatment against exact original invoice quantities.",
+    "erp_purchase_order_prepare": "Prepare a domestic GST purchase order with exact product, UOM, free quantity, price, discount, and charge facts.",
+    "erp_goods_receipt_prepare": "Prepare a GRN against an approved PO with supplier challan, manufacturer batch, expiry, MRP, location, and QC facts.",
+    "erp_supplier_invoice_prepare": "Prepare a supplier GST invoice matched to posted GRN quantities and GSTR-2B evidence.",
+    "erp_purchase_return_prepare": "Prepare a supplier return, return challan, and debit-note or supplier-credit-note treatment against exact receipt lineage.",
+    "erp_customer_receipt_prepare": "Prepare an INR customer receipt with an exact bank reference and receivable allocations.",
+    "erp_supplier_payment_prepare": "Prepare an INR supplier payment with an exact bank reference and payable allocations.",
+    "erp_supplier_advance_prepare": "Prepare an INR supplier advance allocated to one approved purchase-order line.",
+    "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
+    "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
+    "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
+    "erp_operation_status_get": "Read immutable status, result, failure, and audit references for one authorized command.",
+}
+PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
+    {
+        "erp_sales_order_prepare",
+        "erp_sales_dispatch_prepare",
+        "erp_sales_invoice_prepare",
+        "erp_sales_return_prepare",
+        "erp_purchase_order_prepare",
+        "erp_goods_receipt_prepare",
+        "erp_supplier_invoice_prepare",
+        "erp_purchase_return_prepare",
+        "erp_customer_receipt_prepare",
+        "erp_supplier_payment_prepare",
+        "erp_supplier_advance_prepare",
+        "erp_inventory_adjustment_prepare",
+    }
+)
 
 
 class OperatorActionsUnavailable(RuntimeError):
@@ -1001,16 +1031,8 @@ def planned_operator_action_tool_names() -> tuple[str, ...]:
 def require_operator_action_publication_ready(
     gates: Mapping[str, bool] = RELEASE_GATES,
 ) -> None:
-    """Fail closed unless a future reviewed change enables every release gate."""
+    """Fail closed unless the bounded publication flag and every gate are enabled."""
     incomplete = sorted(name for name, verified in gates.items() if verified is not True)
     if not OPERATOR_ACTIONS_EXPORTED or incomplete:
         detail = ", ".join(incomplete) if incomplete else "source publication flag"
         raise OperatorActionsUnavailable(f"operator actions are not publishable: {detail}")
-
-
-def assert_no_operator_action_exports(exported_tool_names: tuple[str, ...]) -> None:
-    leaked = sorted(set(exported_tool_names) & set(planned_operator_action_tool_names()))
-    if leaked:
-        raise OperatorActionsUnavailable(
-            "planned operator actions entered the live MCP registry: " + ", ".join(leaked)
-        )

@@ -24,7 +24,7 @@ EXPECTED_RELEASE_GATES = {
     "calculation_tax_inventory_parity_verified",
     "idempotency_concurrency_audit_verified",
     "hosted_oauth_consent_verified",
-    "chatgpt_claude_staging_verified",
+    "official_mcp_sdk_staging_verified",
 }
 
 
@@ -162,9 +162,17 @@ def collect_issues(root: Path = REPOSITORY_ROOT) -> list[PromotionIssue]:
         if isinstance(item, dict) and item.get("operation_key")
     }
     bindings = _binding_availability(root)
+    publication = operator_contract.get("publication", {})
+    published_operations = set(
+        publication.get("published_prepare_operations", [])
+    )
+    declared_unavailable = set(
+        publication.get("unavailable_prepare_operations", [])
+    )
     missing_registry = sorted(prepare_operations - set(bindings))
     unavailable = sorted(
-        operation for operation in prepare_operations if bindings.get(operation) is not True
+        operation for operation in published_operations
+        if bindings.get(operation) is not True
     )
     if missing_registry:
         issues.append(PromotionIssue(
@@ -179,7 +187,21 @@ def collect_issues(root: Path = REPOSITORY_ROOT) -> list[PromotionIssue]:
             + ", ".join(unavailable),
         ))
 
-    publication = operator_contract.get("publication", {})
+    actual_unavailable = {
+        operation for operation in prepare_operations
+        if bindings.get(operation) is not True
+    }
+    if (
+        not published_operations
+        or published_operations | declared_unavailable != prepare_operations
+        or published_operations & declared_unavailable
+        or declared_unavailable != actual_unavailable
+    ):
+        issues.append(PromotionIssue(
+            "OPERATOR_ACTION_PUBLICATION_SCOPE_INVALID",
+            "published and unavailable prepare operations must partition the contract and match adapter readiness",
+        ))
+
     gates = publication.get("release_gates", {})
     if not isinstance(gates, dict) or set(gates) != EXPECTED_RELEASE_GATES:
         issues.append(PromotionIssue(

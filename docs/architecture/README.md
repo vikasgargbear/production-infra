@@ -13,8 +13,8 @@ that the target state is already implemented.
 - [MCP readiness](mcp-readiness.md): the agent-facing contract, authorization,
   approvals, idempotency, and audit requirements.
 - [`mcp-operator-actions.json`](mcp-operator-actions.json): machine-readable
-  day-to-day prepare, approve, execute, and status contract; all mutation tools
-  remain fail-closed and unexported.
+  day-to-day prepare, approve, execute, and status contract; the reviewed
+  bounded subset is published while transfer and destruction remain fail-closed.
 - [Hosting options, August 2026](hosting-options-2026-08.md): the accepted Render
   internal pilot, production promotion options, and hosted MCP OAuth gates.
 - [Repository boundaries](repository-boundaries.md): the frontend/backend split

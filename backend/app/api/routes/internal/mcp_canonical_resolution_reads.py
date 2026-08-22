@@ -1,8 +1,4 @@
-"""Hidden canonical entity resolution for planned MCP operator actions.
-
-These routes are application-internal.  They intentionally are not registered
-as MCP tools; the live gateway remains limited to its reviewed three reads.
-"""
+"""Hidden application routes backing published MCP entity-resolution tools."""
 
 from __future__ import annotations
 

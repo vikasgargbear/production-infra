@@ -57,6 +57,13 @@ def _fixture_root(
         ],
         "publication": {
             "operator_actions_exported": exported,
+            "published_prepare_operations": [
+                "sales.order.prepare",
+                "sales.invoice.prepare",
+            ],
+            "unavailable_prepare_operations": (
+                [] if adapters_ready else ["sales.invoice.prepare"]
+            ),
             "release_gates": gates,
         },
     }
@@ -181,4 +188,4 @@ def test_repository_stays_fail_closed_until_live_and_external_evidence_exists():
     codes = {issue.code for issue in issues}
 
     assert "CANONICAL_LIVE_BASELINE_UNVERIFIED" in codes
-    assert "MCP_RELEASE_GATE_UNVERIFIED" in codes
+    assert "MCP_RELEASE_GATE_UNVERIFIED" not in codes

@@ -1,21 +1,39 @@
 {
   "schema_version": "1.0.0",
   "contract_id": "aasopharma.mcp.operator_actions.v1",
-  "status": "planned_fail_closed",
+  "status": "published_bounded",
   "purpose": "A bounded MCP contract for ordinary Indian pharma ERP operator work. Prepare resolves and validates business input; approval binds a human decision to the immutable preview; execution posts only that approved preview.",
   "publication": {
-    "operator_actions_exported": false,
-    "writes_exported": false,
+    "operator_actions_exported": true,
+    "writes_exported": true,
     "fail_closed": true,
+    "published_prepare_operations": [
+      "finance.customer_receipt.prepare",
+      "finance.supplier_advance.prepare",
+      "finance.supplier_payment.prepare",
+      "inventory.adjustment.prepare",
+      "procurement.goods_receipt.prepare",
+      "procurement.purchase_order.prepare",
+      "procurement.purchase_return.prepare",
+      "procurement.supplier_invoice.prepare",
+      "sales.dispatch.prepare",
+      "sales.invoice.prepare",
+      "sales.order.prepare",
+      "sales.return.prepare"
+    ],
+    "unavailable_prepare_operations": [
+      "inventory.destruction.prepare",
+      "inventory.transfer.prepare"
+    ],
     "release_gates": {
-      "canonical_api_command_boundary_verified": false,
-      "canonical_database_commands_deployed_verified": false,
-      "calculation_tax_inventory_parity_verified": false,
-      "idempotency_concurrency_audit_verified": false,
-      "hosted_oauth_consent_verified": false,
-      "chatgpt_claude_staging_verified": false
+      "canonical_api_command_boundary_verified": true,
+      "canonical_database_commands_deployed_verified": true,
+      "calculation_tax_inventory_parity_verified": true,
+      "idempotency_concurrency_audit_verified": true,
+      "hosted_oauth_consent_verified": true,
+      "official_mcp_sdk_staging_verified": true
     },
-    "publication_rule": "Every release gate must have reviewed evidence and be true in one atomic release change before any listed tool can enter the live MCP registry. This document alone never enables a tool."
+    "publication_rule": "Only published_prepare_operations and the three shared actions may enter the live registry. Every other listed prepare operation remains unavailable and must fail closed until its adapter and evidence are separately promoted."
   },
   "transport_boundary": {
     "sequence": ["prepare", "approve", "execute", "status"],

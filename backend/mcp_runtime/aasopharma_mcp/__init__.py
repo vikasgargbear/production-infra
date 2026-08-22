@@ -1,4 +1,4 @@
-"""AASOPharma's isolated, read-only MCP transport."""
+"""AASOPharma's isolated, capability-bounded MCP transport."""
 
 __all__ = ["__version__"]
 

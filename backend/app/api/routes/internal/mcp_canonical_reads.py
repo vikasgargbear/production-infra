@@ -129,7 +129,8 @@ def get_canonical_delegation(
     rows = db.execute(
         text(
             """
-            SELECT grant_row.branch_id, capability.allow_sensitive_read
+            SELECT grant_row.branch_id AS grant_branch_id,
+                   capability.allow_sensitive_read
               FROM automation.agent_grants AS grant_row
               JOIN automation.agent_grant_capabilities AS capability
                 ON capability.org_id=grant_row.org_id
@@ -152,6 +153,14 @@ def get_canonical_delegation(
                AND capability.risk_class='read_only'
                AND capability.approval_policy='none'
                AND capability.status='active'
+               AND (:claim_branch_id IS NULL OR grant_row.branch_id IS NULL
+                    OR grant_row.branch_id=CAST(:claim_branch_id AS uuid))
+               AND (:claim_branch_id IS NULL OR EXISTS (
+                   SELECT 1 FROM core.branches AS requested_branch
+                    WHERE requested_branch.org_id=grant_row.org_id
+                      AND requested_branch.id=CAST(:claim_branch_id AS uuid)
+                      AND requested_branch.status='active'
+               ))
                AND EXISTS (
                    SELECT 1
                      FROM core.access_grants AS access_grant
@@ -174,6 +183,31 @@ def get_canonical_delegation(
                       AND role.status='active' AND permission.status='active'
                       AND permission.code=:permission_code
                )
+               AND (:claim_branch_id IS NULL OR EXISTS (
+                   SELECT 1
+                     FROM core.access_grants AS requested_access
+                     JOIN core.roles AS requested_role
+                       ON requested_role.org_id=requested_access.org_id
+                      AND requested_role.id=requested_access.role_id
+                     JOIN core.role_permissions AS requested_role_permission
+                       ON requested_role_permission.org_id=requested_role.org_id
+                      AND requested_role_permission.role_id=requested_role.id
+                     JOIN core.permissions AS requested_permission
+                       ON requested_permission.code=requested_role_permission.permission_code
+                    WHERE requested_access.org_id=grant_row.org_id
+                      AND requested_access.membership_id=grant_row.subject_membership_id
+                      AND requested_access.status='active'
+                      AND requested_access.valid_from_at<=transaction_timestamp()
+                      AND (requested_access.expires_at IS NULL
+                           OR requested_access.expires_at>transaction_timestamp())
+                      AND requested_role.status='active'
+                      AND requested_permission.status='active'
+                      AND requested_permission.code=:permission_code
+                      AND ((requested_access.scope_kind='organization'
+                            AND requested_access.branch_id IS NULL)
+                           OR (requested_access.scope_kind='branch'
+                               AND requested_access.branch_id=CAST(:claim_branch_id AS uuid)))
+               ))
              LIMIT 2
             """
         ),
@@ -186,12 +220,16 @@ def get_canonical_delegation(
             "auth_user_id": auth_user_id,
             "capability_code": policy.capability_code,
             "permission_code": policy.permission_code,
+            "claim_branch_id": claim_branch,
         },
     ).fetchall()
     if len(rows) != 1:
         raise HTTPException(status_code=403, detail="Canonical MCP authority is inactive")
     authority = rows[0]._mapping
-    if authority["branch_id"] != claim_branch:
+    if (
+        authority["grant_branch_id"] is not None
+        and authority["grant_branch_id"] != claim_branch
+    ):
         raise HTTPException(status_code=403, detail="Canonical MCP branch scope changed")
     allow_sensitive = bool(authority["allow_sensitive_read"])
     if bool(claims.get("mcp_allow_sensitive_read")) != allow_sensitive:

@@ -82,8 +82,12 @@ def enabled_issuer(monkeypatch):
     monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", SERVICE_TOKEN)
 
 
-def test_operator_issuer_is_code_gated_and_does_not_enable_write_readiness():
-    assert mcp_agent_grants.CANONICAL_OPERATOR_ACTION_ADAPTERS_VERIFIED is False
+def test_operator_issuer_is_code_gated_and_enabled_only_by_reviewed_source(monkeypatch):
+    assert mcp_agent_grants.CANONICAL_OPERATOR_ACTION_ADAPTERS_VERIFIED is True
+    assert mcp_agent_grants._require_operator_release_gates() is None
+    monkeypatch.setattr(
+        mcp_agent_grants, "CANONICAL_OPERATOR_ACTION_ADAPTERS_VERIFIED", False
+    )
     with pytest.raises(HTTPException) as blocked:
         mcp_agent_grants._require_operator_release_gates()
     assert blocked.value.status_code == 503

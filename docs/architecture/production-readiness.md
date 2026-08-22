@@ -28,8 +28,9 @@ override the database, transaction, browser, or live-environment gates below.
   two multi-item invoice persistence/reconciliation cases in Supabase.
 - Payment/allocation and inventory updates now take tenant-scoped row locks in
   the reviewed service paths. Posted journal records have immutability guards.
-- OpenAPI exports an explicit three-operation, read-only agent allowlist. It
-  states that no MCP transport or write surface is implemented.
+- The isolated MCP runtime exports 13 reviewed reads, 12 approval-gated prepare
+  tools, and shared approve/execute/status tools. Inventory transfer and
+  destruction remain intentionally unavailable.
 - Browser authentication uses persistent, auto-refreshing Supabase email or
   Google sessions. The ERP bridge verifies the Supabase bearer, resolves an
   immutable `auth_user_id`, and issues a short-lived access-only JWT. The

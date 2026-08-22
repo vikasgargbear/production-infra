@@ -5,7 +5,7 @@ from pathlib import Path
 
 from starlette.routing import Route
 
-from aasopharma_mcp.operations import OPERATIONS
+from aasopharma_mcp.operations import OPERATIONS, OPERATOR_OPERATIONS
 from aasopharma_mcp.server import create_app, registered_tool_names
 from conftest import settings
 
@@ -25,14 +25,14 @@ class Gateway:
     async def readiness(self):
         return None
 
+    async def execute_operator(self, *_args, **_kwargs):
+        raise AssertionError("tool execution is not part of route discovery")
 
-def test_exact_three_read_only_tools_and_streamable_http_routes() -> None:
-    assert registered_tool_names() == (
-        "erp_gst_settings_get",
-        "erp_product_search",
-        "erp_supplier_search",
-    )
-    assert set(registered_tool_names()) == set(OPERATIONS)
+
+def test_exact_reviewed_tools_are_unique_and_streamable_http_routes_exist() -> None:
+    names = registered_tool_names()
+    assert len(names) == len(set(names)) == 28
+    assert set(names) == set(OPERATIONS) | set(OPERATOR_OPERATIONS)
     app = create_app(settings(), Verifier(), Gateway())
     route_paths = {route.path for route in app.routes if isinstance(route, Route)}
     assert "/mcp" in route_paths
@@ -46,7 +46,7 @@ def test_machine_service_contract_matches_runtime() -> None:
         (Path(__file__).parents[1] / "service-contract.json").read_text(encoding="utf-8")
     )
     assert contract["tools"] == list(registered_tool_names())
-    assert contract["writes_exported"] is False
+    assert contract["writes_exported"] is True
     assert contract["oauth"]["audience"] == "authenticated"
     assert contract["oauth"]["required_scopes"] == ["openid", "offline_access"]
     assert contract["oauth"]["dynamic_client_registration"] is False

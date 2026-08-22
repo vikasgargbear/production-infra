@@ -37,7 +37,34 @@ READ_CAPABILITIES = (
     ("master.products.search", False),
     ("master.suppliers.search", True),
     ("gst.settings.get", False),
+    ("parties.customers.search", True),
+    ("inventory.locations.search", False),
+    ("inventory.stock_batches.search", False),
+    ("sales.orders.get", False),
+    ("sales.invoices.get", False),
+    ("procurement.purchase_orders.get", False),
+    ("procurement.goods_receipts.get", False),
+    ("procurement.supplier_invoices.get", True),
+    ("finance.open_items.search", True),
+    ("finance.settlement_choices.search", True),
 )
+WRITE_CAPABILITIES = (
+    ("sales.order.prepare", "actor_confirmation"),
+    ("sales.dispatch.prepare", "actor_confirmation"),
+    ("sales.invoice.prepare", "actor_confirmation"),
+    ("sales.return.prepare", "separate_approver"),
+    ("procurement.purchase_order.prepare", "actor_confirmation"),
+    ("procurement.goods_receipt.prepare", "actor_confirmation"),
+    ("procurement.supplier_invoice.prepare", "actor_confirmation"),
+    ("procurement.purchase_return.prepare", "separate_approver"),
+    ("finance.customer_receipt.prepare", "actor_confirmation"),
+    ("finance.supplier_payment.prepare", "actor_confirmation"),
+    ("finance.supplier_advance.prepare", "separate_approver"),
+    ("inventory.adjustment.prepare", "separate_approver"),
+    ("automation.command.approve", "actor_confirmation"),
+    ("automation.command.execute", "actor_confirmation"),
+)
+STATUS_CAPABILITY = "automation.command.status.get"
 
 
 class ProvisioningError(RuntimeError):
@@ -262,7 +289,7 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                     updated_by_membership_id
                 ) VALUES (
                     %s,%s,%s,%s,%s,NULL,'self_consent','staging-mcp-e2e-v1',
-                    extensions.digest('canonical staging read-only MCP test consent','sha256'),
+                    extensions.digest('canonical staging bounded read and write MCP test consent','sha256'),
                     %s,transaction_timestamp(),%s,transaction_timestamp(),
                     transaction_timestamp()+interval '30 days','active',%s,%s
                 ) ON CONFLICT (org_id,id) DO NOTHING
@@ -299,6 +326,54 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                     for capability, allow_sensitive in READ_CAPABILITIES
                 ],
             )
+            cursor.executemany(
+                """
+                INSERT INTO automation.agent_grant_capabilities (
+                    org_id, agent_grant_id, capability_code, operation_mode,
+                    risk_class, approval_policy, maximum_amount, currency_code,
+                    allow_sensitive_read, status, created_by_membership_id
+                ) VALUES (
+                    %s,%s,%s,'write','consequential_write',%s,
+                    '1000000.00','INR',false,'active',%s
+                ) ON CONFLICT (org_id, agent_grant_id, capability_code) DO UPDATE SET
+                    operation_mode=EXCLUDED.operation_mode,
+                    risk_class=EXCLUDED.risk_class,
+                    approval_policy=EXCLUDED.approval_policy,
+                    maximum_amount=EXCLUDED.maximum_amount,
+                    currency_code=EXCLUDED.currency_code,
+                    allow_sensitive_read=EXCLUDED.allow_sensitive_read,
+                    status='active'
+                """,
+                [
+                    (
+                        DEMO_ORG_ID,
+                        TEST_AGENT_GRANT_ID,
+                        capability,
+                        approval,
+                        REVIEWER_MEMBERSHIP_ID,
+                    )
+                    for capability, approval in WRITE_CAPABILITIES
+                ],
+            )
+            cursor.execute(
+                """
+                INSERT INTO automation.agent_grant_capabilities (
+                    org_id, agent_grant_id, capability_code, operation_mode,
+                    risk_class, approval_policy, maximum_amount, currency_code,
+                    allow_sensitive_read, status, created_by_membership_id
+                ) VALUES (%s,%s,%s,'read','read_only','none',NULL,NULL,false,'active',%s)
+                ON CONFLICT (org_id, agent_grant_id, capability_code) DO UPDATE SET
+                    operation_mode='read',risk_class='read_only',approval_policy='none',
+                    maximum_amount=NULL,currency_code=NULL,allow_sensitive_read=false,
+                    status='active'
+                """,
+                (
+                    DEMO_ORG_ID,
+                    TEST_AGENT_GRANT_ID,
+                    STATUS_CAPABILITY,
+                    REVIEWER_MEMBERSHIP_ID,
+                ),
+            )
             cursor.execute(
                 """
                 SELECT user_row.auth_user_id::text, grant_row.client_id,
@@ -319,7 +394,10 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                 """,
                 (DEMO_ORG_ID, TEST_USER_ID, TEST_MEMBERSHIP_ID, TEST_AGENT_GRANT_ID),
             )
-            if cursor.fetchone() != (auth_user_id, client_id, len(READ_CAPABILITIES)):
+            expected_capabilities = (
+                len(READ_CAPABILITIES) + len(WRITE_CAPABILITIES) + 1
+            )
+            if cursor.fetchone() != (auth_user_id, client_id, expected_capabilities):
                 raise ProvisioningError("Staging MCP test grant binding did not reconcile exactly")
     return True
 
@@ -358,7 +436,7 @@ def main() -> int:
     auth_user_id = _reconcile_test_user(service_key, password)
     print("Reconciled the disposable OAuth test identity")
     demo_bound = _bind_demo(database_url, client["client_id"], auth_user_id)
-    print("Reconciled the isolated read-only demo grant")
+    print("Reconciled the isolated bounded read and write demo grant")
     _write_github_env(
         {
             "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client["client_id"],
