@@ -22,14 +22,14 @@ CANONICAL_READ_POLICIES = {
     "master.products.search": CanonicalReadPolicy(
         "master.products.search",
         "master.products.search",
-        "inventory.view",
+        "catalog.product.manage",
         "/internal/mcp/reads/products",
         100,
     ),
     "master.suppliers.search": CanonicalReadPolicy(
         "master.suppliers.search",
         "master.suppliers.search",
-        "master.view",
+        "parties.supplier.manage",
         "/internal/mcp/reads/suppliers",
         200,
         sensitive_read=True,
@@ -37,7 +37,7 @@ CANONICAL_READ_POLICIES = {
     "gst.settings.get": CanonicalReadPolicy(
         "gst.settings.get",
         "gst.settings.get",
-        "gst.view",
+        "tax.registration.manage",
         "/internal/mcp/reads/gst-settings",
         1,
     ),
@@ -51,7 +51,7 @@ PLANNED_RESOLUTION_READ_POLICIES = {
     "parties.customers.search": CanonicalReadPolicy(
         "parties.customers.search",
         "parties.customers.search",
-        "master.view",
+        "parties.customer.manage",
         "/internal/mcp/resolution/customers",
         50,
         sensitive_read=True,
@@ -61,7 +61,7 @@ PLANNED_RESOLUTION_READ_POLICIES = {
     "inventory.locations.search": CanonicalReadPolicy(
         "inventory.locations.search",
         "inventory.locations.search",
-        "inventory.view",
+        "inventory.location.manage",
         "/internal/mcp/resolution/locations",
         50,
         exposed_in_mcp=False,
@@ -70,45 +70,45 @@ PLANNED_RESOLUTION_READ_POLICIES = {
     "inventory.stock_batches.search": CanonicalReadPolicy(
         "inventory.stock_batches.search",
         "inventory.stock_batches.search",
-        "inventory.view",
+        "inventory.batch.manage",
         "/internal/mcp/resolution/stock-batches",
         100,
         exposed_in_mcp=False,
         readiness_verified=False,
     ),
     "sales.orders.get": CanonicalReadPolicy(
-        "sales.orders.get", "sales.orders.get", "sales.view",
+        "sales.orders.get", "sales.orders.get", "sales.order.manage",
         "/internal/mcp/resolution/sales-orders", 1,
         exposed_in_mcp=False, readiness_verified=False,
     ),
     "sales.invoices.get": CanonicalReadPolicy(
-        "sales.invoices.get", "sales.invoices.get", "sales.view",
+        "sales.invoices.get", "sales.invoices.get", "sales.invoice.create",
         "/internal/mcp/resolution/sales-invoices", 1,
         exposed_in_mcp=False, readiness_verified=False,
     ),
     "procurement.purchase_orders.get": CanonicalReadPolicy(
         "procurement.purchase_orders.get", "procurement.purchase_orders.get",
-        "procurement.view", "/internal/mcp/resolution/purchase-orders", 1,
+        "procurement.order.manage", "/internal/mcp/resolution/purchase-orders", 1,
         exposed_in_mcp=False, readiness_verified=False,
     ),
     "procurement.goods_receipts.get": CanonicalReadPolicy(
         "procurement.goods_receipts.get", "procurement.goods_receipts.get",
-        "procurement.view", "/internal/mcp/resolution/goods-receipts", 1,
+        "procurement.receipt.post", "/internal/mcp/resolution/goods-receipts", 1,
         exposed_in_mcp=False, readiness_verified=False,
     ),
     "procurement.supplier_invoices.get": CanonicalReadPolicy(
         "procurement.supplier_invoices.get", "procurement.supplier_invoices.get",
-        "procurement.view", "/internal/mcp/resolution/supplier-invoices", 1,
+        "procurement.supplier_invoice.create", "/internal/mcp/resolution/supplier-invoices", 1,
         exposed_in_mcp=False, readiness_verified=False,
     ),
     "finance.open_items.search": CanonicalReadPolicy(
-        "finance.open_items.search", "finance.open_items.search", "finance.view",
+        "finance.open_items.search", "finance.open_items.search", "finance.payment.manage",
         "/internal/mcp/resolution/open-items", 100,
         exposed_in_mcp=False, readiness_verified=False,
     ),
     "finance.settlement_choices.search": CanonicalReadPolicy(
         "finance.settlement_choices.search", "finance.settlement_choices.search",
-        "finance.view", "/internal/mcp/resolution/settlement-choices", 100,
+        "finance.payment.manage", "/internal/mcp/resolution/settlement-choices", 100,
         exposed_in_mcp=False, readiness_verified=False,
     ),
 }

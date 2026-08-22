@@ -32,15 +32,15 @@ class Operation:
 OPERATIONS = {
     "erp_product_search": Operation(
         "master.products.search", "erp_product_search", "/api/internal/mcp/reads/products",
-        "inventory.view", 100,
+        "catalog.product.manage", 100,
     ),
     "erp_supplier_search": Operation(
         "master.suppliers.search", "erp_supplier_search", "/api/internal/mcp/reads/suppliers",
-        "master.view", 200,
+        "parties.supplier.manage", 200,
     ),
     "erp_gst_settings_get": Operation(
         "gst.settings.get", "erp_gst_settings_get", "/api/internal/mcp/reads/gst-settings",
-        "gst.view", 1,
+        "tax.registration.manage", 1,
     ),
 }
 

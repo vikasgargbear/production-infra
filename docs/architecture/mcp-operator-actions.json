@@ -64,7 +64,7 @@
       "tool": "erp_customer_search",
       "operation_key": "parties.customers.search",
       "resource": "parties",
-      "permission": "master.view",
+      "permission": "parties.customer.manage",
       "max_records": 50,
       "description": "Resolve a customer by name, code, GSTIN, or phone inside the active organization; multiple matches require explicit selection."
     },
@@ -72,7 +72,7 @@
       "tool": "erp_inventory_location_search",
       "operation_key": "inventory.locations.search",
       "resource": "inventory",
-      "permission": "inventory.view",
+      "permission": "inventory.location.manage",
       "max_records": 50,
       "description": "Resolve an authorized branch inventory location by exact code or name."
     },
@@ -80,7 +80,7 @@
       "tool": "erp_stock_batch_search",
       "operation_key": "inventory.stock_batches.search",
       "resource": "inventory",
-      "permission": "inventory.view",
+      "permission": "inventory.batch.manage",
       "max_records": 100,
       "description": "Return bounded batch availability, release state, expiry, location, UOM, reservation, and FEFO rank for one product and branch."
     },
@@ -88,7 +88,7 @@
       "tool": "erp_sales_order_get",
       "operation_key": "sales.orders.get",
       "resource": "sales_order",
-      "permission": "sales.view",
+      "permission": "sales.order.manage",
       "max_records": 1,
       "description": "Resolve one sales order by opaque ID or exact order number with remaining line quantities and row version."
     },
@@ -96,7 +96,7 @@
       "tool": "erp_sales_invoice_get",
       "operation_key": "sales.invoices.get",
       "resource": "sales_invoice",
-      "permission": "sales.view",
+      "permission": "sales.invoice.create",
       "max_records": 1,
       "description": "Resolve one posted sales invoice by opaque ID or exact invoice number with returnable line balances and fiscal lineage."
     },
@@ -104,7 +104,7 @@
       "tool": "erp_purchase_order_get",
       "operation_key": "procurement.purchase_orders.get",
       "resource": "purchase_order",
-      "permission": "procurement.view",
+      "permission": "procurement.order.manage",
       "max_records": 1,
       "description": "Resolve one purchase order by opaque ID or exact number with remaining receipt and advance quantities."
     },
@@ -112,7 +112,7 @@
       "tool": "erp_goods_receipt_get",
       "operation_key": "procurement.goods_receipts.get",
       "resource": "goods_receipt",
-      "permission": "procurement.view",
+      "permission": "procurement.receipt.post",
       "max_records": 1,
       "description": "Resolve one posted goods receipt by opaque ID or exact number with invoiceable line and batch balances."
     },
@@ -120,7 +120,7 @@
       "tool": "erp_supplier_invoice_get",
       "operation_key": "procurement.supplier_invoices.get",
       "resource": "supplier_invoice",
-      "permission": "procurement.view",
+      "permission": "procurement.supplier_invoice.create",
       "max_records": 1,
       "description": "Resolve one posted supplier invoice by opaque ID or exact supplier document number with returnable and payable balances."
     },
@@ -128,7 +128,7 @@
       "tool": "erp_open_item_search",
       "operation_key": "finance.open_items.search",
       "resource": "payments",
-      "permission": "finance.view",
+      "permission": "finance.payment.manage",
       "max_records": 100,
       "description": "Return bounded receivable or payable open items for one exact party, currency, and branch for explicit allocation."
     },
@@ -136,7 +136,7 @@
       "tool": "erp_settlement_choice_search",
       "operation_key": "finance.settlement_choices.search",
       "resource": "payments",
-      "permission": "finance.view",
+      "permission": "finance.payment.manage",
       "max_records": 100,
       "description": "Return active matching-currency asset settlement accounts for the delegated branch as explicit cash choices without a bank identity and non-cash choices with one active bank identity."
     }

@@ -9,7 +9,10 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.routes.internal import mcp_agent_grants, mcp_canonical_reads
 from app.api.routes.internal.mcp_agent_grants import GrantRequest
-from app.api.routes.internal.mcp_contract import CANONICAL_READ_POLICIES
+from app.api.routes.internal.mcp_contract import (
+    ALL_CANONICAL_READ_POLICIES,
+    CANONICAL_READ_POLICIES,
+)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -83,7 +86,7 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
     }
     assert all(policy.path.startswith("/internal/mcp/reads/") for policy in CANONICAL_READ_POLICIES.values())
     assert all(policy.capability_code == policy.operation_key for policy in CANONICAL_READ_POLICIES.values())
-    assert CANONICAL_READ_POLICIES["master.products.search"].permission_code == "inventory.view"
+    assert CANONICAL_READ_POLICIES["master.products.search"].permission_code == "catalog.product.manage"
     assert CANONICAL_READ_POLICIES["master.suppliers.search"].sensitive_read is True
     route_paths = {route.path for route in mcp_canonical_reads.router.routes}
     assert route_paths == {
@@ -93,6 +96,18 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
     }
     assert all(route.include_in_schema is False for route in mcp_canonical_reads.router.routes)
     assert all(route.methods == {"GET"} for route in mcp_canonical_reads.router.routes)
+
+
+def test_every_mcp_read_permission_exists_in_the_canonical_catalog() -> None:
+    seed = (
+        ROOT / "database/canonical/platform/baseline-platform-enforcements.json"
+    ).read_text(encoding="utf-8")
+    permissions = {
+        policy.permission_code for policy in ALL_CANONICAL_READ_POLICIES.values()
+    }
+    assert permissions
+    for permission in permissions:
+        assert f"('{permission}'," in seed
 
 
 def test_supplier_read_returns_typed_account_selection_not_generic_ids() -> None:
@@ -127,21 +142,21 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
             "master.products.search",
             "erp_product_search",
             "/api/internal/mcp/reads/products",
-            "inventory.view",
+            "catalog.product.manage",
             100,
         ),
         "erp_supplier_search": (
             "master.suppliers.search",
             "erp_supplier_search",
             "/api/internal/mcp/reads/suppliers",
-            "master.view",
+            "parties.supplier.manage",
             200,
         ),
         "erp_gst_settings_get": (
             "gst.settings.get",
             "erp_gst_settings_get",
             "/api/internal/mcp/reads/gst-settings",
-            "gst.view",
+            "tax.registration.manage",
             1,
         ),
     }
