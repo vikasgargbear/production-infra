@@ -82,3 +82,14 @@ def test_operator_sdk_argument_models_match_exact_published_schemas(monkeypatch)
     assert execute.fn_metadata.validate_arguments(arguments) == arguments
     with pytest.raises(ValidationError):
         execute.fn_metadata.validate_arguments({**arguments, "lines": []})
+
+    sales_order = server._tool_manager.get_tool("erp_sales_order_prepare")
+    required_only = {
+        name: None for name in sales_order.parameters["required"]
+    }
+    assert set(sales_order.fn_metadata.validate_arguments(required_only)) == set(
+        sales_order.parameters["required"]
+    )
+    assert "charge_lines" not in sales_order.fn_metadata.validate_arguments(
+        required_only
+    )

@@ -28,6 +28,13 @@ class ExactOperatorArguments(ArgModelBase):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
+    def model_dump_one_level(self) -> dict[str, Any]:
+        return {
+            field.alias or name: getattr(self, name)
+            for name, field in self.__class__.model_fields.items()
+            if name in self.model_fields_set
+        }
+
 
 def registered_tool_names() -> tuple[str, ...]:
     return tuple(sorted((*OPERATIONS, *published_operator_action_tool_names())))
