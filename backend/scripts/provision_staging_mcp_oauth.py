@@ -269,13 +269,28 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
             )
             cursor.execute(
                 """
+                UPDATE core.access_grants
+                   SET status='expired', row_version=row_version+1
+                 WHERE org_id=%s AND membership_id=%s AND role_id=%s
+                   AND status='active' AND expires_at IS NOT NULL
+                   AND expires_at<=transaction_timestamp()
+                """,
+                (DEMO_ORG_ID, TEST_MEMBERSHIP_ID, DEMO_ROLE_ID),
+            )
+            cursor.execute(
+                """
                 INSERT INTO core.access_grants (
                     org_id,id,membership_id,role_id,scope_kind,branch_id,
                     valid_from_at,expires_at,status,created_by_membership_id
-                ) VALUES (
+                ) SELECT
                     %s,%s,%s,%s,'organization',NULL,transaction_timestamp(),
                     transaction_timestamp()+interval '30 days','active',%s
-                ) ON CONFLICT (org_id,id) DO NOTHING
+                 WHERE NOT EXISTS (
+                    SELECT 1 FROM core.access_grants
+                     WHERE org_id=%s AND membership_id=%s AND role_id=%s
+                       AND status='active'
+                 )
+                ON CONFLICT (org_id,id) DO NOTHING
                 """,
                 (
                     DEMO_ORG_ID,
@@ -283,6 +298,9 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                     TEST_MEMBERSHIP_ID,
                     DEMO_ROLE_ID,
                     REVIEWER_MEMBERSHIP_ID,
+                    DEMO_ORG_ID,
+                    TEST_MEMBERSHIP_ID,
+                    DEMO_ROLE_ID,
                 ),
             )
             cursor.execute(
