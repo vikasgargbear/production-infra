@@ -305,6 +305,15 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
             )
             cursor.execute(
                 """
+                UPDATE automation.agent_grants
+                   SET status='suspended', row_version=row_version+1
+                 WHERE org_id=%s AND subject_membership_id=%s AND client_id=%s
+                   AND status='active'
+                """,
+                (DEMO_ORG_ID, TEST_MEMBERSHIP_ID, client_id),
+            )
+            cursor.execute(
+                """
                 INSERT INTO automation.agent_grants (
                     org_id,id,subject_membership_id,client_id,client_display_name,
                     branch_id,authorization_mode,consent_version,consent_text_hash,
@@ -316,7 +325,8 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                     extensions.digest('canonical staging bounded read and write MCP test consent','sha256'),
                     %s,transaction_timestamp(),%s,transaction_timestamp(),
                     transaction_timestamp()+interval '30 days','active',%s,%s
-                ) ON CONFLICT (org_id,id) DO NOTHING
+                ) ON CONFLICT (org_id,id) DO UPDATE SET
+                    status='active', row_version=agent_grants.row_version+1
                 """,
                 (
                     DEMO_ORG_ID,

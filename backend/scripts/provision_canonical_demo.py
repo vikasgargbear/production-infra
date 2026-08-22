@@ -449,6 +449,20 @@ def bootstrap_identity(connection) -> None:
         )
         cursor.execute(
             """
+            UPDATE automation.agent_grants
+               SET status='suspended', row_version=row_version+1
+             WHERE org_id=%s AND client_id=%s
+               AND subject_membership_id=ANY(CAST(%s AS uuid[]))
+               AND status='active'
+            """,
+            (
+                IDS["org"],
+                CLIENT_ID,
+                [IDS["operator_membership"], IDS["reviewer_membership"]],
+            ),
+        )
+        cursor.execute(
+            """
             INSERT INTO automation.agent_grants (
                 org_id, id, subject_membership_id, client_id, client_display_name,
                 branch_id, authorization_mode, consent_version, consent_text_hash,
@@ -461,7 +475,8 @@ def bootstrap_identity(connection) -> None:
                 extensions.digest('canonical staging demo consent; INR 1000000 maximum','sha256'),
                 %s, transaction_timestamp(), %s, transaction_timestamp(),
                 transaction_timestamp() + interval '30 days', 'active', %s, %s
-            ) ON CONFLICT (org_id, id) DO NOTHING
+            ) ON CONFLICT (org_id, id) DO UPDATE SET
+                status='active', row_version=agent_grants.row_version+1
             """,
             (
                 IDS["org"], IDS["agent_grant"], IDS["operator_membership"], CLIENT_ID,
@@ -483,7 +498,8 @@ def bootstrap_identity(connection) -> None:
                 extensions.digest('canonical staging independent approval consent','sha256'),
                 %s, transaction_timestamp(), %s, transaction_timestamp(),
                 transaction_timestamp() + interval '30 days', 'active', %s, %s
-            ) ON CONFLICT (org_id, id) DO NOTHING
+            ) ON CONFLICT (org_id, id) DO UPDATE SET
+                status='active', row_version=agent_grants.row_version+1
             """,
             (
                 IDS["org"], IDS["legacy_approver_agent_grant"],
