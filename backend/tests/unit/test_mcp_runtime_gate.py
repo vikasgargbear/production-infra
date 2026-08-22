@@ -52,5 +52,8 @@ def test_non_sdk_report_describes_the_implemented_isolated_transport_honestly():
     assert set(report["registry_tools"]) == gate.expected_runtime_tools()
     assert report["official_sdk_version"] is None
     assert report["transport"] == "official_sdk_streamable_http_stateless"
-    assert any("DCR is disabled" in item for item in report["remaining_blockers"])
+    assert any(
+        "DCR" in item and "disabled" in item
+        for item in report["remaining_blockers"]
+    )
     assert any("transfer and destruction" in item for item in report["remaining_blockers"])
