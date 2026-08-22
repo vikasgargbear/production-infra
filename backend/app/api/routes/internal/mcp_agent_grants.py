@@ -313,8 +313,32 @@ def _operator_grant_rows(
                )
                AND (
                    :operation_key<>'automation.command.execute'
-                   OR command.status='approved'
-                      AND command.expires_at>transaction_timestamp()
+                   OR (command.status IN ('prepared','pending_approval','approved')
+                       AND command.expires_at>transaction_timestamp()
+                       AND NOT EXISTS (
+                           SELECT 1 FROM automation.command_approvals AS rejection
+                            WHERE rejection.org_id=command.org_id
+                              AND rejection.command_request_id=command.id
+                              AND rejection.decision='rejected'
+                              AND rejection.preview_hash=command.preview_hash
+                              AND rejection.aggregate_version_hash=command.aggregate_version_hash
+                       )
+                       AND (
+                           SELECT count(*)
+                             FROM automation.command_approvals AS approval
+                            WHERE approval.org_id=command.org_id
+                              AND approval.command_request_id=command.id
+                              AND approval.decision='approved'
+                              AND approval.preview_hash=command.preview_hash
+                              AND approval.aggregate_version_hash=command.aggregate_version_hash
+                              AND approval.valid_until_at>transaction_timestamp()
+                              AND (command.approval_policy<>'actor_confirmation'
+                                   OR approval.approver_membership_id=command.requested_by_membership_id)
+                              AND (command.approval_policy='actor_confirmation'
+                                   OR approval.approver_membership_id<>command.requested_by_membership_id)
+                              AND (command.approval_policy<>'human_compliance_approver'
+                                   OR approval.authentication_strength='mfa')
+                       )>=command.required_approval_count)
                )
                AND (
                    :operation_key<>'automation.command.approve'

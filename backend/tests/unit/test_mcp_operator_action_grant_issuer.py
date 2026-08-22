@@ -235,6 +235,17 @@ def test_operator_authority_sql_revalidates_rbac_branches_and_approval_separatio
         "membership.id<>command.requested_by_membership_id",
         "grant_row.expires_at>transaction_timestamp()",
         "grant_row.org_id=:organization_id",
+        "command.status IN ('prepared','pending_approval','approved')",
+        "automation.command_approvals AS rejection",
+        "rejection.decision='rejected'",
+        "automation.command_approvals AS approval",
+        "approval.valid_until_at>transaction_timestamp()",
+        "approval.preview_hash=command.preview_hash",
+        "approval.aggregate_version_hash=command.aggregate_version_hash",
+        "approval.approver_membership_id=command.requested_by_membership_id",
+        "approval.approver_membership_id<>command.requested_by_membership_id",
+        "approval.authentication_strength='mfa'",
+        ">=command.required_approval_count",
     ):
         assert fragment in sql
     assert params["command_request_id"] == command_request_id
