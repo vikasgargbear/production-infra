@@ -65,7 +65,7 @@ def _grant(access: AccessToken, operation_name: str) -> dict:
         "client_id": access.client_id,
         "operation_key": operation.key,
         "capability_code": operation.key,
-        "organization_id": str(uuid4()),
+        "organization_id": access.claims["organization_id"],
         "membership_id": str(uuid4()),
         "agent_grant_id": str(uuid4()),
         "branch_ids": [],
@@ -112,6 +112,14 @@ async def test_grant_response_echo_and_record_limits_fail_closed() -> None:
     responses = [Response(200, bad_grant)]
     gateway = OperationGateway(settings(), lambda: Client(responses, []))
     with pytest.raises(UpstreamContractError, match="client_id"):
+        await gateway.execute(OPERATIONS["erp_product_search"], access, {})
+
+    bad_grant = _grant(access, "erp_product_search")
+    bad_grant["organization_id"] = str(uuid4())
+    gateway = OperationGateway(
+        settings(), lambda: Client([Response(200, bad_grant)], [])
+    )
+    with pytest.raises(UpstreamContractError, match="organization_id"):
         await gateway.execute(OPERATIONS["erp_product_search"], access, {})
 
     responses = [
