@@ -62,7 +62,7 @@
     "@craco/craco": "^7.1.0",
     "@playwright/test": "^1.40.1",
     "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.6.4",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.2.42",
