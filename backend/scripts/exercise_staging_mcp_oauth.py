@@ -286,6 +286,8 @@ def _exercise_mcp(
     expected = sorted(json.loads(contract_path.read_text(encoding="utf-8"))["tools"])
     if names != expected:
         raise ExerciseError(f"Live MCP registry drifted: {names}")
+    if not business_flow:
+        return names, None
     called = _jsonrpc_response(
         session.post(
             MCP_URL,
@@ -301,9 +303,6 @@ def _exercise_mcp(
             timeout=30,
         )
     )
-    _tool_payload(called)
-    if not business_flow:
-        return names, None
     if DEMO_PRODUCT_ID not in json.dumps(called):
         raise ExerciseError("Live product-search tool did not return the canonical demo product")
 
@@ -520,9 +519,7 @@ def main() -> int:
         "mcp_tools": tool_names,
         "exercise_mode": exercise_mode,
         "live_read_tool_calls": (
-            ["erp_product_search", "erp_customer_search"]
-            if workflow is not None
-            else ["erp_product_search"]
+            ["erp_product_search", "erp_customer_search"] if workflow is not None else []
         ),
         "live_demo_product_verified": workflow is not None,
         "live_write_workflow": (

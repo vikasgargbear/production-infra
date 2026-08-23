@@ -872,3 +872,6 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "boundary_only" in workflow
     assert "business_flow" in workflow
     assert 'exercise_mode not in {"boundary_only", "business_flow"}' in exercise
+    assert exercise.index("if not business_flow:") < exercise.index(
+        '"name": "erp_product_search"'
+    )
