@@ -154,6 +154,10 @@ applicability rules, provider conformance, credentials, and network evidence.
 - Recorded the provider-disabled release mode with finance-owned manual
   compliance handling; the operational audit now requires applicability
   evidence only when software provider submission is enabled.
+- Reduced the disposable Nano staging Supavisor pool from 15 to 5 database
+  connections per role/database combination. The canonical workflow uses four
+  isolated roles plus the bootstrap role, so this bounds their potential
+  database-side pool footprint while preserving the 200-client queue.
 
 ## Verdict
 

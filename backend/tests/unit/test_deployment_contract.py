@@ -618,7 +618,7 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
         "Refresh the reviewed free-tier Supavisor configuration", 1
     )[1].split("Reset canonical data", 1)[0]
     assert "if: inputs.refresh_pooler_configuration == true" in refresh_step
-    assert '"default_pool_size":15' in refresh_step
+    assert '"default_pool_size":5' in refresh_step
     assert '"pool_mode":"transaction"' in refresh_step
     assert "/config/database/pooler" in refresh_step
     assert "sleep 125" in refresh_step

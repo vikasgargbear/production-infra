@@ -212,9 +212,9 @@ jobs:
             --request PATCH \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             --header 'Content-Type: application/json' \
-            --data '{"default_pool_size":15,"pool_mode":"transaction"}' \
+            --data '{"default_pool_size":5,"pool_mode":"transaction"}' \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/database/pooler")
-          test "$(jq -r .default_pool_size <<<"$response")" = 15
+          test "$(jq -r .default_pool_size <<<"$response")" = 5
           test "$(jq -r .pool_mode <<<"$response")" = transaction
           sleep 125
 
