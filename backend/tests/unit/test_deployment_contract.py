@@ -461,6 +461,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "sales_return_reconciliation",
         "purchase_return_reconciliation",
         "inventory_adjustment_reconciliation",
+        "cross_table_reconciliation",
         "unavailable_action_reconciliation",
     ):
         assert reconciliation in provisioner
@@ -500,6 +501,29 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "item.outstanding_amount" not in provisioner
     assert "COMMAND_ADAPTER_UNAVAILABLE" in provisioner
     assert 'response.status_code != 503' in provisioner
+    cross_table = provisioner.split("def reconcile_cross_table_invariants", 1)[1].split(
+        "\ndef main", 1
+    )[0]
+    for required_relation in (
+        "automation.command_requests",
+        "automation.command_approvals",
+        "core.audit_events",
+        "calculation.artifacts",
+        "finance.accounting_events",
+        "finance.journal_entries",
+        "finance.journal_lines",
+        "finance.open_items",
+        "finance.allocations",
+        "inventory.stock_ledger_entries",
+        "inventory.stock_balances",
+        "tax.documents",
+    ):
+        assert required_relation in cross_table
+    assert "transaction_debit_total<>transaction_credit_total" in cross_table
+    assert "allocated_amount>principal_amount" in cross_table
+    assert "ledger_quantity IS DISTINCT FROM balance_quantity" in cross_table
+    assert "supply_type='intra_state'" in cross_table
+    assert "supply_type='inter_state'" in cross_table
     assert provisioner.count("DEMOB1234C") == 1
     assert provisioner.count("DEMOC5678D") == 4
     assert provisioner.count("27DEMOC5678D1Z5") == 3

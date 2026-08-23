@@ -2923,6 +2923,223 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         return str(row[0])
 
 
+def reconcile_cross_table_invariants(
+    connection,
+    *,
+    command_ids: list[str],
+    started_at: datetime,
+) -> dict[str, Any]:
+    """Reconcile the exact demo run across durable ledgers and projections."""
+    if len(command_ids) != 12 or len(set(command_ids)) != len(command_ids):
+        raise RuntimeError("demo cross-table audit requires 12 unique command requests")
+    result: dict[str, Any] = {"command_count": len(command_ids)}
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT count(*) AS command_count,
+                   count(*) FILTER (WHERE command.status='succeeded') AS succeeded_count,
+                   count(*) FILTER (WHERE command.result_resource_id IS NULL) AS missing_result_count,
+                   count(*) FILTER (WHERE NOT EXISTS (
+                       SELECT 1 FROM automation.command_approvals approval
+                        WHERE approval.org_id=command.org_id
+                          AND approval.command_request_id=command.id
+                          AND approval.decision='approved'
+                          AND approval.preview_hash=command.preview_hash
+                          AND approval.aggregate_version_hash=command.aggregate_version_hash
+                   )) AS missing_approval_count,
+                   count(DISTINCT audit.command_request_id) AS audited_command_count
+              FROM automation.command_requests command
+              LEFT JOIN core.audit_events audit
+                ON audit.org_id=command.org_id
+               AND audit.command_request_id=command.id
+             WHERE command.org_id=%s AND command.id=ANY(CAST(%s AS uuid[]))
+            """,
+            (IDS["org"], command_ids),
+        )
+        command_row = cursor.fetchone()
+        if command_row != (12, 12, 0, 0, 12):
+            raise RuntimeError(
+                f"demo command, approval, and audit evidence did not reconcile: {command_row}"
+            )
+        result.update(
+            {
+                "succeeded_command_count": command_row[1],
+                "audited_command_count": command_row[4],
+            }
+        )
+
+        cursor.execute(
+            """
+            SELECT count(*) AS artifact_count,
+                   count(*) FILTER (WHERE status<>'consumed') AS nonconsumed_count,
+                   count(*) FILTER (
+                       WHERE octet_length(authority_hash)<>32
+                          OR octet_length(request_sha256)<>32
+                   ) AS invalid_hash_count
+              FROM calculation.artifacts
+             WHERE org_id=%s AND command_request_id=ANY(CAST(%s AS uuid[]))
+            """,
+            (IDS["org"], command_ids),
+        )
+        artifact_row = cursor.fetchone()
+        if artifact_row[0] < 5 or artifact_row[1:] != (0, 0):
+            raise RuntimeError(
+                f"demo calculation authority did not reconcile: {artifact_row}"
+            )
+        result["consumed_calculation_artifact_count"] = artifact_row[0]
+
+        cursor.execute(
+            """
+            WITH journal_totals AS (
+                SELECT journal.id,journal.status,
+                       journal.transaction_debit_total,
+                       journal.transaction_credit_total,
+                       journal.functional_debit_total,
+                       journal.functional_credit_total,
+                       count(line.id) AS line_count,
+                       coalesce(sum(line.transaction_debit),0) AS line_transaction_debit,
+                       coalesce(sum(line.transaction_credit),0) AS line_transaction_credit,
+                       coalesce(sum(line.functional_debit),0) AS line_functional_debit,
+                       coalesce(sum(line.functional_credit),0) AS line_functional_credit
+                  FROM finance.accounting_events event
+                  JOIN finance.journal_entries journal
+                    ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+                  JOIN finance.journal_lines line
+                    ON line.org_id=journal.org_id AND line.journal_entry_id=journal.id
+                 WHERE event.org_id=%s AND event.occurred_at>=%s
+                 GROUP BY journal.org_id,journal.id
+            )
+            SELECT count(*) AS journal_count,
+                   count(*) FILTER (
+                       WHERE status<>'posted' OR line_count<2
+                          OR transaction_debit_total<>transaction_credit_total
+                          OR functional_debit_total<>functional_credit_total
+                          OR transaction_debit_total<>line_transaction_debit
+                          OR transaction_credit_total<>line_transaction_credit
+                          OR functional_debit_total<>line_functional_debit
+                          OR functional_credit_total<>line_functional_credit
+                   ) AS invalid_journal_count
+              FROM journal_totals
+            """,
+            (IDS["org"], started_at),
+        )
+        journal_row = cursor.fetchone()
+        if journal_row[0] < 9 or journal_row[1] != 0:
+            raise RuntimeError(f"demo journals did not reconcile: {journal_row}")
+        result["balanced_posted_journal_count"] = journal_row[0]
+
+        cursor.execute(
+            """
+            WITH settlement AS (
+                SELECT item.id,item.principal_amount,item.status,
+                       coalesce(sum(allocation.amount) FILTER (
+                           WHERE allocation.status='posted'
+                       ),0) AS allocated_amount
+                  FROM finance.open_items item
+                  LEFT JOIN finance.allocations allocation
+                    ON allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+                 WHERE item.org_id=%s AND item.created_at>=%s
+                 GROUP BY item.org_id,item.id
+            )
+            SELECT count(*) AS open_item_count,
+                   count(*) FILTER (
+                       WHERE allocated_amount>principal_amount
+                          OR (allocated_amount=principal_amount AND status<>'settled')
+                          OR (allocated_amount<principal_amount AND status<>'open')
+                   ) AS invalid_open_item_count
+              FROM settlement
+            """,
+            (IDS["org"], started_at),
+        )
+        open_item_row = cursor.fetchone()
+        if open_item_row[0] < 3 or open_item_row[1] != 0:
+            raise RuntimeError(f"demo open items did not reconcile: {open_item_row}")
+        result["reconciled_open_item_count"] = open_item_row[0]
+
+        cursor.execute(
+            """
+            SELECT count(*) AS allocation_count,
+                   count(*) FILTER (
+                       WHERE amount<=0 OR functional_amount<=0 OR currency_code<>'INR'
+                          OR num_nonnulls(payment_id,withholding_id,adjustment_note_id,
+                                          purchase_order_advance_allocation_id)<>1
+                   ) AS invalid_allocation_count
+              FROM finance.allocations
+             WHERE org_id=%s AND created_at>=%s
+            """,
+            (IDS["org"], started_at),
+        )
+        allocation_row = cursor.fetchone()
+        if allocation_row[0] < 4 or allocation_row[1] != 0:
+            raise RuntimeError(f"demo allocations did not reconcile: {allocation_row}")
+        result["reconciled_allocation_count"] = allocation_row[0]
+
+        cursor.execute(
+            """
+            WITH ledger AS (
+                SELECT org_id,branch_id,location_id,product_id,batch_id,
+                       sum(quantity_delta) AS on_hand_quantity,
+                       sum(value_delta) AS inventory_value
+                  FROM inventory.stock_ledger_entries
+                 WHERE org_id=%s
+                 GROUP BY org_id,branch_id,location_id,product_id,batch_id
+            ), compared AS (
+                SELECT coalesce(ledger.location_id,balance.location_id) AS location_id,
+                       coalesce(ledger.product_id,balance.product_id) AS product_id,
+                       coalesce(ledger.batch_id,balance.batch_id) AS batch_id,
+                       ledger.on_hand_quantity AS ledger_quantity,
+                       balance.on_hand_quantity AS balance_quantity,
+                       ledger.inventory_value AS ledger_value,
+                       balance.inventory_value AS balance_value
+                  FROM ledger
+                  FULL JOIN inventory.stock_balances balance
+                    ON balance.org_id=ledger.org_id
+                   AND balance.branch_id=ledger.branch_id
+                   AND balance.location_id=ledger.location_id
+                   AND balance.product_id=ledger.product_id
+                   AND balance.batch_id=ledger.batch_id
+                 WHERE coalesce(balance.org_id,ledger.org_id)=%s
+            )
+            SELECT count(*) AS stock_position_count,
+                   count(*) FILTER (
+                       WHERE ledger_quantity IS DISTINCT FROM balance_quantity
+                          OR ledger_value IS DISTINCT FROM balance_value
+                   ) AS invalid_stock_position_count
+              FROM compared
+            """,
+            (IDS["org"], IDS["org"]),
+        )
+        stock_row = cursor.fetchone()
+        if stock_row[0] < 2 or stock_row[1] != 0:
+            raise RuntimeError(f"demo stock projection did not reconcile: {stock_row}")
+        result["reconciled_stock_position_count"] = stock_row[0]
+
+        cursor.execute(
+            """
+            SELECT count(*) AS tax_document_count,
+                   count(*) FILTER (
+                       WHERE currency_code<>'INR' OR octet_length(source_hash)<>32
+                          OR (supply_type='intra_state'
+                              AND (igst_amount<>0 OR cgst_amount<>sgst_amount))
+                          OR (supply_type='inter_state'
+                              AND (cgst_amount<>0 OR sgst_amount<>0))
+                   ) AS invalid_tax_document_count
+              FROM tax.documents
+             WHERE org_id=%s AND posted_at>=%s
+            """,
+            (IDS["org"], started_at),
+        )
+        tax_row = cursor.fetchone()
+        if tax_row[0] < 4 or tax_row[1] != 0:
+            raise RuntimeError(f"demo tax documents did not reconcile: {tax_row}")
+        result["reconciled_tax_document_count"] = tax_row[0]
+    return result
+
+
 def main() -> int:
     assert_target()
     if not CLIENT_ID or CLIENT_ID == "disabled-unissued-canonical-staging":
@@ -2951,6 +3168,9 @@ def main() -> int:
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         verify_fiscal_tax_fact(runtime)
         activate_demo_product(runtime)
+        with runtime.cursor() as cursor:
+            cursor.execute("SELECT transaction_timestamp()")
+            journey_started_at = cursor.fetchone()[0]
 
     purchase_payload = purchase_order_payload()
     preflight_action("procurement.purchase_order.prepare", purchase_payload)
@@ -3148,6 +3368,27 @@ def main() -> int:
             runtime, adjustment_journey["executed"]["resource_id"]
         )
         unavailable_reconciliation = assert_unavailable_actions(runtime)
+        cross_table_reconciliation = reconcile_cross_table_invariants(
+            runtime,
+            command_ids=[
+                str(journey["prepared"]["command_request_id"])
+                for journey in (
+                    purchase_journey,
+                    advance_journey,
+                    receipt_journey,
+                    supplier_invoice_journey,
+                    supplier_payment_journey,
+                    journey,
+                    dispatch_journey,
+                    invoice_journey,
+                    customer_receipt_journey,
+                    sales_return_journey,
+                    purchase_return_journey,
+                    adjustment_journey,
+                )
+            ],
+            started_at=journey_started_at,
+        )
     summary = {
         "project_ref": PROJECT_REF,
         "organization_id": IDS["org"],
@@ -3172,6 +3413,7 @@ def main() -> int:
         "sales_return_reconciliation": sales_return_reconciliation,
         "purchase_return_reconciliation": purchase_return_reconciliation,
         "inventory_adjustment_reconciliation": adjustment_reconciliation,
+        "cross_table_reconciliation": cross_table_reconciliation,
         "unavailable_action_reconciliation": unavailable_reconciliation,
         "challan_evidence": {
             "supplier_challan_number": receipt_payload["supplier_challan_number"],
