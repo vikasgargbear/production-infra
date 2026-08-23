@@ -18,16 +18,16 @@ SPEC.loader.exec_module(MODULE)
 
 def inputs():
     return (
-        MODULE.load_json(MODULE.DEFAULT_CAPTURE),
+        MODULE.load_json(MODULE.DEFAULT_INVENTORY),
         MODULE.load_json(MODULE.DEFAULT_EVIDENCE),
         MODULE.load_json(MODULE.DEFAULT_MODEL),
     )
 
 
 def test_live_evidence_compiles_complete_separate_shadow_plan() -> None:
-    capture, evidence, model = inputs()
+    inventory, evidence, model = inputs()
     plan = MODULE.compile_plan(
-        capture=capture,
+        inventory=inventory,
         evidence=evidence,
         model=model,
         target_project_ref=MODULE.DISPOSABLE_STAGING_PROJECT_REF,
@@ -53,11 +53,11 @@ def test_target_ids_are_stable_and_source_scoped() -> None:
 
 
 def test_plan_refuses_same_or_unreviewed_target() -> None:
-    capture, evidence, model = inputs()
+    inventory, evidence, model = inputs()
     for target in (MODULE.SOURCE_PROJECT_REF, "unknown-project"):
         with pytest.raises(MODULE.PlanError):
             MODULE.compile_plan(
-                capture=capture,
+                inventory=inventory,
                 evidence=evidence,
                 model=model,
                 target_project_ref=target,
@@ -65,12 +65,12 @@ def test_plan_refuses_same_or_unreviewed_target() -> None:
 
 
 def test_plan_refuses_non_read_only_or_float_evidence() -> None:
-    capture, evidence, model = inputs()
+    inventory, evidence, model = inputs()
     unsafe = deepcopy(evidence)
     unsafe["transaction_read_only"] = "off"
     with pytest.raises(MODULE.PlanError, match="read-only"):
         MODULE.compile_plan(
-            capture=capture,
+            inventory=inventory,
             evidence=unsafe,
             model=model,
             target_project_ref=MODULE.DISPOSABLE_STAGING_PROJECT_REF,
@@ -80,7 +80,7 @@ def test_plan_refuses_non_read_only_or_float_evidence() -> None:
     inexact["exact_totals"]["payments"]["amount"] = 18864.0
     with pytest.raises(MODULE.PlanError, match="exact decimal string"):
         MODULE.compile_plan(
-            capture=capture,
+            inventory=inventory,
             evidence=inexact,
             model=model,
             target_project_ref=MODULE.DISPOSABLE_STAGING_PROJECT_REF,
@@ -88,12 +88,12 @@ def test_plan_refuses_non_read_only_or_float_evidence() -> None:
 
 
 def test_plan_refuses_unclassified_source_relation() -> None:
-    capture, evidence, model = inputs()
+    inventory, evidence, model = inputs()
     incomplete_model = deepcopy(model)
     incomplete_model["source_mapping"].pop("sales.orders")
     with pytest.raises(MODULE.PlanError, match="unclassified source relations"):
         MODULE.compile_plan(
-            capture=capture,
+            inventory=inventory,
             evidence=evidence,
             model=incomplete_model,
             target_project_ref=MODULE.DISPOSABLE_STAGING_PROJECT_REF,
@@ -101,9 +101,9 @@ def test_plan_refuses_unclassified_source_relation() -> None:
 
 
 def test_reviewed_exceptions_have_explicit_non_drop_dispositions() -> None:
-    capture, evidence, model = inputs()
+    inventory, evidence, model = inputs()
     plan = MODULE.compile_plan(
-        capture=capture,
+        inventory=inventory,
         evidence=evidence,
         model=model,
         target_project_ref=MODULE.DISPOSABLE_STAGING_PROJECT_REF,

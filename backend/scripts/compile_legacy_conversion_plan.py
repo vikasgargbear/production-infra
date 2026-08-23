@@ -19,11 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CAPTURE = (
-    REPO_ROOT
-    / "artifacts/live-schema-captures"
-    / "supabase-jfrairkkzxwkhbtqejnz-20260819T143728Z.json"
-)
+DEFAULT_INVENTORY = REPO_ROOT / "database/live-source-relation-inventory.json"
 DEFAULT_EVIDENCE = REPO_ROOT / "database/live-conversion-preflight-evidence.json"
 DEFAULT_MODEL = REPO_ROOT / "docs/architecture/canonical-data-model.json"
 
@@ -124,17 +120,25 @@ def canonical_relations(model: dict[str, Any]) -> set[str]:
 
 
 def validate_mapping(
-    capture: dict[str, Any], model: dict[str, Any]
+    inventory: dict[str, Any], model: dict[str, Any]
 ) -> list[dict[str, Any]]:
     mapping = model.get("source_mapping")
     if not isinstance(mapping, dict):
         raise PlanError("canonical model has no source_mapping object")
     targets = canonical_relations(model)
+    if inventory.get("inventory_version") != "1.0.0":
+        raise PlanError("source relation inventory version 1.0.0 is required")
+    if inventory.get("project_ref") != SOURCE_PROJECT_REF:
+        raise PlanError("source relation inventory belongs to an unexpected project")
+    if inventory.get("transaction_read_only") != "on":
+        raise PlanError("source relation inventory was not captured read-only")
     source_relations = {
         f"{table['table_schema']}.{table['table_name']}"
-        for table in capture.get("tables", [])
+        for table in inventory.get("relations", [])
         if table.get("table_schema") not in NON_BUSINESS_SCHEMAS
     }
+    if len(source_relations) != 184:
+        raise PlanError(f"expected 184 source relations, found {len(source_relations)}")
     missing = sorted(source_relations - set(mapping))
     unknown = sorted(set(mapping) - source_relations)
     if missing:
@@ -239,7 +243,7 @@ def validate_evidence(evidence: dict[str, Any]) -> None:
 
 def compile_plan(
     *,
-    capture: dict[str, Any],
+    inventory: dict[str, Any],
     evidence: dict[str, Any],
     model: dict[str, Any],
     target_project_ref: str,
@@ -248,11 +252,8 @@ def compile_plan(
         raise PlanError("source and target project refs must differ")
     if target_project_ref != DISPOSABLE_STAGING_PROJECT_REF:
         raise PlanError("target is not the reviewed disposable canonical staging project")
-    if capture.get("transaction_read_only") != "on":
-        raise PlanError("schema capture was not performed in a read-only transaction")
-
     validate_evidence(evidence)
-    dispositions = validate_mapping(capture, model)
+    dispositions = validate_mapping(inventory, model)
     counts = evidence["source_counts"]
     missing_batch_count = evidence["orphan_counts"][
         "inventory_movements_without_batch"
@@ -352,7 +353,7 @@ def compile_plan(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--capture", type=Path, default=DEFAULT_CAPTURE)
+    parser.add_argument("--inventory", type=Path, default=DEFAULT_INVENTORY)
     parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--target-project-ref", required=True)
@@ -364,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         plan = compile_plan(
-            capture=load_json(args.capture),
+            inventory=load_json(args.inventory),
             evidence=load_json(args.evidence),
             model=load_json(args.model),
             target_project_ref=args.target_project_ref,

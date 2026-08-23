@@ -238,7 +238,9 @@ def _tool_payload(response: dict[str, Any]) -> dict[str, Any]:
     raise ExerciseError("Live MCP tool response omitted one JSON object payload")
 
 
-def _exercise_mcp(access_token: str) -> tuple[list[str], dict[str, Any]]:
+def _exercise_mcp(
+    access_token: str, *, business_flow: bool
+) -> tuple[list[str], dict[str, Any] | None]:
     session = requests.Session()
     session.headers.update(
         {
@@ -299,6 +301,9 @@ def _exercise_mcp(access_token: str) -> tuple[list[str], dict[str, Any]]:
             timeout=30,
         )
     )
+    _tool_payload(called)
+    if not business_flow:
+        return names, None
     if DEMO_PRODUCT_ID not in json.dumps(called):
         raise ExerciseError("Live product-search tool did not return the canonical demo product")
 
@@ -422,6 +427,11 @@ def main() -> int:
         raise ExerciseError("Refusing OAuth exercise outside the reviewed staging project")
     if _required("SUPABASE_URL") != SUPABASE_URL:
         raise ExerciseError("SUPABASE_URL does not match the reviewed staging project")
+    exercise_mode = os.getenv(
+        "CANONICAL_STAGING_MCP_EXERCISE_MODE", "business_flow"
+    ).strip()
+    if exercise_mode not in {"boundary_only", "business_flow"}:
+        raise ExerciseError("Unsupported staging MCP exercise mode")
     client_id = _required("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS")
     email = _required("CANONICAL_STAGING_MCP_TEST_EMAIL")
     password = _required("CANONICAL_STAGING_MCP_TEST_PASSWORD")
@@ -484,8 +494,14 @@ def main() -> int:
     ready = requests.get(MCP_URL.removesuffix("/mcp") + "/ready", timeout=30)
     if ready.status_code != 200:
         raise ExerciseError(f"MCP readiness remained HTTP {ready.status_code}")
-    tool_names, workflow = _exercise_mcp(token["access_token"])
-    reconciliation = _reconcile_database(workflow["command_request_id"])
+    tool_names, workflow = _exercise_mcp(
+        token["access_token"], business_flow=exercise_mode == "business_flow"
+    )
+    reconciliation = (
+        _reconcile_database(workflow["command_request_id"])
+        if workflow is not None
+        else None
+    )
     evidence_dir = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
     evidence = {
@@ -502,15 +518,26 @@ def main() -> int:
         "refresh_token_issued": True,
         "mcp_readiness_verified": True,
         "mcp_tools": tool_names,
-        "live_read_tool_calls": ["erp_product_search", "erp_customer_search"],
-        "live_demo_product_verified": True,
-        "live_write_workflow": [
-            "erp_sales_order_prepare",
-            "erp_operation_approve",
-            "erp_operation_execute",
-            "erp_operation_status_get",
-        ],
-        "live_command_request_id": workflow["command_request_id"],
+        "exercise_mode": exercise_mode,
+        "live_read_tool_calls": (
+            ["erp_product_search", "erp_customer_search"]
+            if workflow is not None
+            else ["erp_product_search"]
+        ),
+        "live_demo_product_verified": workflow is not None,
+        "live_write_workflow": (
+            [
+                "erp_sales_order_prepare",
+                "erp_operation_approve",
+                "erp_operation_execute",
+                "erp_operation_status_get",
+            ]
+            if workflow is not None
+            else []
+        ),
+        "live_command_request_id": (
+            workflow["command_request_id"] if workflow is not None else None
+        ),
         "database_reconciliation": reconciliation,
     }
     (evidence_dir / "canonical-staging-mcp-oauth-e2e.json").write_text(

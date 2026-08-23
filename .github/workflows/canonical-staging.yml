@@ -1256,6 +1256,7 @@ jobs:
         if: inputs.provision_demo_data != true
         env:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+          CANONICAL_STAGING_MCP_EXERCISE_MODE: boundary_only
         run: |
           set -euo pipefail
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
@@ -1393,6 +1394,17 @@ jobs:
           cleanup_demo_api
           cleanup_demo_role_membership
           trap - EXIT
+
+      - name: Exercise hosted OAuth and MCP against the provisioned demo
+        if: inputs.provision_demo_data == true
+        env:
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+          CANONICAL_STAGING_MCP_EXERCISE_MODE: business_flow
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          python3 backend/scripts/exercise_staging_mcp_oauth.py
 
       - name: Publish staging baseline evidence
         run: |

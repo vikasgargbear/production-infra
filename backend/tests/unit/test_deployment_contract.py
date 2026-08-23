@@ -868,3 +868,7 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert '_decide(session, denial_id, user_access_token, "deny")' in exercise
     assert '"method": "tools/list"' in exercise
     assert '"name": "erp_product_search"' in exercise
+    assert "CANONICAL_STAGING_MCP_EXERCISE_MODE" in workflow
+    assert "boundary_only" in workflow
+    assert "business_flow" in workflow
+    assert 'exercise_mode not in {"boundary_only", "business_flow"}' in exercise
