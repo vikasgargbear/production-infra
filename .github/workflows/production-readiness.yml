@@ -46,11 +46,23 @@ on:
         required: false
         default: ""
         type: string
+      run_conversion_preflight:
+        description: Run aggregate-only read-only diagnostics against the production legacy source
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  canonical-conversion-preflight:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_conversion_preflight
+    uses: ./.github/workflows/canonical-conversion-preflight.yml
+    secrets: inherit
+
   canonical-free-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&

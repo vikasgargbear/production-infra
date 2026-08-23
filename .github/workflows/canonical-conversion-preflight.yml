@@ -2,6 +2,7 @@ name: Canonical conversion preflight
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

@@ -70,3 +70,11 @@ def test_conversion_preflight_workflow_cannot_write_to_production() -> None:
     assert "SUPABASE_DB_PASSWORD" not in workflow
     assert "canonical-conversion-preflight.json" in workflow
     assert "retention-days: 7" in workflow
+    assert "workflow_call:" in workflow
+
+    production_workflow = (
+        ROOT / ".github/workflows/production-readiness.yml"
+    ).read_text(encoding="utf-8")
+    assert "run_conversion_preflight:" in production_workflow
+    assert "inputs.run_conversion_preflight" in production_workflow
+    assert "uses: ./.github/workflows/canonical-conversion-preflight.yml" in production_workflow
