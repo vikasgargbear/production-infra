@@ -447,6 +447,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "def assert_calculation_totals" in provisioner
     assert provisioner.count("assert_calculation_totals(") == 7
     assert "demo calculation reconciliation compared too few totals" in provisioner
+    assert provisioner.count("returned.net_value_total,returned.gst_taxable_total") == 2
+    assert provisioner.count("returned.recipient_assessed_tax_total") >= 2
     assert "row[3] != Decimal(expected_amount)" in provisioner
     assert "row[4] != Decimal(expected_amount)" in provisioner
     assert "executed demo sales dispatch quantities changed" in provisioner

@@ -2953,7 +2953,11 @@ def reconcile_sales_return(
                    (SELECT coalesce(sum(ledger.quantity_delta),0)
                       FROM inventory.stock_ledger_entries ledger
                      WHERE ledger.org_id=returned.org_id
-                       AND ledger.inventory_document_id=document.id) AS stock_quantity_delta
+                       AND ledger.inventory_document_id=document.id) AS stock_quantity_delta,
+                   returned.net_value_total,returned.gst_taxable_total,
+                   returned.cgst_total,returned.sgst_total,returned.igst_total,
+                   returned.cess_total,returned.recipient_assessed_tax_total,
+                   returned.rounding_adjustment
               FROM sales.returns returned
               JOIN sales.return_lines line
                 ON line.org_id=returned.org_id AND line.return_id=returned.id
@@ -3055,7 +3059,11 @@ def reconcile_purchase_return(
                    (SELECT coalesce(sum(ledger.quantity_delta),0)
                       FROM inventory.stock_ledger_entries ledger
                      WHERE ledger.org_id=returned.org_id
-                       AND ledger.inventory_document_id=document.id) AS stock_quantity_delta
+                       AND ledger.inventory_document_id=document.id) AS stock_quantity_delta,
+                   returned.net_value_total,returned.gst_taxable_total,
+                   returned.cgst_total,returned.sgst_total,returned.igst_total,
+                   returned.cess_total,returned.recipient_assessed_tax_total,
+                   returned.rounding_adjustment
               FROM procurement.purchase_returns returned
               JOIN procurement.purchase_return_lines line
                 ON line.org_id=returned.org_id AND line.purchase_return_id=returned.id
