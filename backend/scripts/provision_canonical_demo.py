@@ -170,12 +170,70 @@ PREPARE_CAPABILITIES = (
     ("inventory.adjustment.prepare", "separate_approver"),
 )
 
+CALCULATION_TOTAL_FIELDS = (
+    "subtotal",
+    "discount_total",
+    "charges_total",
+    "net_value_total",
+    "gst_taxable_total",
+    "cgst_total",
+    "sgst_total",
+    "igst_total",
+    "cess_total",
+    "recipient_assessed_tax_total",
+    "rounding_adjustment",
+    "grand_total",
+)
+
 
 def required(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
         raise RuntimeError(f"missing required environment variable: {name}")
     return value
+
+
+def calculation_totals(cursor, command_request_id: str) -> dict[str, Decimal]:
+    """Load exact immutable calculator totals for one consumed command."""
+    cursor.execute(
+        """
+        SELECT convert_from(artifact.output_bytes,'UTF8')::jsonb
+          FROM calculation.artifacts artifact
+         WHERE artifact.org_id=%s AND artifact.command_request_id=%s
+           AND artifact.status='consumed'
+        """,
+        (IDS["org"], command_request_id),
+    )
+    rows = cursor.fetchall()
+    if len(rows) != 1 or not isinstance(rows[0][0], dict):
+        raise RuntimeError("demo command lacks one consumed calculation artifact")
+    totals = rows[0][0].get("totals")
+    if not isinstance(totals, dict):
+        raise RuntimeError("demo calculation artifact lacks typed totals")
+    return {
+        field: Decimal(str(totals[field]))
+        for field in CALCULATION_TOTAL_FIELDS
+        if field in totals
+    }
+
+
+def assert_calculation_totals(
+    cursor,
+    command_request_id: str,
+    actual: dict[str, Any],
+) -> None:
+    expected = calculation_totals(cursor, command_request_id)
+    compared = 0
+    for field, expected_value in expected.items():
+        if field not in actual or actual[field] is None:
+            continue
+        compared += 1
+        if Decimal(str(actual[field])) != expected_value:
+            raise RuntimeError(
+                f"demo {field} differs from immutable calculation artifact"
+            )
+    if compared < 4 or "grand_total" not in expected:
+        raise RuntimeError("demo calculation reconciliation compared too few totals")
 
 
 def demo_run_uuid(label: str) -> str:
@@ -1701,7 +1759,9 @@ def purchase_order_payload() -> dict[str, Any]:
     }
 
 
-def reconcile_purchase_order(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_purchase_order(
+    connection, resource_id: str, command_request_id: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -1726,6 +1786,7 @@ def reconcile_purchase_order(connection, resource_id: str) -> dict[str, Any]:
             raise RuntimeError("executed demo purchase order did not reconcile")
         columns = [item.name for item in cursor.description]
         result = dict(zip(columns, row))
+        assert_calculation_totals(cursor, command_request_id, result)
         result["line_ids"] = [str(item) for item in result["line_ids"]]
         for key, value in tuple(result.items()):
             if key != "line_ids" and value is not None:
@@ -2005,7 +2066,9 @@ def supplier_invoice_payload(
     }
 
 
-def reconcile_supplier_advance(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_supplier_advance(
+    connection, resource_id: str, expected_amount: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -2028,7 +2091,12 @@ def reconcile_supplier_advance(connection, resource_id: str) -> dict[str, Any]:
             (IDS["org"], resource_id),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "posted" or row[4:] != (1, 1, 1):
+        if (
+            row is None
+            or row[2] != "posted"
+            or row[3] != Decimal(expected_amount)
+            or row[4:] != (1, 1, 1)
+        ):
             raise RuntimeError("executed demo supplier advance did not reconcile")
         return {
             "id": str(row[0]),
@@ -2041,7 +2109,13 @@ def reconcile_supplier_advance(connection, resource_id: str) -> dict[str, Any]:
         }
 
 
-def reconcile_goods_receipt(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_goods_receipt(
+    connection,
+    resource_id: str,
+    *,
+    expected_accepted_quantity: str,
+    expected_free_quantity: str,
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -2067,7 +2141,13 @@ def reconcile_goods_receipt(connection, resource_id: str) -> dict[str, Any]:
             (IDS["org"], resource_id),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "posted" or row[9] != row[5] + row[6]:
+        if (
+            row is None
+            or row[2] != "posted"
+            or row[5] != Decimal(expected_accepted_quantity)
+            or row[6] != Decimal(expected_free_quantity)
+            or row[9] != row[5] + row[6]
+        ):
             raise RuntimeError("executed demo goods receipt did not reconcile")
         columns = [item.name for item in cursor.description]
         return {
@@ -2139,7 +2219,9 @@ def release_received_batch(connection, goods_receipt_id: str, batch_id: str) -> 
         }
 
 
-def reconcile_supplier_invoice(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_supplier_invoice(
+    connection, resource_id: str, command_request_id: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -2181,10 +2263,12 @@ def reconcile_supplier_invoice(connection, resource_id: str) -> dict[str, Any]:
         if row is None or row[2] != "posted" or row[12:] != (1, 1):
             raise RuntimeError("executed demo supplier invoice did not reconcile")
         columns = [item.name for item in cursor.description]
-        return {
+        result = {
             key: str(value) if value is not None else None
             for key, value in zip(columns, row)
         }
+        assert_calculation_totals(cursor, command_request_id, result)
+        return result
 
 
 def supplier_payment_payload(open_item_id: str) -> dict[str, Any]:
@@ -2202,7 +2286,12 @@ def supplier_payment_payload(open_item_id: str) -> dict[str, Any]:
     }
 
 
-def reconcile_payment(connection, resource_id: str, expected_direction: str) -> dict[str, Any]:
+def reconcile_payment(
+    connection,
+    resource_id: str,
+    expected_direction: str,
+    expected_amount: str,
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -2226,6 +2315,7 @@ def reconcile_payment(connection, resource_id: str, expected_direction: str) -> 
             row is None
             or row[2] != expected_direction
             or row[3] != "posted"
+            or row[4] != Decimal(expected_amount)
             or row[5] != 1
             or row[4] != row[6]
             or row[7] != 1
@@ -2439,7 +2529,9 @@ def exercise_sales_order(
     return evidence
 
 
-def reconcile(connection, execution: dict[str, Any]) -> dict[str, Any]:
+def reconcile(
+    connection, execution: dict[str, Any], command_request_id: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT erp_security.activate_context(%s, %s)",
@@ -2467,6 +2559,7 @@ def reconcile(connection, execution: dict[str, Any]) -> dict[str, Any]:
             raise RuntimeError("executed demo sales order did not reconcile")
         columns = [item.name for item in cursor.description]
         result = {column: str(value) if value is not None else None for column, value in zip(columns, row)}
+        assert_calculation_totals(cursor, command_request_id, result)
         cursor.execute(
             """
             SELECT count(*) FROM calculation.artifacts
@@ -2573,7 +2666,13 @@ def sales_dispatch_payload(
     }
 
 
-def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_sales_dispatch(
+    connection,
+    resource_id: str,
+    *,
+    expected_billed_quantity: str,
+    expected_free_quantity: str,
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -2631,6 +2730,14 @@ def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
         dispatched_lines = [dict(zip(columns, item)) for item in cursor.fetchall()]
         if not dispatched_lines or len(dispatched_lines) != int(result["ledger_count"]):
             raise RuntimeError("executed demo sales dispatch lacks batch lineage")
+        if sum(
+            (Decimal(str(line["billed_quantity"])) for line in dispatched_lines),
+            Decimal("0"),
+        ) != Decimal(expected_billed_quantity) or sum(
+            (Decimal(str(line["free_quantity"])) for line in dispatched_lines),
+            Decimal("0"),
+        ) != Decimal(expected_free_quantity):
+            raise RuntimeError("executed demo sales dispatch quantities changed")
         for line in dispatched_lines:
             if (
                 line["base_quantity"] != line["base_billed_quantity"] + line["base_free_quantity"]
@@ -2689,7 +2796,9 @@ def sales_invoice_payload(dispatch_lines: list[dict[str, str]]) -> dict[str, Any
     }
 
 
-def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_sales_invoice(
+    connection, resource_id: str, command_request_id: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
@@ -2731,6 +2840,7 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
             key: str(value) if value is not None else None
             for key, value in zip(columns, row)
         }
+        assert_calculation_totals(cursor, command_request_id, result)
         cursor.execute(
             """
             SELECT allocation.id AS invoice_dispatch_allocation_id,
@@ -2816,7 +2926,9 @@ def sales_return_payload(
     }
 
 
-def reconcile_sales_return(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_sales_return(
+    connection, resource_id: str, command_request_id: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT erp_security.activate_context(%s, %s)",
@@ -2863,10 +2975,12 @@ def reconcile_sales_return(connection, resource_id: str) -> dict[str, Any]:
         ):
             raise RuntimeError("executed demo sales return did not reconcile")
         columns = [item.name for item in cursor.description]
-        return {
+        result = {
             key: str(value) if value is not None else None
             for key, value in zip(columns, row)
         }
+        assert_calculation_totals(cursor, command_request_id, result)
+        return result
 
 
 def purchase_return_payload(
@@ -2914,7 +3028,9 @@ def purchase_return_payload(
     }
 
 
-def reconcile_purchase_return(connection, resource_id: str) -> dict[str, Any]:
+def reconcile_purchase_return(
+    connection, resource_id: str, command_request_id: str
+) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT erp_security.activate_context(%s, %s)",
@@ -2962,10 +3078,12 @@ def reconcile_purchase_return(connection, resource_id: str) -> dict[str, Any]:
         ):
             raise RuntimeError("executed demo purchase return did not reconcile")
         columns = [item.name for item in cursor.description]
-        return {
+        result = {
             key: str(value) if value is not None else None
             for key, value in zip(columns, row)
         }
+        assert_calculation_totals(cursor, command_request_id, result)
+        return result
 
 
 def inventory_adjustment_payload(batch_id: str, counted_base_quantity: str) -> dict[str, Any]:
@@ -3403,7 +3521,9 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         purchase_reconciliation = reconcile_purchase_order(
-            runtime, purchase_journey["executed"]["resource_id"]
+            runtime,
+            purchase_journey["executed"]["resource_id"],
+            purchase_journey["prepared"]["command_request_id"],
         )
 
     purchase_order_id = purchase_reconciliation["id"]
@@ -3420,7 +3540,9 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         advance_reconciliation = reconcile_supplier_advance(
-            runtime, advance_journey["executed"]["resource_id"]
+            runtime,
+            advance_journey["executed"]["resource_id"],
+            advance_payload["gross_amount"],
         )
 
     receipt_payload = goods_receipt_payload(
@@ -3435,7 +3557,14 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         receipt_reconciliation = reconcile_goods_receipt(
-            runtime, receipt_journey["executed"]["resource_id"]
+            runtime,
+            receipt_journey["executed"]["resource_id"],
+            expected_accepted_quantity=receipt_payload["lines"][0]["batches"][0][
+                "accepted_quantity"
+            ],
+            expected_free_quantity=receipt_payload["lines"][0]["batches"][0][
+                "free_quantity"
+            ],
         )
         batch_release_reconciliation = release_received_batch(
             runtime, receipt_reconciliation["id"], receipt_reconciliation["batch_id"]
@@ -3461,7 +3590,9 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         supplier_invoice_reconciliation = reconcile_supplier_invoice(
-            runtime, supplier_invoice_journey["executed"]["resource_id"]
+            runtime,
+            supplier_invoice_journey["executed"]["resource_id"],
+            supplier_invoice_journey["prepared"]["command_request_id"],
         )
 
     supplier_payment_request = supplier_payment_payload(
@@ -3476,14 +3607,21 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         supplier_payment_reconciliation = reconcile_payment(
-            runtime, supplier_payment_journey["executed"]["resource_id"], "disbursement"
+            runtime,
+            supplier_payment_journey["executed"]["resource_id"],
+            "disbursement",
+            supplier_payment_request["gross_amount"],
         )
 
     payload = sales_order_payload()
     preflight_sales_order(payload, evidence_dir)
     journey = exercise_sales_order(evidence_dir, payload)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
-        reconciliation = reconcile(runtime, journey["executed"])
+        reconciliation = reconcile(
+            runtime,
+            journey["executed"],
+            journey["prepared"]["command_request_id"],
+        )
 
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         dispatch_allocations = resolve_fefo_dispatch_allocations(runtime)
@@ -3499,7 +3637,10 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         dispatch_reconciliation = reconcile_sales_dispatch(
-            runtime, dispatch_journey["executed"]["resource_id"]
+            runtime,
+            dispatch_journey["executed"]["resource_id"],
+            expected_billed_quantity=dispatch_request["lines"][0]["billed_quantity"],
+            expected_free_quantity=dispatch_request["lines"][0]["free_quantity"],
         )
 
     invoice_request = sales_invoice_payload(dispatch_reconciliation["dispatch_lines"])
@@ -3512,7 +3653,9 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         invoice_reconciliation = reconcile_sales_invoice(
-            runtime, invoice_journey["executed"]["resource_id"]
+            runtime,
+            invoice_journey["executed"]["resource_id"],
+            invoice_journey["prepared"]["command_request_id"],
         )
 
     customer_receipt_request = customer_receipt_payload(
@@ -3527,7 +3670,10 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         customer_receipt_reconciliation = reconcile_payment(
-            runtime, customer_receipt_journey["executed"]["resource_id"], "receipt"
+            runtime,
+            customer_receipt_journey["executed"]["resource_id"],
+            "receipt",
+            customer_receipt_request["amount"],
         )
 
     sales_return_request = sales_return_payload(
@@ -3545,7 +3691,9 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         sales_return_reconciliation = reconcile_sales_return(
-            runtime, sales_return_journey["executed"]["resource_id"]
+            runtime,
+            sales_return_journey["executed"]["resource_id"],
+            sales_return_journey["prepared"]["command_request_id"],
         )
 
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
@@ -3567,7 +3715,9 @@ def main() -> int:
     )
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         purchase_return_reconciliation = reconcile_purchase_return(
-            runtime, purchase_return_journey["executed"]["resource_id"]
+            runtime,
+            purchase_return_journey["executed"]["resource_id"],
+            purchase_return_journey["prepared"]["command_request_id"],
         )
         saleable_quantity = current_saleable_quantity(
             runtime, receipt_reconciliation["batch_id"]

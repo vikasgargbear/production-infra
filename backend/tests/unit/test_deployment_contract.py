@@ -428,6 +428,14 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "LEFT JOIN core.audit_events audit" not in cross_table_audit
     assert "resolve_fefo_dispatch_allocations" in provisioner
     assert "conversion.multiplier" in provisioner
+    assert "def calculation_totals" in provisioner
+    assert "artifact.status='consumed'" in provisioner
+    assert "def assert_calculation_totals" in provisioner
+    assert provisioner.count("assert_calculation_totals(") == 7
+    assert "demo calculation reconciliation compared too few totals" in provisioner
+    assert "row[3] != Decimal(expected_amount)" in provisioner
+    assert "row[4] != Decimal(expected_amount)" in provisioner
+    assert "executed demo sales dispatch quantities changed" in provisioner
     assert "conversion.conversion_factor" not in provisioner
     assert "ORDER BY batch.expires_on,batch.id" in provisioner
     assert 'dispatch_reconciliation["dispatch_lines"]' in provisioner
