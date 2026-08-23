@@ -299,10 +299,10 @@
     "parties.customer_contacts": {"action": "merge", "targets": ["parties.contacts"]},
     "parties.customer_group_members": {"action": "archive_drop", "targets": []},
     "parties.customer_groups": {"action": "archive_drop", "targets": []},
-    "parties.customers": {"action": "merge", "targets": ["parties.parties", "parties.customer_accounts", "parties.tax_registrations"]},
+    "parties.customers": {"action": "merge", "targets": ["parties.parties", "parties.customer_accounts", "parties.contacts", "parties.tax_registrations"]},
     "parties.routes": {"action": "archive_drop", "targets": []},
     "parties.supplier_contacts": {"action": "merge", "targets": ["parties.contacts"]},
-    "parties.suppliers": {"action": "merge", "targets": ["parties.parties", "parties.supplier_accounts", "parties.tax_registrations", "finance.bank_accounts"]},
+    "parties.suppliers": {"action": "merge", "targets": ["parties.parties", "parties.supplier_accounts", "parties.contacts", "parties.tax_registrations", "finance.bank_accounts"]},
     "parties.territories": {"action": "archive_drop", "targets": []},
 
     "procurement.branch_budgets": {"action": "archive_drop", "targets": []},

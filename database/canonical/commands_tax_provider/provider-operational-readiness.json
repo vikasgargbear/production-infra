@@ -1,5 +1,13 @@
 {
   "evidence_version": "1.0.0",
+  "external_provider_feature": {
+    "enabled": false,
+    "reviewed": true,
+    "release_scope": "initial_production_disabled",
+    "reason": "Product owner directed e-invoice and e-way-bill provider submission to remain disabled for the initial production release; internal GST calculation and tax documents remain enabled.",
+    "reviewed_by": "product_owner_direction",
+    "reviewed_at": "2026-08-23"
+  },
   "adapter_contract": {
     "reviewed": true,
     "adapter_name": "aasopharma_provider_neutral_worker_boundary",

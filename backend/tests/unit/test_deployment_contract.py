@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -403,6 +404,19 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert provisioner.count('"approved_replay": approved_replay') == 2
     assert provisioner.count('"executed_replay": executed_replay') == 2
     assert provisioner.count('idempotency_replayed") is not True') == 4
+    assert '"customer_contact"' in provisioner
+    assert '"supplier_contact"' in provisioner
+    assert provisioner.count("INSERT INTO parties.contacts") == 2
+    assert "def reconcile_party_master" in provisioner
+    assert 're.fullmatch(r"[6-9][0-9]{9}"' in provisioner
+    assert 'endswith("@example.invalid")' in provisioner
+    canonical_model = json.loads(_read("docs/architecture/canonical-data-model.json"))
+    app_contract = json.loads(_read("docs/architecture/app-data-contract.json"))
+    for source in ("parties.customers", "parties.suppliers"):
+        assert "parties.contacts" in canonical_model["source_mapping"][source]["targets"]
+        assert "parties.contacts" in app_contract["legacy_relation_map"][source][
+            "also_targets"
+        ]
     cross_table_audit = provisioner.split(
         "def reconcile_cross_table_invariants", 1
     )[1].split("\ndef main", 1)[0]
@@ -461,6 +475,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     ):
         assert operation in provisioner
     for reconciliation in (
+        "party_master_reconciliation",
         "purchase_order_reconciliation",
         "supplier_advance_reconciliation",
         "goods_receipt_reconciliation",

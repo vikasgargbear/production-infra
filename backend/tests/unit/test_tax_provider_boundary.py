@@ -248,8 +248,6 @@ def test_readiness_has_only_external_promotion_evidence_remaining() -> None:
         (COMMAND_ROOT / "provider-operational-readiness.json").read_text(encoding="utf-8")
     )
     assert audit.blockers(evidence) == [
-        "sandbox_conformance_unreviewed",
-        "provider_credentials_unprovisioned",
         "einvoice_applicability_unreviewed",
     ]
 

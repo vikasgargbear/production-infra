@@ -4,6 +4,7 @@
   "project_ref": "jfrairkkzxwkhbtqejnz",
   "captured_at": "2026-08-19T14:37:28.293638+00:00",
   "artifact": "artifacts/live-schema-captures/supabase-jfrairkkzxwkhbtqejnz-20260819T143728Z.json",
+  "latest_live_row_count_evidence": "database/live-row-count-evidence.json",
   "artifact_sha256": "6d833eb6152f433c473d50d463fd1b016dfcb639e8bb3ccc316c1dea7cc87406",
   "capture_sql_sha256": "5378d17844f15f19abb4289fc0acc0cffcbe5ee8a495c68b217a3964744473c5",
   "transaction_read_only": "on",

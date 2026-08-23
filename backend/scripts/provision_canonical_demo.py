@@ -56,6 +56,7 @@ IDS = {
     "customer_party": "d3000000-0000-7000-8000-000000000010",
     "customer_account": "d3000000-0000-7000-8000-000000000011",
     "customer_address": "d3000000-0000-7000-8000-000000000012",
+    "customer_contact": "d3000000-0000-7000-8000-000000000027",
     "manufacturer_party": "d3000000-0000-7000-8000-000000000013",
     "receivable_account": "d3000000-0000-7000-8000-000000000014",
     "product": "d3000000-0000-7000-8000-000000000015",
@@ -82,6 +83,7 @@ IDS = {
     "fiscal_tax_fact": "d3200000-0000-7000-8000-00000000000b",
     "cycle_count_evidence": "d3200000-0000-7000-8000-00000000000c",
     "recipient_itc_evidence": "d3200000-0000-7000-8000-00000000000d",
+    "supplier_contact": "d3200000-0000-7000-8000-00000000000e",
     "bank_ledger": "d3210000-0000-7000-8000-000000000001",
     "payable_account": "d3210000-0000-7000-8000-000000000002",
     "inventory_account": "d3210000-0000-7000-8000-000000000003",
@@ -821,6 +823,31 @@ def seed_business_master(connection) -> None:
         )
         cursor.execute(
             """
+            INSERT INTO parties.contacts (
+                org_id,id,party_id,contact_kind,name,designation,email,phone,
+                is_primary,status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,'business','Meera Nair','Procurement Manager',
+                'meera.nair@example.invalid','9876500001',true,'active',%s,%s
+            ) ON CONFLICT (org_id,id) DO UPDATE SET
+                party_id=EXCLUDED.party_id,
+                contact_kind=EXCLUDED.contact_kind,
+                name=EXCLUDED.name,
+                designation=EXCLUDED.designation,
+                email=EXCLUDED.email,
+                phone=EXCLUDED.phone,
+                is_primary=EXCLUDED.is_primary,
+                status=EXCLUDED.status,
+                updated_by_membership_id=EXCLUDED.updated_by_membership_id,
+                row_version=parties.contacts.row_version+1
+            """,
+            (
+                IDS["org"], IDS["customer_contact"], IDS["customer_party"],
+                IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            """
             INSERT INTO parties.customer_accounts (
                 org_id, id, party_id, customer_code, credit_limit, credit_days,
                 default_receivable_account_id, status,
@@ -1042,6 +1069,31 @@ def seed_end_to_end_master(connection) -> None:
             (
                 IDS["org"], IDS["supplier_gstin"], IDS["supplier_party"],
                 SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO parties.contacts (
+                org_id,id,party_id,contact_kind,name,designation,email,phone,
+                is_primary,status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,'billing','Arjun Mehta','Accounts Manager',
+                'arjun.mehta@example.invalid','9876500002',true,'active',%s,%s
+            ) ON CONFLICT (org_id,id) DO UPDATE SET
+                party_id=EXCLUDED.party_id,
+                contact_kind=EXCLUDED.contact_kind,
+                name=EXCLUDED.name,
+                designation=EXCLUDED.designation,
+                email=EXCLUDED.email,
+                phone=EXCLUDED.phone,
+                is_primary=EXCLUDED.is_primary,
+                status=EXCLUDED.status,
+                updated_by_membership_id=EXCLUDED.updated_by_membership_id,
+                row_version=parties.contacts.row_version+1
+            """,
+            (
+                IDS["org"], IDS["supplier_contact"], IDS["supplier_party"],
+                IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
 
@@ -3012,6 +3064,84 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         return str(row[0])
 
 
+def reconcile_party_master(connection) -> dict[str, Any]:
+    """Prove customer and supplier contact facts through the runtime RLS path."""
+    expected = {
+        IDS["customer_contact"]: (IDS["customer_party"], "business", True, False),
+        IDS["supplier_contact"]: (IDS["supplier_party"], "billing", False, True),
+    }
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT contact.id,contact.party_id,contact.contact_kind,contact.name,
+                   contact.designation,contact.email,contact.phone,
+                   contact.is_primary,contact.status,
+                   EXISTS (
+                       SELECT 1 FROM parties.customer_accounts customer
+                        WHERE customer.org_id=contact.org_id
+                          AND customer.party_id=contact.party_id
+                          AND customer.status='active'
+                   ) AS has_customer_account,
+                   EXISTS (
+                       SELECT 1 FROM parties.supplier_accounts supplier
+                        WHERE supplier.org_id=contact.org_id
+                          AND supplier.party_id=contact.party_id
+                          AND supplier.status='active'
+                   ) AS has_supplier_account,
+                   (SELECT count(*) FROM parties.addresses address
+                     WHERE address.org_id=contact.org_id
+                       AND address.party_id=contact.party_id
+                       AND address.status='active') AS active_address_count,
+                   (SELECT count(*) FROM parties.tax_registrations registration
+                     WHERE registration.org_id=contact.org_id
+                       AND registration.party_id=contact.party_id
+                       AND registration.status='active') AS active_tax_registration_count
+              FROM parties.contacts contact
+             WHERE contact.org_id=%s AND contact.id=ANY(CAST(%s AS uuid[]))
+             ORDER BY contact.id
+            """,
+            (IDS["org"], list(expected)),
+        )
+        columns = [item.name for item in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    if len(rows) != len(expected):
+        raise RuntimeError("demo customer and supplier contacts are not both RLS-visible")
+    for row in rows:
+        expected_party, expected_kind, customer_role, supplier_role = expected[
+            str(row["id"])
+        ]
+        if (
+            str(row["party_id"]) != expected_party
+            or row["contact_kind"] != expected_kind
+            or not row["name"]
+            or not row["designation"]
+            or not str(row["email"]).endswith("@example.invalid")
+            or re.fullmatch(r"[6-9][0-9]{9}", str(row["phone"])) is None
+            or row["is_primary"] is not True
+            or row["status"] != "active"
+            or row["has_customer_account"] is not customer_role
+            or row["has_supplier_account"] is not supplier_role
+            or row["active_address_count"] < 1
+            or row["active_tax_registration_count"] < 1
+        ):
+            raise RuntimeError(f"demo party contact master did not reconcile: {row}")
+    return {
+        "contact_count": len(rows),
+        "contacts": [
+            {
+                key: str(value) if value is not None else None
+                for key, value in row.items()
+                if key not in {"email", "phone"}
+            }
+            for row in rows
+        ],
+    }
+
+
 def reconcile_cross_table_invariants(
     connection,
     *,
@@ -3256,6 +3386,7 @@ def main() -> int:
         seed_business_master(bootstrap)
         seed_end_to_end_master(bootstrap)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+        party_master_reconciliation = reconcile_party_master(runtime)
         verify_fiscal_tax_fact(runtime)
         activate_demo_product(runtime)
         with runtime.cursor() as cursor:
@@ -3490,6 +3621,7 @@ def main() -> int:
         ).hexdigest(),
         "reference_scope": "demo subset; not a complete production tax dataset",
         "transaction_scope": "canonical day-to-day purchase, sales, inventory, return, and settlement actions",
+        "party_master_reconciliation": party_master_reconciliation,
         "purchase_order_reconciliation": purchase_reconciliation,
         "supplier_advance_reconciliation": advance_reconciliation,
         "goods_receipt_reconciliation": receipt_reconciliation,

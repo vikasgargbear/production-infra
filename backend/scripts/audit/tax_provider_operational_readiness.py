@@ -50,40 +50,54 @@ def blockers(payload: dict) -> list[str]:
     ):
         blocked.append("adapter_contract_unreviewed")
 
-    sandbox = payload.get("sandbox_conformance", {})
-    if not (
-        sandbox.get("reviewed") is True
-        and sandbox.get("report_uri")
-        and SHA256.fullmatch(str(sandbox.get("report_sha256", "")))
-        and sandbox.get("reviewed_by")
-        and sandbox.get("reviewed_at")
-    ):
-        blocked.append("sandbox_conformance_unreviewed")
+    feature = payload.get("external_provider_feature", {})
+    provider_enabled = feature.get("enabled") is True
+    provider_deferred = (
+        feature.get("enabled") is False
+        and feature.get("reviewed") is True
+        and feature.get("release_scope") == "initial_production_disabled"
+        and feature.get("reason")
+        and feature.get("reviewed_by")
+        and feature.get("reviewed_at")
+    )
+    if not provider_enabled and not provider_deferred:
+        blocked.append("provider_feature_state_unreviewed")
 
-    credentials = payload.get("credential_provisioning", {})
-    if credentials.get("secret_values_stored") is not False:
-        blocked.append("credential_evidence_contains_secret")
-    if not (
-        credentials.get("provisioned_outside_repository") is True
-        and credentials.get("static_indian_egress_provisioned") is True
-        and credentials.get("provider_ip_allowlist_provisioned") is True
-        and credentials.get("evidence_reference")
-        and credentials.get("reviewed_by")
-        and credentials.get("reviewed_at")
-    ):
-        blocked.append("provider_credentials_unprovisioned")
+    if provider_enabled:
+        sandbox = payload.get("sandbox_conformance", {})
+        if not (
+            sandbox.get("reviewed") is True
+            and sandbox.get("report_uri")
+            and SHA256.fullmatch(str(sandbox.get("report_sha256", "")))
+            and sandbox.get("reviewed_by")
+            and sandbox.get("reviewed_at")
+        ):
+            blocked.append("sandbox_conformance_unreviewed")
 
-    route = payload.get("provider_route", {})
-    if not (
-        route.get("reviewed") is True
-        and route.get("route_kind") == "authenticated_internal_worker_boundary"
-        and route.get("authentication_contract") == "bearer_plus_raw_body_hmac_v1"
-        and route.get("database_principal") == "erp_tax_provider"
-        and route.get("evidence_reference")
-        and route.get("reviewed_by")
-        and route.get("reviewed_at")
-    ):
-        blocked.append("provider_route_unreviewed")
+        credentials = payload.get("credential_provisioning", {})
+        if credentials.get("secret_values_stored") is not False:
+            blocked.append("credential_evidence_contains_secret")
+        if not (
+            credentials.get("provisioned_outside_repository") is True
+            and credentials.get("static_indian_egress_provisioned") is True
+            and credentials.get("provider_ip_allowlist_provisioned") is True
+            and credentials.get("evidence_reference")
+            and credentials.get("reviewed_by")
+            and credentials.get("reviewed_at")
+        ):
+            blocked.append("provider_credentials_unprovisioned")
+
+        route = payload.get("provider_route", {})
+        if not (
+            route.get("reviewed") is True
+            and route.get("route_kind") == "authenticated_internal_worker_boundary"
+            and route.get("authentication_contract") == "bearer_plus_raw_body_hmac_v1"
+            and route.get("database_principal") == "erp_tax_provider"
+            and route.get("evidence_reference")
+            and route.get("reviewed_by")
+            and route.get("reviewed_at")
+        ):
+            blocked.append("provider_route_unreviewed")
 
     applicability = payload.get("einvoice_applicability", {})
     if not (
