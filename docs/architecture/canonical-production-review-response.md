@@ -165,6 +165,15 @@ applicability rules, provider conformance, credentials, and network evidence.
 concurrent REST/MCP probe must be rerun against the regenerated baseline before
 its added contention claim is promoted.
 
+The latest reruns did not reach that probe. Run `32658718261` applied the
+hash-approved baseline but failed isolated-role verification with a Supavisor
+`EAUTHQUERY` timeout. Run `32659048918` failed the same gate when the pooler
+dropped the client startup handshake. After bounding the Nano pool to five
+database connections per role/database combination, run `32659214897` confirmed
+the configuration and again failed the gate with Supavisor
+`ECIRCUITBREAKER` while retrieving `erp_runtime` credentials. No further blind
+retry is authorized; the hosted business-journey evidence remains unpromoted.
+
 **Production:** blocked; preserve-and-convert required. Do not run
 `supabase db push`, reset production, or apply the canonical baseline in place.
 
