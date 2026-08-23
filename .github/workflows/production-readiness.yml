@@ -52,7 +52,9 @@ permissions:
 
 jobs:
   canonical-free-staging:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy_canonical_staging
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.deploy_canonical_staging || inputs.provision_canonical_demo)
     uses: ./.github/workflows/canonical-staging.yml
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING

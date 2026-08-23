@@ -589,6 +589,10 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "DROP SCHEMA auth" not in workflow
     assert "DROP SCHEMA storage" not in workflow
     assert "reset_canonical_staging:" in production_workflow
+    assert (
+        "(inputs.deploy_canonical_staging || inputs.provision_canonical_demo)"
+        in production_workflow
+    )
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
     assert "rotate_canonical_staging_roles:" in production_workflow
     assert "rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}" in production_workflow
