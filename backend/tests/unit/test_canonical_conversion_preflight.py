@@ -27,8 +27,19 @@ def test_conversion_preflight_is_one_aggregate_only_read_query() -> None:
         "duplicate_document_number_groups",
         "validation_counts",
         "status_counts",
+        "contact_counts",
+        "exact_totals",
     ):
         assert f"'{section}'" in sql
+
+    for exact_value in (
+        "sum(final_amount)",
+        "sum(invoice_total)",
+        "sum(payment_amount)",
+        "sum(allocated_amount)",
+        "sum(quantity_available * coalesce(unit_cost,0))",
+    ):
+        assert exact_value in sql
 
 
 def test_conversion_preflight_covers_every_counted_business_flow() -> None:

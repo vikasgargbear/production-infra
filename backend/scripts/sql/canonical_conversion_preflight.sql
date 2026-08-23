@@ -83,14 +83,176 @@ WITH source_counts AS (
         'supplier_invoices', (SELECT coalesce(jsonb_object_agg(status,row_count),'{}'::jsonb) FROM (SELECT coalesce(invoice_status,'null') status,count(*) row_count FROM procurement.supplier_invoices GROUP BY invoice_status) grouped),
         'purchase_returns', (SELECT coalesce(jsonb_object_agg(status,row_count),'{}'::jsonb) FROM (SELECT coalesce(approval_status,'null') status,count(*) row_count FROM procurement.purchase_returns GROUP BY approval_status) grouped)
     ) AS value
+), contact_counts AS (
+    SELECT jsonb_build_object(
+        'customer_primary_contacts', (SELECT count(*) FROM parties.customers WHERE NOT coalesce(is_deleted,false) AND (nullif(btrim(contact_person_name),'') IS NOT NULL OR nullif(btrim(contact_person_phone),'') IS NOT NULL OR nullif(btrim(contact_person_email),'') IS NOT NULL)),
+        'customer_primary_emails', (SELECT count(*) FROM parties.customers WHERE NOT coalesce(is_deleted,false) AND nullif(btrim(contact_person_email),'') IS NOT NULL),
+        'customer_business_endpoints', (SELECT count(*) FROM parties.customers WHERE NOT coalesce(is_deleted,false) AND (nullif(btrim(primary_phone),'') IS NOT NULL OR nullif(btrim(primary_email),'') IS NOT NULL)),
+        'supplier_primary_contacts', (SELECT count(*) FROM parties.suppliers WHERE NOT coalesce(is_deleted,false) AND (nullif(btrim(contact_person_name),'') IS NOT NULL OR nullif(btrim(contact_person_phone),'') IS NOT NULL)),
+        'supplier_business_endpoints', (SELECT count(*) FROM parties.suppliers WHERE NOT coalesce(is_deleted,false) AND (nullif(btrim(primary_phone),'') IS NOT NULL OR nullif(btrim(primary_email),'') IS NOT NULL))
+    ) AS value
+), exact_totals AS (
+    SELECT jsonb_build_object(
+        'sales_orders', (SELECT jsonb_build_object(
+            'subtotal', coalesce(sum(subtotal_amount),0)::text,
+            'discount', coalesce(sum(discount_amount + scheme_discount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'cess', coalesce(sum(cess_amount),0)::text,
+            'grand_total', coalesce(sum(final_amount),0)::text
+        ) FROM sales.orders WHERE NOT coalesce(is_deleted,false)),
+        'sales_order_lines', (SELECT jsonb_build_object(
+            'billed_quantity', coalesce(sum(quantity),0)::text,
+            'free_quantity', coalesce(sum(free_quantity),0)::text,
+            'discount', coalesce(sum(discount_amount + scheme_discount_amount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'cess', coalesce(sum(cess_amount),0)::text,
+            'line_total', coalesce(sum(line_total),0)::text
+        ) FROM sales.order_items),
+        'dispatch_lines', (SELECT jsonb_build_object(
+            'dispatched_quantity', coalesce(sum(dispatched_quantity),0)::text,
+            'delivered_quantity', coalesce(sum(delivered_quantity),0)::text,
+            'returned_quantity', coalesce(sum(returned_quantity),0)::text,
+            'damaged_quantity', coalesce(sum(damaged_quantity),0)::text
+        ) FROM sales.delivery_challan_items),
+        'sales_invoices', (SELECT jsonb_build_object(
+            'subtotal', coalesce(sum(subtotal_amount),0)::text,
+            'discount', coalesce(sum(discount_amount + scheme_discount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'cess', coalesce(sum(cess_amount),0)::text,
+            'tax', coalesce(sum(total_tax_amount),0)::text,
+            'grand_total', coalesce(sum(final_amount),0)::text,
+            'paid', coalesce(sum(paid_amount),0)::text
+        ) FROM sales.invoices WHERE NOT coalesce(is_deleted,false)),
+        'sales_invoice_lines', (SELECT jsonb_build_object(
+            'billed_quantity', coalesce(sum(quantity),0)::text,
+            'free_quantity', coalesce(sum(free_quantity),0)::text,
+            'discount', coalesce(sum(discount_amount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'cess', coalesce(sum(cess_amount),0)::text,
+            'tax', coalesce(sum(total_tax_amount),0)::text,
+            'line_total', coalesce(sum(line_total),0)::text
+        ) FROM sales.invoice_items),
+        'sales_returns', (SELECT jsonb_build_object(
+            'net', coalesce(sum(return_amount),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'grand_total', coalesce(sum(total_amount),0)::text
+        ) FROM sales.sales_returns WHERE NOT coalesce(is_deleted,false)),
+        'sales_return_lines', (SELECT jsonb_build_object(
+            'return_quantity', coalesce(sum(return_quantity),0)::text,
+            'saleable_quantity', coalesce(sum(saleable_quantity),0)::text,
+            'damaged_quantity', coalesce(sum(damaged_quantity),0)::text,
+            'return_value', coalesce(sum(return_value),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text
+        ) FROM sales.sales_return_items),
+        'purchase_orders', (SELECT jsonb_build_object(
+            'subtotal', coalesce(sum(subtotal_amount),0)::text,
+            'discount', coalesce(sum(discount_amount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'cess', coalesce(sum(cess_amount),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text,
+            'grand_total', coalesce(sum(total_amount),0)::text
+        ) FROM procurement.purchase_orders),
+        'purchase_order_lines', (SELECT jsonb_build_object(
+            'billed_quantity', coalesce(sum(ordered_quantity),0)::text,
+            'free_quantity', coalesce(sum(free_quantity),0)::text,
+            'discount', coalesce(sum(discount_amount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text,
+            'line_total', coalesce(sum(line_total),0)::text
+        ) FROM procurement.purchase_order_items),
+        'goods_receipt_lines', (SELECT jsonb_build_object(
+            'received_quantity', coalesce(sum(received_quantity),0)::text,
+            'accepted_quantity', coalesce(sum(accepted_quantity),0)::text,
+            'rejected_quantity', coalesce(sum(rejected_quantity),0)::text,
+            'free_quantity', coalesce(sum(free_quantity),0)::text
+        ) FROM procurement.grn_items),
+        'supplier_invoices', (SELECT jsonb_build_object(
+            'subtotal', coalesce(sum(subtotal_amount),0)::text,
+            'discount', coalesce(sum(discount_amount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'cess', coalesce(sum(cess_amount),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text,
+            'grand_total', coalesce(sum(invoice_total),0)::text,
+            'paid', coalesce(sum(paid_amount),0)::text
+        ) FROM procurement.supplier_invoices),
+        'supplier_invoice_lines', (SELECT jsonb_build_object(
+            'billed_quantity', coalesce(sum(quantity),0)::text,
+            'free_quantity', coalesce(sum(free_quantity),0)::text,
+            'discount', coalesce(sum(discount_amount),0)::text,
+            'taxable', coalesce(sum(taxable_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'line_total', coalesce(sum(total_amount),0)::text
+        ) FROM procurement.supplier_invoice_items),
+        'purchase_returns', (SELECT jsonb_build_object(
+            'net', coalesce(sum(return_amount),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text,
+            'cgst', coalesce(sum(cgst_amount),0)::text,
+            'sgst', coalesce(sum(sgst_amount),0)::text,
+            'igst', coalesce(sum(igst_amount),0)::text,
+            'grand_total', coalesce(sum(total_amount),0)::text
+        ) FROM procurement.purchase_returns),
+        'purchase_return_lines', (SELECT jsonb_build_object(
+            'return_quantity', coalesce(sum(return_quantity),0)::text,
+            'saleable_quantity', coalesce(sum(saleable_quantity),0)::text,
+            'damaged_quantity', coalesce(sum(damaged_quantity),0)::text,
+            'return_value', coalesce(sum(return_value),0)::text,
+            'tax', coalesce(sum(tax_amount),0)::text
+        ) FROM procurement.purchase_return_items),
+        'payments', (SELECT jsonb_build_object(
+            'amount', coalesce(sum(payment_amount),0)::text,
+            'allocated', coalesce(sum(allocated_amount),0)::text,
+            'unallocated', coalesce(sum(unallocated_amount),0)::text
+        ) FROM financial.payments WHERE NOT coalesce(is_deleted,false)),
+        'allocations', (SELECT jsonb_build_object(
+            'amount', coalesce(sum(allocated_amount),0)::text,
+            'discount', coalesce(sum(discount_amount),0)::text,
+            'write_off', coalesce(sum(write_off_amount),0)::text
+        ) FROM financial.allocations),
+        'inventory_movements', (SELECT jsonb_build_object(
+            'quantity', coalesce(sum(quantity),0)::text,
+            'base_quantity', coalesce(sum(base_quantity),0)::text,
+            'total_cost', coalesce(sum(total_cost),0)::text
+        ) FROM inventory.inventory_movements),
+        'stock_positions', (SELECT jsonb_build_object(
+            'available_quantity', coalesce(sum(quantity_available),0)::text,
+            'reserved_quantity', coalesce(sum(quantity_reserved),0)::text,
+            'quarantine_quantity', coalesce(sum(quantity_quarantine),0)::text,
+            'inventory_value', coalesce(sum(quantity_available * coalesce(unit_cost,0)),0)::text
+        ) FROM inventory.location_wise_stock)
+    ) AS value
 )
 SELECT jsonb_build_object(
-    'contract_version','1.0.0',
+    'contract_version','1.1.0',
     'transaction_read_only',current_setting('transaction_read_only'),
     'source_counts',(SELECT value FROM source_counts),
     'orphan_counts',(SELECT value FROM orphan_counts),
     'zero_line_headers',(SELECT value FROM zero_line_headers),
     'duplicate_document_number_groups',(SELECT value FROM duplicate_numbers),
     'validation_counts',(SELECT value FROM validation_counts),
-    'status_counts',(SELECT value FROM status_counts)
+    'status_counts',(SELECT value FROM status_counts),
+    'contact_counts',(SELECT value FROM contact_counts),
+    'exact_totals',(SELECT value FROM exact_totals)
 ) AS canonical_conversion_preflight;
