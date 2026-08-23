@@ -8,6 +8,15 @@
     "reviewed_by": "product_owner_direction",
     "reviewed_at": "2026-08-23"
   },
+  "release_compliance_handling": {
+    "reviewed": true,
+    "mode": "manual_outside_application",
+    "applicability_determined": false,
+    "owner": "finance_operator",
+    "reason": "The initial production release does not submit e-invoices or e-way bills. Finance remains responsible for determining applicability and completing any required submission outside this application.",
+    "reviewed_by": "product_owner_direction",
+    "reviewed_at": "2026-08-24"
+  },
   "adapter_contract": {
     "reviewed": true,
     "adapter_name": "aasopharma_provider_neutral_worker_boundary",

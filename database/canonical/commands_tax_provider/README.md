@@ -22,16 +22,20 @@ Supported adapter contracts are `nic_irp_v1`, `licensed_gsp_irp_v1`,
 `nic_eway_v1`, and `licensed_gsp_eway_v1`. These are code allowlist identities,
 not claims that an adapter or provider account has been provisioned.
 
-Production remains blocked until operators provision sandbox/production
-credentials outside PostgreSQL, provide required Indian static egress and IP
-allowlisting, pin the adapter implementation to the current official schema,
-and pass official generation, duplicate, signed-QR, cancellation, regeneration,
-expiry, and failure conformance cases.
+External provider submission remains disabled for the initial production
+release. Finance owns applicability review and any required e-invoice or
+e-way-bill submission outside this application. Enabling provider submission
+requires operators to provision sandbox/production credentials outside
+PostgreSQL, provide required Indian static egress and IP allowlisting, pin the
+adapter implementation to the current official schema, and pass official
+generation, duplicate, signed-QR, cancellation, regeneration, expiry, and
+failure conformance cases.
 
 E-invoice generation also fails closed until the canonical model contains a
 reviewed PAN/fiscal-year AATO profile and effective applicability/reporting-
 window release. `provider-operational-readiness.json` deliberately contains no
-secrets and remains blocked. The production CI audit requires reviewed adapter
-and official-schema identity, sandbox conformance report hash, non-secret
-credential-provisioning evidence, static Indian egress/IP allowlisting or a
-licensed GSP route, and e-invoice applicability evidence.
+secrets. For a provider-disabled release, the production CI audit requires a
+reviewed manual-compliance owner and does not claim legal inapplicability. If
+provider submission is enabled later, the audit requires sandbox conformance,
+non-secret credential-provisioning evidence, static Indian egress/IP
+allowlisting or a licensed GSP route, and e-invoice applicability evidence.

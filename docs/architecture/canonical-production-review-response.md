@@ -128,6 +128,18 @@ requires a separate canonical target, a read-only source snapshot, deterministic
 ID maps, ordered conversion, exact reconciliation, application cutover, and a
 tested rollback to the source.
 
+### 9. Initial-release e-Invoice handling
+
+**Disposition: provider submission deferred by product-owner direction.**
+
+The initial production release will not submit e-invoices or e-way bills. The
+provider boundary remains hard-disabled in application code. Finance owns the
+applicability decision and any required submission outside this application.
+This decision removes provider integration and applicability evidence as a
+blocker for a provider-disabled release; it does not claim that the organization
+is legally exempt. Enabling submission later still requires reviewed
+applicability rules, provider conformance, credentials, and network evidence.
+
 ## Changes made after review
 
 - Added transaction-scoped same-key serialization before all 12 prepare paths.
@@ -139,6 +151,9 @@ tested rollback to the source.
   `len(outbox)`; the prior unrun path incorrectly accessed a nonexistent
   `count` field.
 - Added deterministic unit assertions for the prepare lock and approval lock.
+- Recorded the provider-disabled release mode with finance-owned manual
+  compliance handling; the operational audit now requires applicability
+  evidence only when software provider submission is enabled.
 
 ## Verdict
 
@@ -161,5 +176,5 @@ its added contention claim is promoted.
 4. Complete a backup and restore drill and document retention approval.
 5. Rerun the full live REST/MCP matrix, including concurrent prepare, approve,
    and execute, against the converted shadow target.
-6. Obtain finance/legal classification for e-Invoice applicability before its
-   provider feature can be promoted.
+6. Before enabling the provider feature, obtain finance classification for
+   e-Invoice applicability and complete the provider operational evidence.

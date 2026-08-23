@@ -141,9 +141,7 @@ def test_operational_readiness_audit_has_exact_expected_blockers() -> None:
     audit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(audit)
     evidence = json.loads((ROOT / "provider-operational-readiness.json").read_text())
-    assert audit.blockers(evidence) == [
-        "einvoice_applicability_unreviewed",
-    ]
+    assert audit.blockers(evidence) == []
     enabled = json.loads(json.dumps(evidence))
     enabled["external_provider_feature"]["enabled"] = True
     assert audit.blockers(enabled) == [

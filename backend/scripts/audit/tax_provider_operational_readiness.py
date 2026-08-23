@@ -63,6 +63,19 @@ def blockers(payload: dict) -> list[str]:
     if not provider_enabled and not provider_deferred:
         blocked.append("provider_feature_state_unreviewed")
 
+    if provider_deferred:
+        compliance = payload.get("release_compliance_handling", {})
+        if not (
+            compliance.get("reviewed") is True
+            and compliance.get("mode") == "manual_outside_application"
+            and compliance.get("applicability_determined") is False
+            and compliance.get("owner") == "finance_operator"
+            and compliance.get("reason")
+            and compliance.get("reviewed_by")
+            and compliance.get("reviewed_at")
+        ):
+            blocked.append("manual_compliance_handling_unreviewed")
+
     if provider_enabled:
         sandbox = payload.get("sandbox_conformance", {})
         if not (
@@ -99,15 +112,15 @@ def blockers(payload: dict) -> list[str]:
         ):
             blocked.append("provider_route_unreviewed")
 
-    applicability = payload.get("einvoice_applicability", {})
-    if not (
-        applicability.get("reviewed") is True
-        and applicability.get("profile_contract_version")
-        and applicability.get("rule_release_id")
-        and applicability.get("reviewed_by")
-        and applicability.get("reviewed_at")
-    ):
-        blocked.append("einvoice_applicability_unreviewed")
+        applicability = payload.get("einvoice_applicability", {})
+        if not (
+            applicability.get("reviewed") is True
+            and applicability.get("profile_contract_version")
+            and applicability.get("rule_release_id")
+            and applicability.get("reviewed_by")
+            and applicability.get("reviewed_at")
+        ):
+            blocked.append("einvoice_applicability_unreviewed")
     return blocked
 
 

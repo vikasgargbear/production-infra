@@ -238,7 +238,7 @@ def test_database_commands_bind_completion_to_immutable_request_identity() -> No
         assert fragment in sql
 
 
-def test_readiness_has_only_external_promotion_evidence_remaining() -> None:
+def test_disabled_provider_release_has_reviewed_manual_compliance_handling() -> None:
     audit_path = REPO / "backend/scripts/audit/tax_provider_operational_readiness.py"
     spec = importlib.util.spec_from_file_location("tax_provider_readiness_boundary", audit_path)
     assert spec and spec.loader
@@ -247,9 +247,9 @@ def test_readiness_has_only_external_promotion_evidence_remaining() -> None:
     evidence = json.loads(
         (COMMAND_ROOT / "provider-operational-readiness.json").read_text(encoding="utf-8")
     )
-    assert audit.blockers(evidence) == [
-        "einvoice_applicability_unreviewed",
-    ]
+    assert audit.blockers(evidence) == []
+    evidence["release_compliance_handling"]["reviewed"] = False
+    assert audit.blockers(evidence) == ["manual_compliance_handling_unreviewed"]
 
 
 def test_render_declares_all_three_unique_provider_secrets() -> None:
