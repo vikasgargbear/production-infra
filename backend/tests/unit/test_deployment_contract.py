@@ -211,6 +211,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert workflow.count("connect_timeout=15") == 7
     assert "application_name=canonical_staging_ci" in workflow
     assert "application_name=canonical_staging_verify" in workflow
+    assert workflow.count("gssencmode=disable") >= 2
     assert "for attempt in $(seq 1 3)" in workflow
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
@@ -249,9 +250,15 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "verify_role_with_retry(canary_role, canary_password, session_port)" in workflow
     assert "verify_role_with_retry(canary_role, canary_password, transaction_port)" in workflow
     assert "for role, password in expected_roles.items()" in workflow
-    assert "for attempt in range(1, 4):" in workflow
+    assert "for attempt in range(1, 3):" in workflow
+    assert "if attempt < 2:" in workflow
     assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
     assert "Transaction pooler selected after session-mode canary failed" in workflow
+    assert "Diagnose bounded Supavisor role verification failure" in workflow
+    assert "/analytics/endpoints/logs" in workflow
+    assert "source = 'supavisor_logs'" in workflow
+    assert "EAUTHQUERY" in workflow
+    assert "ECIRCUITBREAKER" in workflow
     assert "CANONICAL_ACTIVE_POOLER_PORT" in workflow
     assert "CANONICAL_ACTIVE_POOLER_MODE" in workflow
     assert 'port="$CANONICAL_ACTIVE_POOLER_PORT"' in workflow
@@ -592,7 +599,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "PYTHONPATH=backend PORT=8090 python3 -m uvicorn" in workflow
     assert "for attempt in 1 2 3 4 5" in workflow
     assert "def verify_role_with_retry(role, password, port):" in workflow
-    assert "for attempt in range(1, 4):" in workflow
+    assert "for attempt in range(1, 3):" in workflow
     assert "Canonical CI API traceback" in workflow
     assert "postgresql://<redacted>@" in workflow
 

@@ -195,7 +195,7 @@ jobs:
           # Canonical migrations, role DDL, and rollback fixtures require a persistent
           # PostgreSQL session. Supabase reserves 6543 transaction mode for short-lived
           # serverless traffic; the IPv4 session pooler is exposed on 5432.
-          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_staging_ci"
+          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_staging_ci"
           database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
           echo "::add-mask::$database_url"
           echo "::add-mask::$psycopg_database_url"
@@ -874,7 +874,7 @@ jobs:
           def verify_role(role, password, port):
               url = (
                   f"postgresql://{role}.{ref}:{quote(password, safe='')}"
-                  f"@{host}:{port}/postgres?sslmode=require&connect_timeout=5&application_name=canonical_staging_verify"
+                  f"@{host}:{port}/postgres?sslmode=require&gssencmode=disable&connect_timeout=5&application_name=canonical_staging_verify"
               )
               with psycopg2.connect(url, connect_timeout=5) as connection:
                   with connection.cursor() as cursor:
@@ -887,13 +887,13 @@ jobs:
 
           def verify_role_with_retry(role, password, port):
               last_error = None
-              for attempt in range(1, 4):
+              for attempt in range(1, 3):
                   try:
                       verify_role(role, password, port)
                       return
                   except Exception as error:
                       last_error = error
-                      if attempt < 3:
+                      if attempt < 2:
                           time.sleep(5)
               raise last_error
 
@@ -922,7 +922,7 @@ jobs:
               admin_password = quote(os.environ["SUPABASE_DB_PASSWORD"], safe="")
               psycopg_url = (
                   f"postgresql://postgres.{ref}:{admin_password}@{host}:{active_port}"
-                  "/postgres?sslmode=require&connect_timeout=15&application_name=canonical_staging_ci"
+                  "/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_staging_ci"
               )
               sqlalchemy_url = "postgresql+psycopg2://" + psycopg_url.removeprefix(
                   "postgresql://"
@@ -947,6 +947,37 @@ jobs:
                   )
                   raise
           PY
+
+      - name: Diagnose bounded Supavisor role verification failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          query=$(cat <<'SQL'
+          SELECT
+            countIf(positionCaseInsensitive(event_message, 'EAUTHQUERY') > 0) AS eauthquery_count,
+            countIf(positionCaseInsensitive(event_message, 'ECIRCUITBREAKER') > 0) AS circuit_breaker_count,
+            countIf(positionCaseInsensitive(event_message, 'worker_not_found') > 0) AS worker_not_found_count,
+            countIf(positionCaseInsensitive(event_message, 'authentication') > 0) AS authentication_count,
+            count(*) AS supavisor_event_count
+          FROM logs
+          WHERE source = 'supavisor_logs'
+            AND timestamp >= now() - INTERVAL 10 MINUTE
+          SQL
+          )
+          response=$(mktemp)
+          if curl --fail --silent --show-error --get \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --data-urlencode "sql=$query" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/analytics/endpoints/logs" \
+            >"$response"; then
+            summary=$(jq -c '{result,error}' "$response")
+            summary=${summary//'%'/'%25'}
+            summary=${summary//$'\r'/'%0D'}
+            summary=${summary//$'\n'/'%0A'}
+            echo "::notice title=Bounded Supavisor diagnostic::$summary"
+          else
+            echo "::warning title=Bounded Supavisor diagnostic unavailable::Management API log query failed"
+          fi
 
       - name: Run canonical rollback fixtures on live free staging
         run: |

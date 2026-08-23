@@ -92,3 +92,5 @@ def test_conversion_preflight_workflow_cannot_write_to_production() -> None:
     assert "run_conversion_preflight:" in production_workflow
     assert "inputs.run_conversion_preflight" in production_workflow
     assert "uses: ./.github/workflows/canonical-conversion-preflight.yml" in production_workflow
+    assert "compile_legacy_conversion_plan.py" in production_workflow
+    assert "--target-project-ref rgihahbmkrmhitjdjvev" in production_workflow
