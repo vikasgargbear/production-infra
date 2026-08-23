@@ -72,6 +72,8 @@ def test_conversion_preflight_workflow_cannot_write_to_production() -> None:
     assert "retention-days: 7" in workflow
     assert "workflow_call:" in workflow
     assert "environment: canonical-staging" in workflow
+    assert "title=Canonical conversion preflight" in workflow
+    assert "compact_result=$(jq -c . canonical-conversion-preflight.json)" in workflow
 
     production_workflow = (
         ROOT / ".github/workflows/production-readiness.yml"

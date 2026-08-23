@@ -41,6 +41,11 @@ jobs:
           jq -e '.. | objects | select(.canonical_conversion_preflight?) | .canonical_conversion_preflight | select(.transaction_read_only == "on")' \
             "$response" >canonical-conversion-preflight.json
           jq . canonical-conversion-preflight.json
+          compact_result=$(jq -c . canonical-conversion-preflight.json)
+          compact_result=${compact_result//'%'/'%25'}
+          compact_result=${compact_result//$'\r'/'%0D'}
+          compact_result=${compact_result//$'\n'/'%0A'}
+          echo "::notice file=backend/scripts/sql/canonical_conversion_preflight.sql,title=Canonical conversion preflight::$compact_result"
       - uses: actions/upload-artifact@v4
         with:
           name: canonical-conversion-preflight-${{ github.run_id }}
