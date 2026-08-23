@@ -10,6 +10,7 @@ permissions:
 jobs:
   production-read-only-preflight:
     runs-on: ubuntu-latest
+    environment: canonical-staging
     env:
       SOURCE_PROJECT_REF: jfrairkkzxwkhbtqejnz
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
