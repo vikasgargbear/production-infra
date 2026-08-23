@@ -1438,32 +1438,76 @@ def exercise_action(
         "POST", f"/api/internal/mcp/actions/{operation}/prepare",
         operation, permission, payload,
     )
+    prepared_replay = api_call(
+        "POST", f"/api/internal/mcp/actions/{operation}/prepare",
+        operation, permission, payload,
+    )
     command_id = str(prepared["command_request_id"])
     preview_hash = str(prepared["preview_hash"])
+    if (
+        str(prepared_replay.get("command_request_id")) != command_id
+        or str(prepared_replay.get("preview_hash")) != preview_hash
+    ):
+        raise RuntimeError(f"{operation} prepare replay changed immutable evidence")
+    approval_key = f"demo-approve-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
     approved = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/approve",
         "automation.command.approve", "automation.command.approve",
         {
             "preview_hash": preview_hash,
             "approval_intent": "approve",
-            "idempotency_key": f"demo-approve-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}",
+            "idempotency_key": approval_key,
         },
         command_id,
         approver=separate_approver,
     )
+    approved_replay = api_call(
+        "POST", f"/api/internal/mcp/commands/{command_id}/approve",
+        "automation.command.approve", "automation.command.approve",
+        {
+            "preview_hash": preview_hash,
+            "approval_intent": "approve",
+            "idempotency_key": approval_key,
+        },
+        command_id,
+        approver=separate_approver,
+    )
+    if (
+        str(approved_replay.get("command_request_id")) != command_id
+        or approved_replay.get("idempotency_replayed") is not True
+    ):
+        raise RuntimeError(f"{operation} approval replay was not idempotent")
+    execution_key = f"demo-execute-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
     executed = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/execute",
         "automation.command.execute", "automation.command.execute",
         {
             "preview_hash": preview_hash,
-            "idempotency_key": f"demo-execute-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}",
+            "idempotency_key": execution_key,
         }, command_id,
     )
+    executed_replay = api_call(
+        "POST", f"/api/internal/mcp/commands/{command_id}/execute",
+        "automation.command.execute", "automation.command.execute",
+        {
+            "preview_hash": preview_hash,
+            "idempotency_key": execution_key,
+        }, command_id,
+    )
+    if (
+        str(executed_replay.get("command_request_id")) != command_id
+        or str(executed_replay.get("resource_id")) != str(executed.get("resource_id"))
+        or executed_replay.get("idempotency_replayed") is not True
+    ):
+        raise RuntimeError(f"{operation} execution replay was not idempotent")
     evidence = {
         "payload": payload,
         "prepared": prepared,
+        "prepared_replay": prepared_replay,
         "approved": approved,
+        "approved_replay": approved_replay,
         "executed": executed,
+        "executed_replay": executed_replay,
     }
     evidence_name = operation.replace(".", "-")
     (evidence_dir / f"canonical-demo-{evidence_name}.json").write_text(
@@ -2272,26 +2316,71 @@ def exercise_sales_order(
         "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
         "sales.order.prepare", "sales.order.create", payload,
     )
+    prepared_replay = api_call(
+        "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
+        "sales.order.prepare", "sales.order.create", payload,
+    )
     command_id = str(prepared["command_request_id"])
     preview_hash = str(prepared["preview_hash"])
+    if (
+        str(prepared_replay.get("command_request_id")) != command_id
+        or str(prepared_replay.get("preview_hash")) != preview_hash
+    ):
+        raise RuntimeError("sales order prepare replay changed immutable evidence")
+    approval_key = f"demo-approve-{os.getenv('GITHUB_RUN_ID', 'local')}"
     approved = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/approve",
         "automation.command.approve", "automation.command.approve",
         {
             "preview_hash": preview_hash,
             "approval_intent": "approve",
-            "idempotency_key": f"demo-approve-{os.getenv('GITHUB_RUN_ID', 'local')}",
+            "idempotency_key": approval_key,
         }, command_id,
     )
+    approved_replay = api_call(
+        "POST", f"/api/internal/mcp/commands/{command_id}/approve",
+        "automation.command.approve", "automation.command.approve",
+        {
+            "preview_hash": preview_hash,
+            "approval_intent": "approve",
+            "idempotency_key": approval_key,
+        }, command_id,
+    )
+    if (
+        str(approved_replay.get("command_request_id")) != command_id
+        or approved_replay.get("idempotency_replayed") is not True
+    ):
+        raise RuntimeError("sales order approval replay was not idempotent")
+    execution_key = f"demo-execute-{os.getenv('GITHUB_RUN_ID', 'local')}"
     executed = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/execute",
         "automation.command.execute", "automation.command.execute",
         {
             "preview_hash": preview_hash,
-            "idempotency_key": f"demo-execute-{os.getenv('GITHUB_RUN_ID', 'local')}",
+            "idempotency_key": execution_key,
         }, command_id,
     )
-    evidence = {"payload": payload, "prepared": prepared, "approved": approved, "executed": executed}
+    executed_replay = api_call(
+        "POST", f"/api/internal/mcp/commands/{command_id}/execute",
+        "automation.command.execute", "automation.command.execute",
+        {"preview_hash": preview_hash, "idempotency_key": execution_key},
+        command_id,
+    )
+    if (
+        str(executed_replay.get("command_request_id")) != command_id
+        or str(executed_replay.get("resource_id")) != str(executed.get("resource_id"))
+        or executed_replay.get("idempotency_replayed") is not True
+    ):
+        raise RuntimeError("sales order execution replay was not idempotent")
+    evidence = {
+        "payload": payload,
+        "prepared": prepared,
+        "prepared_replay": prepared_replay,
+        "approved": approved,
+        "approved_replay": approved_replay,
+        "executed": executed,
+        "executed_replay": executed_replay,
+    }
     (evidence_dir / "canonical-demo-sales-order.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

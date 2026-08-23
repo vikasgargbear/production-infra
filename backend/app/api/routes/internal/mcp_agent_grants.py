@@ -313,7 +313,7 @@ def _operator_grant_rows(
                )
                AND (
                    :operation_key<>'automation.command.execute'
-                   OR (command.status IN ('prepared','pending_approval','approved')
+                   OR (command.status IN ('prepared','pending_approval','approved','succeeded')
                        AND command.expires_at>transaction_timestamp()
                        AND NOT EXISTS (
                            SELECT 1 FROM automation.command_approvals AS rejection

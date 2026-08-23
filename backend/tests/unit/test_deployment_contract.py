@@ -399,6 +399,10 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "SqlAlchemyOperatorActionService" in preflight
     assert "PREPARE_PAYLOAD_MODELS[operation].model_validate(payload)" in provisioner
     assert 'model_dump(mode="python", exclude_none=True)' in provisioner
+    assert provisioner.count('"prepared_replay": prepared_replay') == 2
+    assert provisioner.count('"approved_replay": approved_replay') == 2
+    assert provisioner.count('"executed_replay": executed_replay') == 2
+    assert provisioner.count('idempotency_replayed") is not True') == 4
     assert "resolve_fefo_dispatch_allocations" in provisioner
     assert "conversion.multiplier" in provisioner
     assert "conversion.conversion_factor" not in provisioner

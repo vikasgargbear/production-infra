@@ -235,7 +235,7 @@ def test_operator_authority_sql_revalidates_rbac_branches_and_approval_separatio
         "membership.id<>command.requested_by_membership_id",
         "grant_row.expires_at>transaction_timestamp()",
         "grant_row.org_id=:organization_id",
-        "command.status IN ('prepared','pending_approval','approved')",
+        "command.status IN ('prepared','pending_approval','approved','succeeded')",
         "automation.command_approvals AS rejection",
         "rejection.decision='rejected'",
         "automation.command_approvals AS approval",
