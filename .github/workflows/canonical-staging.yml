@@ -854,7 +854,49 @@ jobs:
           trap - EXIT
 
       - name: Verify baseline topology and isolated role posture
+        env:
+          ROLE_POSTURE_QUERY: |
+            SELECT role.rolname,
+                   role.rolcanlogin,
+                   role.rolpassword IS NOT NULL AS password_present,
+                   role.rolvaliduntil IS NULL OR role.rolvaliduntil > now() AS password_unexpired,
+                   pg_has_role(role.oid,'erp_app','MEMBER') AS erp_app_member
+              FROM pg_catalog.pg_roles AS role
+             WHERE role.rolname IN (
+               'erp_runtime','erp_calculator','erp_tax_provider',
+               'erp_regulatory_importer'
+             )
+             ORDER BY role.rolname
         run: |
+          set -euo pipefail
+          posture_response=$(mktemp)
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc --arg query "$ROLE_POSTURE_QUERY" '{query:$query}')" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
+            >"$posture_response"
+          jq -e '[.. | objects | select(.rolname?)] | length == 4' "$posture_response" >/dev/null
+          jq -e '[.. | objects | select(.rolname?)] | all(
+            .rolcanlogin == true and .password_present == true and .password_unexpired == true and
+            ((.rolname == "erp_runtime" and .erp_app_member == true) or
+             (.rolname != "erp_runtime" and .erp_app_member == false)))' \
+            "$posture_response" >/dev/null
+          posture=$(jq -c '[.. | objects | select(.rolname?)]' "$posture_response")
+          posture=${posture//'%'/'%25'}
+          posture=${posture//$'\r'/'%0D'}
+          posture=${posture//$'\n'/'%0A'}
+          echo "::notice title=Canonical isolated role posture::$posture"
+
+          bans_response=$(mktemp)
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/network-bans" \
+            >"$bans_response"
+          ban_count=$(jq '[.. | objects | select(.ipv4_address? or .ip?)] | length' "$bans_response")
+          echo "::notice title=Canonical staging network-ban count::$ban_count"
+
           python3 - <<'PY'
           import os
           import sys
