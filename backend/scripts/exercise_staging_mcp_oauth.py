@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -421,6 +422,22 @@ def _reconcile_database(command_id: str) -> dict[str, Any]:
     return {"command_status": row[0], "sales_order_id": row[1], "order_count": row[2]}
 
 
+def _wait_for_mcp_readiness() -> None:
+    readiness_url = MCP_URL.removesuffix("/mcp") + "/ready"
+    last_detail = "no response"
+    for attempt in range(1, 6):
+        try:
+            response = requests.get(readiness_url, timeout=30)
+            last_detail = f"HTTP {response.status_code}"
+            if response.status_code == 200:
+                return
+        except requests.RequestException as exc:
+            last_detail = type(exc).__name__
+        if attempt < 5:
+            time.sleep(10)
+    raise ExerciseError(f"MCP readiness failed after five checks: {last_detail}")
+
+
 def main() -> int:
     if _required("CANONICAL_STAGING_PROJECT_REF") != PROJECT_REF:
         raise ExerciseError("Refusing OAuth exercise outside the reviewed staging project")
@@ -490,9 +507,7 @@ def main() -> int:
     if not {"openid", "offline_access"}.issubset(scopes):
         raise ExerciseError("OAuth access token omitted required scopes")
 
-    ready = requests.get(MCP_URL.removesuffix("/mcp") + "/ready", timeout=30)
-    if ready.status_code != 200:
-        raise ExerciseError(f"MCP readiness remained HTTP {ready.status_code}")
+    _wait_for_mcp_readiness()
     tool_names, workflow = _exercise_mcp(
         token["access_token"], business_flow=exercise_mode == "business_flow"
     )

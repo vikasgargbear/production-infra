@@ -877,3 +877,5 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert exercise.index("if not business_flow:") < exercise.index(
         '"name": "erp_product_search"'
     )
+    assert "for attempt in range(1, 6):" in exercise
+    assert "MCP readiness failed after five checks" in exercise
