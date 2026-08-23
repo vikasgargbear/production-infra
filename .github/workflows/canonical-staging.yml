@@ -891,10 +891,11 @@ jobs:
 
           bans_response=$(mktemp)
           curl --fail --silent --show-error \
+            --request POST \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/network-bans" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/network-bans/retrieve" \
             >"$bans_response"
-          ban_count=$(jq '[.. | objects | select(.ipv4_address? or .ip?)] | length' "$bans_response")
+          ban_count=$(jq '.banned_ipv4_addresses | length' "$bans_response")
           echo "::notice title=Canonical staging network-ban count::$ban_count"
 
           python3 - <<'PY'

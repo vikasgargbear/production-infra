@@ -250,7 +250,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "role.rolpassword IS NOT NULL AS password_present" in workflow
     assert "password_unexpired" in workflow
     assert "Canonical isolated role posture" in workflow
-    assert "/network-bans" in workflow
+    assert "/network-bans/retrieve" in workflow
+    assert "--request POST" in workflow
     assert "Canonical staging network-ban count" in workflow
     assert 'canary_role = "erp_runtime"' in workflow
     assert "verify_role_with_retry(canary_role, canary_password, session_port)" in workflow

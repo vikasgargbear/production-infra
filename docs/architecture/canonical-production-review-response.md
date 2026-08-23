@@ -182,7 +182,12 @@ canary now uses `gssencmode=disable`, permits at most two attempts per port, and
 queries an aggregate Supavisor diagnostic on failure. The diagnostic endpoint
 returned a provider backend error. A staging database restart is the next
 bounded recovery action and requires immediate user confirmation before it is
-dispatched.
+dispatched. A subsequent read-only role-catalog diagnostic in run `32661047853`
+proved all four isolated roles are login-enabled, have passwords, are unexpired,
+and have the intended `erp_app` membership. The authenticated Supabase CLI then
+reported one staging network ban. Removing that single staging ban and running
+one canary is now the preferred next action; it requires explicit user
+confirmation because it changes a security control.
 
 **Production:** blocked; preserve-and-convert required. Do not run
 `supabase db push`, reset production, or apply the canonical baseline in place.
