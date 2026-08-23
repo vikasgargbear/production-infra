@@ -403,6 +403,15 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert provisioner.count('"approved_replay": approved_replay') == 2
     assert provisioner.count('"executed_replay": executed_replay') == 2
     assert provisioner.count('idempotency_replayed") is not True') == 4
+    cross_table_audit = provisioner.split(
+        "def reconcile_cross_table_invariants", 1
+    )[1].split("\ndef main", 1)[0]
+    assert (
+        "count(*) FILTER (WHERE EXISTS (\n"
+        "                       SELECT 1 FROM core.audit_events audit"
+        in cross_table_audit
+    )
+    assert "LEFT JOIN core.audit_events audit" not in cross_table_audit
     assert "resolve_fefo_dispatch_allocations" in provisioner
     assert "conversion.multiplier" in provisioner
     assert "conversion.conversion_factor" not in provisioner

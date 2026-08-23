@@ -3040,11 +3040,12 @@ def reconcile_cross_table_invariants(
                           AND approval.preview_hash=command.preview_hash
                           AND approval.aggregate_version_hash=command.aggregate_version_hash
                    )) AS missing_approval_count,
-                   count(DISTINCT audit.command_request_id) AS audited_command_count
+                   count(*) FILTER (WHERE EXISTS (
+                       SELECT 1 FROM core.audit_events audit
+                        WHERE audit.org_id=command.org_id
+                          AND audit.command_request_id=command.id
+                   )) AS audited_command_count
               FROM automation.command_requests command
-              LEFT JOIN core.audit_events audit
-                ON audit.org_id=command.org_id
-               AND audit.command_request_id=command.id
              WHERE command.org_id=%s AND command.id=ANY(CAST(%s AS uuid[]))
             """,
             (IDS["org"], command_ids),
