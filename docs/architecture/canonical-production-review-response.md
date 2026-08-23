@@ -174,14 +174,56 @@ the configuration and again failed the gate with Supavisor
 `ECIRCUITBREAKER` while retrieving `erp_runtime` credentials. No further blind
 retry is authorized; the hosted business-journey evidence remains unpromoted.
 
+Run `32660835178` then repeated only the non-destructive baseline verification
+with reset, restart, credential rotation, pooler mutation, and demo provisioning
+all disabled. Both documented shared-pooler modes still failed the
+`erp_runtime` canary with `EAUTHQUERY auth_query secret check timed out`. The
+canary now uses `gssencmode=disable`, permits at most two attempts per port, and
+queries an aggregate Supavisor diagnostic on failure. The diagnostic endpoint
+returned a provider backend error. A staging database restart is the next
+bounded recovery action and requires immediate user confirmation before it is
+dispatched.
+
 **Production:** blocked; preserve-and-convert required. Do not run
 `supabase db push`, reset production, or apply the canonical baseline in place.
 
+### Production conversion evidence now available
+
+Read-only preflight job `97245824039` in run `32660498426` succeeded against
+production project `jfrairkkzxwkhbtqejnz`. The checked aggregate evidence is
+`database/live-conversion-preflight-evidence.json`; it contains no customer,
+supplier, user, document, or product identifiers.
+
+- All eight document-number duplicate-group counts are zero.
+- All transaction-line orphan counts are zero.
+- GSTIN and PAN format failures are zero for customers and suppliers.
+- Exact Decimal baselines now cover document headers and lines, GST components,
+  billed/free/returned quantities, payments, allocations, movements, and stock.
+- Embedded contact evidence covers 140 customer contacts, 134 customer contact
+  emails, eight supplier named contacts, and all customer/supplier business
+  endpoints.
+- Legacy exceptions are explicit: 311 header-only documents, two inventory
+  movements referencing absent batches, and seven active users without auth
+  identities.
+
+`backend/scripts/compile_legacy_conversion_plan.py` binds this evidence to the
+read-only schema capture and all 184 non-auth source-relation dispositions. It
+refuses the production project as a target, permits only the reviewed separate
+staging project, derives deterministic UUIDs, requires a disposition for every
+counted row, preserves header-only documents without fabricated lines, assigns
+missing-batch movements to audited deterministic untracked batches, and imports
+users without auth identities as disabled profiles. The compiled plan covers
+4,839 counted source rows with zero unexplained rows allowed.
+
+This is conversion planning and source reconciliation evidence, not a completed
+row extraction or target import. It does not remove the production cutover
+blocker by itself.
+
 ## Remaining production evidence
 
-1. Provision a separate canonical shadow target and retain the current project
-   as the read-only conversion source.
-2. Implement source-to-target ETL for master, transaction, inventory, finance,
+1. Restore reliable isolated-role access to the separate canonical shadow
+   target and retain the current project as the read-only conversion source.
+2. Implement and execute source-to-target row ETL for master, transaction, inventory, finance,
    tax, challan, attachment, and audit lineage, including embedded contacts.
 3. Reconcile source and target counts, exact monetary totals, signed stock by
    product/batch/location, open-item balances, GST components, and source-ID
