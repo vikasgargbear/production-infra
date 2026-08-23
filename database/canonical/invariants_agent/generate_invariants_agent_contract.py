@@ -421,7 +421,7 @@ END
 
 
 BLOCKED_REASONS = {
-    "core.data_retention_cases:data_retention_cases_command_guard": "Typed eligibility, legal-hold evaluation and subject anonymization require the reviewed core privacy command boundary.",
+    "core.data_retention_cases:data_retention_cases_command_guard": "Typed eligibility, legal-hold evaluation and subject anonymization require the reviewed core privacy command boundary controls.",
     "automation.agent_grant_capabilities:agent_grant_capabilities_revocation": "Revocation immutability is locally enforceable, but the parent grant still stores no risk, approval, money, currency, or sensitive-read ceilings against which the capability can be proved.",
     "automation.command_requests:command_execution_guard": "PostgreSQL can lock the request and count approvals, but it cannot re-hash unknown aggregate serializers or dispatch the shared application command exactly once without a reviewed operation registry and stored command API.",
     "automation.command_requests:command_request_matches_grant": "Subject, grant state, expiry, and capability state are locally provable; operation compatibility, request branch, money/currency, and sensitive-read bounds are not persisted as typed request facts.",

@@ -135,8 +135,23 @@ def _execute_step(
     reversal_state: dict[str, dict[str, dict[str, Decimal]]],
 ):
     payload.setdefault("idempotency_key", f"prepare:{step['id']}")
-    rest_prepared = rest_client.prepare(f"{step['operation']}.prepare", payload)
-    mcp_prepared = mcp_client.call(step["prepare_tool"], copy.deepcopy(payload))
+
+    def prepare_rest():
+        return rest_client.prepare(
+            f"{step['operation']}.prepare", copy.deepcopy(payload)
+        )
+
+    def prepare_mcp():
+        return mcp_client.call(step["prepare_tool"], copy.deepcopy(payload))
+
+    if step.get("concurrency_probe"):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            rest_prepared, mcp_prepared = list(
+                executor.map(lambda fn: fn(), [prepare_rest, prepare_mcp])
+            )
+    else:
+        rest_prepared = prepare_rest()
+        mcp_prepared = prepare_mcp()
     rest_command_id, rest_hash = required_preview_fields(rest_prepared)
     mcp_command_id, mcp_hash = required_preview_fields(mcp_prepared)
     assert mcp_command_id == rest_command_id
@@ -172,8 +187,12 @@ def _execute_step(
 
     approve_key = f"live-approve-{step['id']}-{uuid.uuid4()}"
     execute_key = f"live-execute-{step['id']}-{uuid.uuid4()}"
-    if index % 2:
-        approval = mcp_client.call(
+
+    def approve_rest():
+        return rest_client.approve(rest_command_id, rest_hash, approve_key)
+
+    def approve_mcp():
+        return mcp_client.call(
             "erp_operation_approve",
             {
                 "command_request_id": rest_command_id,
@@ -182,8 +201,21 @@ def _execute_step(
                 "idempotency_key": approve_key,
             },
         )
+
+    if step.get("concurrency_probe"):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            approvals = list(
+                executor.map(lambda fn: fn(), [approve_rest, approve_mcp])
+            )
+        assert all(
+            _find(candidate, "decision") in {None, "approved"}
+            for candidate in approvals
+        )
+        approval = approvals[0]
+    elif index % 2:
+        approval = approve_mcp()
     else:
-        approval = rest_client.approve(rest_command_id, rest_hash, approve_key)
+        approval = approve_rest()
     assert _find(approval, "decision") in {None, "approved"}
 
     def execute_rest():

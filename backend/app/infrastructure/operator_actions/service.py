@@ -220,6 +220,20 @@ _SET_REQUEST_CONTEXT_SQL = text(
     "SELECT pg_catalog.set_config('app.request_id', :request_id, true)"
 )
 
+_PREPARE_IDEMPOTENCY_LOCK_SQL = text(
+    """
+    SELECT pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+            CAST(:org_id AS text) || ':' ||
+            CAST(:agent_grant_id AS text) || ':' ||
+            :operation || ':' ||
+            pg_catalog.encode(:idempotency_key_hash, 'hex'),
+            0
+        )
+    )
+    """
+)
+
 _APPROVE_COMMAND_SQL = text(
     """
     SELECT erp_automation_commands.approve_operator_command(
@@ -343,6 +357,23 @@ def _json_document(value: Any) -> dict[str, Any]:
     raise OperatorActionError(
         ActionErrorCode.POLICY_BLOCKED,
         "Canonical resolver returned an invalid document",
+    )
+
+
+def _lock_prepare_idempotency(
+    session: Session,
+    params: Mapping[str, Any],
+    operation: str,
+) -> None:
+    """Serialize an exact prepare key before any draft rows are written."""
+    session.execute(
+        _PREPARE_IDEMPOTENCY_LOCK_SQL,
+        {
+            "org_id": params["org_id"],
+            "agent_grant_id": params["agent_grant_id"],
+            "operation": operation,
+            "idempotency_key_hash": params["idempotency_key_hash"],
+        },
     )
 
 
@@ -564,6 +595,7 @@ class SqlAlchemyOperatorActionService:
         factory = self._calculator_factory or calculator_session_factory()
         with factory() as session:
             with session.begin():
+                _lock_prepare_idempotency(session, params, "sales.order.prepare")
                 rows = _mapping_rows(session.execute(RESOLVE_SALES_ORDER_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(
@@ -873,6 +905,9 @@ class SqlAlchemyOperatorActionService:
         factory = self._calculator_factory or calculator_session_factory()
         with factory() as session:
             with session.begin():
+                _lock_prepare_idempotency(
+                    session, params, "procurement.supplier_invoice.prepare"
+                )
                 rows = _mapping_rows(
                     session.execute(RESOLVE_SUPPLIER_INVOICE_SQL, params)
                 )
@@ -1076,6 +1111,9 @@ class SqlAlchemyOperatorActionService:
         factory = self._calculator_factory or calculator_session_factory()
         with factory() as session:
             with session.begin():
+                _lock_prepare_idempotency(
+                    session, params, "procurement.purchase_order.prepare"
+                )
                 rows = _mapping_rows(
                     session.execute(RESOLVE_PURCHASE_ORDER_SQL, params)
                 )
@@ -1305,6 +1343,9 @@ class SqlAlchemyOperatorActionService:
         with self._session_factory() as session:
             with session.begin():
                 assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "procurement.goods_receipt.prepare"
+                )
                 rows = _mapping_rows(
                     session.execute(RESOLVE_GOODS_RECEIPT_SQL, params)
                 )
@@ -1544,6 +1585,7 @@ class SqlAlchemyOperatorActionService:
         factory = self._calculator_factory or calculator_session_factory()
         with factory() as session:
             with session.begin():
+                _lock_prepare_idempotency(session, params, "sales.invoice.prepare")
                 rows = _mapping_rows(session.execute(RESOLVE_SALES_INVOICE_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(
@@ -1757,6 +1799,7 @@ class SqlAlchemyOperatorActionService:
         factory = self._calculator_factory or calculator_session_factory()
         with factory() as session:
             with session.begin():
+                _lock_prepare_idempotency(session, params, "sales.return.prepare")
                 rows = _mapping_rows(session.execute(RESOLVE_SALES_RETURN_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(ActionErrorCode.POLICY_BLOCKED, "Canonical sales-return resolution is unavailable")
@@ -1913,6 +1956,9 @@ class SqlAlchemyOperatorActionService:
         factory = self._calculator_factory or calculator_session_factory()
         with factory() as session:
             with session.begin():
+                _lock_prepare_idempotency(
+                    session, params, "procurement.purchase_return.prepare"
+                )
                 rows = _mapping_rows(session.execute(RESOLVE_PURCHASE_RETURN_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(
@@ -2097,6 +2143,9 @@ class SqlAlchemyOperatorActionService:
         with self._session_factory() as session:
             with session.begin():
                 assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "finance.customer_receipt.prepare"
+                )
                 rows = _mapping_rows(
                     session.execute(RESOLVE_CUSTOMER_RECEIPT_SQL, params)
                 )
@@ -2257,6 +2306,9 @@ class SqlAlchemyOperatorActionService:
         with self._session_factory() as session:
             with session.begin():
                 assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "finance.supplier_payment.prepare"
+                )
                 rows = _mapping_rows(
                     session.execute(RESOLVE_SUPPLIER_PAYMENT_SQL, params)
                 )
@@ -2437,6 +2489,9 @@ class SqlAlchemyOperatorActionService:
         with self._session_factory() as session:
             with session.begin():
                 assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "finance.supplier_advance.prepare"
+                )
                 rows = _mapping_rows(
                     session.execute(RESOLVE_SUPPLIER_ADVANCE_SQL, params)
                 )
@@ -2607,6 +2662,9 @@ class SqlAlchemyOperatorActionService:
         with self._session_factory() as session:
             with session.begin():
                 assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "inventory.adjustment.prepare"
+                )
                 rows = _mapping_rows(session.execute(RESOLVE_INVENTORY_ADJUSTMENT_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(
@@ -2782,6 +2840,7 @@ class SqlAlchemyOperatorActionService:
         with self._session_factory() as session:
             with session.begin():
                 assert_runtime_principal(session)
+                _lock_prepare_idempotency(session, params, "sales.dispatch.prepare")
                 rows = _mapping_rows(session.execute(RESOLVE_SALES_DISPATCH_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(

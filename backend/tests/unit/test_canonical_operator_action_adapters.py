@@ -137,6 +137,8 @@ class FakeCalculatorSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "resolve_sales_order_prepare" in sql:
             request = json.loads(params["request_json"])
@@ -247,6 +249,8 @@ class FakeSalesInvoiceSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "resolve_sales_invoice_prepare" in sql:
             request = json.loads(params["request_json"])
@@ -359,6 +363,8 @@ class FakeSalesReturnSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "resolve_sales_return_prepare" in sql:
             request = json.loads(params["request_json"])
@@ -484,6 +490,8 @@ class FakePurchaseReturnSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "resolve_purchase_return_prepare" in sql:
             request = json.loads(params["request_json"])
@@ -633,6 +641,8 @@ class FakePurchaseOrderSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "resolve_purchase_order_prepare" in sql:
             request = json.loads(params["request_json"])
@@ -722,6 +732,8 @@ class FakeSupplierInvoiceSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "resolve_supplier_invoice_prepare" in sql:
             request = json.loads(params["request_json"])
@@ -852,6 +864,8 @@ class FakeDispatchSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "FROM pg_catalog.pg_roles AS role" in sql:
             return FakeResult(({
@@ -974,6 +988,8 @@ class FakeCustomerReceiptSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "FROM pg_catalog.pg_roles AS role" in sql:
             return FakeResult(({
@@ -1053,6 +1069,8 @@ class FakeSupplierPaymentSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "FROM pg_catalog.pg_roles AS role" in sql:
             return FakeResult(({
@@ -1171,6 +1189,8 @@ class FakeInventoryAdjustmentSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "FROM pg_catalog.pg_roles AS role" in sql:
             return FakeResult(({
@@ -1262,6 +1282,8 @@ class FakeSupplierAdvanceSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "FROM pg_catalog.pg_roles AS role" in sql:
             return FakeResult(({
@@ -1346,6 +1368,8 @@ class FakeGoodsReceiptSession:
     def execute(self, statement, parameters=None):
         sql = str(statement)
         params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
         self.executions.append((sql, params))
         if "FROM pg_catalog.pg_roles AS role" in sql:
             return FakeResult(({
@@ -3237,6 +3261,8 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert " public." not in source
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
+    assert "pg_advisory_xact_lock" in source
+    assert source.count("_lock_prepare_idempotency(") == 13
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):

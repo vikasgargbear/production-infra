@@ -311,6 +311,10 @@ def test_exact_hash_quorum_and_exact_once_boundaries_are_present() -> None:
         "command approvals may be inserted only by the reviewed approval authority",
     ):
         assert fragment in mapping
+    approval_start = mapping.index('"approve_operator_command"')
+    approval_end = mapping.index('"execute_approved_command"', approval_start)
+    approval = mapping[approval_start:approval_end]
+    assert "id=command_request_id FOR UPDATE" in approval
 
 
 def test_mapping_composes_and_removes_the_three_blockers() -> None:

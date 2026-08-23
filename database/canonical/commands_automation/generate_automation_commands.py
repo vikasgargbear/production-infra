@@ -6032,7 +6032,7 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='operator approval context, permission, or hash is invalid';
     END IF;
     SELECT * INTO STRICT request_row FROM automation.command_requests
-     WHERE org_id=organization_id AND id=command_request_id FOR SHARE;
+     WHERE org_id=organization_id AND id=command_request_id FOR UPDATE;
     IF request_row.status NOT IN ('prepared','pending_approval','approved')
        OR request_row.expires_at<=pg_catalog.transaction_timestamp()
        OR request_row.preview_hash IS DISTINCT FROM preview_hash_input

@@ -54,9 +54,12 @@ def test_artifacts_are_deterministic_catalog_bound_and_complete() -> None:
     assert MAPPING_PATH.read_text(encoding="utf-8") == mapping_text
     assert MANIFEST_PATH.read_text(encoding="utf-8") == manifest_text
     assert manifest["mapping_sha256"] == hashlib.sha256(mapping_text.encode()).hexdigest()
-    assert manifest["reviewed_count"] == 15
+    assert manifest["reviewed_count"] == 16
     assert manifest["resolved_count"] == 5
-    assert manifest["blocked_count"] == 10
+    assert manifest["blocked_count"] == 11
+    assert manifest["reviewed_count"] == (
+        manifest["resolved_count"] + manifest["blocked_count"]
+    )
     assert set(manifest["resolved_invariants"]).isdisjoint(manifest["blocked_invariants"])
     assert set(manifest["resolved_invariants"]) | set(manifest["blocked_invariants"]) == generator.REVIEW_KEYS
 

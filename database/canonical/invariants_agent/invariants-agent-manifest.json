@@ -18,7 +18,7 @@
       "reason": "Lifecycle and terminal immutability are locally enforceable, but transactional expiry at every authorization use can only be proved by the separately reviewed security permission helper and every caller using it."
     },
     "core.data_retention_cases:data_retention_cases_command_guard": {
-      "reason": "Typed eligibility, legal-hold evaluation and subject anonymization require the reviewed core privacy command boundary."
+      "reason": "Typed eligibility, legal-hold evaluation and subject anonymization require the reviewed core privacy command boundary controls."
     },
     "core.document_sequences:document_sequences_atomic_allocation": {
       "reason": "The sequence row has no persisted idempotency owner or allocation evidence. A row trigger cannot prove replay ownership, exactly-once allocation, and permanent no-reuse together."
