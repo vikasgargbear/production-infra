@@ -61,6 +61,10 @@ export const productsApi = {
     return apiHelpers.put(`/products/${productId}`, productUpdateSchema.parse(data));
   },
 
+  delete: (productId: number | string) => {
+    return apiHelpers.delete(`/products/${productId}`);
+  },
+
   // Search products
   search: (query: string, params: ProductParams = {}) => {
     return apiHelpers.get('/products', {

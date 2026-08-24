@@ -136,7 +136,7 @@ export function useProducts() {
     }, [fetchProducts, page]);
 
     const deleteProduct = useCallback(async (productId: number | string) => {
-        if (!window.confirm('Are you sure you want to delete this product?')) {
+        if (!window.confirm('Delete this unused product draft? Active or referenced products cannot be deleted.')) {
             return { success: false };
         }
 

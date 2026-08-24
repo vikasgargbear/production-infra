@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi.routing import APIRoute
+from pydantic import ValidationError
 
 from app.api.routes import canonical_erp_reads
 from app.core.utils import schema_validator
@@ -38,6 +39,7 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
     assert [(route.path, route.methods) for route in writes] == [
         ("/products/", {"POST"}),
         ("/products/{product_id}", {"PUT"}),
+        ("/products/{product_id}", {"DELETE"}),
         ("/customers/", {"POST"}),
         ("/suppliers/", {"POST"}),
         ("/customers/{customer_id:uuid}/addresses/", {"POST"}),
@@ -109,6 +111,132 @@ def test_party_creation_activates_party_before_active_account_commit() -> None:
     assert "SET status='active', updated_at=transaction_timestamp()" in source
     assert "WHERE org_id=:org_id AND id=:party_id AND status='draft'" in source
     assert "Party activation failed" in source
+
+
+def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> None:
+    customer = canonical_erp_reads.CanonicalCustomerCreate.model_validate({
+        "customer_name": "E2E Browser Customer",
+        "customer_type": "pharmacy",
+        "primary_phone": "9876543210",
+        "primary_email": "buyer@example.com",
+        "address_line1": "Test Lane 1",
+        "city": "Mumbai",
+        "state": "Maharashtra",
+        "pincode": "400001",
+        "credit_limit": 5000,
+        "credit_days": 30,
+    })
+
+    assert customer.primary_phone == "9876543210"
+    assert customer.model_dump(exclude_none=True) == {
+        "customer_name": "E2E Browser Customer",
+        "customer_type": "pharmacy",
+        "primary_phone": "9876543210",
+        "primary_email": "buyer@example.com",
+        "address_line1": "Test Lane 1",
+        "city": "Mumbai",
+        "state": "Maharashtra",
+        "pincode": "400001",
+        "credit_limit": customer.credit_limit,
+        "credit_days": 30,
+    }
+
+
+def test_reviewed_party_create_contracts_reject_unowned_and_partial_facts() -> None:
+    try:
+        canonical_erp_reads.CanonicalCustomerCreate.model_validate({
+            "customer_name": "Bad Boundary",
+            "customer_type": "retail",
+            "primary_phone": "9876543210",
+            "org_id": str(uuid4()),
+        })
+    except ValidationError as exc:
+        assert "Extra inputs are not permitted" in str(exc)
+    else:
+        raise AssertionError("tenant identity must not be accepted from the browser")
+
+    try:
+        canonical_erp_reads.CanonicalSupplierCreate.model_validate({
+            "supplier_name": "Partial Address Supplier",
+            "primary_phone": "9876543210",
+            "city": "Mumbai",
+        })
+    except ValidationError as exc:
+        assert "must be supplied together" in str(exc)
+    else:
+        raise AssertionError("partial canonical addresses must be rejected")
+
+
+class _CreatedAccountResult:
+    def __init__(self, account_id):
+        self.account_id = account_id
+
+    def scalar_one(self):
+        return self.account_id
+
+
+class _CreatedAccountSession:
+    def __init__(self, account_id):
+        self.account_id = account_id
+        self.committed = False
+
+    def execute(self, *_args, **_kwargs):
+        return _CreatedAccountResult(self.account_id)
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        raise AssertionError("valid party creation must not roll back")
+
+
+def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch) -> None:
+    org_id = uuid4()
+    party_id = uuid4()
+    posting_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+    monkeypatch.setattr(
+        canonical_erp_reads,
+        "_party_posting_account",
+        lambda _db, _org_id, _account_type: posting_id,
+    )
+    monkeypatch.setattr(
+        canonical_erp_reads,
+        "_insert_party_contact_address_and_tax",
+        lambda *_args, **_kwargs: party_id,
+    )
+
+    customer_account_id = uuid4()
+    customer_db = _CreatedAccountSession(customer_account_id)
+    customer = canonical_erp_reads.create_customer(
+        canonical_erp_reads.CanonicalCustomerCreate(
+            customer_name="Active Customer",
+            primary_phone="9876543210",
+        ),
+        user={},
+        db=customer_db,
+    )
+    assert customer["customer_id"] == customer_account_id
+    assert customer["party_id"] == party_id
+    assert customer["is_active"] is True
+    assert customer["status"] == "active"
+    assert customer_db.committed
+
+    supplier_account_id = uuid4()
+    supplier_db = _CreatedAccountSession(supplier_account_id)
+    supplier = canonical_erp_reads.create_supplier(
+        canonical_erp_reads.CanonicalSupplierCreate(
+            supplier_name="Active Supplier",
+            primary_phone="9876543210",
+        ),
+        user={},
+        db=supplier_db,
+    )
+    assert supplier["supplier_id"] == supplier_account_id
+    assert supplier["party_id"] == party_id
+    assert supplier["is_active"] is True
+    assert supplier["status"] == "active"
+    assert supplier_db.committed
 
 
 def test_customer_address_primary_is_scoped_by_address_kind() -> None:
@@ -221,3 +349,44 @@ def test_product_draft_write_uses_canonical_catalog_and_returns_uuid() -> None:
     sql = "\n".join(database.statements)
     assert "catalog.products" in sql
     assert "inventory.products" not in sql
+
+
+class ProductDraftDeleteDatabase:
+    def __init__(self) -> None:
+        self.product_id = uuid4()
+        self.statements = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    def execute(self, statement, params):
+        sql = str(statement)
+        self.statements.append(sql)
+        if "activate_context" in sql:
+            return SimpleNamespace()
+        if "DELETE FROM catalog.products" in sql:
+            row = SimpleNamespace(id=self.product_id, sku="DRAFT-E2E", name="E2E draft")
+            return SimpleNamespace(first=lambda: row)
+        raise AssertionError(sql)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def test_delete_product_draft_is_bounded_to_draft_lifecycle() -> None:
+    database = ProductDraftDeleteDatabase()
+    result = canonical_erp_reads.delete_product_draft(
+        database.product_id,
+        user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
+        db=database,
+    )
+
+    assert result["success"] is True
+    assert result["product_id"] == database.product_id
+    assert database.commits == 1
+    assert database.rollbacks == 0
+    sql = "\n".join(database.statements)
+    assert "DELETE FROM catalog.products" in sql
+    assert "status='draft'" in sql

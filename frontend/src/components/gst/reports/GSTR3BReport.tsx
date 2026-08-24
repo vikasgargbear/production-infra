@@ -12,15 +12,29 @@ import { formatCurrency, calculateNetPayable } from '../utils';
 import { invoicesApi, purchasesApi } from '../../../services/api';
 
 interface GSTR3BReportProps {
-    dateRange: DateRange;
-    refreshTrigger: number;
+    dateRange?: DateRange;
+    refreshTrigger?: number;
     onRefresh?: () => void;
     showTaxBreakdown?: boolean;
     onDataReady?: (data: any) => void;
     onExport?: () => void;
 }
 
-const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, showTaxBreakdown = false, onDataReady, onExport }) => {
+const currentMonthRange = (): DateRange => {
+    const today = new Date();
+    return {
+        from: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10),
+        to: today.toISOString().slice(0, 10),
+    };
+};
+
+const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
+    dateRange = currentMonthRange(),
+    refreshTrigger = 0,
+    showTaxBreakdown = false,
+    onDataReady,
+    onExport,
+}) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [outputTax, setOutputTax] = useState({ cgst: 0, sgst: 0, igst: 0, total: 0 });

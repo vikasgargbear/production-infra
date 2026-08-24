@@ -16,15 +16,28 @@ import {
 import { gstApi, invoicesApi } from '../../../services/api';
 
 interface GSTR1ReportProps {
-    dateRange: DateRange;
-    refreshTrigger: number;
+    dateRange?: DateRange;
+    refreshTrigger?: number;
     onRefresh?: () => void;
     showTaxBreakdown?: boolean;
     onDataReady?: (data: any) => void;
     onExport?: () => void;
 }
 
-const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger, showTaxBreakdown = false, onDataReady }) => {
+const currentMonthRange = (): DateRange => {
+    const today = new Date();
+    return {
+        from: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10),
+        to: today.toISOString().slice(0, 10),
+    };
+};
+
+const GSTR1Report: React.FC<GSTR1ReportProps> = ({
+    dateRange = currentMonthRange(),
+    refreshTrigger = 0,
+    showTaxBreakdown = false,
+    onDataReady,
+}) => {
     const [data, setData] = useState<GSTR1Data | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);

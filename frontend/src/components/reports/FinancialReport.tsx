@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DollarSign, TrendingUp, CreditCard, Download, Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
+import { DollarSign, TrendingUp, CreditCard, Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -320,20 +320,16 @@ const FinancialReport: React.FC = () => {
                 <option value="quarter">This Quarter</option>
                 <option value="year">This Year</option>
               </select>
-              <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
             </div>
           </div>
 
           {/* View Tabs */}
-          <div className="flex gap-4 mt-6 border-b border-gray-200">
+          <nav aria-label="Financial report views" className="mt-6 flex gap-4 overflow-x-auto border-b border-gray-200">
             {(['overview', 'cashflow', 'receivables', 'payables'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setView(tab)}
-                className={`pb-3 px-1 border-b-2 transition-colors ${
+                className={`min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 transition-colors ${
                   view === tab
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -342,7 +338,7 @@ const FinancialReport: React.FC = () => {
                 {tab.charAt(0).toUpperCase() + tab.slice(1).replace('flow', ' Flow')}
               </button>
             ))}
-          </div>
+          </nav>
         </div>
 
         {/* Metrics Grid */}
@@ -444,9 +440,6 @@ const FinancialReport: React.FC = () => {
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
-                <button className="text-sm text-blue-600 hover:text-blue-700">
-                  View All →
-                </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">

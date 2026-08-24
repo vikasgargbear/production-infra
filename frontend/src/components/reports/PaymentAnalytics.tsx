@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Wallet, TrendingUp, CreditCard, Clock, DollarSign, CheckCircle,
-  XCircle, AlertCircle, Download, RefreshCw, Loader2
+  XCircle, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import {
@@ -320,10 +320,6 @@ const PaymentAnalytics: React.FC = () => {
               >
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
-              </button>
-              <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Export Report
               </button>
             </div>
           </div>

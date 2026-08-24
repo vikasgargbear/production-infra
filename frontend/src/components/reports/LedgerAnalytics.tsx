@@ -642,7 +642,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
             iconColor="text-purple-600"
             onClose={onClose}
             historyType="ledger"
-            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: "Export PDF",

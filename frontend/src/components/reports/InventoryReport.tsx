@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Package, AlertTriangle, TrendingDown, BarChart3, Download, Search, Calendar, Activity, Box, AlertCircle } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, BarChart3, Search, Calendar, Activity, Box, AlertCircle } from 'lucide-react';
 import { Line, Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -323,19 +323,15 @@ const InventoryReport: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-900">Inventory Report</h1>
               <p className="text-gray-600 mt-1">Stock levels, movement analysis, and expiry tracking</p>
             </div>
-            <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-              <Download className="h-4 w-4" />
-              Export Report
-            </button>
           </div>
 
           {/* View Tabs */}
-          <div className="flex gap-4 mt-6 border-b border-gray-200">
+          <nav aria-label="Inventory report views" className="mt-6 flex gap-4 overflow-x-auto border-b border-gray-200">
             {(['overview', 'movements', 'expiry', 'valuation'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setView(tab)}
-                className={`pb-3 px-1 border-b-2 transition-colors ${
+                className={`min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 transition-colors ${
                   view === tab
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -344,7 +340,7 @@ const InventoryReport: React.FC = () => {
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
-          </div>
+          </nav>
 
           {/* Filters */}
           <div className="flex flex-wrap gap-4 mt-4">

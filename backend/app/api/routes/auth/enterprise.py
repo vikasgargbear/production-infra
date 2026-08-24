@@ -24,7 +24,7 @@ async def logout(
     Logout user and invalidate session by blacklisting the token.
 
     The token is extracted from Authorization header and added to blacklist.
-    **Offline Mode**: Frontend should also clear local storage/IndexedDB
+    The frontend then clears its browser-held session credentials.
     """
     from ....core.auth.jwt_auth import decode_jwt
     from ....core.auth.token_blacklist import blacklist_token

@@ -27,6 +27,7 @@ describe('canonical master mutation endpoints', () => {
     });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(2, '/suppliers/', {
       supplier_name: 'E2E supplier',
+      payment_days: 30,
     });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(3, '/branches/', {
       branch_name: 'E2E branch',

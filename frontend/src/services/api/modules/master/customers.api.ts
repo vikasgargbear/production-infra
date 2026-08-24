@@ -21,6 +21,55 @@ export interface CustomerParams {
   include_credit?: boolean;
 }
 
+export interface CanonicalCustomerCreateInput {
+  customer_name: string;
+  customer_code?: string;
+  customer_type?: string;
+  primary_phone: string;
+  primary_email?: string;
+  contact_person_name?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  gst_number?: string;
+  pan_number?: string;
+  credit_limit?: number;
+  credit_days?: number;
+}
+
+const firstDefined = (...values: unknown[]): unknown => values.find(value => value !== undefined && value !== null);
+const optionalText = (value: unknown): string | undefined => (
+  typeof value === 'string' && value.trim() ? value.trim() : undefined
+);
+const canonicalPhone = (value: unknown): string => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+};
+
+/** Keep the browser write boundary aligned with the reviewed canonical schema. */
+export const toCanonicalCustomerCreate = (input: Record<string, any>): CanonicalCustomerCreateInput => {
+  const address = input.address && typeof input.address === 'object' ? input.address : {};
+  return cleanData({
+    customer_name: input.customer_name,
+    customer_code: input.customer_code,
+    customer_type: input.customer_type || 'retail',
+    primary_phone: canonicalPhone(input.primary_phone),
+    primary_email: firstDefined(input.primary_email, input.email),
+    contact_person_name: input.contact_person_name,
+    address_line1: firstDefined(input.address_line1, address.address_line1),
+    address_line2: firstDefined(input.address_line2, address.address_line2),
+    city: firstDefined(input.city, address.city),
+    state: firstDefined(input.state, address.state),
+    pincode: firstDefined(input.pincode, address.pincode),
+    gst_number: optionalText(input.gst_number)?.toUpperCase(),
+    pan_number: optionalText(input.pan_number)?.toUpperCase(),
+    credit_limit: input.credit_limit ?? 0,
+    credit_days: input.credit_days ?? 0,
+  }) as CanonicalCustomerCreateInput;
+};
+
 // ============================================================================
 // API
 // ============================================================================
@@ -29,6 +78,10 @@ const crud = createCrudApi({ basePath: '/customers', createPath: '/customers/' }
 
 export const customersApi = {
   ...crud,
+
+  create: (data: Record<string, any>) => {
+    return apiHelpers.post('/customers/', toCanonicalCustomerCreate(data));
+  },
 
   // Get customers with embedded addresses from the live API
   getAllWithAddresses: (params: any = {}) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, CreditCard, Save, User, Banknote } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
+import { apiErrorMessage } from '../../../services/api/utils/apiError';
 
 // ==================== INLINE TRANSFORMER ====================
 
@@ -8,30 +9,19 @@ import { suppliersApi } from '../../../services/api';
  * Transform supplier data for API submission
  */
 const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
-  name: formData.supplier_name,
-  code: formData.supplier_code || null,
-  supplier_type: formData.supplier_type || 'distributor',
+  supplier_name: formData.supplier_name,
+  supplier_code: formData.supplier_code || undefined,
   contact_person: formData.contact_person || null,
-  contact_person_phone: formData.contact_person_phone || null,
-  phone: formData.phone || null,
-  whatsapp_number: formData.whatsapp_number || formData.phone || null,
-  email: formData.email || null,
-  website: formData.website || null,
-  address: formData.address_line1 || null,
+  primary_phone: formData.phone || null,
+  primary_email: formData.email || null,
+  address_line1: formData.address_line1 || null,
   address_line2: formData.address_line2 || null,
   city: formData.city || null,
   state: formData.state || null,
   pincode: formData.pincode || null,
   gst_number: formData.gst_number || null,
   pan_number: formData.pan_number || null,
-  drug_license_number: formData.drug_license_no || null,
-  drug_license_validity: formData.drug_license_validity || null,
-  bank_name: formData.bank_name || null,
-  account_number: formData.bank_account_no || null,
-  ifsc_code: formData.bank_ifsc_code || null,
-  account_holder_name: formData.account_holder_name || null,
   payment_days: parseInt(String(formData.payment_terms || 30)),
-  notes: formData.notes || null,
 });
 
 /**
@@ -39,11 +29,12 @@ const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
  */
 const transformSupplierResponse = (supplier: Record<string, unknown>) => ({
   supplier_id: String(supplier.supplier_id || supplier.id || ''),
-  name: String(supplier.supplier_name || supplier.name || ''),
-  code: String(supplier.supplier_code || ''),
-  type: String(supplier.supplier_type || ''),
-  phone: String(supplier.primary_phone || supplier.phone || ''),
-  email: String(supplier.primary_email || supplier.email || ''),
+  supplier_name: String(supplier.supplier_name || supplier.name || ''),
+  supplier_code: String(supplier.supplier_code || ''),
+  supplier_type: String(supplier.supplier_type || ''),
+  primary_phone: String(supplier.primary_phone || supplier.phone || ''),
+  primary_email: String(supplier.primary_email || supplier.email || ''),
+  is_active: supplier.is_active !== false,
 });
 
 // Indian states for dropdown
@@ -53,8 +44,8 @@ const INDIAN_STATES = [
   'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
   'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
   'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
-  'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep',
   'Puducherry'
 ];
 
@@ -126,7 +117,7 @@ const SupplierCreationForm = ({
         Date.now().toString().slice(-4);
       setFormData(prev => ({ ...prev, supplier_code: code }));
     }
-  }, [formData.supplier_name]);
+  }, [formData.supplier_name, formData.supplier_code]);
 
   // Copy phone to WhatsApp if checkbox is checked
   useEffect(() => {
@@ -163,6 +154,10 @@ const SupplierCreationForm = ({
 
     if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
+    }
+
+    if (!formData.address_line1 || !formData.city || !formData.state || !/^\d{6}$/.test(formData.pincode)) {
+      newErrors.address = 'Complete address, city, state, and 6-digit pincode are required';
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -202,9 +197,8 @@ const SupplierCreationForm = ({
       } else {
         throw new Error('Failed to create supplier');
       }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create supplier';
-      setErrors({ submit: errorMessage });
+    } catch (error: unknown) {
+      setErrors({ submit: apiErrorMessage(error, 'Failed to create supplier') });
     } finally {
       setSaving(false);
     }
@@ -604,9 +598,9 @@ const SupplierCreationForm = ({
       </details>
 
       {/* Error Message */}
-      {errors.submit && (
+      {(errors.submit || errors.address) && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          <p className="text-xs text-red-600">{errors.submit}</p>
+          <p className="text-xs text-red-600">{errors.submit || errors.address}</p>
         </div>
       )}
 

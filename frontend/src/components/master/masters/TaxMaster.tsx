@@ -1,681 +1,89 @@
-/**
- * TaxMaster Component
- * 
- * Manages tax rates following Indian GST principles:
- * - GST = CGST + SGST (intrastate) or IGST (interstate)
- * - Standard rates: 0%, 5%, 12%, 18%, 28%
- * - CGST = SGST = GST Rate / 2
- * - IGST = GST Rate (for interstate transactions)
- * 
- * Refactored to use useSettingsEntity hook for shared CRUD.
- * Reduced from 815 lines to ~550 lines.
- */
-import React, { useState, useEffect } from 'react';
-import {
-    Receipt, Search, Plus, Edit2, Trash2,
-    Loader2, AlertCircle, Check,
-    X, RefreshCw, Building, Calculator, Info
-} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Loader2, Receipt, RefreshCw, Search, X } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
-import { useSettingsEntity } from '../hooks';
-import { CanonicalWriteNotice } from '../../global';
-
-// ============================================================================
-// Types
-// ============================================================================
+import type { TaxViewDto } from '../../../services/api/modules/settings/settings.api';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 interface TaxMasterProps {
     open?: boolean;
     onClose?: () => void;
 }
 
-interface Tax {
-    id: number | string;
-    name: string;
-    type: string;
-    unit_price: number;
-    cgst: number;
-    sgst: number;
-    igst: number;
-    description?: string;
-    isActive: boolean;
-}
-
-interface TaxFormData {
-    name: string;
-    type: string;
-    unit_price: string | number;
-    cgst: string | number;
-    sgst: string | number;
-    igst: string | number;
-    description: string;
-    isActive: boolean;
-}
-
-interface GSTConfig {
-    companyGSTIN: string;
-    defaultGSTRate: string;
-    autoCalculateGST: boolean;
-    gstCalculationMethod: 'exclusive' | 'inclusive';
-}
-
-// ============================================================================
-// Constants - Indian GST Standard Rates
-// ============================================================================
-
-const TAX_TYPES = [
-    { value: 'all', label: 'All Types' },
-    { value: 'GST', label: 'GST' },
-    { value: 'VAT', label: 'VAT' },
-    { value: 'Custom', label: 'Custom' }
-];
-
-const INITIAL_FORM_DATA: TaxFormData = {
-    name: '',
-    type: 'GST',
-    unit_price: '',
-    cgst: '',
-    sgst: '',
-    igst: '',
-    description: '',
-    isActive: true
-};
-
-const INITIAL_GST_CONFIG: GSTConfig = {
-    companyGSTIN: '',
-    defaultGSTRate: '',
-    autoCalculateGST: true,
-    gstCalculationMethod: 'exclusive'
-};
-
-// ============================================================================
-// GST Calculation Helpers - Following Indian GST Principles
-// ============================================================================
-
-/**
- * Calculate GST components from total rate
- * In India: CGST = SGST = Rate/2, IGST = Rate
- */
-const calculateGSTFromRate = (unit_price: number): { cgst: number; sgst: number; igst: number } => ({
-    cgst: unit_price / 2,
-    sgst: unit_price / 2,
-    igst: unit_price
-});
-
-/**
- * Calculate total unit_price from CGST + SGST
- * In India: Total = CGST + SGST, IGST = CGST + SGST
- */
-const calculateRateFromComponents = (cgst: number, sgst: number): { unit_price: number; igst: number } => ({
-    unit_price: cgst + sgst,
-    igst: cgst + sgst
-});
-
-const TAX_TYPE_STYLES: Record<string, string> = {
-    'GST': 'bg-blue-100 text-blue-800',
-    'VAT': 'bg-green-100 text-green-800',
-    'Custom': 'bg-purple-100 text-purple-800',
-};
-
-// ============================================================================
-// Main Component
-// ============================================================================
+const formatDate = (value: string | null) => value
+    ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(value))
+    : 'Open ended';
 
 const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
-    // Tab state (local - not part of shared hook)
-    const [activeTab, setActiveTab] = useState<'rates' | 'gst-config'>('rates');
-    const [gstConfig, setGstConfig] = useState<GSTConfig>(INITIAL_GST_CONFIG);
+    const [taxes, setTaxes] = useState<TaxViewDto[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [taxability, setTaxability] = useState('all');
+    const [isLoading, setIsLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Custom form state with GST auto-calculation
-    const [localFormData, setLocalFormData] = useState<TaxFormData>(INITIAL_FORM_DATA);
-
-    // Use shared hook for CRUD operations
-    const {
-        entities: taxes,
-        filteredEntities,
-        isLoading,
-        error,
-        successMessage,
-        refreshing,
-        searchTerm,
-        setSearchTerm,
-        filterValue,
-        setFilterValue,
-        showModal,
-        setShowModal,
-        editingEntity,
-        loadEntities,
-        handleRefresh,
-        handleDelete,
-        handleToggleActive,
-        handleCloseModal: baseCloseModal,
-        clearError,
-        clearSuccess
-    } = useSettingsEntity<Tax, TaxFormData>({
-        entityName: 'tax',
-        idField: 'id',
-        api: settingsApi.taxes as any,
-        searchFields: ['name', 'description'],
-        filterField: 'type',
-        initialFormData: INITIAL_FORM_DATA,
-        entityToFormData: (tax) => ({
-            name: tax.name,
-            type: tax.type,
-            unit_price: tax.unit_price,
-            cgst: tax.cgst,
-            sgst: tax.sgst,
-            igst: tax.igst,
-            description: tax.description || '',
-            isActive: tax.isActive
-        }),
-        formDataToEntity: (data) => ({
-            ...data,
-            unit_price: parseFloat(String(data.unit_price)) || 0,
-            cgst: parseFloat(String(data.cgst)) || 0,
-            sgst: parseFloat(String(data.sgst)) || 0,
-            igst: parseFloat(String(data.igst)) || 0
-        }),
-        loadOnOpen: true
-    });
-
-    // Load when opened
-    useEffect(() => {
-        if (open) {
-            loadEntities();
+    const loadTaxes = useCallback(async () => {
+        setError(null);
+        try {
+            const response = await settingsApi.taxes.getAll();
+            setTaxes(response.data);
+        } catch {
+            setTaxes([]);
+            setError('Tax codes could not be loaded from the live canonical API.');
+        } finally {
+            setIsLoading(false);
         }
-    }, [open, loadEntities]);
-
-    // Listen for navigation events to show GST config tab
-    useEffect(() => {
-        const handleNavigateToMaster = (event: Event) => {
-            const customEvent = event as CustomEvent;
-            if (customEvent.detail?.tab === 'gst-config') {
-                setActiveTab('gst-config');
-            }
-        };
-        window.addEventListener('navigateToMaster', handleNavigateToMaster);
-        return () => window.removeEventListener('navigateToMaster', handleNavigateToMaster);
     }, []);
 
-    // ========================================
-    // GST Form Logic - Auto-calculate components
-    // ========================================
+    useEffect(() => {
+        if (open) void loadTaxes();
+    }, [open, loadTaxes]);
 
-    const handleInputChange = (field: keyof TaxFormData, value: unknown) => {
-        setLocalFormData(prev => {
-            const updated = { ...prev, [field]: value };
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        await loadTaxes();
+        setRefreshing(false);
+    };
 
-            // Auto-calculate GST components following Indian GST rules
-            if (prev.type === 'GST') {
-                if (field === 'unit_price') {
-                    // When unit_price changes: CGST = SGST = unit_price/2, IGST = rate
-                    const unit_price = parseFloat(String(value)) || 0;
-                    const { cgst, sgst, igst } = calculateGSTFromRate(unit_price);
-                    updated.cgst = cgst;
-                    updated.sgst = sgst;
-                    updated.igst = igst;
-                } else if (field === 'cgst' || field === 'sgst') {
-                    // When CGST/SGST changes: recalculate total unit_price and IGST
-                    const cgst = field === 'cgst' ? parseFloat(String(value)) || 0 : parseFloat(String(updated.cgst)) || 0;
-                    const sgst = field === 'sgst' ? parseFloat(String(value)) || 0 : parseFloat(String(updated.sgst)) || 0;
-                    const { unit_price, igst } = calculateRateFromComponents(cgst, sgst);
-                    updated.unit_price = unit_price;
-                    updated.igst = igst;
-                }
-            }
-
-            return updated;
+    const types = useMemo(
+        () => Array.from(new Set(taxes.map(item => item.type).filter(Boolean))).sort(),
+        [taxes],
+    );
+    const visibleTaxes = useMemo(() => {
+        const query = searchTerm.trim().toLowerCase();
+        return taxes.filter(item => {
+            const matchesSearch = !query || [item.name, item.code, item.type]
+                .some(value => value.toLowerCase().includes(query));
+            return matchesSearch && (taxability === 'all' || item.type === taxability);
         });
-    };
-
-    const handleEdit = (tax: Tax) => {
-        setLocalFormData({
-            name: tax.name,
-            type: tax.type,
-            unit_price: tax.unit_price,
-            cgst: tax.cgst,
-            sgst: tax.sgst,
-            igst: tax.igst,
-            description: tax.description || '',
-            isActive: tax.isActive
-        });
-        setShowModal(true);
-    };
-
-    const handleCloseModal = () => {
-        setLocalFormData(INITIAL_FORM_DATA);
-        baseCloseModal();
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        try {
-            const taxData = {
-                ...localFormData,
-                unit_price: parseFloat(String(localFormData.unit_price)) || 0,
-                cgst: parseFloat(String(localFormData.cgst)) || 0,
-                sgst: parseFloat(String(localFormData.sgst)) || 0,
-                igst: parseFloat(String(localFormData.igst)) || 0
-            };
-
-            if (editingEntity) {
-                await settingsApi.taxes.update(editingEntity.id, taxData);
-            } else {
-                await settingsApi.taxes.create(taxData);
-            }
-
-            await loadEntities();
-            handleCloseModal();
-        } catch (err) {
-            // Error handled by hook
-        }
-    };
+    }, [taxes, searchTerm, taxability]);
 
     if (!open) return null;
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-50 h-full overflow-hidden">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <Receipt className="w-6 h-6 text-gray-700" />
-                        <h1 className="text-2xl font-bold text-gray-900">Tax Master</h1>
-                        <span className="text-sm text-gray-500">({taxes.length} tax rates)</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        {/* Tabs */}
-                        <div className="bg-gray-100 rounded-lg p-1 flex">
-                            <button
-                                onClick={() => setActiveTab('rates')}
-                                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'rates' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                                    }`}
-                            >
-                                Tax Rates
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('gst-config')}
-                                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'gst-config' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                                    }`}
-                            >
-                                GST Configuration
-                            </button>
-                        </div>
-                        {/* Action Buttons */}
-                        <div className="flex items-center space-x-3">
-                            <button
-                                onClick={handleRefresh}
-                                disabled={refreshing}
-                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
-                            >
-                                {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                            </button>
-                            <button
-                                onClick={() => setShowModal(true)}
-                                disabled
-                                title="Unavailable until a canonical tax command exists"
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                            >
-                                <Plus className="w-4 h-4" /><span>Add Tax</span>
-                            </button>
-                        </div>
-                    </div>
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-gray-50">
+            <header className="border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3"><Receipt className="h-6 w-6 shrink-0 text-gray-700" aria-hidden="true" /><div><h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">Tax Master</h1><p className="text-sm text-gray-500">{taxes.length} effective canonical tax codes</p></div></div>
+                    <div className="flex items-center gap-2"><button type="button" onClick={handleRefresh} disabled={refreshing} className="inline-flex min-h-11 items-center gap-2 border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-50">{refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Refresh</button>{onClose && <button type="button" onClick={onClose} aria-label="Close tax master" className="grid h-11 w-11 place-items-center border border-gray-300 bg-white text-gray-600"><X className="h-5 w-5" /></button>}</div>
                 </div>
+            </header>
+
+            <CanonicalWriteNotice action="Changing tax codes" className="mx-4 mt-4 sm:mx-6" />
+
+            <div className="grid gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:px-6">
+                <label className="relative block"><span className="sr-only">Search tax codes</span><Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" /><input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search tax code, name, or taxability" className="min-h-11 w-full border border-gray-300 bg-white pl-10 pr-3" /></label>
+                <select aria-label="Filter taxability" value={taxability} onChange={event => setTaxability(event.target.value)} className="min-h-11 w-full border border-gray-300 bg-white px-3"><option value="all">All taxability types</option>{types.map(item => <option key={item} value={item}>{item}</option>)}</select>
             </div>
 
-            <CanonicalWriteNotice action="Changing tax rates" className="mx-6 mt-4" />
-
-            {/* Filters */}
-            <div className="bg-white border-b border-gray-200 px-6 py-3">
-                <div className="flex items-center space-x-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search by name or description..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <select
-                        value={filterValue}
-                        onChange={(e) => setFilterValue(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                        {TAX_TYPES.map(type => (
-                            <option key={type.value} value={type.value}>{type.label}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            {/* Messages */}
-            {error && (
-                <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2" />{error}
-                    <button onClick={clearError} className="ml-auto text-red-400 hover:text-red-600">
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-            {successMessage && (
-                <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
-                    <Check className="w-5 h-5 mr-2" />{successMessage}
-                    <button onClick={clearSuccess} className="ml-auto text-green-400 hover:text-green-600">
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto p-6 min-h-0">
-                {activeTab === 'rates' ? (
-                    /* Tax Rates Tab */
+            <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                {error && <div role="alert" className="mb-4 flex items-center gap-2 border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
+                {isLoading ? <div className="flex h-48 items-center justify-center text-gray-600"><Loader2 className="mr-2 h-6 w-6 animate-spin" />Loading tax codes…</div> : visibleTaxes.length === 0 ? <div className="border border-gray-200 bg-white p-8 text-center text-gray-600">No tax codes match the current filters.</div> : (
                     <>
-                        {isLoading ? (
-                            <div className="flex items-center justify-center h-64">
-                                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                                <span className="ml-2 text-gray-600">Loading tax rates...</span>
-                            </div>
-                        ) : filteredEntities.length === 0 ? (
-                            <div className="flex items-center justify-center h-64">
-                                <div className="text-center">
-                                    <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                    <p className="text-gray-600">No tax rates found</p>
-                                    {searchTerm && <p className="text-sm text-gray-500 mt-2">Try adjusting your search</p>}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
-                                <div className="flex-1 overflow-auto">
-                                    <table className="w-full">
-                                        <thead className="bg-gray-50 sticky top-0 z-10">
-                                            <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tax Details</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Rate</th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">GST Components</th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
-                                            {filteredEntities.map((tax) => (
-                                                <tr key={tax.id} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-sm font-medium text-gray-900">{tax.name}</p>
-                                                        {tax.description && <p className="text-xs text-gray-500">{tax.description}</p>}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 text-xs rounded-full ${TAX_TYPE_STYLES[tax.type] || 'bg-gray-100 text-gray-800'}`}>
-                                                            {tax.type}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className="text-lg font-semibold text-gray-900">{tax.unit_price}%</span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        {tax.type === 'GST' ? (
-                                                            <div className="text-xs space-y-1">
-                                                                <div className="flex justify-between max-w-24 mx-auto">
-                                                                    <span>CGST:</span><span className="font-medium">{tax.cgst}%</span>
-                                                                </div>
-                                                                <div className="flex justify-between max-w-24 mx-auto">
-                                                                    <span>SGST:</span><span className="font-medium">{tax.sgst}%</span>
-                                                                </div>
-                                                                <div className="flex justify-between max-w-24 mx-auto text-blue-600">
-                                                                    <span>IGST:</span><span className="font-medium">{tax.igst}%</span>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-gray-400">N/A</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <button
-                                                            onClick={() => handleToggleActive(tax.id)}
-                                                            disabled
-                                                            className={`px-2 py-1 text-xs rounded-full ${tax.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
-                                                        >
-                                                            {tax.isActive ? 'Active' : 'Inactive'}
-                                                        </button>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex items-center justify-center space-x-2">
-                                                            <button onClick={() => handleEdit(tax)} disabled title="Edit unavailable" className="p-1 text-blue-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed">
-                                                                <Edit2 className="w-4 h-4" />
-                                                            </button>
-                                                            <button onClick={() => handleDelete(tax.id)} disabled title="Delete unavailable" className="p-1 text-red-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed">
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
+                        <div className="space-y-3 md:hidden">{visibleTaxes.map(item => <article key={item.id} className="border border-gray-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-medium text-gray-900">{item.name}</h2><p className="text-sm text-gray-500">{item.code}</p></div><strong className="shrink-0 text-blue-700">{item.totalRate}%</strong></div><dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-gray-500">Taxability</dt><dd>{item.type || '—'}</dd></div><div><dt className="text-gray-500">Status</dt><dd>{item.isActive ? 'Active' : item.status || 'Inactive'}</dd></div><div><dt className="text-gray-500">CGST / SGST</dt><dd>{item.cgst}% / {item.sgst}%</dd></div><div><dt className="text-gray-500">IGST / Cess</dt><dd>{item.igst}% / {item.cess}%</dd></div><div className="col-span-2"><dt className="text-gray-500">Effective</dt><dd>{formatDate(item.effectiveFrom)} – {formatDate(item.effectiveTo)}</dd></div></dl></article>)}</div>
+                        <div className="hidden overflow-x-auto border border-gray-200 bg-white md:block"><table className="w-full min-w-[860px] text-sm"><thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-4 py-3">Tax code</th><th className="px-4 py-3">Taxability</th><th className="px-4 py-3 text-right">Total</th><th className="px-4 py-3 text-right">CGST</th><th className="px-4 py-3 text-right">SGST</th><th className="px-4 py-3 text-right">IGST</th><th className="px-4 py-3">Effective period</th><th className="px-4 py-3">Status</th></tr></thead><tbody className="divide-y divide-gray-200">{visibleTaxes.map(item => <tr key={item.id}><td className="px-4 py-3"><div className="font-medium text-gray-900">{item.name}</div><div className="text-gray-500">{item.code}</div></td><td className="px-4 py-3">{item.type || '—'}</td><td className="px-4 py-3 text-right font-medium">{item.totalRate}%</td><td className="px-4 py-3 text-right">{item.cgst}%</td><td className="px-4 py-3 text-right">{item.sgst}%</td><td className="px-4 py-3 text-right">{item.igst}%</td><td className="px-4 py-3">{formatDate(item.effectiveFrom)} – {formatDate(item.effectiveTo)}</td><td className="px-4 py-3">{item.isActive ? 'Active' : item.status || 'Inactive'}</td></tr>)}</tbody></table></div>
                     </>
-                ) : (
-                    /* GST Configuration Tab */
-                    <div className="space-y-6">
-                        {/* Company GST Information */}
-                        <div className="bg-white rounded-lg border border-gray-200 p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                <Building className="h-5 w-5 mr-2 text-blue-600" />
-                                Company GST Information
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Company GSTIN</label>
-                                    <input
-                                        type="text"
-                                        value={gstConfig.companyGSTIN}
-                                        onChange={(e) => setGstConfig(prev => ({ ...prev, companyGSTIN: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., 27AABCU9603R1ZX"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Default GST Rate</label>
-                                    <select
-                                        value={gstConfig.defaultGSTRate}
-                                        onChange={(e) => setGstConfig(prev => ({ ...prev, defaultGSTRate: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="">Select Default Rate</option>
-                                        {taxes.filter(tax => tax.type === 'GST' && tax.isActive).map(tax => (
-                                            <option key={tax.id} value={String(tax.id)}>{tax.name} - {tax.unit_price}%</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* GST Calculation Settings */}
-                        <div className="bg-white rounded-lg border border-gray-200 p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                <Calculator className="h-5 w-5 mr-2 text-green-600" />
-                                GST Calculation Settings
-                            </h3>
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Auto-calculate GST on invoices</label>
-                                        <p className="text-xs text-gray-500">Automatically apply GST based on product configuration</p>
-                                    </div>
-                                    <input
-                                        type="checkbox"
-                                        checked={gstConfig.autoCalculateGST}
-                                        onChange={(e) => setGstConfig(prev => ({ ...prev, autoCalculateGST: e.target.checked }))}
-                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">GST Calculation Method</label>
-                                    <select
-                                        value={gstConfig.gstCalculationMethod}
-                                        onChange={(e) => setGstConfig(prev => ({ ...prev, gstCalculationMethod: e.target.value as 'exclusive' | 'inclusive' }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="exclusive">Tax Exclusive (Price + GST)</option>
-                                        <option value="inclusive">Tax Inclusive (Price includes GST)</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Info Panel */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <div className="flex items-start">
-                                <Info className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
-                                <div className="text-sm text-blue-800">
-                                    <p className="font-medium mb-1">Indian GST Structure</p>
-                                    <p>GST = CGST + SGST (intrastate) or IGST (interstate). Standard rates: 0%, 5%, 12%, 18%, 28%.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 )}
-            </div>
-
-            {/* Add/Edit Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl m-4">
-                        <div className="px-6 py-4 border-b border-gray-200">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-semibold text-gray-900">
-                                    {editingEntity ? 'Edit Tax Rate' : 'Add New Tax Rate'}
-                                </h2>
-                                <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
-                                    <X className="w-5 h-5 text-gray-500" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Tax Name <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={localFormData.name}
-                                        onChange={(e) => handleInputChange('name', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., GST 18%, GST 5%"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tax Type</label>
-                                    <select
-                                        value={localFormData.type}
-                                        onChange={(e) => handleInputChange('type', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="GST">GST</option>
-                                        <option value="VAT">VAT</option>
-                                        <option value="Custom">Custom</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Total Rate (%) <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        required
-                                        value={localFormData.unit_price}
-                                        onChange={(e) => handleInputChange('unit_price', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., 18"
-                                    />
-                                    {localFormData.type === 'GST' && (
-                                        <p className="text-xs text-gray-500 mt-1">CGST & SGST will be auto-calculated as unit_price/2</p>
-                                    )}
-                                </div>
-
-                                {/* GST Components - Only for GST type */}
-                                {localFormData.type === 'GST' && (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">CGST (%)</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={localFormData.cgst}
-                                                onChange={(e) => handleInputChange('cgst', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">SGST (%)</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={localFormData.sgst}
-                                                onChange={(e) => handleInputChange('sgst', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">IGST (%) - Interstate</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={localFormData.igst}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50"
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">Auto-calculated: CGST + SGST</p>
-                                        </div>
-                                    </>
-                                )}
-
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                    <textarea
-                                        value={localFormData.description}
-                                        onChange={(e) => handleInputChange('description', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        rows={2}
-                                        placeholder="Optional description..."
-                                    />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={localFormData.isActive}
-                                            onChange={(e) => handleInputChange('isActive', e.target.checked)}
-                                            className="rounded border-gray-300"
-                                        />
-                                        <span className="text-sm text-gray-700">Active</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div className="mt-6 flex items-center justify-end space-x-3">
-                                <button type="button" onClick={handleCloseModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                                    Cancel
-                                </button>
-                                <button type="submit" disabled className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed">
-                                    {editingEntity ? 'Update Tax' : 'Add Tax'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            </main>
         </div>
     );
 };

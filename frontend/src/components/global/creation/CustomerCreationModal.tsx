@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
 import { customersApi } from '../../../services/api';
+import { apiErrorMessages } from '../../../services/api/utils/apiError';
 import { FullScreenModal } from '../modals/FullScreenModal';
 import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 
@@ -18,16 +19,12 @@ import type {
 const prepareCustomerForAPI = (customerData: CustomerFormData & { org_id?: string | null }) => ({
     customer_name: customerData.customer_name,
     primary_phone: customerData.primary_phone,
-
-    whatsapp_number: customerData.whatsapp_number || null,
-    email: customerData.primary_email || null,
+    primary_email: customerData.primary_email || undefined,
     customer_type: customerData.customer_type || 'retail',
     gst_number: customerData.gst_number || null,
     pan_number: customerData.pan_number || null,
-    drug_license_number: customerData.drug_license_number || null,
     credit_limit: parseFloat(String(customerData.credit_limit || 0)),
     credit_days: parseInt(String(customerData.credit_days || 0)),
-    org_id: customerData.org_id,
     address_line1: customerData.address?.address_line1 || '',
     address_line2: customerData.address?.address_line2 || '',
     city: customerData.address?.city || '',
@@ -40,6 +37,7 @@ const prepareCustomerForAPI = (customerData: CustomerFormData & { org_id?: strin
  */
 const transformCustomer = (customer: Record<string, unknown>): Customer => ({
     customer_id: String(customer.customer_id || customer.id || ''),
+    customer_code: String(customer.customer_code || ''),
     customer_name: String(customer.customer_name || ''),
     primary_phone: String(customer.primary_phone || ''),
     primary_email: String(customer.primary_email || customer.email || ''),
@@ -50,6 +48,7 @@ const transformCustomer = (customer: Record<string, unknown>): Customer => ({
     credit_days: parseInt(String(customer.credit_days || 0)),
     customer_type: String(customer.customer_type || 'retail'),
     current_outstanding: parseFloat(String(customer.current_outstanding || 0)),
+    is_active: customer.is_active !== false,
 });
 
 // ==================== TYPES ====================
@@ -109,6 +108,32 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
     }, [customerMode, isB2BOnly, isB2COnly, features.default_customer_type]);
 
     const saveCustomer = async (): Promise<void> => {
+        const validationErrors: string[] = [];
+        if (!newCustomer.customer_name.trim()) validationErrors.push('Customer name is required');
+        if (!/^\d{10}$/.test(newCustomer.primary_phone.replace(/\D/g, ''))) {
+            validationErrors.push('A valid 10-digit phone number is required');
+        }
+        const address = newCustomer.address;
+        const addressLine1 = address?.address_line1?.trim() || '';
+        const city = address?.city?.trim() || '';
+        const state = address?.state?.trim() || '';
+        const pincode = address?.pincode?.trim() || '';
+        if (!addressLine1 || !city || !state || !/^\d{6}$/.test(pincode)) {
+            validationErrors.push('Complete address, city, state, and 6-digit pincode are required');
+        }
+        if (newCustomer.primary_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomer.primary_email)) {
+            validationErrors.push('Email address is invalid');
+        }
+        if (newCustomer.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(newCustomer.gst_number)) {
+            validationErrors.push('GSTIN is invalid');
+        }
+        if (newCustomer.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(newCustomer.pan_number)) {
+            validationErrors.push('PAN is invalid');
+        }
+        if (validationErrors.length > 0) {
+            setErrors(validationErrors);
+            return;
+        }
         setSaving(true);
         setErrors([]);
         try {
@@ -150,27 +175,8 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
             } else {
                 setErrors(['Customer created but response format unexpected']);
             }
-        } catch (error: any) {
-            if (error.response?.data?.detail) {
-                if (Array.isArray(error.response.data.detail)) {
-                    setErrors(error.response.data.detail.map((err: unknown) => {
-                        if (typeof err === 'string') {
-                            return err;
-                        } else if (err && typeof err === 'object' && 'msg' in err) {
-                            const typedErr = err as { msg: string; loc?: string[] };
-                            return typedErr.loc ? `${typedErr.loc.join('.')} - ${typedErr.msg}` : typedErr.msg;
-                        } else {
-                            return JSON.stringify(err);
-                        }
-                    }));
-                } else if (typeof error.response.data.detail === 'string') {
-                    setErrors([error.response.data.detail]);
-                } else {
-                    setErrors([JSON.stringify(error.response.data.detail)]);
-                }
-            } else {
-                setErrors(['Failed to save customer']);
-            }
+        } catch (error: unknown) {
+            setErrors(apiErrorMessages(error, 'Failed to save customer'));
         } finally {
             setSaving(false);
         }

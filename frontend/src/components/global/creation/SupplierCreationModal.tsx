@@ -1,9 +1,9 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
-import { Building2, MapPin, FileText, Globe, Briefcase, Check } from 'lucide-react';
+import { Building2, MapPin, FileText } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { useToast } from '../ui';
-import { APP_CONFIG } from '../../../config/app.config';
 import { FullScreenModal } from '../modals/FullScreenModal';
+import { apiErrorMessage } from '../../../services/api/utils/apiError';
 
 // ==================== INLINE TRANSFORMERS ====================
 
@@ -11,40 +11,21 @@ import { FullScreenModal } from '../modals/FullScreenModal';
  * Prepare supplier data for API submission
  */
 const prepareSupplierForAPI = (supplierData: Record<string, unknown>) => ({
-    name: supplierData.supplier_name || supplierData.name,
-    code: supplierData.supplier_code || null,
-    supplier_type: supplierData.supplier_type || 'distributor',
+    supplier_name: supplierData.supplier_name || supplierData.name,
+    supplier_code: supplierData.supplier_code || undefined,
     contact_person: supplierData.contact_person || null,
-    contact_person_phone: supplierData.contact_person_phone || null,
-    phone: supplierData.phone || null,
-    secondary_phone: supplierData.secondary_phone || null,
-    whatsapp_number: (supplierData.whatsapp_number as string) || (supplierData.phone as string) || null,
-    email: supplierData.email || null,
-    website: supplierData.website || null,
-    address: supplierData.address_line1 || supplierData.address || null,
+    primary_phone: supplierData.phone || null,
+    primary_email: supplierData.email || null,
+    address_line1: supplierData.address_line1 || supplierData.address || null,
     address_line2: supplierData.address_line2 || null,
     city: supplierData.city || null,
     state: supplierData.state || null,
     pincode: supplierData.pincode || null,
     gst_number: supplierData.gst_number || null,
     pan_number: supplierData.pan_number || null,
-    drug_license_number: supplierData.drug_license_no || null,
-    drug_license_validity: supplierData.drug_license_validity || null,
-    bank_name: supplierData.bank_name || null,
-    account_number: supplierData.bank_account_no || null,
-    ifsc_code: supplierData.bank_ifsc_code || null,
-    account_holder_name: supplierData.account_holder_name || null,
-    payment_terms: supplierData.payment_terms || null,
     payment_days: supplierData.payment_terms === 'custom'
         ? parseInt(String(supplierData.payment_days || 30))
         : parseInt(String(supplierData.payment_terms || 30)),
-    credit_days: parseInt(String(supplierData.credit_days || 0)),
-    quality_rating: supplierData.quality_rating || 4,
-    delivery_rating: supplierData.delivery_rating || 4,
-    compliance_rating: supplierData.compliance_rating || 'good',
-    notes: supplierData.notes || null,
-    internal_notes: supplierData.notes || null,
-    org_id: supplierData.org_id
 });
 
 /**
@@ -52,12 +33,12 @@ const prepareSupplierForAPI = (supplierData: Record<string, unknown>) => ({
  */
 const transformSupplier = (supplier: Record<string, unknown>) => ({
     supplier_id: String(supplier.supplier_id || supplier.id || ''),
-    name: String(supplier.supplier_name || supplier.name || ''),
-    code: String(supplier.supplier_code || ''),
-    type: String(supplier.supplier_type || ''),
+    supplier_name: String(supplier.supplier_name || supplier.name || ''),
+    supplier_code: String(supplier.supplier_code || ''),
+    supplier_type: String(supplier.supplier_type || ''),
     contact_person: String(supplier.contact_person || supplier.contact_person || ''),
-    phone: String(supplier.primary_phone || supplier.phone || ''),
-    email: String(supplier.primary_email || supplier.email || ''),
+    primary_phone: String(supplier.primary_phone || supplier.phone || ''),
+    primary_email: String(supplier.primary_email || supplier.email || ''),
     gst_number: String(supplier.gst_number || supplier.gst_number || ''),
     pan_number: String(supplier.pan_number || ''),
     is_active: supplier.is_active ?? true,
@@ -69,8 +50,8 @@ const INDIAN_STATES: string[] = [
     'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
     'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
     'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
-    'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep',
     'Puducherry'
 ];
 
@@ -139,7 +120,6 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
     title = "Add New Supplier"
 }) => {
     const toast = useToast();
-    const [activeSection, setActiveSection] = useState<string>('all');
     const [saving, setSaving] = useState<boolean>(false);
     const [useBusinessPhoneForWhatsApp, setUseBusinessPhoneForWhatsApp] = useState<boolean>(false);
     const [useBusinessContactForPerson, setUseBusinessContactForPerson] = useState<boolean>(false);
@@ -192,7 +172,7 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
                 Date.now().toString().slice(-4);
             setFormData(prev => ({ ...prev, supplier_code: code }));
         }
-    }, [formData.supplier_name]);
+    }, [formData.supplier_name, formData.supplier_code]);
 
     // Handle copying business phone to WhatsApp
     useEffect(() => {
@@ -245,6 +225,7 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
 
         if (!formData.city) newErrors.city = 'City is required';
         if (!formData.state) newErrors.state = 'State is required';
+        if (!formData.address_line1) newErrors.address_line1 = 'Address is required';
 
         if ((formData.city || formData.state) && !formData.pincode) {
             newErrors.pincode = 'Pincode is required when providing address';
@@ -294,9 +275,7 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
                 throw new Error('Failed to create supplier');
             }
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { detail?: string } }; message?: string };
-            const errorMessage = err.response?.data?.detail || err.message || 'Failed to create supplier';
-            toast.error(errorMessage);
+            toast.error(apiErrorMessage(error, 'Failed to create supplier'));
         } finally {
             setSaving(false);
         }
@@ -504,13 +483,18 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
                     </h3>
                     <div className="space-y-3">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            <input
-                                type="text"
-                                value={formData.address_line1}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('address_line1', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                placeholder="Building/Street address"
-                            />
+                            <div>
+                                <input
+                                    type="text"
+                                    value={formData.address_line1}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('address_line1', e.target.value)}
+                                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.address_line1 ? 'border-red-300' : 'border-gray-300'}`}
+                                    placeholder="Building/Street address *"
+                                />
+                                {errors.address_line1 && (
+                                    <p className="mt-1 text-xs text-red-600">{errors.address_line1}</p>
+                                )}
+                            </div>
                             <input
                                 type="text"
                                 value={formData.address_line2}

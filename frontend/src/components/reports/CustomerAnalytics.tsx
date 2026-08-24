@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Users, UserPlus, UserCheck, TrendingUp, Download, Search, Filter, MapPin, ShoppingBag, Calendar, Award } from 'lucide-react';
+import { Users, UserPlus, UserCheck, TrendingUp, Search, Filter, MapPin, ShoppingBag, Calendar, Award } from 'lucide-react';
 import { Line, Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -305,10 +305,6 @@ const CustomerAnalytics: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-900">Customer Analytics</h1>
               <p className="text-gray-600 mt-1">Customer behavior, segmentation, and lifetime value analysis</p>
             </div>
-            <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-              <Download className="h-4 w-4" />
-              Export Report
-            </button>
           </div>
 
           {/* Filters */}

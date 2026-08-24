@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
-from ..schemas.master.customer import CustomerCreate
-from ..schemas.master.supplier import SupplierCreate
+from ..schemas.master.customer import CanonicalCustomerCreate
+from ..schemas.master.supplier import CanonicalSupplierCreate
 
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
 logger = logging.getLogger(__name__)
@@ -111,25 +111,6 @@ def _party_posting_account(db: Session, org_id: UUID, account_type: str) -> UUID
     return account_id
 
 
-def _reject_unreviewed_party_fields(kind: str, values: dict[str, Any]) -> None:
-    entered = [label for field, label in (
-        ("drug_license_number", "drug license"),
-        ("fssai_number", "FSSAI license"),
-        ("bank_name", "supplier bank details"),
-        ("account_number", "supplier bank details"),
-        ("ifsc_code", "supplier bank details"),
-        ("internal_notes", "internal notes"),
-    ) if values.get(field)]
-    if values.get("discount_percent"):
-        entered.append("default discount")
-    if entered:
-        fields = ", ".join(sorted(set(entered)))
-        raise HTTPException(
-            status_code=422,
-            detail=f"{kind} {fields} require their dedicated reviewed workflow",
-        )
-
-
 class CanonicalProductDraftCreate(BaseModel):
     """Small, honest product-draft contract for the canonical catalog."""
 
@@ -143,14 +124,6 @@ class CanonicalProductDraftCreate(BaseModel):
     generic_name: Optional[str] = Field(default=None, max_length=255)
     product_kind: str = Field(default="medicine", pattern=r"^(medicine|medical_device|consumable)$")
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-
-class CanonicalCustomerCreate(CustomerCreate):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-
-class CanonicalSupplierCreate(SupplierCreate):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
@@ -351,6 +324,45 @@ def update_product_draft(
         "product_name": updated.name,
         "lifecycle_status": "draft",
         "message": "Product draft updated",
+    }
+
+
+@router.delete("/products/{product_id}")
+def delete_product_draft(
+    product_id: UUID,
+    user: dict = Depends(PermissionChecker("master", "delete")),
+    db: Session = Depends(get_db),
+):
+    """Delete only an unused draft; active catalog records are immutable here."""
+
+    org_id = _activate(db, user)
+    try:
+        deleted = db.execute(text("""
+            DELETE FROM catalog.products
+             WHERE org_id=:org_id AND id=:product_id AND status='draft'
+         RETURNING id, sku, name
+        """), {"org_id": org_id, "product_id": product_id}).first()
+        if deleted is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Only an existing unused product draft can be deleted",
+            )
+        db.commit()
+    except HTTPException:
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This draft is already referenced and cannot be deleted",
+        ) from exc
+    return {
+        "success": True,
+        "product_id": deleted.id,
+        "product_code": deleted.sku,
+        "product_name": deleted.name,
+        "message": "Product draft deleted",
     }
 
 
@@ -594,8 +606,6 @@ def create_customer(
     user: dict = Depends(PermissionChecker("master", "create")),
     db: Session = Depends(get_db),
 ):
-    values = customer.model_dump()
-    _reject_unreviewed_party_fields("Customer", values)
     org_id = _activate(db, user)
     receivable_account_id = _party_posting_account(db, org_id, "asset")
     try:
@@ -638,9 +648,16 @@ def create_customer(
         raise HTTPException(status_code=409, detail="Customer code or contact already exists") from exc
     return {
         "customer_id": account,
+        "party_id": party_id,
         "customer_code": customer_code,
         "customer_name": customer.customer_name,
         "primary_phone": customer.primary_phone,
+        "primary_email": customer.primary_email,
+        "gst_number": customer.gst_number,
+        "customer_type": customer.customer_type,
+        "credit_limit": customer.credit_limit,
+        "credit_days": customer.credit_days,
+        "is_active": True,
         "status": "active",
         "message": "Customer created",
     }
@@ -656,8 +673,6 @@ def create_supplier(
     user: dict = Depends(PermissionChecker("master", "create")),
     db: Session = Depends(get_db),
 ):
-    values = supplier.model_dump()
-    _reject_unreviewed_party_fields("Supplier", values)
     org_id = _activate(db, user)
     payable_account_id = _party_posting_account(db, org_id, "liability")
     try:
@@ -687,7 +702,7 @@ def create_supplier(
             ) RETURNING id
         """), {
             "org_id": org_id, "party_id": party_id, "code": supplier_code,
-            "payment_days": supplier.payment_days or supplier.credit_days,
+            "payment_days": supplier.payment_days,
             "account_id": payable_account_id,
         }).scalar_one()
         db.commit()
@@ -699,9 +714,14 @@ def create_supplier(
         raise HTTPException(status_code=409, detail="Supplier code or contact already exists") from exc
     return {
         "supplier_id": account,
+        "party_id": party_id,
         "supplier_code": supplier_code,
         "supplier_name": supplier.supplier_name,
         "primary_phone": supplier.primary_phone,
+        "primary_email": supplier.primary_email,
+        "gst_number": supplier.gst_number,
+        "payment_days": supplier.payment_days,
+        "is_active": True,
         "status": "active",
         "message": "Supplier created",
     }
@@ -1399,8 +1419,10 @@ def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, g
     rows = _rows(db, """
         SELECT receipt.id AS grn_id, receipt.goods_receipt_number AS grn_number,
                receipt.received_at AS grn_date, receipt.status AS grn_status,
+               receipt.status='posted' AS stock_updated,
                receipt.supplier_account_id AS supplier_id, party.legal_name AS supplier_name,
                receipt.supplier_challan_number AS invoice_number,
+               receipt.supplier_challan_number AS supplier_invoice_number,
                receipt.created_at, receipt.updated_at
           FROM procurement.goods_receipts receipt
           JOIN parties.supplier_accounts account ON account.org_id=receipt.org_id AND account.id=receipt.supplier_account_id

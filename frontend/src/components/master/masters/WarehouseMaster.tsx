@@ -1,737 +1,128 @@
-import React, { useState, useEffect } from 'react';
-import {
-    Warehouse, Search, Plus, Edit2, Trash2,
-    MapPin, Phone, Mail, Package, User,
-    Loader2, AlertCircle, Check,
-    ChevronRight, BarChart3, Clock, Settings, X,
-    QrCode, Wifi, Thermometer, Lock, Activity, RefreshCw
-} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Loader2, RefreshCw, Search, Warehouse, X } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
-import { CanonicalWriteNotice, DataTable, StatusBadge, Toast } from '../../global/ui';
+import type { WarehouseViewDto } from '../../../services/api/modules/settings/settings.api';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 interface WarehouseMasterProps {
     open?: boolean;
     onClose?: () => void;
 }
 
-interface WarehouseData {
-    id: number | string;
-    code: string;
-    name: string;
-    type: string;
-    address: string;
-    city: string;
-    state: string;
-    pincode: string;
-    phone: string;
-    email: string;
-    manager: string;
-    capacity?: number | string;
-    occupancy?: number | string;
-    currentStock?: number;
-    description: string;
-    temperature: string;
-    isActive: boolean;
-    isDefault: boolean;
-}
-
-interface WarehouseFormData {
-    code: string;
-    name: string;
-    type: string;
-    address: string;
-    city: string;
-    state: string;
-    pincode: string;
-    phone: string;
-    email: string;
-    manager: string;
-    capacity: string | number;
-    description: string;
-    temperature: string;
-    isActive: boolean;
-    isDefault: boolean;
-}
-
 const WarehouseMaster: React.FC<WarehouseMasterProps> = ({ open, onClose }) => {
+    const [warehouses, setWarehouses] = useState<WarehouseViewDto[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [editingWarehouse, setEditingWarehouse] = useState<WarehouseData | null>(null);
-    const [selectedWarehouses, setSelectedWarehouses] = useState<(number | string)[]>([]);
-    const [warehouses, setWarehouses] = useState<WarehouseData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState('');
     const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Load warehouses on component mount
-    useEffect(() => {
-        if (open) {
-            loadWarehouses();
-        }
-    }, [open]);
-
-    // Load warehouses from backend
-    const loadWarehouses = async () => {
-        setIsLoading(true);
+    const loadWarehouses = useCallback(async () => {
         setError(null);
-
         try {
             const response = await settingsApi.warehouses.getAll();
-
-            // Handle different response formats
-            let warehouseData: WarehouseData[] = [];
-            if (response && (response as any).data) {
-                warehouseData = Array.isArray((response as any).data) ? (response as any).data : (response as any).data.warehouses || [];
-            } else if (Array.isArray(response)) {
-                // @ts-ignore
-                warehouseData = response;
-            }
-
-            setWarehouses(warehouseData || []);
-        } catch (error) {
-            setError('Failed to load warehouses. Please try again.');
+            setWarehouses(response.data);
+        } catch {
             setWarehouses([]);
+            setError('Locations could not be loaded from the live canonical API.');
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    // Handle refresh
+    useEffect(() => {
+        if (open) void loadWarehouses();
+    }, [open, loadWarehouses]);
+
     const handleRefresh = async () => {
         setRefreshing(true);
-        setError(null);
-        try {
-            await loadWarehouses();
-        } catch (error) {
-            setError('Failed to refresh data');
-        } finally {
-            setRefreshing(false);
-        }
+        await loadWarehouses();
+        setRefreshing(false);
     };
 
-    const warehouseTypes = [
-        { value: 'all', label: 'All Types' },
-        { value: 'warehouse', label: 'Warehouse' },
-        { value: 'coldStorage', label: 'Cold Storage' },
-        { value: 'store', label: 'Store' },
-        { value: 'primary', label: 'Primary' },
-        { value: 'specialized', label: 'Specialized' }
-    ];
-
-    const filteredWarehouses = warehouses.filter(warehouse => {
-        const matchesSearch = searchTerm === '' ||
-            warehouse.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            warehouse.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            warehouse.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            warehouse.manager?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = filterType === 'all' || warehouse.type === filterType;
-        return matchesSearch && matchesType;
-    });
-
-    const [formData, setFormData] = useState<WarehouseFormData>({
-        code: '',
-        name: '',
-        type: 'warehouse',
-        address: '',
-        city: '',
-        state: '',
-        pincode: '',
-        phone: '',
-        email: '',
-        manager: '',
-        capacity: '',
-        description: '',
-        temperature: 'Ambient',
-        isActive: true,
-        isDefault: false
-    });
-
-    const handleInputChange = (field: keyof WarehouseFormData, value: any) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: value
-        }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(null);
-
-        try {
-            const warehouseData = {
-                ...formData,
-                capacity: parseInt(formData.capacity as string) || 0
-            };
-
-            if (editingWarehouse) {
-                // Update existing warehouse
-                const response = await settingsApi.warehouses.update(editingWarehouse.id, warehouseData);
-                if ((response as any).success || (response as any).data) {
-                    setSuccessMessage('Warehouse updated successfully!');
-                    await loadWarehouses(); // Reload data
-                }
-            } else {
-                // Add new warehouse
-                const response = await settingsApi.warehouses.create(warehouseData);
-                if ((response as any).success || (response as any).data) {
-                    setSuccessMessage('Warehouse added successfully!');
-                    await loadWarehouses(); // Reload data
-                }
-            }
-
-            setTimeout(() => setSuccessMessage(''), 3000);
-            handleCloseModal();
-        } catch (error) {
-            setError('Failed to save warehouse. Please try again.');
-        }
-    };
-
-    const handleEdit = (warehouse: WarehouseData) => {
-        setEditingWarehouse(warehouse);
-        setFormData({
-            code: warehouse.code || '',
-            name: warehouse.name || '',
-            type: warehouse.type || 'warehouse',
-            address: warehouse.address || '',
-            city: warehouse.city || '',
-            state: warehouse.state || '',
-            pincode: warehouse.pincode || '',
-            phone: warehouse.phone || '',
-            email: warehouse.email || '',
-            manager: warehouse.manager || '',
-            capacity: warehouse.capacity || warehouse.occupancy || '', //'occupancy' used as fallback
-            description: warehouse.description || '',
-            temperature: warehouse.temperature || 'Ambient',
-            isActive: warehouse.isActive !== false,
-            isDefault: warehouse.isDefault || false
+    const types = useMemo(
+        () => Array.from(new Set(warehouses.map(item => item.type).filter(Boolean))).sort(),
+        [warehouses],
+    );
+    const filteredWarehouses = useMemo(() => {
+        const query = searchTerm.trim().toLowerCase();
+        return warehouses.filter(item => {
+            const matchesSearch = !query || [item.name, item.code, item.branchName, item.type]
+                .some(value => value.toLowerCase().includes(query));
+            return matchesSearch && (filterType === 'all' || item.type === filterType);
         });
-        setShowAddModal(true);
-    };
-
-    const handleDelete = async (id: number | string) => {
-        if (window.confirm('Are you sure you want to delete this warehouse?')) {
-            try {
-                await settingsApi.warehouses.delete(id);
-                setSuccessMessage('Warehouse deleted successfully!');
-                await loadWarehouses();
-                setTimeout(() => setSuccessMessage(''), 3000);
-            } catch (error) {
-                setError('Failed to delete warehouse. Please try again.');
-            }
-        }
-    };
-
-    const handleToggleActive = async (id: number | string) => {
-        try {
-            const warehouse = warehouses.find(w => w.id === id);
-            if (warehouse) {
-                const updatedWarehouse = { ...warehouse, isActive: !warehouse.isActive };
-                await settingsApi.warehouses.update(id, updatedWarehouse);
-                setSuccessMessage(`Warehouse ${updatedWarehouse.isActive ? 'activated' : 'deactivated'} successfully!`);
-                await loadWarehouses();
-                setTimeout(() => setSuccessMessage(''), 3000);
-            }
-        } catch (error) {
-            setError('Failed to update warehouse status. Please try again.');
-        }
-    };
-
-    const handleCloseModal = () => {
-        setShowAddModal(false);
-        setEditingWarehouse(null);
-        setFormData({
-            code: '',
-            name: '',
-            type: 'warehouse',
-            address: '',
-            city: '',
-            state: '',
-            pincode: '',
-            phone: '',
-            email: '',
-            manager: '',
-            capacity: '',
-            description: '',
-            temperature: 'Ambient',
-            isActive: true,
-            isDefault: false
-        });
-    };
-
-    const WAREHOUSE_TYPE_STYLES: Record<string, string> = {
-        warehouse: 'bg-blue-100 text-blue-800',
-        coldStorage: 'bg-cyan-100 text-cyan-800',
-        store: 'bg-green-100 text-green-800',
-        primary: 'bg-purple-100 text-purple-800',
-        specialized: 'bg-orange-100 text-orange-800',
-    };
-
-    const getWarehouseTypeIcon = (type: string) => {
-        const icons: { [key: string]: any } = {
-            'warehouse': Warehouse,
-            'coldStorage': Thermometer,
-            'store': Package,
-            'primary': Warehouse,
-            'specialized': Settings
-        };
-        return icons[type] || Warehouse;
-    };
-
-    const getUtilizationPercent = (warehouse: WarehouseData) => {
-        const capacity = (warehouse.capacity as number) || (warehouse.occupancy as number) || 0;
-        const current = warehouse.currentStock || (warehouse.occupancy as number) || 0;
-        if (capacity === 0) return 0;
-        return Math.round((current / capacity) * 100);
-    };
+    }, [warehouses, searchTerm, filterType]);
 
     if (!open) return null;
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-50 h-full overflow-hidden">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <Warehouse className="w-6 h-6 text-gray-700" />
-                        <h1 className="text-2xl font-bold text-gray-900">Warehouse Master</h1>
-                        <span className="text-sm text-gray-500">({warehouses.length} warehouses)</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={handleRefresh}
-                            disabled={refreshing}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
-                        >
-                            {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                        </button>
-                        <button
-                            onClick={() => setShowAddModal(true)}
-                            disabled
-                            title="Unavailable until a canonical location command exists"
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        >
-                            <Plus className="w-4 h-4" />
-                            <span>Add Warehouse</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <CanonicalWriteNotice action="Changing locations" className="mx-6 mt-4" />
-
-            {/* Filters */}
-            <div className="bg-white border-b border-gray-200 px-6 py-3">
-                <div className="flex items-center space-x-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search by name, code, city, or manager..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <select
-                        value={filterType}
-                        onChange={(e) => setFilterType(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                        {warehouseTypes.map(type => (
-                            <option key={type.value} value={type.value}>{type.label}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            {/* Messages */}
-            {error && (
-                <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2" />
-                    {error}
-                    <button
-                        onClick={() => setError(null)}
-                        className="ml-auto text-red-400 hover:text-red-600"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-
-            {successMessage && (
-                <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
-                    <Check className="w-5 h-5 mr-2" />
-                    {successMessage}
-                    <button
-                        onClick={() => setSuccessMessage('')}
-                        className="ml-auto text-green-400 hover:text-green-600"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-
-            {/* Warehouses Table */}
-            <div className="flex-1 overflow-y-auto p-6 min-h-0">
-                {isLoading ? (
-                    <div className="flex items-center justify-center h-64">
-                        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                        <span className="ml-2 text-gray-600">Loading warehouses...</span>
-                    </div>
-                ) : filteredWarehouses.length === 0 ? (
-                    <div className="flex items-center justify-center h-64">
-                        <div className="text-center">
-                            <Warehouse className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">No warehouses found</p>
-                            {searchTerm && (
-                                <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
-                            )}
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-gray-50">
+            <header className="border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <Warehouse className="h-6 w-6 shrink-0 text-gray-700" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <h1 className="truncate text-xl font-semibold text-gray-900 sm:text-2xl">Warehouse Master</h1>
+                            <p className="text-sm text-gray-500">{warehouses.length} live locations</p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                        <button type="button" onClick={handleRefresh} disabled={refreshing} className="inline-flex min-h-11 items-center gap-2 border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-50">
+                            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                            Refresh
+                        </button>
+                        {onClose && <button type="button" onClick={onClose} aria-label="Close warehouse master" className="grid h-11 w-11 place-items-center border border-gray-300 bg-white text-gray-600"><X className="h-5 w-5" /></button>}
+                    </div>
+                </div>
+            </header>
+
+            <CanonicalWriteNotice action="Changing locations" className="mx-4 mt-4 sm:mx-6" />
+
+            <div className="grid gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:px-6">
+                <label className="relative block">
+                    <span className="sr-only">Search locations</span>
+                    <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                    <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, code, branch, or type" className="min-h-11 w-full border border-gray-300 bg-white pl-10 pr-3" />
+                </label>
+                <select aria-label="Filter location type" value={filterType} onChange={event => setFilterType(event.target.value)} className="min-h-11 w-full border border-gray-300 bg-white px-3">
+                    <option value="all">All location types</option>
+                    {types.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+            </div>
+
+            <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                {error && <div role="alert" className="mb-4 flex items-center gap-2 border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
+                {isLoading ? (
+                    <div className="flex h-48 items-center justify-center text-gray-600"><Loader2 className="mr-2 h-6 w-6 animate-spin" />Loading locations…</div>
+                ) : filteredWarehouses.length === 0 ? (
+                    <div className="border border-gray-200 bg-white p-8 text-center text-gray-600">No locations match the current filters.</div>
                 ) : (
-                    <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
-                        <div className="flex-1 overflow-auto">
-                            <table className="w-full">
-                                <thead className="bg-gray-50 sticky top-0 z-10">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            <input
-                                                type="checkbox"
-                                                className="rounded border-gray-300"
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedWarehouses(filteredWarehouses.map(w => w.id));
-                                                    } else {
-                                                        setSelectedWarehouses([]);
-                                                    }
-                                                }}
-                                            />
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Warehouse Details</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manager</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Capacity</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredWarehouses.map((warehouse) => {
-                                        const utilizationPercent = getUtilizationPercent(warehouse);
-                                        return (
-                                            <tr key={warehouse.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedWarehouses.includes(warehouse.id)}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                                setSelectedWarehouses([...selectedWarehouses, warehouse.id]);
-                                                            } else {
-                                                                setSelectedWarehouses(selectedWarehouses.filter(id => id !== warehouse.id));
-                                                            }
-                                                        }}
-                                                        className="rounded border-gray-300"
-                                                    />
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-900">{warehouse.name}</p>
-                                                        <p className="text-xs text-gray-500">Code: {warehouse.code}</p>
-                                                        {warehouse.description && (
-                                                            <p className="text-xs text-gray-500">{warehouse.description}</p>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 text-xs rounded-full ${WAREHOUSE_TYPE_STYLES[warehouse.type] || 'bg-gray-100 text-gray-800'}`}>
-                                                        {warehouse.type}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm">
-                                                        <p className="text-gray-900">{warehouse.city}, {warehouse.state}</p>
-                                                        {warehouse.address && (
-                                                            <p className="text-xs text-gray-500">{warehouse.address}</p>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm">
-                                                        <p className="text-gray-900">{warehouse.manager}</p>
-                                                        {warehouse.phone && (
-                                                            <p className="text-xs text-gray-500">{warehouse.phone}</p>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="text-sm">
-                                                        <p className="font-medium">{warehouse.capacity || warehouse.occupancy || 0}</p>
-                                                        <p className="text-xs text-gray-500">{utilizationPercent}% utilized</p>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button
-                                                        onClick={() => handleToggleActive(warehouse.id)}
-                                                        disabled
-                                                        className={`px-2 py-1 text-xs rounded-full ${warehouse.isActive !== false
-                                                                ? 'bg-green-100 text-green-800'
-                                                                : 'bg-gray-100 text-gray-600'
-                                                            }`}
-                                                    >
-                                                        {warehouse.isActive !== false ? 'Active' : 'Inactive'}
-                                                    </button>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex items-center justify-center space-x-2">
-                                                        <button
-                                                            onClick={() => handleEdit(warehouse)}
-                                                            disabled
-                                                            title="Edit unavailable"
-                                                            className="p-1 text-blue-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
-                                                        >
-                                                            <Edit2 className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(warehouse.id)}
-                                                            disabled
-                                                            title="Delete unavailable"
-                                                            className="p-1 text-red-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
+                    <>
+                        <div className="space-y-3 md:hidden">
+                            {filteredWarehouses.map(item => (
+                                <article key={item.id} className="border border-gray-200 bg-white p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0"><h2 className="truncate font-medium text-gray-900">{item.name}</h2><p className="text-sm text-gray-500">{item.code}</p></div>
+                                        <span className="shrink-0 border border-gray-200 px-2 py-1 text-xs text-gray-700">{item.isActive ? 'Active' : item.status || 'Inactive'}</span>
+                                    </div>
+                                    <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                                        <div><dt className="text-gray-500">Branch</dt><dd className="text-gray-900">{item.branchName || '—'}</dd></div>
+                                        <div><dt className="text-gray-500">Type</dt><dd className="text-gray-900">{item.type || '—'}</dd></div>
+                                        <div><dt className="text-gray-500">Sales</dt><dd>{item.allowsSale ? 'Allowed' : 'Not allowed'}</dd></div>
+                                        <div><dt className="text-gray-500">Negative stock</dt><dd>{item.allowsNegativeStock ? 'Allowed' : 'Not allowed'}</dd></div>
+                                    </dl>
+                                </article>
+                            ))}
+                        </div>
+                        <div className="hidden overflow-x-auto border border-gray-200 bg-white md:block">
+                            <table className="w-full min-w-[760px] text-sm">
+                                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-4 py-3">Location</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Branch</th><th className="px-4 py-3">Sales</th><th className="px-4 py-3">Negative stock</th><th className="px-4 py-3">Status</th></tr></thead>
+                                <tbody className="divide-y divide-gray-200">{filteredWarehouses.map(item => <tr key={item.id}><td className="px-4 py-3"><div className="font-medium text-gray-900">{item.name}</div><div className="text-gray-500">{item.code}</div></td><td className="px-4 py-3">{item.type || '—'}</td><td className="px-4 py-3">{item.branchName || '—'}</td><td className="px-4 py-3">{item.allowsSale ? 'Allowed' : 'Not allowed'}</td><td className="px-4 py-3">{item.allowsNegativeStock ? 'Allowed' : 'Not allowed'}</td><td className="px-4 py-3">{item.isActive ? 'Active' : item.status || 'Inactive'}</td></tr>)}</tbody>
                             </table>
                         </div>
-                    </div>
+                    </>
                 )}
-            </div>
-
-            {/* Add/Edit Modal */}
-            {showAddModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4">
-                        <div className="px-6 py-4 border-b border-gray-200">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-semibold text-gray-900">
-                                    {editingWarehouse ? 'Edit Warehouse' : 'Add New Warehouse'}
-                                </h2>
-                                <button
-                                    onClick={handleCloseModal}
-                                    className="p-2 hover:bg-gray-100 rounded-lg"
-                                >
-                                    <X className="w-5 h-5 text-gray-500" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Warehouse Code <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.code}
-                                        onChange={(e) => handleInputChange('code', e.target.value.toUpperCase())}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., WH-001"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Warehouse Name <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.name}
-                                        onChange={(e) => handleInputChange('name', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., Main Warehouse"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                                    <select
-                                        value={formData.type}
-                                        onChange={(e) => handleInputChange('type', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="warehouse">Warehouse</option>
-                                        <option value="coldStorage">Cold Storage</option>
-                                        <option value="store">Store</option>
-                                        <option value="primary">Primary</option>
-                                        <option value="specialized">Specialized</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-                                    <input
-                                        type="number"
-                                        value={formData.capacity}
-                                        onChange={(e) => handleInputChange('capacity', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., 5000"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
-                                    <input
-                                        type="text"
-                                        value={formData.temperature}
-                                        onChange={(e) => handleInputChange('temperature', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., Ambient, 2-8°C"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Manager</label>
-                                    <input
-                                        type="text"
-                                        value={formData.manager}
-                                        onChange={(e) => handleInputChange('manager', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., John Doe"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                                    <input
-                                        type="tel"
-                                        value={formData.phone}
-                                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., +91 98765 43210"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                    <input
-                                        type="email"
-                                        value={formData.email}
-                                        onChange={(e) => handleInputChange('email', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., warehouse@company.com"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                                    <input
-                                        type="text"
-                                        value={formData.city}
-                                        onChange={(e) => handleInputChange('city', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., Mumbai"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                                    <input
-                                        type="text"
-                                        value={formData.state}
-                                        onChange={(e) => handleInputChange('state', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., Maharashtra"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                                    <input
-                                        type="text"
-                                        value={formData.pincode}
-                                        onChange={(e) => handleInputChange('pincode', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., 400001"
-                                    />
-                                </div>
-
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                                    <textarea
-                                        value={formData.address}
-                                        onChange={(e) => handleInputChange('address', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        rows={2}
-                                        placeholder="Full address..."
-                                    />
-                                </div>
-
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                    <textarea
-                                        value={formData.description}
-                                        onChange={(e) => handleInputChange('description', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        rows={2}
-                                        placeholder="Optional description..."
-                                    />
-                                </div>
-
-                                <div className="md:col-span-2 flex items-center space-x-6">
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.isActive}
-                                            onChange={(e) => handleInputChange('isActive', e.target.checked)}
-                                            className="rounded border-gray-300"
-                                        />
-                                        <span className="text-sm text-gray-700">Active</span>
-                                    </label>
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.isDefault}
-                                            onChange={(e) => handleInputChange('isDefault', e.target.checked)}
-                                            className="rounded border-gray-300"
-                                        />
-                                        <span className="text-sm text-gray-700">Default Warehouse</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* Actions */}
-                            <div className="mt-6 flex items-center justify-end space-x-3">
-                                <button
-                                    type="button"
-                                    onClick={handleCloseModal}
-                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    {editingWarehouse ? 'Update Warehouse' : 'Add Warehouse'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            </main>
         </div>
     );
 };

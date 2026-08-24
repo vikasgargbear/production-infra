@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Package, TrendingUp, Star, BarChart3, Download, Search, AlertTriangle, Zap, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Package, TrendingUp, Star, BarChart3, Search, AlertTriangle, Zap, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -252,10 +252,6 @@ const ProductAnalytics: React.FC = () => {
               >
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
-              </button>
-              <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Export Report
               </button>
             </div>
           </div>

@@ -85,13 +85,18 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
       header: 'Status',
       align: 'center' as const,
       render: (_: any, grn: any) => {
-        const status = grn.grn_status || 'completed';
+        const status = grn.grn_status;
         const map: Record<string, any> = {
-          completed: { status: 'success', label: 'Completed' },
+          posted: { status: 'success', label: 'Posted' },
+          approved: { status: 'success', label: 'Approved' },
+          inspected: { status: 'info', label: 'Inspected' },
+          submitted: { status: 'warning', label: 'Submitted' },
           draft: { status: 'info', label: 'Draft' },
-          pending: { status: 'warning', label: 'Pending' }
+          rejected: { status: 'error', label: 'Rejected' },
+          cancelled: { status: 'error', label: 'Cancelled' },
+          reversed: { status: 'error', label: 'Reversed' },
         };
-        const config = map[status] || { status: 'default', label: status };
+        const config = status ? (map[status] || { status: 'default', label: status }) : { status: 'default', label: 'Unknown' };
         return <StatusBadge status={config.status} label={config.label} />;
       },
       width: '100px'

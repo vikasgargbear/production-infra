@@ -154,8 +154,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           total_amount: Number(grn.total_amount || 0),
           paid_amount: 0,
           pending_amount: Number(grn.total_amount || 0),
-          payment_status: 'received',
-          status: grn.status || 'completed',
+          payment_status: grn.grn_status === 'posted' ? 'paid' : 'pending',
+          status: grn.grn_status,
           items_count: grn.items_count || grn.items?.length || 0,
           created_at: grn.created_at,
           updated_at: grn.updated_at

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Download, Printer, TrendingUp, TrendingDown, Filter, ChevronRight, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { FileText, Printer, TrendingUp, TrendingDown, Filter, ChevronRight, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -320,12 +320,6 @@ const ProfitLossStatement: React.FC = () => {
     return rows;
   };
 
-  const exportToPDF = () => {
-  };
-
-  const exportToExcel = () => {
-  };
-
   const handlePrint = () => {
     window.print();
   };
@@ -359,20 +353,6 @@ const ProfitLossStatement: React.FC = () => {
               >
                 <Filter className="h-4 w-4" />
                 Compare
-              </button>
-              <button
-                onClick={exportToExcel}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Excel
-              </button>
-              <button
-                onClick={exportToPDF}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                PDF
               </button>
               <button
                 onClick={handlePrint}

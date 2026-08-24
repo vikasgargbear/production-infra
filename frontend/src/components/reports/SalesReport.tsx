@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download, FileText, ChevronDown,
-  ChevronUp, Printer
+  ChevronDown, ChevronUp, Printer
 } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import { format, subDays } from 'date-fns';
@@ -233,10 +232,6 @@ const SalesReport: React.FC = () => {
     },
   };
 
-  const handleExport = (format: 'pdf' | 'excel' | 'csv') => {
-    // Implement export functionality
-  };
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
@@ -247,20 +242,6 @@ const SalesReport: React.FC = () => {
             <p className="text-gray-600 mt-1">Analyze sales performance and trends</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => handleExport('pdf')}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              PDF
-            </button>
-            <button
-              onClick={() => handleExport('excel')}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Excel
-            </button>
             <button
               onClick={() => window.print()}
               className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"

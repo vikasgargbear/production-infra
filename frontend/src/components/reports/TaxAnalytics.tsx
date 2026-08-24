@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Receipt, TrendingUp, TrendingDown,
-  Download, DollarSign,
+  DollarSign,
   CheckCircle, Clock, RefreshCw
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -368,19 +368,12 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
             iconColor="text-orange-600"
             onClose={onClose}
             historyType="report"
-            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: 'Refresh',
                 icon: RefreshCw,
                 onClick: () => refetch(),
                 variant: 'outline'
-              },
-              {
-                label: 'Export',
-                icon: Download,
-                onClick: () => { },
-                variant: 'secondary'
               }
             ] as any}
           />

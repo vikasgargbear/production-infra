@@ -212,7 +212,6 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
             iconColor="text-blue-600"
             onClose={onClose}
             historyType="report"
-            onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: 'Refresh',
