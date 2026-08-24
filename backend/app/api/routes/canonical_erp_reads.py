@@ -2733,7 +2733,7 @@ def canonical_sales_order_compatibility_detail(
           ) tax ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
-                         'id', line.id, 'source_document_kind', 'delivery_challan',
+                         'id', line.id, 'source_document_kind', 'sales_order',
                          'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
                          'hsn_code', product.hsn_code, 'branch_id', document.branch_id,

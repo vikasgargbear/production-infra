@@ -57,6 +57,12 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
     ]
 
 
+def test_sales_order_import_projects_its_true_source_kind() -> None:
+    source = inspect.getsource(canonical_erp_reads.canonical_sales_order_compatibility_detail)
+    assert "'source_document_kind', 'sales_order'" in source
+    assert "'source_document_kind', 'delivery_challan'" not in source
+
+
 def test_canonical_routes_precede_legacy_compatibility_routes() -> None:
     # FastAPI 0.137+ preserves included routers instead of flattening copies of
     # their APIRoutes.  Its effective route contexts expose the fully-prefixed
