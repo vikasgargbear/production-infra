@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import NotificationCenter from './global/NotificationCenter';
 import { usePermissions } from '../hooks/usePermissions';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface HomeProps {
   setActiveTab: (tab: string) => void;
@@ -46,8 +47,9 @@ const ACTION_MODULE_MAP: Record<string, string> = {
 };
 
 const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
-  const companyName = localStorage.getItem('companyName') || 'PharmaERP Pro';
-  const companyLogo = localStorage.getItem('companyLogo');
+  const { companyInfo } = useCompany();
+  const companyName = companyInfo?.name || 'Company profile not configured';
+  const companyLogo = companyInfo?.logo || null;
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [loading, setLoading] = useState(true);

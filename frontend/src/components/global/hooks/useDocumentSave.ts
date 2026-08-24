@@ -22,6 +22,7 @@ export interface UseDocumentSaveConfig {
     apiCall: (data: any) => Promise<any>;
     validate: () => string | null;   // return error message or null
     preparePayload: () => any;       // transform doc state → API payload
+    prepareSyncPayload?: (payload: any, docNo: string, tempId: string) => any;
     getDocNumber?: () => Promise<string>;  // override for custom number logic
 
     stockOperation?: () => Promise<void>;  // caller handles deduct/add
@@ -115,14 +116,20 @@ export function useDocumentSave(config: UseDocumentSaveConfig): UseDocumentSaveR
                     console.warn(`[DocumentSave] Server unavailable, saved offline: ${cfg.entityType}`);
                     await offlineDB.add(cfg.idbStoreName, localDoc);
                     await cfg.stockOperation?.();
-                    await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
+                    const syncPayload = cfg.prepareSyncPayload
+                        ? cfg.prepareSyncPayload(payload, docNo, tempId)
+                        : localDoc;
+                    await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', syncPayload);
                     cfg.onSuccess(tempId, docNo);
                     await cfg.onSyncQueued?.(tempId, docNo, payload, 'sync_failed');
                 }
             } else {
                 await offlineDB.add(cfg.idbStoreName, localDoc);
                 await cfg.stockOperation?.();
-                await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
+                const syncPayload = cfg.prepareSyncPayload
+                    ? cfg.prepareSyncPayload(payload, docNo, tempId)
+                    : localDoc;
+                await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', syncPayload);
                 cfg.onSuccess(tempId, docNo);
                 await cfg.onSyncQueued?.(tempId, docNo, payload, 'offline');
             }

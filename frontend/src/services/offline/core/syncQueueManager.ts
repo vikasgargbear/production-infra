@@ -1,5 +1,4 @@
-import { IDBPDatabase } from 'idb';
-import { SyncQueueItem, SyncStatusEnum, SYNC_STATUS } from '../types';
+import { SyncQueueItem, SYNC_STATUS } from '../types';
 
 export class SyncQueueManager {
     private getDb: () => Promise<any>;
@@ -28,7 +27,11 @@ export class SyncQueueManager {
 
     async getSyncQueue(): Promise<SyncQueueItem[]> {
         const db = await this.getDb();
-        return db.getAll('sync_queue');
+        const items = await db.getAll('sync_queue') as SyncQueueItem[];
+        return items.filter(item => (
+            item.sync_status === SYNC_STATUS.PENDING
+            && ((item as SyncQueueItem & { retry_count?: number }).retry_count || 0) < 3
+        ));
     }
 
     async removeFromSyncQueue(id: number): Promise<void> {

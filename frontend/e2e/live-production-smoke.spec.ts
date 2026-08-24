@@ -29,6 +29,9 @@ test.describe('live ERP pilot', () => {
     const failures = collectBrowserFailures(page);
     const isMobile = testInfo.project.name === 'mobile-chrome';
 
+    await expect(page.getByText('Your Company', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Company profile not configured', { exact: true })).toHaveCount(0);
+
     if (isMobile) {
       const navigation = page.getByRole('navigation', { name: 'Primary mobile navigation' });
       await expect(navigation).toBeVisible();

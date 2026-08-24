@@ -40,6 +40,8 @@ interface InvoiceData {
         quantity: number;
     }>;
     created_at?: string;
+    canonical_operation?: string;
+    canonical_payload?: Record<string, unknown>;
     [key: string]: unknown;
 }
 
@@ -142,6 +144,16 @@ interface StockConflictError {
     requiredQty?: number;
     availableQty?: number;
     invoiceNumber?: string;
+}
+
+class CanonicalMigrationConflictError extends Error implements StockConflictError {
+    readonly isConflict = true;
+    readonly type = 'CANONICAL_MIGRATION_REQUIRED';
+
+    constructor(readonly invoiceNumber?: string) {
+        super('This offline invoice predates the canonical command contract. Review and recreate it; automatic legacy posting is disabled.');
+        this.name = 'CanonicalMigrationConflictError';
+    }
 }
 
 // ==================== GENERIC SYNC ENTITY CONFIG ====================
@@ -546,24 +558,17 @@ class SyncEngine {
         const localId = String(_localId || temp_id || '');
 
         try {
-            let response: AxiosResponse;
-            const cleanedInvoice = cleanData(invoice);
+            if (
+                invoice.canonical_operation !== 'sales.invoice.prepare'
+                || !invoice.canonical_payload
+            ) {
+                throw new CanonicalMigrationConflictError(invoice.invoice_number);
+            }
+            console.log('[SyncEngine] Syncing invoice through canonical command transport');
+            const response = await invoicesApi.createCanonical(invoice.canonical_payload);
 
-            if (invoice.invoice_id && !invoice.invoice_id.startsWith('LOCAL_')) {
-                // Use centralized API module
-                response = await invoicesApi.update(invoice.invoice_id, cleanedInvoice);
-            } else {
-                console.log('[SyncEngine] Syncing invoice with cleaned data:', JSON.stringify(cleanedInvoice, null, 2));
-                // Use centralized API module
-                response = await invoicesApi.create(cleanedInvoice as any); // Cast to any matching API expectation
-
-                if (response.data) {
-                    console.log('[SyncEngine] Invoice sync response:', response.data);
-                }
-
-                if (response.data?.invoice_id && localId) {
-                    await offlineDB.updateLocalId('invoices', localId, response.data.invoice_id);
-                }
+            if (response.data?.invoice_id && localId) {
+                await offlineDB.updateLocalId('invoices', localId, response.data.invoice_id);
             }
 
             // SUCCESS: Clear reserved quantities
@@ -572,13 +577,6 @@ class SyncEngine {
                     await offlineDB.clearReservedQuantity(reservation.product_id, reservation.batch_id, reservation.quantity);
                 }
                 console.log(`✅ Cleared ${reserved_batches.length} batch reservations after successful sync`);
-            }
-
-            // Update batch quantities from server response if available
-            if (response.data?.updated_batches) {
-                for (const batchUpdate of response.data.updated_batches) {
-                    await offlineDB.updateBatchQuantity(batchUpdate.product_id, batchUpdate.batch_id, batchUpdate.new_quantity);
-                }
             }
 
             return response;

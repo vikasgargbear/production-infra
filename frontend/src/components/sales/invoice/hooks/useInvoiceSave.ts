@@ -116,6 +116,17 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             ),
         ),
 
+        prepareSyncPayload: (_payload, docNo, tempId) => ({
+            canonical_operation: 'sales.invoice.prepare',
+            canonical_payload: buildCanonicalInvoicePreparePayload(
+                invoice,
+                selectedCustomer!,
+                `erp-web-invoice-offline:${clientUuid()}`,
+            ),
+            invoice_number: docNo,
+            temp_id: tempId,
+        }),
+
         stockOperation: async () => {
             await deductStockLocally(invoice.items);
         },
