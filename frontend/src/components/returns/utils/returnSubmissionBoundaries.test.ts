@@ -2,19 +2,19 @@ import { getPurchaseReturnSubmissionBoundary } from '../hooks/usePurchaseReturnS
 import { getSalesReturnSubmissionBoundary } from './returnSubmissionBoundaries';
 
 describe('return submission boundaries', () => {
-    it('omits the sales-return write handler until its canonical identities are mapped', () => {
-        const boundary = getSalesReturnSubmissionBoundary();
+    it('blocks sales-return prepare until its canonical identities are mapped', () => {
+        const boundary = getSalesReturnSubmissionBoundary({});
 
-        expect(boundary.saving).toBe(false);
-        expect(boundary.handleSaveReturn).toBeUndefined();
-        expect(boundary.unavailableReason).toContain('dispatch allocation');
+        expect(boundary.canPrepare).toBe(false);
+        expect(boundary.unavailableReason).toContain('Canonical sales return is blocked');
+        expect(boundary.unavailableReason).toContain('GST treatment');
     });
 
-    it('omits the purchase-return write handler until its canonical identities are mapped', () => {
-        const boundary = getPurchaseReturnSubmissionBoundary();
+    it('blocks purchase-return prepare until its canonical identities are mapped', () => {
+        const boundary = getPurchaseReturnSubmissionBoundary({});
 
-        expect(boundary.saving).toBe(false);
-        expect(boundary.handleSaveReturn).toBeUndefined();
-        expect(boundary.unavailableReason).toContain('goods-receipt line');
+        expect(boundary.canPrepare).toBe(false);
+        expect(boundary.unavailableReason).toContain('Canonical purchase return is blocked');
+        expect(boundary.unavailableReason).toContain('GST treatment');
     });
 });
