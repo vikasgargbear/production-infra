@@ -1,19 +1,19 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 
 // Types
-interface PaymentAllocation {
+export interface PaymentAllocation {
     invoice_id: string;
     invoice_number: string;
-    amount: number;
+    amount: string;
 }
 
-interface CustomerDetails {
+export interface CustomerDetails {
     customer_id: string;
     customer_name: string;
     [key: string]: any;
 }
 
-interface Payment {
+export interface Payment {
     customer_id: string;
     customer_name: string;
     customer_details: CustomerDetails | null;
@@ -22,11 +22,20 @@ interface Payment {
     amount: string;
     payment_mode: string;
     reference_number: string;
+    bank_account_id: string;
+    settlement_account_id: string;
     remarks: string;
     payment_type: string;
     allocation_method: string;
     allocations: PaymentAllocation[];
 }
+
+export const localBusinessDate = (value: Date = new Date()): string => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 interface PaymentState {
     payment: Payment;
@@ -81,13 +90,15 @@ const initialState: PaymentState = {
         customer_name: '',
         customer_details: null,
         receipt_no: '',
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: localBusinessDate(),
         amount: '',
-        payment_mode: 'CASH',
+        payment_mode: 'UPI',
         reference_number: '',
+        bank_account_id: '',
+        settlement_account_id: '',
         remarks: '',
         payment_type: 'order_payment',
-        allocation_method: 'manual',
+        allocation_method: 'fifo',
         allocations: []
     },
     selectedCustomer: null,
@@ -209,8 +220,8 @@ const paymentReducer = (state: PaymentState, action: PaymentAction): PaymentStat
                 ...initialState,
                 payment: {
                     ...initialState.payment,
-                    payment_date: new Date().toISOString().split('T')[0],
-                    allocation_method: 'manual'
+                    payment_date: localBusinessDate(),
+                    allocation_method: 'fifo'
                 }
             };
 

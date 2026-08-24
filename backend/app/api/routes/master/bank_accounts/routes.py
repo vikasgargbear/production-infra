@@ -32,6 +32,8 @@ async def get_bank_accounts(
         for account in accounts:
             result.append({
                 "id": account.get("bank_account_id"),
+                "bank_account_id": account.get("bank_account_id"),
+                "settlement_account_id": account.get("settlement_account_id"),
                 "org_id": account.get("org_id"),
                 "account_name": account.get("account_name"),
                 "code": account.get("code"),

@@ -18,6 +18,7 @@ class BankAccountService:
         """Get canonical active bank accounts without exposing encrypted numbers."""
         query = """
             SELECT bank.id AS bank_account_id,
+                   account.id AS settlement_account_id,
                    bank.org_id,
                    account.code,
                    account.name,

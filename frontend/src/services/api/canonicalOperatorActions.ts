@@ -104,9 +104,9 @@ export async function prepareCanonicalAction(
 export async function approveAndExecuteCanonicalAction(
   operationKey: CanonicalOperationKey,
   preparedPreview: CanonicalCommandPreview,
+  lifecycleId: string = clientUuid(),
 ): Promise<CanonicalApprovedExecution> {
   const preview = requirePreview(preparedPreview);
-  const lifecycleId = clientUuid();
   const idempotencyNamespace = operationKey.replace(/\.prepare$/, '').replace(/\./g, '-');
 
   const approved = await apiHelpers.post<Record<string, unknown>>(

@@ -3,11 +3,25 @@ import { Calendar } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 import { CustomerSearch } from '../../global';
+import { bankAccountsApi } from '../../../services/api';
+import { localBusinessDate } from '../../../contexts/PaymentContext';
 
 interface SplitPayment {
   type: string;
   amount: string;
   reference?: string;
+}
+
+interface CanonicalBankAccount {
+  id: string;
+  bank_account_id: string;
+  settlement_account_id: string;
+  account_name: string;
+  bank_name: string;
+  is_active: boolean;
+  is_payment_account: boolean;
+  allows_bank_reconciliation: boolean;
+  currency_code: string;
 }
 
 const PaymentFlowOptimized: React.FC = () => {
@@ -26,6 +40,8 @@ const PaymentFlowOptimized: React.FC = () => {
     { type: 'CASH', amount: '' },
     { type: 'UPI', amount: '' }
   ]);
+  const [bankAccounts, setBankAccounts] = useState<CanonicalBankAccount[]>([]);
+  const [bankAccountsError, setBankAccountsError] = useState('');
 
   const amountRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<any>(null);
@@ -45,6 +61,37 @@ const PaymentFlowOptimized: React.FC = () => {
     if (!selectedCustomer) {
       customerSearchRef.current?.focus();
     }
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    let active = true;
+    bankAccountsApi.getActive()
+      .then(response => {
+        if (!active) return;
+        const accounts = Array.isArray(response.data) ? response.data.filter(account => (
+          account?.is_active !== false
+          && account?.is_payment_account === true
+          && account?.allows_bank_reconciliation === true
+          && account?.currency_code === 'INR'
+          && account?.bank_account_id
+          && account?.settlement_account_id
+        )) : [];
+        setBankAccounts(accounts);
+        setBankAccountsError(accounts.length ? '' : 'No canonical bank settlement account is available.');
+        if (accounts.length === 1) {
+          setPaymentField('bank_account_id', accounts[0].bank_account_id);
+          setPaymentField('settlement_account_id', accounts[0].settlement_account_id);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setBankAccounts([]);
+        setBankAccountsError('Unable to load canonical bank settlement accounts. Receipt posting is unavailable.');
+      });
+    return () => { active = false; };
+    // The context action is intentionally read once; including its render-local
+    // function identity would refetch after every field update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFieldChange = (field: string, value: string): void => {
@@ -69,15 +116,15 @@ const PaymentFlowOptimized: React.FC = () => {
 
   // Payment modes including split
   const paymentModes = [
-    { value: 'CASH', label: 'Cash', icon: '💵' },
+    { value: 'CASH', label: 'Cash', icon: '💵', unavailable: true },
     { value: 'UPI', label: 'UPI', icon: '📱' },
     { value: 'CARD', label: 'Card', icon: '💳' },
     { value: 'BANK_TRANSFER', label: 'Bank', icon: '🏦' },
-    { value: 'CHEQUE', label: 'Cheque', icon: '📄' },
-    { value: 'SPLIT', label: 'Split', icon: '➗' }
+    { value: 'CHEQUE', label: 'Cheque', icon: '📄', unavailable: true },
+    { value: 'SPLIT', label: 'Split', icon: '➗', unavailable: true }
   ];
 
-  const needsReference = ['UPI', 'BANK_TRANSFER', 'CHEQUE'].includes(payment.payment_mode);
+  const needsReference = ['UPI', 'CARD', 'BANK_TRANSFER'].includes(payment.payment_mode);
 
   const handlePaymentModeSelect = (mode: string) => {
     if (mode === 'SPLIT') {
@@ -139,7 +186,7 @@ const PaymentFlowOptimized: React.FC = () => {
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="date"
-                  value={payment.payment_date || new Date().toISOString().split('T')[0]}
+                  value={payment.payment_date || localBusinessDate()}
                   onChange={(e) => handleFieldChange('payment_date', e.target.value)}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -153,8 +200,8 @@ const PaymentFlowOptimized: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="order_payment">Order Payment</option>
-                <option value="advance">Advance</option>
-                <option value="adjustment">Adjustment</option>
+                <option value="advance" disabled>Advance (canonical posting unavailable)</option>
+                <option value="adjustment" disabled>Adjustment (canonical posting unavailable)</option>
               </select>
             </div>
           </div>
@@ -174,7 +221,8 @@ const PaymentFlowOptimized: React.FC = () => {
                   className={`w-full pl-10 pr-3 py-2.5 text-xl font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
                     }`}
                   placeholder="0"
-                  step="1"
+                  min="0.01"
+                  step="0.01"
                 />
               </div>
               {errors.amount && (
@@ -191,8 +239,11 @@ const PaymentFlowOptimized: React.FC = () => {
                 <button
                   key={mode.value}
                   type="button"
+                  disabled={mode.unavailable}
+                  aria-disabled={mode.unavailable}
+                  title={mode.unavailable ? `${mode.label} receipt posting is not available in the canonical API` : undefined}
                   onClick={() => handlePaymentModeSelect(mode.value)}
-                  className={`p-2.5 rounded-lg border transition-all ${payment.payment_mode === mode.value
+                  className={`p-2.5 rounded-lg border transition-all disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-50 ${payment.payment_mode === mode.value
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                     }`}
@@ -204,20 +255,45 @@ const PaymentFlowOptimized: React.FC = () => {
             </div>
           </div>
 
-          {/* Reference Number - Optional */}
+          {/* Canonical settlement identity */}
+          <div className="space-y-2">
+            <label htmlFor="receipt-bank-account" className="block text-sm font-medium text-gray-700">
+              Settlement bank account <span className="text-red-600" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="receipt-bank-account"
+              value={payment.bank_account_id}
+              onChange={(event) => {
+                const account = bankAccounts.find(candidate => candidate.bank_account_id === event.target.value);
+                setPaymentField('bank_account_id', account?.bank_account_id || '');
+                setPaymentField('settlement_account_id', account?.settlement_account_id || '');
+              }}
+              className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select bank settlement account</option>
+              {bankAccounts.map(account => (
+                <option key={account.bank_account_id} value={account.bank_account_id}>
+                  {account.bank_name} — {account.account_name}
+                </option>
+              ))}
+            </select>
+            {bankAccountsError && <p role="alert" className="text-sm text-red-700">{bankAccountsError}</p>}
+          </div>
+
+          {/* Reference Number */}
           {needsReference && (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
               <label className="block text-sm font-medium text-gray-600 mb-2">
-                {payment.payment_mode === 'UPI' ? 'UPI Transaction ID' :
-                  payment.payment_mode === 'CHEQUE' ? 'Cheque Number' :
-                    'Reference Number'} <span className="text-xs text-gray-500">(Optional)</span>
+                {payment.payment_mode === 'UPI' ? 'UPI Transaction ID' : 'Reference Number'}
+                {' '}<span className="text-red-600" aria-hidden="true">*</span>
               </label>
               <input
                 type="text"
                 value={payment.reference_number || ''}
                 onChange={(e) => handleFieldChange('reference_number', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter reference (optional)"
+                required
+                placeholder="Enter bank, UPI, or gateway reference"
               />
             </div>
           )}

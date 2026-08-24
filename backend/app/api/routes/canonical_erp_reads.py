@@ -3174,6 +3174,7 @@ def chart_of_accounts(user: dict = FINANCE_USER, db: Session = Depends(get_db)):
 class CanonicalUnpaidInvoice(BaseModel):
     invoice_id: UUID
     open_item_id: UUID
+    branch_id: UUID
     invoice_number: str
     invoice_date: date
     customer_id: UUID
@@ -3186,6 +3187,16 @@ class CanonicalUnpaidInvoice(BaseModel):
 
 class CanonicalUnpaidInvoicesResponse(BaseModel):
     invoices: list[CanonicalUnpaidInvoice]
+    invoice_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_cardinality(self):
+        if self.invoice_count != len(self.invoices):
+            raise ValueError("unpaid invoice projection cardinality is incomplete")
+        open_item_ids = [invoice.open_item_id for invoice in self.invoices]
+        if len(open_item_ids) != len(set(open_item_ids)):
+            raise ValueError("unpaid invoice projection repeats an open item")
+        return self
 
 
 class CanonicalInvoiceAllocationSummary(BaseModel):
@@ -3211,6 +3222,89 @@ class CanonicalInvoicePayment(BaseModel):
 class CanonicalInvoicePaymentsResponse(BaseModel):
     invoice: CanonicalInvoiceAllocationSummary
     payments: list[CanonicalInvoicePayment]
+
+
+class CanonicalReceiptAllocationReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allocation_id: UUID
+    open_item_id: UUID
+    amount: MoneyJSON
+    allocation_date: date
+
+
+class CanonicalReceiptJournalLineReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    journal_line_id: UUID
+    line_number: int = Field(gt=0)
+    account_id: UUID
+    party_id: Optional[UUID]
+    transaction_debit: MoneyJSON
+    transaction_credit: MoneyJSON
+    functional_debit: MoneyJSON
+    functional_credit: MoneyJSON
+
+
+class CanonicalCustomerReceiptReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    payment_id: UUID
+    payment_number: str
+    payment_date: date
+    branch_id: UUID
+    party_id: UUID
+    settlement_account_id: UUID
+    payment_method: Literal["bank_transfer", "card", "upi"]
+    external_reference: str
+    amount: MoneyJSON
+    status: Literal["posted"]
+    journal_entry_id: UUID
+    journal_number: str
+    journal_debit_total: MoneyJSON
+    journal_credit_total: MoneyJSON
+    allocations: list[CanonicalReceiptAllocationReadback]
+    journal_lines: list[CanonicalReceiptJournalLineReadback]
+    allocation_reconciled: Literal[True]
+    journal_balanced: Literal[True]
+
+    @model_validator(mode="after")
+    def validate_accounting_evidence(self):
+        amount = Decimal(self.amount)
+        if not self.allocations:
+            raise ValueError("posted receipt readback requires allocation evidence")
+        open_items = [allocation.open_item_id for allocation in self.allocations]
+        if len(open_items) != len(set(open_items)):
+            raise ValueError("posted receipt readback repeats an open item")
+        if sum((Decimal(row.amount) for row in self.allocations), Decimal("0")) != amount:
+            raise ValueError("posted receipt allocations do not reconcile to payment")
+        if len(self.journal_lines) != 2:
+            raise ValueError("posted receipt requires exactly two journal lines")
+        debit = sum((Decimal(row.transaction_debit) for row in self.journal_lines), Decimal("0"))
+        credit = sum((Decimal(row.transaction_credit) for row in self.journal_lines), Decimal("0"))
+        functional_debit = sum((Decimal(row.functional_debit) for row in self.journal_lines), Decimal("0"))
+        functional_credit = sum((Decimal(row.functional_credit) for row in self.journal_lines), Decimal("0"))
+        if not (
+            debit == credit == functional_debit == functional_credit == amount
+            and Decimal(self.journal_debit_total) == amount
+            and Decimal(self.journal_credit_total) == amount
+        ):
+            raise ValueError("posted receipt journal does not balance to payment")
+        settlement_lines = [
+            row for row in self.journal_lines
+            if row.account_id == self.settlement_account_id
+            and Decimal(row.transaction_debit) == amount
+            and Decimal(row.transaction_credit) == 0
+        ]
+        receivable_lines = [
+            row for row in self.journal_lines
+            if row.party_id == self.party_id
+            and Decimal(row.transaction_credit) == amount
+            and Decimal(row.transaction_debit) == 0
+        ]
+        if len(settlement_lines) != 1 or len(receivable_lines) != 1:
+            raise ValueError("posted receipt settlement and receivable journal identities are invalid")
+        return self
 
 
 def _canonical_receivable_rows(
@@ -3242,7 +3336,9 @@ def _canonical_receivable_rows(
              GROUP BY allocation.org_id, allocation.open_item_id
         ), receivables AS (
             SELECT item.org_id, item.id AS open_item_id,
-                   invoice.id AS sales_invoice_id, item.party_id,
+                   invoice.branch_id,
+                   invoice.id AS sales_invoice_id, invoice.customer_account_id,
+                   item.party_id,
                    item.document_number, item.document_date, item.due_date,
                    item.principal_amount,
                    GREATEST(item.principal_amount-COALESCE(applied.allocated_amount,0),0)
@@ -3259,7 +3355,7 @@ def _canonical_receivable_rows(
               LEFT JOIN effective_allocations applied
                 ON applied.org_id=item.org_id AND applied.open_item_id=item.id
              WHERE item.org_id=:org_id AND item.item_side='receivable'
-               AND item.status<>'reversed'
+               AND item.status='open'
                AND (:organization_scope
                     OR invoice.branch_id=ANY(CAST(:branch_ids AS uuid[])))
                AND item.principal_amount-COALESCE(applied.allocated_amount,0)>0
@@ -3296,6 +3392,7 @@ def _canonical_receivable_rows(
                jsonb_agg(jsonb_build_object(
                    'invoice_id', receivable.sales_invoice_id,
                    'open_item_id', receivable.open_item_id,
+                   'branch_id', receivable.branch_id,
                    'invoice_number', receivable.document_number,
                    'invoice_date', receivable.document_date,
                    'due_date', receivable.due_date,
@@ -3317,12 +3414,11 @@ def _canonical_receivable_rows(
           FROM receivables receivable
           JOIN parties.parties party
             ON party.org_id=receivable.org_id AND party.id=receivable.party_id
-          JOIN LATERAL (
-              SELECT customer.id, customer.credit_limit
-                FROM parties.customer_accounts customer
-               WHERE customer.org_id=party.org_id AND customer.party_id=party.id
-               ORDER BY customer.created_at, customer.id LIMIT 1
-          ) account ON true
+           AND party.status='active'
+          JOIN parties.customer_accounts account
+            ON account.org_id=receivable.org_id
+           AND account.id=receivable.customer_account_id
+           AND account.party_id=party.id AND account.status='active'
           LEFT JOIN LATERAL (
               SELECT party_contact.phone, party_contact.email
                 FROM parties.contacts party_contact
@@ -3371,6 +3467,7 @@ def canonical_unpaid_invoices(
             invoices.append({
                 "invoice_id": invoice.get("invoice_id"),
                 "open_item_id": invoice.get("open_item_id"),
+                "branch_id": invoice.get("branch_id"),
                 "invoice_number": invoice.get("invoice_number"),
                 "invoice_date": invoice.get("invoice_date"),
                 "customer_id": party.get("customer_id"),
@@ -3381,7 +3478,7 @@ def canonical_unpaid_invoices(
                 "payment_status": invoice.get("status"),
             })
     invoices.sort(key=lambda row: (str(row.get("invoice_date") or ""), str(row.get("invoice_id"))))
-    return {"invoices": invoices}
+    return {"invoices": invoices, "invoice_count": len(invoices)}
 
 
 @router.get(
@@ -3494,6 +3591,118 @@ def canonical_invoice_payments(
             "allocated_amount": money_json(row["allocated_amount"]),
             "allocation_type": "manual",
         } for row in payment_rows],
+    }
+
+
+@router.get(
+    "/payment-allocation/payment/{payment_id:uuid}/readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def canonical_customer_receipt_readback(
+    payment_id: UUID,
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+):
+    """Return posted allocation and balanced-journal evidence for one receipt."""
+    org_id = _activate(db, user)
+    branch_ids = [UUID(str(value)) for value in (user.get("branch_ids") or [])]
+    organization_scope = (
+        user.get("is_admin") is True
+        or str(user.get("data_access_level") or "").lower() == "organization"
+        or str(user.get("branch_scope") or "").lower() in {"all", "organization"}
+    )
+    params = {
+        "org_id": org_id,
+        "payment_id": payment_id,
+        "organization_scope": organization_scope,
+        "branch_ids": branch_ids,
+    }
+    headers = _rows(db, """
+        SELECT payment.id AS payment_id, payment.payment_number,
+               payment.payment_date, payment.branch_id, payment.party_id,
+               payment.settlement_account_id, payment.payment_method,
+               payment.external_reference, payment.amount, payment.status,
+               journal.id AS journal_entry_id, journal.journal_number,
+               journal.transaction_debit_total AS journal_debit_total,
+               journal.transaction_credit_total AS journal_credit_total
+          FROM finance.payments payment
+          JOIN finance.accounting_events event
+            ON event.org_id=payment.org_id AND event.payment_id=payment.id
+          JOIN finance.journal_entries journal
+            ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+           AND journal.status='posted'
+         WHERE payment.org_id=:org_id AND payment.id=:payment_id
+           AND payment.direction='receipt'
+           AND payment.payment_purpose='commercial_settlement'
+           AND payment.status='posted'
+           AND (:organization_scope
+                OR payment.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+    """, params)
+    if len(headers) != 1:
+        raise HTTPException(status_code=404, detail="Canonical customer receipt not found")
+    allocations = _rows(db, """
+        SELECT allocation.id AS allocation_id, allocation.open_item_id,
+               allocation.amount, allocation.allocation_date
+          FROM finance.allocations allocation
+          JOIN finance.payments payment
+            ON payment.org_id=allocation.org_id AND payment.id=allocation.payment_id
+         WHERE allocation.org_id=:org_id AND allocation.payment_id=:payment_id
+           AND allocation.status='posted'
+           AND allocation.reversal_of_allocation_id IS NULL
+           AND (:organization_scope
+                OR payment.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+           AND NOT EXISTS (
+               SELECT 1 FROM finance.allocations reversal
+                WHERE reversal.org_id=allocation.org_id
+                  AND reversal.reversal_of_allocation_id=allocation.id
+           )
+         ORDER BY allocation.allocation_date, allocation.id
+    """, params)
+    journal_lines = _rows(db, """
+        SELECT line.id AS journal_line_id, line.line_number, line.account_id,
+               line.party_id, line.transaction_debit, line.transaction_credit,
+               line.functional_debit, line.functional_credit
+          FROM finance.accounting_events event
+          JOIN finance.payments payment
+            ON payment.org_id=event.org_id AND payment.id=event.payment_id
+          JOIN finance.journal_entries journal
+            ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+           AND journal.status='posted'
+          JOIN finance.journal_lines line
+            ON line.org_id=journal.org_id AND line.journal_entry_id=journal.id
+         WHERE event.org_id=:org_id AND event.payment_id=:payment_id
+           AND (:organization_scope
+                OR payment.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+         ORDER BY line.line_number, line.id
+    """, params)
+    header = headers[0]
+    allocation_total = sum(
+        (Decimal(str(row["amount"])) for row in allocations), Decimal("0")
+    )
+    line_debit = sum(
+        (Decimal(str(row["transaction_debit"])) for row in journal_lines),
+        Decimal("0"),
+    )
+    line_credit = sum(
+        (Decimal(str(row["transaction_credit"])) for row in journal_lines),
+        Decimal("0"),
+    )
+    amount = Decimal(str(header["amount"]))
+    return {
+        **header,
+        "amount": money_json(header["amount"]),
+        "journal_debit_total": money_json(header["journal_debit_total"]),
+        "journal_credit_total": money_json(header["journal_credit_total"]),
+        "allocations": [{**row, "amount": money_json(row["amount"])} for row in allocations],
+        "journal_lines": [{
+            **row,
+            "transaction_debit": money_json(row["transaction_debit"]),
+            "transaction_credit": money_json(row["transaction_credit"]),
+            "functional_debit": money_json(row["functional_debit"]),
+            "functional_credit": money_json(row["functional_credit"]),
+        } for row in journal_lines],
+        "allocation_reconciled": allocation_total == amount,
+        "journal_balanced": line_debit == line_credit == amount,
     }
 
 

@@ -1,20 +1,12 @@
 import React from 'react';
 import {
-  Calendar, CreditCard, Hash, FileText,
-  User, Receipt, CheckCircle
+  Hash, User, CheckCircle
 } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 
-interface SelectedInvoice {
-  invoice_number: string;
-  invoice_date: string;
-  amount_due: number;
-  allocated_amount: number;
-}
-
 const PaymentSummaryCompact: React.FC = () => {
-  const { payment, selectedCustomer, outstandingInvoices } = usePayment();
+  const { payment, selectedCustomer } = usePayment();
 
   // Get allocations from payment data
   const selectedInvoices = payment.allocations || [];
@@ -43,18 +35,12 @@ const PaymentSummaryCompact: React.FC = () => {
   };
 
   // Calculate allocations correctly
-  const allocatedAmount = (selectedInvoices || []).reduce((sum: number, inv: any) => {
-    // Handle both allocated_amount and allocatedAmount fields
-    const amount = inv.allocated_amount || inv.allocatedAmount || 0;
-    return sum + parseFloat(amount.toString());
+  const allocatedAmount = (selectedInvoices || []).reduce((sum: number, invoice) => {
+    return sum + Number(invoice.amount || 0);
   }, 0);
 
   const totalPayment = parseFloat(payment.amount || '0');
   const unallocatedAmount = totalPayment - allocatedAmount;
-  const isAdvancePayment = payment.allocation_method === 'advance' ||
-    (outstandingInvoices && outstandingInvoices.length === 0) ||
-    unallocatedAmount > 0;
-
   return (
     <div className="space-y-4">
       {/* Payment Header Card */}
@@ -153,7 +139,7 @@ const PaymentSummaryCompact: React.FC = () => {
                     {selectedInvoices.slice(0, 2).map((invoice: any, index: number) => (
                       <div key={index} className="flex items-center justify-between text-xs text-green-700">
                         <span>{invoice.invoice_number || invoice.invoice_number}</span>
-                        <span>₹{(invoice.allocated_amount || invoice.allocatedAmount || 0).toFixed(2)}</span>
+                        <span>₹{invoice.amount}</span>
                       </div>
                     ))}
                     {selectedInvoices.length > 2 && (
@@ -175,7 +161,7 @@ const PaymentSummaryCompact: React.FC = () => {
                       Customer Advance
                     </span>
                     <p className="text-xs text-amber-600 mt-1">
-                      Will be available for future invoices
+                      Posting unavailable until the canonical customer-advance command is connected
                     </p>
                   </div>
                   <span className="text-sm font-bold text-amber-800">
@@ -194,7 +180,7 @@ const PaymentSummaryCompact: React.FC = () => {
                       Full Advance Payment
                     </span>
                     <p className="text-xs text-blue-600 mt-1">
-                      No outstanding invoices to allocate
+                      Customer-advance posting is not yet available
                     </p>
                   </div>
                   <span className="text-sm font-bold text-blue-800">

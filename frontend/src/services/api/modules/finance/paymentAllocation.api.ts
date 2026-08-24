@@ -67,5 +67,9 @@ export const paymentAllocationApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/invoice/${invoiceId}/payments`);
     },
 
+    getCustomerReceiptReadback: (paymentId: string): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/payment/${paymentId}/readback`);
+    },
+
     deallocate: (_allocationId: number): Promise<AxiosResponse> => rejectCanonicalWrite('Removing a payment allocation')
 };

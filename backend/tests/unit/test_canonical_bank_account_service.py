@@ -32,6 +32,7 @@ class _Database:
         self.params = params
         return [SimpleNamespace(_mapping={
             "bank_account_id": uuid4(),
+            "settlement_account_id": uuid4(),
             "org_id": uuid4(),
             "code": "BANK-DEMO",
             "name": "Demo settlement",
@@ -74,9 +75,11 @@ def test_bank_account_read_uses_canonical_tenant_scoped_tables():
 
 def test_bank_account_route_serializes_balance_as_exact_money(monkeypatch):
     account_id = uuid4()
+    settlement_account_id = uuid4()
     org_id = uuid4()
     monkeypatch.setattr(BankAccountService, "list_bank_accounts", lambda *_: [{
         "bank_account_id": account_id,
+        "settlement_account_id": settlement_account_id,
         "org_id": org_id,
         "account_name": "Demo settlement",
         "allows_bank_reconciliation": False,
@@ -88,6 +91,8 @@ def test_bank_account_route_serializes_balance_as_exact_money(monkeypatch):
     ))
 
     assert result[0]["id"] == account_id
+    assert result[0]["bank_account_id"] == account_id
+    assert result[0]["settlement_account_id"] == settlement_account_id
     assert result[0]["allows_bank_reconciliation"] is False
     assert result[0]["balance"] == "125.50"
 
