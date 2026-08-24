@@ -14,10 +14,10 @@ import { PurchaseEntryFlow } from './purchase-entry';
 import { PurchaseOrderFlow } from './purchase-order';
 import { GRNFlow } from './grn';
 import PurchaseListHistory from './PurchaseListHistory';
-import { purchasesApi } from '../../services/api';
 import { toast } from 'react-toastify';
-import type { PurchaseData, PurchaseItem } from './purchase-entry/hooks';
 import { usePermissions } from '../../hooks/usePermissions';
+import { canonicalGoodsReceiptsApi } from '../../services/api/modules/purchase/canonicalGoodsReceipts.api';
+import type { CanonicalReceiptContext } from '../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 
 interface PurchaseHubProps {
   open?: boolean;
@@ -41,73 +41,51 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
   /** All valid sub-module IDs for deep-linking into PurchaseHub. */
   const PURCHASE_SUBPAGE_IDS = ['purchase', 'purchase-order', 'grn', 'purchase-history'] as const;
 
-  // State for PO → Purchase Entry navigation
-  const [prefilledData, setPrefilledData] = useState<Partial<PurchaseData> | null>(null);
+  // State for PO → canonical goods-receipt navigation.
+  const [receiptContext, setReceiptContext] = useState<CanonicalReceiptContext | null>(null);
+  const [receiptReadbackId, setReceiptReadbackId] = useState<string | null>(null);
   const [forceModule, setForceModule] = useState<string | null>(null);
 
-  // Handle "Record Receipt" from PO list → opens Purchase Entry with prefill
+  // Handle "Record Receipt" from a canonical UUID PO. Legacy integer PO
+  // identities are rejected by the request adapter before any HTTP call.
   const handleRecordReceipt = useCallback(async (poId: string) => {
     try {
-      const response = await purchasesApi.getForEntry(poId);
-      const poData = response?.data;
+      const response = await canonicalGoodsReceiptsApi.getPurchaseOrderContext(poId);
+      const context = response.data;
 
-      if (!poData || !poData.items?.length) {
+      if (!context?.lines?.length) {
         toast.warning('No remaining items to receive on this PO');
         return;
       }
-
-      // Transform PO data into PurchaseData format for prefill
-      const prefill: Partial<PurchaseData> = {
-        purchase_order_id: poData.purchase_order_id,
-        po_number: poData.po_number,
-        supplier_id: poData.supplier_id,
-        supplier_name: poData.supplier_name,
-        supplier_details: {
-          supplier_id: poData.supplier_id,
-          supplier_name: poData.supplier_name,
-          gst_number: poData.supplier_gst_number,
-          address: poData.supplier_address,
-          phone: poData.supplier_phone
-        },
-        notes: `Receipt for PO ${poData.po_number}`,
-        items: poData.items.map((item: any) => ({
-          po_item_id: item.po_item_id,
-          product_id: item.product_id,
-          product_name: item.product_name,
-          hsn_code: item.hsn_code,
-          quantity: Number(item.remaining_quantity),
-          ordered_quantity: Number(item.ordered_quantity),
-          free_quantity: Number(item.free_quantity || 0),
-          unit_price: Number(item.unit_price || 0),
-          mrp: Number(item.mrp || 0),
-          discount_percent: Number(item.discount_percent || 0),
-          tax_percent: Number(item.tax_percent || 0),
-          uom: item.uom,
-          pack_type: item.pack_type,
-          pack_size: item.pack_size,
-          batch_number: item.batch_number || '',
-          expiry_date: item.expiry_date || '',
-          manufacturing_date: item.manufacturing_date || ''
-        } as PurchaseItem))
-      };
-
-      setPrefilledData(prefill);
-      setForceModule('purchase');
+      setReceiptContext(context);
+      setReceiptReadbackId(null);
+      setForceModule('grn');
     } catch (error: any) {
-      const msg = error.response?.data?.detail || 'Failed to load PO data';
+      const detail = error.response?.data?.detail;
+      const msg = typeof detail === 'string'
+        ? detail
+        : detail?.message || error.message || 'Failed to load canonical receipt context';
       toast.error(msg);
     }
   }, []);
 
-  // Wrapper components that inject extra props
+  // Purchase entry remains independent; receipt posting never routes through it.
   const PurchaseEntryWrapper = useCallback((props: any) => {
-    const data = prefilledData;
-    // Clear prefill after passing it (single use)
-    if (data) {
-      setTimeout(() => setPrefilledData(null), 0);
-    }
-    return <PurchaseEntryFlow {...props} prefilledData={data} />;
-  }, [prefilledData]);
+    return <PurchaseEntryFlow {...props} />;
+  }, []);
+
+  const ReceiptWrapper = useCallback((props: any) => (
+    <GRNFlow
+      {...props}
+      prefilledData={receiptContext}
+      initialDetailId={receiptReadbackId}
+      onReceiptContextConsumed={() => setReceiptContext(null)}
+      onReceiptPosted={goodsReceiptId => {
+        setReceiptContext(null);
+        setReceiptReadbackId(goodsReceiptId);
+      }}
+    />
+  ), [receiptContext, receiptReadbackId]);
 
   const HistoryWrapper = useCallback((props: any) => (
     <PurchaseListHistory {...props} onRecordReceipt={handleRecordReceipt} />
@@ -147,7 +125,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
         description: 'Receipt history',
         icon: Package,
         color: 'green',
-        component: GRNFlow
+        component: ReceiptWrapper
       },
       {
         id: 'purchase-history',
@@ -161,7 +139,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
     );
 
     return modules;
-  }, [canCreate, PurchaseEntryWrapper, HistoryWrapper]);
+  }, [canCreate, PurchaseEntryWrapper, ReceiptWrapper, HistoryWrapper]);
 
   // Use forceModule to switch tab when navigating from PO; fall back to deep-link or permission-based default
   const resolvedInitialSubpage =

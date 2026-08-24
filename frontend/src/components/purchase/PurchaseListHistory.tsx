@@ -24,6 +24,7 @@ import {
   purchaseHistoryCsv,
   PurchaseDocumentType,
 } from './purchaselisthistory/utils/purchaseHistoryProjection';
+import { canRecordCanonicalReceipt } from './grn/canonicalReceiptCommand';
 
 // Document type configuration
 type DocumentType = PurchaseDocumentType;
@@ -363,13 +364,13 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="flex items-center justify-center space-x-1">
-          {/* Record Receipt button - only for PO documents with receivable status */}
+          {/* Canonical receipt is available only after PO approval and until fully received. */}
           {documentType === 'purchase_order' && onRecordReceipt &&
-            ['draft', 'pending', 'partial', 'confirmed', 'approved'].includes(purchase.status) && (
+            canRecordCanonicalReceipt(purchase.status) && (
             <button
               onClick={() => onRecordReceipt(purchase.id)}
               className="min-h-11 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-              title="Record Receipt (Create Purchase Entry from this PO)"
+              title={`Record canonical receipt for ${purchase.po_number}`}
             >
               <Package className="w-3.5 h-3.5 inline mr-1" />
               Receipt

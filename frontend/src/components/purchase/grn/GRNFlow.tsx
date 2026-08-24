@@ -1,18 +1,34 @@
-/**
- * GRNFlow - Goods Receipt Notes (Read-Only Viewer)
- *
- * GRNs are now auto-created from Purchase Entry.
- * This component shows a read-only list of existing GRNs with source badges.
- */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Package, FileText, Loader2, RefreshCw, Eye } from 'lucide-react';
+import { Package, FileText, Loader2, RefreshCw, Eye, AlertCircle } from 'lucide-react';
 import { grnApi } from '../../../services/api';
 import { DataTable, StatusBadge, ModuleHeader } from '../../global';
+import { canonicalGoodsReceiptsApi } from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
+import type {
+  CanonicalReceiptContext,
+  CanonicalReceiptDetail,
+} from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
+import { CanonicalGoodsReceiptForm } from './CanonicalGoodsReceiptForm';
 
-const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
+interface GRNFlowProps {
+  onClose: () => void;
+  prefilledData?: CanonicalReceiptContext | null;
+  initialDetailId?: string | null;
+  onReceiptContextConsumed?: () => void;
+  onReceiptPosted?: (goodsReceiptId: string) => void;
+}
+
+const GRNFlow = ({
+  onClose,
+  prefilledData,
+  initialDetailId,
+  onReceiptContextConsumed,
+  onReceiptPosted,
+}: GRNFlowProps) => {
   const [grns, setGrns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedGrn, setSelectedGrn] = useState<any>(null);
+  const [selectedGrn, setSelectedGrn] = useState<CanonicalReceiptDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const stockState = (grn: any) => {
     const status = String(grn?.grn_status || '').toLowerCase();
@@ -40,6 +56,27 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
   useEffect(() => {
     fetchGRNs();
   }, [fetchGRNs]);
+
+  const loadDetail = useCallback(async (goodsReceiptId: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const response = await canonicalGoodsReceiptsApi.getDetail(goodsReceiptId);
+      setSelectedGrn(response.data);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setDetailError(typeof detail === 'string'
+        ? detail
+        : detail?.message || error?.message || 'Canonical receipt detail is unavailable');
+      setSelectedGrn(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialDetailId) loadDetail(initialDetailId);
+  }, [initialDetailId, loadDetail]);
 
   // Source badge colors
   const sourceBadge = (source: string) => {
@@ -125,7 +162,7 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
       align: 'center' as const,
       render: (_: any, grn: any) => (
         <button
-          onClick={() => setSelectedGrn(grn)}
+          onClick={() => loadDetail(String(grn.grn_id))}
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
           title="View Details"
           aria-label={`View GRN ${grn.grn_number}`}
@@ -137,14 +174,36 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
     }
   ];
 
+  if (prefilledData) {
+    return (
+      <CanonicalGoodsReceiptForm
+        context={prefilledData}
+        onCancel={() => onReceiptContextConsumed?.()}
+        onPosted={goodsReceiptId => {
+          fetchGRNs();
+          onReceiptPosted?.(goodsReceiptId);
+        }}
+      />
+    );
+  }
+
+  if (detailLoading) {
+    return (
+      <div className="flex h-full items-center justify-center bg-gray-50" role="status">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <span className="ml-3 text-sm text-gray-700">Loading canonical stock evidence…</span>
+      </div>
+    );
+  }
+
   // Detail view
   if (selectedGrn) {
     return (
       <div className="h-full bg-gray-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
-            title={`GRN ${selectedGrn.grn_number}`}
-            documentNumber={selectedGrn.grn_number}
+            title={`GRN ${selectedGrn.goods_receipt_number}`}
+            documentNumber={selectedGrn.goods_receipt_number}
             status="active"
             icon={Package}
             iconColor="text-blue-600"
@@ -153,64 +212,84 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
             onSaveDraft={() => {}}
           />
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-3xl mx-auto space-y-6">
-              {/* Header Info */}
+            <div className="max-w-6xl mx-auto space-y-6">
               <div className="bg-white rounded-lg border p-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <span className="text-sm text-gray-500">GRN Number</span>
-                    <p className="font-medium">{selectedGrn.grn_number}</p>
+                    <p className="font-medium">{selectedGrn.goods_receipt_number}</p>
                   </div>
                   <div>
                     <span className="text-sm text-gray-500">Date</span>
                     <p className="font-medium">
-                      {selectedGrn.grn_date ? new Date(selectedGrn.grn_date).toLocaleDateString('en-IN') : '-'}
+                      {new Date(selectedGrn.received_at).toLocaleString('en-IN')}
                     </p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-500">Source</span>
-                    <p className="mt-1">{sourceBadge(selectedGrn.source || 'MANUAL')}</p>
+                    <span className="text-sm text-gray-500">Supplier</span>
+                    <p className="font-medium">{selectedGrn.supplier_name}</p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-500">Supplier Invoice</span>
-                    <p className="font-medium">{selectedGrn.supplier_invoice_number || '-'}</p>
+                    <span className="text-sm text-gray-500">Supplier challan</span>
+                    <p className="font-medium">{selectedGrn.supplier_challan_number || '-'}</p>
                   </div>
-                  {selectedGrn.purchase_order_id && (
-                    <div>
-                      <span className="text-sm text-gray-500">Linked PO</span>
-                      <p className="font-medium text-purple-600">PO #{selectedGrn.purchase_order_id}</p>
-                    </div>
-                  )}
-                  {selectedGrn.supplier_invoice_id && (
-                    <div>
-                      <span className="text-sm text-gray-500">Linked Invoice</span>
-                      <p className="font-medium text-blue-600">Invoice #{selectedGrn.supplier_invoice_id}</p>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-sm text-gray-500">Linked PO</span>
+                    <p className="font-medium text-purple-700">{selectedGrn.purchase_order_number}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">Base quantity posted</span>
+                    <p className="font-medium">{selectedGrn.total_abs_base_quantity}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">Posted receipt valuation</span>
+                    <p className="font-medium">₹{selectedGrn.total_inventory_value}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">Costing</span>
+                    <p className="font-medium">Moving weighted average</p>
+                  </div>
                 </div>
+                <p className="mt-4 break-all border-t border-gray-100 pt-4 text-xs text-gray-500">Receipt UUID: {selectedGrn.goods_receipt_id}</p>
               </div>
 
-              {/* Info Banner */}
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-blue-600" />
                   <p className="text-sm text-blue-800">
-                    This receipt is read-only. {stockState(selectedGrn).updated
-                      ? 'Its posted quantities are reflected in canonical stock.'
-                      : selectedGrn.grn_status === 'reversed'
-                        ? 'Its stock effect has been reversed.'
-                        : 'Stock changes only when the receipt is posted.'}
+                    Inventory-only receipt: no supplier payable, GST/ITC document, or journal entry is created at GRN posting. Those belong to the matched supplier invoice.
                   </p>
                 </div>
               </div>
 
-              {/* Notes */}
-              {selectedGrn.notes && (
-                <div className="bg-white rounded-lg border p-4">
-                  <span className="text-sm text-gray-500">Notes</span>
-                  <p className="mt-1 text-sm">{selectedGrn.notes}</p>
-                </div>
-              )}
+              <div className="space-y-4">
+                {selectedGrn.lines.map(line => (
+                  <div key={line.goods_receipt_line_id} className="rounded-xl border border-gray-200 bg-white p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{line.product_name}</h3>
+                        <p className="text-xs text-gray-500">{line.sku} · Line {line.line_number} · {line.uom_code}</p>
+                      </div>
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">{line.qc_status}</span>
+                    </div>
+                    <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                      <div><dt className="text-gray-500">Batch</dt><dd className="font-medium text-gray-900">{line.manufacturer_batch_number}</dd></div>
+                      <div><dt className="text-gray-500">Expiry / MRP</dt><dd className="font-medium text-gray-900">{line.expires_on} · ₹{line.mrp}</dd></div>
+                      <div><dt className="text-gray-500">Billed / free</dt><dd className="font-medium text-gray-900">{line.accepted_quantity} / {line.free_quantity}</dd></div>
+                      <div><dt className="text-gray-500">Base billed / free</dt><dd className="font-medium text-gray-900">{line.base_accepted_quantity} / {line.base_free_quantity}</dd></div>
+                      <div><dt className="text-gray-500">Location</dt><dd className="font-medium text-gray-900">{line.location_code} · {line.location_type}</dd></div>
+                      <div><dt className="text-gray-500">Receipt cost</dt><dd className="font-medium text-gray-900">₹{line.unit_cost} / ₹{line.extended_cost}</dd></div>
+                      <div><dt className="text-gray-500">Ledger delta</dt><dd className="font-medium text-green-700">+{line.inventory.ledger_quantity_delta} / ₹{line.inventory.ledger_value_delta}</dd></div>
+                      <div><dt className="text-gray-500">Current balance (includes later movements)</dt><dd className="font-medium text-gray-900">{line.inventory.current_on_hand_quantity} / ₹{line.inventory.current_inventory_value}</dd></div>
+                    </dl>
+                    <p className="mt-4 break-all border-t border-gray-100 pt-3 text-xs text-gray-500">Line UUID: {line.goods_receipt_line_id} · Batch UUID: {line.batch_id} · Ledger UUID: {line.inventory.ledger_entry_id}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-white p-4 text-xs text-gray-500">
+                Inventory document UUID: {selectedGrn.inventory_document_id} · {selectedGrn.inventory_document_number} · {selectedGrn.inventory_document_status}
+              </div>
             </div>
           </div>
         </div>
@@ -246,8 +325,8 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-gray-600" />
             <p className="text-sm text-gray-700">
-              Goods Receipt Notes are auto-generated when you create a Purchase Entry.
-              Use the <strong>Purchase Entry</strong> tab to record new receipts.
+              Receipts are posted only from an approved purchase order through a reviewed canonical command.
+              Use <strong>Purchase History → Purchase Orders → Receipt</strong> to start.
             </p>
           </div>
         </div>
@@ -255,6 +334,15 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-7xl mx-auto">
+            {detailError && (
+              <div role="alert" className="mb-4 flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">Receipt detail could not be verified</p>
+                  <p>{detailError}</p>
+                </div>
+              </div>
+            )}
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 animate-spin text-green-600" />
@@ -267,7 +355,7 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
                   data={grns}
                   keyField="grn_id"
                   loading={false}
-                  emptyMessage="No goods receipts yet. Create a Purchase Entry to auto-generate GRNs."
+                  emptyMessage="No canonical goods receipts yet. Start from an approved purchase order."
                 />
               </div>
             )}
