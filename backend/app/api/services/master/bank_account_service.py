@@ -55,11 +55,10 @@ class BankAccountService:
                AND account.allows_bank_reconciliation=true
              ORDER BY bank.bank_name, account.code, bank.id
         """
-        
+
         result = db.execute(text(query), {"org_id": org_id})
         accounts = []
         for row in result:
             account = dict(row._mapping)
             accounts.append(account)
         return accounts
-    
