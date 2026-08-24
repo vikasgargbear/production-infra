@@ -399,7 +399,8 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     assert "inventory_document.document_type='sales_issue'" in sql
     assert "inventory_document.status='posted'" in sql
     assert "command.status='succeeded'" in sql
-    assert "command.request_hash=extensions.digest(" in sql
+    assert "command.request_hash=extensions.digest(" not in sql
+    assert "command.request_hash=pg_catalog.sha256(" in sql
     assert "count(*)::integer AS command_evidence_count" in sql
     assert "CASE WHEN count(*)=1 THEN" in sql
     assert "LEFT JOIN LATERAL" in sql

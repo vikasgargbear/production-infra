@@ -1853,8 +1853,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                    AND command.result_resource_type='sales_invoice'
                                    AND command.result_resource_id=invoice.id
                                    AND command.response_status=200
-                                   AND command.request_hash=extensions.digest(
-                                       command.request_bytes, 'sha256'
+                                   AND command.request_hash=pg_catalog.sha256(
+                                       command.request_bytes
                                    )
                             ) command_evidence ON true
                             LEFT JOIN LATERAL (

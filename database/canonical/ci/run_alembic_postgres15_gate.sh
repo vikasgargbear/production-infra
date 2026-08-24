@@ -56,3 +56,6 @@ test "$fixture_count" -gt 0 || {
   echo "no canonical PostgreSQL fixtures were discovered" >&2
   exit 2
 }
+
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_invoice_detail_runtime_role.py

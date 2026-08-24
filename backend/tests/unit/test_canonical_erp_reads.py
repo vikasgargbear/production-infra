@@ -558,7 +558,8 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert "'free_quantity', executed.free_quantity" in source
     assert "command.status='succeeded'" in source
     assert "command.result_resource_id=invoice.id" in source
-    assert "command.request_hash=extensions.digest(" in source
+    assert "command.request_hash=extensions.digest(" not in source
+    assert "command.request_hash=pg_catalog.sha256(" in source
     assert "count(*)::integer AS command_evidence_count" in source
     assert "CASE WHEN count(*)=1 THEN" in source
     assert "LEFT JOIN LATERAL" in source
@@ -598,6 +599,23 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert allocation_schema["properties"]["source_kind"]["enum"] == [
         "direct_issue", "dispatch_allocation"
     ]
+
+
+def test_invoice_detail_relies_on_immutable_canonical_command_hash_evidence() -> None:
+    detail_source = inspect.getsource(canonical_erp_reads._canonical_invoice_detail)
+    canonical_sql = (
+        Path(__file__).parents[2] / "alembic/sql/20260820_0001_canonical_v1.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "extensions.digest" not in detail_source
+    assert "command.request_hash=pg_catalog.sha256(" in detail_source
+    assert (
+        "NEW.request_hash IS DISTINCT FROM extensions.digest(NEW.request_bytes,'sha256')"
+        in canonical_sql
+    )
+    assert "command request evidence cannot be deleted" in canonical_sql
+    assert "terminal command request is immutable" in canonical_sql
+    assert "approved command snapshot facts are immutable" in canonical_sql
 
 
 def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations() -> None:

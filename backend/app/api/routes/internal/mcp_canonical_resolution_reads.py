@@ -966,8 +966,8 @@ def canonical_sales_invoice_get(
                      AND command.result_resource_type='sales_invoice'
                      AND command.result_resource_id=invoice_line.invoice_id
                      AND command.response_status=200
-                     AND command.request_hash=extensions.digest(
-                         command.request_bytes, 'sha256'
+                     AND command.request_hash=pg_catalog.sha256(
+                         command.request_bytes
                      )
               ) AS command_evidence ON true
               LEFT JOIN LATERAL (
