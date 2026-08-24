@@ -5,6 +5,7 @@ from typing import Any, Dict, Sequence, Type, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from ...core.auth.org_context import OrgContext, get_org_context
 from ...core.auth.tenant_service import (
@@ -28,25 +29,23 @@ from ..schemas.calculations import (
     NoteCalculationRequest,
     InvoiceCalculationPreviewResponse,
     ChallanCalculationPreviewResponse,
-    CalculationLine,
+    NoteCalculationPreviewResponse,
+    PurchaseCalculationPreviewResponse,
+    ReturnCalculationPreviewResponse,
 )
 
 
 router = APIRouter(prefix="/calculations", tags=["Calculations"])
 
 
-PreviewResponse = TypeVar(
-    "PreviewResponse",
-    InvoiceCalculationPreviewResponse,
-    ChallanCalculationPreviewResponse,
-)
+PreviewResponse = TypeVar("PreviewResponse", bound=BaseModel)
 
 
 def _preview_response(
     result: Dict[str, Any],
     gst_type: str,
     response_type: Type[PreviewResponse],
-    source_lines: Sequence[CalculationLine],
+    source_lines: Sequence[BaseModel],
 ) -> PreviewResponse:
     totals = dict(result)
     line_items = totals.pop("calculated_items")
@@ -69,19 +68,6 @@ def _preview_response(
         "calculation_timestamp": int(time.time() * 1000),
         "gst_type": str(gst_type).strip().upper(),
     })
-
-
-def _untyped_preview_response(result: Dict[str, Any], gst_type: str) -> Dict[str, Any]:
-    """Compatibility wrapper for calculation surfaces outside this typed closure."""
-    totals = dict(result)
-    line_items = totals.pop("calculated_items")
-    return {
-        "success": True,
-        "line_items": line_items,
-        "totals": totals,
-        "calculation_timestamp": int(time.time() * 1000),
-        "gst_type": str(gst_type).strip().upper(),
-    }
 
 
 @router.post(
@@ -117,6 +103,7 @@ async def preview_invoice_totals(
             discount_type=invoice_data.discount_type,
             discount_percent=invoice_data.discount_percent,
             discount_amount=invoice_data.discount_amount,
+            exact_output=True,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -165,6 +152,7 @@ async def preview_sales_order_totals(
             discount_type=order_data.discount_type,
             discount_percent=order_data.discount_percent,
             discount_amount=order_data.discount_amount,
+            exact_output=True,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -177,7 +165,11 @@ async def preview_sales_order_totals(
     )
 
 
-@router.post("/purchase-order")
+@router.post(
+    "/purchase-order",
+    response_model=PurchaseCalculationPreviewResponse,
+    response_model_exclude_none=True,
+)
 @with_tenant_context
 async def preview_purchase_order_totals(
     purchase_data: PurchaseCalculationRequest,
@@ -204,11 +196,17 @@ async def preview_purchase_order_totals(
             freight_charges=purchase_data.freight_charges,
             insurance_charges=purchase_data.insurance_charges,
             other_charges=purchase_data.other_charges,
+            exact_output=True,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _untyped_preview_response(result, gst_type)
+    return _preview_response(
+        result,
+        gst_type,
+        PurchaseCalculationPreviewResponse,
+        purchase_data.items,
+    )
 
 
 @router.post(
@@ -239,6 +237,7 @@ async def preview_challan_totals(
             items=[item.model_dump() for item in challan_data.items],
             gst_type=gst_type,
             freight_charges=challan_data.freight_charges,
+            exact_output=True,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -248,7 +247,11 @@ async def preview_challan_totals(
     )
 
 
-@router.post("/return")
+@router.post(
+    "/return",
+    response_model=ReturnCalculationPreviewResponse,
+    response_model_exclude_none=True,
+)
 @with_tenant_context
 async def preview_return_totals(
     return_data: ReturnCalculationRequest,
@@ -292,10 +295,19 @@ async def preview_return_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _untyped_preview_response(result, gst_type)
+    return _preview_response(
+        result,
+        gst_type,
+        ReturnCalculationPreviewResponse,
+        return_data.items,
+    )
 
 
-@router.post("/note")
+@router.post(
+    "/note",
+    response_model=NoteCalculationPreviewResponse,
+    response_model_exclude_none=True,
+)
 @with_tenant_context
 async def preview_note_totals(
     note_data: NoteCalculationRequest,
@@ -306,7 +318,7 @@ async def preview_note_totals(
     """Calculate a credit or debit note without writing ledger state."""
     try:
         party_kwargs: Dict[str, int] = {}
-        if note_data.party_id is not None:
+        if note_data.party_id is not None and not isinstance(note_data.party_id, UUID):
             party_kwargs[
                 "supplier_id" if note_data.party_type == "supplier" else "customer_id"
             ] = note_data.party_id
@@ -327,4 +339,9 @@ async def preview_note_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _untyped_preview_response(result, gst_type)
+    return _preview_response(
+        result,
+        gst_type,
+        NoteCalculationPreviewResponse,
+        note_data.items,
+    )

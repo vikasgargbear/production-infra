@@ -179,7 +179,7 @@ def test_challan_preview_response_validates_totals_and_preserves_uuid_line_id():
         request.items,
     )
     assert response.line_items[0].product_id == product_id
-    assert isinstance(response.model_dump(mode="json")["totals"]["final_amount"], float)
+    assert response.model_dump(mode="json")["totals"]["final_amount"] == "118.0"
 
     invalid = dict(result)
     invalid["final_amount"] = -1

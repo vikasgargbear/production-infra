@@ -520,7 +520,9 @@ class InvoiceService:
         other_charges: float = 0,
         discount_type: str = "percentage",
         discount_percent: float = 0,
-        discount_amount: float = 0
+        discount_amount: float = 0,
+        *,
+        exact_output: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculate all invoice totals from item list.
@@ -599,12 +601,12 @@ class InvoiceService:
 
             calculated_items.append({
                 **calculated,
-                'quantity': float(quantity),
-                'free_quantity': float(free_quantity),
+                'quantity': quantity,
+                'free_quantity': free_quantity,
                 'free_supply_tax_treatment': free_supply_tax_treatment,
-                'cgst_percent': float(gst_pct / 2) if normalized_gst_type == "CGST/SGST" else 0.0,
-                'sgst_percent': float(gst_pct / 2) if normalized_gst_type == "CGST/SGST" else 0.0,
-                'igst_percent': float(gst_pct) if normalized_gst_type == "IGST" else 0.0,
+                'cgst_percent': gst_pct / 2 if normalized_gst_type == "CGST/SGST" else Decimal("0"),
+                'sgst_percent': gst_pct / 2 if normalized_gst_type == "CGST/SGST" else Decimal("0"),
+                'igst_percent': gst_pct if normalized_gst_type == "IGST" else Decimal("0"),
                 'total_tax_amount': calculated['total_tax'],
                 '_taxable_before_scheme': line_taxable,
                 '_gst_percent': gst_pct,
@@ -664,14 +666,14 @@ class InvoiceService:
             new_igst = components['igst_amount']
             new_tax = components['total_tax_amount']
 
-            calc['scheme_discount'] = float(item_scheme_discount)
-            calc['taxable_amount'] = float(adjusted_taxable)
-            calc['cgst_amount'] = float(new_cgst)
-            calc['sgst_amount'] = float(new_sgst)
-            calc['igst_amount'] = float(new_igst)
-            calc['total_tax'] = float(new_tax)
-            calc['total_tax_amount'] = float(new_tax)
-            calc['line_total'] = float(money(adjusted_taxable + new_tax))
+            calc['scheme_discount'] = item_scheme_discount
+            calc['taxable_amount'] = adjusted_taxable
+            calc['cgst_amount'] = new_cgst
+            calc['sgst_amount'] = new_sgst
+            calc['igst_amount'] = new_igst
+            calc['total_tax'] = new_tax
+            calc['total_tax_amount'] = new_tax
+            calc['line_total'] = money(adjusted_taxable + new_tax)
 
             taxable_amount += adjusted_taxable
             cgst += new_cgst
@@ -689,22 +691,34 @@ class InvoiceService:
         final_amount = rupees(amount_before_round)
         round_off_amount = money(final_amount - amount_before_round)
 
-        return {
-            'subtotal_amount': float(money(gross_subtotal)),
-            'discount_amount': float(money(item_discount)),
-            'scheme_discount': float(scheme_discount),
-            'scheme_discount_percent': float(money(scheme_discount_percent_value)),
-            'taxable_amount': float(money(taxable_amount)),
-            'cgst_amount': float(money(cgst)),
-            'sgst_amount': float(money(sgst)),
-            'igst_amount': float(money(igst)),
-            'total_tax_amount': float(money(total_tax)),
-            'freight_charges': float(freight_value),
-            'insurance_charges': float(insurance_value),
-            'other_charges': float(other_value),
-            'round_off_amount': float(round_off_amount),
-            'final_amount': float(final_amount),
+        totals = {
+            'subtotal_amount': money(gross_subtotal),
+            'discount_amount': money(item_discount),
+            'scheme_discount': scheme_discount,
+            'scheme_discount_percent': money(scheme_discount_percent_value),
+            'taxable_amount': money(taxable_amount),
+            'cgst_amount': money(cgst),
+            'sgst_amount': money(sgst),
+            'igst_amount': money(igst),
+            'total_tax_amount': money(total_tax),
+            'freight_charges': freight_value,
+            'insurance_charges': insurance_value,
+            'other_charges': other_value,
+            'round_off_amount': round_off_amount,
+            'final_amount': final_amount,
             'calculated_items': calculated_items,
+        }
+        if exact_output:
+            return totals
+        return {
+            **{key: float(value) for key, value in totals.items() if key != 'calculated_items'},
+            'calculated_items': [
+                {
+                    key: float(value) if isinstance(value, Decimal) else value
+                    for key, value in item.items()
+                }
+                for item in calculated_items
+            ],
         }
     
     @staticmethod

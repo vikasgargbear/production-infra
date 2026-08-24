@@ -206,8 +206,8 @@ def test_invoice_preview_response_is_strict_and_serializes_frontend_numbers():
         result, "IGST", InvoiceCalculationPreviewResponse, source_lines
     )
     body = response.model_dump(mode="json")
-    assert isinstance(body["line_items"][0]["line_total"], float)
-    assert isinstance(body["totals"]["final_amount"], float)
+    assert body["line_items"][0]["line_total"] == "236.0"
+    assert body["totals"]["final_amount"] == "236.0"
     assert body["line_items"][0]["product_id"] == (
         "d3000000-0000-7000-8000-000000000001"
     )
@@ -270,19 +270,19 @@ def test_invoice_mixed_billed_and_free_treatment_matches_preview_contract(
 
     line = body["line_items"][0]
     assert line["product_id"] == "d3000000-0000-7000-8000-000000000002"
-    assert line["quantity"] == 2.0
-    assert line["free_quantity"] == 1.0
+    assert line["quantity"] == "2.0"
+    assert line["free_quantity"] == "1.0"
     assert line["free_supply_tax_treatment"] == free_supply_tax_treatment
-    assert line["subtotal"] == expected_subtotal
-    assert line["taxable_amount"] == expected_subtotal
-    assert line["igst_amount"] == expected_tax
-    assert line["total_tax_amount"] == expected_tax
-    assert line["line_total"] == expected_total
-    assert body["totals"]["subtotal_amount"] == expected_subtotal
-    assert body["totals"]["taxable_amount"] == expected_subtotal
-    assert body["totals"]["igst_amount"] == expected_tax
-    assert body["totals"]["total_tax_amount"] == expected_tax
-    assert body["totals"]["final_amount"] == expected_total
+    assert line["subtotal"] == str(expected_subtotal)
+    assert line["taxable_amount"] == str(expected_subtotal)
+    assert line["igst_amount"] == str(expected_tax)
+    assert line["total_tax_amount"] == str(expected_tax)
+    assert line["line_total"] == str(expected_total)
+    assert body["totals"]["subtotal_amount"] == str(expected_subtotal)
+    assert body["totals"]["taxable_amount"] == str(expected_subtotal)
+    assert body["totals"]["igst_amount"] == str(expected_tax)
+    assert body["totals"]["total_tax_amount"] == str(expected_tax)
+    assert body["totals"]["final_amount"] == str(expected_total)
 
 
 def test_line_calculation_matrix_covers_prices_quantities_discounts_and_gst():

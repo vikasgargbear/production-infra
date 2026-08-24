@@ -12,12 +12,12 @@ from ..services.compliance.gst_service import GSTService
 
 
 def calculate_line_item(
-    quantity: float,
-    unit_price: float,
-    discount_percent: float,
-    gst_percent: float,
+    quantity: object,
+    unit_price: object,
+    discount_percent: object,
+    gst_percent: object,
     gst_type: str = "CGST/SGST",
-) -> Dict[str, float]:
+) -> Dict[str, Decimal]:
     """Calculate one billable line using commercial half-up rounding."""
     quantity_value = decimal_value(quantity, "quantity", minimum=Decimal("0"))
     price_value = decimal_value(unit_price, "unit_price", minimum=Decimal("0"))
@@ -38,14 +38,14 @@ def calculate_line_item(
     line_total = money(taxable_amount + gst["total_tax_amount"])
 
     return {
-        "subtotal": float(subtotal),
-        "discount_amount": float(discount_amount),
-        "taxable_amount": float(taxable_amount),
-        "cgst_amount": float(gst["cgst_amount"]),
-        "sgst_amount": float(gst["sgst_amount"]),
-        "igst_amount": float(gst["igst_amount"]),
-        "total_tax": float(gst["total_tax_amount"]),
-        "line_total": float(line_total),
+        "subtotal": subtotal,
+        "discount_amount": discount_amount,
+        "taxable_amount": taxable_amount,
+        "cgst_amount": gst["cgst_amount"],
+        "sgst_amount": gst["sgst_amount"],
+        "igst_amount": gst["igst_amount"],
+        "total_tax": gst["total_tax_amount"],
+        "line_total": line_total,
     }
 
 

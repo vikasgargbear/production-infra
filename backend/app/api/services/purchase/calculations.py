@@ -151,7 +151,9 @@ class PurchaseCalculator:
         gst_type: str = "CGST/SGST",
         freight_charges: float = 0,
         insurance_charges: float = 0,
-        other_charges: float = 0
+        other_charges: float = 0,
+        *,
+        exact_output: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculate all totals for a purchase order or supplier invoice
@@ -196,18 +198,18 @@ class PurchaseCalculator:
             calculated_items.append({
                 'product_id': calc.product_id,
                 'product_name': calc.product_name,
-                'quantity': float(calc.quantity),
-                'unit_price': float(calc.unit_price),
-                'discount_percent': float(calc.discount_percent),
-                'discount_amount': float(calc.discount_amount),
-                'tax_percent': float(calc.tax_percent),
-                'taxable_amount': float(calc.taxable_amount),
-                'cgst_amount': float(calc.cgst_amount),
-                'sgst_amount': float(calc.sgst_amount),
-                'igst_amount': float(calc.igst_amount),
-                'tax_amount': float(calc.tax_amount),
-                'line_total': float(calc.line_total),
-                'mrp': float(calc.mrp)
+                'quantity': calc.quantity,
+                'unit_price': calc.unit_price,
+                'discount_percent': calc.discount_percent,
+                'discount_amount': calc.discount_amount,
+                'tax_percent': calc.tax_percent,
+                'taxable_amount': calc.taxable_amount,
+                'cgst_amount': calc.cgst_amount,
+                'sgst_amount': calc.sgst_amount,
+                'igst_amount': calc.igst_amount,
+                'tax_amount': calc.tax_amount,
+                'line_total': calc.line_total,
+                'mrp': calc.mrp,
             })
         
         # Add additional charges
@@ -224,22 +226,33 @@ class PurchaseCalculator:
         
         final_total = rounded_total
         
-        # Return with rounded values
-        return {
-            'subtotal_amount': float(money(subtotal)),
-            'discount_amount': float(money(discount_total)),
-            'taxable_amount': float(money(taxable_total)),
-            'cgst_amount': float(money(cgst_total)),
-            'sgst_amount': float(money(sgst_total)),
-            'igst_amount': float(money(igst_total)),
-            'tax_amount': float(money(tax_total)),
-            'freight_charges': float(freight),
-            'insurance_charges': float(insurance),
-            'other_charges': float(other),
-            'round_off_amount': float(money(round_off)),
-            'total_amount': float(final_total),  # For purchase_orders
-            'invoice_total': float(final_total),  # For supplier_invoices
+        totals = {
+            'subtotal_amount': money(subtotal),
+            'discount_amount': money(discount_total),
+            'taxable_amount': money(taxable_total),
+            'cgst_amount': money(cgst_total),
+            'sgst_amount': money(sgst_total),
+            'igst_amount': money(igst_total),
+            'tax_amount': money(tax_total),
+            'freight_charges': freight,
+            'insurance_charges': insurance,
+            'other_charges': other,
+            'round_off_amount': money(round_off),
+            'total_amount': final_total,  # For purchase_orders
+            'invoice_total': final_total,  # For supplier_invoices
             'calculated_items': calculated_items
+        }
+        if exact_output:
+            return totals
+        return {
+            **{key: float(value) for key, value in totals.items() if key != 'calculated_items'},
+            'calculated_items': [
+                {
+                    key: float(value) if isinstance(value, Decimal) else value
+                    for key, value in item.items()
+                }
+                for item in calculated_items
+            ],
         }
     
     @staticmethod

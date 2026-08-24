@@ -23,6 +23,8 @@ class ChallanService:
         items: List[Dict[str, Any]],
         gst_type: str,
         freight_charges: Any = 0,
+        *,
+        exact_output: bool = False,
     ) -> Dict[str, Any]:
         """Calculate delivery-challan lines and totals for preview and commit."""
         if not items:
@@ -80,9 +82,9 @@ class ChallanService:
                 gst_percent=gst_percent,
                 gst_type=normalized_gst_type,
             )
-            line["gst_percent"] = float(gst_percent)
-            line["quantity"] = float(quantity)
-            line["free_quantity"] = float(free_quantity)
+            line["gst_percent"] = gst_percent
+            line["quantity"] = quantity
+            line["free_quantity"] = free_quantity
             line["free_supply_tax_treatment"] = free_supply_tax_treatment
             line["total_tax_amount"] = line["total_tax"]
             calculated_items.append(line)
@@ -96,17 +98,29 @@ class ChallanService:
         freight = money(decimal_value(freight_charges, "freight_charges", minimum=Decimal("0")))
         total_tax = money(cgst + sgst + igst)
         final_amount = money(taxable + total_tax + freight)
-        return {
-            "subtotal_amount": float(money(subtotal)),
-            "discount_amount": float(money(discount)),
-            "taxable_amount": float(money(taxable)),
-            "cgst_amount": float(money(cgst)),
-            "sgst_amount": float(money(sgst)),
-            "igst_amount": float(money(igst)),
-            "total_tax_amount": float(total_tax),
-            "freight_charges": float(freight),
-            "final_amount": float(final_amount),
+        totals = {
+            "subtotal_amount": money(subtotal),
+            "discount_amount": money(discount),
+            "taxable_amount": money(taxable),
+            "cgst_amount": money(cgst),
+            "sgst_amount": money(sgst),
+            "igst_amount": money(igst),
+            "total_tax_amount": total_tax,
+            "freight_charges": freight,
+            "final_amount": final_amount,
             "calculated_items": calculated_items,
+        }
+        if exact_output:
+            return totals
+        return {
+            **{key: float(value) for key, value in totals.items() if key != "calculated_items"},
+            "calculated_items": [
+                {
+                    key: float(value) if isinstance(value, Decimal) else value
+                    for key, value in item.items()
+                }
+                for item in calculated_items
+            ],
         }
     
     @staticmethod
