@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "revision": "20260824_0002",
+  "source_sql_sha256": "a81a2ab94ceacbd1ba34211af6ac49f85310c86a1cd75da2a80bb0ffd95f6785",
+  "target_regprocedure": "erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)",
+  "authority_change": "sales_invoice_fefo_expiry_date_equivalence_v1"
+}

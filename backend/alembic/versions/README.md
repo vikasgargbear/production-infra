@@ -11,3 +11,11 @@ requires the exact reviewed hash in `CANONICAL_BASELINE_APPROVED_SHA256`, the
 bootstrap migration-principal preflight, and the reset procedure in
 `database/canonical/RESET_AND_BASELINE.md`. Downgrade fails closed; recovery is
 the separately approved restore/reset workflow.
+
+`20260824_0002_sales_invoice_fefo_expiry_equivalence.py` is the first
+incremental revision. It preserves the applied baseline and replaces only the
+reviewed FEFO block in `resolve_sales_invoice_prepare`. The replacement is
+hash-bound, checks its exact predecessor, and can upgrade an existing
+`20260820_0001` database without reset or business-data mutation. It treats all
+released lots sharing the earliest expiry date as one FEFO tier; later tiers
+remain unavailable until earlier-tier stock is fully allocated.

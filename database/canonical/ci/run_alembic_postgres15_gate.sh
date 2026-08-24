@@ -39,7 +39,7 @@ CANONICAL_BASELINE_APPROVED_SHA256=$(
   alembic -c alembic.ini upgrade head
 )
 
-test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260820_0001"
+test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260824_0002"
 test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass")" = "true|true"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
 

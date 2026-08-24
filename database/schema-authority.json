@@ -16,6 +16,9 @@
     "backend/alembic/versions/20260820_0001_canonical_v1.py",
     "backend/alembic/sql/20260820_0001_canonical_v1.sql",
     "backend/alembic/sql/20260820_0001_canonical_v1.manifest.json",
+    "backend/alembic/versions/20260824_0002_sales_invoice_fefo_expiry_equivalence.py",
+    "backend/alembic/sql/20260824_0002_sales_invoice_fefo_expiry_equivalence.sql",
+    "backend/alembic/sql/20260824_0002_sales_invoice_fefo_expiry_equivalence.manifest.json",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

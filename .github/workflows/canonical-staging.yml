@@ -346,7 +346,7 @@ jobs:
           test "$(psql -X -Atqc "SELECT to_regclass('public.alembic_version') IS NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')" "$PSYCOPG_DATABASE_URL")" = 0
 
-      - name: Apply or verify the approved baseline
+      - name: Apply or verify the approved canonical migration head
         run: |
           set -euo pipefail
           export PGOPTIONS='-c statement_timeout=120000 -c lock_timeout=15000'
@@ -375,7 +375,7 @@ jobs:
                    ) AND (rolsuper OR rolcreaterole OR rolbypassrls)
                  ) AS unsafe_role_count
             FROM public.alembic_version AS revision
-           WHERE revision.version_num='20260820_0001'
+           WHERE revision.version_num='20260824_0002'
           SQL
           )
           if curl --fail --silent --show-error \
@@ -385,14 +385,25 @@ jobs:
             --data "$(jq -nc --arg query "$baseline_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$baseline_state" \
-            && jq -e '.. | objects | select(.version_num? == "20260820_0001" and ((.table_count? // "") | tostring) == "110" and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
+            && jq -e '.. | objects | select(.version_num? == "20260824_0002" and ((.table_count? // "") | tostring) == "110" and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
               "$baseline_state" >/dev/null; then
             echo "Control plane verified exact canonical revision and topology; Alembic is already current"
             baseline_applied=true
           fi
           if [ "$baseline_applied" != true ]; then
+            cleanup_alembic_membership() {
+              psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+                -c 'GRANT erp_migration_owner TO postgres WITH SET FALSE' \
+                >/dev/null 2>&1 || true
+            }
+            trap cleanup_alembic_membership EXIT
             for attempt in $(seq 1 3); do
               if (
+                cd backend
+                alembic -c alembic.ini upgrade 20260820_0001
+                cd ..
+                psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+                  -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE' >/dev/null
                 cd backend
                 alembic -c alembic.ini upgrade head
                 alembic -c alembic.ini upgrade head
@@ -412,21 +423,17 @@ jobs:
                 sleep 20
               fi
             done
+            cleanup_alembic_membership
+            trap - EXIT
           fi
           if [ "$baseline_applied" != true ]; then
-            {
-              echo
-              echo "--- rollback-safe psql statement diagnostic ---"
-              psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-                -f backend/alembic/sql/20260820_0001_canonical_v1.sql
-            } >> "$log_file" 2>&1 || true
             python3 - "$log_file" <<'PY'
           import pathlib
           import sys
 
           text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Canonical free staging baseline failure::{text}")
+          print(f"::error title=Canonical free staging migration failure::{text}")
           PY
             exit 1
           fi
@@ -560,7 +567,9 @@ jobs:
                  position('aggregate_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS purchase_order_binding_current,
                  position('requested.requested_batch_id=eligible.eligible_batch_id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
                    AND position('JOIN inventory.batches AS eligible_batch' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AS dispatch_fefo_current,
-                 position('SELECT * INTO STRICT revenue_account FROM finance.accounts AS resolved_revenue_account' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AS sales_invoice_revenue_account_current,
+                 position('SELECT * INTO STRICT revenue_account FROM finance.accounts AS resolved_revenue_account' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('sales_invoice_fefo_expiry_date_equivalence_v1' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('ORDER BY batch_row.expires_on,stock.batch_id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AS sales_invoice_revenue_account_current,
                  position('(resolved_document->>''branch_id'')::uuid,false,''sales_return_receipt''' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_sales_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS sales_return_receipt_current,
                  position('persisted_return.id=(expected_line->>''line_id'')::uuid' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0
                    AND position('sales-return draft line cardinality changed' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0 AS sales_return_draft_current,
@@ -692,10 +701,6 @@ jobs:
               ),
               (
                   "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
-                  'CREATE FUNCTION "erp_automation_commands"."resolve_sales_invoice_prepare"',
-              ),
-              (
-                  "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
                   'CREATE FUNCTION "erp_automation_commands"."persist_sales_return_prepare"',
               ),
               (
@@ -823,6 +828,9 @@ jobs:
           test "$(psql -X -Atqc \
             "SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0, position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0 AND position('''purchase_order'',purchase_order.id,purchase_order.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('outbox_aggregate_id' IN pg_catalog.pg_get_functiondef('erp_plumbing.enqueue_state_outbox()'::regprocedure))>0, position('SECURITY DEFINER' IN pg_catalog.pg_get_functiondef('erp_trade_commands_v2.guard_source_inventory_ownership()'::regprocedure))>0 AND position('SECURITY DEFINER' IN pg_catalog.pg_get_functiondef('erp_trade_commands_v2.guard_posted_landed_allocation()'::regprocedure))>0, position('controlled_batched_movement' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AND position('conversion.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AND position('effective_from<=adjustment_date' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AND position('conversion_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0, position('pg_catalog.current_date' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AND position('order_line.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AND position('mrp_conversion.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AND position('order_line_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AND position('mrp_conversion_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0, position('aggregate_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0, position('requested.requested_batch_id=eligible.eligible_batch_id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0, position('SELECT * INTO STRICT revenue_account FROM finance.accounts AS resolved_revenue_account' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0, position('NEW.capability_code IN (' IN pg_catalog.pg_get_functiondef('erp_automation_commands.guard_command_request_match()'::regprocedure))>0, (SELECT count(*)=5 AND pg_catalog.bool_and(position('set_config(''app.request_id''' IN pg_catalog.pg_get_functiondef(proc.oid))>0) FROM pg_catalog.pg_proc AS proc JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace WHERE namespace.nspname='erp_automation_commands' AND proc.proname IN ('persist_supplier_invoice_prepare','persist_inventory_adjustment_prepare','persist_supplier_payment_prepare','persist_supplier_advance_prepare','persist_customer_receipt_prepare')), position('supplier_invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_supplier_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0, position('target_document_id uuid:=portal_document_id' IN pg_catalog.pg_get_functiondef('erp_finance_commands.parse_portal_document(uuid,uuid,jsonb)'::regprocedure))>0 AND position('existing_line.portal_document_id=target_document_id' IN pg_catalog.pg_get_functiondef('erp_finance_commands.parse_portal_document(uuid,uuid,jsonb)'::regprocedure))>0, NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid='tax.portal_documents'::regclass AND tgname='tax_portal_documents_immutable_trg' AND NOT tgisinternal)" \
             "$PSYCOPG_DATABASE_URL")" = "t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t"
+          test "$(psql -X -Atqc \
+            "SELECT position('sales_invoice_fefo_expiry_date_equivalence_v1' IN definition)>0 AND position('ORDER BY batch_row.expires_on,stock.batch_id' IN definition)=0 FROM (SELECT pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure) definition) current_definition" \
+            "$PSYCOPG_DATABASE_URL")" = "t"
           test "$(psql -X -Atqc \
             "SELECT position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' THEN' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))>0 AND position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' AND NEW.sales_invoice_id' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))=0" \
             "$PSYCOPG_DATABASE_URL")" = "t"
@@ -1417,7 +1425,7 @@ jobs:
           mkdir -p staging-evidence
           jq -n \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --arg revision "20260820_0001" \
+            --arg revision "20260824_0002" \
             --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
             --arg commit_sha "$GITHUB_SHA" \
             --arg render_deploy_sha "$CANONICAL_RENDER_DEPLOY_SHA" \

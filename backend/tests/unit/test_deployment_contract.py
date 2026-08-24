@@ -294,7 +294,11 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_core_commands"."allocate_document_number"' in reconciliation
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert '"erp_automation_commands"."resolve_sales_dispatch_prepare"' in reconciliation
-    assert '"erp_automation_commands"."resolve_sales_invoice_prepare"' in reconciliation
+    assert "sales_invoice_fefo_expiry_date_equivalence_v1" in reconciliation
+    reconciliation_targets = reconciliation.split("targets = (", 1)[1].split(
+        ")\n          selected = []", 1
+    )[0]
+    assert '"erp_automation_commands"."resolve_sales_invoice_prepare"' not in reconciliation_targets
     assert '"erp_automation_commands"."persist_sales_return_prepare"' in reconciliation
     assert '"erp_automation_commands"."assert_sales_return_draft"' in reconciliation
     assert '"erp_automation_commands"."resolve_purchase_return_prepare"' in reconciliation
