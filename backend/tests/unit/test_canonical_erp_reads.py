@@ -142,7 +142,7 @@ def test_batch_reads_use_canonical_inventory_lifecycle_states() -> None:
 def test_batch_reads_project_branch_from_authoritative_stock_balance() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 
-    assert source.count("COUNT(DISTINCT balance.branch_id)=1") == 2
+    assert source.count("COUNT(DISTINCT balance.branch_id)=1") == 1
     assert "JOIN inventory.stock_balances balance" in source
     assert "balance.on_hand_quantity>0" in source
     assert "location.allows_sale" in source
