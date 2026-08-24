@@ -43,6 +43,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     () => modules.filter(module => Boolean(module.component)),
     [modules]
   );
+  const availableModuleIds = availableModules.map(module => module.id).join('\u0000');
   const [activeModule, setActiveModule] = useState(
     defaultModule || (layout === 'centered' ? '' : (availableModules[0]?.id || ''))
   );
@@ -52,10 +53,11 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
   const { isExpanded, lockExpanded } = sidebarSettings;
 
   useEffect(() => {
-    if (defaultModule && availableModules.some(module => module.id === defaultModule)) {
+    const moduleIds = availableModuleIds ? availableModuleIds.split('\u0000') : [];
+    if (defaultModule && moduleIds.includes(defaultModule)) {
       setActiveModule(defaultModule);
     }
-  }, [defaultModule, availableModules]);
+  }, [defaultModule, availableModuleIds]);
 
   useEffect(() => {
     if (layout === 'centered' && activeModule === '') return;
