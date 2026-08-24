@@ -51,6 +51,11 @@ on:
         required: true
         default: false
         type: boolean
+      diagnose_render_pilot:
+        description: Read sanitized status and startup logs for the free Render pilot
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -77,6 +82,86 @@ jobs:
       refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}
       render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
     secrets: inherit
+
+  render-pilot-diagnostics:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.diagnose_render_pilot
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read sanitized API and MCP deployment diagnostics
+        env:
+          RENDER_OWNER_ID: tea-da2nh58ae00c73ciaqog
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          api_key = os.environ["RENDER_API_KEY"]
+          owner_id = os.environ["RENDER_OWNER_ID"]
+
+          def get(path, query=None):
+              url = "https://api.render.com/v1" + path
+              if query:
+                  url += "?" + urlencode(query, doseq=True)
+              request = Request(
+                  url,
+                  headers={
+                      "Accept": "application/json",
+                      "Authorization": f"Bearer {api_key}",
+                  },
+              )
+              with urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          def redact(message):
+              message = re.sub(r"(?i)(password|secret|token|apikey|api_key)=?[^ ,;]+", r"\1=[redacted]", message)
+              message = re.sub(r"(?i)(postgres(?:ql)?://)[^@\s]+@", r"\1[redacted]@", message)
+              message = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[redacted-jwt]", message)
+              return message[:1000]
+
+          for name in ("aasopharma-api-pilot", "aasopharma-mcp-pilot"):
+              service_rows = get(
+                  "/services",
+                  {"ownerId": owner_id, "name": name, "includePreviews": "false", "limit": 20},
+              )
+              matches = [row.get("service", row) for row in service_rows if row.get("service", row).get("name") == name]
+              if len(matches) != 1:
+                  raise SystemExit(f"{name}: expected one service, found {len(matches)}")
+              service = matches[0]
+              service_id = service["id"]
+              deploy_rows = get(f"/services/{service_id}/deploys", {"limit": 3})
+              deploys = [row.get("deploy", row) for row in deploy_rows]
+              print(f"## {name} ({service_id})")
+              for deploy in deploys:
+                  print(
+                      "deploy",
+                      deploy.get("id"),
+                      "status=", deploy.get("status"),
+                      "commit=", (deploy.get("commit") or {}).get("id"),
+                  )
+              log_payload = get(
+                  "/logs",
+                  {
+                      "ownerId": owner_id,
+                      "resource": service_id,
+                      "direction": "backward",
+                      "limit": 100,
+                  },
+              )
+              for entry in reversed(log_payload.get("logs", [])):
+                  labels = {label["name"]: label["value"] for label in entry.get("labels", [])}
+                  if labels.get("type") not in {"app", "build"}:
+                      continue
+                  print(entry.get("timestamp"), labels.get("type"), redact(entry.get("message", "")))
+          PY
 
   mcp-sdk-compatibility:
     runs-on: ubuntu-latest
