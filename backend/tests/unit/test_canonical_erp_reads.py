@@ -559,9 +559,13 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert "command.status='succeeded'" in source
     assert "command.result_resource_id=invoice.id" in source
     assert "command.request_hash=extensions.digest(" in source
-    assert "HAVING count(*)=1" in source
-    assert "requested_allocation.value->>'inventory_line_id'" in source
-    assert "inventory_line.entered_quantity=" in source
+    assert "count(*)::integer AS command_evidence_count" in source
+    assert "CASE WHEN count(*)=1 THEN" in source
+    assert "LEFT JOIN LATERAL" in source
+    assert "HAVING count(*)=1" not in source
+    assert "evidence_match_count" in source
+    assert "candidate.value->>'inventory_line_id'" in source
+    assert "'entered_quantity', executed.entered_quantity" in source
     assert "inventory_document.document_type='sales_issue'" in source
     assert "inventory_document.status='posted'" in source
     assert "dispatch.status='posted'" in source
@@ -599,24 +603,33 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
 def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations() -> None:
     def allocation(source_kind: str, *, expires):
         inventory_line_id = uuid4()
+        invoice_line_id = uuid4()
         dispatch_allocation_id = (
             uuid4() if source_kind == "dispatch_allocation" else None
         )
+        dispatch_line_id = uuid4() if source_kind == "dispatch_allocation" else None
         return {
             "source_kind": source_kind,
             "allocation_id": dispatch_allocation_id or inventory_line_id,
+            "invoice_line_id": invoice_line_id,
+            "source_line_id": dispatch_line_id or invoice_line_id,
             "command_request_id": uuid4() if source_kind == "direct_issue" else None,
+            "command_evidence_count": 1 if source_kind == "direct_issue" else 0,
+            "request_line_count": 1 if source_kind == "direct_issue" else 0,
+            "evidenced_allocation_count": 1 if source_kind == "direct_issue" else None,
+            "evidence_match_count": 1 if source_kind == "direct_issue" else 0,
             "inventory_document_id": uuid4(),
             "inventory_document_line_id": inventory_line_id,
             "invoice_dispatch_allocation_id": dispatch_allocation_id,
             "dispatch_id": uuid4() if source_kind == "dispatch_allocation" else None,
-            "dispatch_line_id": uuid4() if source_kind == "dispatch_allocation" else None,
+            "dispatch_line_id": dispatch_line_id,
             "batch_id": uuid4(),
             "batch_number": f"BATCH-{source_kind}",
             "expiry_date": expires,
             "from_location_id": uuid4(),
             "uom_code": "EA",
             "base_quantity": 1,
+            "entered_quantity": 1,
             "base_billed_quantity": 1,
             "base_free_quantity": 0,
             "billed_quantity": 1,
@@ -624,12 +637,20 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         }
 
     def item(batch_allocations):
-        singular = batch_allocations[0] if len(batch_allocations) == 1 else None
+        allocations = [{**value} for value in batch_allocations]
+        line_id = allocations[0]["invoice_line_id"] if allocations else uuid4()
+        for value in allocations:
+            value["invoice_line_id"] = line_id
+            if value["source_kind"] == "direct_issue":
+                value["source_line_id"] = line_id
+                value["evidenced_allocation_count"] = len(allocations)
+        singular = allocations[0] if len(allocations) == 1 else None
         return {
-            "id": uuid4(), "product_id": uuid4(), "product_name": "Product",
+            "id": line_id, "product_id": uuid4(), "product_name": "Product",
             "product_code": "SKU", "hsn_code": "481910", "uom_code": "EA",
-            "unit": "EA", "quantity": len(batch_allocations) or 1,
-            "free_quantity": 0, "unit_price": 150, "discount_percent": 0,
+            "unit": "EA", "quantity": len(allocations) or 1,
+            "free_quantity": 0, "base_billed_quantity": len(allocations) or 1,
+            "base_free_quantity": 0, "unit_price": 150, "discount_percent": 0,
             "free_supply_tax_treatment": "excluded_from_taxable_value",
             "tax_rate": 12, "gst_percent": 12, "taxable_amount": 150,
             "cgst_amount": 9, "sgst_amount": 9, "igst_amount": 0,
@@ -637,16 +658,17 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
             "batch_id": singular["batch_id"] if singular else None,
             "batch_number": singular["batch_number"] if singular else None,
             "expiry_date": singular["expiry_date"] if singular else None,
-            "batch_allocations": batch_allocations,
+            "batch_allocations": allocations,
         }
 
     direct = allocation("direct_issue", expires=None)
     direct_two = allocation("direct_issue", expires=date(2029, 9, 1))
     direct_two["command_request_id"] = direct["command_request_id"]
+    direct_two["inventory_document_id"] = direct["inventory_document_id"]
     dispatch = allocation("dispatch_allocation", expires=date(2028, 9, 1))
     payload = {
         "invoice_id": uuid4(), "invoice_number": "INV-1",
-        "invoice_date": date(2026, 8, 24), "status": "posted",
+        "invoice_date": date(2026, 8, 24), "status": "draft",
         "customer_id": uuid4(), "customer_name": "Customer",
         "customer_phone": None, "customer_email": None,
         "customer_gst_number": None, "billing_address": "Address",
@@ -696,6 +718,29 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     quantity_mismatch["quantity"] = 2
     with pytest.raises(ValidationError, match="do not reconcile"):
         canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(quantity_mismatch)
+    posted_without_allocations = {**payload, "status": "posted", "items": [item([])]}
+    with pytest.raises(ValidationError, match="posted product invoice lines require"):
+        canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(
+            posted_without_allocations
+        )
+    ambiguous_evidence = {**direct, "command_evidence_count": 2}
+    with pytest.raises(ValidationError, match="exactly one matched"):
+        canonical_erp_reads.CanonicalInvoiceExecutedBatchAllocation.model_validate(
+            ambiguous_evidence
+        )
+    other_document = {**direct_two, "inventory_document_id": uuid4()}
+    multiple_documents = item([direct, other_document])
+    with pytest.raises(ValidationError, match="share one inventory document"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(
+            multiple_documents
+        )
+    identity_mismatch = item([direct])
+    identity_mismatch["batch_allocations"][0]["invoice_line_id"] = uuid4()
+    identity_mismatch["batch_allocations"][0]["source_line_id"] = identity_mismatch[
+        "batch_allocations"
+    ][0]["invoice_line_id"]
+    with pytest.raises(ValidationError, match="invoice line identity"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(identity_mismatch)
 
 
 def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:

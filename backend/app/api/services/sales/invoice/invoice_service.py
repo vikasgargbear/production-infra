@@ -555,10 +555,27 @@ class InvoiceService:
 
         for item in items:
             quantity = decimal_value(item.get('quantity', 0), "quantity", minimum=Decimal("0"))
-            if quantity <= 0:
-                raise ValueError("quantity must be greater than 0")
+            free_quantity = decimal_value(
+                item.get('free_quantity', 0), "free_quantity", minimum=Decimal("0")
+            )
+            if quantity + free_quantity <= 0:
+                raise ValueError("quantity plus free_quantity must be greater than 0")
             unit_price = decimal_value(item.get('unit_price', 0), "unit_price", minimum=Decimal("0"))
-            decimal_value(item.get('free_quantity', 0), "free_quantity", minimum=Decimal("0"))
+            free_supply_tax_treatment = str(
+                item.get(
+                    'free_supply_tax_treatment',
+                    'excluded_from_taxable_value',
+                )
+            ).strip()
+            if free_supply_tax_treatment not in {
+                'excluded_from_taxable_value', 'included_at_unit_rate'
+            }:
+                raise ValueError("free_supply_tax_treatment is invalid")
+            priced_quantity = quantity + (
+                free_quantity
+                if free_supply_tax_treatment == 'included_at_unit_rate'
+                else Decimal("0")
+            )
             discount_pct = decimal_value(
                 item.get('discount_percent', 0),
                 "discount_percent",
@@ -570,18 +587,21 @@ class InvoiceService:
             )
 
             calculated = calculate_line_item(
-                quantity=quantity,
+                quantity=priced_quantity,
                 unit_price=unit_price,
                 discount_percent=discount_pct,
                 gst_percent=gst_pct,
                 gst_type=normalized_gst_type,
             )
-            line_gross = money(quantity * unit_price)
+            line_gross = money(priced_quantity * unit_price)
             line_discount = money(calculated['discount_amount'])
             line_taxable = money(calculated['taxable_amount'])
 
             calculated_items.append({
                 **calculated,
+                'quantity': float(quantity),
+                'free_quantity': float(free_quantity),
+                'free_supply_tax_treatment': free_supply_tax_treatment,
                 'cgst_percent': float(gst_pct / 2) if normalized_gst_type == "CGST/SGST" else 0.0,
                 'sgst_percent': float(gst_pct / 2) if normalized_gst_type == "CGST/SGST" else 0.0,
                 'igst_percent': float(gst_pct) if normalized_gst_type == "IGST" else 0.0,

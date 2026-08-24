@@ -1452,7 +1452,13 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
 
     source_kind: Literal["direct_issue", "dispatch_allocation"]
     allocation_id: UUID
+    invoice_line_id: UUID
+    source_line_id: UUID
     command_request_id: Optional[UUID]
+    command_evidence_count: int
+    request_line_count: int
+    evidenced_allocation_count: Optional[int]
+    evidence_match_count: int
     inventory_document_id: UUID
     inventory_document_line_id: UUID
     invoice_dispatch_allocation_id: Optional[UUID]
@@ -1464,6 +1470,7 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
     from_location_id: Optional[UUID]
     uom_code: str
     base_quantity: float
+    entered_quantity: float
     base_billed_quantity: float
     base_free_quantity: float
     billed_quantity: float
@@ -1474,15 +1481,29 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
         if self.source_kind == "dispatch_allocation":
             if (
                 self.command_request_id is not None
+                or self.command_evidence_count != 0
+                or self.request_line_count != 0
+                or self.evidenced_allocation_count is not None
+                or self.evidence_match_count != 0
                 or not self.invoice_dispatch_allocation_id
                 or not self.dispatch_id
                 or not self.dispatch_line_id
+                or self.source_line_id != self.dispatch_line_id
             ):
                 raise ValueError("dispatch allocation requires dispatch lineage identities")
-        elif not self.command_request_id:
-            raise ValueError("direct issue requires succeeded command evidence")
+        elif (
+            not self.command_request_id
+            or self.command_evidence_count != 1
+            or self.request_line_count != 1
+            or not self.evidenced_allocation_count
+            or self.evidence_match_count != 1
+            or self.source_line_id != self.invoice_line_id
+        ):
+            raise ValueError("direct issue requires exactly one matched succeeded command evidence")
         elif self.invoice_dispatch_allocation_id or self.dispatch_id or self.dispatch_line_id:
             raise ValueError("direct issue cannot claim dispatch allocation identities")
+        if abs(self.entered_quantity - self.billed_quantity - self.free_quantity) > 0.000001:
+            raise ValueError("executed allocation entered quantities do not reconcile")
         return self
 
 
@@ -1498,6 +1519,8 @@ class CanonicalInvoiceDetailItem(BaseModel):
     unit: str
     quantity: float
     free_quantity: float
+    base_billed_quantity: float
+    base_free_quantity: float
     free_supply_tax_treatment: Literal[
         "excluded_from_taxable_value", "included_at_unit_rate"
     ]
@@ -1532,10 +1555,22 @@ class CanonicalInvoiceDetailItem(BaseModel):
             self.batch_allocations
         ):
             raise ValueError("executed inventory line identities must be unique")
+        if any(value.invoice_line_id != self.id for value in self.batch_allocations):
+            raise ValueError("executed allocation invoice line identity does not match")
         if self.batch_allocations[0].source_kind == "direct_issue" and len({
             value.command_request_id for value in self.batch_allocations
         }) != 1:
             raise ValueError("direct allocations must share one succeeded command")
+        if self.batch_allocations[0].source_kind == "direct_issue":
+            if len({value.inventory_document_id for value in self.batch_allocations}) != 1:
+                raise ValueError("direct allocations must share one inventory document")
+            evidenced_counts = {
+                value.evidenced_allocation_count for value in self.batch_allocations
+            }
+            if evidenced_counts != {len(self.batch_allocations)}:
+                raise ValueError(
+                    "direct physical allocation count does not match command evidence"
+                )
         for allocation in self.batch_allocations:
             if abs(
                 allocation.base_quantity
@@ -1555,6 +1590,12 @@ class CanonicalInvoiceDetailItem(BaseModel):
             sum(value.billed_quantity for value in self.batch_allocations) - self.quantity
         ) > 0.000001 or abs(
             sum(value.free_quantity for value in self.batch_allocations) - self.free_quantity
+        ) > 0.000001 or abs(
+            sum(value.base_billed_quantity for value in self.batch_allocations)
+            - self.base_billed_quantity
+        ) > 0.000001 or abs(
+            sum(value.base_free_quantity for value in self.batch_allocations)
+            - self.base_free_quantity
         ) > 0.000001:
             raise ValueError("executed allocations do not reconcile to invoice quantities")
         if len(self.batch_allocations) == 1:
@@ -1596,6 +1637,16 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @model_validator(mode="after")
+    def validate_posted_product_allocations(self):
+        if self.status == "posted" and any(
+            not item.batch_allocations for item in self.items
+        ):
+            raise ValueError(
+                "posted product invoice lines require one nonempty allocation source"
+            )
+        return self
+
 
 def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> dict:
     rows = _rows(db, """
@@ -1635,6 +1686,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity', line.billed_quantity,
                          'free_quantity', line.free_quantity,
+                         'base_billed_quantity', line.base_billed_quantity,
+                         'base_free_quantity', line.base_free_quantity,
                          'free_supply_tax_treatment', line.free_supply_tax_treatment,
                          'unit_price', line.quoted_unit_rate,
                          'discount_percent', CASE
@@ -1668,7 +1721,14 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                            jsonb_agg(jsonb_build_object(
                                'source_kind', executed.source_kind,
                                'allocation_id', executed.allocation_id,
+                               'invoice_line_id', executed.invoice_line_id,
+                               'source_line_id', executed.source_line_id,
                                'command_request_id', executed.command_request_id,
+                               'command_evidence_count', executed.command_evidence_count,
+                               'request_line_count', executed.request_line_count,
+                               'evidenced_allocation_count',
+                                   executed.evidenced_allocation_count,
+                               'evidence_match_count', executed.evidence_match_count,
                                'inventory_document_id', executed.inventory_document_id,
                                'inventory_document_line_id', executed.inventory_document_line_id,
                                'invoice_dispatch_allocation_id',
@@ -1681,6 +1741,7 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                'from_location_id', executed.from_location_id,
                                'uom_code', executed.uom_code,
                                'base_quantity', executed.base_quantity,
+                               'entered_quantity', executed.entered_quantity,
                                'base_billed_quantity', executed.base_billed_quantity,
                                'base_free_quantity', executed.base_free_quantity,
                                'billed_quantity', executed.billed_quantity,
@@ -1690,7 +1751,17 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                       FROM (
                           SELECT 'direct_issue'::text AS source_kind,
                                  inventory_line.id AS allocation_id,
+                                 line.id AS invoice_line_id,
+                                 (requested_line.request_line->>'line_id')::uuid
+                                   AS source_line_id,
                                  command_evidence.command_request_id,
+                                 command_evidence.command_evidence_count,
+                                 requested_line.request_line_count,
+                                 pg_catalog.jsonb_array_length(COALESCE(
+                                   requested_line.request_line->'batch_allocations',
+                                   '[]'::jsonb
+                                 )) AS evidenced_allocation_count,
+                                 requested_allocation.evidence_match_count,
                                  inventory_line.inventory_document_id,
                                  inventory_line.id AS inventory_document_line_id,
                                  NULL::uuid AS invoice_dispatch_allocation_id,
@@ -1701,17 +1772,22 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                  inventory_line.from_location_id,
                                  inventory_line.uom_code,
                                  inventory_line.base_quantity,
+                                 inventory_line.entered_quantity,
                                  pg_catalog.round(
-                                   (requested_allocation.value->>'billed_quantity')::numeric
+                                   (requested_allocation.request_allocation
+                                      ->>'billed_quantity')::numeric
                                      * line.uom_conversion_factor, 6
                                  ) AS base_billed_quantity,
                                  pg_catalog.round(
-                                   (requested_allocation.value->>'free_quantity')::numeric
+                                   (requested_allocation.request_allocation
+                                      ->>'free_quantity')::numeric
                                      * line.uom_conversion_factor, 6
                                  ) AS base_free_quantity,
-                                 (requested_allocation.value->>'billed_quantity')::numeric
+                                 (requested_allocation.request_allocation
+                                    ->>'billed_quantity')::numeric
                                    AS billed_quantity,
-                                 (requested_allocation.value->>'free_quantity')::numeric
+                                 (requested_allocation.request_allocation
+                                    ->>'free_quantity')::numeric
                                    AS free_quantity
                             FROM inventory.inventory_document_lines inventory_line
                             JOIN inventory.inventory_documents inventory_document
@@ -1724,13 +1800,16 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                             JOIN inventory.batches batch
                               ON batch.org_id=inventory_line.org_id
                              AND batch.id=inventory_line.batch_id
-                            JOIN LATERAL (
-                                SELECT (array_agg(command.id ORDER BY command.id))[1]
-                                         AS command_request_id,
-                                       (array_agg(
-                                          pg_catalog.convert_from(command.request_bytes, 'UTF8')::jsonb
-                                          ORDER BY command.id
-                                        ))[1] AS request_document
+                            LEFT JOIN LATERAL (
+                                SELECT count(*)::integer AS command_evidence_count,
+                                       CASE WHEN count(*)=1 THEN
+                                         (array_agg(command.id ORDER BY command.id))[1]
+                                       END AS command_request_id,
+                                       CASE WHEN count(*)=1 THEN (array_agg(
+                                         pg_catalog.convert_from(
+                                           command.request_bytes, 'UTF8'
+                                         )::jsonb ORDER BY command.id
+                                       ))[1] END AS request_document
                                   FROM automation.command_requests command
                                  WHERE command.org_id=invoice.org_id
                                    AND command.branch_id=invoice.branch_id
@@ -1745,34 +1824,45 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                    AND command.request_hash=extensions.digest(
                                        command.request_bytes, 'sha256'
                                    )
-                                HAVING count(*)=1
                             ) command_evidence ON true
-                            JOIN LATERAL pg_catalog.jsonb_array_elements(
-                                command_evidence.request_document->'lines'
-                            ) requested_line(value)
-                              ON requested_line.value->>'line_id'=line.id::text
-                             AND requested_line.value->>'fulfillment_source'='direct_issue'
-                            JOIN LATERAL pg_catalog.jsonb_array_elements(
-                                requested_line.value->'batch_allocations'
-                            ) requested_allocation(value)
-                              ON requested_allocation.value->>'inventory_line_id'
-                                   =inventory_line.id::text
-                             AND requested_allocation.value->>'batch_id'
-                                   =inventory_line.batch_id::text
+                            LEFT JOIN LATERAL (
+                                SELECT count(*)::integer AS request_line_count,
+                                       CASE WHEN count(*)=1 THEN
+                                         (array_agg(candidate.value))[1]
+                                       END AS request_line
+                                  FROM pg_catalog.jsonb_array_elements(COALESCE(
+                                    command_evidence.request_document->'lines',
+                                    '[]'::jsonb
+                                  )) candidate(value)
+                                 WHERE candidate.value->>'line_id'=line.id::text
+                                   AND candidate.value->>'fulfillment_source'='direct_issue'
+                            ) requested_line ON true
+                            LEFT JOIN LATERAL (
+                                SELECT count(*)::integer AS evidence_match_count,
+                                       CASE WHEN count(*)=1 THEN
+                                         (array_agg(candidate.value))[1]
+                                       END AS request_allocation
+                                  FROM pg_catalog.jsonb_array_elements(COALESCE(
+                                    requested_line.request_line->'batch_allocations',
+                                    '[]'::jsonb
+                                  )) candidate(value)
+                                 WHERE candidate.value->>'inventory_line_id'
+                                         =inventory_line.id::text
+                                   AND candidate.value->>'batch_id'
+                                         =inventory_line.batch_id::text
+                            ) requested_allocation ON true
                            WHERE inventory_line.org_id=line.org_id
                              AND inventory_line.sales_invoice_line_id=line.id
-                             AND inventory_line.entered_quantity=
-                                 (requested_allocation.value->>'billed_quantity')::numeric
-                                 +(requested_allocation.value->>'free_quantity')::numeric
-                             AND inventory_line.base_quantity=pg_catalog.round(
-                                 ((requested_allocation.value->>'billed_quantity')::numeric
-                                  +(requested_allocation.value->>'free_quantity')::numeric)
-                                 *line.uom_conversion_factor, 6
-                             )
                           UNION ALL
                           SELECT 'dispatch_allocation'::text AS source_kind,
                                  invoice_allocation.id AS allocation_id,
+                                 line.id AS invoice_line_id,
+                                 dispatch_line.id AS source_line_id,
                                  NULL::uuid AS command_request_id,
+                                 0::integer AS command_evidence_count,
+                                 0::integer AS request_line_count,
+                                 NULL::integer AS evidenced_allocation_count,
+                                 0::integer AS evidence_match_count,
                                  inventory_line.inventory_document_id,
                                  inventory_line.id AS inventory_document_line_id,
                                  invoice_allocation.id AS invoice_dispatch_allocation_id,
@@ -1781,9 +1871,13 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                  dispatch_line.batch_id, batch.batch_number,
                                  batch.expires_on AS expiry_date,
                                  dispatch_line.from_location_id,
-                                 dispatch_line.uom_code,
+                                 line.uom_code,
                                  invoice_allocation.allocated_base_billed_quantity
                                    + invoice_allocation.allocated_base_free_quantity AS base_quantity,
+                                 invoice_allocation.allocated_base_billed_quantity
+                                   / NULLIF(line.uom_conversion_factor, 0)
+                                   + invoice_allocation.allocated_base_free_quantity
+                                   / NULLIF(line.uom_conversion_factor, 0) AS entered_quantity,
                                  invoice_allocation.allocated_base_billed_quantity
                                    AS base_billed_quantity,
                                  invoice_allocation.allocated_base_free_quantity

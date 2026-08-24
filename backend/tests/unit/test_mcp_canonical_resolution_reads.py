@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.api.routes.internal import mcp_canonical_resolution_reads as reads
 from app.api.routes.internal.mcp_canonical_reads import CanonicalDelegation
@@ -291,6 +292,7 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
     line = _row(
         invoice_line_id=line_id, line_number=1, line_kind="product",
         order_line_id=uuid4(), product_id=uuid4(), charge_code=None, uom_code="BOX",
+        billed_quantity=Decimal("10"), free_quantity=Decimal("2"),
         base_billed_quantity=Decimal("10"), base_free_quantity=Decimal("2"),
         free_supply_tax_treatment="included_at_unit_rate",
         returned_base_billed_quantity=Decimal("3"), returned_base_free_quantity=Decimal("1"),
@@ -299,12 +301,15 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
         line_total=Decimal("118.00"),
     )
     allocation = _row(
-        invoice_line_id=line_id, invoice_dispatch_allocation_id=allocation_id,
+        invoice_line_id=line_id, source_line_id=uuid4(),
+        invoice_dispatch_allocation_id=allocation_id,
         inventory_document_id=uuid4(), inventory_document_line_id=uuid4(),
-        dispatch_id=uuid4(), dispatch_line_id=uuid4(), dispatch_number="DSP-1",
+        dispatch_id=uuid4(), dispatch_line_id=None, dispatch_number="DSP-1",
         dispatch_date=date(2026, 8, 19), product_id=line._mapping["product_id"],
         batch_id=uuid4(), batch_number="BATCH-1", expires_on=date(2028, 9, 1),
         from_location_id=uuid4(), uom_code="BOX",
+        base_quantity=Decimal("12"), entered_quantity=Decimal("12"),
+        billed_quantity=Decimal("10"), free_quantity=Decimal("2"),
         allocated_base_billed_quantity=Decimal("10"),
         allocated_base_free_quantity=Decimal("2"),
         returned_base_billed_quantity=Decimal("3"),
@@ -312,6 +317,7 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
         remaining_base_billed_quantity=Decimal("7"),
         remaining_base_free_quantity=Decimal("1"),
     )
+    allocation._mapping["dispatch_line_id"] = allocation._mapping["source_line_id"]
     database = _Database([header], [line], [allocation], [])
     result = reads.canonical_sales_invoice_get(
         invoice_id, None, None, _context("sales.invoices.get"), database,
@@ -343,6 +349,7 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     line = _row(
         invoice_line_id=line_id, line_number=1, line_kind="product",
         order_line_id=None, product_id=uuid4(), charge_code=None, uom_code="EA",
+        billed_quantity=Decimal("1"), free_quantity=Decimal("0"),
         base_billed_quantity=Decimal("1"), base_free_quantity=Decimal("0"),
         free_supply_tax_treatment="excluded_from_taxable_value",
         returned_base_billed_quantity=Decimal("0"),
@@ -354,11 +361,14 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     )
     inventory_document_id, inventory_line_id, batch_id = uuid4(), uuid4(), uuid4()
     direct_issue = _row(
-        invoice_line_id=line_id, command_request_id=uuid4(),
+        invoice_line_id=line_id, source_line_id=line_id, command_request_id=uuid4(),
+        command_evidence_count=1, request_line_count=1,
+        evidenced_allocation_count=1, evidence_match_count=1,
         inventory_document_id=inventory_document_id,
         inventory_document_line_id=inventory_line_id, batch_id=batch_id,
         batch_number="DEMO-BATCH-1", expires_on=date(2028, 9, 1),
         from_location_id=uuid4(), uom_code="EA", base_quantity=Decimal("1.000000"),
+        entered_quantity=Decimal("1.000000"),
         base_billed_quantity=Decimal("1.000000"),
         base_free_quantity=Decimal("0.000000"),
         billed_quantity=Decimal("1.000000"), free_quantity=Decimal("0.000000"),
@@ -390,8 +400,75 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     assert "inventory_document.status='posted'" in sql
     assert "command.status='succeeded'" in sql
     assert "command.request_hash=extensions.digest(" in sql
-    assert "HAVING count(*)=1" in sql
-    assert "requested_allocation.value->>'inventory_line_id'" in sql
+    assert "count(*)::integer AS command_evidence_count" in sql
+    assert "CASE WHEN count(*)=1 THEN" in sql
+    assert "LEFT JOIN LATERAL" in sql
+    assert "HAVING count(*)=1" not in sql
+    assert "candidate.value->>'inventory_line_id'" in sql
+
+
+def test_sales_invoice_resolution_fails_closed_on_evidence_and_identity_drift():
+    line_id, command_id, inventory_document_id = uuid4(), uuid4(), uuid4()
+
+    def direct(**overrides):
+        values = {
+            "invoice_line_id": line_id, "source_line_id": line_id,
+            "command_request_id": command_id, "command_evidence_count": 1,
+            "request_line_count": 1, "evidenced_allocation_count": 1,
+            "evidence_match_count": 1,
+            "inventory_document_id": inventory_document_id,
+            "inventory_document_line_id": uuid4(), "batch_id": uuid4(),
+            "batch_number": "BATCH-1", "expires_on": date(2028, 9, 1),
+            "from_location_id": uuid4(), "uom_code": "EA",
+            "base_quantity": Decimal("1"), "entered_quantity": Decimal("1"),
+            "base_billed_quantity": Decimal("1"),
+            "base_free_quantity": Decimal("0"), "billed_quantity": Decimal("1"),
+            "free_quantity": Decimal("0"), "unit_cost": Decimal("10"),
+            "extended_cost": Decimal("10"),
+        }
+        values.update(overrides)
+        return values
+
+    with pytest.raises(ValidationError):
+        reads.SalesInvoiceDirectIssueAllocation.model_validate(
+            direct(command_request_id=None, command_evidence_count=0)
+        )
+    with pytest.raises(ValidationError, match="exactly one matched"):
+        reads.SalesInvoiceDirectIssueAllocation.model_validate(
+            direct(command_evidence_count=2)
+        )
+    with pytest.raises(ValidationError, match="exactly one matched"):
+        reads.SalesInvoiceDirectIssueAllocation.model_validate(
+            direct(source_line_id=uuid4())
+        )
+
+    first = reads.SalesInvoiceDirectIssueAllocation.model_validate(
+        direct(evidenced_allocation_count=2)
+    )
+    second = reads.SalesInvoiceDirectIssueAllocation.model_validate(direct(
+        evidenced_allocation_count=2, inventory_document_id=uuid4()
+    ))
+    line = {
+        "invoice_line_id": line_id, "line_number": 1, "line_kind": "product",
+        "order_line_id": None, "product_id": uuid4(), "charge_code": None,
+        "uom_code": "EA", "billed_quantity": Decimal("2"),
+        "free_quantity": Decimal("0"), "base_billed_quantity": Decimal("2"),
+        "base_free_quantity": Decimal("0"),
+        "free_supply_tax_treatment": "excluded_from_taxable_value",
+        "returned_base_billed_quantity": Decimal("0"),
+        "returned_base_free_quantity": Decimal("0"),
+        "returnable_base_billed_quantity": Decimal("2"),
+        "returnable_base_free_quantity": Decimal("0"),
+        "tax_code_version_id": uuid4(), "taxability_snapshot": "taxable",
+        "line_total": Decimal("20"), "dispatch_allocations": [],
+        "direct_issue_allocations": [first, second],
+    }
+    with pytest.raises(ValidationError, match="share one inventory document"):
+        reads.SalesInvoiceLine.model_validate(line)
+
+    line["direct_issue_allocations"] = []
+    with pytest.raises(ValidationError, match="exactly one allocation source"):
+        reads.SalesInvoiceLine.model_validate(line)
 
 
 def test_supplier_receipt_allocation_dto_preserves_ids_and_exact_balances():

@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 
 GSTType = Literal["CGST/SGST", "IGST"]
+FreeSupplyTaxTreatment = Literal[
+    "excluded_from_taxable_value", "included_at_unit_rate"
+]
 EntityId = Union[PositiveInt, UUID]
 
 
@@ -17,6 +20,9 @@ class CalculationLine(BaseModel):
     product_name: Optional[str] = Field(default=None, max_length=255)
     quantity: Decimal = Field(ge=0)
     free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
+    free_supply_tax_treatment: FreeSupplyTaxTreatment = (
+        "excluded_from_taxable_value"
+    )
     unit_price: Decimal = Field(ge=0)
     mrp: Decimal = Field(default=Decimal("0"), ge=0)
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
@@ -75,6 +81,7 @@ class PurchaseCalculationRequest(BaseModel):
 
 class ChallanCalculationRequest(BaseModel):
     customer_id: EntityId
+    gst_type: GSTType = "CGST/SGST"
     items: List[CalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
 

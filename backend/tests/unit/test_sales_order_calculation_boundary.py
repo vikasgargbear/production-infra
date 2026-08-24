@@ -1,7 +1,9 @@
 """Tests for the shared sales-order preview/commit calculation boundary."""
 
 from types import SimpleNamespace
+from uuid import UUID, uuid4
 
+from app.api.schemas.calculations import SalesOrderCalculationRequest
 from app.api.services.sales.order.order_service import OrderService
 
 
@@ -143,3 +145,39 @@ def test_order_creation_delegates_to_shared_calculation(monkeypatch):
     }
     assert "commit" in calls
     assert "rollback" not in calls
+
+
+def test_sales_order_uuid_lines_preserve_free_supply_treatment():
+    customer_id, product_id, batch_id = uuid4(), uuid4(), uuid4()
+    request = SalesOrderCalculationRequest.model_validate({
+        "customer_id": str(customer_id),
+        "gst_type": "IGST",
+        "items": [
+            {
+                "product_id": str(product_id), "batch_id": str(batch_id),
+                "quantity": "0", "free_quantity": "2", "unit_price": "100",
+                "gst_percent": "18",
+                "free_supply_tax_treatment": "included_at_unit_rate",
+            },
+            {
+                "product_id": str(product_id), "quantity": "1",
+                "free_quantity": "2", "unit_price": "100", "gst_percent": "18",
+                "free_supply_tax_treatment": "excluded_from_taxable_value",
+            },
+        ],
+    })
+
+    assert request.customer_id == UUID(str(customer_id))
+    assert request.items[0].product_id == UUID(str(product_id))
+    assert request.items[0].batch_id == UUID(str(batch_id))
+    from app.api.services.sales.invoice.invoice_service import InvoiceService
+    totals = InvoiceService.calculate_invoice_totals(
+        items=[item.model_dump() for item in request.items],
+        gst_type=request.gst_type,
+    )
+    assert totals["subtotal_amount"] == 300.0
+    assert totals["igst_amount"] == 54.0
+    assert totals["final_amount"] == 354.0
+    assert totals["calculated_items"][0]["free_supply_tax_treatment"] == (
+        "included_at_unit_rate"
+    )

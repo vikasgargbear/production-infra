@@ -169,12 +169,16 @@ async def preview_challan_totals(
 ):
     """Calculate a delivery challan using the same path as commit."""
     try:
-        gst_type = GSTService.determine_gst_type(
-            db=db,
-            org_id=str(context.org_id),
-            branch_id=context.primary_branch_id,
-            customer_id=challan_data.customer_id,
-        )
+        customer_id = challan_data.customer_id
+        if not isinstance(customer_id, UUID):
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=str(context.org_id),
+                branch_id=context.primary_branch_id,
+                customer_id=int(customer_id),
+            )
+        else:
+            gst_type = challan_data.gst_type
         result = ChallanService.calculate_challan_totals(
             items=[item.model_dump() for item in challan_data.items],
             gst_type=gst_type,
