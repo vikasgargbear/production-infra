@@ -4,6 +4,8 @@ export interface CanonicalEligibleReceipt {
   goods_receipt_id: string;
   goods_receipt_number: string;
   received_at: string;
+  supplier_challan_number: string;
+  supplier_challan_date: string;
   branch_id: string;
   supplier_account_id: string;
   supplier_name: string;

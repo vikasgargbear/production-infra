@@ -67,6 +67,8 @@ class EligibleReceipt(BaseModel):
     goods_receipt_id: UUID
     goods_receipt_number: str
     received_at: datetime
+    supplier_challan_number: str
+    supplier_challan_date: date
     branch_id: UUID
     supplier_account_id: UUID
     supplier_name: str
@@ -416,6 +418,7 @@ def eligible_receipts(
     rows = _rows(db, """
         SELECT receipt.id AS goods_receipt_id,
                receipt.goods_receipt_number, receipt.received_at,
+               receipt.supplier_challan_number, receipt.supplier_challan_date,
                receipt.branch_id, receipt.supplier_account_id,
                party.legal_name AS supplier_name,
                purchase.id AS purchase_order_id,
@@ -444,6 +447,7 @@ def eligible_receipts(
           ) ceiling ON true
          WHERE receipt.org_id=:org_id AND receipt.status='posted'
          GROUP BY receipt.id, receipt.goods_receipt_number, receipt.received_at,
+                  receipt.supplier_challan_number, receipt.supplier_challan_date,
                   receipt.branch_id, receipt.supplier_account_id, party.legal_name,
                   purchase.id, purchase.purchase_order_number
         HAVING count(*) FILTER (WHERE ceiling.remaining_billed+ceiling.remaining_free>0)>0

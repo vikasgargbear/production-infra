@@ -641,6 +641,17 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     )[0]
     assert '"free_quantity": "2.5"' in supplier_invoice_payload
     assert '"allocated_base_free_quantity": "2.5"' in supplier_invoice_payload
+    assert 'DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"' in provisioner
+    assert "def seed_supplier_invoice_ui_portal_evidence" in provisioner
+    assert 'supplier_invoice_number = f"DEMO-UI-SUP-{DEMO_UI_FIXTURE_ID}"' in provisioner
+    assert '"portal_document_line_id": portal_line_id' in provisioner
+    assert '"taxable_amount": "5000.00"' in provisioner
+    assert 'supplier_challan_number": f"DEMO-UI-CH-{DEMO_UI_FIXTURE_ID}"' in provisioner
+    assert 'evidence_label="supplier-invoice-ui-fixture"' in provisioner
+    assert "expected_line_count=1" in provisioner
+    assert "def reconcile_supplier_invoice_ui_fixture" in provisioner
+    assert "demo supplier-invoice UI fixture portal row was already consumed" in provisioner
+    assert '"supplier_invoice_ui_fixture": supplier_invoice_ui_fixture' in provisioner
     assert "dispatch_delivery_challan_number" in provisioner
     assert "purchase_return_delivery_challan_number" in provisioner
     assert "purchase_order.purchase_order_number" in provisioner
@@ -683,8 +694,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "supply_type='intra_state'" in cross_table
     assert "supply_type='inter_state'" in cross_table
     assert provisioner.count("DEMOB1234C") == 1
-    assert provisioner.count("DEMOC5678D") == 4
-    assert provisioner.count("27DEMOC5678D1Z5") == 3
+    assert provisioner.count("DEMOC5678D") == 6
+    assert provisioner.count("27DEMOC5678D1Z5") == 5
     assert "ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING" in provisioner
     assert "verify_organization_fiscal_tax_fact" in provisioner
     assert "2026::smallint" in provisioner

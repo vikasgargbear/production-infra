@@ -219,6 +219,26 @@ def test_context_preserves_exact_quantities_and_inventory_value():
     assert wire["remaining_capitalized_value"] == "100.00"
 
 
+def test_eligible_receipt_exposes_source_challan_identity_for_exact_matching():
+    receipt = reads.EligibleReceipt(
+        goods_receipt_id=uuid4(),
+        goods_receipt_number="GRN-1",
+        received_at=datetime.now(timezone.utc),
+        supplier_challan_number="DEMO-CH-123",
+        supplier_challan_date="2026-08-20",
+        branch_id=uuid4(),
+        supplier_account_id=uuid4(),
+        supplier_name="Canonical Supplier",
+        purchase_order_id=uuid4(),
+        purchase_order_number="PO-1",
+        remaining_line_count=1,
+        remaining_capitalized_value=Decimal("5000.00"),
+    )
+    wire = receipt.model_dump(mode="json")
+    assert wire["supplier_challan_number"] == "DEMO-CH-123"
+    assert wire["supplier_challan_date"] == "2026-08-20"
+
+
 def test_ready_context_requires_exact_portal_and_grn_line_set():
     line = _context_line()
     response = reads.SupplierInvoiceContextResponse(

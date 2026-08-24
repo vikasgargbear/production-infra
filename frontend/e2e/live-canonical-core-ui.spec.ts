@@ -211,6 +211,159 @@ test.describe('live canonical desktop UI journeys', () => {
     await page.screenshot({ path: testInfo.outputPath('supplier-invoice-gstr2b-fail-closed.png'), fullPage: true });
   });
 
+  test('UI: exact GRN and GSTR-2B evidence -> ITC attestation -> immutable review -> supplier invoice post and readback', async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    await openHomeAction(page, 'Purchase Entry');
+    const eligiblePromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-invoices\/eligible-receipts$/);
+    await chooseHubModule(page, 'Purchase', 'Invoice');
+    const eligible = await responseJson(await eligiblePromise);
+    const fixtures = eligible.receipts.filter((candidate: any) => (
+      typeof candidate.supplier_challan_number === 'string'
+      && candidate.supplier_challan_number.startsWith('DEMO-UI-CH-')
+      && typeof candidate.supplier_challan_date === 'string'
+    )).sort((left: any, right: any) => String(left.supplier_challan_number).localeCompare(
+      String(right.supplier_challan_number),
+      'en',
+      { numeric: true },
+    ));
+    const fixture = fixtures[fixtures.length - 1];
+    expect(fixture, 'disposable staging requires one unconsumed supplier-invoice UI fixture').toBeTruthy();
+    const demoRun = String(fixture.supplier_challan_number).slice('DEMO-UI-CH-'.length);
+    expect(demoRun).not.toBe('');
+    const invoiceNumber = `DEMO-UI-SUP-${demoRun}`;
+    const invoiceDate = String(fixture.supplier_challan_date);
+
+    await page.getByLabel('Posted GRN').selectOption(String(fixture.goods_receipt_id));
+    await page.getByLabel('Supplier invoice number').fill(invoiceNumber);
+    await page.getByLabel('Supplier invoice date').fill(invoiceDate);
+    await page.getByLabel('Supplier invoice received date').fill(invoiceDate);
+
+    const contextPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-invoices\/context$/);
+    await page.getByRole('button', { name: 'Load canonical evidence' }).click();
+    const context = await responseJson(await contextPromise);
+    expect(context.ready, JSON.stringify(context.blocking_reasons)).toBe(true);
+    expect(context.blocking_reasons).toEqual([]);
+    expect(context.goods_receipt_ids).toEqual([fixture.goods_receipt_id]);
+    expect(context.portal_evidence.invoice_number).toBe(invoiceNumber);
+    expect(context.portal_evidence.invoice_date).toBe(invoiceDate);
+    expect(context.portal_evidence.supplier_gstin).toBe(context.supplier_gstin);
+    expect(context.inventory_effect).toBe('already_capitalized_by_goods_receipt');
+    expect(exact(context.supplier_invoice_inventory_value_delta, 'context inventory delta')).toBe('0.00');
+    expect(context.lines).toHaveLength(1);
+
+    await page.getByRole('checkbox', { name: /I confirm taxable resale business use/i }).check();
+    const preparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/procurement\.supplier_invoice\.prepare\/prepare$/);
+    await page.getByRole('button', { name: 'Review server calculation' }).click();
+    const prepared = await responseJson(await preparePromise);
+    expect(prepared.command_type).toBe('procurement.supplier_invoice.post');
+    expect(prepared.financial_impact).toHaveLength(1);
+    expect(exact(prepared.financial_impact[0].supplier_payable, 'preview payable')).toBe(
+      exact(context.portal_evidence.total_amount, 'GSTR-2B total'),
+    );
+    expect(prepared.tax_impact[0].portal_document_line_id).toBe(context.portal_evidence.portal_document_line_id);
+    expect(prepared.tax_impact[0].itc_eligibility).toBe('eligible');
+    expect(prepared.inventory_impact).toEqual([{
+      effect: 'receipt_cost_match_no_landed_cost',
+      inventory_value_delta: '0.00',
+    }]);
+    await expect(page.getByText('Immutable backend preview')).toBeVisible();
+    await expect(page.getByText(prepared.preview_hash, { exact: true })).toBeVisible();
+
+    let executeCalls = 0;
+    page.on('request', request => {
+      if (request.method() === 'POST' && /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/.test(request.url())) {
+        executeCalls += 1;
+      }
+    });
+    const approvalPromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/approve$/);
+    const executePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    const uiReadbackPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-invoices\/[0-9a-f-]+$/);
+    await page.getByRole('button', { name: 'Approve and post supplier invoice' }).click();
+    await responseJson(await approvalPromise);
+    const executedResponse = await executePromise;
+    const executed = await responseJson(executedResponse);
+    const uiReadback = await responseJson(await uiReadbackPromise);
+    expect(executeCalls).toBe(1);
+    expect(String(executed.resource_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    await expect(page.getByText('Server-confirmed accounting result')).toBeVisible();
+
+    const posted = await authorizedGet(
+      page,
+      executedResponse,
+      `/canonical/supplier-invoices/${executed.resource_id}`,
+    );
+    expect(uiReadback.supplier_invoice_id).toBe(executed.resource_id);
+    expect(posted.supplier_invoice_id).toBe(executed.resource_id);
+    expect(posted.supplier_invoice_number).toBe(invoiceNumber);
+    expect(posted.status).toBe('posted');
+    expect(posted.portal_document_line_id).toBe(context.portal_evidence.portal_document_line_id);
+    expect(exact(posted.grand_total, 'posted grand total')).toBe(
+      exact(prepared.financial_impact[0].supplier_payable, 'preview payable readback'),
+    );
+    expect(exact(posted.open_item_principal, 'payable open item')).toBe(exact(posted.grand_total, 'payable total'));
+    expect(exact(posted.tax_document_taxable_total, 'tax document taxable')).toBe(
+      exact(context.portal_evidence.taxable_amount, 'portal taxable'),
+    );
+    expect(exact(posted.tax_document_cgst_total, 'tax document CGST')).toBe(
+      exact(context.portal_evidence.cgst_amount, 'portal CGST'),
+    );
+    expect(exact(posted.tax_document_sgst_total, 'tax document SGST')).toBe(
+      exact(context.portal_evidence.sgst_amount, 'portal SGST'),
+    );
+    expect(exact(posted.journal_debit_total, 'journal debit')).toBe(exact(posted.journal_credit_total, 'journal credit'));
+    expect(exact(posted.journal_debit_total, 'journal balanced total')).toBe(exact(posted.grand_total, 'journal payable total'));
+    const debitMinor = posted.journal_lines.reduce(
+      (sum: bigint, line: any, index: number) => sum + moneyMinor(line.debit, `journal debit line ${index + 1}`),
+      0n,
+    );
+    const creditMinor = posted.journal_lines.reduce(
+      (sum: bigint, line: any, index: number) => sum + moneyMinor(line.credit, `journal credit line ${index + 1}`),
+      0n,
+    );
+    expect(debitMinor).toBe(creditMinor);
+    expect(debitMinor).toBe(moneyMinor(posted.grand_total, 'journal exact total'));
+    expect(posted.supplier_invoice_inventory_document_count).toBe(0);
+    expect(exact(posted.supplier_invoice_inventory_value_delta, 'posted inventory delta')).toBe('0.00');
+    expect(posted.lines).toHaveLength(context.lines.length);
+    expect(posted.lines[0].allocations).toHaveLength(1);
+    expect(posted.lines[0].allocations[0].goods_receipt_line_id).toBe(context.lines[0].goods_receipt_line_id);
+    expect(exact(posted.lines[0].allocations[0].allocated_base_billed_quantity, 'allocated billed quantity')).toBe(
+      exact(context.lines[0].remaining_base_billed_quantity, 'context billed ceiling'),
+    );
+    expect(exact(posted.lines[0].allocations[0].allocated_base_free_quantity, 'allocated free quantity')).toBe(
+      exact(context.lines[0].remaining_base_free_quantity, 'context free ceiling'),
+    );
+    expect(exact(posted.lines[0].allocations[0].capitalized_value, 'allocated capitalized value')).toBe(
+      exact(context.lines[0].remaining_capitalized_value, 'context capitalized ceiling'),
+    );
+
+    await attachExactEvidence(testInfo, 'created-supplier-invoice-and-exact-api-evidence.json', {
+      created_records: [{
+        resource_type: 'supplier_invoice',
+        resource_id: executed.resource_id,
+        resource_number: posted.supplier_invoice_number,
+        command_request_id: prepared.command_request_id,
+        preview_hash: prepared.preview_hash,
+        execution_status: executed.status,
+        ui_readback_resource_id: uiReadback.supplier_invoice_id,
+        source_goods_receipt_id: fixture.goods_receipt_id,
+        source_portal_document_line_id: posted.portal_document_line_id,
+        independent_readback: {
+          open_item_id: posted.open_item_id,
+          open_item_principal: exact(posted.open_item_principal, 'evidence payable'),
+          grand_total: exact(posted.grand_total, 'evidence grand total'),
+          journal_entry_id: posted.journal_entry_id,
+          journal_debit_total: exact(posted.journal_debit_total, 'evidence journal debit'),
+          journal_credit_total: exact(posted.journal_credit_total, 'evidence journal credit'),
+          supplier_invoice_inventory_document_count: posted.supplier_invoice_inventory_document_count,
+          supplier_invoice_inventory_value_delta: exact(posted.supplier_invoice_inventory_value_delta, 'evidence inventory delta'),
+          allocations: posted.lines.flatMap((line: any) => line.allocations),
+        },
+      }],
+    });
+    await page.screenshot({ path: testInfo.outputPath('supplier-invoice-posted-readback.png'), fullPage: true });
+  });
+
   test('UI: customer receipt selection -> exact allocation review -> confirmation -> canonical readback', async ({ page }, testInfo) => {
     test.setTimeout(150_000);
     await openHomeAction(page, 'Financial Hub');

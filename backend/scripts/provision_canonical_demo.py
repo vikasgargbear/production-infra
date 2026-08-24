@@ -122,6 +122,8 @@ INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
 ).date()
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
+DEMO_RUN_ATTEMPT = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"
 for grant_key in (
     "reviewer_access_grant",
     "operator_access_grant",
@@ -253,6 +255,15 @@ def assert_calculation_totals(
 def demo_run_uuid(label: str) -> str:
     run_id = os.getenv("GITHUB_RUN_ID", "local")
     return str(uuid5(NAMESPACE_URL, f"aasopharma-canonical-demo:{run_id}:{label}"))
+
+
+def demo_ui_fixture_uuid(label: str) -> str:
+    return str(
+        uuid5(
+            NAMESPACE_URL,
+            f"aasopharma-canonical-demo-ui:{DEMO_UI_FIXTURE_ID}:{label}",
+        )
+    )
 
 
 def assert_target() -> None:
@@ -1766,6 +1777,7 @@ def exercise_action(
     payload: dict[str, Any],
     *,
     separate_approver: bool = False,
+    evidence_label: str = "",
 ) -> dict[str, Any]:
     prepared = api_call(
         "POST", f"/api/internal/mcp/actions/{operation}/prepare",
@@ -1782,7 +1794,11 @@ def exercise_action(
         or str(prepared_replay.get("preview_hash")) != preview_hash
     ):
         raise RuntimeError(f"{operation} prepare replay changed immutable evidence")
-    approval_key = f"demo-approve-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
+    evidence_suffix = f"-{evidence_label}" if evidence_label else ""
+    approval_key = (
+        f"demo-approve-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
+        f"{evidence_suffix}"
+    )
     approved = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/approve",
         "automation.command.approve", "automation.command.approve",
@@ -1810,7 +1826,10 @@ def exercise_action(
         or approved_replay.get("idempotency_replayed") is not True
     ):
         raise RuntimeError(f"{operation} approval replay was not idempotent")
-    execution_key = f"demo-execute-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
+    execution_key = (
+        f"demo-execute-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
+        f"{evidence_suffix}"
+    )
     executed = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/execute",
         "automation.command.execute", "automation.command.execute",
@@ -1842,7 +1861,7 @@ def exercise_action(
         "executed": executed,
         "executed_replay": executed_replay,
     }
-    evidence_name = operation.replace(".", "-")
+    evidence_name = operation.replace(".", "-") + evidence_suffix
     (evidence_dir / f"canonical-demo-{evidence_name}.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -1982,8 +2001,19 @@ def purchase_order_payload() -> dict[str, Any]:
     }
 
 
+def supplier_invoice_ui_purchase_order_payload() -> dict[str, Any]:
+    payload = purchase_order_payload()
+    payload["idempotency_key"] = f"demo-ui-purchase-order-{DEMO_UI_FIXTURE_ID}"
+    payload["lines"] = [{
+        **payload["lines"][0],
+        "billed_quantity": "50",
+        "free_quantity": "2.5",
+    }]
+    return payload
+
+
 def reconcile_purchase_order(
-    connection, resource_id: str, command_request_id: str
+    connection, resource_id: str, command_request_id: str, *, expected_line_count: int = 2
 ) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
@@ -2005,7 +2035,7 @@ def reconcile_purchase_order(
             (IDS["org"], resource_id),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "approved" or row[9] != 2:
+        if row is None or row[2] != "approved" or row[9] != expected_line_count:
             raise RuntimeError("executed demo purchase order did not reconcile")
         columns = [item.name for item in cursor.description]
         result = dict(zip(columns, row))
@@ -2065,6 +2095,37 @@ def goods_receipt_payload(purchase_order_id: str, purchase_order_line_id: str) -
                 ],
             }
         ],
+    }
+
+
+def supplier_invoice_ui_goods_receipt_payload(
+    purchase_order_id: str,
+    purchase_order_line_id: str,
+) -> dict[str, Any]:
+    return {
+        "idempotency_key": f"demo-ui-goods-receipt-{DEMO_UI_FIXTURE_ID}",
+        "branch_id": IDS["branch"],
+        "received_at": f"{SOURCE_RETRIEVED_ON.isoformat()}T12:00:00+05:30",
+        "purchase_order_id": purchase_order_id,
+        "supplier_account_id": IDS["supplier_account"],
+        "supplier_challan_number": f"DEMO-UI-CH-{DEMO_UI_FIXTURE_ID}",
+        "supplier_challan_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "lines": [{
+            "purchase_order_line_id": purchase_order_line_id,
+            "batches": [{
+                "manufacturer_batch_number": f"DEMO-UI-BATCH-{DEMO_UI_FIXTURE_ID}",
+                "manufactured_on": "2026-07-01",
+                "expires_on": "2028-09-01",
+                "mrp": "150.00",
+                "mrp_uom_conversion_id": IDS["uom_conversion"],
+                "received_quantity": "50",
+                "accepted_quantity": "50",
+                "rejected_quantity": "0",
+                "free_quantity": "2.5",
+                "qc_status": "accepted",
+                "to_location_id": IDS["saleable_location"],
+            }],
+        }],
     }
 
 
@@ -2213,6 +2274,259 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
         "supplier_invoice_number": supplier_invoice_number,
         "portal_document_line_id": portal_line_id,
     }
+
+
+def seed_supplier_invoice_ui_portal_evidence(connection) -> dict[str, str]:
+    """Create one replay-safe, run-attempt-scoped parsed GSTR-2B UI row."""
+
+    supplier_invoice_number = f"DEMO-UI-SUP-{DEMO_UI_FIXTURE_ID}"
+    source_attachment_id = demo_ui_fixture_uuid("gstr2b-source-attachment")
+    return_period_id = demo_ui_fixture_uuid("gstr2b-return-period")
+    portal_document_id = demo_ui_fixture_uuid("gstr2b-portal-document")
+    portal_line_id = demo_ui_fixture_uuid("gstr2b-invoice-line")
+    row_hash = hashlib.sha256(
+        f"synthetic-gstr2b-ui-row:{supplier_invoice_number}".encode()
+    ).hexdigest()
+    with connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        for setting, value in (
+            ("app.org_id", IDS["org"]),
+            ("app.membership_id", IDS["reviewer_membership"]),
+            ("app.user_id", IDS["reviewer_user"]),
+            ("app.auth_user_id", IDS["reviewer_auth_user"]),
+            ("app.request_id", IDS["request"]),
+        ):
+            cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
+        cursor.execute(
+            """
+            INSERT INTO core.attachments (
+                org_id,id,storage_bucket,storage_object_path,original_filename,
+                media_type,byte_size,sha256,evidence_kind,document_date,
+                retention_until,status,verified_at,created_by_membership_id
+            ) VALUES (
+                %s,%s,'canonical-demo-evidence',%s,'synthetic-ui-gstr2b.json',
+                'application/json',256,extensions.digest(%s,'sha256'),'gstr2b_import',
+                %s,%s,'retained',transaction_timestamp(),%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], source_attachment_id,
+                f"demo/{DEMO_UI_FIXTURE_ID}/synthetic-ui-gstr2b.json",
+                f"synthetic-ui-gstr2b:{supplier_invoice_number}",
+                SOURCE_RETRIEVED_ON, date(2034, 8, 20), IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO tax.return_periods (
+                org_id,id,registration_id,period_start,period_end,due_date,
+                period_kind,status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,DATE '2026-08-01',DATE '2026-08-31',DATE '2026-09-20',
+                'monthly','open',%s,%s
+            ) ON CONFLICT (org_id,registration_id,period_start,period_end) DO NOTHING
+            RETURNING id
+            """,
+            (
+                IDS["org"], return_period_id, IDS["org_gst_registration"],
+                IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        inserted_period = cursor.fetchone()
+        if inserted_period is None:
+            cursor.execute(
+                """
+                SELECT id FROM tax.return_periods
+                 WHERE org_id=%s AND registration_id=%s
+                   AND period_start=DATE '2026-08-01'
+                   AND period_end=DATE '2026-08-31'
+                """,
+                (IDS["org"], IDS["org_gst_registration"]),
+            )
+            inserted_period = cursor.fetchone()
+        if inserted_period is None:
+            raise RuntimeError("demo UI GSTR-2B return period was not resolved")
+        return_period_id = str(inserted_period[0])
+        cursor.execute(
+            """
+            INSERT INTO tax.portal_documents (
+                org_id,id,registration_id,return_period_id,portal_document_type,
+                portal_generation_date,source_attachment_id,source_sha256,status,
+                created_by_membership_id
+            ) VALUES (
+                %s,%s,%s,%s,'gstr2b',%s,%s,
+                extensions.digest(%s,'sha256'),'imported',%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], portal_document_id, IDS["org_gst_registration"],
+                return_period_id, SOURCE_RETRIEVED_ON, source_attachment_id,
+                f"synthetic-ui-gstr2b:{supplier_invoice_number}",
+                IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            "SELECT status FROM tax.portal_documents WHERE org_id=%s AND id=%s",
+            (IDS["org"], portal_document_id),
+        )
+        document = cursor.fetchone()
+        if document is None:
+            raise RuntimeError("demo supplier-invoice UI portal document is missing")
+        if document[0] == "imported":
+            cursor.execute(
+                "SELECT erp_finance_commands.parse_portal_document(%s,%s,%s::jsonb)",
+                (
+                    IDS["org"], portal_document_id,
+                    json.dumps([{
+                        "id": portal_line_id,
+                        "line_number": 1,
+                        "supplier_gstin": "27DEMOC5678D1Z5",
+                        "counterparty_name": "Synthetic Medicines Distributor Private Limited",
+                        "invoice_number": supplier_invoice_number,
+                        "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+                        "document_type": "invoice",
+                        "place_of_supply_state_code": "27",
+                        "taxable_amount": "5000.00",
+                        "cgst_amount": "300.00",
+                        "sgst_amount": "300.00",
+                        "igst_amount": "0.00",
+                        "cess_amount": "0.00",
+                        "total_amount": "5600.00",
+                        "portal_reference": f"GSTR2B-DEMO-UI-{DEMO_UI_FIXTURE_ID}",
+                        "source_row_hash": row_hash,
+                    }], separators=(",", ":"), sort_keys=True),
+                ),
+            )
+        elif document[0] != "parsed":
+            raise RuntimeError("demo supplier-invoice UI portal document is not parsed")
+        cursor.execute(
+            """
+            SELECT count(*) FROM tax.portal_document_lines
+             WHERE org_id=%s AND portal_document_id=%s AND id=%s
+               AND document_type='invoice' AND invoice_number=%s
+               AND invoice_date=%s AND source_row_hash=decode(%s,'hex')
+            """,
+            (
+                IDS["org"], portal_document_id, portal_line_id,
+                supplier_invoice_number, SOURCE_RETRIEVED_ON, row_hash,
+            ),
+        )
+        if cursor.fetchone()[0] != 1:
+            raise RuntimeError("demo supplier-invoice UI parsed portal row drifted")
+    return {
+        "supplier_invoice_number": supplier_invoice_number,
+        "portal_document_line_id": portal_line_id,
+        "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+    }
+
+
+def reconcile_supplier_invoice_ui_fixture(
+    connection,
+    goods_receipt_id: str,
+    goods_receipt_line_id: str,
+    portal_evidence: dict[str, str],
+) -> dict[str, str]:
+    """Prove one unconsumed GRN/GSTR-2B pair is ready for the live UI write."""
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            WITH receipt_ceiling AS (
+                SELECT receipt.id AS goods_receipt_id,
+                       receipt.goods_receipt_number,
+                       receipt.supplier_challan_number,
+                       receipt.supplier_challan_date,
+                       line.id AS goods_receipt_line_id,
+                       line.base_accepted_quantity-
+                         COALESCE(sum(allocation.allocated_base_billed_quantity),0)
+                           AS remaining_base_billed_quantity,
+                       line.base_free_quantity-
+                         COALESCE(sum(allocation.allocated_base_free_quantity),0)
+                           AS remaining_base_free_quantity,
+                       round((
+                         line.base_accepted_quantity-
+                           COALESCE(sum(allocation.allocated_base_billed_quantity),0)+
+                         line.base_free_quantity-
+                           COALESCE(sum(allocation.allocated_base_free_quantity),0)
+                       )*line.unit_cost,2) AS remaining_capitalized_value
+                  FROM procurement.goods_receipts receipt
+                  JOIN procurement.goods_receipt_lines line
+                    ON line.org_id=receipt.org_id
+                   AND line.goods_receipt_id=receipt.id
+                  LEFT JOIN procurement.supplier_invoice_receipt_allocations allocation
+                    ON allocation.org_id=line.org_id
+                   AND allocation.goods_receipt_line_id=line.id
+                 WHERE receipt.org_id=%s AND receipt.id=%s AND line.id=%s
+                   AND receipt.status='posted'
+                 GROUP BY receipt.org_id,receipt.id,line.id
+            ), exact_portal_candidates AS (
+                SELECT count(*) AS candidate_count,
+                       min(line.id::text) AS portal_document_line_id
+                  FROM tax.portal_document_lines line
+                  JOIN tax.portal_documents document
+                    ON document.org_id=line.org_id
+                   AND document.id=line.portal_document_id
+                   AND document.portal_document_type='gstr2b'
+                   AND document.status='parsed' AND document.parsed_at IS NOT NULL
+                 WHERE line.org_id=%s AND line.document_type='invoice'
+                   AND line.supplier_gstin='27DEMOC5678D1Z5'
+                   AND line.invoice_number=%s AND line.invoice_date=%s
+                   AND line.place_of_supply_state_code='27'
+                   AND line.taxable_amount=5000.00
+                   AND line.cgst_amount=300.00 AND line.sgst_amount=300.00
+                   AND line.igst_amount=0.00 AND line.cess_amount=0.00
+                   AND line.total_amount=5600.00
+            ), consumption AS (
+                SELECT count(*) AS consumed_count
+                  FROM automation.command_requests command
+                 WHERE command.org_id=%s
+                   AND command.capability_code='procurement.supplier_invoice.prepare'
+                   AND command.operation='procurement.supplier_invoice.post'
+                   AND command.status='succeeded'
+                   AND NULLIF(pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
+                         ->>'portal_document_line_id','')::uuid=%s
+            )
+            SELECT receipt_ceiling.*, exact_portal_candidates.*,
+                   consumption.consumed_count
+              FROM receipt_ceiling
+              CROSS JOIN exact_portal_candidates
+              CROSS JOIN consumption
+            """,
+            (
+                IDS["org"], goods_receipt_id, goods_receipt_line_id,
+                IDS["org"], portal_evidence["supplier_invoice_number"],
+                portal_evidence["invoice_date"],
+                IDS["org"], portal_evidence["portal_document_line_id"],
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("demo supplier-invoice UI fixture GRN is missing")
+        columns = [item.name for item in cursor.description]
+        result = dict(zip(columns, row))
+        if result["candidate_count"] != 1:
+            raise RuntimeError("demo supplier-invoice UI fixture is not one exact parsed GSTR-2B row")
+        if result["portal_document_line_id"] != portal_evidence["portal_document_line_id"]:
+            raise RuntimeError("demo supplier-invoice UI fixture resolved the wrong portal row")
+        if result["consumed_count"] != 0:
+            raise RuntimeError("demo supplier-invoice UI fixture portal row was already consumed")
+        if (
+            result["remaining_base_billed_quantity"] != Decimal("50.000000")
+            or result["remaining_base_free_quantity"] != Decimal("2.500000")
+            or result["remaining_capitalized_value"] != Decimal("5000.00")
+        ):
+            raise RuntimeError("demo supplier-invoice UI fixture receipt ceiling drifted")
+        return {
+            key: value.isoformat() if isinstance(value, date) else str(value)
+            for key, value in result.items()
+        } | {
+            "supplier_invoice_number": portal_evidence["supplier_invoice_number"],
+            "invoice_date": portal_evidence["invoice_date"],
+        }
 
 
 def seed_purchase_return_portal_evidence(connection) -> dict[str, str]:
@@ -3840,6 +4154,52 @@ def main() -> int:
             supplier_invoice_journey["prepared"]["command_request_id"],
         )
 
+    ui_purchase_payload = supplier_invoice_ui_purchase_order_payload()
+    preflight_action("procurement.purchase_order.prepare", ui_purchase_payload)
+    ui_purchase_journey = exercise_action(
+        evidence_dir,
+        "procurement.purchase_order.prepare",
+        "procurement.order.manage",
+        ui_purchase_payload,
+        evidence_label="supplier-invoice-ui-fixture",
+    )
+    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+        ui_purchase_reconciliation = reconcile_purchase_order(
+            runtime,
+            ui_purchase_journey["executed"]["resource_id"],
+            ui_purchase_journey["prepared"]["command_request_id"],
+            expected_line_count=1,
+        )
+
+    ui_receipt_payload = supplier_invoice_ui_goods_receipt_payload(
+        ui_purchase_reconciliation["id"],
+        ui_purchase_reconciliation["line_ids"][0],
+    )
+    preflight_action("procurement.goods_receipt.prepare", ui_receipt_payload)
+    ui_receipt_journey = exercise_action(
+        evidence_dir,
+        "procurement.goods_receipt.prepare",
+        "procurement.receipt.post",
+        ui_receipt_payload,
+        evidence_label="supplier-invoice-ui-fixture",
+    )
+    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+        ui_receipt_reconciliation = reconcile_goods_receipt(
+            runtime,
+            ui_receipt_journey["executed"]["resource_id"],
+            expected_accepted_quantity="50",
+            expected_free_quantity="2.5",
+        )
+    with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+        ui_portal_evidence = seed_supplier_invoice_ui_portal_evidence(bootstrap)
+    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+        supplier_invoice_ui_fixture = reconcile_supplier_invoice_ui_fixture(
+            runtime,
+            ui_receipt_reconciliation["id"],
+            ui_receipt_reconciliation["goods_receipt_line_id"],
+            ui_portal_evidence,
+        )
+
     supplier_payment_request = supplier_payment_payload(
         supplier_invoice_reconciliation["open_item_id"]
     )
@@ -3990,8 +4350,10 @@ def main() -> int:
                 str(journey["prepared"]["command_request_id"])
                 for journey in (
                     purchase_journey,
+                    ui_purchase_journey,
                     advance_journey,
                     receipt_journey,
+                    ui_receipt_journey,
                     supplier_invoice_journey,
                     supplier_payment_journey,
                     journey,
@@ -4023,6 +4385,9 @@ def main() -> int:
         "goods_receipt_reconciliation": receipt_reconciliation,
         "batch_release_reconciliation": batch_release_reconciliation,
         "supplier_invoice_reconciliation": supplier_invoice_reconciliation,
+        "supplier_invoice_ui_purchase_order_reconciliation": ui_purchase_reconciliation,
+        "supplier_invoice_ui_goods_receipt_reconciliation": ui_receipt_reconciliation,
+        "supplier_invoice_ui_fixture": supplier_invoice_ui_fixture,
         "supplier_payment_reconciliation": supplier_payment_reconciliation,
         "sales_order_reconciliation": reconciliation,
         "sales_dispatch_reconciliation": dispatch_reconciliation,
