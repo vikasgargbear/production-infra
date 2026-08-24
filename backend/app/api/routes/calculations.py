@@ -12,7 +12,7 @@ from ...core.auth.tenant_service import (
     get_tenant_aware_db,
     with_tenant_context,
 )
-from ...core.security.permissions import PermissionChecker
+from ...core.security.permissions import PermissionChecker, check_permission
 from ..services.compliance.gst_service import GSTService
 from ..services.purchase.calculations import PurchaseCalculator
 from ..services.returns.return_service import ReturnService
@@ -171,16 +171,24 @@ async def preview_challan_totals(
 @with_tenant_context
 async def preview_return_totals(
     return_data: ReturnCalculationRequest,
-    _: dict = Depends(PermissionChecker("sales", "view")),
+    user: dict = Depends(PermissionChecker()),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context),
 ):
     """Calculate sales or purchase returns with the commit-time rules."""
+    required_module = "sales" if return_data.return_type == "sales" else "purchase"
+    if not check_permission(user, required_module, "view"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission denied: view on {required_module}",
+        )
     try:
         party_kwargs: Dict[str, int] = {}
-        if return_data.return_type == "sales" and return_data.customer_id is not None:
+        if (return_data.return_type == "sales" and return_data.customer_id is not None
+                and not isinstance(return_data.customer_id, UUID)):
             party_kwargs["customer_id"] = return_data.customer_id
-        elif return_data.return_type == "purchase" and return_data.supplier_id is not None:
+        elif (return_data.return_type == "purchase" and return_data.supplier_id is not None
+                and not isinstance(return_data.supplier_id, UUID)):
             party_kwargs["supplier_id"] = return_data.supplier_id
 
         gst_type = (

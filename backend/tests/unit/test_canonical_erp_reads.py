@@ -22,11 +22,15 @@ CRITICAL_UI_READS = {
     "/api/challan/",
     "/api/purchases/",
     "/api/supplier-invoices/",
+    "/api/supplier-invoices/returnable/",
+    "/api/purchase-returns/supplier-invoice/{invoice_id:uuid}/returnable-items",
     "/api/grn/",
     "/api/sale-returns/",
     "/api/purchase-returns/",
     "/api/payments/search",
     "/api/gst/dashboard",
+    "/api/ledger/aging",
+    "/api/collection-center/collection/aging-data",
     "/api/inventory/list",
     "/api/financial/summary",
     "/api/dashboard/stats",
@@ -101,6 +105,98 @@ def test_uuid_customer_address_routes_precede_legacy_integer_routes() -> None:
         "/customers/{customer_id:uuid}/addresses/{address_id:uuid}",
         frozenset({"PUT"}),
     ) in paths
+
+
+def test_uuid_sales_document_detail_routes_precede_legacy_integer_routes() -> None:
+    routes = []
+    for route in app.routes:
+        effective_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_contexts):
+            routes.extend(effective_contexts())
+        elif isinstance(route, APIRoute):
+            routes.append(route)
+
+    expected = {
+        "/api/invoices/{invoice_id:uuid}": canonical_erp_reads.canonical_invoice_compatibility_detail,
+        "/api/sales-orders/{order_id:uuid}": canonical_erp_reads.canonical_sales_order_compatibility_detail,
+    }
+    for path, endpoint in expected.items():
+        matches = [route for route in routes if route.path == path and "GET" in route.methods]
+        assert matches, path
+        assert matches[0].endpoint is endpoint
+
+
+def test_uuid_sales_document_detail_reads_include_importable_lines(monkeypatch) -> None:
+    captured = []
+    org_id = uuid4()
+    invoice_id = uuid4()
+    order_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured.append((sql, params))
+        if "FROM sales.invoices invoice" in sql:
+            return [{"invoice_id": invoice_id, "items": [{"product_id": uuid4()}]}]
+        return [{"order_id": order_id, "items": [{"product_id": uuid4()}]}]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    invoice = canonical_erp_reads.canonical_invoice_compatibility_detail(
+        invoice_id=invoice_id, user={}, db=object(),
+    )
+    order = canonical_erp_reads.canonical_sales_order_compatibility_detail(
+        order_id=order_id, user={}, db=object(),
+    )
+
+    assert invoice["invoice_id"] == invoice_id
+    assert order["order_id"] == order_id
+    assert captured[0][1] == {"org_id": org_id, "invoice_id": invoice_id}
+    assert captured[1][1] == {"org_id": org_id, "order_id": order_id}
+    assert "FROM sales.invoice_lines line" in captured[0][0]
+    assert "invoice_dispatch_allocations" in captured[0][0]
+    assert "line.line_discount_kind='percent'" in captured[0][0]
+    assert "FROM sales.order_lines line" in captured[1][0]
+    assert "registration_type='GSTIN'" in captured[1][0]
+    assert "line.line_discount_kind='percent'" in captured[1][0]
+    for sql, _params in captured:
+        assert "'product_name', product.name" in sql
+        assert "'quantity', line.billed_quantity" in sql
+        assert "'unit_price', line.quoted_unit_rate" in sql
+
+
+def test_sales_order_search_uses_canonical_number_and_customer_fields(monkeypatch) -> None:
+    captured = {}
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+
+    def fake_rows(_db, sql, params):
+        captured.update(sql=sql, params=params)
+        return []
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.sales_orders(
+        limit=50, skip=0, search="DEMO-SO", user={}, db=object(),
+    )
+
+    assert result == {"orders": [], "total": 0, "page": 1, "per_page": 50, "total_pages": 1}
+    assert "document.order_number ILIKE :search_pattern" in captured["sql"]
+    assert "party.legal_name ILIKE :search_pattern" in captured["sql"]
+    assert captured["params"]["search_pattern"] == "%DEMO-SO%"
+
+
+def test_sales_order_pagination_uses_filtered_database_total(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_sales_rows", lambda *_args, **_kwargs: [{
+        "id": uuid4(), "document_number": "SO-2", "document_date": "2026-08-24",
+        "filtered_total": 7,
+    }])
+
+    result = canonical_erp_reads.sales_orders(
+        limit=2, skip=2, search="", user={}, db=object(),
+    )
+
+    assert result["total"] == 7
+    assert result["page"] == 2
+    assert result["total_pages"] == 4
+    assert "filtered_total" not in result["orders"][0]
 
 
 def test_offline_sync_routes_are_not_registered() -> None:
@@ -353,7 +449,7 @@ def test_hsn_report_projects_complete_numeric_contract_for_selected_period() -> 
 
 def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
     list_source = inspect.getsource(canonical_erp_reads._sales_rows)
-    detail_source = inspect.getsource(canonical_erp_reads.canonical_invoice)
+    detail_source = inspect.getsource(canonical_erp_reads._canonical_invoice_detail)
 
     for source in (list_source, detail_source):
         assert "buyer_gstin_snapshot AS customer_gst_number" in source
@@ -362,6 +458,7 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
         assert "sgst_total" in source and "AS sgst_amount" in source
         assert "igst_total" in source and "AS igst_amount" in source
         assert "cess_total" in source and "AS cess_amount" in source
+    assert "COALESCE(document.cess_total, 0) AS cess_amount," in list_source
 
 
 def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:
@@ -376,6 +473,142 @@ def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() ->
     assert "cess_total AS cess_amount" in source
     assert ":from_date IS NULL OR invoice.supplier_invoice_date" in source
     assert ":to_date IS NULL OR invoice.supplier_invoice_date" in source
+    assert "item.item_side='payable'" in source
+    assert "item.status<>'reversed'" in source
+    assert "allocation.reversal_of_allocation_id IS NULL" in source
+    assert "reversal.reversal_of_allocation_id=allocation.id" in source
+
+
+def test_gst_dashboard_applies_the_selected_period_to_both_tax_sides(monkeypatch) -> None:
+    captured = {}
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+
+    def fake_rows(_db, sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{
+            "date_from": "2026-07-01", "date_to": "2026-07-31",
+            "output_tax": 12, "input_credit": 5, "net_payable": 7,
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.gst_dashboard(period="previous", user={}, db=object())
+
+    assert result["period"] == {
+        "key": "previous", "start": "2026-07-01", "end": "2026-07-31",
+    }
+    assert result["outputTax"] == 12
+    assert captured["params"]["period"] == "previous"
+    assert "invoice_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
+    assert "supplier_invoice_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
+    assert captured["sql"].count("status='posted'") == 2
+
+
+def test_canonical_receivables_use_effective_allocations_and_tenant_scope() -> None:
+    source = inspect.getsource(canonical_erp_reads._canonical_receivable_rows)
+
+    assert "finance.open_items" in source
+    assert "finance.allocations" in source
+    assert "item.org_id=:org_id" in source
+    assert "allocation.org_id=:org_id" in source
+    assert "reversal.reversal_of_allocation_id=allocation.id" in source
+    assert "item.item_side='receivable'" in source
+    assert "item.status<>'reversed'" in source
+    assert "finance.accounting_events" in source
+    assert "event.sales_invoice_id IS NOT NULL" in source
+    assert "sales.invoices" in source
+    assert "invoice.status='posted'" in source
+    assert "invoice.branch_id=ANY(CAST(:branch_ids AS uuid[]))" in source
+    assert "'invoice_id', receivable.sales_invoice_id" in source
+    assert "'open_item_id', receivable.open_item_id" in source
+    assert "parties.customer_accounts" in source
+    assert "customer.status='active'" not in source
+    assert "party.status='active'" not in source
+    assert "jsonb_agg(jsonb_build_object(" in source
+
+
+def test_canonical_receivables_bind_signed_branch_visibility(monkeypatch) -> None:
+    captured = {}
+    branch_id = uuid4()
+
+    def fake_rows(_db, sql, params):
+        captured.update(sql=sql, params=params)
+        return []
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    canonical_erp_reads._canonical_receivable_rows(
+        object(), uuid4(), {"branch_ids": [str(branch_id)], "data_access_level": "branch"},
+    )
+
+    assert captured["params"]["organization_scope"] is False
+    assert captured["params"]["branch_ids"] == [branch_id]
+
+
+def test_customer_and_sales_order_gstin_reads_require_active_registration() -> None:
+    assert "r.registration_type='GSTIN' AND r.status='active'" in canonical_erp_reads._PARTY_CONTACTS
+    detail_source = inspect.getsource(
+        canonical_erp_reads.canonical_sales_order_compatibility_detail
+    )
+    assert "registration_type='GSTIN' AND status='active'" in detail_source
+
+
+def test_ledger_aging_returns_ui_compatible_canonical_summary(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_canonical_receivable_rows", lambda *_args: [{
+        "customer_id": uuid4(), "total_outstanding": 100, "overdue_amount": 60,
+        "current": 40, "days_1_30": 20, "days_31_60": 40,
+        "days_61_90": 0, "over_90": 0, "current_count": 1,
+        "days_1_30_count": 1, "days_31_60_count": 1,
+        "days_61_90_count": 0, "over_90_count": 0,
+    }])
+
+    result = canonical_erp_reads.canonical_ledger_aging(
+        party_type="customer", user={}, db=object(),
+    )
+
+    assert result["summary"] == {
+        "total": 100, "current": 40, "overdue": 60, "party_count": 1,
+        "1_30": 20, "31_60": 40, "61_90": 0, "over_90": 0,
+        "current_count": 1, "1_30_count": 1, "31_60_count": 1,
+        "61_90_count": 0, "over_90_count": 0,
+    }
+
+
+def test_collection_aging_exposes_real_contact_and_collection_metrics(monkeypatch) -> None:
+    customer_id = uuid4()
+    party_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_canonical_receivable_rows", lambda *_args: [{
+        "customer_id": customer_id, "party_id": party_id, "customer_name": "Test Buyer",
+        "phone": "9876543210", "email": "buyer@example.com", "location": "Mumbai",
+        "credit_limit": 200, "total_outstanding": 100, "overdue_amount": 60,
+        "max_overdue_days": 45, "oldest_invoice_date": "2026-06-01",
+        "last_payment_date": "2026-08-20", "current": 40,
+        "days_1_30": 0, "days_31_60": 60, "days_61_90": 0, "over_90": 0,
+    }])
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args: [{
+        "today_collections": 10, "week_collections": 20, "month_collections": 25,
+    }])
+
+    result = canonical_erp_reads.canonical_collection_aging(user={}, db=object())
+
+    assert result["summary"]["currentDayCollections"] == 10
+    assert result["summary"]["currentMonthCollections"] == 25
+    assert result["summary"]["collectionEfficiency"] == 20.0
+    assert result["parties"][0] == {
+        "id": customer_id, "partyId": party_id, "name": "Test Buyer",
+        "phone": "9876543210", "email": "buyer@example.com", "location": "Mumbai",
+        "outstandingAmount": 100, "overdueAmount": 60, "daysOverdue": 45,
+        "creditLimit": 200, "creditUtilization": 50.0,
+        "oldestInvoiceDate": "2026-06-01", "lastPayment": "2026-08-20",
+        "lastFollowUp": None, "promiseDate": None, "assignedAgent": None,
+        "riskScore": 20, "paymentHistory": "Average", "collectionSuccess": 80,
+        "agingBreakdown": [
+            {"range": "Current", "amount": 40}, {"range": "1-30", "amount": 0},
+            {"range": "31-60", "amount": 60}, {"range": "61-90", "amount": 0},
+            {"range": "90+", "amount": 0},
+        ],
+    }
 
 
 def test_current_stock_projects_one_canonical_row_per_product() -> None:
@@ -468,3 +701,40 @@ def test_tax_master_does_not_double_count_intra_and_interstate_rates() -> None:
     source = inspect.getsource(canonical_erp_reads.tax_codes)
     assert "GREATEST(cgst_rate+sgst_rate, igst_rate)+cess_rate AS total_rate" in source
     assert "cgst_rate+sgst_rate+igst_rate+cess_rate AS total_rate" not in source
+
+
+def test_purchase_return_reads_use_canonical_receipt_allocation_lineage() -> None:
+    list_source = inspect.getsource(canonical_erp_reads.returnable_supplier_invoices)
+    item_source = inspect.getsource(canonical_erp_reads.returnable_supplier_invoice_items)
+
+    for source in (list_source, item_source):
+        assert "procurement.supplier_invoice_receipt_allocations" in source
+        assert "procurement.purchase_return_lines" in source
+        assert "return_header.status='posted'" in source
+    assert "supplier_invoice_receipt_allocation_id" in item_source
+    assert "invoice_id: UUID" in item_source
+    assert "user: dict = PURCHASE_USER" in item_source
+    assert "remaining_base_billed_quantity" in item_source
+    assert "remaining_base_free_quantity" in item_source
+    assert "returnable_free_quantity" in item_source
+    assert "invoice_line.uom_conversion_factor" in item_source
+    assert "product.base_uom_code" in item_source
+    assert "allocation.allocated_base_free_quantity>returned.base_free" in item_source
+    assert "FROM procurement.supplier_invoice_items" not in item_source
+    assert "grn_items" not in item_source
+
+
+def test_purchase_history_reads_apply_search_status_dates_and_real_totals() -> None:
+    purchase_source = inspect.getsource(canonical_erp_reads.purchase_orders)
+    invoice_source = inspect.getsource(canonical_erp_reads.supplier_invoices)
+    receipt_source = inspect.getsource(canonical_erp_reads.goods_receipts)
+
+    assert "purchase.purchase_order_number ILIKE" in purchase_source
+    assert "purchase.status=:status" in purchase_source
+    assert "count(*) OVER() AS _total" in purchase_source
+    assert "payment_status" in invoice_source
+    assert "finance.open_items" in invoice_source
+    assert "invoice.supplier_invoice_number ILIKE" in invoice_source
+    assert "receipt.status=:status" in receipt_source
+    assert "SUM(line.extended_cost) AS total_amount" in receipt_source
+    assert "receipt.status='posted' AS stock_updated" in receipt_source

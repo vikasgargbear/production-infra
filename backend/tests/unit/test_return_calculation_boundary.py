@@ -1,6 +1,14 @@
 from decimal import Decimal
+from types import SimpleNamespace
+from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
+
+from app.api.routes.calculations import preview_return_totals
+from app.api.schemas.calculations import ReturnCalculationRequest
 from app.api.services.returns.return_service import ReturnService
+from app.core.auth.tenant_service import BranchScope
 from app.main import app
 
 
@@ -36,3 +44,36 @@ def test_sales_return_lines_reconcile_with_free_quantity_and_gst_withheld():
     assert line["tax_amount"] == Decimal("0.00")
     assert result["subtotal"] == Decimal("180.00")
     assert result["total_amount"] == Decimal("180")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("return_type", "permissions", "expected_module"),
+    [
+        ("sales", {"procurement.purchase_return.create": True}, "sales"),
+        ("purchase", {"sales.return.create": True}, "purchase"),
+    ],
+)
+async def test_return_preview_requires_permission_for_the_requested_document_side(
+    return_type, permissions, expected_module,
+):
+    request = ReturnCalculationRequest(
+        return_type=return_type,
+        customer_id=uuid4() if return_type == "sales" else None,
+        supplier_id=uuid4() if return_type == "purchase" else None,
+        items=[{
+            "return_quantity": "1", "unit_price": "100", "tax_percent": "18",
+        }],
+    )
+    context = SimpleNamespace(
+        org_id=uuid4(), user_id=uuid4(), branch_scope=BranchScope.ALL, branch_ids=[],
+        primary_branch_id=uuid4(),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        await preview_return_totals(
+            request, user={"permissions": permissions}, db=object(), context=context,
+        )
+
+    assert denied.value.status_code == 403
+    assert expected_module in denied.value.detail

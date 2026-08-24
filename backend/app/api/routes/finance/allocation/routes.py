@@ -2,8 +2,9 @@
 Payment Allocation API
 REFACTORED: Uses AllocationService for database operations
 """
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from decimal import Decimal
+from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 import logging
@@ -204,7 +205,7 @@ async def get_payment_allocations(
 @router.get("/invoice/{invoice_id}/payments")
 @with_tenant_context
 async def get_invoice_payments(
-    invoice_id: int,
+    invoice_id: Union[int, UUID],
     _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -292,7 +293,7 @@ async def get_unallocated_payments(
 @router.get("/unpaid-invoices")
 @with_tenant_context
 async def get_unpaid_invoices(
-    customer_id: Optional[int] = None,
+    customer_id: Optional[Union[int, UUID]] = None,
     _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -304,7 +305,8 @@ async def get_unpaid_invoices(
             InvoiceStatus.CANCELLED.value, InvoicePaymentStatus.PAID.value
         )
         return {
-            "invoices": [{"invoice_id": i["invoice_id"], "invoice_number": i["invoice_number"],
+            "invoices": [{"invoice_id": i["invoice_id"], "open_item_id": i.get("open_item_id"),
+                         "invoice_number": i["invoice_number"],
                          "invoice_date": i["invoice_date"].isoformat() if i.get("invoice_date") else None,
                          "customer_id": i["customer_id"], "customer_name": i["customer_name"],
                          "total_amount": money_json(i["final_amount"]), "allocated": money_json(i["allocated_amount"]),

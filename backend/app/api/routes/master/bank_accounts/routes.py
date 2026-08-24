@@ -44,6 +44,9 @@ async def get_bank_accounts(
                 "id": account.get("bank_account_id"),
                 "org_id": account.get("org_id"),
                 "account_name": account.get("account_name"),
+                "code": account.get("code"),
+                "name": account.get("name"),
+                "balance": float(account.get("balance") or 0),
                 "account_number": account.get("account_number"),
                 "account_type": account.get("account_type"),
                 "bank_name": account.get("bank_name"),
@@ -54,6 +57,7 @@ async def get_bank_accounts(
                 "is_default_account": account.get("is_default_account"),
                 "is_payment_account": account.get("is_payment_account"),
                 "is_active": account.get("is_active"),
+                "currency_code": account.get("currency_code"),
                 "created_at": account.get("created_at").isoformat() if account.get("created_at") else None,
                 "updated_at": account.get("updated_at").isoformat() if account.get("updated_at") else None
             })

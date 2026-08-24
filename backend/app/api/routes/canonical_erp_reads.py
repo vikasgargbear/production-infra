@@ -737,9 +737,8 @@ _PARTY_CONTACTS = """
         SELECT registration_number, status AS registration_status
           FROM parties.tax_registrations r
          WHERE r.org_id=account.org_id AND r.party_id=account.party_id
-           AND r.registration_type='GSTIN'
-           AND r.status IN ('active','pending_verification')
-         ORDER BY (r.status='active') DESC, r.valid_from DESC NULLS LAST, r.id LIMIT 1
+           AND r.registration_type='GSTIN' AND r.status='active'
+         ORDER BY r.valid_from DESC NULLS LAST, r.id LIMIT 1
     ) registration ON true
 """
 
@@ -1199,11 +1198,27 @@ def tax_codes(user: dict = MASTER_USER, db: Session = Depends(get_db)):
 
 
 @router.get("/gst/dashboard")
-def gst_dashboard(user: dict = Depends(PermissionChecker("gst", "view")),
-                  db: Session = Depends(get_db)):
+def gst_dashboard(
+    period: Literal["current", "previous", "quarter", "year"] = Query("current"),
+    user: dict = Depends(PermissionChecker("gst", "view")),
+    db: Session = Depends(get_db),
+):
     org_id = _activate(db, user)
     rows = _rows(db, """
-        SELECT COALESCE(sales.total,0) AS output_tax,
+        WITH period_bounds AS (
+            SELECT CASE :period
+                     WHEN 'previous' THEN (date_trunc('month', CURRENT_DATE)-interval '1 month')::date
+                     WHEN 'quarter' THEN date_trunc('quarter', CURRENT_DATE)::date
+                     WHEN 'year' THEN date_trunc('year', CURRENT_DATE)::date
+                     ELSE date_trunc('month', CURRENT_DATE)::date
+                   END AS date_from,
+                   CASE :period
+                     WHEN 'previous' THEN (date_trunc('month', CURRENT_DATE)-interval '1 day')::date
+                     ELSE CURRENT_DATE
+                   END AS date_to
+        )
+        SELECT period.date_from, period.date_to,
+               COALESCE(sales.total,0) AS output_tax,
                COALESCE(purchases.total,0) AS input_credit,
                COALESCE(sales.total,0)-COALESCE(purchases.total,0) AS net_payable,
                COALESCE(sales.invoice_count,0) AS total_invoices,
@@ -1215,18 +1230,28 @@ def gst_dashboard(user: dict = Depends(PermissionChecker("gst", "view")),
                COALESCE(purchases.cgst,0) AS purchase_cgst_amount,
                COALESCE(purchases.sgst,0) AS purchase_sgst_amount,
                COALESCE(purchases.igst,0) AS purchase_igst_amount
-          FROM (SELECT SUM(cgst_total+sgst_total+igst_total+cess_total) total,
+          FROM period_bounds period
+          CROSS JOIN LATERAL (
+                SELECT SUM(cgst_total+sgst_total+igst_total+cess_total) total,
                        SUM(cgst_total) cgst, SUM(sgst_total) sgst, SUM(igst_total) igst,
                        count(*) invoice_count
-                  FROM sales.invoices WHERE org_id=:org_id AND status<>'cancelled') sales
-          CROSS JOIN (SELECT SUM(cgst_total+sgst_total+igst_total+cess_total) total,
+                  FROM sales.invoices
+                 WHERE org_id=:org_id AND status='posted'
+                   AND invoice_date BETWEEN period.date_from AND period.date_to
+          ) sales
+          CROSS JOIN LATERAL (
+                SELECT SUM(cgst_total+sgst_total+igst_total+cess_total) total,
                              SUM(cgst_total) cgst, SUM(sgst_total) sgst, SUM(igst_total) igst,
                              count(*) invoice_count, count(DISTINCT supplier_account_id) supplier_count
                         FROM procurement.supplier_invoices
-                       WHERE org_id=:org_id AND status<>'cancelled') purchases
-    """, {"org_id": org_id})
+                       WHERE org_id=:org_id AND status='posted'
+                         AND supplier_invoice_date BETWEEN period.date_from AND period.date_to
+          ) purchases
+    """, {"org_id": org_id, "period": period})
     summary = rows[0] if rows else {}
-    return {"outputTax": summary.pop("output_tax", 0),
+    return {"period": {"key": period, "start": summary.pop("date_from", None),
+                       "end": summary.pop("date_to", None)},
+            "outputTax": summary.pop("output_tax", 0),
             "inputCredit": summary.pop("input_credit", 0),
             "netPayable": summary.pop("net_payable", 0), "summary": summary}
 
@@ -1279,8 +1304,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                COALESCE(payment.paid_amount, 0) AS paid_amount,
                GREATEST(COALESCE(document.grand_total, 0)
                         - COALESCE(payment.paid_amount, 0), 0) AS pending_amount,
-               {payment_status_expression} AS payment_status,
-               COUNT(*) OVER() AS filtered_total
+               {payment_status_expression} AS payment_status
     """ if include_invoice_payments else ""
     invoice_tax_columns = """
                document.buyer_gstin_snapshot AS customer_gst_number,
@@ -1288,7 +1312,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                COALESCE(document.cgst_total, 0) AS cgst_amount,
                COALESCE(document.sgst_total, 0) AS sgst_amount,
                COALESCE(document.igst_total, 0) AS igst_amount,
-               COALESCE(document.cess_total, 0) AS cess_amount
+               COALESCE(document.cess_total, 0) AS cess_amount,
     """ if include_invoice_payments else ""
     payment_join = """
           LEFT JOIN LATERAL (
@@ -1315,18 +1339,19 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                ORDER BY item.created_at DESC, item.id DESC LIMIT 1
           ) payment ON true
     """ if include_invoice_payments else ""
-    invoice_filters = f"""
+    search_filter = f"""
            AND (:search='' OR document.{number_column} ILIKE :search_pattern
                 OR party.legal_name ILIKE :search_pattern)
+    """
+    invoice_filters = f"""
            AND (CAST(:payment_status AS text) IS NULL
                 OR {payment_status_expression}=CAST(:payment_status AS text))
     """ if include_invoice_payments else ""
     params = {"org_id": org_id, "date_from": date_from, "date_to": date_to,
-              "limit": limit, "offset": offset}
+              "limit": limit, "offset": offset, "search": search.strip(),
+              "search_pattern": f"%{search.strip()}%"}
     if include_invoice_payments:
-        params.update({"search": search.strip(),
-                       "search_pattern": f"%{search.strip()}%",
-                       "payment_status": payment_status})
+        params.update({"payment_status": payment_status})
     return _rows(db, f"""
         SELECT document.id, document.id AS document_id,
                document.{number_column} AS document_number,
@@ -1338,6 +1363,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                COALESCE(document.grand_total, 0) AS total_amount,
                COALESCE(lines.items_count, 0) AS items_count,
                COALESCE(lines.items, '[]'::jsonb) AS items,
+               COUNT(*) OVER() AS filtered_total,
                document.created_at, document.updated_at
                {payment_columns}
           FROM sales.{table_name} document
@@ -1371,6 +1397,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
          WHERE document.org_id=:org_id
            AND (:date_from IS NULL OR document.{date_column} >= CAST(:date_from AS date))
            AND (:date_to IS NULL OR document.{date_column} <= CAST(:date_to AS date))
+           {search_filter}
            {invoice_filters}
          ORDER BY document.{date_column} DESC, document.id DESC
          LIMIT :limit OFFSET :offset
@@ -1398,25 +1425,24 @@ def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
     return {"invoices": rows, "total": total}
 
 
-@router.get("/canonical/invoices/{invoice_id}")
-def canonical_invoice(
-    invoice_id: UUID,
-    user: dict = SALES_USER,
-    db: Session = Depends(get_db),
-):
-    org_id = _activate(db, user)
+def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> dict:
     rows = _rows(db, """
         SELECT invoice.id AS invoice_id, invoice.invoice_number,
                invoice.invoice_date, invoice.status,
                invoice.customer_account_id AS customer_id,
                party.legal_name AS customer_name,
+               contact.phone AS customer_phone, contact.email AS customer_email,
                invoice.buyer_gstin_snapshot AS customer_gst_number,
+               invoice.buyer_address_snapshot AS billing_address,
+               invoice.buyer_address_snapshot AS shipping_address,
+               invoice.due_date, invoice.currency_code,
                invoice.gst_taxable_total AS taxable_amount,
                invoice.cgst_total AS cgst_amount,
                invoice.sgst_total AS sgst_amount,
                invoice.igst_total AS igst_amount,
                invoice.cess_total AS cess_amount,
                invoice.grand_total AS total_amount,
+               COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
           JOIN parties.customer_accounts account
@@ -1424,6 +1450,52 @@ def canonical_invoice(
            AND account.id=invoice.customer_account_id
           JOIN parties.parties party
             ON party.org_id=account.org_id AND party.id=account.party_id
+          LEFT JOIN LATERAL (
+              SELECT phone, email
+                FROM parties.contacts
+               WHERE org_id=party.org_id AND party_id=party.id AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) contact ON true
+          LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                         'id', line.id, 'product_id', line.product_id,
+                         'product_name', product.name, 'product_code', product.sku,
+                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'unit', line.uom_code, 'quantity', line.billed_quantity,
+                         'free_quantity', line.free_quantity,
+                         'unit_price', line.quoted_unit_rate,
+                         'discount_percent', CASE
+                             WHEN line.line_discount_kind='percent'
+                             THEN line.line_discount_value ELSE 0 END,
+                         'tax_rate', line.cgst_rate + line.sgst_rate + line.igst_rate,
+                         'gst_percent', line.cgst_rate + line.sgst_rate + line.igst_rate,
+                         'taxable_amount', line.gst_taxable_value,
+                         'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
+                         'igst_amount', line.igst_amount, 'line_total', line.line_total,
+                         'batch_id', allocation.batch_id,
+                         'batch_number', allocation.batch_number,
+                         'expiry_date', allocation.expiry_date
+                     ) ORDER BY line.line_number) AS items
+                FROM sales.invoice_lines line
+                LEFT JOIN catalog.products product
+                  ON product.org_id=line.org_id AND product.id=line.product_id
+                LEFT JOIN LATERAL (
+                    SELECT dispatch_line.batch_id, batch.batch_number,
+                           batch.expires_on AS expiry_date
+                      FROM sales.invoice_dispatch_allocations invoice_allocation
+                      JOIN sales.dispatch_lines dispatch_line
+                        ON dispatch_line.org_id=invoice_allocation.org_id
+                       AND dispatch_line.id=invoice_allocation.dispatch_line_id
+                      JOIN inventory.batches batch
+                        ON batch.org_id=dispatch_line.org_id
+                       AND batch.id=dispatch_line.batch_id
+                     WHERE invoice_allocation.org_id=line.org_id
+                       AND invoice_allocation.invoice_line_id=line.id
+                     ORDER BY dispatch_line.id LIMIT 1
+                ) allocation ON true
+               WHERE line.org_id=invoice.org_id AND line.invoice_id=invoice.id
+                 AND line.product_id IS NOT NULL
+          ) lines ON true
          WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
     """, {"org_id": org_id, "invoice_id": invoice_id})
     if len(rows) != 1:
@@ -1431,17 +1503,118 @@ def canonical_invoice(
     return rows[0]
 
 
+@router.get("/canonical/invoices/{invoice_id}")
+def canonical_invoice(
+    invoice_id: UUID,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    return _canonical_invoice_detail(db, _activate(db, user), invoice_id)
+
+
+@router.get("/invoices/{invoice_id:uuid}")
+def canonical_invoice_compatibility_detail(
+    invoice_id: UUID,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    """Resolve UUID invoice list rows before the integer compatibility route."""
+    return _canonical_invoice_detail(db, _activate(db, user), invoice_id)
+
+
+@router.get("/sales-orders/{order_id:uuid}")
+def canonical_sales_order_compatibility_detail(
+    order_id: UUID,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    """Return a complete canonical order for invoice/challan import flows."""
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT document.id AS order_id, document.id,
+               document.order_number, document.order_date,
+               document.requested_delivery_date AS delivery_date,
+               document.status AS order_status, document.status,
+               document.customer_account_id AS customer_id,
+               party.legal_name AS customer_name,
+               contact.phone AS customer_phone, contact.email AS customer_email,
+               tax.registration_number AS customer_gst_number,
+               billing.line1 AS billing_address,
+               billing.city AS billing_city, billing.state_code AS billing_state,
+               billing.postal_code AS billing_pincode,
+               shipping.line1 AS shipping_address,
+               shipping.city AS shipping_city, shipping.state_code AS shipping_state,
+               shipping.postal_code AS shipping_pincode,
+               document.grand_total AS total_amount,
+               COALESCE(lines.items, '[]'::jsonb) AS items,
+               document.created_at, document.updated_at
+          FROM sales.orders document
+          JOIN parties.customer_accounts account
+            ON account.org_id=document.org_id AND account.id=document.customer_account_id
+          JOIN parties.parties party
+            ON party.org_id=account.org_id AND party.id=account.party_id
+          JOIN parties.addresses billing
+            ON billing.org_id=document.org_id AND billing.id=document.billing_address_id
+          JOIN parties.addresses shipping
+            ON shipping.org_id=document.org_id AND shipping.id=document.shipping_address_id
+          LEFT JOIN LATERAL (
+              SELECT phone, email
+                FROM parties.contacts
+               WHERE org_id=party.org_id AND party_id=party.id AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) contact ON true
+          LEFT JOIN LATERAL (
+              SELECT registration_number
+                FROM parties.tax_registrations
+               WHERE org_id=party.org_id AND party_id=party.id
+                 AND registration_type='GSTIN' AND status='active'
+               ORDER BY verified_at DESC NULLS LAST, id LIMIT 1
+          ) tax ON true
+          LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                         'id', line.id, 'product_id', line.product_id,
+                         'product_name', product.name, 'product_code', product.sku,
+                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'unit', line.uom_code, 'quantity', line.billed_quantity,
+                         'free_quantity', line.free_quantity,
+                         'unit_price', line.quoted_unit_rate,
+                         'discount_percent', CASE
+                             WHEN line.line_discount_kind='percent'
+                             THEN line.line_discount_value ELSE 0 END,
+                         'tax_rate', line.cgst_rate + line.sgst_rate + line.igst_rate,
+                         'gst_percent', line.cgst_rate + line.sgst_rate + line.igst_rate,
+                         'taxable_amount', line.gst_taxable_value,
+                         'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
+                         'igst_amount', line.igst_amount, 'line_total', line.line_total
+                     ) ORDER BY line.line_number) AS items
+                FROM sales.order_lines line
+                LEFT JOIN catalog.products product
+                  ON product.org_id=line.org_id AND product.id=line.product_id
+               WHERE line.org_id=document.org_id AND line.order_id=document.id
+                 AND line.product_id IS NOT NULL
+          ) lines ON true
+         WHERE document.org_id=:org_id AND document.id=:order_id
+    """, {"org_id": org_id, "order_id": order_id})
+    if len(rows) != 1:
+        raise HTTPException(status_code=404, detail="Sales order not found")
+    return rows[0]
+
+
 @router.get("/sales-orders/")
 def sales_orders(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
+                 search: str = Query("", max_length=200),
                  user: dict = SALES_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _sales_rows(db, org_id, "orders", "order_number", "order_date",
-                       "order_lines", "order_id", limit, skip)
+                       "order_lines", "order_id", limit, skip, search=search)
     for row in rows:
         row.update(order_id=row["id"], order_number=row["document_number"],
                    order_date=row["document_date"])
-    return {"orders": rows, "total": len(rows), "page": skip // limit + 1,
-            "per_page": limit, "total_pages": 1}
+    total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
+    for row in rows:
+        row.pop("filtered_total", None)
+    return {"orders": rows, "total": total, "page": skip // limit + 1,
+            "per_page": limit, "total_pages": max(1, (total + limit - 1) // limit)}
 
 
 @router.get("/challan/")
@@ -1465,31 +1638,54 @@ def challans(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
 @router.get("/purchases/")
 def purchase_orders(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
                     date_from: Optional[str] = None, date_to: Optional[str] = None,
+                    from_date: Optional[str] = None, to_date: Optional[str] = None,
+                    search: Optional[str] = Query(None, max_length=100),
+                    status_filter: Optional[str] = Query(None, alias="status"),
                     user: dict = PURCHASE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
+    range_from = date_from or from_date
+    range_to = date_to or to_date
     rows = _rows(db, """
         SELECT purchase.id AS po_id, purchase.id AS purchase_order_id,
                purchase.purchase_order_number AS po_number, purchase.purchase_order_number AS order_number,
                purchase.order_date AS po_date, purchase.order_date,
                purchase.expected_delivery_date, purchase.status,
                purchase.supplier_account_id AS supplier_id, party.legal_name AS supplier_name,
-               purchase.grand_total AS total_amount, purchase.created_at, purchase.updated_at
+               purchase.grand_total AS total_amount,
+               COALESCE(lines.items_count,0) AS items_count,
+               count(*) OVER() AS _total,
+               purchase.created_at, purchase.updated_at
           FROM procurement.purchase_orders purchase
           JOIN parties.supplier_accounts account ON account.org_id=purchase.org_id AND account.id=purchase.supplier_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
+          LEFT JOIN LATERAL (
+              SELECT count(*) AS items_count
+                FROM procurement.purchase_order_lines line
+               WHERE line.org_id=purchase.org_id AND line.purchase_order_id=purchase.id
+                 AND line.line_kind='product'
+          ) lines ON true
          WHERE purchase.org_id=:org_id
            AND (:date_from IS NULL OR purchase.order_date >= CAST(:date_from AS date))
            AND (:date_to IS NULL OR purchase.order_date <= CAST(:date_to AS date))
+           AND (:status IS NULL OR purchase.status=:status)
+           AND (:search IS NULL OR purchase.purchase_order_number ILIKE '%%' || :search || '%%'
+                OR party.legal_name ILIKE '%%' || :search || '%%')
          ORDER BY purchase.order_date DESC, purchase.id DESC
          LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "date_from": date_from, "date_to": date_to,
-            "limit": limit, "offset": offset})
-    return {"orders": rows, "purchases": rows, "total": len(rows)}
+    """, {"org_id": org_id, "date_from": range_from, "date_to": range_to,
+            "search": search.strip() if search and search.strip() else None,
+            "status": status_filter, "limit": limit, "offset": offset})
+    total = int(rows[0].pop("_total", 0)) if rows else 0
+    for row in rows[1:]:
+        row.pop("_total", None)
+    return {"orders": rows, "purchases": rows, "total": total}
 
 
 @router.get("/supplier-invoices/")
 def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                       from_date: Optional[str] = None, to_date: Optional[str] = None,
+                      search: Optional[str] = Query(None, max_length=100),
+                      payment_status: Optional[Literal["paid", "partial", "pending", "overdue"]] = None,
                       user: dict = PURCHASE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
@@ -1505,21 +1701,218 @@ def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0
                invoice.igst_total AS igst_amount,
                invoice.cess_total AS cess_amount,
                invoice.grand_total AS invoice_total, invoice.grand_total AS total_amount,
+               GREATEST(invoice.grand_total-COALESCE(payable.outstanding_amount,invoice.grand_total),0) AS paid_amount,
+               COALESCE(payable.outstanding_amount,invoice.grand_total) AS pending_amount,
+               CASE
+                 WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<=0 THEN 'paid'
+                 WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<invoice.grand_total THEN 'partial'
+                 WHEN invoice.due_date<CURRENT_DATE THEN 'overdue'
+                 ELSE 'pending'
+               END AS payment_status,
+               COALESCE(lines.items_count,0) AS items_count,
+               count(*) OVER() AS _total,
                invoice.created_at, invoice.updated_at
           FROM procurement.supplier_invoices invoice
+          LEFT JOIN LATERAL (
+              SELECT GREATEST(item.principal_amount-COALESCE(applied.amount,0),0) AS outstanding_amount
+                FROM finance.accounting_events event
+                JOIN finance.open_items item
+                  ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+                 AND item.item_side='payable' AND item.status<>'reversed'
+                LEFT JOIN LATERAL (
+                    SELECT SUM(allocation.amount) AS amount
+                      FROM finance.allocations allocation
+                     WHERE allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+                       AND allocation.status='posted'
+                       AND allocation.reversal_of_allocation_id IS NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM finance.allocations reversal
+                            WHERE reversal.org_id=allocation.org_id
+                              AND reversal.reversal_of_allocation_id=allocation.id)
+                ) applied ON true
+               WHERE event.org_id=invoice.org_id AND event.supplier_invoice_id=invoice.id
+               ORDER BY item.id LIMIT 1
+          ) payable ON true
+          LEFT JOIN LATERAL (
+              SELECT count(*) AS items_count
+                FROM procurement.supplier_invoice_lines line
+               WHERE line.org_id=invoice.org_id AND line.supplier_invoice_id=invoice.id
+                 AND line.line_kind='product'
+          ) lines ON true
          WHERE invoice.org_id=:org_id
            AND (:from_date IS NULL OR invoice.supplier_invoice_date >= CAST(:from_date AS date))
            AND (:to_date IS NULL OR invoice.supplier_invoice_date <= CAST(:to_date AS date))
+           AND (:search IS NULL OR invoice.supplier_invoice_number ILIKE '%%' || :search || '%%'
+                OR invoice.supplier_legal_name_snapshot ILIKE '%%' || :search || '%%')
+           AND (:payment_status IS NULL OR CASE
+                 WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<=0 THEN 'paid'
+                 WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<invoice.grand_total THEN 'partial'
+                 WHEN invoice.due_date<CURRENT_DATE THEN 'overdue'
+                 ELSE 'pending' END=:payment_status)
          ORDER BY invoice.supplier_invoice_date DESC, invoice.id DESC
          LIMIT :limit OFFSET :skip
     """, {"org_id": org_id, "from_date": from_date, "to_date": to_date,
-            "limit": limit, "skip": skip})
-    return {"invoices": rows, "total": len(rows)}
+            "search": search.strip() if search and search.strip() else None,
+            "payment_status": payment_status, "limit": limit, "skip": skip})
+    total = int(rows[0].pop("_total", 0)) if rows else 0
+    for row in rows[1:]:
+        row.pop("_total", None)
+    return {"invoices": rows, "total": total}
+
+
+@router.get("/supplier-invoices/returnable/")
+def returnable_supplier_invoices(
+    supplier_id: Optional[UUID] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=100),
+    skip: int = Query(0, ge=0),
+    user: dict = PURCHASE_USER,
+    db: Session = Depends(get_db),
+):
+    """Posted supplier invoices with receipt allocations still eligible for return."""
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT invoice.id AS supplier_invoice_id, invoice.id AS invoice_id,
+               invoice.supplier_invoice_number, invoice.supplier_invoice_number AS invoice_number,
+               invoice.supplier_invoice_date AS invoice_date,
+               invoice.supplier_account_id AS supplier_id,
+               invoice.supplier_legal_name_snapshot AS supplier_name,
+               invoice.grand_total AS total_amount, invoice.grand_total AS invoice_amount,
+               count(*) OVER() AS _total
+          FROM procurement.supplier_invoices invoice
+         WHERE invoice.org_id=:org_id AND invoice.status='posted'
+           AND (:supplier_id IS NULL OR invoice.supplier_account_id=CAST(:supplier_id AS uuid))
+           AND (:from_date IS NULL OR invoice.supplier_invoice_date>=CAST(:from_date AS date))
+           AND (:to_date IS NULL OR invoice.supplier_invoice_date<=CAST(:to_date AS date))
+           AND EXISTS (
+               SELECT 1
+                 FROM procurement.supplier_invoice_lines invoice_line
+                 JOIN procurement.supplier_invoice_receipt_allocations allocation
+                   ON allocation.org_id=invoice_line.org_id
+                  AND allocation.supplier_invoice_line_id=invoice_line.id
+                 LEFT JOIN LATERAL (
+                     SELECT COALESCE(SUM(return_line.base_billed_quantity),0) AS billed,
+                            COALESCE(SUM(return_line.base_free_quantity),0) AS free
+                       FROM procurement.purchase_return_lines return_line
+                       JOIN procurement.purchase_returns return_header
+                         ON return_header.org_id=return_line.org_id
+                        AND return_header.id=return_line.purchase_return_id
+                        AND return_header.status='posted'
+                      WHERE return_line.org_id=allocation.org_id
+                        AND return_line.supplier_invoice_receipt_allocation_id=allocation.id
+                 ) returned ON true
+                WHERE invoice_line.org_id=invoice.org_id
+                  AND invoice_line.supplier_invoice_id=invoice.id
+                  AND (allocation.allocated_base_billed_quantity>returned.billed
+                       OR allocation.allocated_base_free_quantity>returned.free)
+           )
+         ORDER BY invoice.supplier_invoice_date DESC, invoice.id DESC
+         LIMIT :limit OFFSET :skip
+    """, {"org_id": org_id, "supplier_id": supplier_id, "from_date": from_date,
+            "to_date": to_date, "limit": limit, "skip": skip})
+    total = int(rows[0].pop("_total", 0)) if rows else 0
+    for row in rows[1:]:
+        row.pop("_total", None)
+    return {"invoices": rows, "total": total, "skip": skip, "limit": limit}
+
+
+@router.get("/purchase-returns/supplier-invoice/{invoice_id:uuid}/returnable-items")
+def returnable_supplier_invoice_items(
+    invoice_id: UUID,
+    user: dict = PURCHASE_USER,
+    db: Session = Depends(get_db),
+):
+    """Canonical receipt allocations remaining against one posted supplier invoice."""
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT allocation.id AS supplier_invoice_receipt_allocation_id,
+               invoice_line.id AS invoice_item_id,
+               receipt_line.id AS grn_item_id,
+               receipt_line.product_id, product.name AS product_name,
+               receipt_line.batch_id, batch.batch_number,
+               invoice_line.uom_code AS unit,
+               invoice_line.uom_code AS uom_code,
+               product.base_uom_code,
+               receipt_line.uom_code AS receipt_uom_code,
+               invoice_line.uom_conversion_factor,
+               invoice_line.quoted_unit_rate AS unit_price,
+               CASE
+                 WHEN invoice_line.line_discount_kind='percent' THEN invoice_line.line_discount_value
+                 WHEN invoice_line.gross_amount>0
+                   THEN round(invoice_line.line_discount_amount/invoice_line.gross_amount*100,6)
+                 ELSE 0
+               END AS discount_percent,
+               GREATEST(invoice_line.cgst_rate+invoice_line.sgst_rate,invoice_line.igst_rate)
+                 +invoice_line.cess_rate AS tax_percent,
+               product.hsn_code,
+               batch.expires_on AS expiry_date, batch.manufactured_on AS manufacturing_date,
+               allocation.allocated_base_billed_quantity AS allocated_base_billed_quantity,
+               allocation.allocated_base_free_quantity AS allocated_base_free_quantity,
+               returned.base_billed AS returned_base_billed_quantity,
+               returned.base_free AS returned_base_free_quantity,
+               GREATEST(allocation.allocated_base_billed_quantity-returned.base_billed,0)
+                 AS remaining_base_billed_quantity,
+               GREATEST(allocation.allocated_base_free_quantity-returned.base_free,0)
+                 AS remaining_base_free_quantity,
+               allocation.allocated_base_billed_quantity
+                 / NULLIF(invoice_line.uom_conversion_factor,0) AS invoice_quantity,
+               allocation.allocated_base_free_quantity
+                 / NULLIF(invoice_line.uom_conversion_factor,0) AS invoice_free_quantity,
+               returned.base_billed / NULLIF(invoice_line.uom_conversion_factor,0)
+                 AS already_returned,
+               returned.base_free / NULLIF(invoice_line.uom_conversion_factor,0)
+                 AS already_returned_free_quantity,
+               GREATEST(allocation.allocated_base_billed_quantity-returned.base_billed,0)
+                 / NULLIF(invoice_line.uom_conversion_factor,0) AS returnable_quantity,
+               GREATEST(allocation.allocated_base_free_quantity-returned.base_free,0)
+                 / NULLIF(invoice_line.uom_conversion_factor,0) AS returnable_free_quantity,
+               GREATEST(allocation.allocated_base_billed_quantity-returned.base_billed,0)
+                 / NULLIF(invoice_line.uom_conversion_factor,0) AS max_returnable_qty,
+               (allocation.allocated_base_billed_quantity>returned.base_billed
+                 OR allocation.allocated_base_free_quantity>returned.base_free) AS can_return
+          FROM procurement.supplier_invoice_lines invoice_line
+          JOIN procurement.supplier_invoices invoice
+            ON invoice.org_id=invoice_line.org_id AND invoice.id=invoice_line.supplier_invoice_id
+           AND invoice.status='posted'
+          JOIN procurement.supplier_invoice_receipt_allocations allocation
+            ON allocation.org_id=invoice_line.org_id
+           AND allocation.supplier_invoice_line_id=invoice_line.id
+          JOIN procurement.goods_receipt_lines receipt_line
+            ON receipt_line.org_id=allocation.org_id
+           AND receipt_line.id=allocation.goods_receipt_line_id
+          JOIN procurement.goods_receipts receipt
+            ON receipt.org_id=receipt_line.org_id AND receipt.id=receipt_line.goods_receipt_id
+           AND receipt.status='posted'
+          JOIN catalog.products product
+            ON product.org_id=receipt_line.org_id AND product.id=receipt_line.product_id
+          JOIN inventory.batches batch
+            ON batch.org_id=receipt_line.org_id AND batch.id=receipt_line.batch_id
+          LEFT JOIN LATERAL (
+              SELECT COALESCE(SUM(return_line.base_billed_quantity),0) AS base_billed,
+                     COALESCE(SUM(return_line.base_free_quantity),0) AS base_free
+                FROM procurement.purchase_return_lines return_line
+                JOIN procurement.purchase_returns return_header
+                  ON return_header.org_id=return_line.org_id
+                 AND return_header.id=return_line.purchase_return_id
+                 AND return_header.status='posted'
+               WHERE return_line.org_id=allocation.org_id
+                 AND return_line.supplier_invoice_receipt_allocation_id=allocation.id
+          ) returned ON true
+         WHERE invoice_line.org_id=:org_id AND invoice_line.supplier_invoice_id=:invoice_id
+           AND (allocation.allocated_base_billed_quantity>returned.base_billed
+                OR allocation.allocated_base_free_quantity>returned.base_free)
+         ORDER BY invoice_line.line_number, receipt.received_at, receipt_line.line_number
+    """, {"org_id": org_id, "invoice_id": invoice_id})
+    return {"items": rows}
 
 
 @router.get("/grn")
 @router.get("/grn/")
 def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
+                   search: Optional[str] = Query(None, max_length=100),
+                   status_filter: Optional[str] = Query(None, alias="status"),
+                   from_date: Optional[str] = None, to_date: Optional[str] = None,
                    user: dict = PURCHASE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
@@ -1529,14 +1922,34 @@ def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, g
                receipt.supplier_account_id AS supplier_id, party.legal_name AS supplier_name,
                receipt.supplier_challan_number AS invoice_number,
                receipt.supplier_challan_number AS supplier_invoice_number,
+               COALESCE(lines.items_count,0) AS items_count,
+               COALESCE(lines.total_amount,0) AS total_amount,
+               count(*) OVER() AS _total,
                receipt.created_at, receipt.updated_at
           FROM procurement.goods_receipts receipt
           JOIN parties.supplier_accounts account ON account.org_id=receipt.org_id AND account.id=receipt.supplier_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-         WHERE receipt.org_id=:org_id ORDER BY receipt.received_at DESC, receipt.id DESC
+          LEFT JOIN LATERAL (
+              SELECT count(*) AS items_count, SUM(line.extended_cost) AS total_amount
+                FROM procurement.goods_receipt_lines line
+               WHERE line.org_id=receipt.org_id AND line.goods_receipt_id=receipt.id
+          ) lines ON true
+         WHERE receipt.org_id=:org_id
+           AND (:from_date IS NULL OR receipt.received_at::date>=CAST(:from_date AS date))
+           AND (:to_date IS NULL OR receipt.received_at::date<=CAST(:to_date AS date))
+           AND (:status IS NULL OR receipt.status=:status)
+           AND (:search IS NULL OR receipt.goods_receipt_number ILIKE '%%' || :search || '%%'
+                OR party.legal_name ILIKE '%%' || :search || '%%'
+                OR receipt.supplier_challan_number ILIKE '%%' || :search || '%%')
+         ORDER BY receipt.received_at DESC, receipt.id DESC
          LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "limit": limit, "skip": skip})
-    return {"grns": rows, "total": len(rows)}
+    """, {"org_id": org_id, "search": search.strip() if search and search.strip() else None,
+            "status": status_filter, "from_date": from_date, "to_date": to_date,
+            "limit": limit, "skip": skip})
+    total = int(rows[0].pop("_total", 0)) if rows else 0
+    for row in rows[1:]:
+        row.pop("_total", None)
+    return {"grns": rows, "total": total}
 
 
 @router.get("/sale-returns/")
@@ -1743,6 +2156,256 @@ def chart_of_accounts(user: dict = FINANCE_USER, db: Session = Depends(get_db)):
                status='active' AS is_active, status
           FROM finance.accounts WHERE org_id=:org_id ORDER BY code, id
     """, {"org_id": org_id})
+
+
+def _canonical_receivable_rows(
+    db: Session,
+    org_id: UUID,
+    user: Dict[str, Any],
+) -> list[dict]:
+    """Return visible invoice receivables after effective allocations."""
+    branch_ids = [UUID(str(value)) for value in (user.get("branch_ids") or [])]
+    organization_scope = (
+        user.get("is_admin") is True
+        or str(user.get("data_access_level") or "").lower() == "organization"
+        or str(user.get("branch_scope") or "").lower() in {"all", "organization"}
+    )
+    return _rows(db, """
+        WITH effective_allocations AS (
+            SELECT allocation.org_id, allocation.open_item_id,
+                   COALESCE(SUM(allocation.amount), 0) AS allocated_amount,
+                   MAX(allocation.allocation_date) AS last_payment_date
+              FROM finance.allocations allocation
+             WHERE allocation.org_id=:org_id
+               AND allocation.status='posted'
+               AND allocation.reversal_of_allocation_id IS NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM finance.allocations reversal
+                    WHERE reversal.org_id=allocation.org_id
+                      AND reversal.reversal_of_allocation_id=allocation.id
+               )
+             GROUP BY allocation.org_id, allocation.open_item_id
+        ), receivables AS (
+            SELECT item.org_id, item.id AS open_item_id,
+                   invoice.id AS sales_invoice_id, item.party_id,
+                   item.document_number, item.document_date, item.due_date,
+                   item.principal_amount,
+                   GREATEST(item.principal_amount-COALESCE(applied.allocated_amount,0),0)
+                     AS outstanding_amount,
+                   GREATEST(CURRENT_DATE-item.due_date,0) AS days_overdue,
+                   applied.last_payment_date
+              FROM finance.open_items item
+              JOIN finance.accounting_events event
+                ON event.org_id=item.org_id AND event.id=item.accounting_event_id
+               AND event.sales_invoice_id IS NOT NULL
+              JOIN sales.invoices invoice
+                ON invoice.org_id=event.org_id AND invoice.id=event.sales_invoice_id
+               AND invoice.status='posted'
+              LEFT JOIN effective_allocations applied
+                ON applied.org_id=item.org_id AND applied.open_item_id=item.id
+             WHERE item.org_id=:org_id AND item.item_side='receivable'
+               AND item.status<>'reversed'
+               AND (:organization_scope
+                    OR invoice.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+               AND item.principal_amount-COALESCE(applied.allocated_amount,0)>0
+        )
+        SELECT account.id AS customer_id, party.id AS party_id,
+               party.legal_name AS customer_name,
+               COALESCE(contact.phone,'') AS phone,
+               COALESCE(contact.email,'') AS email,
+               COALESCE(address.location,'') AS location,
+               account.credit_limit,
+               SUM(receivable.outstanding_amount) AS total_outstanding,
+               SUM(receivable.outstanding_amount)
+                   FILTER (WHERE receivable.days_overdue>0) AS overdue_amount,
+               COUNT(*) AS invoice_count,
+               COUNT(*) FILTER (WHERE receivable.days_overdue>0) AS overdue_invoices,
+               MAX(receivable.days_overdue) AS max_overdue_days,
+               MIN(receivable.document_date) AS oldest_invoice_date,
+               MAX(receivable.last_payment_date) AS last_payment_date,
+               SUM(receivable.outstanding_amount)
+                   FILTER (WHERE receivable.days_overdue=0) AS current,
+               COUNT(*) FILTER (WHERE receivable.days_overdue=0) AS current_count,
+               SUM(receivable.outstanding_amount)
+                   FILTER (WHERE receivable.days_overdue BETWEEN 1 AND 30) AS days_1_30,
+               COUNT(*) FILTER (WHERE receivable.days_overdue BETWEEN 1 AND 30) AS days_1_30_count,
+               SUM(receivable.outstanding_amount)
+                   FILTER (WHERE receivable.days_overdue BETWEEN 31 AND 60) AS days_31_60,
+               COUNT(*) FILTER (WHERE receivable.days_overdue BETWEEN 31 AND 60) AS days_31_60_count,
+               SUM(receivable.outstanding_amount)
+                   FILTER (WHERE receivable.days_overdue BETWEEN 61 AND 90) AS days_61_90,
+               COUNT(*) FILTER (WHERE receivable.days_overdue BETWEEN 61 AND 90) AS days_61_90_count,
+               SUM(receivable.outstanding_amount)
+                   FILTER (WHERE receivable.days_overdue>90) AS over_90,
+               COUNT(*) FILTER (WHERE receivable.days_overdue>90) AS over_90_count,
+               jsonb_agg(jsonb_build_object(
+                   'invoice_id', receivable.sales_invoice_id,
+                   'open_item_id', receivable.open_item_id,
+                   'invoice_number', receivable.document_number,
+                   'invoice_date', receivable.document_date,
+                   'due_date', receivable.due_date,
+                   'original_amount', receivable.principal_amount,
+                   'paid_amount', receivable.principal_amount-receivable.outstanding_amount,
+                   'current_outstanding', receivable.outstanding_amount,
+                   'days_overdue', receivable.days_overdue,
+                   'aging_bucket', CASE
+                       WHEN receivable.days_overdue=0 THEN 'current'
+                       WHEN receivable.days_overdue<=30 THEN '1-30'
+                       WHEN receivable.days_overdue<=60 THEN '31-60'
+                       WHEN receivable.days_overdue<=90 THEN '61-90'
+                       ELSE 'over_90' END,
+                   'status', CASE
+                       WHEN receivable.days_overdue>0 THEN 'overdue'
+                       WHEN receivable.outstanding_amount<receivable.principal_amount THEN 'partial'
+                       ELSE 'pending' END
+               ) ORDER BY receivable.due_date, receivable.open_item_id) AS invoices
+          FROM receivables receivable
+          JOIN parties.parties party
+            ON party.org_id=receivable.org_id AND party.id=receivable.party_id
+          JOIN LATERAL (
+              SELECT customer.id, customer.credit_limit
+                FROM parties.customer_accounts customer
+               WHERE customer.org_id=party.org_id AND customer.party_id=party.id
+               ORDER BY customer.created_at, customer.id LIMIT 1
+          ) account ON true
+          LEFT JOIN LATERAL (
+              SELECT party_contact.phone, party_contact.email
+                FROM parties.contacts party_contact
+               WHERE party_contact.org_id=party.org_id
+                 AND party_contact.party_id=party.id AND party_contact.status='active'
+               ORDER BY party_contact.is_primary DESC, party_contact.created_at,
+                        party_contact.id LIMIT 1
+          ) contact ON true
+          LEFT JOIN LATERAL (
+              SELECT concat_ws(', ', party_address.line1, party_address.city,
+                                      party_address.state_code) AS location
+                FROM parties.addresses party_address
+               WHERE party_address.org_id=party.org_id
+                 AND party_address.party_id=party.id AND party_address.status='active'
+               ORDER BY party_address.is_primary DESC, party_address.created_at,
+                        party_address.id LIMIT 1
+          ) address ON true
+         WHERE party.org_id=:org_id
+         GROUP BY account.id, party.id, party.legal_name, contact.phone,
+                  contact.email, address.location, account.credit_limit
+         ORDER BY total_outstanding DESC, party.legal_name, party.id
+    """, {
+        "org_id": org_id,
+        "organization_scope": organization_scope,
+        "branch_ids": branch_ids,
+    })
+
+
+def _amount(rows: list[dict], key: str):
+    return sum((row.get(key) or 0 for row in rows), 0)
+
+
+def _count(rows: list[dict], key: str) -> int:
+    return sum((int(row.get(key) or 0) for row in rows), 0)
+
+
+@router.get("/ledger/aging")
+def canonical_ledger_aging(
+    party_type: Literal["customer", "supplier"] = Query("customer"),
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    if party_type == "supplier":
+        return {"party_type": party_type, "aging_data": [], "summary": {
+            "total": 0, "current": 0, "overdue": 0, "party_count": 0,
+            "1_30": 0, "31_60": 0, "61_90": 0, "over_90": 0,
+        }}
+
+    rows = _canonical_receivable_rows(db, org_id, user)
+    return {"party_type": party_type, "aging_data": rows, "summary": {
+        "total": _amount(rows, "total_outstanding"),
+        "current": _amount(rows, "current"),
+        "overdue": _amount(rows, "overdue_amount"),
+        "party_count": len(rows),
+        "1_30": _amount(rows, "days_1_30"),
+        "31_60": _amount(rows, "days_31_60"),
+        "61_90": _amount(rows, "days_61_90"),
+        "over_90": _amount(rows, "over_90"),
+        "current_count": _count(rows, "current_count"),
+        "1_30_count": _count(rows, "days_1_30_count"),
+        "31_60_count": _count(rows, "days_31_60_count"),
+        "61_90_count": _count(rows, "days_61_90_count"),
+        "over_90_count": _count(rows, "over_90_count"),
+    }}
+
+
+@router.get("/collection-center/collection/aging-data")
+def canonical_collection_aging(
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    rows = _canonical_receivable_rows(db, org_id, user)
+    collection_rows = _rows(db, """
+        SELECT COALESCE(SUM(amount) FILTER (
+                   WHERE payment_date=CURRENT_DATE),0) AS today_collections,
+               COALESCE(SUM(amount) FILTER (
+                   WHERE payment_date>=CURRENT_DATE-interval '6 days'),0) AS week_collections,
+               COALESCE(SUM(amount) FILTER (
+                   WHERE payment_date>=date_trunc('month',CURRENT_DATE)::date),0)
+                   AS month_collections
+          FROM finance.payments
+         WHERE org_id=:org_id AND direction='receipt' AND status='posted'
+           AND reversal_of_payment_id IS NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM finance.payments reversal
+                WHERE reversal.org_id=payments.org_id
+                  AND reversal.reversal_of_payment_id=payments.id
+           )
+    """, {"org_id": org_id})
+    collections = collection_rows[0] if collection_rows else {}
+    total_outstanding = _amount(rows, "total_outstanding")
+    month_collections = collections.get("month_collections") or 0
+    denominator = total_outstanding + month_collections
+    efficiency = round(float(month_collections / denominator * 100), 1) if denominator else 0
+
+    parties = []
+    for row in rows:
+        outstanding = row.get("total_outstanding") or 0
+        overdue_days = int(row.get("max_overdue_days") or 0)
+        credit_limit = row.get("credit_limit") or 0
+        utilization = round(float(outstanding / credit_limit * 100), 1) if credit_limit else 0
+        risk_score = min(100, (40 if overdue_days > 90 else 30 if overdue_days > 60
+                               else 20 if overdue_days > 30 else 10 if overdue_days > 0 else 0)
+                         + (25 if utilization > 90 else 20 if utilization > 75
+                            else 10 if utilization > 50 else 0))
+        parties.append({
+            "id": row["customer_id"], "partyId": row["party_id"],
+            "name": row["customer_name"], "phone": row.get("phone") or "",
+            "email": row.get("email") or "", "location": row.get("location") or "",
+            "outstandingAmount": outstanding,
+            "overdueAmount": row.get("overdue_amount") or 0,
+            "daysOverdue": overdue_days, "creditLimit": credit_limit,
+            "creditUtilization": utilization,
+            "oldestInvoiceDate": row.get("oldest_invoice_date"),
+            "lastPayment": row.get("last_payment_date"),
+            "lastFollowUp": None, "promiseDate": None, "assignedAgent": None,
+            "riskScore": risk_score,
+            "paymentHistory": "Poor" if overdue_days > 90 else "Average" if overdue_days > 30 else "Good",
+            "collectionSuccess": max(0, 100-risk_score),
+            "agingBreakdown": [
+                {"range": "Current", "amount": row.get("current") or 0},
+                {"range": "1-30", "amount": row.get("days_1_30") or 0},
+                {"range": "31-60", "amount": row.get("days_31_60") or 0},
+                {"range": "61-90", "amount": row.get("days_61_90") or 0},
+                {"range": "90+", "amount": row.get("over_90") or 0},
+            ],
+        })
+
+    return {"summary": {
+        "totalOutstanding": total_outstanding,
+        "overdueAmount": _amount(rows, "overdue_amount"),
+        "currentDayCollections": collections.get("today_collections") or 0,
+        "currentWeekCollections": collections.get("week_collections") or 0,
+        "currentMonthCollections": month_collections,
+        "collectionEfficiency": efficiency,
+    }, "parties": parties}
 
 
 def _sales_daily(db: Session, params: dict) -> list[dict]:
