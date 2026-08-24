@@ -8,6 +8,7 @@ import { ModuleHeader, AddressForm, DocumentFooter } from '../../../global';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { indianStateName } from '../../../../utils/indianStates';
+import { applySelectedDeliveryAddress } from '../utils/invoiceAddressSelection';
 
 // Shared Types
 import { Customer, Invoice, Payment } from '../types/invoiceTypes';
@@ -118,11 +119,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                 companyInfo?.state, addrState,
                                                 companyInfo?.gst_number, selectedCustomer?.gst_number
                                             );
-                                            setInvoice(prev => ({
-                                                ...prev,
-                                                shipping_address_data: addressData,
-                                                gst_type: gstType
-                                            } as Invoice));
+                                            setInvoice(prev => applySelectedDeliveryAddress(
+                                                prev,
+                                                addressData as Record<string, unknown>,
+                                                addrState,
+                                                gstType,
+                                            ));
                                         }}
                                     />
                                 ) : (
