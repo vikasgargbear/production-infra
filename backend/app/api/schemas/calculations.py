@@ -81,7 +81,7 @@ class PurchaseCalculationRequest(BaseModel):
 
 class ChallanCalculationRequest(BaseModel):
     customer_id: EntityId
-    gst_type: GSTType = "CGST/SGST"
+    gst_type: GSTType
     items: List[CalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
 

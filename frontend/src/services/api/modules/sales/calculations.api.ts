@@ -75,6 +75,7 @@ export interface SalesOrderCalculationRequest {
 
 export interface ChallanCalculationRequest {
     customer_id: number | string;
+    gst_type: 'CGST/SGST' | 'IGST';
     items: InvoiceCalculationLine[];
     freight_charges?: number | string;
 }

@@ -1,7 +1,10 @@
 import pytest
+from pydantic import ValidationError
+from types import SimpleNamespace
 
 from app.api.services.sales.challan.service import ChallanService
 from app.api.schemas.calculations import ChallanCalculationRequest
+from app.api.routes.calculations import preview_challan_totals
 from app.main import app
 from uuid import UUID, uuid4
 
@@ -14,6 +17,10 @@ def test_challan_preview_is_typed_authenticated_and_not_mcp_exported():
     assert "x-erp-tool-name" not in operation
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
     assert request_schema["$ref"].endswith("/ChallanCalculationRequest")
+    challan_request = schema["components"]["schemas"]["ChallanCalculationRequest"]
+    assert challan_request["additionalProperties"] is False
+    assert "gst_type" in challan_request["required"]
+    assert challan_request["properties"]["gst_type"]["enum"] == ["CGST/SGST", "IGST"]
     response_schema = operation["responses"]["200"]["content"][
         "application/json"
     ]["schema"]
@@ -82,6 +89,56 @@ def test_challan_accepts_uuid_strings_and_values_free_supply_by_treatment():
     assert result["final_amount"] == 236.0
     assert result["calculated_items"][0]["quantity"] == 0.0
     assert result["calculated_items"][0]["free_quantity"] == 2.0
+
+
+def test_challan_uuid_request_requires_explicit_document_gst_type():
+    payload = {
+        "customer_id": str(uuid4()),
+        "items": [{
+            "product_id": str(uuid4()),
+            "quantity": 1,
+            "unit_price": 100,
+            "gst_percent": 18,
+        }],
+    }
+
+    with pytest.raises(ValidationError, match="gst_type"):
+        ChallanCalculationRequest.model_validate(payload)
+
+    with pytest.raises(ValidationError, match="Input should be 'CGST/SGST' or 'IGST'"):
+        ChallanCalculationRequest.model_validate({**payload, "gst_type": "AUTO"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gst_type", ["CGST/SGST", "IGST"])
+async def test_challan_uuid_route_uses_explicit_document_gst_type(gst_type):
+    request = ChallanCalculationRequest.model_validate({
+        "customer_id": str(uuid4()),
+        "gst_type": gst_type,
+        "items": [{
+            "product_id": str(uuid4()),
+            "quantity": 1,
+            "unit_price": 100,
+            "gst_percent": 18,
+        }],
+    })
+
+    response = await preview_challan_totals.__wrapped__(
+        request,
+        {},
+        db=None,
+        context=SimpleNamespace(org_id=uuid4(), primary_branch_id=uuid4()),
+    )
+
+    assert response.gst_type == gst_type
+    if gst_type == "IGST":
+        assert response.totals.igst_amount == 18
+        assert response.totals.cgst_amount == 0
+        assert response.totals.sgst_amount == 0
+    else:
+        assert response.totals.igst_amount == 0
+        assert response.totals.cgst_amount == 9
+        assert response.totals.sgst_amount == 9
 
 
 def test_challan_mixed_billed_and_free_excludes_free_by_default():

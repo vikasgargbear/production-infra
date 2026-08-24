@@ -33,6 +33,7 @@ export async function calculateChallanPreview(challan: Challan, isOnline: boolea
     }));
     const response = await challanCalculationsApi.preview({
         customer_id: customerId,
+        gst_type: challan.gst_type,
         items,
         freight_charges: numeric(challan.freight_charges)
     });

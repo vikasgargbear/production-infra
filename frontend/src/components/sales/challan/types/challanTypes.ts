@@ -156,7 +156,7 @@ export interface Challan {
     total_amount: number;
     taxable_amount?: number;
     total_tax_amount?: number;
-    gst_type?: 'CGST/SGST' | 'IGST';
+    gst_type: 'CGST/SGST' | 'IGST';
 
     // Notes
     notes: string;
@@ -297,5 +297,6 @@ export const getInitialChallan = (): Challan => ({
     total_weight: 0,
     total_quantity: 0,
     total_amount: 0,
+    gst_type: 'CGST/SGST',
     notes: ''
 });
