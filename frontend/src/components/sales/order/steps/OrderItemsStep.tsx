@@ -14,7 +14,7 @@ import {
     StandardDatePicker
 } from '../../../global';
 import type { Order, OrderItem } from '../../../../types/models';
-import type { Customer, Product } from '../../../../types/models';
+import type { Customer } from '../../../../types/models';
 import type { ProductSearchRef } from '../../../global/search/ProductSearch';
 
 // Using canonical types from /types/models - no local duplicates
@@ -26,7 +26,7 @@ interface OrderItemsStepProps {
     message: string;
     messageType: string;
     onCustomerSelect: (customer: Customer | null) => Promise<void>;
-    onProductSelect: (product: Product) => void;
+    onProductSelect: (product: any) => void;
     onUpdateItem: (index: number, field: string, value: unknown) => void;
     onRemoveItem: (index: number) => void;
     onShowCustomerModal: () => void;
@@ -137,6 +137,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     ref={productSearchRef}
                     onAddItem={onProductSelect as any}
                     onCreateProduct={onCreateProduct as any}
+                    enforceFefo
                     tabIndex={2}
                 />
             </div>

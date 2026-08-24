@@ -4,6 +4,17 @@ import {
     prepareSelectedProductForInvoice,
 } from './invoiceItemUtils';
 
+const selectedBatch = {
+    batch_id: '33333333-3333-4333-8333-333333333333',
+    batch_number: 'BATCH-1',
+    quantity_available: '99999999999999.123456',
+    sale_price_per_unit: '9007199254740993.1250',
+    unit_price: '9007199254740993.1250',
+    mrp_per_unit: '9007199254740993.2500',
+    mrp: '9007199254740993.2500',
+    gst_percent: '12.000000',
+};
+
 describe('prepareItemForInvoice free-supply treatment', () => {
     it.each([
         'included_at_unit_rate',
@@ -12,23 +23,20 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         const item = prepareItemForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Canonical item',
-            batch_id: '33333333-3333-4333-8333-333333333333',
-            batch_number: 'BATCH-1',
-            quantity: 2,
-            free_quantity: 1,
+            ...selectedBatch,
+            quantity: '2.000000',
+            free_quantity: '1.000000',
             free_supply_tax_treatment: treatment,
-            unit_price: 100,
-            gst_percent: 18,
         });
 
         expect(item).toEqual(expect.objectContaining({
             product_id: '22222222-2222-4222-8222-222222222222',
             batch_id: '33333333-3333-4333-8333-333333333333',
-            quantity: 2,
-            free_quantity: 1,
+            quantity: '2.000000',
+            free_quantity: '1.000000',
             free_supply_tax_treatment: treatment,
-            unit_price: 100,
-            gst_percent: 18,
+            unit_price: '9007199254740993.1250',
+            gst_percent: '12.000000',
         }));
     });
 
@@ -36,11 +44,11 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         const item = prepareSelectedProductForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Canonical item',
-            unit_price: 100,
+            ...selectedBatch,
         });
 
-        expect(item.quantity).toBe(1);
-        expect(item.free_quantity).toBe(0);
+        expect(item.quantity).toBe('1.000000');
+        expect(item.free_quantity).toBe('0.000000');
         expect(item.free_supply_tax_treatment).toBe('excluded_from_taxable_value');
     });
 
@@ -48,31 +56,35 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         const item = prepareSelectedProductForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Explicit selection quantity',
-            quantity: 0,
-            free_quantity: 0.5,
-            unit_price: 100,
+            ...selectedBatch,
+            quantity: '0.100000',
+            free_quantity: '0.200000',
         });
 
-        expect(item.quantity).toBe(0);
-        expect(item.free_quantity).toBe(0.5);
+        expect(item.quantity).toBe('0.100000');
+        expect(item.free_quantity).toBe('0.200000');
     });
 
     it.each([
         ['selected batch', {
             batch_id: '33333333-3333-4333-8333-333333333333',
-            quantity_available: '2.75',
-        }, 2.75],
+            quantity_available: '2.750000',
+            sale_price_per_unit: '100.1250',
+            mrp_per_unit: '120.2500',
+        }, '2.750000'],
         ['best batch', {
             best_batch: {
                 batch_id: '33333333-3333-4333-8333-333333333333',
-                quantity_available: '4.125',
+                quantity_available: '4.125000',
+                sale_price_per_unit: '100.1250',
+                mrp_per_unit: '120.2500',
             },
-        }, 4.125],
+        }, '4.125000'],
     ])('preserves exact fractional availability from the %s', (_label, source, expected) => {
         const item = prepareSelectedProductForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Fractional stock item',
-            unit_price: 100,
+            gst_percent: '12.000000',
             ...source,
         });
 
@@ -84,9 +96,20 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Invalid stock item',
             batch_id: '33333333-3333-4333-8333-333333333333',
-            quantity_available: '-0.25',
-            unit_price: 100,
-        })).toThrow('Available quantity must be a finite non-negative number');
+            quantity_available: '-0.250000',
+            sale_price_per_unit: '100.0000',
+            mrp_per_unit: '120.0000',
+            gst_percent: '12.000000',
+        })).toThrow(/plain decimal string/);
+    });
+
+    it('rejects a JSON-number batch decimal at the authoritative selection boundary', () => {
+        expect(() => prepareSelectedProductForInvoice({
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Unsafe numeric stock item',
+            ...selectedBatch,
+            quantity_available: 0.1,
+        })).toThrow(/must remain an exact decimal string/);
     });
 
     it.each([
@@ -96,18 +119,16 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         const item = prepareItemForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Free-only canonical item',
-            batch_id: '33333333-3333-4333-8333-333333333333',
+            ...selectedBatch,
             batch_number: 'BATCH-FREE',
-            quantity: 0,
-            free_quantity: 2.5,
+            quantity: '0.000000',
+            free_quantity: '2.500000',
             free_supply_tax_treatment: treatment,
-            unit_price: 100,
-            gst_percent: 18,
         });
 
         expect(item).toEqual(expect.objectContaining({
-            quantity: 0,
-            free_quantity: 2.5,
+            quantity: '0.000000',
+            free_quantity: '2.500000',
             free_supply_tax_treatment: treatment,
         }));
     });
@@ -116,15 +137,15 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         const item = prepareItemForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Fractional canonical item',
-            batch_id: '33333333-3333-4333-8333-333333333333',
+            ...selectedBatch,
             batch_number: 'BATCH-FRACTIONAL',
-            quantity: 0.375,
-            free_quantity: 1.625,
-            unit_price: 100,
+            quantity: '0.123456',
+            free_quantity: '1.625000',
         });
 
-        expect(item.quantity).toBe(0.375);
-        expect(item.free_quantity).toBe(1.625);
+        expect(item.quantity).toBe('0.123456');
+        expect(item.free_quantity).toBe('1.625000');
+        expect(item.unit_price).toBe('9007199254740993.1250');
     });
 
     it('preserves imported dispatch fractional strings without a Number boundary', () => {
@@ -133,6 +154,7 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             product_name: 'Fractional dispatch item',
             batch_id: '33333333-3333-4333-8333-333333333333',
             batch_number: 'BATCH-FRACTIONAL',
+            source_line_id: '44444444-4444-4444-8444-444444444444',
             quantity: '1.125000',
             free_quantity: '0.250000',
             base_billed_quantity: '11.250000',

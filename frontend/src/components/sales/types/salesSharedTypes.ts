@@ -30,6 +30,14 @@ export type CanonicalSourceDocumentKind =
     | 'delivery_challan'
     | 'sales_invoice';
 
+/**
+ * Decimal values in an active canonical sales draft stay as strings.  The
+ * number member exists only for operator-entered safe-integer defaults while
+ * a draft is being edited; API-owned fractions must never cross through an
+ * IEEE-754 conversion.
+ */
+export type SalesDecimal = string | number;
+
 // ==================== EMPLOYEE (SHARED) ====================
 
 /** Employee / Sales Representative / M.R. */
@@ -85,8 +93,8 @@ export interface BaseLineItem {
     expiry_date?: string | null;
 
     // Quantity
-    quantity: number;
-    free_quantity?: number;
+    quantity: SalesDecimal;
+    free_quantity?: SalesDecimal;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     unit?: string;
 
@@ -101,25 +109,25 @@ export interface BaseLineItem {
     invoice_dispatch_allocation_id?: string | null;
     dispatch_id?: string | null;
     dispatch_line_id?: string | null;
-    base_billed_quantity?: number;
-    base_free_quantity?: number;
-    source_billed_quantity?: number;
-    source_free_quantity?: number;
+    base_billed_quantity?: SalesDecimal;
+    base_free_quantity?: SalesDecimal;
+    source_billed_quantity?: SalesDecimal;
+    source_free_quantity?: SalesDecimal;
 
     // Pricing - backend uses unit_price and mrp
-    mrp?: number;
-    unit_price?: number;
-    discount_percent?: number;
+    mrp?: SalesDecimal;
+    unit_price?: SalesDecimal;
+    discount_percent?: SalesDecimal;
 
     // Tax
-    gst_percent?: number;
+    gst_percent?: SalesDecimal;
     hsn_code?: string;
     cgst_amount?: number;
     sgst_amount?: number;
     igst_amount?: number;
 
     // Totals - backend uses line_total
-    line_total?: number;
+    line_total?: SalesDecimal;
 }
 
 // ==================== TRANSPORT DETAILS (SHARED) ====================

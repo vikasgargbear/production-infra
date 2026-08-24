@@ -200,6 +200,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                             </div>
                             <ProductSearch
                                 onAddItem={handleProductSelect}
+                                enforceFefo
                                 onCreateProduct={(productName: string) => {
                                     setNewProductName(productName || '');
                                     setShowCreateProduct(true);

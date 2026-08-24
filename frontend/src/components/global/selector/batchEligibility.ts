@@ -1,8 +1,10 @@
+import { compareExactDecimals, exactDecimalUnits } from '../../../utils/exactDecimal';
+
 export interface BatchEligibilityFacts {
     batch_id?: string | null;
     batch_number?: string | null;
     batch_status?: string | null;
-    quantity_available: number;
+    quantity_available: string;
     days_to_expiry?: number | null;
     expiry_date?: string | null;
     location_id?: string | null;
@@ -28,15 +30,22 @@ export const batchDisabledReason = (batch: BatchEligibilityFacts): string | null
         && batch.days_to_expiry <= 0) {
         return 'Expired batch cannot be sold';
     }
-    if (!Number.isFinite(batch.quantity_available) || batch.quantity_available <= 0) {
+    try {
+        if (exactDecimalUnits(batch.quantity_available, 'Batch available quantity', {
+            scale: 6,
+            maximumWholeDigits: 14,
+        }) <= 0n) {
+            return 'No saleable stock is available';
+        }
+    } catch {
         return 'No saleable stock is available';
     }
     return null;
 };
 
-const expiryTime = (batch: BatchEligibilityFacts): number => {
-    const parsed = Date.parse(String(batch.expiry_date || ''));
-    return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+const canonicalExpiry = (batch: BatchEligibilityFacts): string => {
+    const value = String(batch.expiry_date || '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '9999-12-31';
 };
 
 /**
@@ -48,8 +57,8 @@ export const compareBatchesByCanonicalFefo = (
     left: BatchEligibilityFacts,
     right: BatchEligibilityFacts,
 ): number => {
-    const leftExpiry = expiryTime(left);
-    const rightExpiry = expiryTime(right);
+    const leftExpiry = canonicalExpiry(left);
+    const rightExpiry = canonicalExpiry(right);
     if (leftExpiry < rightExpiry) return -1;
     if (leftExpiry > rightExpiry) return 1;
 
@@ -78,10 +87,20 @@ export const batchSelectionDisabledReason = (
         .sort(compareBatchesByCanonicalFefo);
     const earliest = eligibleAtLocation[0];
 
-    if (!earliest || expiryTime(batch) === expiryTime(earliest)) return null;
+    if (!earliest || canonicalExpiry(batch) === canonicalExpiry(earliest)) return null;
 
     const earliestIdentity = earliest.batch_number
         ? `batch ${earliest.batch_number}`
         : 'the earliest-expiry batch';
     return `FEFO requires ${earliestIdentity} (expires ${earliest.expiry_date}) first`;
 };
+
+export const compareBatchAvailability = (
+    left: BatchEligibilityFacts,
+    right: BatchEligibilityFacts,
+): -1 | 0 | 1 => compareExactDecimals(
+    left.quantity_available,
+    right.quantity_available,
+    'Batch availability',
+    { scale: 6, maximumWholeDigits: 14 },
+);

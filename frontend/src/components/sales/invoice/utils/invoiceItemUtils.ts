@@ -10,8 +10,8 @@ import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import type { CanonicalImportLine } from '../../utils/documentImport';
 
 type SelectedProductInput = Omit<ProductInput, 'quantity' | 'free_quantity'> & {
-    quantity?: number;
-    free_quantity?: number;
+    quantity?: string | number;
+    free_quantity?: string | number;
 };
 
 /**
@@ -48,16 +48,32 @@ export const prepareImportedItemsForInvoice = (
         value === undefined || value === null || value === ''
             ? undefined
             : normalizeExactDecimal(value, label, { scale: 6 });
+    const billedQuantity = normalizeExactDecimal(
+        exact.quantity,
+        `Imported item ${index + 1} billed quantity`,
+        { scale: 6 },
+    );
+    const freeQuantity = normalizeExactDecimal(
+        exact.free_quantity,
+        `Imported item ${index + 1} free quantity`,
+        { scale: 6 },
+    );
+    const unitPrice = normalizeExactDecimal(
+        exact.unit_price ?? exact.sale_price,
+        `Imported item ${index + 1} unit rate`,
+        { scale: 4 },
+    );
     const mapped = prepareItemForInvoice({
         ...product as ProductInput,
-        quantity: 0,
-        free_quantity: 0,
+        quantity: billedQuantity,
+        free_quantity: freeQuantity,
+        unit_price: unitPrice,
     });
     return {
         ...mapped,
-        quantity: normalizeExactDecimal(exact.quantity, `Imported item ${index + 1} billed quantity`, { scale: 6 }),
-        free_quantity: normalizeExactDecimal(exact.free_quantity, `Imported item ${index + 1} free quantity`, { scale: 6 }),
-        unit_price: normalizeExactDecimal(exact.unit_price ?? exact.sale_price, `Imported item ${index + 1} unit rate`, { scale: 4 }),
+        quantity: billedQuantity,
+        free_quantity: freeQuantity,
+        unit_price: unitPrice,
         discount_percent: normalizeExactDecimal(exact.discount_percent ?? 0, `Imported item ${index + 1} discount`, { scale: 6 }),
         available_quantity: optionalQuantity(exact.available_quantity, `Imported item ${index + 1} availability`),
         base_billed_quantity: optionalQuantity(exact.base_billed_quantity, `Imported item ${index + 1} base billed quantity`),

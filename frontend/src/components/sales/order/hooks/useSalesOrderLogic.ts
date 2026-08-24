@@ -14,6 +14,7 @@ import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 import type { ImportData } from '../../../global/modals/DocumentImportModal';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { addExactDecimals, normalizeExactDecimal } from '../../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -43,20 +44,21 @@ interface CompanyInfo {
 }
 
 // Using canonical Product type from /types/models - extended with UI fields
-type ProductInput = Product & {
+type ProductInput = Omit<Product, 'mrp' | 'sale_price' | 'gst_percent'> & {
     branch_id?: string;
     location_id?: string;
     uom_conversion_id?: string;
     batch_id?: number | string;
     batch_number?: string;
-    quantity?: number;
+    quantity?: string | number;
     unit?: string;
     uom?: string;
     pack_size?: string;
     pack_type?: string;
-    mrp?: number;
-    sale_price?: number;
-    unit_price?: number;
+    mrp?: string | number;
+    sale_price?: string | number;
+    unit_price?: string | number;
+    gst_percent?: string | number;
 };
 
 export interface UseSalesOrderLogicReturn {
@@ -361,21 +363,35 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
     // Handle product selection
     const handleProductSelect = useCallback((product: ProductInput): void => {
-        const existingItem = order.items.find(item => item.product_id === product.product_id);
+        const existingItem = order.items.find(item =>
+            item.product_id === product.product_id && item.batch_id === product.batch_id
+        );
 
         if (existingItem) {
             const updatedItems = order.items.map(item =>
-                item.product_id === product.product_id
-                    ? { ...item, quantity: item.quantity + 1 }
+                item.product_id === product.product_id && item.batch_id === product.batch_id
+                    ? { ...item, quantity: addExactDecimals(
+                        [item.quantity, product.quantity ?? '1.000000'],
+                        'Sales order item quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ) }
                     : item
             );
             setOrder(prev => ({ ...prev, items: updatedItems }));
             recalculateTotals(updatedItems);
         } else {
-            const quantity = 1;
-            const unitPrice = product.sale_price || product.mrp || 0;
-            const discountPercent = 0;
-            const gstPercent = product.gst_percent || 0;
+            const quantity = normalizeExactDecimal(
+                product.quantity ?? '1.000000',
+                'Sales order item quantity',
+                { scale: 6, maximumWholeDigits: 14 },
+            );
+            const unitPrice = product.sale_price ?? product.unit_price;
+            const discountPercent = '0.000000';
+            const gstPercent = product.gst_percent;
+            if (typeof unitPrice !== 'string' || typeof gstPercent !== 'string') {
+                toast.error('Select an authoritative canonical batch before adding this order item.');
+                return;
+            }
             const newItem: OrderItem = {
                 id: Date.now(),
                 product_id: product.product_id,
@@ -389,7 +405,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 quantity,
                 unit: product.unit || product.uom || 'NOS',
                 pack_size: product.pack_size || product.pack_type,
-                mrp: product.mrp || 0,
+                mrp: product.mrp,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
                 discount_amount: 0,

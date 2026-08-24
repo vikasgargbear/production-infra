@@ -3,25 +3,32 @@ import { X, Package, AlertCircle, CheckCircle, Shield, Clock, Box } from 'lucide
 import { batchesApi } from '../../../services/api';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
-import { mergeProductAndBatch } from '../../../utils/productMapper';
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Product as CanonicalProduct } from '../../../types/models';
 import {
+    compareExactDecimals,
+    formatExactDecimal,
+    normalizeAuthoritativeDecimal,
+} from '../../../utils/exactDecimal';
+import {
     batchDisabledReason,
     batchSelectionDisabledReason,
+    compareBatchAvailability,
     compareBatchesByCanonicalFefo,
 } from './batchEligibility';
 
 // ==================== HELPERS ====================
 
-const requiredNumber = (value: unknown, field: string, row: number): number => {
-    if (value === null || value === undefined || value === '') {
-        throw new Error(`Batch row ${row} is missing ${field}`);
-    }
-    const parsed = typeof value === 'number' ? value : Number(value);
-    if (!Number.isFinite(parsed)) throw new Error(`Batch row ${row} has invalid ${field}`);
-    return parsed;
-};
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const moneyOptions = { scale: 4, maximumWholeDigits: 16 } as const;
+const rateOptions = { scale: 6, maximumWholeDigits: 4 } as const;
+
+const requiredDecimal = (
+    value: unknown,
+    field: string,
+    row: number,
+    options: typeof quantityOptions | typeof moneyOptions | typeof rateOptions,
+): string => normalizeAuthoritativeDecimal(value, `Batch row ${row} ${field}`, options);
 
 // Simple class concatenation helper (replaces cx from invoiceStyles)
 const cx = (...classNames: (string | boolean | undefined | null)[]) =>
@@ -38,12 +45,16 @@ const styles = {
 // ==================== TYPE DEFINITIONS ====================
 
 // Extended Product with batch-specific UI fields
-type Product = CanonicalProduct & {
+type Product = Omit<CanonicalProduct, 'mrp' | 'sale_price' | 'cost_per_unit' | 'gst_percent'> & {
     id?: number | string;
     name?: string;
-    mrp_per_unit?: number;
-    sale_price_per_unit?: number;
-    unit_price?: number;
+    mrp_per_unit?: string;
+    sale_price_per_unit?: string;
+    unit_price?: string;
+    mrp?: string;
+    sale_price?: string;
+    cost_per_unit?: string;
+    gst_percent?: string;
     batches?: any[];  // OPTIMIZATION: Embedded batches from search
 };
 
@@ -52,15 +63,15 @@ interface Batch {
     batch_number: string;
     expiry_date: string;
     manufacturing_date: string;
-    quantity_available: number;
-    sale_price_per_unit: number;
-    mrp_per_unit: number;
-    cost_per_unit: number;
+    quantity_available: string;
+    sale_price_per_unit: string;
+    mrp_per_unit: string;
+    cost_per_unit: string;
     days_to_expiry: number | null;
     has_pending_sync: boolean;
     product_id: string;
     product_name: string;
-    gst_percent: number;
+    gst_percent: string;
     location_id?: string;
     branch_id?: string;
     uom_conversion_id?: string;
@@ -68,18 +79,20 @@ interface Batch {
     branch_name?: string;
     batch_status: string;
     // Pack info
-    units_per_pack?: number;
-    packages_per_box?: number;
+    units_per_pack?: string;
+    packages_per_box?: string;
     pack_type?: string;
 }
 
 interface ProductWithBatch extends Product {
     batch_id: number | string;
     batch_number: string;
-    available_quantity: number;
-    quantity: number;
-    unit_price: number;
-    mrp: number;
+    available_quantity: string;
+    quantity_available: string;
+    quantity: string;
+    free_quantity: string;
+    unit_price: string;
+    mrp: string;
     expiry_date: string;
     manufacturing_date: string;
 }
@@ -214,15 +227,15 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 batch_number: batch.batch_number,
                 expiry_date: typeof batch.expiry_date === 'string' ? batch.expiry_date : '',
                 manufacturing_date: typeof batch.manufacturing_date === 'string' ? batch.manufacturing_date : '',
-                quantity_available: requiredNumber(batch.quantity_available, 'quantity_available', row),
-                sale_price_per_unit: requiredNumber(batch.sale_price_per_unit, 'sale_price_per_unit', row),
-                mrp_per_unit: requiredNumber(batch.mrp_per_unit, 'mrp_per_unit', row),
-                cost_per_unit: requiredNumber(batch.cost_per_unit, 'cost_per_unit', row),
+                quantity_available: requiredDecimal(batch.quantity_available, 'quantity_available', row, quantityOptions),
+                sale_price_per_unit: requiredDecimal(batch.sale_price_per_unit, 'sale_price_per_unit', row, moneyOptions),
+                mrp_per_unit: requiredDecimal(batch.mrp_per_unit, 'mrp_per_unit', row, moneyOptions),
+                cost_per_unit: requiredDecimal(batch.cost_per_unit, 'cost_per_unit', row, moneyOptions),
                 days_to_expiry: daysToExpiry,
                 has_pending_sync: false,
                 product_id: batch.product_id,
                 product_name: batch.product_name,
-                gst_percent: requiredNumber(batch.gst_percent, 'gst_percent', row),
+                gst_percent: requiredDecimal(batch.gst_percent, 'gst_percent', row, rateOptions),
                 location_id: batch.location_id,
                 branch_id: batch.branch_id,
                 uom_conversion_id: batch.uom_conversion_id,
@@ -242,17 +255,20 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
 
         if (minQuantity > 0) {
-            processedBatches = processedBatches.filter(batch =>
-                batch.quantity_available >= minQuantity
-            );
+            processedBatches = processedBatches.filter(batch => compareExactDecimals(
+                batch.quantity_available,
+                String(minQuantity),
+                'Minimum batch quantity',
+                quantityOptions,
+            ) >= 0);
         }
 
         processedBatches.sort((a, b) => {
             switch (sortBy) {
                 case 'quantity':
                     return sortOrder === 'asc'
-                        ? a.quantity_available - b.quantity_available
-                        : b.quantity_available - a.quantity_available;
+                        ? compareBatchAvailability(a, b)
+                        : compareBatchAvailability(b, a);
 
                 case 'manufacturing':
                     const dateA = new Date(a.manufacturing_date || 0);
@@ -287,6 +303,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     };
 
     const handleBatchSelect = (batch: Batch): void => {
+        if (!product) return;
         const disabledReason = batchSelectionDisabledReason(batch, batches, enforceFefo);
         if (disabledReason) {
             setError(`${disabledReason}. Refresh or select another batch.`);
@@ -294,13 +311,21 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
         setSelectedBatch(batch);
 
-        // Use centralized mapper to merge data correctly (ensures batch price > product price)
-        const logicalBatch = mergeProductAndBatch(product as any, batch as any);
-
-        // Ensure UI compatibility (strict strings vs undefined)
-        const productWithBatch = {
-            ...logicalBatch,
-            manufacturing_date: logicalBatch.manufacturing_date || ''
+        // The selected canonical batch owns stock and price.  Product-level
+        // price aliases are deliberately overwritten, never used as fallback.
+        const productWithBatch: ProductWithBatch = {
+            ...product,
+            ...batch,
+            product_code: product.product_code || '',
+            product_type: product.product_type || 'medicine',
+            available_quantity: batch.quantity_available,
+            quantity_available: batch.quantity_available,
+            quantity: '1.000000',
+            free_quantity: '0.000000',
+            unit_price: batch.sale_price_per_unit,
+            sale_price: batch.sale_price_per_unit,
+            mrp: batch.mrp_per_unit,
+            manufacturing_date: batch.manufacturing_date || '',
         };
 
         setTimeout(() => {
@@ -346,6 +371,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             <button
                 type="button"
                 key={String(batch.batch_id)}
+                data-batch-id={batch.batch_id}
                 ref={(el) => { if (typeof index === 'number') batchRefs.current[index] = el; }}
                 onClick={() => handleBatchSelect(batch)}
                 disabled={Boolean(disabledReason)}
@@ -427,22 +453,22 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     <div className="text-center">
                         <span className={cx(
                             "text-sm font-bold",
-                            (batch.quantity_available || 0) > 10 ? "text-emerald-600" :
-                                (batch.quantity_available || 0) > 0 ? "text-amber-600" : "text-red-600"
+                            compareExactDecimals(batch.quantity_available, '10', 'Batch availability', quantityOptions) > 0 ? "text-emerald-600" :
+                                compareExactDecimals(batch.quantity_available, '0', 'Batch availability', quantityOptions) > 0 ? "text-amber-600" : "text-red-600"
                         )}>
-                            {batch.quantity_available || 0}
+                            {formatExactDecimal(batch.quantity_available, 'Batch availability', quantityOptions)}
                         </span>
                     </div>
 
                     <div className="text-right">
                         <span className="text-sm font-medium text-blue-700">
-                            ₹{parseFloat(String(batch.sale_price_per_unit || 0)).toFixed(2)}
+                            ₹{formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}
                         </span>
                     </div>
 
                     <div className="text-right">
                         <span className="text-sm text-gray-500">
-                            ₹{parseFloat(String(batch.mrp_per_unit || 0)).toFixed(2)}
+                            ₹{formatExactDecimal(batch.mrp_per_unit, 'Batch MRP', moneyOptions, 2)}
                         </span>
                     </div>
 
@@ -479,7 +505,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                             )}
                         </div>
                         <div className="shrink-0 rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800">
-                            Stock {batch.quantity_available}
+                            Stock {formatExactDecimal(batch.quantity_available, 'Batch availability', quantityOptions)}
                         </div>
                     </div>
 
@@ -501,13 +527,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         <div>
                             <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Rate</dt>
                             <dd className="mt-0.5 text-sm font-medium text-gray-900">
-                                ₹{parseFloat(String(batch.sale_price_per_unit || 0)).toFixed(2)}
+                                ₹{formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}
                             </dd>
                         </div>
                         <div>
                             <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">MRP</dt>
                             <dd className="mt-0.5 text-sm text-gray-800">
-                                ₹{parseFloat(String(batch.mrp_per_unit || 0)).toFixed(2)}
+                                ₹{formatExactDecimal(batch.mrp_per_unit, 'Batch MRP', moneyOptions, 2)}
                             </dd>
                         </div>
                     </dl>

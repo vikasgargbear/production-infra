@@ -54,11 +54,11 @@ const selectedProduct = {
     branch_id: ids.branch,
     location_id: ids.location,
     uom_conversion_id: ids.uom,
-    quantity_available: 20,
-    unit_price: 100,
-    mrp: 120,
+    quantity_available: '20.000000',
+    unit_price: '100.1250',
+    mrp: '120.2500',
     hsn_code: '481910',
-    gst_percent: 18,
+    gst_percent: '18.000000',
 };
 
 const mockedPreview = calculateInvoicePreview as jest.MockedFunction<
@@ -83,17 +83,17 @@ describe('useInvoiceLogic selected quantity boundary', () => {
     it.each([
         {
             label: 'free-only selection',
-            billed: 0,
-            free: 0.5,
+            billed: '0.000000',
+            free: '0.500000',
             treatment: 'included_at_unit_rate' as const,
         },
         {
             label: 'fractional billed/free selection',
-            billed: 0.375001,
-            free: 0.125001,
+            billed: '0.375001',
+            free: '0.125001',
             treatment: 'excluded_from_taxable_value' as const,
         },
-    ])('keeps a $label in draft state but rejects its fractional JS number at the posting boundary', async ({
+    ])('keeps an exact $label through the posting boundary', async ({
         billed,
         free,
         treatment,
@@ -116,13 +116,17 @@ describe('useInvoiceLogic selected quantity boundary', () => {
             free_supply_tax_treatment: treatment,
         }));
 
-        expect(() => buildCanonicalInvoicePreparePayload({
+        const payload = buildCanonicalInvoicePreparePayload({
                 ...result.current.invoice,
                 billing_address: '1 Canonical Customer Road',
                 shipping_address: '1 Canonical Customer Road',
                 delivery_type: 'PICKUP',
-            }, customer, `erp-web-invoice:${billed}:${free}`),
-        ).toThrow(/must remain an exact decimal string/i);
+            }, customer, `erp-web-invoice:${billed}:${free}`);
+        expect(payload.lines[0]).toEqual(expect.objectContaining({
+            billed_quantity: billed,
+            free_quantity: free,
+            quoted_unit_rate: '100.1250',
+        }));
     });
 
     it('adds the exact billed/free selection when the same batch is selected again', async () => {
@@ -132,22 +136,22 @@ describe('useInvoiceLogic selected quantity boundary', () => {
         await act(async () => {
             await result.current.handleAddItem({
                 ...selectedProduct,
-                quantity: 0,
-                free_quantity: 0.5,
+                quantity: '0.000000',
+                free_quantity: '0.500000',
                 free_supply_tax_treatment: 'included_at_unit_rate',
             });
             await result.current.handleAddItem({
                 ...selectedProduct,
-                quantity: 0.375001,
-                free_quantity: 0.125001,
+                quantity: '0.375001',
+                free_quantity: '0.125001',
                 free_supply_tax_treatment: 'included_at_unit_rate',
             });
         });
 
         expect(result.current.invoice.items).toHaveLength(1);
         expect(result.current.invoice.items[0]).toEqual(expect.objectContaining({
-            quantity: 0.375001,
-            free_quantity: 0.625001,
+            quantity: '0.375001',
+            free_quantity: '0.625001',
             free_supply_tax_treatment: 'included_at_unit_rate',
         }));
     });
@@ -173,6 +177,7 @@ describe('useInvoiceLogic selected quantity boundary', () => {
                     batch_id: ids.batch, batch_number: 'BATCH-1',
                     branch_id: ids.branch, location_id: ids.location,
                     uom_conversion_id: ids.uom,
+                    source_line_id: '10000000-0000-7000-8000-000000000007',
                     quantity: '1.125000', free_quantity: '0.250000',
                     base_billed_quantity: '11.250000', base_free_quantity: '2.500000',
                     source_billed_quantity: '1.125000', source_free_quantity: '0.250000',

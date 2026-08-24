@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { formatExactDecimal } from '../../../../utils/exactDecimal';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 import {
     NotesSection,
@@ -85,7 +86,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                         discount_percent: item.discount_percent || 0,
                         gst_percent: item.gst_percent || 0,
                         total: item.calculated_total || item.total
-                    })),
+                    })) as any,
                     totals: {
                         subtotal: order.subtotal_amount,
                         discount: order.discount_amount || 0,
@@ -282,7 +283,12 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                                 <p className="text-xs text-gray-500">Batch: {item.batch_number || item.batch_number || 'N/A'}</p>
                                             </td>
                                             <td className="text-center py-2 px-3 text-sm font-medium">{item.quantity}</td>
-                                            <td className="text-right py-2 px-3 text-sm">₹{(item.unit_price || 0).toFixed(2)}</td>
+                                            <td className="text-right py-2 px-3 text-sm">₹{formatExactDecimal(
+                                                item.unit_price,
+                                                `Order item ${index + 1} rate`,
+                                                { scale: 4, maximumWholeDigits: 16 },
+                                                2,
+                                            )}</td>
                                             <td className="text-right py-2 px-3 text-sm">{item.gst_percent}%</td>
                                             <td className="text-right py-2 px-3 text-sm font-medium">₹{(item.calculated_total || item.total || 0).toFixed(2)}</td>
                                         </tr>

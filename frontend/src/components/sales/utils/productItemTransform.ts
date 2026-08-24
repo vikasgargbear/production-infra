@@ -11,6 +11,14 @@ import {
     CanonicalSourceDocumentKind,
     FreeSupplyTaxTreatment,
 } from '../types/salesSharedTypes';
+import {
+    normalizeAuthoritativeDecimal,
+    normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
+
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const moneyOptions = { scale: 4, maximumWholeDigits: 16 } as const;
+const rateOptions = { scale: 6, maximumWholeDigits: 4 } as const;
 
 export interface ProductInput {
     product_id?: number | string;
@@ -22,20 +30,20 @@ export interface ProductInput {
     batch_number?: string;
     expiry_date?: string | null;
     manufacturing_date?: string;
-    sale_price_per_unit?: number;
-    unit_price?: number;
-    sale_price?: number;
-    mrp_per_unit?: number;
-    mrp?: number;
+    sale_price_per_unit?: string;
+    unit_price?: string;
+    sale_price?: string;
+    mrp_per_unit?: string;
+    mrp?: string;
     quantity_available?: number | string;
     available_quantity?: number | string;
     total_stock?: number | string;
     total_quantity_available?: number | string;
-    gst_percent?: number;
-    tax_rate?: number;
+    gst_percent?: string;
+    tax_rate?: string;
     hsn_code?: string;
-    quantity: number;
-    free_quantity: number;
+    quantity: string | number;
+    free_quantity: string | number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     source_line_id?: string | number;
     source_document_kind?: CanonicalSourceDocumentKind;
@@ -47,44 +55,35 @@ export interface ProductInput {
     invoice_dispatch_allocation_id?: string | null;
     dispatch_id?: string | null;
     dispatch_line_id?: string | null;
-    base_billed_quantity?: number;
-    base_free_quantity?: number;
-    source_billed_quantity?: number;
-    source_free_quantity?: number;
-    discount_percent?: number;
+    base_billed_quantity?: string | number;
+    base_free_quantity?: string | number;
+    source_billed_quantity?: string | number;
+    source_free_quantity?: string | number;
+    discount_percent?: string;
     best_batch?: any; // Nested batch data from API
     [key: string]: any; // Allow additional fields
 }
 
-function nonNegativeQuantity(
+const editableQuantity = (
     value: unknown,
     label: string,
-): number {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-        throw new Error(`${label} must be a finite non-negative number.`);
-    }
-    return value;
-}
+): string => normalizeExactDecimal(value, label, quantityOptions);
 
-function nonNegativeAvailability(value: unknown): number {
-    const parsed = typeof value === 'number'
-        ? value
-        : typeof value === 'string' && value.trim() !== ''
-            ? Number(value)
-            : 0;
-    if (!Number.isFinite(parsed) || parsed < 0) {
-        throw new Error('Available quantity must be a finite non-negative number.');
-    }
-    return parsed;
-}
+const authoritativeQuantity = (value: unknown, label: string): string =>
+    normalizeAuthoritativeDecimal(value, label, quantityOptions);
+
+const authoritativeMoney = (value: unknown, label: string): string =>
+    normalizeAuthoritativeDecimal(value, label, moneyOptions);
+
+const authoritativeRate = (value: unknown, label: string): string =>
+    normalizeAuthoritativeDecimal(value, label, rateOptions);
 
 /**
  * Transform product data into a generic line item
  * 
- * Handles data from multiple sources:
+ * Handles canonical data from two sources:
  * 1. BatchSelector → product with batch_id and batch pricing
  * 2. API best_batch → product with best_batch embedded
- * 3. Legacy → product with product-level pricing
  * 
  * @param product - Product data from various sources
  * @param itemDefaults - Default values to merge into the item
@@ -97,10 +96,9 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
     // If product has best_batch from new API, use it
     const bestBatch = product.best_batch;
 
-    // Get pricing - prioritize batch-level, then product-level
-    let unitPrice = 0;
-    let mrp = 0;
-    let availableQty = 0;
+    let unitPrice: string;
+    let mrp: string | undefined;
+    let availableQty: string | undefined;
     let batchId = product.batch_id;
     let batchNumber = product.batch_number || product.batch_number || '';
     let expiryDate = product.expiry_date || '';
@@ -108,42 +106,31 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
 
     if (product.batch_id) {
         // BatchSelector: product already has batch data merged - ALWAYS respect user selection
-        console.log('[PrepareItem] Using batch data from BatchSelector (user selected)');
-        unitPrice = parseFloat(String(
-            product.sale_price_per_unit || product.unit_price || 0
-        ));
-        mrp = parseFloat(String(
-            product.mrp_per_unit || product.mrp || 0
-        ));
-        availableQty = nonNegativeAvailability(
-            product.quantity_available ?? product.available_quantity ?? 0
+        unitPrice = authoritativeMoney(
+            product.sale_price_per_unit ?? product.unit_price,
+            'Selected batch unit rate',
         );
+        const immutableImport = Boolean(product.source_line_id || product.allocation_id);
+        const selectedMrp = product.mrp_per_unit ?? product.mrp;
+        const selectedAvailability = product.quantity_available ?? product.available_quantity;
+        mrp = immutableImport && selectedMrp === undefined
+            ? undefined
+            : authoritativeMoney(selectedMrp, 'Selected batch MRP');
+        availableQty = immutableImport && selectedAvailability === undefined
+            ? undefined
+            : authoritativeQuantity(selectedAvailability, 'Selected batch available quantity');
         manufacturingDate = product.manufacturing_date || product.manufacturing_date || '';
     } else if (bestBatch) {
         // New API: use best_batch ONLY if no batch was explicitly selected
-        console.log('[PrepareItem] Using best_batch from API (auto-selected):', bestBatch);
-        unitPrice = parseFloat(String(bestBatch.sale_price_per_unit || 0));
-        mrp = parseFloat(String(bestBatch.mrp_per_unit || 0));
-        availableQty = nonNegativeAvailability(bestBatch.quantity_available ?? 0);
+        unitPrice = authoritativeMoney(bestBatch.sale_price_per_unit, 'Recommended batch unit rate');
+        mrp = authoritativeMoney(bestBatch.mrp_per_unit, 'Recommended batch MRP');
+        availableQty = authoritativeQuantity(bestBatch.quantity_available, 'Recommended batch available quantity');
         batchId = bestBatch.batch_id;
         batchNumber = bestBatch.batch_number || '';
         expiryDate = bestBatch.expiry_date || '';
         manufacturingDate = bestBatch.manufacturing_date || '';
     } else {
-        // Legacy: product-level averages (fallback)
-        console.log('[PrepareItem] Using product-level pricing (no batch selected)');
-        unitPrice = parseFloat(String(
-            product.sale_price_per_unit || product.sale_price || 0
-        ));
-        mrp = parseFloat(String(
-            product.mrp_per_unit || product.mrp || 0
-        ));
-        availableQty = nonNegativeAvailability(
-            product.total_stock
-            ?? product.quantity_available
-            ?? product.total_quantity_available
-            ?? 0
-        );
+        throw new Error('Select an authoritative canonical batch before adding this sales item.');
     }
 
     // Create base item with ONLY canonical fields
@@ -156,8 +143,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         expiry_date: expiryDate,
         unit_price: unitPrice,  // ✅ CANONICAL
         mrp: mrp,
-        quantity: nonNegativeQuantity(product.quantity, 'Quantity'),
-        free_quantity: nonNegativeQuantity(product.free_quantity, 'Free quantity'),
+        quantity: editableQuantity(product.quantity, 'Quantity'),
+        free_quantity: editableQuantity(product.free_quantity, 'Free quantity'),
         free_supply_tax_treatment:
             product.free_supply_tax_treatment || 'excluded_from_taxable_value',
         source_line_id: product.source_line_id,
@@ -185,21 +172,19 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         product_code: product.product_code || '',
         manufacturing_date: manufacturingDate,
         available_quantity: availableQty,
-        gst_percent: parseFloat(String(product.gst_percent || product.tax_rate || 0)),
+        gst_percent: authoritativeRate(product.gst_percent ?? product.tax_rate, 'Product GST rate'),
         hsn_code: product.hsn_code || '',
         product_type: product.product_type,
         requires_prescription: Boolean(product.requires_prescription),
-        discount_percent: parseFloat(String(product.discount_percent || 0)),
+        discount_percent: product.discount_percent === undefined
+            ? '0.000000'
+            : authoritativeRate(product.discount_percent, 'Product discount rate'),
         location_id: product.location_id || bestBatch?.location_id,
         branch_id: product.branch_id || bestBatch?.branch_id,
         uom_conversion_id: product.uom_conversion_id || bestBatch?.uom_conversion_id,
         // Pack info - from batch or product
-        units_per_pack: parseInt(String(
-            bestBatch?.units_per_pack || product.units_per_pack || 1
-        )),
-        packages_per_box: parseInt(String(
-            bestBatch?.packages_per_box || product.packages_per_box || 1
-        )),
+        units_per_pack: bestBatch?.units_per_pack ?? product.units_per_pack,
+        packages_per_box: bestBatch?.packages_per_box ?? product.packages_per_box,
         pack_type: bestBatch?.pack_type || product.pack_type || '',
         pack_size: bestBatch?.pack_size || product.pack_size || ''
     } as unknown as T;

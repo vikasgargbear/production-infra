@@ -29,6 +29,7 @@ import {
 import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
 import { useInvoiceSave } from './useInvoiceSave';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { addExactDecimals } from '../../../../utils/exactDecimal';
 
 // ==================== HOOK-SPECIFIC TYPE EXTENSIONS ====================
 // These extend shared types with required fields for the hook's internal state
@@ -36,16 +37,16 @@ import type { CanonicalCommandPreview } from '../../../../services/api/canonical
 export interface InvoiceItem extends SharedInvoiceItem {
     product_id: number | string;
     product_name: string;
-    unit_price: number;
-    mrp: number;
-    gst_percent: number;
-    quantity: number;
-    free_quantity: number;
-    base_billed_quantity?: number;
-    base_free_quantity?: number;
-    source_billed_quantity?: number;
-    source_free_quantity?: number;
-    discount_percent: number;
+    unit_price: string | number;
+    mrp: string | number;
+    gst_percent: string | number;
+    quantity: string | number;
+    free_quantity: string | number;
+    base_billed_quantity?: string | number;
+    base_free_quantity?: string | number;
+    source_billed_quantity?: string | number;
+    source_free_quantity?: string | number;
+    discount_percent: string | number;
     // Calculated fields (use canonical names from enterpriseCalculator)
     subtotal?: number;
     discount_amount?: number;
@@ -56,7 +57,7 @@ export interface InvoiceItem extends SharedInvoiceItem {
     igst_amount?: number;
     total_amount?: number;
     // Availability
-    available_quantity?: number;
+    available_quantity?: string | number;
     manufacturing_date?: string;
 }
 
@@ -477,11 +478,7 @@ export const useInvoiceLogic = (
     const handleAddItem = useCallback(async (product: ProductInput) => {
         if (!product) return;
 
-        console.log('📦 [ADD ITEM] Raw product from search:', product);
-
         const invoiceItem = prepareSelectedProductForInvoice(product);
-
-        console.log('📦 [ADD ITEM] Transformed product:', invoiceItem);
 
         if (!invoiceItem || !invoiceItem.product_name) {
             toast.error('Invalid product data');
@@ -504,9 +501,16 @@ export const useInvoiceLogic = (
                 // free-only or fractional selection into one billed unit.
                 updatedItems[existingItemIndex] = {
                     ...updatedItems[existingItemIndex],
-                    quantity: updatedItems[existingItemIndex].quantity + invoiceItem.quantity,
-                    free_quantity: updatedItems[existingItemIndex].free_quantity
-                        + invoiceItem.free_quantity,
+                    quantity: addExactDecimals(
+                        [updatedItems[existingItemIndex].quantity, invoiceItem.quantity],
+                        'Invoice billed quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
+                    free_quantity: addExactDecimals(
+                        [updatedItems[existingItemIndex].free_quantity, invoiceItem.free_quantity],
+                        'Invoice free quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
                 };
                 // Note: Toast removed - visual feedback in table is sufficient
                 return { ...prev, items: updatedItems };

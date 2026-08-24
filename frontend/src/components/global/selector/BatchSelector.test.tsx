@@ -17,11 +17,11 @@ const canonicalBatch = (status: string, suffix: string) => ({
     product_name: 'Demo Product',
     manufacturing_date: '2026-01-01',
     expiry_date: '2099-01-01',
-    quantity_available: 12,
-    sale_price_per_unit: 100,
-    mrp_per_unit: 120,
-    cost_per_unit: 80,
-    gst_percent: 12,
+    quantity_available: '12.000000',
+    sale_price_per_unit: '100.0000',
+    mrp_per_unit: '120.0000',
+    cost_per_unit: '80.0000',
+    gst_percent: '12.000000',
     batch_status: status,
     location_name: 'Saleable stock',
     branch_name: 'Mumbai',
@@ -111,5 +111,55 @@ describe('BatchSelector lifecycle and mobile presentation', () => {
         fireEvent.click(sameExpiry);
         await waitFor(() => expect(onBatchSelect).toHaveBeenCalledTimes(1));
         expect(onBatchSelect.mock.calls[0][0]).toMatchObject({ batch_number: 'SAME-EXPIRY' });
+        expect(onBatchSelect.mock.calls[0][0]).toMatchObject({
+            quantity: '1.000000',
+            free_quantity: '0.000000',
+            unit_price: '100.0000',
+            available_quantity: '12.000000',
+        });
+    });
+
+    it('renders and returns large and fractional canonical decimals without coercion', async () => {
+        const onBatchSelect = jest.fn();
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({
+            data: { batches: [{
+                ...canonicalBatch('released', '24'),
+                quantity_available: '0.123456',
+                sale_price_per_unit: '9007199254740993.1250',
+                mrp_per_unit: '9007199254740993.2500',
+            }] },
+        });
+        render(<BatchSelector show enforceFefo product={{
+            product_id: 'd3000000-0000-7000-8000-000000000015',
+            product_name: 'Demo Product',
+            product_code: 'DEMO',
+            product_type: 'medicine',
+            gst_percent: '12.000000',
+        } as any} onBatchSelect={onBatchSelect} onClose={jest.fn()} />);
+
+        const option = await screen.findByRole('option', { name: /Select batch DEMO-RELEASED/i });
+        expect(within(option).getAllByText('₹9007199254740993.125').length).toBeGreaterThan(0);
+        fireEvent.click(option);
+        await waitFor(() => expect(onBatchSelect).toHaveBeenCalledTimes(1));
+        expect(onBatchSelect.mock.calls[0][0]).toMatchObject({
+            available_quantity: '0.123456',
+            unit_price: '9007199254740993.1250',
+            mrp: '9007199254740993.2500',
+        });
+    });
+
+    it('rejects numeric API decimals instead of silently rounding them', async () => {
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({
+            data: { batches: [{ ...canonicalBatch('released', '25'), quantity_available: 0.1 }] },
+        });
+        render(<BatchSelector show product={{
+            product_id: 'd3000000-0000-7000-8000-000000000015',
+            product_name: 'Demo Product',
+            product_code: 'DEMO',
+            product_type: 'medicine',
+        } as any} onBatchSelect={jest.fn()} onClose={jest.fn()} />);
+
+        expect(await screen.findByText(/must remain an exact decimal string/i)).toBeTruthy();
+        expect(screen.queryByRole('option')).toBeNull();
     });
 });

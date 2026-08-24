@@ -8,7 +8,7 @@ describe('canonical batch eligibility', () => {
     it('allows only released, unexpired batches with stock', () => {
         expect(batchDisabledReason({
             batch_status: 'released',
-            quantity_available: 10,
+            quantity_available: '10.000000',
             days_to_expiry: 90,
         })).toBeNull();
     });
@@ -21,25 +21,25 @@ describe('canonical batch eligibility', () => {
     ])('keeps %s lifecycle stock disabled with an explicit reason', (status, reason) => {
         expect(batchDisabledReason({
             batch_status: status,
-            quantity_available: 10,
+            quantity_available: '10.000000',
             days_to_expiry: 90,
         })).toBe(reason);
     });
 
     it('blocks expired and empty released batches', () => {
         expect(batchDisabledReason({
-            batch_status: 'released', quantity_available: 10, days_to_expiry: 0,
+            batch_status: 'released', quantity_available: '10.000000', days_to_expiry: 0,
         })).toBe('Expired batch cannot be sold');
         expect(batchDisabledReason({
-            batch_status: 'released', quantity_available: 0, days_to_expiry: 90,
+            batch_status: 'released', quantity_available: '0.000000', days_to_expiry: 90,
         })).toBe('No saleable stock is available');
     });
 
     it('sorts by exact expiry and then UUID, matching canonical resolution order', () => {
         const rows = [
-            { batch_id: 'b', expiry_date: '2028-09-01', quantity_available: 1 },
-            { batch_id: 'c', expiry_date: '2028-10-01', quantity_available: 1 },
-            { batch_id: 'a', expiry_date: '2028-09-01', quantity_available: 1 },
+            { batch_id: 'b', expiry_date: '2028-09-01', quantity_available: '1.000000' },
+            { batch_id: 'c', expiry_date: '2028-10-01', quantity_available: '1.000000' },
+            { batch_id: 'a', expiry_date: '2028-09-01', quantity_available: '1.000000' },
         ];
 
         expect([...rows].sort(compareBatchesByCanonicalFefo).map(row => row.batch_id))
@@ -50,7 +50,7 @@ describe('canonical batch eligibility', () => {
         const earliest = {
             batch_id: 'a', batch_number: 'EARLY', batch_status: 'released',
             expiry_date: '2028-09-01', location_id: 'location-a',
-            quantity_available: 5, days_to_expiry: 365,
+            quantity_available: '5.000000', days_to_expiry: 365,
         };
         const samePriority = { ...earliest, batch_id: 'b', batch_number: 'SAME' };
         const later = {

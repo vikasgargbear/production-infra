@@ -3,6 +3,11 @@ import { Search, Package } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import BatchSelector from '../selector/BatchSelector';
 import { debounce } from '../../../utils/debounce';
+import {
+    compareExactDecimals,
+    formatExactDecimal,
+    normalizeAuthoritativeDecimal,
+} from '../../../utils/exactDecimal';
 
 import { Product } from '../../../types/models/product';
 
@@ -10,13 +15,28 @@ import { Product } from '../../../types/models/product';
 
 
 
-interface ProductWithBatch extends Product {
+type ExactSearchProduct = Omit<Product,
+    'gst_percent' | 'total_quantity_available' | 'total_stock' | 'mrp' | 'sale_price' | 'cost_per_unit'
+> & {
+    gst_percent: string;
+    total_quantity_available: string;
+    total_stock: string;
+    mrp?: string;
+    sale_price?: string;
+    cost_per_unit?: string;
+};
+
+interface ProductWithBatch extends ExactSearchProduct {
     batch_id?: number | string;
     batch_number?: string;
     expiry_date?: string;
-    quantity?: number;
-    unit_price?: number;
+    quantity?: string;
+    free_quantity?: string;
+    unit_price?: string;
 }
+
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const rateOptions = { scale: 6, maximumWholeDigits: 4 } as const;
 
 interface ProductSearchProps {
     onAddItem: (product: ProductWithBatch) => void;
@@ -37,15 +57,16 @@ export interface ProductSearchRef {
 const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
     ({ onAddItem, onCreateProduct, showBatchSelection = true, enforceFefo = false, tabIndex }, ref) => {
         const [searchQuery, setSearchQuery] = useState<string>('');
-        const [searchResults, setSearchResults] = useState<Product[]>([]);
+        const [searchResults, setSearchResults] = useState<ExactSearchProduct[]>([]);
         const [loading, setLoading] = useState<boolean>(false);
         const [showDropdown, setShowDropdown] = useState<boolean>(false);
         const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
-        const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+        const [selectedProduct, setSelectedProduct] = useState<ExactSearchProduct | null>(null);
         const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
         const searchInputRef = useRef<HTMLInputElement>(null);
         const dropdownRef = useRef<HTMLDivElement>(null);
         const resultRefs = useRef<(HTMLButtonElement | null)[]>([]);
+        const searchRequestRef = useRef(0);
 
         // Expose focus method to parent
         useImperativeHandle(ref, () => ({
@@ -58,7 +79,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
 
         // Search the canonical API; no device cache or fallback authority.
         const searchProducts = useMemo(
-            () => debounce(async (query: string): Promise<void> => {
+            () => debounce(async (query: string, requestId: number): Promise<void> => {
                 if (!query || query.length < 2) {
                     setSearchResults([]);
                     setHighlightedIndex(-1);
@@ -69,20 +90,25 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
 
                 try {
                     const response = await productsApi.search(query, { limit: 20 });
+                    if (requestId !== searchRequestRef.current) return;
                     const rows = response?.data;
                     if (!Array.isArray(rows)) {
                         throw new Error('Product search returned an invalid canonical response');
                     }
-                    const transformedResults: Product[] = rows.map((row: any, index: number) => {
+                    const transformedResults: ExactSearchProduct[] = rows.map((row: any, index: number) => {
                         if (typeof row?.product_id !== 'string' || typeof row?.product_name !== 'string') {
                             throw new Error(`Product search row ${index + 1} is missing identity`);
                         }
-                        const gstPercent = typeof row.gst_percent === 'number'
-                            ? row.gst_percent
-                            : Number(row.gst_percent);
-                        if (!Number.isFinite(gstPercent)) {
-                            throw new Error(`Product search row ${index + 1} has no effective GST classification`);
-                        }
+                        const gstPercent = normalizeAuthoritativeDecimal(
+                            row.gst_percent,
+                            `Product search row ${index + 1} GST rate`,
+                            rateOptions,
+                        );
+                        const currentStock = normalizeAuthoritativeDecimal(
+                            row.current_stock,
+                            `Product search row ${index + 1} current stock`,
+                            quantityOptions,
+                        );
                         return {
                             product_id: row.product_id,
                             product_code: typeof row.product_code === 'string' ? row.product_code : '',
@@ -95,13 +121,9 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                             uom_conversion_id: typeof row.uom_conversion_id === 'string' ? row.uom_conversion_id : undefined,
                             gst_percent: gstPercent,
                             requires_prescription: row.requires_prescription === true,
-                            total_quantity_available: typeof row.current_stock === 'number'
-                                ? row.current_stock
-                                : Number(row.current_stock || 0),
-                            total_stock: typeof row.current_stock === 'number'
-                                ? row.current_stock
-                                : Number(row.current_stock || 0),
-                        } as Product;
+                            total_quantity_available: currentStock,
+                            total_stock: currentStock,
+                        } as ExactSearchProduct;
                     });
 
                     setSearchResults(transformedResults);
@@ -112,25 +134,28 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         setHighlightedIndex(-1);
                     }
                 } catch (error) {
+                    if (requestId !== searchRequestRef.current) return;
                     console.error('Product search failed:', error);
                     setSearchResults([]);
                     setHighlightedIndex(-1);
                 } finally {
-                    setLoading(false);
+                    if (requestId === searchRequestRef.current) setLoading(false);
                 }
             }, 100),
             []
         );
 
         useEffect(() => {
-            searchProducts(searchQuery);
+            const requestId = ++searchRequestRef.current;
+            searchProducts(searchQuery, requestId);
             return () => searchProducts.cancel();
         }, [searchQuery, searchProducts]);
 
         // Auto-scroll to highlighted item
         useEffect(() => {
-            if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
-                resultRefs.current[highlightedIndex]?.scrollIntoView({
+            const highlighted = resultRefs.current[highlightedIndex];
+            if (highlightedIndex >= 0 && typeof highlighted?.scrollIntoView === 'function') {
+                highlighted.scrollIntoView({
                     behavior: 'smooth',
                     block: 'nearest'
                 });
@@ -149,7 +174,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }, []);
 
-        const handleProductSelect = (product: Product): void => {
+        const handleProductSelect = (product: ExactSearchProduct): void => {
             if (showBatchSelection) {
                 setSelectedProduct(product);
                 setShowBatchModal(true);
@@ -257,10 +282,16 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <div className={`font-medium ${(product.total_stock || 0) > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                            Stock: {product.total_stock || 0}
+                                                        <div className={`font-medium ${compareExactDecimals(
+                                                            product.total_stock ?? '0', '0', 'Product stock', quantityOptions,
+                                                        ) > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                            Stock: {formatExactDecimal(
+                                                                product.total_stock ?? '0', 'Product stock', quantityOptions,
+                                                            )}
                                                         </div>
-                                                        <div className="text-xs text-gray-500">GST {product.gst_percent || 0}%</div>
+                                                        <div className="text-xs text-gray-500">GST {formatExactDecimal(
+                                                            product.gst_percent ?? '0', 'Product GST rate', rateOptions,
+                                                        )}%</div>
                                                     </div>
                                                 </div>
                                             </button>

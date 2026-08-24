@@ -26,4 +26,17 @@ describe('desktop canonical sales and purchase UX boundaries', () => {
     expect(source).toContain('disabled');
     expect(source).toContain('canonical batch and dispatch review');
   });
+
+  it('keeps canonical product and batch decimals out of IEEE-754 transforms', () => {
+    const sources = [
+      '../global/search/ProductSearch.tsx',
+      '../global/selector/BatchSelector.tsx',
+      '../global/selector/batchEligibility.ts',
+      'utils/productItemTransform.ts',
+    ].map(read).join('\n');
+
+    expect(sources).not.toMatch(/\bNumber\s*\(/);
+    expect(sources).not.toMatch(/\bparseFloat\s*\(/);
+    expect(sources).not.toMatch(/\.toFixed\s*\(/);
+  });
 });

@@ -24,6 +24,7 @@ import {
     CreatedChallanData,
     getInitialChallan
 } from '../types/challanTypes';
+import { formatExactDecimal } from '../../../../utils/exactDecimal';
 
 // ==================== PROPS ====================
 
@@ -120,6 +121,11 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                         return {
                             ...item,
                             ...calculated,
+                            quantity: item.quantity,
+                            free_quantity: item.free_quantity,
+                            unit_price: item.unit_price,
+                            mrp: item.mrp,
+                            gst_percent: item.gst_percent,
                             line_total: lineTotal,
                             total: lineTotal,
                             taxable_amount: taxable,
@@ -363,7 +369,12 @@ Expected Delivery: ${challan.expected_delivery_date}
         <div class="bold">Items:</div>
         ${challan.items.map((item, idx) => `
           <div class="item-row"><span>${idx + 1}. ${item.product_name || 'N/A'}</span></div>
-          <div class="item-row"><span>  Qty: ${item.quantity} ${item.unit || ''}</span><span>₹${(item.unit_price || item.unit_price || 0).toFixed(2)}</span></div>
+          <div class="item-row"><span>  Qty: ${item.quantity} ${item.unit || ''}</span><span>₹${formatExactDecimal(
+              item.unit_price ?? '0',
+              `Challan item ${idx + 1} rate`,
+              { scale: 4, maximumWholeDigits: 16 },
+              2,
+          )}</span></div>
         `).join('')}
         <div class="total-section">
           <div class="item-row"><span class="bold">Total Items:</span><span>${challan.items.length}</span></div>

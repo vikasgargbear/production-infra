@@ -130,3 +130,22 @@ export function formatExactCurrency(value: unknown, label = 'Money'): string {
   const grouped = leading ? `${groupedLeading},${lastThree}` : lastThree;
   return `${sign}₹${grouped}.${fraction}`;
 }
+
+/** Render a validated decimal without converting it to an IEEE-754 number. */
+export function formatExactDecimal(
+  value: unknown,
+  label: string,
+  options: ExactDecimalOptions,
+  minimumFractionDigits = 0,
+): string {
+  if (!Number.isInteger(minimumFractionDigits)
+    || minimumFractionDigits < 0
+    || minimumFractionDigits > options.scale) {
+    throw new Error(`${label} has unsupported display precision.`);
+  }
+  const normalized = normalizeExactDecimal(value, label, options);
+  if (options.scale === 0) return normalized;
+  const [whole, fraction = ''] = normalized.split('.');
+  const retained = fraction.replace(/0+$/, '').padEnd(minimumFractionDigits, '0');
+  return retained ? `${whole}.${retained}` : whole;
+}

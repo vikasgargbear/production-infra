@@ -11,6 +11,11 @@
 import { useState, useEffect, useCallback, useRef, RefObject } from 'react';
 import { employeesApi, apiClient } from '../../../services/api';
 import { BaseEmployee, BaseCustomer, BaseLineItem } from '../types/salesSharedTypes';
+import {
+    addExactDecimals,
+    normalizeAuthoritativeDecimal,
+    normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
 
 // ==================== CONFIGURATION ====================
 
@@ -198,14 +203,32 @@ export function useSalesTransaction<
         if (existingIndex >= 0) {
             // Increment quantity if product already exists
             const updatedItems = document.items.map((item, index) =>
-                index === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+                index === existingIndex ? {
+                    ...item,
+                    quantity: addExactDecimals(
+                        [item.quantity, 1],
+                        'Sales item quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
+                } : item
             );
             setDocument(prev => ({ ...prev, items: updatedItems } as TDoc));
         } else {
             // Add new item
-            const quantity = 1;
-            const unitPrice = product[priceField] || product.sale_price || product.mrp || 0;
-            const total = quantity * unitPrice;
+            if (!product.batch_id || typeof product[priceField] !== 'string') {
+                console.error(`[useSalesTransaction:${documentType}] Canonical batch price is unavailable`);
+                return;
+            }
+            const quantity = normalizeExactDecimal(
+                product.quantity ?? '1.000000',
+                'Sales item quantity',
+                { scale: 6, maximumWholeDigits: 14 },
+            );
+            const unitPrice = normalizeAuthoritativeDecimal(
+                product[priceField],
+                'Selected batch unit rate',
+                { scale: 4, maximumWholeDigits: 16 },
+            );
 
             const newItem: TItem = {
                 id: Date.now(),
@@ -219,9 +242,9 @@ export function useSalesTransaction<
                 uom_conversion_id: product.uom_conversion_id,
                 quantity,
                 unit: product.unit || product.base_uom || product.uom_code || '',
-                mrp: product.mrp || 0,
+                mrp: product.mrp,
                 unit_price: unitPrice,  // ✅ CANONICAL
-                gst_percent: includeGst ? (product.gst_percent || 0) : undefined
+                gst_percent: includeGst ? product.gst_percent : undefined
             } as unknown as TItem;
 
             const updatedItems = [...document.items, newItem];

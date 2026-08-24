@@ -22,8 +22,8 @@ export interface OrderItem {
     uom_conversion_id?: string;
 
     // Quantities
-    quantity: number;
-    free_quantity?: number;
+    quantity: string | number;
+    free_quantity?: string | number;
     free_supply_tax_treatment?:
         | 'excluded_from_taxable_value'
         | 'included_at_unit_rate';
@@ -40,15 +40,15 @@ export interface OrderItem {
     dispatch_line_id?: string | null;
 
     // Pricing
-    unit_price: number;
-    mrp?: number;
-    rate?: number;
-    sale_price?: number;
+    unit_price: string | number;
+    mrp?: string | number;
+    rate?: string | number;
+    sale_price?: string | number;
 
     // Discounts & Taxes
-    discount_percent: number;
+    discount_percent: string | number;
     discount_amount?: number;
-    gst_percent: number;
+    gst_percent: string | number;
     tax_amount?: number;
     total_tax_amount?: number;
     cgst_amount?: number;

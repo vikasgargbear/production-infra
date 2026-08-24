@@ -3,6 +3,7 @@ import {
   compareExactDecimals,
   exactDecimalString,
   exactDecimalUnits,
+  formatExactDecimal,
   normalizeExactDecimal,
 } from './exactDecimal';
 
@@ -10,6 +11,15 @@ const money = { scale: 2, maximumWholeDigits: 18 } as const;
 const quantity = { scale: 6, maximumWholeDigits: 14 } as const;
 
 describe('exact decimal arithmetic', () => {
+  it('formats a fractional rate above the JavaScript safe integer limit without coercion', () => {
+    expect(formatExactDecimal(
+      '9007199254740993.1250',
+      'Unit rate',
+      { scale: 4, maximumWholeDigits: 16 },
+      2,
+    )).toBe('9007199254740993.125');
+  });
+
   it('preserves values beyond JavaScript safe integers', () => {
     const units = exactDecimalUnits('9007199254740993.01', 'Money', money);
     expect(units).toBe(900719925474099301n);

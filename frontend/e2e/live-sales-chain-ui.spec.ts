@@ -104,6 +104,8 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     const explicitAlternative = dialog.getByRole('option').filter({ hasNotText: /Recommended FEFO batch|Unavailable/i });
     expect(await explicitAlternative.count(), 'fixture needs a second eligible batch in the earliest-expiry FEFO tier').toBeGreaterThan(0);
     // Default recommendation is deterministic; the user can explicitly choose another eligible batch in the same FEFO tier.
+    const selectedBatchId = await explicitAlternative.first().getAttribute('data-batch-id');
+    expect(selectedBatchId).toMatch(/^[0-9a-f-]{36}$/i);
     await explicitAlternative.first().click();
     const row = page.getByRole('row').filter({ hasText: /Synthetic Corrugated Pharmacy Packing Carton/i });
     await row.locator('input[type="number"]').nth(0).fill('1.125000');
@@ -122,6 +124,9 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     expect(preparedPayload.lines[0].billed_quantity).toBe('1.125000');
     expect(preparedPayload.lines[0].free_quantity).toBe('0.250000');
     expect(preparedPayload.lines[0].quoted_unit_rate).toBe('84.1250');
+    expect(preparedPayload.lines[0].batch_allocations).toEqual([
+      expect.objectContaining({ batch_id: selectedBatchId }),
+    ]);
     const review = page.getByRole('dialog', { name: 'Review exact sales invoice' });
     await expect(review).toBeVisible();
     await review.getByRole('button', { name: 'Back' }).click();

@@ -243,8 +243,8 @@ export interface InvoiceItem {
     discount_amount?: number;   // CANONICAL: calculated discount amount
 
     // Taxes
-    gst_percent?: number;
-    tax_percent?: number;
+    gst_percent?: number | string;
+    tax_percent?: number | string;
     cgst_percent?: number;
     sgst_percent?: number;
     igst_percent?: number;
