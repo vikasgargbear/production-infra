@@ -15,6 +15,11 @@ REVISION_PATH = (
     REPO_ROOT
     / "backend/alembic/versions/20260824_0002_sales_invoice_fefo_expiry_equivalence.py"
 )
+POSTGRES_CONTRACT_PATH = (
+    REPO_ROOT
+    / "database/canonical/commands_automation/test_sales_invoice_fefo_equivalence.sql"
+)
+STAGING_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/canonical-staging.yml"
 
 
 def test_fefo_incremental_migration_is_hash_bound_and_linear() -> None:
@@ -64,6 +69,24 @@ def test_fefo_migration_is_surgical_and_fails_closed_on_source_drift() -> None:
     )[1].split("BEGIN", 1)[0]
     assert baseline.count(old_fefo) == 1
     assert "sales_invoice_fefo_expiry_date_equivalence_v1" in new_fefo
+
+
+def test_fefo_definition_checks_use_regular_strpos_calls() -> None:
+    sql = SQL_PATH.read_text(encoding="utf-8")
+    postgres_contract = POSTGRES_CONTRACT_PATH.read_text(encoding="utf-8")
+    staging_workflow = STAGING_WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "pg_catalog.position(" not in sql
+    assert "pg_catalog.position(" not in postgres_contract
+    assert "pg_catalog.strpos(definition,old_fefo)" in sql
+    assert (
+        "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')"
+        in postgres_contract
+    )
+    assert (
+        "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')"
+        in staging_workflow
+    )
 
 
 def test_schema_authority_includes_incremental_fefo_package() -> None:

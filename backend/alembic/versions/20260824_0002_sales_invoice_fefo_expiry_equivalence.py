@@ -25,7 +25,7 @@ SQL_PATH = (
     / "20260824_0002_sales_invoice_fefo_expiry_equivalence.sql"
 )
 EXPECTED_SQL_SHA256 = (
-    "a81a2ab94ceacbd1ba34211af6ac49f85310c86a1cd75da2a80bb0ffd95f6785"
+    "aa8778b4b5082a4f8579bd57940df791061041f8097aca4bb66a0eca646ba89a"
 )
 
 

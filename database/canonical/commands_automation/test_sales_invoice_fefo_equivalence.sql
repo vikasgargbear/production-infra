@@ -8,11 +8,11 @@ BEGIN
     definition:=pg_catalog.pg_get_functiondef(
       'erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure
     );
-    IF pg_catalog.position('sales_invoice_fefo_expiry_date_equivalence_v1' IN definition)=0
-       OR pg_catalog.position('expiry_groups AS (' IN definition)=0
-       OR pg_catalog.position('GROUP BY eligible_lot.product_id,eligible_lot.expires_on' IN definition)=0
-       OR pg_catalog.position('ORDER BY expiry_group.expires_on' IN definition)=0
-       OR pg_catalog.position('ORDER BY batch_row.expires_on,stock.batch_id' IN definition)>0 THEN
+    IF pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')=0
+       OR pg_catalog.strpos(definition,'expiry_groups AS (')=0
+       OR pg_catalog.strpos(definition,'GROUP BY eligible_lot.product_id,eligible_lot.expires_on')=0
+       OR pg_catalog.strpos(definition,'ORDER BY expiry_group.expires_on')=0
+       OR pg_catalog.strpos(definition,'ORDER BY batch_row.expires_on,stock.batch_id')>0 THEN
         RAISE EXCEPTION 'installed sales-invoice FEFO definition is not expiry-tier equivalent';
     END IF;
 END

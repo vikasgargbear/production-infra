@@ -46,11 +46,11 @@ BEGIN
         'erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure
     ) INTO STRICT definition;
 
-    IF pg_catalog.position('sales_invoice_fefo_expiry_date_equivalence_v1' IN definition)>0
-       AND pg_catalog.position(old_fefo IN definition)=0 THEN
+    IF pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')>0
+       AND pg_catalog.strpos(definition,old_fefo)=0 THEN
         RETURN;
     END IF;
-    IF pg_catalog.position(old_fefo IN definition)=0
+    IF pg_catalog.strpos(definition,old_fefo)=0
        OR pg_catalog.length(definition)-pg_catalog.length(pg_catalog.replace(definition,old_fefo,''))
           <>pg_catalog.length(old_fefo) THEN
         RAISE EXCEPTION USING ERRCODE='55000',
@@ -58,8 +58,8 @@ BEGIN
     END IF;
 
     definition:=pg_catalog.replace(definition,old_fefo,new_fefo);
-    IF pg_catalog.position('sales_invoice_fefo_expiry_date_equivalence_v1' IN definition)=0
-       OR pg_catalog.position('ORDER BY batch_row.expires_on,stock.batch_id' IN definition)>0 THEN
+    IF pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')=0
+       OR pg_catalog.strpos(definition,'ORDER BY batch_row.expires_on,stock.batch_id')>0 THEN
         RAISE EXCEPTION USING ERRCODE='55000',
           MESSAGE='sales-invoice FEFO migration did not produce the reviewed definition';
     END IF;
