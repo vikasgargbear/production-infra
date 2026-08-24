@@ -1,177 +1,124 @@
-# Write-Boundary Matrix — AasoPharma ERP
+# ERP web write-boundary matrix
 
-Scope: backend-first write-boundary inventory audit (feat/claude-desktop-closure).
-Out of scope (Codex owns): invoice creation/tax/place-of-supply, GST period/dashboard,
-ledger/outstanding/collection, sales UUID imports/history, purchase returns/GRN/purchase
-history, customer/supplier/product masters.
+Status date: 2026-08-25. This document describes the canonical web boundary on
+`feat/canonical-erp-data-model`; it is not a record of the retired legacy UI.
 
-Legend
-- **wired**: CTA calls `prepareCanonicalAction` → confirmation modal → `approveAndExecuteCanonicalAction`
-- **disconnected**: canonical command exists but CTA called a legacy endpoint or was a stub
-- **no-command**: no canonical command exists; CTA is explicitly disabled via `rejectCanonicalWrite` or `CanonicalWriteNotice`
+## Authority rule
 
----
+Business documents have one browser write authority:
 
-## Inventory — Stock Adjustment
+1. `POST /api/web/actions/{operation}/prepare` validates business inputs and
+   returns an immutable backend preview.
+2. A visible review identifies the command, exact financial/tax/inventory
+   impact, warnings, and required approval policy.
+3. `POST /api/web/actions/commands/{id}/approve` records explicit intent.
+4. `POST /api/web/actions/commands/{id}/execute` is idempotent and is the only
+   posting boundary.
+5. A canonical UUID detail projection must reconcile the executed resource,
+   line values, tax, stock, open items, and journals before the UI reports
+   success.
 
-| Field | Value |
+The resolver requires exactly one active reviewed ERP web grant. Zero grants
+mean the environment is not provisioned; multiple grants are an authority
+ambiguity. It must fail closed instead of selecting one arbitrarily.
+
+## Core document flows
+
+| Flow | Operation | Desktop UI | Authoritative readback | State |
+|---|---|---|---|---|
+| Sales order | `sales.order.prepare` | backend review → Approve & Post | canonical sales-order UUID detail | active |
+| Delivery / challan | `sales.dispatch.prepare` | source selection → backend review → Approve & Post | dispatch, batch allocation, stock ledger and valuation | active |
+| Sales invoice | `sales.invoice.prepare` | FEFO batch selection → exact review → Approve & Post | invoice, tax, open item, journal and inventory lineage | active |
+| Sales return | `sales.return.prepare` | exact review → independent approval inbox → execute | return, credit note, tax, inventory and journal evidence | active; separate approver |
+| Purchase order | `procurement.purchase_order.prepare` | backend review → Approve & Create PO | approved PO UUID detail and exact lines/totals | active |
+| Goods receipt | `procurement.goods_receipt.prepare` | PO remaining quantities → physical batches → review → post | GRN, locations, stock ledger and valuation | active |
+| Supplier invoice | `procurement.supplier_invoice.prepare` | GRN + parsed GSTR-2B evidence → review → post | receipt allocations, ITC, payable, journal; zero second stock movement | active when portal evidence matches |
+| Purchase return | `procurement.purchase_return.prepare` | exact billed/free review → independent approval inbox → execute | return, debit note, tax, stock and journal evidence | active; separate approver |
+| Customer receipt | `finance.customer_receipt.prepare` | FIFO/manual allocation → exact review → Approve & Post | payment, allocations, residual open items and balanced journal | active |
+| Supplier payment | `finance.supplier_payment.prepare` | FIFO/manual allocation → attested review → post | payment, bank/settlement accounts, allocations and balanced journal | active |
+| Supplier advance | `finance.supplier_advance.prepare` | no primary desktop entry yet | canonical command supports it | backend available; UI absent |
+| Cycle-count adjustment | `inventory.adjustment.prepare` | exact count review → independent approval → execute | inventory document, stock ledger and valuation | active; separate approver |
+| Stock transfer | `inventory.transfer.prepare` | Posting Unavailable | none | backend resolver unavailable; disabled |
+| Destruction | `inventory.destruction.prepare` | no entry | none | backend resolver unavailable |
+
+The browser never retries `execute` after an ambiguous response. Once an
+execution returns a resource UUID, recovery is GET-only against canonical
+readback using the retained UUID and lifecycle identity.
+
+## Deliberately unsupported writes
+
+The following surfaces have no reviewed canonical command and therefore remain
+disabled or reject before transport:
+
+- bank reconciliation;
+- standalone credit/debit notes and expense claims;
+- direct journal authoring;
+- notification rules, campaigns, reminder sending, SMS and email sending;
+- direct collection-center payment recording;
+- company logo, QR and profile mutations;
+- branches, departments, employees and bank-account mutations;
+- supplier/customer lifecycle edits and deletes;
+- product category/type, stock-edit and batch-upload mutations;
+- settings, feature flags, setup/seed and document-number reservation;
+- compliance/drug-license and GSTR-2B mutation routes.
+
+These are product gaps, not permission bypasses. A disabled CTA must explain
+the missing command; it must not fall back to local storage, an offline queue,
+or a legacy endpoint.
+
+## Bounded canonical master authoring
+
+These narrow master operations are intentionally owned directly by
+`canonical_erp_reads` until they require a richer reviewed workflow:
+
+| Method and path | Owner |
 |---|---|
-| Component | `frontend/src/components/inventory/stock/StockAdjustmentFlow.tsx` |
-| CTA | "Post Adjustment" button in step-2 footer (via `GlobalDocumentFlow.onSave`) |
-| Handler | `handlePrepare()` → confirmation modal → `handleCommit()` |
-| API service method | `prepareCanonicalAction('inventory.adjustment.prepare', ...)` then `approveAndExecuteCanonicalAction(...)` |
-| Endpoint URL | `POST /web/actions/inventory.adjustment.prepare/prepare` → `POST /web/actions/commands/{id}/approve` → `POST /web/actions/commands/{id}/execute` |
-| Backend handler | `web_operator_actions.prepare_action` / `approve_command` / `execute_command` |
-| Canonical command | `inventory.adjustment.prepare` |
-| Permissions | `inventory.create` (via agent grant capability) |
-| Response/readback | `ExecutionResponse.resource_id` (adjustment document UUID) shown in success banner |
-| Status | **wired** (this commit) |
-| Previously | Amber "review only" banner; no onSave wired; `stockApi.adjust` hit legacy `/stock-adjustments/` endpoint |
+| `POST /api/products/` | canonical product draft creation |
+| `PUT /api/products/{product_id}` | canonical product draft edit |
+| `DELETE /api/products/{product_id}` | canonical draft-only deletion |
+| `POST /api/customers/` | canonical customer account creation |
+| `POST /api/suppliers/` | canonical supplier account creation |
+| `POST /api/customers/{customer_id}/addresses/` | canonical UUID address creation |
+| `PUT /api/customers/{customer_id}/addresses/{address_id}` | canonical UUID address edit |
 
----
+Registration tests require exactly one owner for each path. The later legacy
+master routers are mounted read-only and cannot shadow these handlers.
 
-## Inventory — Stock Transfer
+## Read-only and calculation utilities
 
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/inventory/stock/StockTransfer.tsx` |
-| CTA | "Post Transfer" button in step-2 footer (via `GlobalDocumentFlow.onSave`) |
-| Handler | `handlePrepare()` → confirmation modal → `handleCommit()` |
-| API service method | `prepareCanonicalAction('inventory.transfer.prepare', ...)` then `approveAndExecuteCanonicalAction(...)` |
-| Endpoint URL | `POST /web/actions/inventory.transfer.prepare/prepare` → approve → execute |
-| Backend handler | `web_operator_actions.prepare_action` / `approve_command` / `execute_command` |
-| Canonical command | `inventory.transfer.prepare` |
-| Permissions | `inventory.create` (branch-scoped; both source and destination branch checked) |
-| Response/readback | `ExecutionResponse.resource_id` (transfer document UUID) shown in success banner |
-| Status | **wired** (this commit) |
-| Previously | Amber "review only" banner; no onSave; `stockApi.transfer` hit legacy `/stock-movements/transfer` endpoint; `inventory.transfer.prepare` was missing from frontend `CanonicalOperationKey` type |
+Legacy routers are filtered when mounted: only GET/HEAD/OPTIONS survive. Every
+effective POST/PUT/PATCH/DELETE is compared with an exact owner allowlist at
+test time. Read handlers are separately audited for database, file and external
+side effects.
 
----
+The only browser POST utilities outside reviewed commands are non-persistent,
+owner-pinned parsers and calculators:
 
-## Inventory — Stock Movement (read-only log)
+- purchase invoice parse/validation;
+- invoice, order, challan, purchase, return and note calculation previews;
+- tax-entry and GST calculations.
 
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/inventory/stock/StockMovement.tsx` |
-| CTA | No write CTA; this is a read-only history view |
-| Status | **no-command** (no write action required; read path uses `stockApi.getMovements` → `/inventory/movements`) |
+Their decimal-bearing responses are JSON strings. A JSON number at an
+authoritative numeric boundary is rejected by the active UI because it may
+already have lost precision.
 
----
+## External contact actions
 
-## Finance — Customer Receipt (Payment Received)
+Email, WhatsApp and telephone links are browser intents, not ERP persistence.
+They require a valid destination and an explicit click. Automated acceptance
+may inspect the encoded destination and content, but must not send a message or
+place a call.
 
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/payment/entry/EnterprisePaymentEntry.tsx`, `ModularPaymentEntry.tsx`, `PaymentReceived.tsx` |
-| CTA | "Save Payment" button |
-| Handler | `handleSave()` — currently shows error toast / `CanonicalWriteNotice` |
-| API service method | `paymentsApi.create` → `rejectCanonicalWrite('Posting a payment')` |
-| Endpoint URL | None (blocked) |
-| Backend handler | None wired to web transport yet |
-| Canonical command | `finance.customer_receipt.prepare` (exists in `CanonicalOperationKey`) |
-| Permissions | TBD — requires `finance.customer_receipt` agent grant capability |
-| Response/readback | N/A |
-| Status | **disconnected** |
-| What must be built | Wire `EnterprisePaymentEntry`/`ModularPaymentEntry` "Save Payment" CTA to `prepareCanonicalAction('finance.customer_receipt.prepare', ...)` → confirmation modal → execute. The payload requires `payment_method` (bank_transfer/card/upi), `bank_account_id`, `external_reference`, `amount`, `allocations[]` matching open items exactly. `PaymentReceived.tsx` is a placeholder stub — replace with the real flow or delete. |
+## Release evidence required
 
----
+Before promotion, the deployed SHA must pass:
 
-## Finance — Supplier Payment (Payment Made)
-
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/payment/entry/PaymentMade.tsx` |
-| CTA | None (placeholder "Coming soon" stub) |
-| Handler | None |
-| API service method | `paymentsApi.create` → `rejectCanonicalWrite('Posting a payment')` |
-| Endpoint URL | None (blocked) |
-| Backend handler | None wired to web transport yet |
-| Canonical command | `finance.supplier_payment.prepare` (exists in `CanonicalOperationKey`) |
-| Permissions | TBD — requires `finance.supplier_payment` agent grant capability |
-| Response/readback | N/A |
-| Status | **disconnected** |
-| What must be built | Build supplier payment entry flow mirroring `EnterprisePaymentEntry` pattern; call `prepareCanonicalAction('finance.supplier_payment.prepare', ...)`. Payload requires `payment_method` (bank_transfer/upi), `bank_account_id`, `external_reference`, `gross_amount`, `allocations[]` summing exactly to `gross_amount`. `PaymentMade.tsx` is a "Coming soon" placeholder — replace. |
-
----
-
-## Finance — Supplier Advance
-
-| Field | Value |
-|---|---|
-| Component | None (no flow implemented) |
-| CTA | None |
-| Canonical command | `finance.supplier_advance.prepare` (exists in `CanonicalOperationKey`) |
-| Status | **no-command** (command exists but no UI entry point built yet) |
-| What must be built | Build supplier advance entry; payload requires exactly one PO-line allocation; `payment_method` restricted to bank_transfer/upi. |
-
----
-
-## Finance — Bank Reconciliation
-
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/payment/flows/BankReconciliationFlow.tsx` |
-| CTA | Start Reconciliation |
-| API service method | `paymentsApi.startBankReconciliation` → `rejectCanonicalWrite('Starting bank reconciliation')` |
-| Canonical command | None |
-| Status | **no-command** |
-| What must be built | Canonical bank reconciliation command is not yet defined. CTA is correctly disabled. Do not restore legacy behavior. |
-
----
-
-## Finance — Credit/Debit Note
-
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/payment/flows/CreditDebitFlow.tsx` |
-| CTA | TBD |
-| Canonical command | None |
-| Status | **no-command** |
-| What must be built | No canonical command yet. CTA must remain disabled until command is defined. |
-
----
-
-## Finance — Expense Claims
-
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/payment/flows/ExpenseClaimsFlow.tsx` |
-| CTA | TBD |
-| Canonical command | None |
-| Status | **no-command** |
-| What must be built | No canonical command yet. CTA must remain disabled. |
-
----
-
-## Finance — Journal Entry
-
-| Field | Value |
-|---|---|
-| Component | `frontend/src/components/payment/flows/FinancialJournalFlow.tsx` |
-| CTA | Post Journal Entry |
-| API service method | `journalApi` (out of scope — Codex owns ledger/journal) |
-| Status | out-of-scope |
-
----
-
-## Summary
-
-| CTA | Status |
-|---|---|
-| Stock Adjustment — Post Adjustment | wired |
-| Stock Transfer — Post Transfer | wired |
-| Stock Movement — (read-only) | no-command (correct) |
-| Customer Receipt — Save Payment | disconnected — needs build |
-| Supplier Payment — Save Payment | disconnected — needs build |
-| Supplier Advance — (no UI) | disconnected — needs build |
-| Bank Reconciliation — Start | no-command (correctly disabled) |
-| Credit/Debit Note | no-command (correctly disabled) |
-| Expense Claims | no-command (correctly disabled) |
-| Journal Entry | out-of-scope (Codex) |
-
-### Legacy endpoint fence
-
-`stockApi.adjust`, `stockApi.transfer`, and `stockApi.createAdjustment` now call
-`rejectCanonicalWrite(...)` instead of posting to `/stock-adjustments/` or
-`/stock-movements/transfer`. Any legacy caller will receive a
-`CanonicalWriteUnavailableError` at runtime rather than silently writing to the legacy path.
+- full backend, frontend, TypeScript, lint, build and PostgreSQL/Alembic gates;
+- authenticated desktop Playwright journeys with writes enabled in the
+  disposable canonical organization;
+- maker/checker Playwright for sales return, purchase return and cycle count;
+- exact API and database reconciliation for UUIDs, decimals, tax, inventory,
+  allocations, open items and balanced journals;
+- live API, frontend and MCP deployment-SHA agreement;
+- negative missing/invalid/duplicate/ambiguous tests with no fake success and
+  no legacy/offline fallback.
