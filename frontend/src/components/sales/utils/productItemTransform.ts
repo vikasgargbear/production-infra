@@ -5,7 +5,10 @@
  * Handles data from multiple sources (BatchSelector, API best_batch, legacy).
  */
 
-import { BaseLineItem } from '../types/salesSharedTypes';
+import {
+    BaseLineItem,
+    FreeSupplyTaxTreatment,
+} from '../types/salesSharedTypes';
 
 export interface ProductInput {
     product_id?: number | string;
@@ -31,6 +34,7 @@ export interface ProductInput {
     hsn_code?: string;
     quantity?: number;
     free_quantity?: number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     discount_percent?: number;
     best_batch?: any; // Nested batch data from API
     [key: string]: any; // Allow additional fields
@@ -113,6 +117,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         mrp: mrp,
         quantity: parseInt(String(product.quantity || 1)),
         free_quantity: parseInt(String(product.free_quantity || 0)),
+        free_supply_tax_treatment:
+            product.free_supply_tax_treatment || 'excluded_from_taxable_value',
         unit: ''
     };
 

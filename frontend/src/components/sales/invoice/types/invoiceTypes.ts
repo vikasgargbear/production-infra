@@ -9,6 +9,10 @@
  *          InvoiceSelector, EnterprisePaymentEntry, CustomerCreationModal, etc.
  */
 
+import type {
+    FreeSupplyTaxTreatment as SharedFreeSupplyTaxTreatment,
+} from '../../types/salesSharedTypes';
+
 // ==================== BASE TYPES ====================
 
 /** Payment method types supported by the system */
@@ -25,6 +29,9 @@ export type DeliveryType = 'local' | 'courier' | 'self_pickup' | 'transport' | '
 
 /** GST type - intra-state vs inter-state */
 export type GstType = 'CGST/SGST' | 'IGST';
+
+/** Whether free units contribute to the taxable line value. */
+export type FreeSupplyTaxTreatment = SharedFreeSupplyTaxTreatment;
 
 // ==================== BANK ACCOUNT ====================
 
@@ -206,6 +213,7 @@ export interface InvoiceItem {
     // Quantities
     quantity?: number;
     free_quantity?: number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     ordered_quantity?: number;
     dispatched_quantity?: number;
 
@@ -504,6 +512,7 @@ export interface ProductInput {
     // Quantities
     quantity?: number;
     free_quantity?: number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     quantity_available?: number;
     available_quantity?: number;
     total_quantity_available?: number;  // Alias from product search

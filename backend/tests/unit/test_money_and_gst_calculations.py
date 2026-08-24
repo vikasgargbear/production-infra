@@ -225,6 +225,66 @@ def test_invoice_preview_response_is_strict_and_serializes_frontend_numbers():
         )
 
 
+@pytest.mark.parametrize(
+    "free_supply_tax_treatment,expected_subtotal,expected_tax,expected_total",
+    [
+        ("included_at_unit_rate", 300.0, 54.0, 354.0),
+        ("excluded_from_taxable_value", 200.0, 36.0, 236.0),
+    ],
+)
+def test_invoice_mixed_billed_and_free_treatment_matches_preview_contract(
+    free_supply_tax_treatment,
+    expected_subtotal,
+    expected_tax,
+    expected_total,
+):
+    from app.api.routes.calculations import _preview_response
+    from app.api.schemas.calculations import (
+        InvoiceCalculationPreviewResponse,
+        InvoiceCalculationRequest,
+    )
+
+    request = InvoiceCalculationRequest.model_validate({
+        "customer_id": "d3000000-0000-7000-8000-000000000001",
+        "gst_type": "IGST",
+        "items": [{
+            "product_id": "d3000000-0000-7000-8000-000000000002",
+            "quantity": "2",
+            "free_quantity": "1",
+            "free_supply_tax_treatment": free_supply_tax_treatment,
+            "unit_price": "100",
+            "gst_percent": "18",
+        }],
+    })
+    totals = InvoiceService.calculate_invoice_totals(
+        items=[item.model_dump() for item in request.items],
+        gst_type=request.gst_type,
+    )
+    response = _preview_response(
+        totals,
+        request.gst_type,
+        InvoiceCalculationPreviewResponse,
+        request.items,
+    )
+    body = response.model_dump(mode="json")
+
+    line = body["line_items"][0]
+    assert line["product_id"] == "d3000000-0000-7000-8000-000000000002"
+    assert line["quantity"] == 2.0
+    assert line["free_quantity"] == 1.0
+    assert line["free_supply_tax_treatment"] == free_supply_tax_treatment
+    assert line["subtotal"] == expected_subtotal
+    assert line["taxable_amount"] == expected_subtotal
+    assert line["igst_amount"] == expected_tax
+    assert line["total_tax_amount"] == expected_tax
+    assert line["line_total"] == expected_total
+    assert body["totals"]["subtotal_amount"] == expected_subtotal
+    assert body["totals"]["taxable_amount"] == expected_subtotal
+    assert body["totals"]["igst_amount"] == expected_tax
+    assert body["totals"]["total_tax_amount"] == expected_tax
+    assert body["totals"]["final_amount"] == expected_total
+
+
 def test_line_calculation_matrix_covers_prices_quantities_discounts_and_gst():
     quantities = ["0", "0.01", "1", "2.5", "9999"]
     prices = ["0", "0.01", "1.005", "99.99", "1234.567"]

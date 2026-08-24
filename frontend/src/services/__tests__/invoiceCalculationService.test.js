@@ -87,3 +87,123 @@ test('preserves canonical UUID IDs in the online calculation request', async () 
     items: [expect.objectContaining({ product_id: productId })]
   }));
 });
+
+test('preserves mixed free-supply treatments in the exact online request and response', async () => {
+  const customerId = '11111111-1111-4111-8111-111111111111';
+  const includedProductId = '22222222-2222-4222-8222-222222222222';
+  const excludedProductId = '33333333-3333-4333-8333-333333333333';
+  invoiceCalculationsApi.preview.mockResolvedValue({
+    data: {
+      success: true,
+      gst_type: 'IGST',
+      calculation_timestamp: 1,
+      line_items: [
+        {
+          product_id: includedProductId,
+          quantity: 2,
+          free_quantity: 1,
+          free_supply_tax_treatment: 'included_at_unit_rate',
+          subtotal: 300,
+          taxable_amount: 300,
+          total_tax_amount: 54,
+          line_total: 354
+        },
+        {
+          product_id: excludedProductId,
+          quantity: 2,
+          free_quantity: 1,
+          free_supply_tax_treatment: 'excluded_from_taxable_value',
+          subtotal: 200,
+          taxable_amount: 200,
+          total_tax_amount: 36,
+          line_total: 236
+        }
+      ],
+      totals: {
+        subtotal_amount: 500,
+        discount_amount: 0,
+        scheme_discount: 0,
+        taxable_amount: 500,
+        cgst_amount: 0,
+        sgst_amount: 0,
+        igst_amount: 90,
+        total_tax_amount: 90,
+        round_off_amount: 0,
+        final_amount: 590
+      }
+    }
+  });
+
+  const result = await calculateInvoicePreview({
+    customer_details: { customer_id: customerId },
+    gst_type: 'IGST',
+    items: [
+      {
+        product_id: includedProductId,
+        quantity: 2,
+        free_quantity: 1,
+        free_supply_tax_treatment: 'included_at_unit_rate',
+        unit_price: 100,
+        discount_percent: 0,
+        gst_percent: 18
+      },
+      {
+        product_id: excludedProductId,
+        quantity: 2,
+        free_quantity: 1,
+        free_supply_tax_treatment: 'excluded_from_taxable_value',
+        unit_price: 100,
+        discount_percent: 0,
+        gst_percent: 18
+      }
+    ]
+  }, true);
+
+  expect(invoiceCalculationsApi.preview).toHaveBeenCalledWith({
+    customer_id: customerId,
+    gst_type: 'IGST',
+    items: [
+      {
+        product_id: includedProductId,
+        quantity: 2,
+        free_quantity: 1,
+        free_supply_tax_treatment: 'included_at_unit_rate',
+        unit_price: 100,
+        discount_percent: 0,
+        gst_percent: 18
+      },
+      {
+        product_id: excludedProductId,
+        quantity: 2,
+        free_quantity: 1,
+        free_supply_tax_treatment: 'excluded_from_taxable_value',
+        unit_price: 100,
+        discount_percent: 0,
+        gst_percent: 18
+      }
+    ],
+    freight_charges: 0,
+    insurance_charges: 0,
+    other_charges: 0,
+    discount_type: 'percentage',
+    discount_percent: 0,
+    discount_amount: 0
+  });
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      free_supply_tax_treatment: 'included_at_unit_rate',
+      taxable_amount: 300,
+      total_amount: 354
+    }),
+    expect.objectContaining({
+      free_supply_tax_treatment: 'excluded_from_taxable_value',
+      taxable_amount: 200,
+      total_amount: 236
+    })
+  ]);
+  expect(result.totals).toEqual(expect.objectContaining({
+    taxable_amount: 500,
+    total_tax_amount: 90,
+    final_amount: 590
+  }));
+});

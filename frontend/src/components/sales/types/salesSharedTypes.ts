@@ -17,6 +17,10 @@ export type PaymentStatusType = 'pending' | 'partial' | 'paid' | 'overdue' | 'un
 /** Delivery type options */
 export type DeliveryTypeBase = 'PICKUP' | 'DELIVERY' | 'COURIER' | 'TRANSPORT';
 
+export type FreeSupplyTaxTreatment =
+    | 'excluded_from_taxable_value'
+    | 'included_at_unit_rate';
+
 // ==================== EMPLOYEE (SHARED) ====================
 
 /** Employee / Sales Representative / M.R. */
@@ -74,6 +78,7 @@ export interface BaseLineItem {
     // Quantity
     quantity: number;
     free_quantity?: number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     unit?: string;
 
     // Pricing - backend uses unit_price and mrp

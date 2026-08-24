@@ -362,6 +362,8 @@ export const useInvoiceLogic = (
         // eslint-disable-next-line react-hooks/exhaustive-deps
         JSON.stringify(invoice.items?.map(i => ({
             quantity: i.quantity,
+            free_quantity: i.free_quantity,
+            free_supply_tax_treatment: i.free_supply_tax_treatment,
             unit_price: i.unit_price,
             discount_percent: i.discount_percent,
             gst_percent: i.gst_percent

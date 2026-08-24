@@ -21,6 +21,8 @@ function toRequest(invoice: any): InvoiceCalculationRequest {
             product_id: item.product_id,
             quantity: item.quantity,
             free_quantity: item.free_quantity || 0,
+            free_supply_tax_treatment:
+                item.free_supply_tax_treatment || 'excluded_from_taxable_value',
             unit_price: item.unit_price,
             discount_percent: item.discount_percent || 0,
             gst_percent: item.gst_percent ?? item.tax_percent ?? 0
