@@ -1385,7 +1385,8 @@ def gst_dashboard(
                COALESCE(sales.igst,0) AS igst_amount,
                COALESCE(purchases.cgst,0) AS purchase_cgst_amount,
                COALESCE(purchases.sgst,0) AS purchase_sgst_amount,
-               COALESCE(purchases.igst,0) AS purchase_igst_amount
+               COALESCE(purchases.igst,0) AS purchase_igst_amount,
+               COALESCE(purchase_adjustments.unsupported_count,0) AS unsupported_input_adjustments
           FROM period_bounds period
           CROSS JOIN LATERAL (
                 SELECT SUM(CASE WHEN tax_document.document_effect='decrease' THEN -1 ELSE 1 END *
@@ -1454,6 +1455,37 @@ def gst_dashboard(
                           AND return_period.period_end<=period.date_to
                    )
           ) purchases
+          CROSS JOIN LATERAL (
+                SELECT count(DISTINCT note.id) AS unsupported_count
+                  FROM finance.adjustment_notes note
+                  JOIN finance.adjustment_note_lines line
+                    ON line.org_id=note.org_id
+                   AND line.adjustment_note_id=note.id
+                   AND line.itc_eligibility='eligible'
+                  JOIN tax.portal_document_lines portal_line
+                    ON portal_line.org_id=note.org_id
+                   AND portal_line.id=note.counterparty_portal_document_line_id
+                  JOIN tax.portal_documents portal_document
+                    ON portal_document.org_id=portal_line.org_id
+                   AND portal_document.id=portal_line.portal_document_id
+                   AND portal_document.portal_document_type='gstr2b'
+                   AND portal_document.status='parsed'
+                   AND portal_document.parsed_at IS NOT NULL
+                  JOIN tax.return_periods return_period
+                    ON return_period.org_id=portal_document.org_id
+                   AND return_period.id=portal_document.return_period_id
+                   AND return_period.registration_id=portal_document.registration_id
+                 WHERE note.org_id=:org_id AND note.status='posted'
+                   AND note.side='purchase' AND note.gst_tax_treatment='statutory'
+                   AND return_period.period_start>=period.date_from
+                   AND return_period.period_end<=period.date_to
+                   AND EXISTS (
+                       SELECT 1 FROM tax.documents tax_document
+                        WHERE tax_document.org_id=note.org_id
+                          AND tax_document.adjustment_note_id=note.id
+                          AND tax_document.document_class='adjustment_note'
+                   )
+          ) purchase_adjustments
     """, {"org_id": org_id, "period": period})
     summary = rows[0] if rows else {}
     period_start = summary.pop("date_from", None)
@@ -1461,6 +1493,11 @@ def gst_dashboard(
     output_tax = money_json(summary.pop("output_tax", 0))
     input_credit = money_json(summary.pop("input_credit", 0))
     net_payable = money_json(summary.pop("net_payable", 0))
+    if int(summary.pop("unsupported_input_adjustments", 0) or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Eligible purchase adjustments require canonical GSTR-2B ITC projection",
+        )
     summary = _money_fields(summary, (
         "cgst_amount", "sgst_amount", "igst_amount",
         "purchase_cgst_amount", "purchase_sgst_amount", "purchase_igst_amount",
@@ -1622,7 +1659,8 @@ def canonical_gstr3b_report(
                COALESCE(input.cgst,0) AS input_cgst,
                COALESCE(input.sgst,0) AS input_sgst,
                COALESCE(input.igst,0) AS input_igst,
-               COALESCE(input.cess,0) AS input_cess
+               COALESCE(input.cess,0) AS input_cess,
+               COALESCE(purchase_adjustments.unsupported_count,0) AS unsupported_input_adjustments
           FROM (
               SELECT SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.cgst_amount ELSE tax_document.cgst_amount END) cgst,
                      SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.sgst_amount ELSE tax_document.sgst_amount END) sgst,
@@ -1683,8 +1721,44 @@ def canonical_gstr3b_report(
                         AND return_period.period_end<=:date_to
                  )
           ) input
+          CROSS JOIN (
+              SELECT count(DISTINCT note.id) AS unsupported_count
+                FROM finance.adjustment_notes note
+                JOIN finance.adjustment_note_lines line
+                  ON line.org_id=note.org_id
+                 AND line.adjustment_note_id=note.id
+                 AND line.itc_eligibility='eligible'
+                JOIN tax.portal_document_lines portal_line
+                  ON portal_line.org_id=note.org_id
+                 AND portal_line.id=note.counterparty_portal_document_line_id
+                JOIN tax.portal_documents portal_document
+                  ON portal_document.org_id=portal_line.org_id
+                 AND portal_document.id=portal_line.portal_document_id
+                 AND portal_document.portal_document_type='gstr2b'
+                 AND portal_document.status='parsed'
+                 AND portal_document.parsed_at IS NOT NULL
+                JOIN tax.return_periods return_period
+                  ON return_period.org_id=portal_document.org_id
+                 AND return_period.id=portal_document.return_period_id
+                 AND return_period.registration_id=portal_document.registration_id
+               WHERE note.org_id=:org_id AND note.status='posted'
+                 AND note.side='purchase' AND note.gst_tax_treatment='statutory'
+                 AND return_period.period_start>=:date_from
+                 AND return_period.period_end<=:date_to
+                 AND EXISTS (
+                     SELECT 1 FROM tax.documents tax_document
+                      WHERE tax_document.org_id=note.org_id
+                        AND tax_document.adjustment_note_id=note.id
+                        AND tax_document.document_class='adjustment_note'
+                 )
+          ) purchase_adjustments
     """, params)
     row = rows[0] if rows else {}
+    if int(row.get("unsupported_input_adjustments") or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Eligible purchase adjustments require canonical GSTR-2B ITC projection",
+        )
     output = {component: Decimal(str(row.get(f"output_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
     input_credit = {component: Decimal(str(row.get(f"input_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
     payable = {component: max(Decimal("0"), output[component]-input_credit[component]) for component in output}

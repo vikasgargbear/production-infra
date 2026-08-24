@@ -1264,6 +1264,7 @@ def test_gstr3b_and_dashboard_itc_require_eligible_lines_and_parsed_gstr2b() -> 
         assert "portal_document.parsed_at IS NOT NULL" in source
         assert "command.status='succeeded'" in source
         assert "AND EXISTS (" in source
+        assert "Eligible purchase adjustments require canonical GSTR-2B ITC projection" in source
     assert "return_period.period_start>=:date_from" in gstr3b
     assert "return_period.period_end<=:date_to" in gstr3b
     assert "supplier_invoice_date BETWEEN :date_from AND :date_to" not in gstr3b
@@ -1281,6 +1282,20 @@ def test_gstr3b_query_excludes_ineligible_or_unattested_supplier_tax(
     assert "command.status='succeeded'" in source
     assert "portal_document.portal_document_type='gstr2b'" in source
     assert "portal_document.status='parsed'" in source
+
+
+def test_gstr3b_fails_closed_for_eligible_matched_purchase_adjustments(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args: [{
+        "unsupported_input_adjustments": 1,
+    }])
+
+    with pytest.raises(HTTPException) as exc:
+        canonical_erp_reads.canonical_gstr3b_report(
+            date_from=date(2026, 8, 1), date_to=date(2026, 8, 31), user={}, db=object(),
+        )
+    assert exc.value.status_code == 503
+    assert "purchase adjustments" in exc.value.detail
 
 
 def test_supplier_aging_fails_closed_instead_of_returning_a_fake_empty_success(monkeypatch) -> None:
