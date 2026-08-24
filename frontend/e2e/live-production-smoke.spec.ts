@@ -1,3 +1,4 @@
+/* eslint-disable jest/valid-expect, jest/valid-title, jest/no-conditional-expect, testing-library/prefer-screen-queries */
 import { expect, test } from '@playwright/test';
 import {
   assertNoVisibleFailure,
@@ -153,6 +154,9 @@ test.describe('live ERP pilot', () => {
     const body = await calculated.text();
     expect(calculated.status(), body.slice(0, 1500)).toBeGreaterThanOrEqual(200);
     expect(calculated.status(), body.slice(0, 1500)).toBeLessThan(300);
+    const calculation = JSON.parse(body);
+    expect(typeof calculation.totals.final_amount).toBe('string');
+    expect(calculation.totals.final_amount).toMatch(/^\d+(?:\.\d+)?$/);
 
     const line = page.getByRole('row', { name: new RegExp(productName) });
     await expect(line).toBeVisible();
@@ -209,10 +213,18 @@ test.describe('live ERP pilot', () => {
       ));
 
       await page.getByRole('button', { name: 'Generate Invoice', exact: true }).last().click();
-      const [prepared, approved, executed, confirmed] = await Promise.all([
-        prepare, approve, execute, readback,
+      const prepared = await prepare;
+      const preparedBody = await prepared.text();
+      expect(prepared.status(), `${prepared.url()} ${preparedBody.slice(0, 1500)}`).toBeGreaterThanOrEqual(200);
+      expect(prepared.status(), `${prepared.url()} ${preparedBody.slice(0, 1500)}`).toBeLessThan(300);
+      const review = page.getByRole('dialog', { name: 'Review exact sales invoice' });
+      await expect(review).toBeVisible();
+      await review.getByRole('checkbox').check();
+      await review.getByRole('button', { name: 'Approve & Post' }).click();
+      const [approved, executed, confirmed] = await Promise.all([
+        approve, execute, readback,
       ]);
-      for (const response of [prepared, approved, executed, confirmed]) {
+      for (const response of [approved, executed, confirmed]) {
         const body = await response.text();
         expect(response.status(), `${response.url()} ${body.slice(0, 1500)}`).toBeGreaterThanOrEqual(200);
         expect(response.status(), `${response.url()} ${body.slice(0, 1500)}`).toBeLessThan(300);
@@ -222,7 +234,9 @@ test.describe('live ERP pilot', () => {
       expect(execution.resource_id).toMatch(/^[0-9a-f-]{36}$/);
       expect(authoritative.invoice_id).toBe(execution.resource_id);
       expect(authoritative.invoice_number).toBeTruthy();
-      expect(Number(authoritative.total_amount)).toBeGreaterThan(0);
+      expect(typeof authoritative.total_amount).toBe('string');
+      expect(authoritative.total_amount).toMatch(/^\d+(?:\.\d+)?$/);
+      expect(BigInt(authoritative.total_amount.replace('.', ''))).toBeGreaterThan(0n);
       await expect(page.getByText('Invoice Created!', { exact: true })).toBeVisible();
       await expect(page.getByText(authoritative.invoice_number, { exact: true })).toBeVisible();
     }
