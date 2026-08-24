@@ -6,10 +6,11 @@
  * The main component handles only rendering.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../../../contexts/AuthContext';
-import { getDaysFromToday, getTodayBusinessDate } from '../../../../utils/indianDateUtils';
 import { clientUuid } from '../../../../utils/clientUuid';
+import { canonicalBusinessContextApi } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { toast } from 'react-toastify';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
 import {
     canonicalPurchaseOrderValidationError,
@@ -116,10 +117,12 @@ export interface UsePurchaseOrderLogicReturn {
     handlePrint: () => void;
 }
 
-export const getInitialPurchaseOrder = (prefilledData?: Partial<PurchaseOrderData> | null): PurchaseOrderData => ({
+export const getInitialPurchaseOrder = (
+    prefilledData?: Partial<PurchaseOrderData> | null,
+): PurchaseOrderData => ({
     po_no: '',
-    po_date: getTodayBusinessDate(),
-    expected_delivery_date: getDaysFromToday(7),
+    po_date: prefilledData?.po_date || '',
+    expected_delivery_date: prefilledData?.expected_delivery_date || '',
     supplier_id: prefilledData?.supplier_id || '',
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
@@ -157,6 +160,29 @@ export function usePurchaseOrderLogic({
 
     // Data States
     const [createdPOData, setCreatedPOData] = useState<CreatedPOData | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        if (purchaseOrder.po_date && purchaseOrder.expected_delivery_date) return undefined;
+        void canonicalBusinessContextApi.get().then(context => {
+            if (!active) return;
+            const delivery = new Date(`${context.business_date}T00:00:00Z`);
+            delivery.setUTCDate(delivery.getUTCDate() + 7);
+            const expectedDeliveryDate = delivery.toISOString().slice(0, 10);
+            setPurchaseOrder(previous => ({
+                ...previous,
+                po_date: previous.po_date || context.business_date,
+                expected_delivery_date: previous.expected_delivery_date || expectedDeliveryDate,
+            }));
+        }).catch(error => {
+            if (active) toast.error(
+                error instanceof Error
+                    ? error.message
+                    : 'Unable to load the organization business date.',
+            );
+        });
+        return () => { active = false; };
+    }, [purchaseOrder.po_date, purchaseOrder.expected_delivery_date]);
 
     // Handlers
     const handleSupplierSelect = useCallback((supplier: any) => {

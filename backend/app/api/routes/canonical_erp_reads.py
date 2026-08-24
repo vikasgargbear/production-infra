@@ -102,6 +102,42 @@ PURCHASE_USER = Depends(PermissionChecker("purchase", "view"))
 INVENTORY_USER = Depends(PermissionChecker("inventory", "view"))
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
 
+
+class CanonicalBusinessContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: UUID
+    organization_timezone: str
+    business_date: date
+
+
+@router.get("/canonical/business-context", response_model=CanonicalBusinessContext)
+def canonical_business_context(
+    user: dict = Depends(PermissionChecker()),
+    db: Session = Depends(get_db),
+) -> CanonicalBusinessContext:
+    """Return the server-owned wall-clock date for the active organization."""
+
+    org_id = _activate(db, user)
+    rows = _rows(
+        db,
+        """
+        SELECT organization.id AS organization_id,
+               organization.timezone AS organization_timezone,
+               (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AS business_date
+          FROM core.organizations organization
+         WHERE organization.id=:org_id AND organization.status='active'
+        """,
+        {"org_id": org_id},
+    )
+    if len(rows) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The active organization has no authoritative business clock",
+        )
+    return CanonicalBusinessContext.model_validate(rows[0])
+
 INDIAN_STATE_CODES = {
     "Andaman and Nicobar Islands": "35", "Andhra Pradesh": "37",
     "Arunachal Pradesh": "12", "Assam": "18", "Bihar": "10",

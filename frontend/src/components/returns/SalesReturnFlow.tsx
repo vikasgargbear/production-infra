@@ -37,6 +37,7 @@ import { clientUuid } from '../../utils/clientUuid';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { CANONICAL_SALES_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
+import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const rateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -76,6 +77,22 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
   const { canPrepare, unavailableReason } = getSalesReturnSubmissionBoundary(returnData as any);
+
+  useEffect(() => {
+    let active = true;
+    if (returnData.return_date) return undefined;
+    void canonicalBusinessContextApi.get().then(context => {
+      if (active) dispatch({
+        type: 'SET_RETURN_DATA',
+        data: { return_date: context.business_date },
+      });
+    }).catch(error => {
+      if (active) toast.error(
+        error instanceof Error ? error.message : 'Unable to load the organization business date.',
+      );
+    });
+    return () => { active = false; };
+  }, [dispatch, returnData.return_date]);
 
   // Load return reasons
   useEffect(() => {

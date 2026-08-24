@@ -129,16 +129,16 @@ describe('canonical purchase-order command', () => {
             .toContain('exact decimal string');
     });
 
-    it('uses the local IST business date across UTC rollover', () => {
-        jest.useFakeTimers().setSystemTime(new Date('2026-08-24T19:00:00.000Z'));
-        window.localStorage.setItem('company_timezone', 'Asia/Kolkata');
-        try {
-            const initial = getInitialPurchaseOrder();
-            expect(initial.po_date).toBe('2026-08-25');
-            expect(initial.expected_delivery_date).toBe('2026-09-01');
-        } finally {
-            window.localStorage.removeItem('company_timezone');
-            jest.useRealTimers();
-        }
+    it('does not invent business dates in the browser', () => {
+        const empty = getInitialPurchaseOrder();
+        expect(empty.po_date).toBe('');
+        expect(empty.expected_delivery_date).toBe('');
+
+        const authoritative = getInitialPurchaseOrder({
+            po_date: '2026-08-25',
+            expected_delivery_date: '2026-09-01',
+        });
+        expect(authoritative.po_date).toBe('2026-08-25');
+        expect(authoritative.expected_delivery_date).toBe('2026-09-01');
     });
 });

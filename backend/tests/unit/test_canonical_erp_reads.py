@@ -16,6 +16,7 @@ from app.main import app
 
 
 CRITICAL_UI_READS = {
+    "/api/canonical/business-context",
     "/api/products",
     "/api/products/{product_id}/batches",
     "/api/customers",
@@ -40,6 +41,39 @@ CRITICAL_UI_READS = {
     "/api/dashboard/stats",
     "/api/settings/features",
 }
+
+
+def test_business_context_uses_server_clock_in_organization_timezone(monkeypatch) -> None:
+    org_id = uuid4()
+    captured = {}
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{
+            "organization_id": org_id,
+            "organization_timezone": "Asia/Kolkata",
+            "business_date": date(2026, 8, 25),
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.canonical_business_context(user={}, db=object())
+
+    assert result.business_date == date(2026, 8, 25)
+    assert result.organization_timezone == "Asia/Kolkata"
+    assert "transaction_timestamp() AT TIME ZONE organization.timezone" in captured["sql"]
+    assert captured["params"] == {"org_id": org_id}
+
+
+def test_business_context_fails_closed_without_one_active_organization(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args, **_kwargs: [])
+
+    with pytest.raises(HTTPException) as exc:
+        canonical_erp_reads.canonical_business_context(user={}, db=object())
+
+    assert exc.value.status_code == 503
 
 
 def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:

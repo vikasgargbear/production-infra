@@ -19,10 +19,10 @@ import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
 import { updatePurchaseReturnItem } from './utils/purchaseReturnProjection';
 import { prepareCanonicalPurchaseReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
-import { indiaBusinessDate } from './utils/returnBusinessDate';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { CANONICAL_PURCHASE_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
+import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
 
 const purchaseQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const purchaseRateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -96,7 +96,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   // Return data state - matching sales return structure
   const [returnData, setReturnData] = useState<PurchaseReturnData>({
     return_no: '',
-    return_date: indiaBusinessDate(),
+    return_date: '',
     supplier_id: '',
     supplier_details: null,
     supplier_invoice_id: '',
@@ -138,6 +138,22 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     isPositiveDecimalText(item.return_paid_qty)
     || isPositiveDecimalText(item.return_free_qty)
   ));
+
+  useEffect(() => {
+    let active = true;
+    if (returnData.return_date) return undefined;
+    void canonicalBusinessContextApi.get().then(context => {
+      if (active) setReturnData(previous => ({
+        ...previous,
+        return_date: context.business_date,
+      }));
+    }).catch(error => {
+      if (active) toast.error(
+        error instanceof Error ? error.message : 'Unable to load the organization business date.',
+      );
+    });
+    return () => { active = false; };
+  }, [returnData.return_date, toast]);
 
   // Load return reasons from system settings
   useEffect(() => {
@@ -464,7 +480,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   value={returnData.return_date}
                   onChange={(dateStr) => setReturnData(prev => ({
                     ...prev,
-                    return_date: dateStr || indiaBusinessDate()
+                    return_date: dateStr
                   }))}
                   required
                 />

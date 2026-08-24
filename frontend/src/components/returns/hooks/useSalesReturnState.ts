@@ -7,7 +7,6 @@
 import { useReducer } from 'react';
 import type { ReturnUIState, ReturnFormData, ReturnReason } from '../types/return.types';
 import type { Customer, Invoice } from '../../../types/api.types';
-import { indiaBusinessDate } from '../utils/returnBusinessDate';
 
 // ============================================================================
 // State Type
@@ -48,7 +47,7 @@ type ReturnAction =
 
 const initialReturnData: ReturnFormData = {
     return_no: '',
-    return_date: indiaBusinessDate(),
+    return_date: '',
     customer_id: '',
     customer_details: null,
     invoice_id: '',
