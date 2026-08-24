@@ -1643,6 +1643,223 @@ class CanonicalInvoiceDetailItem(BaseModel):
         return self
 
 
+class CanonicalSalesOrderImportItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    source_document_kind: Literal["sales_order"]
+    product_id: UUID
+    product_name: str
+    product_code: str
+    hsn_code: str
+    branch_id: UUID
+    location_id: UUID
+    uom_conversion_id: UUID
+    uom_code: str
+    unit: str
+    quantity: float
+    free_quantity: float
+    free_supply_tax_treatment: Literal[
+        "excluded_from_taxable_value", "included_at_unit_rate"
+    ]
+    unit_price: float
+    discount_percent: float
+    tax_rate: float
+    gst_percent: float
+    taxable_amount: float
+    cgst_amount: float
+    sgst_amount: float
+    igst_amount: float
+    line_total: float
+    batch_id: UUID
+    batch_number: str
+    expiry_date: Optional[date]
+    mrp: float
+    available_quantity: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_quantity(self):
+        if self.quantity < 0 or self.free_quantity < 0:
+            raise ValueError("order import quantities cannot be negative")
+        if self.quantity + self.free_quantity <= 0:
+            raise ValueError("order import line requires a positive quantity")
+        if self.available_quantity < self.quantity + self.free_quantity:
+            raise ValueError("order import reservation does not cover its quantity")
+        return self
+
+
+class CanonicalDispatchImportAllocation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["dispatch_allocation"]
+    allocation_id: UUID
+    source_line_id: UUID
+    command_request_id: UUID
+    inventory_document_id: UUID
+    inventory_document_line_id: UUID
+    invoice_dispatch_allocation_id: None
+    dispatch_id: UUID
+    dispatch_line_id: UUID
+    batch_id: UUID
+    batch_number: str
+    expiry_date: Optional[date]
+    from_location_id: UUID
+    base_quantity: float
+    base_billed_quantity: float
+    base_free_quantity: float
+    billed_quantity: float
+    free_quantity: float
+
+    @model_validator(mode="after")
+    def validate_lineage(self):
+        if self.allocation_id != self.dispatch_line_id:
+            raise ValueError("dispatch import allocation identity must be its dispatch line")
+        if self.source_line_id != self.dispatch_line_id:
+            raise ValueError("dispatch import source identity must be its dispatch line")
+        if self.base_billed_quantity < 0 or self.base_free_quantity < 0:
+            raise ValueError("dispatch import base quantities cannot be negative")
+        if self.billed_quantity < 0 or self.free_quantity < 0:
+            raise ValueError("dispatch import entered quantities cannot be negative")
+        if not _allocation_quantities_match(
+            self.base_quantity,
+            self.base_billed_quantity + self.base_free_quantity,
+            tolerance_units=0,
+        ):
+            raise ValueError("dispatch import base quantities do not reconcile")
+        return self
+
+
+class CanonicalChallanImportItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    source_document_kind: Literal["delivery_challan"]
+    product_id: UUID
+    product_name: str
+    product_code: str
+    hsn_code: str
+    branch_id: UUID
+    uom_conversion_id: UUID
+    uom_code: str
+    unit: str
+    quantity: float
+    dispatched_quantity: float
+    free_quantity: float
+    free_supply_tax_treatment: Literal[
+        "excluded_from_taxable_value", "included_at_unit_rate"
+    ]
+    unit_price: float
+    discount_percent: float
+    tax_rate: float
+    gst_percent: float
+    taxable_amount: float
+    cgst_amount: float
+    sgst_amount: float
+    igst_amount: float
+    line_total: float
+    batch_id: UUID
+    batch_number: str
+    expiry_date: Optional[date]
+    mrp: float
+    batch_allocations: list[CanonicalDispatchImportAllocation]
+
+    @model_validator(mode="after")
+    def validate_allocation(self):
+        if len(self.batch_allocations) != 1:
+            raise ValueError("challan import line requires exactly one dispatch allocation")
+        allocation = self.batch_allocations[0]
+        if allocation.dispatch_line_id != self.id:
+            raise ValueError("challan allocation does not belong to its source line")
+        if (
+            not _allocation_quantities_match(
+                allocation.billed_quantity, self.quantity, tolerance_units=0
+            )
+            or not _allocation_quantities_match(
+                allocation.free_quantity, self.free_quantity, tolerance_units=0
+            )
+        ):
+            raise ValueError("challan allocation quantities do not reconcile")
+        return self
+
+
+class CanonicalSalesOrderImportDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: UUID
+    id: UUID
+    order_number: str
+    order_date: date
+    delivery_date: Optional[date]
+    order_status: Literal["approved"]
+    status: Literal["approved"]
+    customer_id: UUID
+    customer_name: str
+    customer_phone: Optional[str]
+    customer_email: Optional[str]
+    customer_gst_number: Optional[str]
+    billing_address: str
+    billing_city: str
+    billing_state: str
+    billing_pincode: str
+    shipping_address: str
+    shipping_city: str
+    shipping_state: str
+    shipping_pincode: str
+    total_amount: float
+    items: list[CanonicalSalesOrderImportItem]
+    source_item_count: int = Field(exclude=True)
+    importable_item_count: int = Field(exclude=True)
+    created_at: datetime
+    updated_at: datetime
+
+    @model_validator(mode="after")
+    def validate_item_cardinality(self):
+        if (
+            self.source_item_count <= 0
+            or self.source_item_count != self.importable_item_count
+            or self.importable_item_count != len(self.items)
+        ):
+            raise ValueError("sales-order import line cardinality is incomplete")
+        return self
+
+
+class CanonicalChallanImportDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challan_id: UUID
+    id: UUID
+    challan_number: str
+    challan_date: date
+    status: Literal["posted"]
+    customer_id: UUID
+    customer_name: str
+    customer_phone: Optional[str]
+    customer_email: Optional[str]
+    delivery_address: str
+    delivery_city: str
+    delivery_state: str
+    delivery_pincode: str
+    transport_company: Optional[str]
+    vehicle_number: Optional[str]
+    lr_number: Optional[str]
+    items: list[CanonicalChallanImportItem]
+    source_item_count: int = Field(exclude=True)
+    importable_item_count: int = Field(exclude=True)
+    total_amount: float
+    created_at: datetime
+    updated_at: datetime
+
+    @model_validator(mode="after")
+    def validate_item_cardinality(self):
+        if (
+            self.source_item_count <= 0
+            or self.source_item_count != self.importable_item_count
+            or self.importable_item_count != len(self.items)
+        ):
+            raise ValueError("challan import line cardinality is incomplete")
+        return self
+
+
 class CanonicalInvoiceDetailResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1713,7 +1930,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
           ) contact ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
-                         'id', line.id, 'product_id', line.product_id,
+                         'id', line.id, 'source_document_kind', 'sales_order',
+                         'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
                          'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity', line.billed_quantity,
@@ -1978,7 +2196,10 @@ def canonical_invoice_compatibility_detail(
     return _canonical_invoice_detail(db, _activate(db, user), invoice_id)
 
 
-@router.get("/sales-orders/{order_id:uuid}")
+@router.get(
+    "/sales-orders/{order_id:uuid}",
+    response_model=CanonicalSalesOrderImportDetail,
+)
 def canonical_sales_order_compatibility_detail(
     order_id: UUID,
     user: dict = SALES_USER,
@@ -2003,6 +2224,12 @@ def canonical_sales_order_compatibility_detail(
                shipping.postal_code AS shipping_pincode,
                document.grand_total AS total_amount,
                COALESCE(lines.items, '[]'::jsonb) AS items,
+               (SELECT count(*)
+                  FROM sales.order_lines source_line
+                 WHERE source_line.org_id=document.org_id
+                   AND source_line.order_id=document.id
+                   AND source_line.line_kind='product') AS source_item_count,
+               COALESCE(lines.importable_item_count, 0) AS importable_item_count,
                document.created_at, document.updated_at
           FROM sales.orders document
           JOIN parties.customer_accounts account
@@ -2028,11 +2255,16 @@ def canonical_sales_order_compatibility_detail(
           ) tax ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
-                         'id', line.id, 'product_id', line.product_id,
+                         'id', line.id, 'source_document_kind', 'delivery_challan',
+                         'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
-                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'hsn_code', product.hsn_code, 'branch_id', document.branch_id,
+                         'location_id', reservation.location_id,
+                         'uom_conversion_id', conversion.id,
+                         'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity', line.billed_quantity,
                          'free_quantity', line.free_quantity,
+                         'free_supply_tax_treatment', line.free_supply_tax_treatment,
                          'unit_price', line.quoted_unit_rate,
                          'discount_percent', CASE
                              WHEN line.line_discount_kind='percent'
@@ -2046,31 +2278,78 @@ def canonical_sales_order_compatibility_detail(
                          'batch_number', reservation.batch_number,
                          'expiry_date', reservation.expiry_date,
                          'mrp', reservation.mrp,
-                         'available_quantity', reservation.quantity
-                     ) ORDER BY line.line_number) AS items
+                         'available_quantity', reservation.available_quantity
+                     ) ORDER BY line.line_number) AS items,
+                     count(*)::integer AS importable_item_count
                 FROM sales.order_lines line
-                LEFT JOIN catalog.products product
+                JOIN catalog.products product
                   ON product.org_id=line.org_id AND product.id=line.product_id
-                LEFT JOIN LATERAL (
-                    SELECT held.batch_id, batch.batch_number,
-                           batch.expires_on AS expiry_date, batch.mrp,
-                           held.quantity
-                      FROM inventory.reservations held
-                      JOIN inventory.batches batch
-                        ON batch.org_id=held.org_id AND batch.id=held.batch_id
-                     WHERE held.org_id=line.org_id AND held.order_line_id=line.id
-                       AND held.status='active'
-                       AND held.expires_at>transaction_timestamp()
-                     ORDER BY held.created_at, held.id LIMIT 1
+                JOIN LATERAL (
+                    SELECT candidate.id
+                      FROM (
+                            SELECT candidate_conversion.id,
+                                   count(*) OVER () AS candidate_count
+                              FROM catalog.uom_conversions candidate_conversion
+                             WHERE candidate_conversion.org_id=line.org_id
+                               AND candidate_conversion.product_id=line.product_id
+                               AND candidate_conversion.from_uom_code=line.uom_code
+                               AND candidate_conversion.to_uom_code=product.base_uom_code
+                               AND candidate_conversion.multiplier=line.uom_conversion_factor
+                               AND candidate_conversion.status='active'
+                               AND candidate_conversion.valid_from<=document.order_date
+                               AND (candidate_conversion.valid_until IS NULL
+                                    OR candidate_conversion.valid_until>=document.order_date)
+                           ) candidate
+                     WHERE candidate.candidate_count=1
+                ) conversion ON true
+                JOIN LATERAL (
+                    SELECT candidate.batch_id, candidate.batch_number,
+                           candidate.expiry_date, candidate.mrp,
+                           candidate.location_id,
+                           candidate.quantity / NULLIF(line.uom_conversion_factor, 0)
+                               AS available_quantity
+                      FROM (
+                            SELECT held.batch_id, batch.batch_number,
+                                   batch.expires_on AS expiry_date, batch.mrp,
+                                   held.location_id, held.quantity,
+                                   count(*) OVER () AS candidate_count
+                              FROM inventory.reservations held
+                              JOIN inventory.batches batch
+                                ON batch.org_id=held.org_id AND batch.id=held.batch_id
+                             WHERE held.org_id=line.org_id
+                               AND held.order_line_id=line.id
+                               AND held.branch_id=document.branch_id
+                               AND held.status='active'
+                               AND held.expires_at>transaction_timestamp()
+                           ) candidate
+                     WHERE candidate.candidate_count=1
                 ) reservation ON true
                WHERE line.org_id=document.org_id AND line.order_id=document.id
-                 AND line.product_id IS NOT NULL
+                 AND line.line_kind='product' AND line.product_id IS NOT NULL
           ) lines ON true
          WHERE document.org_id=:org_id AND document.id=:order_id
     """, {"org_id": org_id, "order_id": order_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Sales order not found")
-    return rows[0]
+    result = rows[0]
+    if result["status"] != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Only an approved, unfulfilled sales order can be imported",
+        )
+    if (
+        int(result["source_item_count"]) <= 0
+        or int(result["source_item_count"]) != int(result["importable_item_count"])
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Sales-order import requires exactly one active canonical batch "
+                "reservation and one unambiguous UOM conversion per product line; "
+                "multi-reservation orders are not available yet"
+            ),
+        )
+    return result
 
 
 @router.get("/sales-orders/")
@@ -2108,7 +2387,10 @@ def challans(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
     """, {"org_id": org_id, "limit": limit, "skip": skip})
 
 
-@router.get("/challan/{challan_id:uuid}")
+@router.get(
+    "/challan/{challan_id:uuid}",
+    response_model=CanonicalChallanImportDetail,
+)
 def canonical_challan_compatibility_detail(
     challan_id: UUID,
     user: dict = SALES_USER,
@@ -2132,6 +2414,10 @@ def canonical_challan_compatibility_detail(
                dispatch.transport_document_number AS lr_number,
                COALESCE(lines.items, '[]'::jsonb) AS items,
                COALESCE(lines.total_amount, 0) AS total_amount,
+               (SELECT count(*) FROM sales.dispatch_lines source_line
+                 WHERE source_line.org_id=dispatch.org_id
+                   AND source_line.dispatch_id=dispatch.id) AS source_item_count,
+               COALESCE(lines.importable_item_count, 0) AS importable_item_count,
                dispatch.created_at, dispatch.updated_at
           FROM sales.dispatches dispatch
           JOIN parties.customer_accounts account
@@ -2149,10 +2435,12 @@ def canonical_challan_compatibility_detail(
               SELECT jsonb_agg(jsonb_build_object(
                          'id', line.id, 'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
-                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'hsn_code', product.hsn_code, 'branch_id', dispatch.branch_id,
+                         'uom_conversion_id', conversion.id, 'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity', line.billed_quantity,
                          'dispatched_quantity', line.billed_quantity,
                          'free_quantity', line.free_quantity,
+                         'free_supply_tax_treatment', order_line.free_supply_tax_treatment,
                          'unit_price', order_line.quoted_unit_rate,
                          'discount_percent', CASE
                              WHEN order_line.line_discount_kind='percent'
@@ -2167,9 +2455,30 @@ def canonical_challan_compatibility_detail(
                          'igst_amount', order_line.igst_amount,
                          'line_total', order_line.line_total,
                          'batch_id', line.batch_id, 'batch_number', batch.batch_number,
-                         'expiry_date', batch.expires_on, 'mrp', batch.mrp
+                         'expiry_date', batch.expires_on, 'mrp', batch.mrp,
+                         'batch_allocations', jsonb_build_array(jsonb_build_object(
+                             'source_kind', 'dispatch_allocation',
+                             'allocation_id', line.id,
+                             'source_line_id', line.id,
+                             'command_request_id', command.command_request_id,
+                             'inventory_document_id', inventory_document.id,
+                             'inventory_document_line_id', inventory_line.id,
+                             'invoice_dispatch_allocation_id', NULL,
+                             'dispatch_id', dispatch.id,
+                             'dispatch_line_id', line.id,
+                             'batch_id', line.batch_id,
+                             'batch_number', batch.batch_number,
+                             'expiry_date', batch.expires_on,
+                             'from_location_id', line.from_location_id,
+                             'base_quantity', inventory_line.base_quantity,
+                             'base_billed_quantity', line.base_billed_quantity,
+                             'base_free_quantity', line.base_free_quantity,
+                             'billed_quantity', line.billed_quantity,
+                             'free_quantity', line.free_quantity
+                         ))
                      ) ORDER BY line.line_number) AS items,
-                     SUM(order_line.line_total) AS total_amount
+                     SUM(order_line.line_total) AS total_amount,
+                     count(*)::integer AS importable_item_count
                 FROM sales.dispatch_lines line
                 JOIN sales.order_lines order_line
                   ON order_line.org_id=line.org_id AND order_line.id=line.order_line_id
@@ -2177,13 +2486,96 @@ def canonical_challan_compatibility_detail(
                   ON product.org_id=line.org_id AND product.id=line.product_id
                 JOIN inventory.batches batch
                   ON batch.org_id=line.org_id AND batch.id=line.batch_id
+                JOIN LATERAL (
+                    SELECT candidate.id
+                      FROM (
+                            SELECT candidate_conversion.id,
+                                   count(*) OVER () AS candidate_count
+                              FROM catalog.uom_conversions candidate_conversion
+                             WHERE candidate_conversion.org_id=line.org_id
+                               AND candidate_conversion.product_id=line.product_id
+                               AND candidate_conversion.from_uom_code=line.uom_code
+                               AND candidate_conversion.to_uom_code=product.base_uom_code
+                               AND candidate_conversion.multiplier=order_line.uom_conversion_factor
+                               AND candidate_conversion.status='active'
+                               AND candidate_conversion.valid_from<=dispatch.dispatch_date
+                               AND (candidate_conversion.valid_until IS NULL
+                                    OR candidate_conversion.valid_until>=dispatch.dispatch_date)
+                           ) candidate
+                     WHERE candidate.candidate_count=1
+                ) conversion ON true
+                JOIN LATERAL (
+                    SELECT candidate.id
+                      FROM (
+                            SELECT candidate_document.id,
+                                   count(*) OVER () AS candidate_count
+                              FROM inventory.inventory_documents candidate_document
+                             WHERE candidate_document.org_id=line.org_id
+                               AND candidate_document.sales_dispatch_id=dispatch.id
+                               AND candidate_document.document_type='sales_issue'
+                               AND candidate_document.status='posted'
+                           ) candidate
+                     WHERE candidate.candidate_count=1
+                ) inventory_document ON true
+                JOIN LATERAL (
+                    SELECT candidate.id, candidate.base_quantity
+                      FROM (
+                            SELECT candidate_line.id, candidate_line.base_quantity,
+                                   count(*) OVER () AS candidate_count
+                              FROM inventory.inventory_document_lines candidate_line
+                             WHERE candidate_line.org_id=line.org_id
+                               AND candidate_line.inventory_document_id=inventory_document.id
+                               AND candidate_line.sales_dispatch_line_id=line.id
+                               AND candidate_line.movement_kind='issue'
+                               AND candidate_line.product_id=line.product_id
+                               AND candidate_line.batch_id=line.batch_id
+                               AND candidate_line.from_location_id=line.from_location_id
+                           ) candidate
+                     WHERE candidate.candidate_count=1
+                ) inventory_line ON true
+                JOIN LATERAL (
+                    SELECT candidate.command_request_id
+                      FROM (
+                            SELECT candidate_command.id AS command_request_id,
+                                   count(*) OVER () AS candidate_count
+                              FROM automation.command_requests candidate_command
+                             WHERE candidate_command.org_id=dispatch.org_id
+                               AND candidate_command.capability_code='sales.dispatch.prepare'
+                               AND candidate_command.status='succeeded'
+                               AND candidate_command.result_resource_id=dispatch.id
+                           ) candidate
+                     WHERE candidate.candidate_count=1
+                ) command ON true
                WHERE line.org_id=dispatch.org_id AND line.dispatch_id=dispatch.id
+                 AND NOT EXISTS (
+                       SELECT 1
+                         FROM sales.invoice_dispatch_allocations consumed
+                        WHERE consumed.org_id=line.org_id
+                          AND consumed.dispatch_line_id=line.id
+                 )
           ) lines ON true
          WHERE dispatch.org_id=:org_id AND dispatch.id=:challan_id
     """, {"org_id": org_id, "challan_id": challan_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Delivery challan not found")
-    return rows[0]
+    result = rows[0]
+    if result["status"] != "posted":
+        raise HTTPException(
+            status_code=409,
+            detail="Only a posted delivery challan can be imported into an invoice",
+        )
+    if (
+        int(result["source_item_count"]) <= 0
+        or int(result["source_item_count"]) != int(result["importable_item_count"])
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Delivery challan is already invoiced or its posted command, inventory, "
+                "dispatch, or UOM lineage is incomplete"
+            ),
+        )
+    return result
 
 
 @router.get("/purchases/")

@@ -58,6 +58,38 @@ describe('prepareItemForInvoice free-supply treatment', () => {
     });
 
     it.each([
+        ['selected batch', {
+            batch_id: '33333333-3333-4333-8333-333333333333',
+            quantity_available: '2.75',
+        }, 2.75],
+        ['best batch', {
+            best_batch: {
+                batch_id: '33333333-3333-4333-8333-333333333333',
+                quantity_available: '4.125',
+            },
+        }, 4.125],
+    ])('preserves exact fractional availability from the %s', (_label, source, expected) => {
+        const item = prepareSelectedProductForInvoice({
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Fractional stock item',
+            unit_price: 100,
+            ...source,
+        });
+
+        expect(item.available_quantity).toBe(expected);
+    });
+
+    it('rejects invalid selected-batch availability instead of truncating/defaulting it', () => {
+        expect(() => prepareSelectedProductForInvoice({
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Invalid stock item',
+            batch_id: '33333333-3333-4333-8333-333333333333',
+            quantity_available: '-0.25',
+            unit_price: 100,
+        })).toThrow('Available quantity must be a finite non-negative number');
+    });
+
+    it.each([
         'included_at_unit_rate',
         'excluded_from_taxable_value',
     ] as const)('preserves a free-only %s canonical line', treatment => {
@@ -108,6 +140,7 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             product_name: 'Invalid canonical item',
             quantity,
             free_quantity: freeQuantity,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
             unit_price: 100,
         } as any])).toThrow('must be a finite non-negative number');
     });
@@ -122,7 +155,18 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Incomplete canonical import',
             unit_price: 100,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
             ...quantities,
         } as any])).toThrow('must be a finite non-negative number');
+    });
+
+    it('fails closed when a canonical import omits free-supply tax treatment', () => {
+        expect(() => prepareImportedItemsForInvoice([{
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Incomplete canonical treatment',
+            quantity: 1,
+            free_quantity: 0,
+            unit_price: 100,
+        }])).toThrow('missing its canonical free-supply tax treatment');
     });
 });

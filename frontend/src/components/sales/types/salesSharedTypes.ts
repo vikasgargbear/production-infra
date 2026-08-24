@@ -21,6 +21,15 @@ export type FreeSupplyTaxTreatment =
     | 'excluded_from_taxable_value'
     | 'included_at_unit_rate';
 
+export type CanonicalAllocationSourceKind =
+    | 'direct_issue'
+    | 'dispatch_allocation';
+
+export type CanonicalSourceDocumentKind =
+    | 'sales_order'
+    | 'delivery_challan'
+    | 'sales_invoice';
+
 // ==================== EMPLOYEE (SHARED) ====================
 
 /** Employee / Sales Representative / M.R. */
@@ -80,6 +89,22 @@ export interface BaseLineItem {
     free_quantity?: number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     unit?: string;
+
+    // Immutable executed-allocation lineage retained by canonical imports.
+    source_line_id?: string | number;
+    source_document_kind?: CanonicalSourceDocumentKind;
+    source_allocation_kind?: CanonicalAllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
+    base_billed_quantity?: number;
+    base_free_quantity?: number;
+    source_billed_quantity?: number;
+    source_free_quantity?: number;
 
     // Pricing - backend uses unit_price and mrp
     mrp?: number;

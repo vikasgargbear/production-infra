@@ -23,6 +23,7 @@ describe('DocumentImportModal detail resolution', () => {
             items: [{
                 product_id: 'product-1', product_name: 'Carton', quantity: 1,
                 free_quantity: 0,
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
                 unit_price: 150, batch_id: 'batch-1', batch_number: 'BATCH-1',
             }],
         });

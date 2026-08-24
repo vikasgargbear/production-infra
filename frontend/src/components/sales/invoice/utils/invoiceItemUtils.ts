@@ -34,4 +34,12 @@ export const prepareSelectedProductForInvoice = (
 /** Canonical imports must carry both quantities explicitly; no UI defaults apply. */
 export const prepareImportedItemsForInvoice = (
     products: ProductInput[],
-): InvoiceItem[] => products.map(prepareItemForInvoice);
+): InvoiceItem[] => products.map((product, index) => {
+    if (product.free_supply_tax_treatment !== 'excluded_from_taxable_value'
+        && product.free_supply_tax_treatment !== 'included_at_unit_rate') {
+        throw new Error(
+            `Imported item ${index + 1} is missing its canonical free-supply tax treatment.`,
+        );
+    }
+    return prepareItemForInvoice(product);
+});

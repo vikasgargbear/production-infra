@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
@@ -140,7 +141,11 @@ def test_uuid_sales_document_detail_reads_include_importable_lines(monkeypatch) 
         captured.append((sql, params))
         if "FROM sales.invoices invoice" in sql:
             return [{"invoice_id": invoice_id, "items": [{"product_id": uuid4()}]}]
-        return [{"order_id": order_id, "items": [{"product_id": uuid4()}]}]
+        return [{
+            "order_id": order_id, "status": "approved",
+            "source_item_count": 1, "importable_item_count": 1,
+            "items": [{"product_id": uuid4()}],
+        }]
 
     monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
     invoice = canonical_erp_reads.canonical_invoice_compatibility_detail(
@@ -176,8 +181,16 @@ def test_order_and_challan_import_details_include_canonical_batch_allocations(mo
     def fake_rows(_db, sql, params):
         captured.append((sql, params))
         if "FROM sales.dispatches dispatch" in sql:
-            return [{"challan_id": challan_id, "items": [{"batch_id": uuid4()}]}]
-        return [{"order_id": order_id, "items": [{"batch_id": uuid4()}]}]
+            return [{
+                "challan_id": challan_id, "status": "posted",
+                "source_item_count": 1, "importable_item_count": 1,
+                "items": [{"batch_id": uuid4()}],
+            }]
+        return [{
+            "order_id": order_id, "status": "approved",
+            "source_item_count": 1, "importable_item_count": 1,
+            "items": [{"batch_id": uuid4()}],
+        }]
 
     monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
     canonical_erp_reads.canonical_sales_order_compatibility_detail(
@@ -197,6 +210,189 @@ def test_order_and_challan_import_details_include_canonical_batch_allocations(mo
     assert "JOIN inventory.batches batch" in challan_sql
     assert "'batch_number', batch.batch_number" in challan_sql
     assert challan_params == {"org_id": org_id, "challan_id": challan_id}
+
+
+def test_order_and_challan_import_routes_publish_strict_authoritative_contracts() -> None:
+    routes = {
+        route.path: route for route in canonical_erp_reads.router.routes
+        if isinstance(route, APIRoute) and route.path in {
+            "/sales-orders/{order_id:uuid}", "/challan/{challan_id:uuid}",
+        }
+    }
+    assert routes["/sales-orders/{order_id:uuid}"].response_model is (
+        canonical_erp_reads.CanonicalSalesOrderImportDetail
+    )
+    assert routes["/challan/{challan_id:uuid}"].response_model is (
+        canonical_erp_reads.CanonicalChallanImportDetail
+    )
+
+    order_source = inspect.getsource(
+        canonical_erp_reads.canonical_sales_order_compatibility_detail
+    )
+    for evidence in (
+        "'free_supply_tax_treatment', line.free_supply_tax_treatment",
+        "'branch_id', document.branch_id",
+        "'location_id', reservation.location_id",
+        "'uom_conversion_id', conversion.id",
+        "candidate.candidate_count=1",
+        "source_item_count",
+        "importable_item_count",
+    ):
+        assert evidence in order_source
+
+    challan_source = inspect.getsource(
+        canonical_erp_reads.canonical_challan_compatibility_detail
+    )
+    for evidence in (
+        "'source_kind', 'dispatch_allocation'",
+        "'allocation_id', line.id",
+        "'command_request_id', command.command_request_id",
+        "'inventory_document_id', inventory_document.id",
+        "'inventory_document_line_id', inventory_line.id",
+        "'dispatch_line_id', line.id",
+        "'base_billed_quantity', line.base_billed_quantity",
+        "'base_free_quantity', line.base_free_quantity",
+        "candidate_command.status='succeeded'",
+        "candidate_document.status='posted'",
+        "source_item_count",
+        "importable_item_count",
+    ):
+        assert evidence in challan_source
+
+
+def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fields() -> None:
+    now = datetime(2026, 8, 25, 12, 0)
+    ids = {name: uuid4() for name in (
+        "order", "challan", "customer", "branch", "location", "uom",
+        "product", "batch", "dispatch_line", "command", "inventory_document",
+        "inventory_line",
+    )}
+    order_item = {
+        "id": uuid4(), "product_id": ids["product"], "product_name": "Carton",
+        "source_document_kind": "sales_order",
+        "product_code": "BOX", "hsn_code": "481910",
+        "branch_id": ids["branch"], "location_id": ids["location"],
+        "uom_conversion_id": ids["uom"], "uom_code": "EA", "unit": "EA",
+        "quantity": 1.25, "free_quantity": 0.25,
+        "free_supply_tax_treatment": "included_at_unit_rate",
+        "unit_price": 100, "discount_percent": 0, "tax_rate": 12,
+        "gst_percent": 12, "taxable_amount": 150, "cgst_amount": 9,
+        "sgst_amount": 9, "igst_amount": 0, "line_total": 168,
+        "batch_id": ids["batch"], "batch_number": "B-1", "expiry_date": None,
+        "mrp": 150, "available_quantity": 1.5,
+    }
+    order = {
+        "order_id": ids["order"], "id": ids["order"], "order_number": "SO-1",
+        "order_date": date(2026, 8, 25), "delivery_date": None,
+        "order_status": "approved", "status": "approved",
+        "customer_id": ids["customer"], "customer_name": "Customer",
+        "customer_phone": None, "customer_email": None, "customer_gst_number": None,
+        "billing_address": "A", "billing_city": "Pune", "billing_state": "27",
+        "billing_pincode": "411001", "shipping_address": "A",
+        "shipping_city": "Pune", "shipping_state": "27",
+        "shipping_pincode": "411001", "total_amount": 168,
+        "items": [order_item], "source_item_count": 1, "importable_item_count": 1,
+        "created_at": now, "updated_at": now,
+    }
+    canonical_erp_reads.CanonicalSalesOrderImportDetail.model_validate(order)
+    with pytest.raises(ValidationError, match="cardinality"):
+        canonical_erp_reads.CanonicalSalesOrderImportDetail.model_validate({
+            **order, "source_item_count": 2,
+        })
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        canonical_erp_reads.CanonicalSalesOrderImportDetail.model_validate({
+            **order, "offline_fallback": True,
+        })
+
+    allocation = {
+        "source_kind": "dispatch_allocation",
+        "allocation_id": ids["dispatch_line"],
+        "source_line_id": ids["dispatch_line"],
+        "command_request_id": ids["command"],
+        "inventory_document_id": ids["inventory_document"],
+        "inventory_document_line_id": ids["inventory_line"],
+        "invoice_dispatch_allocation_id": None,
+        "dispatch_id": ids["challan"], "dispatch_line_id": ids["dispatch_line"],
+        "batch_id": ids["batch"], "batch_number": "B-1", "expiry_date": None,
+        "from_location_id": ids["location"], "base_quantity": 15,
+        "base_billed_quantity": 12.5, "base_free_quantity": 2.5,
+        "billed_quantity": 1.25, "free_quantity": 0.25,
+    }
+    challan_item = {
+        **{key: value for key, value in order_item.items() if key not in {
+            "location_id", "available_quantity", "source_document_kind",
+        }},
+        "id": ids["dispatch_line"],
+        "source_document_kind": "delivery_challan",
+        "dispatched_quantity": 1.25,
+        "batch_allocations": [allocation],
+    }
+    challan = {
+        "challan_id": ids["challan"], "id": ids["challan"],
+        "challan_number": "DC-1", "challan_date": date(2026, 8, 25),
+        "status": "posted", "customer_id": ids["customer"],
+        "customer_name": "Customer", "customer_phone": None,
+        "customer_email": None, "delivery_address": "A", "delivery_city": "Pune",
+        "delivery_state": "27", "delivery_pincode": "411001",
+        "transport_company": None, "vehicle_number": None, "lr_number": None,
+        "items": [challan_item], "source_item_count": 1,
+        "importable_item_count": 1, "total_amount": 168,
+        "created_at": now, "updated_at": now,
+    }
+    canonical_erp_reads.CanonicalChallanImportDetail.model_validate(challan)
+    with pytest.raises(ValidationError, match="quantities do not reconcile"):
+        canonical_erp_reads.CanonicalChallanImportDetail.model_validate({
+            **challan,
+            "items": [{**challan_item, "quantity": 1}],
+        })
+
+
+@pytest.mark.parametrize("source,status", [
+    ("order", "draft"),
+    ("order", "cancelled"),
+    ("challan", "draft"),
+    ("challan", "cancelled"),
+    ("challan", "reversed"),
+])
+def test_import_details_reject_non_authoritative_source_states(
+    monkeypatch, source: str, status: str,
+) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda *_args: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args: [{
+        "status": status,
+        "source_item_count": 1,
+        "importable_item_count": 1,
+    }])
+
+    with pytest.raises(HTTPException) as blocked:
+        if source == "order":
+            canonical_erp_reads.canonical_sales_order_compatibility_detail(
+                order_id=uuid4(), user={}, db=object(),
+            )
+        else:
+            canonical_erp_reads.canonical_challan_compatibility_detail(
+                challan_id=uuid4(), user={}, db=object(),
+            )
+
+    assert blocked.value.status_code == 409
+
+
+def test_challan_import_rejects_already_invoiced_or_partial_lineage(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda *_args: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args: [{
+        "status": "posted",
+        "source_item_count": 2,
+        "importable_item_count": 1,
+    }])
+
+    with pytest.raises(HTTPException, match="already invoiced") as blocked:
+        canonical_erp_reads.canonical_challan_compatibility_detail(
+            challan_id=uuid4(), user={}, db=object(),
+        )
+    assert blocked.value.status_code == 409
+    assert "NOT EXISTS" in inspect.getsource(
+        canonical_erp_reads.canonical_challan_compatibility_detail
+    )
 
 
 def test_return_history_reads_filter_and_project_original_documents(monkeypatch) -> None:

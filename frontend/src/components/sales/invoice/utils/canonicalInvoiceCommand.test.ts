@@ -7,6 +7,8 @@ import {
 } from './canonicalInvoiceCommand';
 import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { Customer } from '../../../../types/models/customer';
+import { prepareImportedItemsForInvoice } from './invoiceItemUtils';
+import { projectCanonicalImportLines } from '../../utils/documentImport';
 
 const ids = {
     branch: '10000000-0000-7000-8000-000000000001',
@@ -15,6 +17,13 @@ const ids = {
     product: '10000000-0000-7000-8000-000000000004',
     batch: '10000000-0000-7000-8000-000000000005',
     uom: '10000000-0000-7000-8000-000000000006',
+    sourceLine: '10000000-0000-7000-8000-000000000007',
+    command: '10000000-0000-7000-8000-000000000008',
+    inventoryDocument: '10000000-0000-7000-8000-000000000009',
+    inventoryLine: '10000000-0000-7000-8000-000000000010',
+    dispatch: '10000000-0000-7000-8000-000000000011',
+    dispatchLine: '10000000-0000-7000-8000-000000000012',
+    invoiceDispatchAllocation: '10000000-0000-7000-8000-000000000013',
 };
 
 const customer = {
@@ -99,6 +108,129 @@ describe('canonical invoice command', () => {
         }));
     });
 
+    it.each([
+        {
+            label: 'direct-issue execution lineage',
+            allocation: {
+                source_kind: 'direct_issue',
+                allocation_id: ids.inventoryLine,
+                source_line_id: ids.sourceLine,
+                command_request_id: ids.command,
+                inventory_document_id: ids.inventoryDocument,
+                inventory_document_line_id: ids.inventoryLine,
+                invoice_dispatch_allocation_id: null,
+                dispatch_id: null,
+                dispatch_line_id: null,
+                from_location_id: ids.location,
+                batch_id: ids.batch,
+                batch_number: 'BATCH-IMPORT',
+                expiry_date: null,
+                base_quantity: 1.5,
+                base_billed_quantity: 1.25,
+                base_free_quantity: 0.25,
+                billed_quantity: 1.25,
+                free_quantity: 0.25,
+            },
+            expectedSource: 'direct_issue',
+        },
+        {
+            label: 'dispatch execution lineage',
+            allocation: {
+                source_kind: 'dispatch_allocation',
+                allocation_id: ids.invoiceDispatchAllocation,
+                source_line_id: ids.dispatchLine,
+                command_request_id: null,
+                inventory_document_id: ids.inventoryDocument,
+                inventory_document_line_id: ids.inventoryLine,
+                invoice_dispatch_allocation_id: ids.invoiceDispatchAllocation,
+                dispatch_id: ids.dispatch,
+                dispatch_line_id: ids.dispatchLine,
+                from_location_id: ids.location,
+                batch_id: ids.batch,
+                batch_number: 'BATCH-IMPORT',
+                expiry_date: null,
+                base_quantity: 15,
+                base_billed_quantity: 12.5,
+                base_free_quantity: 2.5,
+                billed_quantity: 1.25,
+                free_quantity: 0.25,
+            },
+            expectedSource: 'dispatch_allocated',
+        },
+    ])('preserves $label from import projection through whole prepare', ({
+        allocation,
+        expectedSource,
+    }) => {
+        const importedItems = prepareImportedItemsForInvoice(
+            projectCanonicalImportLines([{
+                id: ids.sourceLine,
+                product_id: ids.product,
+                product_name: 'Canonical import product',
+                hsn_code: '481910',
+                branch_id: ids.branch,
+                uom_conversion_id: ids.uom,
+                quantity: 1.25,
+                free_quantity: 0.25,
+                unit_price: 100,
+                discount_percent: 0,
+                free_supply_tax_treatment: 'included_at_unit_rate',
+                available_quantity: 2.75,
+                batch_allocations: [allocation],
+            }]),
+        );
+        const importedInvoice = {
+            ...invoice,
+            discount_percent: 0,
+            freight_charges: 0,
+            items: importedItems,
+        } as Invoice;
+
+        const payload = buildCanonicalInvoicePreparePayload(
+            importedInvoice,
+            customer,
+            `erp-web-invoice:import:${expectedSource}`,
+        );
+        const line = (payload.lines as Record<string, unknown>[])[0];
+        expect(line.fulfillment_source).toBe(expectedSource);
+        expect(importedItems[0]).toEqual(expect.objectContaining({
+            source_allocation_kind: allocation.source_kind,
+            allocation_id: allocation.allocation_id,
+            inventory_document_id: ids.inventoryDocument,
+            inventory_document_line_id: ids.inventoryLine,
+            dispatch_line_id: allocation.dispatch_line_id,
+        }));
+
+        const isDispatch = expectedSource === 'dispatch_allocated';
+        expect(payload.from_location_id).toBe(isDispatch ? undefined : ids.location);
+        expect(payload.logistics).toEqual(isDispatch ? undefined : {
+            transport_mode: 'in_person',
+            distance_km: '0',
+        });
+        expect(line.batch_allocations).toEqual(isDispatch ? undefined : [{
+            batch_id: ids.batch,
+            billed_quantity: '1.25',
+            free_quantity: '0.25',
+        }]);
+        expect(line.dispatch_allocations).toEqual(isDispatch ? [{
+                dispatch_line_id: ids.dispatchLine,
+                allocated_base_billed_quantity: '12.5',
+                allocated_base_free_quantity: '2.5',
+            }] : undefined);
+
+        let editedError: Error | undefined;
+        try {
+            buildCanonicalInvoicePreparePayload({
+                ...importedInvoice,
+                items: [{ ...importedItems[0], quantity: 1 }],
+            } as Invoice, customer, 'erp-web-invoice:edited-import');
+        } catch (error) {
+            editedError = error instanceof Error ? error : new Error(String(error));
+        }
+        expect(editedError?.message).toBe(isDispatch
+            ? 'Item 1 dispatch quantity was edited after import. Re-import the canonical dispatch before invoicing.'
+            : undefined);
+    });
+
     it('fails closed when a canonical stock reference is missing', () => {
         const invalid = {
             ...invoice,
@@ -107,6 +239,26 @@ describe('canonical invoice command', () => {
         expect(canonicalInvoiceValidationError(invalid, customer)).toMatch(
             /stock location is missing its canonical UUID/i,
         );
+    });
+
+    it('requires a sales order to be dispatched before invoice posting', () => {
+        const orderImport = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                source_document_kind: 'sales_order',
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
+            }],
+        } as Invoice;
+
+        expect(canonicalInvoiceValidationError(orderImport, customer)).toMatch(
+            /order must be dispatched first.*cannot consume its stock reservation/i,
+        );
+        expect(() => buildCanonicalInvoicePreparePayload(
+            orderImport,
+            customer,
+            'erp-web-invoice:blocked-order-import',
+        )).toThrow(/order must be dispatched first/i);
     });
 
     it('fails closed instead of partially allocating beyond the selected batch', () => {

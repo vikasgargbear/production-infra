@@ -1,6 +1,6 @@
 import type { Customer } from '../../../../types/models/customer';
 import type { Invoice } from '../hooks/useInvoiceLogic';
-import type { FreeSupplyTaxTreatment } from '../types/invoiceTypes';
+import type { FreeSupplyTaxTreatment, InvoiceItem } from '../types/invoiceTypes';
 import type { CompanyInfo } from '../../../../types/common/company.types';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { indianStateCode } from '../../../../utils/indianStates';
@@ -29,7 +29,94 @@ const requiredUuid = (value: unknown, label: string): string => {
     return normalized;
 };
 
+const requiredDecimal = (value: unknown, label: string): string => {
+    if (value === undefined || value === null || value === '') {
+        throw new Error(`${label} is missing`);
+    }
+    return decimal(value);
+};
+
 const nonEmpty = (value: unknown): boolean => String(value ?? '').trim().length > 0;
+
+const fulfillmentSource = (
+    item: InvoiceItem,
+): 'direct_issue' | 'dispatch_allocated' => {
+    if (item.source_allocation_kind === undefined
+        || item.source_allocation_kind === 'direct_issue') {
+        return 'direct_issue';
+    }
+    if (item.source_allocation_kind === 'dispatch_allocation') {
+        return 'dispatch_allocated';
+    }
+    throw new Error('Invoice item has an unsupported canonical allocation source');
+};
+
+const validateImportedAllocationLineage = (item: InvoiceItem, index: number): void => {
+    if (item.source_allocation_kind === undefined) return;
+
+    const prefix = `Item ${index + 1}`;
+    const allocationId = requiredUuid(item.allocation_id, `${prefix} allocation`);
+    requiredUuid(item.source_line_id, `${prefix} source line`);
+    requiredUuid(item.inventory_document_id, `${prefix} inventory document`);
+    const inventoryLineId = requiredUuid(
+        item.inventory_document_line_id,
+        `${prefix} inventory document line`,
+    );
+
+    if (item.source_allocation_kind === 'direct_issue') {
+        requiredUuid(item.command_request_id, `${prefix} command request`);
+        if (allocationId !== inventoryLineId) {
+            throw new Error(`${prefix} direct-issue allocation identity is inconsistent`);
+        }
+        if (item.invoice_dispatch_allocation_id != null
+            || item.dispatch_id != null
+            || item.dispatch_line_id != null) {
+            throw new Error(`${prefix} direct-issue lineage cannot contain dispatch identities`);
+        }
+        return;
+    }
+
+    const dispatchLineId = requiredUuid(item.dispatch_line_id, `${prefix} dispatch line`);
+    requiredUuid(item.dispatch_id, `${prefix} dispatch`);
+    if (item.command_request_id != null) {
+        requiredUuid(item.command_request_id, `${prefix} command request`);
+    }
+    const expectedAllocationId = item.invoice_dispatch_allocation_id == null
+        ? dispatchLineId
+        : requiredUuid(
+            item.invoice_dispatch_allocation_id,
+            `${prefix} invoice dispatch allocation`,
+        );
+    if (allocationId !== expectedAllocationId
+        || String(item.source_line_id) !== dispatchLineId) {
+        throw new Error(`${prefix} dispatch allocation lineage is inconsistent`);
+    }
+    const baseBilled = Number(requiredDecimal(
+        item.base_billed_quantity,
+        `${prefix} base billed quantity`,
+    ));
+    const baseFree = Number(requiredDecimal(
+        item.base_free_quantity,
+        `${prefix} base free quantity`,
+    ));
+    const sourceBilled = Number(requiredDecimal(
+        item.source_billed_quantity,
+        `${prefix} source billed quantity`,
+    ));
+    const sourceFree = Number(requiredDecimal(
+        item.source_free_quantity,
+        `${prefix} source free quantity`,
+    ));
+    if (Number(item.quantity) !== sourceBilled
+        || Number(item.free_quantity) !== sourceFree) {
+        throw new Error(
+            `${prefix} dispatch quantity was edited after import. Re-import the canonical dispatch before invoicing.`,
+        );
+    }
+    if (baseBilled + baseFree <= 0) {
+        throw new Error(`${prefix} dispatch allocation has no positive base quantity`);
+    }
+};
 
 const freeSupplyTaxTreatment = (value: unknown): FreeSupplyTaxTreatment => {
     if (value == null || value === '') return 'excluded_from_taxable_value';
@@ -112,6 +199,7 @@ const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
  */
 export function invoiceBatchAllocationValidationError(invoice: Invoice): string | null {
     for (const [index, item] of invoice.items.entries()) {
+        if (fulfillmentSource(item) === 'dispatch_allocated') continue;
         const availableQuantity = Number(item.available_quantity ?? item.quantity_available);
         if (!Number.isFinite(availableQuantity) || availableQuantity < 0) {
             return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
@@ -147,17 +235,31 @@ export function canonicalInvoiceValidationError(
     if (batchAllocationError) return batchAllocationError;
 
     let branchId: string | undefined;
-    let locationId: string | undefined;
+    let directIssueLocationId: string | undefined;
     for (const [index, item] of invoice.items.entries()) {
         try {
+            if (item.source_document_kind === 'sales_order') {
+                return 'Order must be dispatched first before it can be invoiced; direct order import cannot consume its stock reservation.';
+            }
             if (!/^[0-9]{4,8}$/.test(String(item.hsn_code || '').trim())) {
                 return `Item ${index + 1} HSN code is missing or invalid. Complete the product master first.`;
             }
             const itemBranch = requiredUuid(item.branch_id, `Item ${index + 1} branch`);
-            const itemLocation = requiredUuid(item.location_id, `Item ${index + 1} stock location`);
             requiredUuid(item.product_id, `Item ${index + 1} product`);
-            requiredUuid(item.batch_id, `Item ${index + 1} batch`);
             requiredUuid(item.uom_conversion_id, `Item ${index + 1} UOM`);
+            const source = fulfillmentSource(item);
+            validateImportedAllocationLineage(item, index);
+            if (source === 'direct_issue') {
+                const itemLocation = requiredUuid(
+                    item.location_id,
+                    `Item ${index + 1} stock location`,
+                );
+                requiredUuid(item.batch_id, `Item ${index + 1} batch`);
+                directIssueLocationId ??= itemLocation;
+                if (directIssueLocationId !== itemLocation) {
+                    return 'All direct-issue items must use one stock location';
+                }
+            }
             const billedQuantity = Number(decimal(item.quantity));
             const freeQuantity = Number(decimal(item.free_quantity));
             decimal(item.unit_price);
@@ -167,9 +269,7 @@ export function canonicalInvoiceValidationError(
                 return `Item ${index + 1} billed or free quantity must be greater than zero`;
             }
             branchId ??= itemBranch;
-            locationId ??= itemLocation;
             if (branchId !== itemBranch) return 'All invoice items must belong to one branch';
-            if (locationId !== itemLocation) return 'All direct-issue items must use one stock location';
         } catch (error) {
             return error instanceof Error ? error.message : 'Invoice item is invalid';
         }
@@ -196,6 +296,9 @@ export function buildCanonicalInvoicePreparePayload(
     if (validationError) throw new Error(validationError);
 
     const firstItem = invoice.items[0];
+    const firstDirectIssueItem = invoice.items.find(
+        item => fulfillmentSource(item) === 'direct_issue',
+    );
     const freight = Number(invoice.freight_charges || 0);
     return {
         idempotency_key: idempotencyKey,
@@ -215,15 +318,18 @@ export function buildCanonicalInvoicePreparePayload(
         customer_account_id: requiredUuid(customer.customer_id, 'Customer'),
         tax_charge_mechanism: 'normal',
         place_of_supply_state_code: invoicePlaceOfSupplyStateCode(invoice, customer),
-        from_location_id: requiredUuid(firstItem.location_id, 'Stock location'),
-        logistics: {
-            transport_mode: 'in_person',
-            distance_km: '0',
-        },
+        ...(firstDirectIssueItem ? {
+            from_location_id: requiredUuid(firstDirectIssueItem.location_id, 'Stock location'),
+            logistics: {
+                transport_mode: 'in_person',
+                distance_km: '0',
+            },
+        } : {}),
         lines: invoice.items.map((item, index) => {
             const discountPercent = Number(item.discount_percent || 0);
             const billedQuantity = decimal(item.quantity);
             const freeQuantity = decimal(item.free_quantity);
+            const source = fulfillmentSource(item);
             return {
                 product_id: requiredUuid(item.product_id, `Item ${index + 1} product`),
                 uom_conversion_id: requiredUuid(item.uom_conversion_id, `Item ${index + 1} UOM`),
@@ -244,12 +350,29 @@ export function buildCanonicalInvoicePreparePayload(
                     line_discount_value: '0',
                 },
                 document_discount_eligible: true,
-                fulfillment_source: 'direct_issue',
-                batch_allocations: [{
-                    batch_id: requiredUuid(item.batch_id, `Item ${index + 1} batch`),
-                    billed_quantity: billedQuantity,
-                    free_quantity: freeQuantity,
-                }],
+                fulfillment_source: source,
+                ...(source === 'direct_issue' ? {
+                    batch_allocations: [{
+                        batch_id: requiredUuid(item.batch_id, `Item ${index + 1} batch`),
+                        billed_quantity: billedQuantity,
+                        free_quantity: freeQuantity,
+                    }],
+                } : {
+                    dispatch_allocations: [{
+                        dispatch_line_id: requiredUuid(
+                            item.dispatch_line_id,
+                            `Item ${index + 1} dispatch line`,
+                        ),
+                        allocated_base_billed_quantity: requiredDecimal(
+                            item.base_billed_quantity,
+                            `Item ${index + 1} base billed quantity`,
+                        ),
+                        allocated_base_free_quantity: requiredDecimal(
+                            item.base_free_quantity,
+                            `Item ${index + 1} base free quantity`,
+                        ),
+                    }],
+                }),
             };
         }),
     };

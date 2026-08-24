@@ -43,6 +43,10 @@ export type CanonicalAllocationSourceKind = 'direct_issue' | 'dispatch_allocatio
 export type FreeSupplyTaxTreatment =
     | 'excluded_from_taxable_value'
     | 'included_at_unit_rate';
+export type CanonicalSourceDocumentKind =
+    | 'sales_order'
+    | 'delivery_challan'
+    | 'sales_invoice';
 
 export interface CanonicalImportLine {
     product_id: string | number;
@@ -65,6 +69,14 @@ export interface CanonicalImportLine {
     tax_percent?: number;
     discount_percent: number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
+    available_quantity?: number;
+    base_billed_quantity?: number;
+    base_free_quantity?: number;
+    source_billed_quantity?: number;
+    source_free_quantity?: number;
     taxable_amount?: number;
     cgst_amount?: number;
     sgst_amount?: number;
@@ -75,6 +87,7 @@ export interface CanonicalImportLine {
     line_total?: number;
     total?: number;
     source_line_id?: string | number;
+    source_document_kind?: CanonicalSourceDocumentKind;
     source_allocation_kind?: CanonicalAllocationSourceKind;
     allocation_id?: string;
     command_request_id?: string | null;
@@ -88,9 +101,11 @@ export interface CanonicalImportLine {
 interface CanonicalExecutedBatchAllocation {
     source_kind: CanonicalAllocationSourceKind;
     allocation_id: string;
+    source_line_id?: string;
     command_request_id?: string | null;
     inventory_document_id: string;
     inventory_document_line_id: string;
+    from_location_id?: string;
     invoice_dispatch_allocation_id?: string | null;
     dispatch_id?: string | null;
     dispatch_line_id?: string | null;
@@ -114,13 +129,15 @@ const finiteNumber = (value: unknown): number | null => {
 const quantitiesMatch = (left: number, right: number): boolean =>
     Math.abs(left - right) <= 0.000001;
 
-const optionalFreeSupplyTaxTreatment = (
+const requiredFreeSupplyTaxTreatment = (
     value: unknown,
     lineIndex: number,
-): FreeSupplyTaxTreatment | undefined => {
-    if (value === undefined || value === null) return undefined;
+): FreeSupplyTaxTreatment => {
     if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') {
         return value;
+    }
+    if (value === undefined || value === null || value === '') {
+        throw new Error(`Line ${lineIndex + 1} is missing its canonical free-supply tax treatment.`);
     }
     throw new Error(`Line ${lineIndex + 1} has an invalid free-supply tax treatment.`);
 };
@@ -209,17 +226,19 @@ const projectExecutedAllocations = (
         }
         seenAllocationIds.add(allocationId);
         if (allocation.source_kind === 'dispatch_allocation'
-            && (!allocation.invoice_dispatch_allocation_id
-                || String(allocation.invoice_dispatch_allocation_id).trim() === '')) {
-            throw new Error(`${prefix} is missing its invoice dispatch allocation identity.`);
-        }
-        if (allocation.source_kind === 'dispatch_allocation'
-            && (allocationId !== String(allocation.invoice_dispatch_allocation_id)
-                || !allocation.dispatch_id || !allocation.dispatch_line_id)) {
+            && (!allocation.dispatch_id || !allocation.dispatch_line_id)) {
             throw new Error(`${prefix} has contradictory dispatch lineage identities.`);
         }
         if (allocation.source_kind === 'dispatch_allocation') {
             const dispatchLineId = String(allocation.dispatch_line_id);
+            const expectedAllocationId = allocation.invoice_dispatch_allocation_id
+                ? String(allocation.invoice_dispatch_allocation_id)
+                : dispatchLineId;
+            if (allocationId !== expectedAllocationId
+                || (allocation.source_line_id !== undefined
+                    && String(allocation.source_line_id) !== dispatchLineId)) {
+                throw new Error(`${prefix} has contradictory dispatch lineage identities.`);
+            }
             if (seenDispatchLines.has(dispatchLineId)) {
                 throw new Error(`${prefix} duplicates a dispatch line allocation.`);
             }
@@ -304,7 +323,13 @@ const projectExecutedAllocations = (
     const monetarySplits = splitMoney(item, monetaryWeights);
     return allocations.map((allocation, allocationIndex) => ({
         ...monetarySplits[allocationIndex],
-        source_line_id: item.id as string | number | undefined,
+        source_line_id: allocation.source_line_id
+            ?? (allocation.source_kind === 'dispatch_allocation'
+                ? allocation.dispatch_line_id ?? undefined
+                : item.id as string | number | undefined),
+        source_document_kind: item.source_document_kind as (
+            CanonicalSourceDocumentKind | undefined
+        ),
         source_allocation_kind: allocation.source_kind,
         allocation_id: allocation.allocation_id,
         command_request_id: allocation.command_request_id ?? null,
@@ -313,6 +338,16 @@ const projectExecutedAllocations = (
         invoice_dispatch_allocation_id: allocation.invoice_dispatch_allocation_id ?? null,
         dispatch_id: allocation.dispatch_id ?? null,
         dispatch_line_id: allocation.dispatch_line_id ?? null,
+        branch_id: typeof item.branch_id === 'string' ? item.branch_id : undefined,
+        location_id: allocation.from_location_id,
+        uom_conversion_id: typeof item.uom_conversion_id === 'string'
+            ? item.uom_conversion_id
+            : undefined,
+        available_quantity: finiteNumber(item.available_quantity) ?? undefined,
+        base_billed_quantity: finiteNumber(allocation.base_billed_quantity) ?? undefined,
+        base_free_quantity: finiteNumber(allocation.base_free_quantity) ?? undefined,
+        source_billed_quantity: quantities[allocationIndex].billed,
+        source_free_quantity: quantities[allocationIndex].free,
         product_id: (item.product_id ?? item.id) as string | number,
         product_name: String(item.product_name ?? item.name ?? '').trim(),
         product_code: typeof item.product_code === 'string' ? item.product_code : undefined,
@@ -398,6 +433,9 @@ export function projectCanonicalImportLines(
 
         projected.push({
             product_id: productId as string | number,
+            source_document_kind: item.source_document_kind as (
+                CanonicalSourceDocumentKind | undefined
+            ),
             product_name: productName,
             product_code: typeof item.product_code === 'string' ? item.product_code : undefined,
             hsn_code: typeof item.hsn_code === 'string' ? item.hsn_code : undefined,
@@ -416,10 +454,16 @@ export function projectCanonicalImportLines(
             tax_percent: finiteNumber(item.tax_percent ?? item.tax_rate) ?? undefined,
             free_quantity: freeQuantity,
             discount_percent: finiteNumber(item.discount_percent) ?? 0,
-            free_supply_tax_treatment: optionalFreeSupplyTaxTreatment(
+            free_supply_tax_treatment: requiredFreeSupplyTaxTreatment(
                 item.free_supply_tax_treatment,
                 index,
             ),
+            branch_id: typeof item.branch_id === 'string' ? item.branch_id : undefined,
+            location_id: typeof item.location_id === 'string' ? item.location_id : undefined,
+            uom_conversion_id: typeof item.uom_conversion_id === 'string'
+                ? item.uom_conversion_id
+                : undefined,
+            available_quantity: finiteNumber(item.available_quantity) ?? undefined,
         });
     });
     return projected;

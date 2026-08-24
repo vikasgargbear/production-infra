@@ -46,6 +46,7 @@ describe('Sales document import envelope normalization', () => {
             batch_number: 'BATCH-1',
             quantity: 2,
             free_quantity: 0,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
             unit_price: '150.25',
             tax_rate: '12',
         }])).toEqual([expect.objectContaining({
@@ -74,6 +75,7 @@ describe('Sales document import envelope normalization', () => {
             inventory_document_line_id: 'inventory-line-1',
             batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
             quantity: 1, free_quantity: 0, unit_price: 150, gst_percent: 12,
+            base_billed_quantity: 1, base_free_quantity: 0,
         })]);
     });
 
@@ -211,7 +213,7 @@ describe('Sales document import envelope normalization', () => {
     it.each([
         [[], 'no executed canonical batch allocations'],
         [[allocation({ inventory_document_line_id: undefined })], 'inventory document line identity'],
-        [[allocation({ source_kind: 'dispatch_allocation' })], 'invoice dispatch allocation identity'],
+        [[allocation({ source_kind: 'dispatch_allocation' })], 'dispatch lineage identities'],
         [[allocation(), allocation({
             source_kind: 'dispatch_allocation', command_request_id: null,
             allocation_id: 'invoice-dispatch-allocation-2',
@@ -249,6 +251,9 @@ describe('Sales document import envelope normalization', () => {
         [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
             quantity: 1, free_quantity: 0, unit_price: 10, free_supply_tax_treatment: 'unknown' },
         'invalid free-supply tax treatment'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
+            quantity: 1, free_quantity: 0, unit_price: 10 },
+        'missing its canonical free-supply tax treatment'],
         [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
             quantity: 1, unit_price: 10 }, 'billed and free quantities separately'],
         [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',

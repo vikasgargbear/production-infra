@@ -7,6 +7,8 @@
 
 import {
     BaseLineItem,
+    CanonicalAllocationSourceKind,
+    CanonicalSourceDocumentKind,
     FreeSupplyTaxTreatment,
 } from '../types/salesSharedTypes';
 
@@ -25,16 +27,30 @@ export interface ProductInput {
     sale_price?: number;
     mrp_per_unit?: number;
     mrp?: number;
-    quantity_available?: number;
-    available_quantity?: number;
-    total_stock?: number;
-    total_quantity_available?: number;
+    quantity_available?: number | string;
+    available_quantity?: number | string;
+    total_stock?: number | string;
+    total_quantity_available?: number | string;
     gst_percent?: number;
     tax_rate?: number;
     hsn_code?: string;
     quantity: number;
     free_quantity: number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    source_line_id?: string | number;
+    source_document_kind?: CanonicalSourceDocumentKind;
+    source_allocation_kind?: CanonicalAllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
+    base_billed_quantity?: number;
+    base_free_quantity?: number;
+    source_billed_quantity?: number;
+    source_free_quantity?: number;
     discount_percent?: number;
     best_batch?: any; // Nested batch data from API
     [key: string]: any; // Allow additional fields
@@ -48,6 +64,18 @@ function nonNegativeQuantity(
         throw new Error(`${label} must be a finite non-negative number.`);
     }
     return value;
+}
+
+function nonNegativeAvailability(value: unknown): number {
+    const parsed = typeof value === 'number'
+        ? value
+        : typeof value === 'string' && value.trim() !== ''
+            ? Number(value)
+            : 0;
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error('Available quantity must be a finite non-negative number.');
+    }
+    return parsed;
 }
 
 /**
@@ -87,16 +115,16 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         mrp = parseFloat(String(
             product.mrp_per_unit || product.mrp || 0
         ));
-        availableQty = parseInt(String(
-            product.quantity_available || product.available_quantity || 0
-        ));
+        availableQty = nonNegativeAvailability(
+            product.quantity_available ?? product.available_quantity ?? 0
+        );
         manufacturingDate = product.manufacturing_date || product.manufacturing_date || '';
     } else if (bestBatch) {
         // New API: use best_batch ONLY if no batch was explicitly selected
         console.log('[PrepareItem] Using best_batch from API (auto-selected):', bestBatch);
         unitPrice = parseFloat(String(bestBatch.sale_price_per_unit || 0));
         mrp = parseFloat(String(bestBatch.mrp_per_unit || 0));
-        availableQty = parseInt(String(bestBatch.quantity_available || 0));
+        availableQty = nonNegativeAvailability(bestBatch.quantity_available ?? 0);
         batchId = bestBatch.batch_id;
         batchNumber = bestBatch.batch_number || '';
         expiryDate = bestBatch.expiry_date || '';
@@ -110,9 +138,12 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         mrp = parseFloat(String(
             product.mrp_per_unit || product.mrp || 0
         ));
-        availableQty = parseInt(String(
-            product.total_stock || product.quantity_available || product.total_quantity_available || 0
-        ));
+        availableQty = nonNegativeAvailability(
+            product.total_stock
+            ?? product.quantity_available
+            ?? product.total_quantity_available
+            ?? 0
+        );
     }
 
     // Create base item with ONLY canonical fields
@@ -129,6 +160,20 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         free_quantity: nonNegativeQuantity(product.free_quantity, 'Free quantity'),
         free_supply_tax_treatment:
             product.free_supply_tax_treatment || 'excluded_from_taxable_value',
+        source_line_id: product.source_line_id,
+        source_document_kind: product.source_document_kind,
+        source_allocation_kind: product.source_allocation_kind,
+        allocation_id: product.allocation_id,
+        command_request_id: product.command_request_id,
+        inventory_document_id: product.inventory_document_id,
+        inventory_document_line_id: product.inventory_document_line_id,
+        invoice_dispatch_allocation_id: product.invoice_dispatch_allocation_id,
+        dispatch_id: product.dispatch_id,
+        dispatch_line_id: product.dispatch_line_id,
+        base_billed_quantity: product.base_billed_quantity,
+        base_free_quantity: product.base_free_quantity,
+        source_billed_quantity: product.source_billed_quantity,
+        source_free_quantity: product.source_free_quantity,
         unit: ''
     };
 

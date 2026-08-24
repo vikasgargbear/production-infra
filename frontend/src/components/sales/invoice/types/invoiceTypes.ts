@@ -10,6 +10,8 @@
  */
 
 import type {
+    CanonicalAllocationSourceKind,
+    CanonicalSourceDocumentKind,
     FreeSupplyTaxTreatment as SharedFreeSupplyTaxTreatment,
 } from '../../types/salesSharedTypes';
 import type { CanonicalImportLine } from '../../utils/documentImport';
@@ -215,6 +217,20 @@ export interface InvoiceItem {
     quantity?: number;
     free_quantity?: number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    source_line_id?: string | number;
+    source_document_kind?: CanonicalSourceDocumentKind;
+    source_allocation_kind?: CanonicalAllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
+    base_billed_quantity?: number;
+    base_free_quantity?: number;
+    source_billed_quantity?: number;
+    source_free_quantity?: number;
     ordered_quantity?: number;
     dispatched_quantity?: number;
 
