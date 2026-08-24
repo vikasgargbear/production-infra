@@ -181,3 +181,13 @@ def test_sales_order_uuid_lines_preserve_free_supply_treatment():
     assert totals["calculated_items"][0]["free_supply_tax_treatment"] == (
         "included_at_unit_rate"
     )
+    from app.api.routes.calculations import _preview_response
+    from app.api.schemas.calculations import InvoiceCalculationPreviewResponse
+    response = _preview_response(
+        totals,
+        request.gst_type,
+        InvoiceCalculationPreviewResponse,
+        request.items,
+    )
+    assert response.line_items[0].product_id == product_id
+    assert response.line_items[0].batch_id == batch_id

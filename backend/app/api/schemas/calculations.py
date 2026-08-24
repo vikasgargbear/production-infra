@@ -88,6 +88,85 @@ class ChallanCalculationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CalculationPreviewLine(BaseModel):
+    """Strict numeric line contract shared by sales calculation previews."""
+
+    product_id: Optional[EntityId] = None
+    batch_id: Optional[EntityId] = None
+    quantity: float = Field(ge=0)
+    free_quantity: float = Field(ge=0)
+    free_supply_tax_treatment: FreeSupplyTaxTreatment
+    subtotal: float = Field(ge=0)
+    discount_amount: float = Field(ge=0)
+    taxable_amount: float = Field(ge=0)
+    cgst_amount: float = Field(ge=0)
+    sgst_amount: float = Field(ge=0)
+    igst_amount: float = Field(ge=0)
+    total_tax: float = Field(ge=0)
+    total_tax_amount: float = Field(ge=0)
+    line_total: float = Field(ge=0)
+    gst_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    cgst_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    sgst_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    igst_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    scheme_discount: Optional[float] = Field(default=None, ge=0)
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class InvoiceCalculationPreviewTotals(BaseModel):
+    subtotal_amount: float = Field(ge=0)
+    discount_amount: float = Field(ge=0)
+    scheme_discount: float = Field(ge=0)
+    scheme_discount_percent: float = Field(ge=0, le=100)
+    taxable_amount: float = Field(ge=0)
+    cgst_amount: float = Field(ge=0)
+    sgst_amount: float = Field(ge=0)
+    igst_amount: float = Field(ge=0)
+    total_tax_amount: float = Field(ge=0)
+    freight_charges: float = Field(ge=0)
+    insurance_charges: float = Field(ge=0)
+    other_charges: float = Field(ge=0)
+    round_off_amount: float
+    final_amount: float = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class ChallanCalculationPreviewTotals(BaseModel):
+    subtotal_amount: float = Field(ge=0)
+    discount_amount: float = Field(ge=0)
+    taxable_amount: float = Field(ge=0)
+    cgst_amount: float = Field(ge=0)
+    sgst_amount: float = Field(ge=0)
+    igst_amount: float = Field(ge=0)
+    total_tax_amount: float = Field(ge=0)
+    freight_charges: float = Field(ge=0)
+    final_amount: float = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class InvoiceCalculationPreviewResponse(BaseModel):
+    success: Literal[True]
+    line_items: List[CalculationPreviewLine] = Field(min_length=1, max_length=500)
+    totals: InvoiceCalculationPreviewTotals
+    calculation_timestamp: int = Field(ge=0)
+    gst_type: GSTType
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ChallanCalculationPreviewResponse(BaseModel):
+    success: Literal[True]
+    line_items: List[CalculationPreviewLine] = Field(min_length=1, max_length=500)
+    totals: ChallanCalculationPreviewTotals
+    calculation_timestamp: int = Field(ge=0)
+    gst_type: GSTType
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ReturnCalculationLine(BaseModel):
     product_id: Optional[EntityId] = None
     return_quantity: Decimal = Field(gt=0)

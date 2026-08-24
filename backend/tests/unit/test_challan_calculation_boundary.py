@@ -1,3 +1,5 @@
+import pytest
+
 from app.api.services.sales.challan.service import ChallanService
 from app.api.schemas.calculations import ChallanCalculationRequest
 from app.main import app
@@ -5,12 +7,19 @@ from uuid import UUID, uuid4
 
 
 def test_challan_preview_is_typed_authenticated_and_not_mcp_exported():
-    operation = app.openapi()["paths"]["/api/calculations/challan"]["post"]
+    schema = app.openapi()
+    operation = schema["paths"]["/api/calculations/challan"]["post"]
 
     assert operation["security"] == [{"HTTPBearer": []}]
     assert "x-erp-tool-name" not in operation
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
     assert request_schema["$ref"].endswith("/ChallanCalculationRequest")
+    response_schema = operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema["$ref"].endswith("/ChallanCalculationPreviewResponse")
+    totals = schema["components"]["schemas"]["ChallanCalculationPreviewTotals"]
+    assert totals["additionalProperties"] is False
 
 
 def test_challan_lines_reconcile_discount_gst_freight_and_total():
@@ -87,3 +96,40 @@ def test_challan_mixed_billed_and_free_excludes_free_by_default():
     assert result["subtotal_amount"] == 100.0
     assert result["igst_amount"] == 18.0
     assert result["final_amount"] == 118.0
+
+
+def test_challan_preview_response_validates_totals_and_preserves_uuid_line_id():
+    from pydantic import ValidationError
+    from app.api.routes.calculations import _preview_response
+    from app.api.schemas.calculations import ChallanCalculationPreviewResponse
+
+    product_id = uuid4()
+    request = ChallanCalculationRequest.model_validate({
+        "customer_id": str(uuid4()), "gst_type": "IGST",
+        "items": [{
+            "product_id": str(product_id), "quantity": 1, "free_quantity": 0,
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "unit_price": 100, "gst_percent": 18,
+        }],
+    })
+    result = ChallanService.calculate_challan_totals(
+        [item.model_dump() for item in request.items], request.gst_type
+    )
+    response = _preview_response(
+        result,
+        request.gst_type,
+        ChallanCalculationPreviewResponse,
+        request.items,
+    )
+    assert response.line_items[0].product_id == product_id
+    assert isinstance(response.model_dump(mode="json")["totals"]["final_amount"], float)
+
+    invalid = dict(result)
+    invalid["final_amount"] = -1
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        _preview_response(
+            invalid,
+            request.gst_type,
+            ChallanCalculationPreviewResponse,
+            request.items,
+        )

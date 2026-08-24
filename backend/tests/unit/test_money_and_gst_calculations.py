@@ -179,6 +179,52 @@ def test_invoice_accepts_string_document_discounts_from_json_payloads():
     assert result["igst_amount"] == 31.5
 
 
+def test_invoice_preview_response_is_strict_and_serializes_frontend_numbers():
+    from pydantic import ValidationError
+    from app.api.routes.calculations import _preview_response
+    from app.api.schemas.calculations import (
+        CalculationLine,
+        InvoiceCalculationPreviewResponse,
+    )
+
+    result = InvoiceService.calculate_invoice_totals(
+        items=[{
+            "product_id": "d3000000-0000-7000-8000-000000000001",
+            "quantity": "1", "free_quantity": "1", "unit_price": "100",
+            "gst_percent": "18",
+            "free_supply_tax_treatment": "included_at_unit_rate",
+        }],
+        gst_type="IGST",
+    )
+    source_lines = [CalculationLine.model_validate({
+        "product_id": "d3000000-0000-7000-8000-000000000001",
+        "quantity": "1", "free_quantity": "1", "unit_price": "100",
+        "gst_percent": "18",
+        "free_supply_tax_treatment": "included_at_unit_rate",
+    })]
+    response = _preview_response(
+        result, "IGST", InvoiceCalculationPreviewResponse, source_lines
+    )
+    body = response.model_dump(mode="json")
+    assert isinstance(body["line_items"][0]["line_total"], float)
+    assert isinstance(body["totals"]["final_amount"], float)
+    assert body["line_items"][0]["product_id"] == (
+        "d3000000-0000-7000-8000-000000000001"
+    )
+    assert body["line_items"][0]["free_supply_tax_treatment"] == (
+        "included_at_unit_rate"
+    )
+
+    invalid = dict(result)
+    invalid["calculated_items"] = [
+        {**result["calculated_items"][0], "client_total": 1}
+    ]
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        _preview_response(
+            invalid, "IGST", InvoiceCalculationPreviewResponse, source_lines
+        )
+
+
 def test_line_calculation_matrix_covers_prices_quantities_discounts_and_gst():
     quantities = ["0", "0.01", "1", "2.5", "9999"]
     prices = ["0", "0.01", "1.005", "99.99", "1234.567"]

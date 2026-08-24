@@ -1,7 +1,7 @@
 """Read-only calculation previews backed by the same services as document writes."""
 
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Sequence, Type, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,13 +26,53 @@ from ..schemas.calculations import (
     ChallanCalculationRequest,
     ReturnCalculationRequest,
     NoteCalculationRequest,
+    InvoiceCalculationPreviewResponse,
+    ChallanCalculationPreviewResponse,
+    CalculationLine,
 )
 
 
 router = APIRouter(prefix="/calculations", tags=["Calculations"])
 
 
-def _preview_response(result: Dict[str, Any], gst_type: str) -> Dict[str, Any]:
+PreviewResponse = TypeVar(
+    "PreviewResponse",
+    InvoiceCalculationPreviewResponse,
+    ChallanCalculationPreviewResponse,
+)
+
+
+def _preview_response(
+    result: Dict[str, Any],
+    gst_type: str,
+    response_type: Type[PreviewResponse],
+    source_lines: Sequence[CalculationLine],
+) -> PreviewResponse:
+    totals = dict(result)
+    line_items = totals.pop("calculated_items")
+    if len(line_items) != len(source_lines):
+        raise ValueError("calculation response line count does not match request")
+    identified_lines = []
+    for index, line in enumerate(line_items):
+        identified = dict(line)
+        source = source_lines[index]
+        if source.product_id is not None:
+            identified["product_id"] = source.product_id
+        batch_id = getattr(source, "batch_id", None)
+        if batch_id is not None:
+            identified["batch_id"] = batch_id
+        identified_lines.append(identified)
+    return response_type.model_validate({
+        "success": True,
+        "line_items": identified_lines,
+        "totals": totals,
+        "calculation_timestamp": int(time.time() * 1000),
+        "gst_type": str(gst_type).strip().upper(),
+    })
+
+
+def _untyped_preview_response(result: Dict[str, Any], gst_type: str) -> Dict[str, Any]:
+    """Compatibility wrapper for calculation surfaces outside this typed closure."""
     totals = dict(result)
     line_items = totals.pop("calculated_items")
     return {
@@ -44,7 +84,11 @@ def _preview_response(result: Dict[str, Any], gst_type: str) -> Dict[str, Any]:
     }
 
 
-@router.post("/invoice")
+@router.post(
+    "/invoice",
+    response_model=InvoiceCalculationPreviewResponse,
+    response_model_exclude_none=True,
+)
 @with_tenant_context
 async def preview_invoice_totals(
     invoice_data: InvoiceCalculationRequest,
@@ -77,10 +121,16 @@ async def preview_invoice_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _preview_response(result, gst_type)
+    return _preview_response(
+        result, gst_type, InvoiceCalculationPreviewResponse, invoice_data.items
+    )
 
 
-@router.post("/sales-order")
+@router.post(
+    "/sales-order",
+    response_model=InvoiceCalculationPreviewResponse,
+    response_model_exclude_none=True,
+)
 @with_tenant_context
 async def preview_sales_order_totals(
     order_data: SalesOrderCalculationRequest,
@@ -122,6 +172,8 @@ async def preview_sales_order_totals(
     return _preview_response(
         result,
         gst_type,
+        InvoiceCalculationPreviewResponse,
+        order_data.items,
     )
 
 
@@ -156,10 +208,14 @@ async def preview_purchase_order_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _preview_response(result, gst_type)
+    return _untyped_preview_response(result, gst_type)
 
 
-@router.post("/challan")
+@router.post(
+    "/challan",
+    response_model=ChallanCalculationPreviewResponse,
+    response_model_exclude_none=True,
+)
 @with_tenant_context
 async def preview_challan_totals(
     challan_data: ChallanCalculationRequest,
@@ -187,7 +243,9 @@ async def preview_challan_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _preview_response(result, gst_type)
+    return _preview_response(
+        result, gst_type, ChallanCalculationPreviewResponse, challan_data.items
+    )
 
 
 @router.post("/return")
@@ -234,7 +292,7 @@ async def preview_return_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _preview_response(result, gst_type)
+    return _untyped_preview_response(result, gst_type)
 
 
 @router.post("/note")
@@ -269,4 +327,4 @@ async def preview_note_totals(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _preview_response(result, gst_type)
+    return _untyped_preview_response(result, gst_type)

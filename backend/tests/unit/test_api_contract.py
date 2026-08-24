@@ -119,6 +119,10 @@ def test_invoice_calculation_preview_is_authenticated_but_not_mcp_exported():
         contract.path != "/api/calculations/invoice"
         for contract in OPERATION_REGISTRY
     )
+    response_schema = operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema["$ref"].endswith("/InvoiceCalculationPreviewResponse")
 
 
 def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
@@ -135,6 +139,17 @@ def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
     assert request_schema["properties"]["items"]["maxItems"] == 200
     entity_schema = schema["components"]["schemas"]["SalesOrderCalculationLine"]
     assert any(option.get("format") == "uuid" for option in entity_schema["properties"]["product_id"]["anyOf"])
+    response_schema = operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema["$ref"].endswith("/InvoiceCalculationPreviewResponse")
+    line_schema = schema["components"]["schemas"]["CalculationPreviewLine"]
+    totals_schema = schema["components"]["schemas"]["InvoiceCalculationPreviewTotals"]
+    assert line_schema["additionalProperties"] is False
+    assert totals_schema["additionalProperties"] is False
+    assert line_schema["properties"]["free_supply_tax_treatment"]["enum"] == [
+        "excluded_from_taxable_value", "included_at_unit_rate"
+    ]
 
 
 @pytest.mark.parametrize("contract", OPERATION_REGISTRY)
