@@ -93,7 +93,6 @@ test.describe('live canonical desktop UI journeys', () => {
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     const prepared = await responseJson(await preparedPromise);
     await expect(page.getByText('Authoritative backend review')).toBeVisible();
-    page.once('dialog', dialog => dialog.accept());
     const executePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
     const poUiReadbackPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/purchase-orders\/[0-9a-f-]+$/);
     await page.getByRole('button', { name: 'Approve & Create PO', exact: true }).click();
@@ -225,12 +224,16 @@ test.describe('live canonical desktop UI journeys', () => {
     await expect(page.getByText(/FIFO Applied/)).toBeVisible();
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByText('PAYMENT SUMMARY')).toBeVisible();
-    page.once('dialog', dialog => dialog.accept());
     const preparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/finance\.customer_receipt\.prepare\/prepare$/);
     const executePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
     const uiReadbackPromise = canonicalResponse(page, 'GET', /\/api\/payment-allocation\/payment\/[0-9a-f-]+\/readback$/);
     await page.getByRole('button', { name: 'Post Receipt' }).click();
     const prepared = await responseJson(await preparePromise);
+    const receiptReview = page.getByRole('dialog', { name: 'Approve customer receipt' });
+    await expect(receiptReview).toBeVisible();
+    await expect(receiptReview).toContainText(prepared.command_request_id);
+    await expect(receiptReview).toContainText('₹1.00');
+    await receiptReview.getByRole('button', { name: 'Approve & Post Receipt' }).click();
     const executedResponse = await executePromise;
     const executed = await responseJson(executedResponse);
     const uiReadback = await responseJson(await uiReadbackPromise);
