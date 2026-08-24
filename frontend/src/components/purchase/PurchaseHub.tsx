@@ -148,11 +148,6 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
       : null;
   const defaultModule = forceModule || resolvedInitialSubpage || (canCreate ? 'purchase' : 'grn');
 
-  // Reset forceModule after it's been consumed
-  if (forceModule) {
-    setTimeout(() => setForceModule(null), 0);
-  }
-
   return (
     <ModuleHub
       key={forceModule || 'default'}
@@ -163,7 +158,10 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
       icon={ShoppingCart}
       modules={purchaseModules}
       defaultModule={defaultModule}
-      onActiveModuleChange={onSubpageChange}
+      onActiveModuleChange={subpage => {
+        setForceModule(null);
+        onSubpageChange?.(subpage);
+      }}
     />
   );
 };

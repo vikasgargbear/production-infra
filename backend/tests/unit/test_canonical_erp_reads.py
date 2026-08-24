@@ -385,11 +385,12 @@ def test_challan_import_rejects_already_invoiced_or_partial_lineage(monkeypatch)
         "importable_item_count": 1,
     }])
 
-    with pytest.raises(HTTPException, match="already invoiced") as blocked:
+    with pytest.raises(HTTPException) as blocked:
         canonical_erp_reads.canonical_challan_compatibility_detail(
             challan_id=uuid4(), user={}, db=object(),
         )
     assert blocked.value.status_code == 409
+    assert "already invoiced" in str(blocked.value.detail)
     assert "NOT EXISTS" in inspect.getsource(
         canonical_erp_reads.canonical_challan_compatibility_detail
     )
