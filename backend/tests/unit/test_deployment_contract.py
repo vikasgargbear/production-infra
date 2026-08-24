@@ -190,6 +190,23 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
     assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
 
 
+def test_render_pilot_diagnostics_paginate_sanitized_application_logs():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    job = workflow.split("  render-pilot-diagnostics:", 1)[1].split(
+        "  deploy-render-pilot:", 1
+    )[0]
+
+    assert "def get_recent_logs(service_id, *, max_pages=5):" in job
+    assert '"type": "app"' in job
+    assert 'log_payload.get("hasMore")' in job
+    assert 'log_payload.get("nextStartTime")' in job
+    assert 'log_payload.get("nextEndTime")' in job
+    assert 'query["startTime"], query["endTime"] = window' in job
+    assert "Render log pagination did not advance" in job
+    assert "reversed(get_recent_logs(service_id))" in job
+    assert "redact(entry.get" in job
+
+
 def test_free_staging_retries_only_transient_pooler_baseline_failures():
     workflow = _read(".github/workflows/canonical-staging.yml")
 

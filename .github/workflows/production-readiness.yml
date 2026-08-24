@@ -137,6 +137,33 @@ jobs:
               message = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[redacted-jwt]", message)
               return message[:1000]
 
+          def get_recent_logs(service_id, *, max_pages=5):
+              query = {
+                  "ownerId": owner_id,
+                  "resource": service_id,
+                  "direction": "backward",
+                  "limit": 100,
+                  "type": "app",
+              }
+              entries = []
+              seen_windows = set()
+              for _ in range(max_pages):
+                  log_payload = get("/logs", query)
+                  entries.extend(log_payload.get("logs", []))
+                  if not log_payload.get("hasMore"):
+                      break
+                  window = (
+                      log_payload.get("nextStartTime"),
+                      log_payload.get("nextEndTime"),
+                  )
+                  if not all(window) or window in seen_windows:
+                      raise SystemExit(
+                          f"{service_id}: Render log pagination did not advance"
+                      )
+                  seen_windows.add(window)
+                  query["startTime"], query["endTime"] = window
+              return entries
+
           for name in ("aasopharma-api-pilot", "aasopharma-mcp-pilot"):
               service_rows = get(
                   "/services",
@@ -157,18 +184,9 @@ jobs:
                       "status=", deploy.get("status"),
                       "commit=", (deploy.get("commit") or {}).get("id"),
                   )
-              log_payload = get(
-                  "/logs",
-                  {
-                      "ownerId": owner_id,
-                      "resource": service_id,
-                      "direction": "backward",
-                      "limit": 100,
-                  },
-              )
-              for entry in reversed(log_payload.get("logs", [])):
+              for entry in reversed(get_recent_logs(service_id)):
                   labels = {label["name"]: label["value"] for label in entry.get("labels", [])}
-                  if labels.get("type") not in {"app", "build"}:
+                  if labels.get("type") != "app":
                       continue
                   print(entry.get("timestamp"), labels.get("type"), redact(entry.get("message", "")))
           PY
