@@ -41,10 +41,10 @@ export type ReturnReason =
 
 /** Base return item fields */
 export interface BaseReturnItem {
-    product_id: number;
+    product_id: number | string;
     product_name: string;
     product_code?: string;
-    batch_id?: number;
+    batch_id?: number | string;
     batch_number?: string;
 
     // Quantities

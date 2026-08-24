@@ -116,9 +116,9 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             customer_email: party.email || '',
             customer_address: party.location || '',
             total_outstanding: party.outstandingAmount || 0,
-            overdue_amount: party.outstandingAmount || 0,
+            overdue_amount: party.overdueAmount || 0,
             days_overdue: party.daysOverdue || 0,
-            oldest_invoice_date: party.lastPayment || new Date().toISOString(),
+            oldest_invoice_date: party.oldestInvoiceDate || '',
             last_payment_date: party.lastPayment,
             last_contact_date: party.lastFollowUp,
             contact_attempts: 0,
@@ -156,8 +156,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           stats: {
             total_outstanding: summary.totalOutstanding || 0,
             total_overdue: summary.overdueAmount || 0,
-            collections_today: summary.currentWeekCollections || 0,
-            collections_mtd: summary.currentWeekCollections || 0,
+            collections_today: summary.currentDayCollections || 0,
+            collections_mtd: summary.currentMonthCollections || 0,
             promise_amount: 0,
             customers_count: collections.length,
             critical_accounts: criticalCount,
@@ -173,7 +173,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     refetchInterval: 60000 // Refresh every minute
   });
 
-  const collections = data?.collections || [];
+  const collections = useMemo(() => data?.collections || [], [data?.collections]);
   const stats: CollectionStats = data?.stats || {
     total_outstanding: 0,
     total_overdue: 0,
@@ -292,6 +292,17 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className={embedded ? 'p-6' : 'h-full bg-gray-50'}>
+        <div className="mx-auto mt-8 max-w-xl rounded-lg border border-gray-200 bg-white p-8 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+          <p className="mt-3 text-sm text-gray-600">Loading authoritative collection balances...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError) {
     return (
       <div className={embedded ? 'p-6' : 'h-full bg-gray-50'}>
@@ -350,7 +361,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                   </span>
                 </div>
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
-                  <span className="mb-1 block text-xs text-gray-500">Daily Revenue</span>
+                  <span className="mb-1 block text-xs text-gray-500">Collections Today</span>
                   <span className="text-lg font-semibold text-gray-900">
                     ₹{(stats.collections_today || 0).toLocaleString('en-IN')}
                   </span>
@@ -592,12 +603,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                     </div>
                   )}
 
-                  {isLoading && (
-                    <div className="text-center py-12">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
-                      <p className="text-gray-500 mt-2">Loading collections...</p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

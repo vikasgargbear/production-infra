@@ -1,10 +1,10 @@
 /** Boundary between purchase-order UI state and backend-owned calculations. */
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import {
     purchaseCalculationsApi,
     PurchaseCalculationRequest
 } from '../api/modules/purchase/calculations.api';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 
 
 interface PurchasePreviewResult {
@@ -19,12 +19,21 @@ function numeric(value: unknown, fallback: number = 0): number {
     return Number.isFinite(result) ? result : fallback;
 }
 
-function toRequest(order: any): PurchaseCalculationRequest {
+function entityId(value: unknown, label: string): number | string | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    const normalized = String(value).trim();
+    if (isCanonicalUuid(normalized)) return normalized;
+    const legacyId = Number(normalized);
+    if (Number.isInteger(legacyId) && legacyId > 0) return legacyId;
+    throw new Error(`${label} is missing its canonical identifier. Re-select it and try again.`);
+}
+
+export function toPurchaseCalculationRequest(order: any): PurchaseCalculationRequest {
     return {
-        supplier_id: order.supplier_id ? numeric(order.supplier_id) : undefined,
+        supplier_id: entityId(order.supplier_id, 'Supplier'),
         gst_type: order.gst_type,
         items: (order.items || []).filter((item: any) => item.product_id).map((item: any) => ({
-            product_id: numeric(item.product_id),
+            product_id: entityId(item.product_id, 'Product') as number | string,
             product_name: item.product_name,
             quantity: numeric(item.quantity),
             free_quantity: numeric(item.free_quantity),
@@ -44,19 +53,7 @@ export async function calculatePurchaseOrderPreview(
     isOnline: boolean
 ): Promise<PurchasePreviewResult> {
     if (!isOnline) {
-        const local = EnterpriseCalculator.calculateTotals(
-            (order.items || []).filter((item: any) => item.product_id),
-            {
-                invoice_discount: numeric(order.discount_amount),
-                freight_charges: numeric(order.freight_charges),
-                round_final_amount: true
-            }
-        );
-        return {
-            items: local.items as unknown as Array<Record<string, unknown>>,
-            totals: local.totals as unknown as Record<string, number | undefined>,
-            gst_type: order.gst_type || 'CGST/SGST'
-        };
+        throw new Error('Purchase calculations require the live ERP API. Reconnect and try again.');
     }
 
     if (numeric(order.discount_amount) !== 0) {
@@ -65,7 +62,7 @@ export async function calculatePurchaseOrderPreview(
         );
     }
 
-    const response = await purchaseCalculationsApi.preview(toRequest(order));
+    const response = await purchaseCalculationsApi.preview(toPurchaseCalculationRequest(order));
     const data = response.data;
     const items = data.line_items.map((line, index) => {
         const taxable = numeric(line.taxable_amount);

@@ -10,11 +10,14 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface SupplierInvoiceParams {
-    supplier_id?: number;
-    status?: 'unpaid' | 'partial' | 'paid';
+    supplier_id?: number | string;
+    status?: string;
+    payment_status?: 'pending' | 'partial' | 'paid' | 'overdue';
+    search?: string;
     from_date?: string;
     to_date?: string;
     limit?: number;
+    skip?: number;
     offset?: number;
 }
 

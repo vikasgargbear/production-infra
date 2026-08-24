@@ -7,8 +7,12 @@
 // Core Entity Types
 // ============================================================================
 
+export type SalesHistoryDocumentType = 'invoice' | 'challan' | 'sales_order';
+
 export interface Invoice {
     id: string;
+    document_type: SalesHistoryDocumentType;
+    document_status: string;
     invoice_number: string;
     invoice_date: string;
     due_date: string;
@@ -56,12 +60,12 @@ export interface InvoiceFiltersProps {
 
 export interface InvoiceTableProps {
     invoices: Invoice[];
+    documentType: SalesHistoryDocumentType;
     selectedIds: Set<string>;
     isAllSelected: boolean;
     loading: boolean;
     onToggleSelect: (id: string) => void;
     onToggleSelectAll: () => void;
-    onCancelInvoice?: (invoice: Invoice) => void;
 }
 
 export interface InvoiceBulkActionsProps {
@@ -86,6 +90,8 @@ export interface InvoicePaginationProps {
 export interface InvoiceFilters {
     searchQuery: string;
     dateFilter: string;
+    dateFrom: string;
+    dateTo: string;
     statusFilter: string;
 }
 

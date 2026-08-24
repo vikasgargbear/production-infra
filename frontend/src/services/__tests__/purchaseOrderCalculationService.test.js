@@ -2,14 +2,11 @@
 jest.mock('../api/modules/purchase/calculations.api', () => ({
   purchaseCalculationsApi: { preview: jest.fn() }
 }));
-jest.mock('../enterpriseCalculator', () => ({
-  __esModule: true,
-  default: { calculateTotals: jest.fn() }
-}));
-
-import EnterpriseCalculator from '../enterpriseCalculator';
 import { purchaseCalculationsApi } from '../api/modules/purchase/calculations.api';
-import { calculatePurchaseOrderPreview } from '../calculations/purchaseOrderCalculationService';
+import {
+  calculatePurchaseOrderPreview,
+  toPurchaseCalculationRequest
+} from '../calculations/purchaseOrderCalculationService';
 
 
 const order = {
@@ -36,7 +33,6 @@ test('uses backend purchase preview when online', async () => {
     supplier_id: 5,
     items: [expect.objectContaining({ tax_percent: 18 })]
   }));
-  expect(EnterpriseCalculator.calculateTotals).not.toHaveBeenCalled();
   expect(result.items[0]).toEqual(expect.objectContaining({ total: 236 }));
   expect(result.totals).toEqual(expect.objectContaining({ net_amount: 236 }));
 });
@@ -47,11 +43,22 @@ test('blocks unbaselined header discounts online', async () => {
   expect(purchaseCalculationsApi.preview).not.toHaveBeenCalled();
 });
 
-test('uses local calculation only when explicitly offline', async () => {
-  EnterpriseCalculator.calculateTotals.mockReturnValue({ items: [], totals: { total_amount: 236 } });
+test('preserves canonical UUIDv7 supplier and product identifiers', () => {
+  const supplierId = '0198ea37-2b1c-7c8d-9123-123456789abc';
+  const productId = '0198ea37-2b1d-7c8d-9123-123456789abc';
 
-  await calculatePurchaseOrderPreview(order, false);
+  expect(toPurchaseCalculationRequest({
+    ...order,
+    supplier_id: supplierId,
+    items: [{ ...order.items[0], product_id: productId }]
+  })).toEqual(expect.objectContaining({
+    supplier_id: supplierId,
+    items: [expect.objectContaining({ product_id: productId })]
+  }));
+});
 
-  expect(EnterpriseCalculator.calculateTotals).toHaveBeenCalled();
+test('fails closed instead of calculating business totals offline', async () => {
+  await expect(calculatePurchaseOrderPreview(order, false))
+    .rejects.toThrow('require the live ERP API');
   expect(purchaseCalculationsApi.preview).not.toHaveBeenCalled();
 });

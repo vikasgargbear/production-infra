@@ -8,12 +8,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Package, FileText, Loader2, RefreshCw, Eye } from 'lucide-react';
 import { grnApi } from '../../../services/api';
 import { DataTable, StatusBadge, ModuleHeader } from '../../global';
-import { formatCurrency } from '../../../utils/formatters';
 
 const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
   const [grns, setGrns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGrn, setSelectedGrn] = useState<any>(null);
+
+  const stockState = (grn: any) => {
+    const status = String(grn?.grn_status || '').toLowerCase();
+    if (status === 'reversed') return { updated: false, label: 'Reversed', tone: 'text-gray-600' };
+    if (status === 'posted' || grn?.stock_updated === true) {
+      return { updated: true, label: 'Updated', tone: 'text-green-700' };
+    }
+    return { updated: false, label: 'Not posted', tone: 'text-orange-700' };
+  };
 
   const fetchGRNs = useCallback(async () => {
     setLoading(true);
@@ -41,7 +49,7 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
       case 'DIRECT':
         return <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">From Purchase Entry</span>;
       default:
-        return <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">Manual</span>;
+        return <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">Canonical receipt</span>;
     }
   };
 
@@ -105,11 +113,10 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
       key: 'stock_updated',
       header: 'Stock',
       align: 'center' as const,
-      render: (_: any, grn: any) => (
-        <span className={`text-xs font-medium ${grn.stock_updated ? 'text-green-600' : 'text-orange-600'}`}>
-          {grn.stock_updated ? 'Updated' : 'Pending'}
-        </span>
-      ),
+      render: (_: any, grn: any) => {
+        const state = stockState(grn);
+        return <span className={`text-xs font-medium ${state.tone}`}>{state.label}</span>;
+      },
       width: '80px'
     },
     {
@@ -188,8 +195,11 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-blue-600" />
                   <p className="text-sm text-blue-800">
-                    This GRN was auto-generated from {selectedGrn.source === 'PO' ? 'a Purchase Order receipt' : 'a Purchase Entry'}.
-                    Stock has {selectedGrn.stock_updated ? 'been updated' : 'not been updated yet'}.
+                    This receipt is read-only. {stockState(selectedGrn).updated
+                      ? 'Its posted quantities are reflected in canonical stock.'
+                      : selectedGrn.grn_status === 'reversed'
+                        ? 'Its stock effect has been reversed.'
+                        : 'Stock changes only when the receipt is posted.'}
                   </p>
                 </div>
               </div>

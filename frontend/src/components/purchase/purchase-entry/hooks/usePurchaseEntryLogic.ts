@@ -8,7 +8,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { purchasesApi } from '../../../../services/api';
-import { calculatePurchaseOrderPreview } from '../../../../services/calculations/purchaseOrderCalculationService';
+import {
+    calculatePurchaseOrderPreview,
+    toPurchaseCalculationRequest
+} from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
 import { usePurchaseEntrySave } from './usePurchaseEntrySave';
 
@@ -187,8 +190,9 @@ export function usePurchaseEntryLogic({
     const [currentEditItem, setCurrentEditItem] = useState<any>(null);
     const [createdPurchaseData] = useState<CreatedPurchaseData | null>(null);
     const calculationRequestRef = useRef(0);
-    const purchaseRef = useRef(purchase);
-    purchaseRef.current = purchase;
+    const calculationErrorKeyRef = useRef('');
+    const toastRef = useRef(toast);
+    toastRef.current = toast;
 
     // Calculate totals
     const calculateTotals = useCallback(async (purchaseData: PurchaseData) => {
@@ -208,6 +212,7 @@ export function usePurchaseEntryLogic({
         try {
             const calculation = await calculatePurchaseOrderPreview(purchaseData, true);
             if (requestId !== calculationRequestRef.current) return;
+            calculationErrorKeyRef.current = '';
             const totals = calculation.totals;
             setPurchase(prev => {
                 let itemValuesChanged = false;
@@ -236,17 +241,50 @@ export function usePurchaseEntryLogic({
             });
         } catch (calculationError) {
             if (requestId === calculationRequestRef.current) {
-                toast.error(calculationError instanceof Error ? calculationError.message : 'Unable to calculate purchase totals');
+                const message = calculationError instanceof Error
+                    ? calculationError.message
+                    : 'Unable to calculate purchase totals';
+                const errorKey = `${JSON.stringify({
+                    supplier_id: purchaseData.supplier_id,
+                    items: purchaseData.items.map(item => ({
+                        product_id: item.product_id,
+                        quantity: item.quantity,
+                        unit_price: item.unit_price,
+                        discount_percent: item.discount_percent,
+                        tax_percent: item.tax_percent
+                    })),
+                    other_charges: purchaseData.other_charges
+                })}:${message}`;
+                if (calculationErrorKeyRef.current !== errorKey) {
+                    calculationErrorKeyRef.current = errorKey;
+                    toastRef.current.error(message);
+                }
             }
         }
-    }, [toast]);
+    }, []);
+
+    const calculationKey = (() => {
+        try {
+            return JSON.stringify(toPurchaseCalculationRequest(purchase));
+        } catch {
+            return JSON.stringify({
+                supplier_id: purchase.supplier_id,
+                items: purchase.items,
+                other_charges: purchase.other_charges,
+                discount_amount: purchase.discount_amount
+            });
+        }
+    })();
 
     // Trigger calculations when items change
     useEffect(() => {
-        if (purchaseRef.current.items) {
-            void calculateTotals(purchaseRef.current);
-        }
-    }, [calculateTotals, purchase.items, purchase.discount_amount, purchase.other_charges]);
+        const timeout = window.setTimeout(() => {
+            void calculateTotals(purchase);
+        }, 200);
+        return () => window.clearTimeout(timeout);
+        // calculationKey intentionally excludes backend-calculated projection fields.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [calculateTotals, calculationKey]);
 
     // Update payment amount when final amount changes
     useEffect(() => {

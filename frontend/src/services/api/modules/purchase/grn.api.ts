@@ -10,9 +10,10 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface GRNParams {
-    supplier_id?: number;
-    po_id?: number;
+    supplier_id?: number | string;
+    po_id?: number | string;
     status?: string;
+    search?: string;
     from_date?: string;
     to_date?: string;
     limit?: number;

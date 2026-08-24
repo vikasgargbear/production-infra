@@ -17,8 +17,10 @@ interface InlineFilterPanelProps {
   onSearchChange?: (query: string) => void;
   showFilters?: boolean;
   onToggleFilters?: (show: boolean) => void;
+  onClearFilters?: () => void;
   className?: string;
   searchPlaceholder?: string;
+  showFilterToggle?: boolean;
 }
 
 const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
@@ -28,8 +30,10 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
   onSearchChange,
   showFilters = false,
   onToggleFilters,
+  onClearFilters,
   className = '',
-  searchPlaceholder = 'Search by customer name, invoice number, or order number...'
+  searchPlaceholder = 'Search by customer name, invoice number, or order number...',
+  showFilterToggle = true,
 }) => {
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
@@ -46,6 +50,10 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
 
   const clearAllFilters = () => {
     setFilterValues({});
+    if (onClearFilters) {
+      onClearFilters();
+      return;
+    }
     onFilterChange({});
     if (onSearchChange) {
       onSearchChange('');
@@ -77,7 +85,6 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
                 <button
                   onClick={() => {
                     onSearchChange('');
-                    onFilterChange({});
                   }}
                   className="absolute right-1 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                   aria-label="Clear search"
@@ -91,7 +98,7 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
         )}
 
         {/* Filter Toggle */}
-        <div className="flex flex-col items-end space-y-2">
+        {showFilterToggle && <div className="flex flex-col items-end space-y-2">
           <Button
             variant={showFilters ? "primary" : "outline"}
             onClick={() => onToggleFilters?.(!showFilters)}
@@ -100,11 +107,11 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
           >
             {showFilters ? 'Hide Filters' : 'Show Filters'}
           </Button>
-        </div>
+        </div>}
       </div>
 
       {/* Inline Filters */}
-      {showFilters && (
+      {showFilterToggle && showFilters && (
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {filters.map((filter) => (

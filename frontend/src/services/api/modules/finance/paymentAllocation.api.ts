@@ -11,7 +11,7 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface AllocationParams {
-    party_id?: number;
+    party_id?: number | string;
     party_type?: 'customer' | 'supplier';
     from_date?: string;
     to_date?: string;
@@ -20,7 +20,7 @@ export interface AllocationParams {
 export interface AllocationData {
     payment_id: number;
     allocations: {
-        invoice_id: number;
+        invoice_id: number | string;
         amount: number;
     }[];
 }
@@ -47,7 +47,7 @@ export const paymentAllocationApi = {
         return apiHelpers.get(ENDPOINTS.UNALLOCATED_PAYMENTS, { params });
     },
 
-    getUnpaidInvoices: (customerId: number): Promise<AxiosResponse> => {
+    getUnpaidInvoices: (customerId: number | string): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.UNPAID_INVOICES, {
             params: { customer_id: customerId }
         });
@@ -63,7 +63,7 @@ export const paymentAllocationApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/payment/${paymentId}/allocations`);
     },
 
-    getInvoicePayments: (invoiceId: number): Promise<AxiosResponse> => {
+    getInvoicePayments: (invoiceId: number | string): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/invoice/${invoiceId}/payments`);
     },
 

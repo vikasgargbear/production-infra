@@ -10,8 +10,10 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface PurchaseParams {
-    supplier_id?: number;
+    supplier_id?: number | string;
     status?: string;
+    payment_status?: string;
+    search?: string;
     from_date?: string;
     to_date?: string;
     date_from?: string;
@@ -105,7 +107,7 @@ export const purchasesApi = {
         });
     },
     getReturnableInvoices: (params: { supplier_id: number | string }): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/returnable`, { params });
+        return apiHelpers.get('/supplier-invoices/returnable/', { params });
     },
 
     // Search purchase orders

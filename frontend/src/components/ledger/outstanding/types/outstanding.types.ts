@@ -88,7 +88,6 @@ export interface OutstandingTableProps {
     partyType: 'customer' | 'supplier';
     onToggleExpand: (partyId: string) => void;
     onPartyClick: (party: PartyOutstanding) => void;
-    onAllocateClick: (party: PartyOutstanding) => void;
 }
 
 export interface OutstandingAgingViewProps {
@@ -98,7 +97,6 @@ export interface OutstandingAgingViewProps {
 export interface PartyDetailsViewProps {
     party: PartyOutstanding;
     onBack: () => void;
-    onAllocatePayment: () => void;
 }
 
 // ============================================================================

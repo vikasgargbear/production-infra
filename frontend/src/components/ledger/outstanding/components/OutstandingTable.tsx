@@ -5,15 +5,13 @@
  */
 
 import React from 'react';
-import { CreditCard } from 'lucide-react';
 import { formatCurrency } from '../../../../utils/formatters';
 import type { OutstandingTableProps } from '../types/outstanding.types';
 
 export const OutstandingTable = React.memo<OutstandingTableProps>(({
     parties,
     partyType,
-    onPartyClick,
-    onAllocateClick
+    onPartyClick
 }) => {
     if (parties.length === 0) {
         return (
@@ -78,13 +76,12 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                                 </td>
                                 <td className="px-6 py-3 text-center">
                                     <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onAllocateClick(party);
-                                        }}
-                                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                        type="button"
+                                        disabled
+                                        title="Payment allocation requires the canonical customer-receipt command"
+                                        className="cursor-not-allowed rounded border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-500"
                                     >
-                                        Allocate Payment
+                                        Allocation unavailable
                                     </button>
                                 </td>
                             </tr>

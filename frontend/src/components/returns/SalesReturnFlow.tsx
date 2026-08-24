@@ -365,7 +365,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     const calculate = async () => {
       try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales', true);
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales');
         if (requestId !== calculationRequestRef.current) return;
         const totals = calculation.totals;
         let calculatedIndex = 0;

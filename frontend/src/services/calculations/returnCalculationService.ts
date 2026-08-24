@@ -1,6 +1,5 @@
 /** Boundary between return UI state and backend-owned calculations. */
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import {
     returnCalculationsApi,
     ReturnCalculationRequest
@@ -12,6 +11,12 @@ function numeric(value: unknown, fallback: number = 0): number {
     return Number.isFinite(result) ? result : fallback;
 }
 
+function entityId(value: unknown): number | string | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) return value;
+    return undefined;
+}
+
 interface ReturnPreviewResult {
     items: Array<Record<string, unknown>>;
     totals: Record<string, number | undefined>;
@@ -20,8 +25,7 @@ interface ReturnPreviewResult {
 
 export async function calculateReturnPreview(
     returnData: any,
-    returnType: 'sales' | 'purchase',
-    isOnline: boolean
+    returnType: 'sales' | 'purchase'
 ): Promise<ReturnPreviewResult> {
     const selectedItems = (returnData.items || []).filter(
         (item: any) => item.selected !== false && numeric(item.return_quantity ?? item.quantity) > 0
@@ -30,29 +34,18 @@ export async function calculateReturnPreview(
         ? !Boolean(returnData.withhold_gst)
         : returnData.include_gst !== false;
 
-    if (!isOnline) {
-        const local = returnType === 'sales'
-            ? EnterpriseCalculator.calculateSalesReturn(returnData)
-            : EnterpriseCalculator.calculatePurchaseReturn(returnData);
-        return {
-            items: local.items as unknown as Array<Record<string, unknown>>,
-            totals: local.totals as unknown as Record<string, number | undefined>,
-            gst_type: returnData.gst_type || 'CGST/SGST'
-        };
-    }
-
     const request: ReturnCalculationRequest = {
         return_type: returnType,
         customer_id: returnType === 'sales' && returnData.customer_id
-            ? numeric(returnData.customer_id)
+            ? entityId(returnData.customer_id)
             : undefined,
         supplier_id: returnType === 'purchase' && returnData.supplier_id
-            ? numeric(returnData.supplier_id)
+            ? entityId(returnData.supplier_id)
             : undefined,
         gst_type: returnData.gst_type,
         include_gst: includeGst,
         items: selectedItems.map((item: any) => ({
-            product_id: item.product_id ? numeric(item.product_id) : undefined,
+            product_id: entityId(item.product_id),
             return_quantity: numeric(item.return_quantity ?? item.quantity),
             paid_quantity: numeric(item.paid_quantity ?? item.quantity),
             free_quantity: numeric(item.free_quantity),

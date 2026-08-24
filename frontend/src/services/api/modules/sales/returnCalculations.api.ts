@@ -7,12 +7,12 @@ import type { InvoiceCalculationResponse } from './calculations.api';
 
 export interface ReturnCalculationRequest {
     return_type: 'sales' | 'purchase';
-    customer_id?: number;
-    supplier_id?: number;
+    customer_id?: number | string;
+    supplier_id?: number | string;
     gst_type?: 'CGST/SGST' | 'IGST';
     include_gst: boolean;
     items: Array<{
-        product_id?: number;
+        product_id?: number | string;
         return_quantity: number;
         paid_quantity?: number;
         free_quantity?: number;

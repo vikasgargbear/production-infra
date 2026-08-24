@@ -1,294 +1,269 @@
-/**
- * InvoiceTable Component
- * Main invoice listing table with selection and actions
- * Optimized with React.memo
- */
-
-import React, { useMemo, useState } from 'react';
-import { MoreVertical, MessageCircle, Mail, XCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, Eye, Mail, MessageCircle, Printer, X } from 'lucide-react';
 import { DataTable, StatusBadge } from '../../../../global';
 import { useCompany } from '../../../../../contexts/CompanyContext';
 import type { InvoiceTableProps, Invoice } from '../types/invoicelist.types';
-
-// Dropdown menu for more actions
-const ActionDropdown: React.FC<{
-    invoice: Invoice;
-    onCancel?: (invoice: Invoice) => void;
-}> = ({ invoice, onCancel }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const canCancel = invoice.payment_status !== 'cancelled' && invoice.paid_amount === 0;
-
-    if (!canCancel || !onCancel) return null;
-
-    return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100"
-                title="More Actions"
-                aria-label={`More actions for invoice ${invoice.invoice_number}`}
-            >
-                <MoreVertical className="w-4 h-4" />
-            </button>
-
-            {isOpen && (
-                <>
-                    {/* Backdrop to close dropdown */}
-                    <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setIsOpen(false)}
-                    />
-                    {/* Dropdown menu */}
-                    <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
-                        {canCancel && onCancel && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    onCancel(invoice);
-                                    setIsOpen(false);
-                                }}
-                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
-                            >
-                                <XCircle className="w-4 h-4" />
-                                Cancel Invoice
-                            </button>
-                        )}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-};
+import {
+    salesDocumentLabel,
+    salesDocumentNumberLabel,
+    salesDocumentStatus,
+    salesHistoryDocumentCsv,
+    salesHistoryPrintHtml,
+    salesStatusLabel,
+    salesStatusTone,
+} from '../utils/salesHistoryPresentation';
 
 export const InvoiceTable = React.memo<InvoiceTableProps>(({
     invoices,
+    documentType,
     selectedIds,
     isAllSelected,
     loading,
     onToggleSelect,
     onToggleSelectAll,
-    onCancelInvoice
 }) => {
-    // Get company name for message templates
     const { companyInfo } = useCompany();
     const companyName = companyInfo?.name || 'Our Company';
+    const [viewingDocument, setViewingDocument] = useState<Invoice | null>(null);
 
-    // Format date helper
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
+        if (!dateString) return 'Not specified';
+        const date = new Date(dateString);
+        if (Number.isNaN(date.getTime())) return 'Not specified';
+        return date.toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric',
         });
     };
 
-    // Create formatted message for both channels
-    const createInvoiceMessage = (invoice: Invoice) => {
-        const invoiceDate = formatDate(invoice.invoice_date);
-        const dueDate = invoice.due_date ? formatDate(invoice.due_date) : 'Not specified';
+    const createDocumentMessage = (document: Invoice) => {
+        const label = salesDocumentLabel(document.document_type);
+        return `Dear ${document.customer_name},
 
-        return `Dear ${invoice.customer_name},
+Your ${label.toLowerCase()} from ${companyName} is ready.
 
-Your invoice from ${companyName} is ready!
+${label} #: ${document.invoice_number}
+Date: ${formatDate(document.invoice_date)}
+Amount: ₹${document.total_amount.toLocaleString('en-IN')}
+${document.due_date ? `Due/Delivery Date: ${formatDate(document.due_date)}\n` : ''}
+${document.document_type === 'invoice' && document.pending_amount > 0
+                ? `Pending: ₹${document.pending_amount.toLocaleString('en-IN')}\n`
+                : ''}Status: ${salesStatusLabel(salesDocumentStatus(document))}
 
-Invoice #: ${invoice.invoice_number}
-Date: ${invoiceDate}
-Amount: ₹${invoice.total_amount.toLocaleString('en-IN')}
-Due Date: ${dueDate}
-
-${invoice.pending_amount > 0 ? `Pending: ₹${invoice.pending_amount.toLocaleString('en-IN')}\n` : ''}Thank you for your business!
+Thank you for your business.
 
 ---
 ${companyName}`;
     };
 
-    // Handle WhatsApp share
-    const handleWhatsApp = (invoice: Invoice) => {
-        if (!invoice.customer_phone) return;
-        let phone = invoice.customer_phone.replace(/\D/g, '');
+    const handleWhatsApp = (document: Invoice) => {
+        if (!document.customer_phone) return;
+        let phone = document.customer_phone.replace(/\D/g, '');
         if (phone.startsWith('0')) phone = phone.slice(1);
         if (phone.length === 10) phone = `91${phone}`;
-        const message = createInvoiceMessage(invoice);
-        const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        window.open(url, '_blank');
+        window.open(
+            `https://wa.me/${phone}?text=${encodeURIComponent(createDocumentMessage(document))}`,
+            '_blank',
+            'noopener,noreferrer',
+        );
     };
 
-    // Handle Email share
-    const handleEmail = (invoice: Invoice) => {
-        if (!invoice.customer_email) return;
-        const subject = `Invoice ${invoice.invoice_number} - ₹${invoice.total_amount.toLocaleString('en-IN')}`;
-        const body = createInvoiceMessage(invoice);
-        const mailto = `mailto:${encodeURIComponent(invoice.customer_email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.location.href = mailto;
+    const handleEmail = (document: Invoice) => {
+        if (!document.customer_email) return;
+        const label = salesDocumentLabel(document.document_type);
+        const subject = `${label} ${document.invoice_number} - ₹${document.total_amount.toLocaleString('en-IN')}`;
+        window.location.href = `mailto:${encodeURIComponent(document.customer_email)}`
+            + `?subject=${encodeURIComponent(subject)}`
+            + `&body=${encodeURIComponent(createDocumentMessage(document))}`;
     };
 
-    const columns = useMemo(() => [
+    const handlePrint = (document: Invoice) => {
+        const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+        if (!printWindow) return;
+        printWindow.document.write(salesHistoryPrintHtml(document));
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+    };
+
+    const handleDownload = (document: Invoice) => {
+        const blob = new Blob([salesHistoryDocumentCsv(document)], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = window.document.createElement('a');
+        link.href = url;
+        link.download = `${document.document_type}-${document.invoice_number || document.id}.csv`
+            .replace(/[^a-zA-Z0-9._-]/g, '-');
+        window.document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const columns = [
         {
             key: 'select',
             header: (
-                <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={onToggleSelectAll}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
+                <input type="checkbox" aria-label="Select all visible documents"
+                    checked={isAllSelected} onChange={onToggleSelectAll}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             ),
-            render: (_: any, invoice: Invoice) => (
-                <input
-                    type="checkbox"
-                    checked={selectedIds.has(invoice.id)}
-                    onChange={() => onToggleSelect(invoice.id)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
+            render: (_: unknown, document: Invoice) => (
+                <input type="checkbox"
+                    aria-label={`Select ${salesDocumentLabel(document.document_type)} ${document.invoice_number}`}
+                    checked={selectedIds.has(document.id)} onChange={() => onToggleSelect(document.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             ),
-            width: '50px'
+            width: '50px',
         },
         {
-            key: 'invoice_date',
-            header: 'Date',
-            render: (_: any, invoice: Invoice) => (
-                <div className="text-gray-700">
-                    {new Date(invoice.invoice_date).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                    })}
-                </div>
+            key: 'invoice_date', header: 'Date', width: '110px',
+            render: (_: unknown, document: Invoice) => (
+                <div className="text-gray-700">{formatDate(document.invoice_date)}</div>
             ),
-            width: '110px'
         },
         {
-            key: 'invoice_number',
-            header: 'Invoice #',
-            render: (_: any, invoice: Invoice) => (
-                <div className="text-sm text-gray-600">{invoice.invoice_number}</div>
+            key: 'invoice_number', header: salesDocumentNumberLabel(documentType), width: '150px',
+            render: (_: unknown, document: Invoice) => (
+                <div className="text-sm text-gray-700">{document.invoice_number || 'Not assigned'}</div>
             ),
-            width: '140px'
         },
         {
-            key: 'customer_name',
-            header: 'Customer',
-            render: (_: any, invoice: Invoice) => (
-                <div className="font-medium text-gray-900">{invoice.customer_name}</div>
-            )
+            key: 'customer_name', header: 'Customer',
+            render: (_: unknown, document: Invoice) => (
+                <div className="font-medium text-gray-900">{document.customer_name || 'Not available'}</div>
+            ),
         },
         {
-            key: 'total_amount',
-            header: 'Amount',
-            align: 'right' as const,
-            render: (_: any, invoice: Invoice) => (
+            key: 'total_amount', header: 'Amount', align: 'right' as const, width: '150px',
+            render: (_: unknown, document: Invoice) => (
                 <div className="text-right">
                     <div className="font-semibold text-gray-900">
-                        ₹{invoice.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        ₹{document.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
-                    {invoice.pending_amount > 0 && (
-                        <div className="text-xs text-red-600">
-                            ₹{invoice.pending_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} pending
+                    {document.document_type === 'invoice' && document.pending_amount > 0 && (
+                        <div className="text-xs text-red-700">
+                            ₹{document.pending_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} pending
                         </div>
                     )}
                 </div>
             ),
-            width: '150px'
         },
         {
-            key: 'payment_status',
-            header: 'Status',
-            align: 'center' as const,
-            render: (_: any, invoice: Invoice) => {
-                const statusMap = {
-                    paid: { status: 'success', label: 'Paid' },
-                    partial: { status: 'warning', label: 'Partial' },
-                    pending: { status: 'info', label: 'Pending' },
-                    overdue: { status: 'error', label: 'Overdue' },
-                    cancelled: { status: 'error', label: 'Cancelled' }
-                };
-
-                const statusConfig = statusMap[invoice.payment_status] || { status: 'default', label: invoice.payment_status };
-
-                return <StatusBadge status={statusConfig.status as any} label={statusConfig.label} />;
+            key: 'document_status',
+            header: documentType === 'invoice' ? 'Payment Status' : 'Document Status',
+            align: 'center' as const, width: '130px',
+            render: (_: unknown, document: Invoice) => {
+                const status = salesDocumentStatus(document);
+                return <StatusBadge status={salesStatusTone(status)} label={salesStatusLabel(status)} />;
             },
-            width: '100px'
         },
         {
             key: 'due_date',
-            header: 'Due',
-            render: (_: any, invoice: Invoice) => {
-                // Handle missing or invalid due_date
-                if (!invoice.due_date) {
-                    return <div className="text-gray-400">-</div>;
-                }
-
-                const dueDate = new Date(invoice.due_date);
-                if (isNaN(dueDate.getTime())) {
-                    return <div className="text-gray-400">-</div>;
-                }
-
-                const today = new Date();
-                const isOverdue = dueDate < today && invoice.payment_status !== 'paid';
-
-                return (
-                    <div className={isOverdue ? 'text-red-600' : 'text-gray-700'}>
-                        {dueDate.toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short'
-                        })}
-                    </div>
-                );
+            header: documentType === 'sales_order' ? 'Delivery' : documentType === 'invoice' ? 'Due' : 'Dispatch',
+            width: '100px',
+            render: (_: unknown, document: Invoice) => {
+                if (!document.due_date) return <div className="text-gray-400">—</div>;
+                const dueDate = new Date(document.due_date);
+                const overdue = document.document_type === 'invoice'
+                    && !Number.isNaN(dueDate.getTime())
+                    && dueDate < new Date()
+                    && document.payment_status !== 'paid';
+                return <div className={overdue ? 'text-red-700' : 'text-gray-700'}>{formatDate(document.due_date)}</div>;
             },
-            width: '90px'
         },
         {
-            key: 'actions',
-            header: 'Actions',
-            align: 'center' as const,
-            render: (_: any, invoice: Invoice) => {
+            key: 'actions', header: 'Actions', align: 'center' as const, width: '230px',
+            render: (_: unknown, document: Invoice) => {
+                const label = salesDocumentLabel(document.document_type);
+                const iconButton = 'flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors';
                 return (
                     <div className="flex items-center justify-center gap-0.5">
-                        {/* WhatsApp */}
-                        <button
-                            type="button"
-                            onClick={() => handleWhatsApp(invoice)}
-                            disabled={!invoice.customer_phone}
-                            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-green-700 transition-colors hover:bg-green-50 disabled:cursor-not-allowed disabled:text-gray-300"
-                            title={invoice.customer_phone ? 'Share via WhatsApp' : 'Customer phone unavailable'}
-                            aria-label={`Share invoice ${invoice.invoice_number} via WhatsApp`}
-                        >
-                            <MessageCircle className="w-4 h-4" />
+                        <button type="button" onClick={() => setViewingDocument(document)}
+                            className={`${iconButton} text-gray-700 hover:bg-gray-100`}
+                            title="View summary" aria-label={`View ${label} ${document.invoice_number}`}>
+                            <Eye className="h-4 w-4" />
                         </button>
-                        {/* Email */}
-                        <button
-                            type="button"
-                            onClick={() => handleEmail(invoice)}
-                            disabled={!invoice.customer_email}
-                            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300"
-                            title={invoice.customer_email ? 'Send via email' : 'Customer email unavailable'}
-                            aria-label={`Email invoice ${invoice.invoice_number}`}
-                        >
-                            <Mail className="w-4 h-4" />
+                        <button type="button" onClick={() => handlePrint(document)}
+                            className={`${iconButton} text-gray-700 hover:bg-gray-100`}
+                            title="Print summary" aria-label={`Print ${label} ${document.invoice_number}`}>
+                            <Printer className="h-4 w-4" />
                         </button>
-                        {/* More Actions (Edit, Cancel) */}
-                        <ActionDropdown
-                            invoice={invoice}
-                            onCancel={onCancelInvoice}
-                        />
+                        <button type="button" onClick={() => handleDownload(document)}
+                            className={`${iconButton} text-gray-700 hover:bg-gray-100`}
+                            title="Download summary CSV" aria-label={`Download ${label} ${document.invoice_number}`}>
+                            <Download className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => handleWhatsApp(document)} disabled={!document.customer_phone}
+                            className={`${iconButton} text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:text-gray-300`}
+                            title={document.customer_phone ? 'Open WhatsApp composer' : 'Customer phone unavailable'}
+                            aria-label={`Share ${label} ${document.invoice_number} via WhatsApp`}>
+                            <MessageCircle className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => handleEmail(document)} disabled={!document.customer_email}
+                            className={`${iconButton} text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300`}
+                            title={document.customer_email ? 'Open email composer' : 'Customer email unavailable'}
+                            aria-label={`Email ${label} ${document.invoice_number}`}>
+                            <Mail className="h-4 w-4" />
+                        </button>
                     </div>
                 );
             },
-            width: '180px'
-        }
-    ], [selectedIds, isAllSelected, onToggleSelect, onToggleSelectAll, onCancelInvoice, companyName]);
+        },
+    ];
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <DataTable
-                columns={columns}
-                data={invoices}
-                keyField="id"
-                loading={loading}
-                emptyMessage="No invoices found"
-            />
-        </div>
+        <>
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+                <DataTable columns={columns} data={invoices} keyField="id" loading={loading}
+                    emptyMessage={`No ${salesDocumentLabel(documentType).toLowerCase()} records found`} />
+            </div>
+
+            {viewingDocument && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                    role="presentation" onMouseDown={() => setViewingDocument(null)}>
+                    <section role="dialog" aria-modal="true" aria-labelledby="sales-document-summary-title"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        className="w-full max-w-lg rounded-lg border border-gray-200 bg-white shadow-xl">
+                        <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                            <div>
+                                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                    {salesDocumentLabel(viewingDocument.document_type)}
+                                </p>
+                                <h2 id="sales-document-summary-title" className="text-lg font-semibold text-gray-900">
+                                    {viewingDocument.invoice_number}
+                                </h2>
+                            </div>
+                            <button type="button" onClick={() => setViewingDocument(null)}
+                                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+                                aria-label="Close document summary"><X className="h-5 w-5" /></button>
+                        </header>
+                        <dl className="grid grid-cols-[9rem_1fr] px-5 py-3 text-sm">
+                            {[
+                                ['Date', formatDate(viewingDocument.invoice_date)],
+                                ['Customer', viewingDocument.customer_name || 'Not available'],
+                                ['Amount', `₹${viewingDocument.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`],
+                                ['Status', salesStatusLabel(salesDocumentStatus(viewingDocument))],
+                                ['Items', String(viewingDocument.items_count)],
+                            ].map(([term, description]) => (
+                                <React.Fragment key={term}>
+                                    <dt className="border-b border-gray-100 py-3 text-gray-500">{term}</dt>
+                                    <dd className="border-b border-gray-100 py-3 font-medium text-gray-900">{description}</dd>
+                                </React.Fragment>
+                            ))}
+                        </dl>
+                        <footer className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
+                            <button type="button" onClick={() => handlePrint(viewingDocument)}
+                                className="min-h-11 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                Print Summary
+                            </button>
+                            <button type="button" onClick={() => handleDownload(viewingDocument)}
+                                className="min-h-11 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
+                                Download CSV
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            )}
+        </>
     );
 });
 

@@ -12,17 +12,12 @@
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ChevronLeft,
   IndianRupee,
   AlertCircle,
-  Loader2,
-  RefreshCw,
-  BarChart3,
-  Table
+  Loader2
 } from 'lucide-react';
 import apiClient from '../../services/api/apiClient';
 import { ModuleHeader } from '../global';
-import PaymentAllocationModal from '../payment/shared/PaymentAllocationModal';
 import { formatCurrency } from '../../utils/formatters';
 
 // Import extracted components
@@ -33,7 +28,7 @@ import { PartyDetailsView } from './outstanding/components/PartyDetailsView';
 
 // Import hooks and types
 import { useOutstandingState } from './outstanding/hooks/useOutstandingState';
-import type { OutstandingProps, PartyOutstanding, InvoiceDetail, OutstandingSummary } from './outstanding/types/outstanding.types';
+import type { OutstandingProps, PartyOutstanding, OutstandingSummary } from './outstanding/types/outstanding.types';
 
 const Outstanding: React.FC<OutstandingProps> = ({
   partyType = 'customer',
@@ -43,7 +38,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
   onCustomerChange
 }) => {
   // Use centralized state management (replaces 7 useState!)
-  const { state, dispatch, filters, ui, selectedParty, allocationModal } = useOutstandingState();
+  const { state, dispatch, filters, ui, selectedParty } = useOutstandingState();
 
   // Auto-expand customer when navigating from Collection Center
   React.useEffect(() => {
@@ -52,7 +47,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
       // Clear the initial customer after expanding
       onCustomerChange?.();
     }
-  }, [initialCustomerId]);
+  }, [dispatch, initialCustomerId, onCustomerChange]);
 
   // Fetch outstanding data using the ledger aging API (works on production)
   const { data, isLoading, refetch, error } = useQuery({
@@ -83,7 +78,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
           oldest_invoice_days: parseInt(party.max_overdue_days || party.oldest_invoice_days || 0),
           credit_limit: parseFloat(party.credit_limit || 0),
           credit_utilization: parseFloat(party.credit_utilization || 0),
-          invoices: [] // Invoice details would need separate API call
+          invoices: Array.isArray(party.invoices) ? party.invoices : []
         }));
 
         // Build summary from response
@@ -95,23 +90,23 @@ const Outstanding: React.FC<OutstandingProps> = ({
           overdue_party_count: parties.filter(p => p.total_overdue > 0).length,
           aging_summary: {
             current: {
-              count: parties.filter(p => p.oldest_invoice_days <= 0).length,
+              count: parseInt(summaryData.current_count || 0),
               amount: parseFloat(summaryData.current || 0)
             },
             '1-30': {
-              count: parties.filter(p => p.oldest_invoice_days > 0 && p.oldest_invoice_days <= 30).length,
+              count: parseInt(summaryData['1_30_count'] || 0),
               amount: parseFloat(summaryData['1_30'] || summaryData.bucket_1_30 || 0)
             },
             '31-60': {
-              count: parties.filter(p => p.oldest_invoice_days > 30 && p.oldest_invoice_days <= 60).length,
+              count: parseInt(summaryData['31_60_count'] || 0),
               amount: parseFloat(summaryData['31_60'] || summaryData.bucket_31_60 || 0)
             },
             '61-90': {
-              count: parties.filter(p => p.oldest_invoice_days > 60 && p.oldest_invoice_days <= 90).length,
+              count: parseInt(summaryData['61_90_count'] || 0),
               amount: parseFloat(summaryData['61_90'] || summaryData.bucket_61_90 || 0)
             },
             over_90: {
-              count: parties.filter(p => p.oldest_invoice_days > 90).length,
+              count: parseInt(summaryData['over_90_count'] || 0),
               amount: parseFloat(summaryData['over_90'] || summaryData.bucket_90_plus || 0)
             }
           }
@@ -134,7 +129,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
     retry: 1
   });
 
-  const parties = data?.parties || [];
+  const parties = useMemo(() => data?.parties || [], [data?.parties]);
   const summary = data?.summary || {
     total_receivable: 0,
     total_payable: 0,
@@ -182,15 +177,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
   const handlePartyClick = (party: PartyOutstanding) => {
     dispatch({ type: 'SET_SELECTED_PARTY', party });
     dispatch({ type: 'SET_DETAILS_VIEW', show: true });
-  };
-
-  const handleAllocateClick = (party: PartyOutstanding) => {
-    dispatch({ type: 'SET_SELECTED_PARTY', party });
-    dispatch({
-      type: 'OPEN_ALLOCATION_MODAL',
-      customerId: parseInt(party.party_id),
-      customerName: party.party_name
-    });
   };
 
   const handleExport = () => {
@@ -285,31 +271,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
             <PartyDetailsView
               party={selectedParty}
               onBack={() => dispatch({ type: 'SET_DETAILS_VIEW', show: false })}
-              onAllocatePayment={() => {
-                dispatch({
-                  type: 'OPEN_ALLOCATION_MODAL',
-                  customerId: parseInt(selectedParty.party_id),
-                  customerName: selectedParty.party_name
-                });
-              }}
             />
           </div>
         </div>
 
-        {/* Payment Allocation Modal */}
-        {allocationModal.isOpen && allocationModal.customerId && (
-          <PaymentAllocationModal
-            isOpen={allocationModal.isOpen}
-            onClose={() => dispatch({ type: 'CLOSE_ALLOCATION_MODAL' })}
-            customerId={allocationModal.customerId}
-            customerName={allocationModal.customerName}
-            invoices={(selectedParty?.invoices || []) as any}
-            onAllocationComplete={() => {
-              refetch();
-              dispatch({ type: 'CLOSE_ALLOCATION_MODAL' });
-            }}
-          />
-        )}
       </div>
     );
   }
@@ -337,61 +302,56 @@ const Outstanding: React.FC<OutstandingProps> = ({
 
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
-              {/* Summary Bar */}
-              <OutstandingSummaryBar
-                summary={summary}
-                totalAdvances={data?.total_advances || 0}
-                netPosition={data?.net_position || 0}
-                partyType={partyType}
-              />
-
-              {/* Filters */}
-              <OutstandingFilters
-                status={filters.status}
-                searchQuery={filters.searchQuery}
-                viewMode={ui.viewMode}
-                onStatusChange={(status) => dispatch({ type: 'SET_FILTERS', filters: { status } })}
-                onSearchChange={(searchQuery) => dispatch({ type: 'SET_FILTERS', filters: { searchQuery } })}
-                onViewModeChange={(mode) => dispatch({ type: 'SET_VIEW_MODE', mode })}
-                onExport={handleExport}
-                onRefresh={() => refetch()}
-              />
-
-              {/* Table or Aging View */}
-              {ui.viewMode === 'summary' && (
+              {isLoading ? (
+                <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
+                  <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
+                  <p className="text-gray-600">Loading outstanding data...</p>
+                </div>
+              ) : error ? (
+                <div role="alert" className="rounded-lg border border-red-200 bg-white p-8 text-center">
+                  <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
+                  <p className="font-medium text-red-700">Outstanding data is unavailable</p>
+                  <p className="mt-1 text-sm text-gray-600">No balances are shown because the server request failed.</p>
+                  <button
+                    type="button"
+                    onClick={() => refetch()}
+                    className="mt-4 min-h-11 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
                 <>
-                  {isLoading ? (
-                    <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-                      <p className="text-gray-600">Loading outstanding data...</p>
-                    </div>
-                  ) : error ? (
-                    <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                      <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                      <p className="text-red-600">Failed to load outstanding data</p>
-                      <button
-                        onClick={() => refetch()}
-                        className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : (
+                  <OutstandingSummaryBar
+                    summary={summary}
+                    totalAdvances={data?.total_advances || 0}
+                    netPosition={data?.net_position || 0}
+                    partyType={partyType}
+                  />
+
+                  <OutstandingFilters
+                    status={filters.status}
+                    searchQuery={filters.searchQuery}
+                    viewMode={ui.viewMode}
+                    onStatusChange={(status) => dispatch({ type: 'SET_FILTERS', filters: { status } })}
+                    onSearchChange={(searchQuery) => dispatch({ type: 'SET_FILTERS', filters: { searchQuery } })}
+                    onViewModeChange={(mode) => dispatch({ type: 'SET_VIEW_MODE', mode })}
+                    onExport={handleExport}
+                    onRefresh={() => refetch()}
+                  />
+
+                  {ui.viewMode === 'summary' && (
                     <OutstandingTable
                       parties={filteredParties}
                       expandedParties={state.expandedParties}
                       partyType={partyType}
                       onToggleExpand={(partyId) => dispatch({ type: 'TOGGLE_PARTY_EXPANSION', partyId })}
                       onPartyClick={handlePartyClick}
-                      onAllocateClick={handleAllocateClick}
                     />
                   )}
-                </>
-              )}
 
-              {/* Aging Analysis View */}
-              {ui.viewMode === 'aging' && (
-                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                  {ui.viewMode === 'aging' && (
+                    <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
                   <div className="mb-5">
                     <h3 className="text-lg font-semibold text-gray-900">Aging Analysis</h3>
                     <p className="mt-1 text-sm text-gray-500">Outstanding balances grouped by how long they have been due.</p>
@@ -422,7 +382,9 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       );
                     })}
                   </div>
-                </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

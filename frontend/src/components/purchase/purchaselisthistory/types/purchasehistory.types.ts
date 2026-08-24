@@ -13,7 +13,7 @@ export interface PurchaseOrder {
     paid_amount: number;
     pending_amount: number;
     payment_status: 'paid' | 'partial' | 'pending' | 'overdue';
-    status: 'draft' | 'confirmed' | 'received' | 'cancelled';
+    status: string;
     items_count: number;
     created_at: string;
     updated_at: string;
@@ -60,6 +60,8 @@ export interface PurchaseListHistoryState {
         searchQuery: string;
         dateFilter: string;
         statusFilter: string;
+        dateFrom: string;
+        dateTo: string;
     };
     ui: {
         showFilters: boolean;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2, Settings } from 'lucide-react';
 import { CanonicalWriteNotice, ModuleHeader } from '../../global';
-import { paymentsApi, bankAccountsApi } from '../../../services/api';
+import { bankAccountsApi } from '../../../services/api';
 
 
 interface BankReconciliationFlowProps {
@@ -45,11 +45,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
     setError(null);
 
     try {
-      // Load bank accounts and unreconciled transactions
-      const [accountsResponse, transactionsResponse] = await Promise.all([
-        bankAccountsApi.getAll(),
-        paymentsApi.getUnreconciledTransactions({ date: reconciliationDate })
-      ]);
+      const accountsResponse = await bankAccountsApi.getAll();
 
       const accountsData = accountsResponse?.data?.accounts || accountsResponse?.data || [];
       if (Array.isArray(accountsData)) {
@@ -58,11 +54,8 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
         setBankAccounts([]);
       }
 
-      if (transactionsResponse?.data && Array.isArray(transactionsResponse.data)) {
-        setUnreconciledTransactions(transactionsResponse.data);
-      } else {
-        setUnreconciledTransactions([]);
-      }
+      // Statement matching remains unavailable until its canonical read/command exists.
+      setUnreconciledTransactions([]);
 
     } catch (err) {
       setError('Unable to load bank reconciliation data from the live API. Please try again.');
@@ -266,9 +259,9 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
 
               {unreconciledTransactions.length === 0 ? (
                 <div className="px-6 py-8 text-center text-gray-500">
-                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-400" />
-                  <p>No unreconciled transactions found</p>
-                  <p className="text-sm">All transactions are reconciled for the selected period</p>
+                  <AlertCircle className="w-12 h-12 mx-auto mb-2 text-amber-500" />
+                  <p>Transaction matching is unavailable</p>
+                  <p className="text-sm">No “all reconciled” claim is made until a canonical reconciliation query exists.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">

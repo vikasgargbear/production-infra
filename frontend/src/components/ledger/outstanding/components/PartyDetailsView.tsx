@@ -1,5 +1,5 @@
 /**
- * PartyDetailsView Component  
+ * PartyDetailsView Component
  * Detailed view of a single party's outstanding invoices with summary cards
  * Optimized with React.memo
  */
@@ -12,8 +12,7 @@ import { format, parseISO } from 'date-fns';
 import type { PartyDetailsViewProps, InvoiceDetail } from '../types/outstanding.types';
 
 export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
-    party,
-    onAllocatePayment
+    party
 }) => {
     const invoiceColumns = useMemo(() => [
         {
@@ -190,11 +189,13 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                     <h3 className="text-lg font-semibold">Outstanding Invoices</h3>
                     <button
-                        onClick={onAllocatePayment}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                        type="button"
+                        disabled
+                        title="Payment allocation requires the canonical customer-receipt command"
+                        className="flex cursor-not-allowed items-center rounded-md border border-gray-200 bg-gray-100 px-4 py-2 text-gray-500"
                     >
                         <CreditCard className="w-4 h-4 mr-2" />
-                        Allocate Payment
+                        Allocation unavailable
                     </button>
                 </div>
                 <div className="p-6">

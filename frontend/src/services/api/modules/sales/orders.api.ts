@@ -45,7 +45,7 @@ export const ordersApi = {
 
   // Search & Validation
   search: (query: string, params: OrderParams = {}) => {
-    return apiHelpers.get('/sales-orders/search', { params: { q: query, ...params } });
+    return apiHelpers.get('/sales-orders/', { params: { search: query, ...params } });
   },
 
   validate: (data: any) => {

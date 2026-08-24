@@ -8,26 +8,30 @@
  * - Cleaner, more maintainable code structure
  */
 
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
-  Download, Edit, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical,
+  Download, Package, RefreshCw, MessageCircle, Mail,
   FileText, ClipboardList, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
 import { supplierInvoicesApi, purchasesApi, grnApi } from '../../services/api';
-import { formatCurrency } from '../../utils/formatters';
-import { useCompany } from '../../contexts/CompanyContext';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
 import type { PurchaseListHistoryProps, PurchaseOrder } from './purchaselisthistory/types/purchasehistory.types';
+import {
+  buildPurchaseHistoryParams,
+  purchaseHistoryCsv,
+  PurchaseDocumentType,
+} from './purchaselisthistory/utils/purchaseHistoryProjection';
 
 // Document type configuration
-type DocumentType = 'supplier_invoice' | 'purchase_order' | 'grn';
+type DocumentType = PurchaseDocumentType;
 
 const documentTypeConfig = {
   supplier_invoice: {
     label: 'Supplier Invoices',
+    singular: 'supplier invoice',
     numberLabel: 'Supplier Invoice #',
     icon: FileText,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -35,6 +39,7 @@ const documentTypeConfig = {
   },
   purchase_order: {
     label: 'Purchase Orders',
+    singular: 'purchase order',
     numberLabel: 'Purchase Order #',
     icon: ClipboardList,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -42,6 +47,7 @@ const documentTypeConfig = {
   },
   grn: {
     label: 'GRN',
+    singular: 'goods receipt',
     numberLabel: 'GRN #',
     icon: Truck,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -52,6 +58,7 @@ const documentTypeConfig = {
 const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRecordReceipt }) => {
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, purchases, selectedIds, filters, ui, pagination, loading } = usePurchaseListHistoryState();
+  const searchTimerRef = useRef<number | undefined>();
 
   // Document type state - default to supplier_invoice
   const [documentType, setDocumentType] = useState<DocumentType>('supplier_invoice');
@@ -62,9 +69,10 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
+      const pageOffset = (page - 1) * pagination.per_page;
       const searchParams: any = {
         limit: pagination.per_page,
-        offset: (page - 1) * pagination.per_page,
+        ...(docType === 'purchase_order' ? { offset: pageOffset } : { skip: pageOffset }),
         ...searchFilters
       };
 
@@ -78,8 +86,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       if (docType === 'supplier_invoice') {
         response = await supplierInvoicesApi.getAll(searchParams);
         const responseData = response?.data;
-        console.log('[Supplier Invoice API] Raw response:', responseData);
-
         const invoicesData = Array.isArray(responseData) ? responseData :
           (responseData?.invoices || []);
 
@@ -91,7 +97,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           supplier_name: invoice.supplier_name,
           total_amount: Number(invoice.invoice_total || invoice.total_amount || 0),
           paid_amount: Number(invoice.paid_amount || 0),
-          pending_amount: Number((invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0)),
+          pending_amount: Number(invoice.pending_amount ?? ((invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0))),
           payment_status: invoice.payment_status || 'pending',
           status: invoice.status || 'confirmed',
           items_count: invoice.items_count || 0,
@@ -109,8 +115,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       } else if (docType === 'purchase_order') {
         response = await purchasesApi.getOrders(searchParams);
         const responseData = response?.data;
-        console.log('[Purchase Order API] Raw response:', responseData);
-
         const ordersData = Array.isArray(responseData) ? responseData :
           (responseData?.orders || responseData?.purchases || []);
 
@@ -140,8 +144,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       } else if (docType === 'grn') {
         response = await grnApi.getAll(searchParams);
         const responseData = response?.data;
-        console.log('[GRN API] Raw response:', responseData);
-
         const grnData = Array.isArray(responseData) ? responseData :
           (responseData?.grns || responseData?.data || []);
 
@@ -154,7 +156,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           total_amount: Number(grn.total_amount || 0),
           paid_amount: 0,
           pending_amount: Number(grn.total_amount || 0),
-          payment_status: grn.grn_status === 'posted' ? 'paid' : 'pending',
+          payment_status: 'pending',
           status: grn.grn_status,
           items_count: grn.items_count || grn.items?.length || 0,
           created_at: grn.created_at,
@@ -190,6 +192,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   const handleDocumentTypeChange = (type: DocumentType) => {
     setDocumentType(type);
     dispatch({ type: 'CLEAR_SELECTION' });
+    dispatch({ type: 'SET_FILTERS', filters: {
+      searchQuery: '', statusFilter: 'all', dateFilter: 'all', dateFrom: '', dateTo: ''
+    } });
   };
 
   // Keyboard shortcuts
@@ -222,17 +227,15 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     }
   };
 
-  const buildSearchParams = useCallback(() => ({
-    search: filters.searchQuery,
-    payment_status: filters.statusFilter === 'all' ? undefined : filters.statusFilter,
-    dateFilter: filters.dateFilter
-  }), [filters]);
+  const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => (
+    buildPurchaseHistoryParams({ ...filters, ...overrides }, documentType)
+  ), [filters, documentType]);
 
   const handleSearchChange = (query: string) => {
     dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
-
-    setTimeout(() => {
-      fetchDocuments(1, { ...buildSearchParams(), search: query }, documentType);
+    if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = window.setTimeout(() => {
+      fetchDocuments(1, buildSearchParams({ searchQuery: query }), documentType);
     }, 500);
   };
 
@@ -249,25 +252,16 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     const selected = selectedIds.size > 0
       ? purchases.filter(p => selectedIds.has(p.id))
       : purchases;
-    const csvData = [
-      ['PO Number', 'Supplier', 'Date', 'Amount', 'Paid', 'Pending', 'Status'],
-      ...selected.map(p => [
-        p.po_number,
-        p.supplier_name,
-        p.po_date,
-        p.total_amount.toString(),
-        p.paid_amount.toString(),
-        p.pending_amount.toString(),
-        p.payment_status
-      ])
-    ];
-
-    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    if (selected.length === 0) return;
+    const csvContent = purchaseHistoryCsv(
+      selected as unknown as Array<Record<string, unknown>>,
+      documentTypeConfig[documentType].numberLabel,
+    );
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `purchases-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `${documentTypeConfig[documentType].label.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -336,6 +330,13 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       header: 'Status',
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => {
+        if (documentType !== 'supplier_invoice') {
+          const documentStatus = String(purchase.status || 'unknown');
+          const statusTone = ['posted', 'received', 'approved'].includes(documentStatus)
+            ? 'success'
+            : ['cancelled', 'rejected', 'reversed'].includes(documentStatus) ? 'error' : 'info';
+          return <StatusBadge status={statusTone} label={documentStatus.replace(/_/g, ' ')} />;
+        }
         const statusMap: Record<string, any> = {
           paid: { status: 'success', label: 'Paid' },
           partial: { status: 'warning', label: 'Partial' },
@@ -346,6 +347,15 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
         return <StatusBadge status={config.status} label={config.label} />;
       },
       width: '100px'
+    },
+    {
+      key: 'total_amount',
+      header: 'Amount',
+      align: 'right' as const,
+      render: (_: any, purchase: PurchaseOrder) => (
+        <span className="font-medium text-gray-900">₹{purchase.total_amount.toLocaleString('en-IN')}</span>
+      ),
+      width: '120px'
     },
     {
       key: 'actions',
@@ -367,7 +377,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           )}
           <button
             onClick={() => {
-              const message = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              const noun = documentTypeConfig[documentType].singular;
+              const message = `Dear ${purchase.supplier_name},\n\n${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
               window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
             }}
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
@@ -378,8 +389,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           </button>
           <button
             onClick={() => {
-              const subject = `Purchase Order ${purchase.po_number}`;
-              const body = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              const noun = documentTypeConfig[documentType].singular;
+              const subject = `${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}`;
+              const body = `Dear ${purchase.supplier_name},\n\n${subject}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
               window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             }}
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
@@ -421,7 +433,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             {
               label: "Export All",
               onClick: handleExport,
-              variant: "secondary"
+              variant: "secondary",
+              disabled: purchases.length === 0
             }
           ] as any}
         />
@@ -460,6 +473,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             {/* Filters */}
             <InlineFilterPanel
               searchPlaceholder={`Search ${documentTypeConfig[documentType].label.toLowerCase()} by number or supplier...`}
+              searchQuery={filters.searchQuery}
               filters={[
                 {
                   key: 'date_preset',
@@ -480,12 +494,21 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                   key: 'payment_status',
                   label: 'Status',
                   type: 'select',
-                  options: [
-                    { value: 'all', label: 'All Status' },
-                    { value: 'paid', label: 'Paid' },
-                    { value: 'partial', label: 'Partial' },
-                    { value: 'pending', label: 'Pending' },
+                  options: documentType === 'supplier_invoice' ? [
+                    { value: 'all', label: 'All Status' }, { value: 'paid', label: 'Paid' },
+                    { value: 'partial', label: 'Partial' }, { value: 'pending', label: 'Pending' },
                     { value: 'overdue', label: 'Overdue' }
+                  ] : documentType === 'purchase_order' ? [
+                    { value: 'all', label: 'All Status' }, { value: 'draft', label: 'Draft' },
+                    { value: 'submitted', label: 'Submitted' }, { value: 'approved', label: 'Approved' },
+                    { value: 'partially_received', label: 'Partially Received' },
+                    { value: 'received', label: 'Received' }, { value: 'cancelled', label: 'Cancelled' }
+                  ] : [
+                    { value: 'all', label: 'All Status' }, { value: 'draft', label: 'Draft' },
+                    { value: 'submitted', label: 'Submitted' }, { value: 'inspected', label: 'Inspected' },
+                    { value: 'approved', label: 'Approved' }, { value: 'posted', label: 'Posted' },
+                    { value: 'rejected', label: 'Rejected' }, { value: 'cancelled', label: 'Cancelled' },
+                    { value: 'reversed', label: 'Reversed' }
                   ],
                 },
                 {
@@ -500,12 +523,14 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                 }
               ]}
               onFilterChange={(newFilters) => {
-                dispatch({ type: 'SET_FILTERS', filters: newFilters });
-                const searchParams = {
-                  search: filters.searchQuery,
-                  payment_status: newFilters.payment_status === 'all' ? undefined : newFilters.payment_status
+                const nextFilters = {
+                  dateFilter: String(newFilters.date_preset || 'all'),
+                  statusFilter: String(newFilters.payment_status || 'all'),
+                  dateFrom: String(newFilters.dateFrom || ''),
+                  dateTo: String(newFilters.dateTo || ''),
                 };
-                fetchPurchases(1, searchParams);
+                dispatch({ type: 'SET_FILTERS', filters: nextFilters });
+                fetchPurchases(1, buildSearchParams(nextFilters), documentType);
               }}
               onSearchChange={handleSearchChange}
               showFilters={ui.showFilters}
@@ -528,6 +553,11 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             )}
 
             {/* Table */}
+            {state.error && (
+              <div className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+                {state.error}
+              </div>
+            )}
             <div className="bg-white rounded-lg shadow-sm">
               <DataTable
                 columns={columns}

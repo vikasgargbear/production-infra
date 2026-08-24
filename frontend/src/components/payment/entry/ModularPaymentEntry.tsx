@@ -4,12 +4,12 @@ import {
   X, History, Plus, Loader2, AlertCircle, User, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
-import { customersApi, invoicesApi } from '../../../services/api';
 import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
 import InvoiceSelector from '../shared/InvoiceSelector';
 import PaymentFlowOptimized from '../shared/PaymentFlowOptimized';
 import PaymentSummary from '../shared/PaymentSummary';
 import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
+import { projectPaymentOutstandingInvoices } from './paymentOutstandingProjection';
 
 
 // Import global components
@@ -54,8 +54,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const [error, setError] = React.useState<string | null>(null);
 
   // Manual invoice selection state
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
-  const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<string>>(new Set());
+  const [manualAllocations, setManualAllocations] = React.useState<Record<string, number>>({});
+  const [hasLoadedOutstanding, setHasLoadedOutstanding] = React.useState(false);
 
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
@@ -227,7 +228,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   };
 
   // Handle manual invoice selection with proper allocation amounts
-  const handleManualInvoiceSelection = (checked: boolean, invoiceId: number, invoice: any) => {
+  const handleManualInvoiceSelection = (checked: boolean, invoiceId: string, invoice: any) => {
     const paymentAmount = parseFloat(payment.amount) || 0;
     const newSelected = new Set(selectedInvoiceIds);
     let newManualAllocations = { ...manualAllocations };
@@ -238,7 +239,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       // Calculate remaining payment amount after existing allocations
       let totalAllocated = 0;
       Object.entries(newManualAllocations).forEach(([id, amount]) => {
-        if (parseInt(id) !== invoiceId) {
+        if (id !== invoiceId) {
           totalAllocated += amount as number;
         }
       });
@@ -291,6 +292,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     // Fetch outstanding invoices - using the same approach as return component
     if (!customer) {
       setOutstandingInvoices([]);
+      setHasLoadedOutstanding(false);
       return;
     }
 
@@ -298,95 +300,15 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
     try {
       setIsLoading(true);
-
-      // Import invoicesApi for fetching invoices
-      const { invoicesApi } = await import('../../../services/api');
-      const response = await invoicesApi.getAll({
-        customer_id: customerId,
-        limit: 100,
-        offset: 0,
-        payment_status: 'pending,partial'
-      });
-
-      const invoiceData = response?.data || response;
-      if (invoiceData && invoiceData.invoices) {
-        // The invoices are in invoiceData.invoices array
-        const invoices = invoiceData.invoices || [];
-
-        // Fetch existing allocations for each invoice
-        const invoicesWithAllocations = await Promise.all(
-          invoices.map(async (inv: any) => {
-            try {
-              // Fetch existing payment allocations for this invoice
-              const allocResponse = await paymentAllocationApi.getInvoicePayments(inv.invoice_id);
-              const existingAllocations = allocResponse.data?.payments || [];
-              const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
-                sum + (alloc.allocated_amount || 0), 0);
-
-              return {
-                ...inv,
-                existing_allocations: existingAllocations,
-                total_allocated: totalAllocated,
-                remaining_due: (inv.credit_amount || inv.final_amount) - totalAllocated
-              };
-            } catch (error) {
-              // If allocation fetch fails, use invoice as-is
-              return {
-                ...inv,
-                existing_allocations: [],
-                total_allocated: 0,
-                remaining_due: inv.credit_amount || inv.final_amount
-              };
-            }
-          })
-        );
-
-        // Filter and map outstanding invoices
-        const outstandingInvoices = invoicesWithAllocations
-          .filter((inv: any) => {
-            // Use remaining_due which accounts for existing allocations
-            return inv.remaining_due > 0.01;
-          })
-          .map((inv: any) => {
-            const totalAmount = inv.final_amount || inv.total_amount || inv.total_amount || 0;
-            const paidAmount = inv.paid_amount || 0;
-
-            // Use remaining_due which already accounts for existing allocations
-            const amountDue = inv.remaining_due;
-
-            return {
-              invoice_number: inv.invoice_number || inv.invoice_number || `INV-${inv.invoice_id}`,
-              invoice_date: inv.invoice_date || inv.created_at,
-              total_amount: totalAmount,
-              paid_amount: paidAmount,
-              amount_due: amountDue,
-              remaining_due: amountDue, // Same as amount_due since it's already calculated
-              // Show existing allocations info
-              total_allocated: inv.total_allocated || 0,
-              existing_allocations: inv.existing_allocations || 0, // Changed to number for display
-              status: inv.payment_status || 'pending',
-              invoice_id: inv.invoice_id || inv.id,
-              customer_id: customerId
-            };
-          });
-
-        // Sort invoices by date (oldest first) for display
-        outstandingInvoices.sort((a, b) =>
-          new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
-        );
-
-        setOutstandingInvoices(outstandingInvoices);
-
-        // Keep manual as default - don't auto-allocate
-        if (!payment.allocation_method) {
-          setPaymentField('allocation_method', 'manual');
-        }
-      } else {
-        setOutstandingInvoices([]);
-      }
+      setError(null);
+      setHasLoadedOutstanding(false);
+      const response = await paymentAllocationApi.getUnpaidInvoices(customerId);
+      setOutstandingInvoices(projectPaymentOutstandingInvoices(response.data));
+      setHasLoadedOutstanding(true);
     } catch (error: any) {
       setOutstandingInvoices([]);
-      // Don't show error message, just silently handle it
+      setHasLoadedOutstanding(false);
+      setError('Unable to load authoritative outstanding invoices. No advance allocation was assumed.');
     } finally {
       setIsLoading(false);
     }
@@ -613,7 +535,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                       )}
 
                       {/* No invoices message */}
-                      {!isLoading && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
+                      {!isLoading && hasLoadedOutstanding && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
                         <div className="text-center py-8">
                           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                           <p className="text-gray-600 font-medium">No Outstanding Invoices</p>
@@ -645,8 +567,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                           if (e.target.checked) {
                                             // Select all with FIFO-like allocation up to payment amount
                                             const paymentAmount = parseFloat(payment.amount) || 0;
-                                            const newSelected = new Set<number>();
-                                            const newAllocations: { [key: number]: number } = {};
+                                            const newSelected = new Set<string>();
+                                            const newAllocations: Record<string, number> = {};
                                             let remainingPayment = paymentAmount;
 
                                             outstandingInvoices.forEach((inv: any) => {
@@ -692,7 +614,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                               </thead>
                               <tbody>
                                 {outstandingInvoices.map((invoice: any, index: number) => {
-                                  const invoiceId = invoice.invoice_id || index;
+                                  const invoiceId = String(invoice.invoice_id || index);
                                   const isSelected = selectedInvoiceIds.has(invoiceId);
                                   const autoAllocation = payment.allocations?.find((alloc: any) =>
                                     alloc.invoice_id === invoiceId || alloc.invoice_number === invoice.invoice_number
@@ -759,10 +681,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         {/* Footer - Using Global Component */}
         <ProceedToReviewComponent
           currentStep={currentStep}
-          canProceed={Boolean(
-            (currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode) ||
-            (currentStep === 2)
-          )}
+          canProceed={Boolean(currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode)}
           onBack={currentStep === 2 ? () => setCurrentStep(1) : undefined}
           onProceed={() => {
             if (currentStep === 1) {
@@ -774,9 +693,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           onReset={currentStep === 1 ? resetPayment : undefined}
           totalItems={payment.allocations ? payment.allocations.length : 0}
           totalAmount={parseFloat(payment.amount) || 0}
-          proceedText={currentStep === 2 ? 'Save Payment' : 'Continue'}
+          proceedText={currentStep === 2 ? 'Save unavailable' : 'Continue'}
           saving={saving}
-          disabled={currentStep === 2}
+          disabled={false}
         />
       </div>
 

@@ -6,10 +6,10 @@ import type { InvoiceCalculationResponse } from '../sales/calculations.api';
 
 
 export interface PurchaseCalculationRequest {
-    supplier_id?: number;
+    supplier_id?: number | string;
     gst_type?: 'CGST/SGST' | 'IGST';
     items: Array<{
-        product_id: number;
+        product_id: number | string;
         product_name?: string;
         quantity: number;
         free_quantity?: number;

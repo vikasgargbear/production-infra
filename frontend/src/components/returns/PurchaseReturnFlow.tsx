@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, X, AlertCircle, CheckCircle,
-  RotateCcw, FileText, Building2, Plus
+  RotateCcw, FileText, Building2
 } from 'lucide-react';
 import {
   SupplierSearch, ModuleHeader,
   Select, NotesSection, useToast,
-  ProceedToReviewComponent, StandardDatePicker, ItemsTable
+  ProceedToReviewComponent, StandardDatePicker, ItemsTable, ProductSearch
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, purchasesApi, metadataApi } from '../../services/api';
@@ -15,6 +15,11 @@ import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
 import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
 import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
+import {
+  manualPurchaseReturnItem,
+  purchaseReturnItemsForTable,
+  updatePurchaseReturnItem,
+} from './utils/purchaseReturnProjection';
 
 interface TransportDetails {
   transport_mode: string;
@@ -25,7 +30,7 @@ interface TransportDetails {
 
 interface PurchaseReturnItem extends Omit<BaseReturnItem, 'product_id'> {
   id: string | number;
-  product_id: number | undefined;
+  product_id: number | string | undefined;
   invoice_item_id?: string | number;
   restock?: boolean;
   disposition?: string;
@@ -97,7 +102,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [returnReasons, setReturnReasons] = useState<{ value: string; label: string; }[]>([]);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
-  const [manualItemCounter, setManualItemCounter] = useState(1);
   const [returnableInvoices, setReturnableInvoices] = useState<any[]>([]);
 
   const returnDataRef = useRef(returnData);
@@ -284,55 +288,50 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     }));
   };
 
-  // Add manual item
-  const handleAddManualItem = () => {
-    const newItem = {
-      id: `manual_${manualItemCounter}`,
-      product_id: undefined,
-      product_name: '',
-      batch_number: '',
-      quantity: 0,
-      original_quantity: 0,
-      return_quantity: 0,
-      unit_price: 0,
-      tax_percent: 18,
-      discount_percent: 0,
-      selected: true,
-      is_manual: true,
-      max_returnable_qty: 999999
-    };
+  // Manual purchase returns must resolve a real product and stock batch before
+  // an editable row exists. A blank "No Batch" row cannot represent canonical
+  // return lineage and previously made quantity validation disagree with the UI.
+  const handleAddManualProduct = (product: any) => {
+    const productId = product?.product_id;
+    const batchId = product?.batch_id;
+    if (!productId || !batchId) {
+      toast.error('Select a product and an available batch to add this return item.');
+      return;
+    }
+    if (returnData.items.some(item => item.product_id === productId && item.batch_id === batchId)) {
+      toast.error('That product batch is already in this return. Update its quantity instead.');
+      return;
+    }
 
-    setReturnData(prev => ({
-      ...prev,
-      items: [...prev.items, newItem]
-    }));
-    setManualItemCounter(prev => prev + 1);
+    try {
+      const item = manualPurchaseReturnItem(product);
+      setReturnData(prev => ({ ...prev, items: [...prev.items, item as PurchaseReturnItem] }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to add that product batch.');
+    }
   };
 
   // Update return item
-  const updateReturnItem = (itemId, field, value) => {
+  const updateReturnItem = (itemIndex, field, value) => {
     setReturnData(prev => ({
       ...prev,
-      items: prev.items.map(item => {
-        if (item.id === itemId || item.invoice_item_id === itemId) {
-          return {
-            ...item,
-            [field]: value
-          };
-        }
-        return item;
-      })
+      items: updatePurchaseReturnItem(prev.items, itemIndex, field, value) as PurchaseReturnItem[]
     }));
   };
 
   // Use effect to recalculate totals when items change
   React.useEffect(() => {
     const requestId = ++calculationRequestRef.current;
-    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) return;
+    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) {
+      setReturnData(prev => prev.subtotal_amount === 0 && prev.tax_amount === 0 && prev.total_amount === 0
+        ? prev
+        : { ...prev, subtotal_amount: 0, tax_amount: 0, total_amount: 0 });
+      return;
+    }
 
     const calculate = async () => {
       try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase', true);
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase');
         if (requestId !== calculationRequestRef.current) return;
         const totals = calculation.totals;
         setReturnData(prev => {
@@ -370,10 +369,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   }, [returnData.items, returnData.include_gst, returnData.supplier_id, toast]);
 
   // Remove manual item
-  const removeManualItem = (itemId) => {
+  const removeManualItem = (itemIndex) => {
     setReturnData(prev => ({
       ...prev,
-      items: prev.items.filter(item => item.id !== itemId)
+      items: prev.items.filter((_, index) => index !== itemIndex)
     }));
   };
 
@@ -390,6 +389,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     if (!hasSelectedItems) {
       toast.error('Please select items to return');
+      return false;
+    }
+
+    const overLimitItem = returnData.items.find(item => item.selected
+      && Number(item.return_quantity) > Number(item.max_returnable_qty ?? item.original_quantity ?? 0));
+    if (overLimitItem) {
+      toast.error(`${overLimitItem.product_name || 'Return item'} exceeds the available return quantity.`);
       return false;
     }
 
@@ -568,47 +574,38 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               )}
 
               {/* Return Items */}
-              {(selectedInvoice || showManualEntry) && returnData.items.length > 0 && (
+              {(selectedInvoice || showManualEntry) && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                       <Package className="w-5 h-5 mr-2 text-blue-600" />
                       Return Items
                     </h3>
-                    {showManualEntry && (
-                      <button
-                        type="button"
-                        onClick={handleAddManualItem}
-                        className="flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add Item
-                      </button>
-                    )}
                   </div>
 
-                  <ItemsTable
-                    items={returnData.items}
-                    onUpdateItem={updateReturnItem}
-                    onRemoveItem={showManualEntry ? removeManualItem : undefined}
-                  />
-                </div>
-              )}
+                  {showManualEntry && (
+                    <div className="mb-4">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                        Add product batch <span className="text-red-500">*</span>
+                      </label>
+                      <ProductSearch onAddItem={handleAddManualProduct} showBatchSelection />
+                      <p className="mt-2 text-xs text-gray-500">
+                        A product and available batch are required. The return quantity is edited in the row below.
+                      </p>
+                    </div>
+                  )}
 
-              {/* Manual Entry Option */}
-              {showManualEntry && returnData.items.length === 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="text-center py-8">
-                    <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600 mb-4">No items added yet</p>
-                    <button
-                      onClick={handleAddManualItem}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Add First Item
-                    </button>
-                  </div>
+                  {returnData.items.length > 0 ? (
+                    <ItemsTable
+                      items={purchaseReturnItemsForTable(returnData.items)}
+                      onUpdateItem={updateReturnItem}
+                      onRemoveItem={showManualEntry ? removeManualItem : undefined}
+                    />
+                  ) : (
+                    <div className="border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-600">
+                      Search for a product above, then select its exact batch.
+                    </div>
+                  )}
                 </div>
               )}
 

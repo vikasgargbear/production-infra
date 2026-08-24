@@ -302,17 +302,15 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 <td className="px-3 py-2 text-center">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'unit_price', el)}
-                                        value={item.unit_price || item.unit_price || 0}
+                                        value={item.unit_price || 0}
                                         type="number"
                                         min={0}
                                         decimalPlaces={2}
                                         prefix={currencySymbol}
                                         onChange={(val) => {
                                             onUpdateItem?.(index, 'unit_price', val);
-                                            onUpdateItem?.(index, 'unit_price', val);
                                         }}
                                         onSave={(val) => {
-                                            onUpdateItem?.(index, 'unit_price', val);
                                             onUpdateItem?.(index, 'unit_price', val);
                                         }}
                                         onNavigate={(dir) => handleNavigate(index, 'unit_price', dir as NavigationDirection)}

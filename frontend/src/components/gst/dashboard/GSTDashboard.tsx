@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   TrendingUp, TrendingDown, FileText,
   RefreshCw, Loader2, AlertCircle, IndianRupee,
@@ -29,6 +29,11 @@ interface DashboardState {
 }
 
 interface GSTDashboardSummaryPayload {
+  period?: {
+    key: string;
+    start?: string;
+    end?: string;
+  };
   outputTax?: number;
   inputCredit?: number;
   netPayable?: number;
@@ -60,12 +65,12 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardState>(EMPTY_STATE);
+  const [periodRange, setPeriodRange] = useState<{ start?: string; end?: string } | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
-  const loadingRef = useRef(false);
+  const requestRef = useRef(0);
 
-  const loadDashboardData = async () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
+  const loadDashboardData = useCallback(async () => {
+    const requestId = ++requestRef.current;
     setLoading(true);
     setError(null);
 
@@ -74,6 +79,8 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
       const gstData: GSTDashboardSummaryPayload = dashboardRes?.data || dashboardRes;
       const summary = gstData?.summary || {};
 
+      if (requestId !== requestRef.current) return;
+      setPeriodRange(gstData.period || null);
       setData({
         outputTax: {
           cgst: summary.cgst_amount || 0,
@@ -93,13 +100,14 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         totalSupplierInvoices: summary.total_supplier_invoices || 0,
       });
     } catch (err) {
+      if (requestId !== requestRef.current) return;
       setError(`Unable to load GST data: ${(err as Error)?.message || 'Unknown error'}`);
       setData(EMPTY_STATE);
+      setPeriodRange(null);
     } finally {
-      setLoading(false);
-      loadingRef.current = false;
+      if (requestId === requestRef.current) setLoading(false);
     }
-  };
+  }, [selectedPeriod]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -116,10 +124,18 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
   useEffect(() => {
     const timeout = setTimeout(() => loadDashboardData(), 100);
     return () => clearTimeout(timeout);
-  }, [selectedPeriod]);
+  }, [loadDashboardData]);
 
   const fmt = (amount: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(amount);
+
+  const selectedPeriodLabel = periodRange?.start && periodRange?.end
+    ? `${new Date(`${periodRange.start}T00:00:00`).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    })} – ${new Date(`${periodRange.end}T00:00:00`).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    })}`
+    : '';
 
   if (loading) {
     return (
@@ -153,6 +169,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         <div className="flex items-center space-x-3">
           <span className="text-sm font-medium text-gray-500">Period:</span>
           <select
+            aria-label="GST reporting period"
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -163,7 +180,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
             <option value="year">Current Year</option>
           </select>
           <span className="text-sm text-gray-400">
-            {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+            {selectedPeriodLabel}
           </span>
         </div>
       </div>
