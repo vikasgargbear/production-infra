@@ -35,6 +35,11 @@ export interface CanonicalCommandResult {
   executed: AxiosResponse<CanonicalCommandExecution>;
 }
 
+export interface CanonicalApprovedExecution {
+  approved: AxiosResponse<Record<string, unknown>>;
+  executed: AxiosResponse<CanonicalCommandExecution>;
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH_PATTERN = /^sha256:[0-9a-f]{64}$/i;
 
@@ -75,11 +80,31 @@ export async function executeCanonicalAction(
   operationKey: CanonicalOperationKey,
   payload: Record<string, unknown>,
 ): Promise<CanonicalCommandResult> {
+  const prepared = await prepareCanonicalAction(operationKey, payload);
+  const { approved, executed } = await approveAndExecuteCanonicalAction(
+    operationKey,
+    prepared.data,
+  );
+  return { prepared, approved, executed };
+}
+
+export async function prepareCanonicalAction(
+  operationKey: CanonicalOperationKey,
+  payload: Record<string, unknown>,
+): Promise<AxiosResponse<CanonicalCommandPreview>> {
   const prepared = await apiHelpers.post<CanonicalCommandPreview>(
     `/web/actions/${operationKey}/prepare`,
     payload,
   );
-  const preview = requirePreview(prepared.data);
+  requirePreview(prepared.data);
+  return prepared;
+}
+
+export async function approveAndExecuteCanonicalAction(
+  operationKey: CanonicalOperationKey,
+  preparedPreview: CanonicalCommandPreview,
+): Promise<CanonicalApprovedExecution> {
+  const preview = requirePreview(preparedPreview);
   const lifecycleId = clientUuid();
   const idempotencyNamespace = operationKey.replace(/\.prepare$/, '').replace(/\./g, '-');
 
@@ -99,8 +124,7 @@ export async function executeCanonicalAction(
     },
   );
   requireExecution(executed.data);
-
-  return { prepared, approved, executed };
+  return { approved, executed };
 }
 
 export function canonicalExecutionCompleted(execution: CanonicalCommandExecution): boolean {

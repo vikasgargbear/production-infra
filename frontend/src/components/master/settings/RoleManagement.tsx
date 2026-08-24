@@ -17,6 +17,7 @@ import {
 import { roleManagementApi } from '../../../services/api';
 import { MODULES, MODULE_INFO, PERMISSIONS } from '../../../config/userRoles.config';
 import type { Role } from '../../../types/api.types';
+import { CanonicalWriteNotice } from '../../global';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface RoleFormData {
@@ -305,7 +306,7 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
             {roles.length === 0 && (
               <button
                 onClick={handleSetupDefaults}
-                disabled={isSaving}
+                disabled={true}
                 className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center space-x-2 disabled:opacity-50"
               >
                 <Crown className="w-4 h-4" />
@@ -314,7 +315,9 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
             )}
             <button
               onClick={handleCreate}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
+              disabled
+              title="Unavailable until a canonical role command exists"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               <span>Create Custom Role</span>
@@ -322,6 +325,8 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
           </div>
         </div>
       </div>
+
+      <CanonicalWriteNotice action="Changing roles and permissions" className="mx-6 mt-4" />
 
       {/* Messages */}
       {error && (
@@ -351,7 +356,7 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
             <p className="text-gray-600 mb-4">Set up default system roles to get started.</p>
             <button
               onClick={handleSetupDefaults}
-              disabled={isSaving}
+              disabled
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 inline-flex items-center disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Crown className="w-4 h-4 mr-2" />}
@@ -425,7 +430,8 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
                         <div className="flex items-center justify-center space-x-2">
                           <button
                             onClick={() => handleEdit(role)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                            disabled
+                            className="p-1.5 text-blue-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
                             title="Edit Role"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -433,7 +439,8 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
                           {!role.is_system_role && (
                             <button
                               onClick={() => { setDeletingRole(role); setReassignRoleId(''); }}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                              disabled
+                              className="p-1.5 text-red-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
                               title="Delete Role"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -619,7 +626,7 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={true}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 disabled:opacity-50"
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -669,7 +676,7 @@ const RoleManagement: React.FC<RoleManagementProps> = ({ open, onClose }) => {
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                disabled={isSaving}
+                disabled
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2 disabled:opacity-50"
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}

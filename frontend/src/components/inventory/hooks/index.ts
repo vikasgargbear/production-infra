@@ -8,10 +8,3 @@ export type {
     MoreFilters,
     UseCurrentStockReturn
 } from './useCurrentStock';
-
-export { useStockAdjustment } from './useStockAdjustment';
-export type {
-    AdjustmentItem,
-    AdjustmentData,
-    UseStockAdjustmentReturn
-} from './useStockAdjustment';

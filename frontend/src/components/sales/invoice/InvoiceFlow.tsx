@@ -55,8 +55,6 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         employees,
         selectedMR,
         setSelectedMR,
-        sameAsShipping,
-        setSameAsShipping,
         isLoading,
         isOnline,
         error,
@@ -102,6 +100,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         handleRemoveItem,
         handleImport,
         handleApplyBillDiscount,
+        resetInvoice,
         handleSaveInvoice,
 
     } = useInvoiceLogic(onClose, prefilledData as any);
@@ -296,6 +295,7 @@ ${companyInfo?.name || 'Your Company'}`;
                     error={error}
                     setError={setError}
                     onClose={onClose as any}
+                    onReset={resetInvoice}
                     onContinue={handleContinueFromStep1}
                     productSearchRef={productSearchRef as any}
                     itemsTableRef={itemsTableRef as any}

@@ -5,9 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
 import { customersApi as customersApi } from '../../services/api';
-import { useCallback } from 'react';
 import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';
-import localSearchService from '../../services/offline/search/localSearchService';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -29,14 +27,17 @@ export const customerKeys = {
 
 /**
  * Hook to search customers (most commonly used)
- * Now with local-first approach for instant results
+ * Searches the canonical customer API.
  */
 export function useCustomerSearch(query: string) {
   return useQuery({
     queryKey: customerKeys.search(query),
     queryFn: async () => {
-      // Use local-first service for instant results
-      const results = await localSearchService.searchCustomers(query, { limit: 20 });
+      const response = await customersApi.search(query, { limit: 20 });
+      const results = response?.data?.customers;
+      if (!Array.isArray(results)) {
+        throw new Error('Customer search returned an invalid canonical response');
+      }
       return {
         success: true,
         data: results

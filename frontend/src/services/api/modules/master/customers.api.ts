@@ -30,15 +30,20 @@ const crud = createCrudApi({ basePath: '/customers', createPath: '/customers/' }
 export const customersApi = {
   ...crud,
 
-  // Get all customers with embedded addresses (for offline sync)
+  // Get customers with embedded addresses from the live API
   getAllWithAddresses: (params: any = {}) => {
     return apiHelpers.get('/customers/all-with-addresses', { params });
   },
 
-  // Create customer address (for offline sync)
+  // Create a customer address through the live API
   createAddress: (customerId: string, addressData: any) => {
     const cleanedData = cleanData(addressData);
     return apiHelpers.post(`/customers/${customerId}/addresses/`, cleanedData);
+  },
+
+  updateAddress: (customerId: string, addressId: string, addressData: any) => {
+    const cleanedData = cleanData(addressData);
+    return apiHelpers.put(`/customers/${customerId}/addresses/${addressId}`, cleanedData);
   },
 
   // Search customers

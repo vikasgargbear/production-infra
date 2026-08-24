@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle, User } from 'lucide-react';
-import { ModuleHeader } from '../../global';
+import { CanonicalWriteNotice, ModuleHeader } from '../../global';
 import { expensesApi } from '../../../services/api';
-import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface ExpenseClaimsFlowProps {
@@ -25,7 +24,6 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
   const [expenses, setExpenses] = useState<ExpenseLine[]>([
     { id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }
   ]);
-  const [saving, setSaving] = useState(false);
 
   // API data states
   const [isLoading, setIsLoading] = useState(false);
@@ -54,17 +52,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
 
     } catch (error) {
       setError('Failed to load expense types');
-      // Fallback expense types
-      setExpenseTypes([
-        { code: 'TRAVEL', name: 'Travel' },
-        { code: 'ACCOMMODATION', name: 'Accommodation' },
-        { code: 'MEALS', name: 'Meals' },
-        { code: 'OFFICE_SUPPLIES', name: 'Office Supplies' },
-        { code: 'COMMUNICATION', name: 'Communication' },
-        { code: 'MEDICAL', name: 'Medical' },
-        { code: 'TRAINING', name: 'Training' },
-        { code: 'OTHER', name: 'Other' }
-      ]);
+      setExpenseTypes([]);
     } finally {
       setIsLoading(false);
     }
@@ -99,78 +87,14 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
     setExpenses(prev => prev.filter(exp => exp.id !== id));
   };
 
-  const saveExpenseClaim = async () => {
-    setSaving(true);
-    try {
-      setError(null);
-
-      // Validate required fields
-      if (!employeeName.trim()) {
-        throw new Error('Employee name is required');
-      }
-
-      if (expenses.length === 0) {
-        throw new Error('At least one expense line is required');
-      }
-
-      // Validate expense lines
-      for (const expense of expenses) {
-        if (!expense.expense_type.trim()) {
-          throw new Error('Expense type is required for all lines');
-        }
-        if (!expense.description.trim()) {
-          throw new Error('Description is required for all lines');
-        }
-        if (expense.amount <= 0) {
-          throw new Error('Amount must be greater than 0 for all lines');
-        }
-      }
-
-      // Prepare expense claim data for API
-      const claimData = {
-        employee_name: employeeName,
-        claim_date: claimDate,
-        purpose: purpose,
-        expenses: expenses.map(expense => ({
-          expense_type: expense.expense_type,
-          description: expense.description,
-          amount: expense.amount,
-          expense_date: expense.date,
-          receipt_attached: expense.receipt_attached
-        }))
-      };
-
-      // Call the actual API to save the expense claim
-      const response = await expensesApi.create(claimData as any);
-      const claimResult = response.data?.data || response.data;
-
-      showFinancialEntryNotification({
-        title: 'Expense Claim Posted',
-        reference: claimResult?.claim_number,
-        amount: expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0),
-        status: 'confirmed',
-        impacts: [
-          'This expense is now recorded in the system.',
-          'Your business cost goes up by this amount.',
-          'The team can now use this record for repayment and reports.'
-        ]
-      });
-
-      // Reset form after successful save
-      setExpenses([{ id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }]);
-      setPurpose('');
-
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Error saving expense claim');
-    } finally {
-      setSaving(false);
-    }
+  const saveExpenseClaim = () => {
+    setError('Submitting an expense claim is disabled until a canonical API command is available.');
   };
 
   const totalAmount = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
   return (
-    <div className="h-full bg-green-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         {/* Header */}
         <ModuleHeader
@@ -191,18 +115,16 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
               disabled: refreshing
             },
             {
-              label: saving ? 'Saving...' : 'Submit Claim',
+              label: 'Submit Claim (Unavailable)',
               onClick: saveExpenseClaim,
               variant: 'primary',
-              disabled: !employeeName || expenses.length === 0 || saving
+              disabled: true
             }
           ] as any}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
-          Keyboard shortcuts: <strong>Ctrl+S</strong> - Submit Claim | <strong>Ctrl+A</strong> - Add Expense | <strong>Esc</strong> - Close
-        </div>
+        <CanonicalWriteNotice action="Submitting an expense claim" className="border-x-0" />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">

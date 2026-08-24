@@ -126,26 +126,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
         };
       } catch (err) {
         console.error('Outstanding API error:', err);
-        return {
-          parties: [],
-          summary: {
-            total_receivable: 0,
-            total_payable: 0,
-            total_overdue: 0,
-            party_count: 0,
-            overdue_party_count: 0,
-            aging_summary: {
-              current: { count: 0, amount: 0 },
-              '1-30': { count: 0, amount: 0 },
-              '31-60': { count: 0, amount: 0 },
-              '61-90': { count: 0, amount: 0 },
-              over_90: { count: 0, amount: 0 }
-            }
-          },
-          total_advances: 0,
-          net_position: 0,
-          customer_advances: {}
-        };
+        throw err;
       }
     },
     placeholderData: (previousData) => previousData,

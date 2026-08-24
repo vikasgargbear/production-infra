@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback } from 'react';
 import { Building, User, Phone, MapPin, Mail, Trash2 } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
 import { EntitySearch, EntitySearchRef, EntitySearchProps } from './EntitySearch';
-import localSearchService from '../../../services/offline/search/localSearchService';
+import { customersApi } from '../../../services/api';
 
 /**
  * CustomerSearch Component Props
@@ -62,8 +62,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   // This is CRITICAL - without useCallback, the searchFn changes on every render,
   // causing the debounced performSearch in EntitySearch to reset its timeout
   const searchCustomers = useCallback(async (query: string): Promise<Customer[]> => {
-    const results = await localSearchService.searchCustomers(query, { limit: 20 });
-    return results as Customer[];
+    const response = await customersApi.search(query, { limit: 20 });
+    const rows = response?.data?.customers;
+    if (!Array.isArray(rows)) throw new Error('Customer search returned an invalid canonical response');
+    return rows as Customer[];
   }, []);
 
   // Render customer result in dropdown - compact layout showing all key info

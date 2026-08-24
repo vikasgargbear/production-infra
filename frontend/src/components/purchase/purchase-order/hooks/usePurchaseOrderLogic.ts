@@ -7,10 +7,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 import { calculatePurchaseOrderPreview } from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
-import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
 
 // Types
@@ -98,7 +96,7 @@ export interface UsePurchaseOrderLogicReturn {
     handleAddItem: (product: any) => void;
     handleUpdateItem: (index: number, field: string, value: any) => void;
     handleRemoveItem: (index: number) => void;
-    handleSavePurchaseOrder: () => Promise<void>;
+    handleSavePurchaseOrder?: undefined;
     validatePurchaseOrder: () => boolean;
     handlePrint: () => void;
     formatCurrency: (amount: number | string) => string;
@@ -144,27 +142,10 @@ export function usePurchaseOrderLogic({
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     // Data States
-    const [createdPOData, setCreatedPOData] = useState<CreatedPOData | null>(null);
+    const [createdPOData] = useState<CreatedPOData | null>(null);
     const calculationRequestRef = useRef(0);
     const purchaseOrderRef = useRef(purchaseOrder);
     purchaseOrderRef.current = purchaseOrder;
-
-    // Network status for offline-first
-    const { isOnline } = useNetworkStatus();
-
-    // Generate PO number on mount
-    useEffect(() => {
-        const generateAndSetPONumber = async () => {
-            try {
-                const poNumber = await documentNumberGenerator.generatePONumber();
-                setPurchaseOrder(prev => ({ ...prev, po_no: poNumber }));
-            } catch (error) {
-                const fallbackNumber = `PO-${Date.now().toString().slice(-8)}`;
-                setPurchaseOrder(prev => ({ ...prev, po_no: fallbackNumber }));
-            }
-        };
-        generateAndSetPONumber();
-    }, []);
 
     // Calculate totals
     const calculateTotals = useCallback(async (order: PurchaseOrderData) => {
@@ -181,7 +162,7 @@ export function usePurchaseOrderLogic({
         }
 
         try {
-            const calculation = await calculatePurchaseOrderPreview(order, isOnline);
+            const calculation = await calculatePurchaseOrderPreview(order, true);
             if (requestId !== calculationRequestRef.current) return;
             const totals = calculation.totals;
 
@@ -206,7 +187,7 @@ export function usePurchaseOrderLogic({
             if (requestId !== calculationRequestRef.current) return;
             toast.error(error instanceof Error ? error.message : 'Unable to calculate purchase-order totals.');
         }
-    }, [isOnline, toast]);
+    }, [toast]);
 
     // Trigger calculations when items change
     useEffect(() => {
@@ -294,15 +275,7 @@ export function usePurchaseOrderLogic({
         return Object.keys(newErrors).length === 0;
     }, [selectedSupplier, purchaseOrder]);
 
-    // Offline-first save hook
-    const { saving: offlineSaving, handleSavePurchaseOrder } = usePurchaseOrderSave({
-        purchaseOrder,
-        selectedSupplier,
-        isOnline,
-        setCreatedPOData,
-        setShowSuccessModal,
-        validatePurchaseOrder
-    });
+    const { saving, handleSavePurchaseOrder } = usePurchaseOrderSave();
 
     const handlePrint = useCallback(() => {
         window.print();
@@ -319,7 +292,7 @@ export function usePurchaseOrderLogic({
         setSelectedSupplier,
         currentStep,
         setCurrentStep,
-        saving: offlineSaving,
+        saving,
         errors,
         showSupplierModal,
         setShowSupplierModal,

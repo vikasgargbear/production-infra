@@ -15,7 +15,6 @@ import {
     removeLegacyErpSessionKeys,
     saveErpSession,
 } from '../services/auth/erpSessionStorage';
-import { salesSyncService } from '../services/offline/modules/sales';
 
 
 export interface User {
@@ -143,7 +142,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } | null>(null);
 
     const clearErpSession = useCallback(() => {
-        salesSyncService.stop();
         clearErpSessionStorage();
         setState({ user: null, token: null, isAuthenticated: false, isLoading: false });
     }, []);

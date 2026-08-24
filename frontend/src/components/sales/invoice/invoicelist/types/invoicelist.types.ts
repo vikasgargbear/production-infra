@@ -14,6 +14,8 @@ export interface Invoice {
     due_date: string;
     customer_id: string;
     customer_name: string;
+    customer_phone?: string;
+    customer_email?: string;
     total_amount: number;
     paid_amount: number;
     pending_amount: number;

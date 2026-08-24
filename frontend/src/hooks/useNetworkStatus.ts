@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import networkMonitor from '../services/offline/core/networkMonitor';
-import offlineDB from '../services/offline/core/offlineDatabase';
+import { useCallback, useEffect, useState } from 'react';
+import { getApiBaseUrl } from '../config/apiBase';
 
 interface SyncStats {
     pending: number;
@@ -24,47 +23,56 @@ interface UseNetworkStatusReturn {
 }
 
 export function useNetworkStatus(): UseNetworkStatusReturn {
-    const [isOnline, setIsOnline] = useState<boolean>((networkMonitor as any).isOnline);
-    const [syncStats, setSyncStats] = useState<SyncStats>({
+    const [isOnline, setIsOnline] = useState<boolean>(false);
+    const syncStats: SyncStats = {
         pending: 0,
         syncing: 0,
         synced: 0,
         failed: 0,
         conflict: 0
-    });
-
-    const updateSyncStats = async (): Promise<void> => {
-        try {
-            const stats = await offlineDB.getSyncStats();
-            setSyncStats(stats as any);
-        } catch (error) {
-            console.error('Failed to get sync stats:', error);
-        }
     };
 
-    useEffect(() => {
-        const unsubscribe = networkMonitor.subscribe((_status: string, online: boolean) => {
-            setIsOnline(online);
-            updateSyncStats();
-        });
+    const checkApi = useCallback(async (): Promise<void> => {
+        if (!navigator.onLine) {
+            setIsOnline(false);
+            return;
+        }
 
-        updateSyncStats();
-
-        const interval = setInterval(updateSyncStats, 10000);
-
-        return () => {
-            unsubscribe();
-            clearInterval(interval);
-        };
+        try {
+            const response = await fetch(`${getApiBaseUrl()}/health`, {
+                method: 'GET',
+                cache: 'no-store',
+                headers: { 'X-Connection-Check': 'true' }
+            });
+            setIsOnline(response.ok);
+        } catch {
+            setIsOnline(false);
+        }
     }, []);
 
+    useEffect(() => {
+        const check = () => { void checkApi(); };
+        check();
+        window.addEventListener('online', check);
+        window.addEventListener('offline', check);
+        const interval = window.setInterval(check, 30_000);
+
+        return () => {
+            window.removeEventListener('online', check);
+            window.removeEventListener('offline', check);
+            window.clearInterval(interval);
+        };
+    }, [checkApi]);
+
     const forceSync = async (): Promise<SyncResult> => {
-        if (isOnline) {
-            const { default: syncEngine } = await import('../services/offline/sync/syncEngine');
-            return syncEngine.startSync();
-        }
-        return { success: false, message: 'Cannot sync while offline' };
+        await checkApi();
+        return {
+            success: false,
+            message: 'Background sync is disabled. Refresh the page to load current API data.'
+        };
     };
+
+    const updateSyncStats = async (): Promise<void> => checkApi();
 
     return {
         isOnline,

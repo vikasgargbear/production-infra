@@ -107,10 +107,11 @@ export interface ReturnReviewPanelProps {
     selectedCustomer: Customer | null;
     selectedInvoice?: any;
     customerDues: number;
-    onSave: () => void;
+    onSave?: () => void;
     onPrint?: () => void;
     onBack: () => void;
     saving: boolean;
+    submissionUnavailableReason?: string;
 }
 
 // ============================================================================

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
 import { useSettingsEntity } from '../hooks';
+import { CanonicalWriteNotice } from '../../global';
 
 // ============================================================================
 // Types
@@ -199,13 +200,17 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
                         </button>
                         <button
                             onClick={() => setShowModal(true)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                            disabled
+                            title="Unavailable until a canonical unit command exists"
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
                         >
                             <Plus className="w-4 h-4" /><span>Add Unit</span>
                         </button>
                     </div>
                 </div>
             </div>
+
+            <CanonicalWriteNotice action="Changing units" className="mx-6 mt-4" />
 
             {/* Filters */}
             <div className="bg-white border-b border-gray-200 px-6 py-3">
@@ -313,6 +318,7 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
                                                 <td className="px-6 py-4 text-center">
                                                     <button
                                                         onClick={() => handleToggleActive(unit.id)}
+                                                        disabled
                                                         className={`px-2 py-1 text-xs rounded-full ${unit.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
                                                     >
                                                         {unit.isActive ? 'Active' : 'Inactive'}
@@ -320,14 +326,14 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex items-center justify-center space-x-2">
-                                                        <button onClick={() => handleEdit(unit)} className="p-1 text-blue-600 hover:bg-blue-50 rounded">
+                                                        <button onClick={() => handleEdit(unit)} disabled title="Edit unavailable" className="p-1 text-blue-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed">
                                                             <Edit2 className="w-4 h-4" />
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteWithCheck(unit.id)}
-                                                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                                            disabled={unit.isBase}
-                                                            title={unit.isBase ? 'Cannot delete base unit' : ''}
+                                                            disabled
+                                                            title="Delete unavailable"
+                                                            className="p-1 text-red-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
                                                         >
                                                             <Trash2 className="w-4 h-4" />
                                                         </button>
@@ -467,7 +473,7 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
                                 <button type="button" onClick={handleCloseModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
                                     Cancel
                                 </button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                <button type="submit" disabled className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed">
                                     {editingEntity ? 'Update Unit' : 'Add Unit'}
                                 </button>
                             </div>

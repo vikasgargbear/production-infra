@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Receipt, Save, Calendar, Filter, Calculator, AlertCircle, CheckCircle, Users, FileText, FileInput
 } from 'lucide-react';
-import { CustomerSearch, Select, Card, DatePicker, Button, CustomerCreation } from '../../global';
+import { CanonicalWriteNotice, CustomerSearch, Select, Card, DatePicker, Button, CustomerCreation } from '../../global';
 import { notesApi, invoicesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 import { calculateNotePreview } from '../../../services/calculations/noteCalculationService';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
@@ -191,25 +190,9 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
       })) || [];
 
       setNoteItems(transformedItems);
-
-      // Store invoice items offline for future use
-      await offlineStorage.storeOffline(`invoice_items_${invoice.id}`, transformedItems, {
-        persistent: true
-      });
-
     } catch (error) {
-
-      // Try to load from offline storage instead of using mock data
-      const offlineData = await offlineStorage.getOffline(`invoice_items_${invoice.id}`, { persistent: true });
-
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for invoice items
-        setNoteItems(offlineData.data);
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        // No offline data available - show proper error instead of mock data
-        setError('Unable to load invoice items. Please check your connection and try again.');
-        setNoteItems([]);
-      }
+      setError('Unable to load invoice items from the live API. Please try again.');
+      setNoteItems([]);
     } finally {
       setLoadingItems(false);
     }
@@ -375,13 +358,10 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-orange-50 px-4 py-2 text-xs text-orange-700 border-b border-orange-200">
-          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+F</strong> - Search Invoice | <strong>Ctrl+S</strong> - Save Draft | <strong>Esc</strong> - Close
-        </div>
+        <CanonicalWriteNotice action="Creating a debit note" className="border-x-0" />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-orange-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <div className="px-6 py-6">
 
             {/* Error Display */}
@@ -517,11 +497,11 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
             <Button
               variant="primary"
               onClick={handleSave}
-              disabled={saving || !selectedCustomer || !noteData.reason || !noteData.settlement_type}
+              disabled
               loading={saving}
               icon={saving ? undefined : <Save className="w-4 h-4" />}
             >
-              {saving ? 'Creating...' : 'Create Debit Note'}
+              Create Debit Note (Unavailable)
             </Button>
           </div>
         </div>

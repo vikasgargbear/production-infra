@@ -35,14 +35,13 @@ export { default as SalesHub } from './SalesHub';
 export { default as ConvertToInvoiceButton } from './ui/ConvertToInvoiceButton';
 
 // Modals - re-export from modals folder
-export { PaymentRecordingModal } from './modals';
 
 // Shared Hooks
-export { useSalesTransaction, useEmployees, useDraftAutoSave } from './hooks';
-export type { UseSalesTransactionConfig, UseSalesTransactionReturn, UseEmployeesReturn, UseDraftAutoSaveOptions } from './hooks';
+export { useSalesTransaction, useEmployees } from './hooks';
+export type { UseSalesTransactionConfig, UseSalesTransactionReturn, UseEmployeesReturn } from './hooks';
 
 // Shared Utils
-export { generateTempId, deductStockLocally, prepareOfflineDocument, prepareItemForTransaction } from './utils';
+export { prepareItemForTransaction } from './utils';
 export type { ProductInput } from './utils';
 
 // Shared Types

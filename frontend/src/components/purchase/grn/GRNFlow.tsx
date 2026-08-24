@@ -114,8 +114,9 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
       render: (_: any, grn: any) => (
         <button
           onClick={() => setSelectedGrn(grn)}
-          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
           title="View Details"
+          aria-label={`View GRN ${grn.grn_number}`}
         >
           <Eye className="w-4 h-4" />
         </button>
@@ -127,14 +128,14 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
   // Detail view
   if (selectedGrn) {
     return (
-      <div className="h-full bg-green-50">
+      <div className="h-full bg-gray-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title={`GRN ${selectedGrn.grn_number}`}
             documentNumber={selectedGrn.grn_number}
             status="active"
             icon={Package}
-            iconColor="text-green-600"
+            iconColor="text-blue-600"
             onClose={() => setSelectedGrn(null)}
             showSaveDraft={false}
             onSaveDraft={() => {}}
@@ -178,7 +179,7 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
               </div>
 
               {/* Info Banner */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-blue-600" />
                   <p className="text-sm text-blue-800">
@@ -203,14 +204,14 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
   }
 
   return (
-    <div className="h-full bg-green-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Goods Receipts"
           documentNumber=""
           status="active"
           icon={Package}
-          iconColor="text-green-600"
+          iconColor="text-blue-600"
           onClose={onClose}
           showSaveDraft={false}
           onSaveDraft={() => {}}
@@ -226,10 +227,10 @@ const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
         />
 
         {/* Info Banner */}
-        <div className="px-6 py-3 bg-green-50 border-b border-green-200">
+        <div className="px-6 py-3 bg-white border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-green-600" />
-            <p className="text-sm text-green-800">
+            <FileText className="w-4 h-4 text-gray-600" />
+            <p className="text-sm text-gray-700">
               Goods Receipt Notes are auto-generated when you create a Purchase Entry.
               Use the <strong>Purchase Entry</strong> tab to record new receipts.
             </p>

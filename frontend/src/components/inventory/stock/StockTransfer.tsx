@@ -8,14 +8,11 @@ import {
   NotesSection, useToast
 } from '../../global';
 import { branchesApi, settingsApi } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import syncEngine from '../../../services/offline/sync/syncEngine';
+import { canReviewStockTransfer } from './utils/canReviewStockTransfer';
 
 const StockTransfer = ({ open = true, onClose }) => {
   const toast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
-  const [saving, setSaving] = useState(false);
   const [locations, setLocations] = useState<any[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
 
@@ -82,8 +79,7 @@ const StockTransfer = ({ open = true, onClose }) => {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (currentStep === 2) handleSubmit();
-        else if (validate()) setCurrentStep(2);
+        if (currentStep === 1 && validate()) setCurrentStep(2);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -157,66 +153,13 @@ const StockTransfer = ({ open = true, onClose }) => {
       return false;
     }
     for (const item of transferData.items) {
-      if (item.transfer_quantity > item.quantity_available) {
+      if (item.transfer_quantity <= 0 || item.transfer_quantity > item.quantity_available) {
         toast.error(`Insufficient stock for ${item.product_name}. Available: ${item.quantity_available}`);
         return false;
       }
     }
     return true;
   }, [transferData, toast]);
-
-  const handleSubmit = async () => {
-    if (!validate()) return;
-    setSaving(true);
-    try {
-      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const transferNumber = await documentNumberGenerator.generateTransferNumber();
-
-      // 1. Save locally first (offline-first)
-      const localRecord = {
-        temp_id: tempId,
-        _localId: tempId,
-        transfer_number: transferNumber,
-        source_location: transferData.source_location,
-        destination_location: transferData.destination_location,
-        movement_date: transferData.movement_date,
-        reason: transferData.reason || 'Stock transfer',
-        notes: transferData.notes,
-        items: transferData.items.map(item => ({
-          product_id: item.product_id,
-          batch_id: item.batch_id,
-          batch_number: item.batch_number,
-          product_name: item.product_name,
-          transfer_quantity: item.transfer_quantity
-        })),
-        sync_status: 'pending',
-        created_at: new Date().toISOString(),
-        created_offline: true
-      };
-
-      const db = await offlineDB.init();
-      await db.put('stock_transfers', localRecord);
-
-      // 2. No local stock update for transfers (multi-location, let server process + delta sync)
-
-      // 3. Add to sync queue
-      await offlineDB.addToSyncQueue('stock_transfer', tempId, 'create', localRecord);
-
-      toast.success(`Stock transfer saved${navigator.onLine ? '' : ' (offline)'}. ${!navigator.onLine ? 'Will sync when online.' : ''}`);
-
-      // 4. Background sync if online
-      if (navigator.onLine) {
-        syncEngine.startSync().catch(() => {});
-      }
-
-      setTimeout(() => onClose(), 1500);
-    } catch (err: any) {
-      console.error('[StockTransfer] Save failed:', err);
-      toast.error('Failed to save stock transfer');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const locationOptions = [
     { value: '', label: 'Select location...' },
@@ -251,7 +194,7 @@ const StockTransfer = ({ open = true, onClose }) => {
       {/* Transfer Details */}
       <div className="mb-6">
         <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-          <MapPin className="w-5 h-5 mr-2 text-purple-600" />
+          <MapPin className="w-5 h-5 mr-2 text-gray-600" />
           Transfer Details
         </h3>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -273,8 +216,8 @@ const StockTransfer = ({ open = true, onClose }) => {
             </div>
 
             <div className="flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <ArrowRight className="w-5 h-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center">
+                <ArrowRight className="w-5 h-5 text-gray-600" />
               </div>
             </div>
 
@@ -337,7 +280,7 @@ const StockTransfer = ({ open = true, onClose }) => {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-medium text-gray-900 flex items-center">
-            <Package className="w-5 h-5 mr-2 text-purple-600" />
+            <Package className="w-5 h-5 mr-2 text-gray-600" />
             Products to Transfer
           </h3>
           <button
@@ -346,7 +289,8 @@ const StockTransfer = ({ open = true, onClose }) => {
               setShowBatchSelector(false);
             }}
             disabled={needsMoreLocations || !transferData.source_location || !transferData.destination_location}
-            className="flex items-center space-x-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex min-h-11 items-center space-x-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
+            title={needsMoreLocations || !transferData.source_location || !transferData.destination_location ? 'Select two different locations first' : 'Add a product'}
           >
             <span>+ Add Product</span>
           </button>
@@ -358,7 +302,7 @@ const StockTransfer = ({ open = true, onClose }) => {
             <div className="mb-4 p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-medium text-gray-900">Search Product</h4>
-                <button onClick={() => setShowProductSearch(false)} className="text-gray-500 hover:text-gray-700">
+                <button onClick={() => setShowProductSearch(false)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700" aria-label="Close product search" title="Close product search">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -377,13 +321,13 @@ const StockTransfer = ({ open = true, onClose }) => {
               <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
                   <div className="flex items-center space-x-3">
-                    <Package className="h-5 w-5 text-purple-600" />
+                    <Package className="h-5 w-5 text-gray-600" />
                     <div>
                       <h3 className="text-base font-semibold text-gray-900">Select Batch for {selectedProduct?.product_name}</h3>
                       <p className="text-xs text-gray-500">Choose a batch to transfer</p>
                     </div>
                   </div>
-                  <button onClick={() => { setShowBatchSelector(false); setSelectedProduct(null); }} className="p-1.5 hover:bg-gray-200 rounded-lg">
+                  <button onClick={() => { setShowBatchSelector(false); setSelectedProduct(null); }} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-200" aria-label="Close batch selector" title="Close batch selector">
                     <X className="h-5 w-5 text-gray-500" />
                   </button>
                 </div>
@@ -442,7 +386,7 @@ const StockTransfer = ({ open = true, onClose }) => {
                             onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value))}
                             min="1"
                             max={item.quantity_available}
-                            className={`w-24 px-2 py-1 border rounded text-center focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                            className={`min-h-11 w-24 px-2 py-1 border rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                               isOverStock ? 'border-red-300 bg-red-50' : 'border-gray-300'
                             }`}
                           />
@@ -453,7 +397,7 @@ const StockTransfer = ({ open = true, onClose }) => {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <button onClick={() => removeItem(item.id)} className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded">
+                          <button onClick={() => removeItem(item.id)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-red-600 hover:text-red-800 hover:bg-red-50" aria-label={`Remove ${item.product_name}`} title={`Remove ${item.product_name}`}>
                             <X className="w-4 h-4" />
                           </button>
                         </td>
@@ -488,9 +432,10 @@ const StockTransfer = ({ open = true, onClose }) => {
         <div className="flex items-start space-x-3">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-amber-800">Please Review Carefully</p>
+            <p className="text-sm font-medium text-amber-800">Review only</p>
             <p className="text-sm text-amber-700 mt-1">
-              Confirm the transfer details below. Stock will be moved immediately upon confirmation.
+              Submission is unavailable until the canonical online stock-transfer action is connected.
+              No inventory request was sent and nothing was changed.
             </p>
           </div>
         </div>
@@ -500,17 +445,17 @@ const StockTransfer = ({ open = true, onClose }) => {
         <h3 className="text-lg font-medium text-gray-900 mb-4">Transfer Summary</h3>
 
         {/* Location Flow */}
-        <div className="flex items-center justify-center space-x-4 mb-6 p-4 bg-purple-50 rounded-lg">
+        <div className="flex items-center justify-center space-x-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
           <div className="text-center">
             <div className="text-xs text-gray-500 uppercase mb-1">From</div>
-            <div className="font-semibold text-purple-800">
+            <div className="font-semibold text-gray-900">
               {locations.find(l => (l.branch_id || l.location_id) === transferData.source_location)?.branch_name || 'Unknown'}
             </div>
           </div>
-          <ArrowRight className="w-6 h-6 text-purple-600" />
+          <ArrowRight className="w-6 h-6 text-gray-600" />
           <div className="text-center">
             <div className="text-xs text-gray-500 uppercase mb-1">To</div>
-            <div className="font-semibold text-purple-800">
+            <div className="font-semibold text-gray-900">
               {locations.find(l => (l.branch_id || l.location_id) === transferData.destination_location)?.branch_name || 'Unknown'}
             </div>
           </div>
@@ -557,7 +502,7 @@ const StockTransfer = ({ open = true, onClose }) => {
                   </td>
                   <td className="px-4 py-3 text-center">{item.quantity_available}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className="font-semibold text-purple-700">{item.transfer_quantity}</span>
+                    <span className="font-semibold text-gray-900">{item.transfer_quantity}</span>
                   </td>
                 </tr>
               ))}
@@ -586,9 +531,8 @@ const StockTransfer = ({ open = true, onClose }) => {
       onStepChange={setCurrentStep}
       createContent={createContent}
       reviewContent={reviewContent}
+      canProceedToReview={() => canReviewStockTransfer(transferData)}
       onClose={onClose}
-      onSave={handleSubmit}
-      isSaving={saving}
     />
   );
 };

@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -42,13 +43,11 @@ export const expensesApi = {
         return apiHelpers.get(`/expense-claims/${claimId}`);
     },
 
-    create: (data: any): Promise<AxiosResponse> => {
-        return apiHelpers.post('/expense-claims', data);
-    },
+    create: (_data: any): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Submitting an expense claim'),
 
-    generateClaimNumber: (): Promise<AxiosResponse> => {
-        return apiHelpers.post('/expense-claims/generate-claim-number', {});
-    },
+    generateClaimNumber: (): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Generating a legacy expense claim number'),
 
     getCategories: (): Promise<AxiosResponse> => {
         return apiHelpers.get('/expense-claims/expense-types');

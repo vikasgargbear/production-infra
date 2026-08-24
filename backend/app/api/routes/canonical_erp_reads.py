@@ -9,8 +9,7 @@ only a non-transactional draft.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
-from datetime import datetime, timezone
+from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
@@ -155,6 +154,19 @@ class CanonicalSupplierCreate(SupplierCreate):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class CanonicalCustomerAddressWrite(BaseModel):
+    address_line1: str = Field(min_length=1, max_length=255)
+    address_line2: Optional[str] = Field(default=None, max_length=255)
+    landmark: Optional[str] = Field(default=None, max_length=255)
+    city: str = Field(min_length=1, max_length=128)
+    state: str = Field(min_length=1, max_length=128)
+    pincode: str = Field(pattern=r"^[0-9]{6}$")
+    address_type: Literal["billing", "shipping", "other"] = "shipping"
+    is_default: bool = False
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
 class CanonicalProductDraftUpdate(BaseModel):
     product_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     generic_name: Optional[str] = Field(default=None, max_length=255)
@@ -183,6 +195,10 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
         SELECT p.id AS product_id, p.sku AS product_code, p.name AS product_name,
                p.generic_name, p.product_kind AS product_type, p.base_uom_code AS unit,
                conversion.id AS uom_conversion_id,
+               tax_version.taxability,
+               CASE WHEN tax_version.taxability IS NULL THEN NULL
+                    WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
+                    ELSE 0 END AS gst_percent,
                CASE WHEN p.status='draft' AND p.hsn_code='0000' THEN NULL ELSE p.hsn_code END AS hsn_code,
                p.dosage_form, p.strength_display, p.drug_schedule,
                p.requires_prescription, p.cold_chain_required,
@@ -202,6 +218,14 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                  AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
+          LEFT JOIN LATERAL (
+              SELECT taxability, igst_rate
+                FROM tax.tax_code_versions
+               WHERE code=p.hsn_code AND code_kind='hsn' AND status='active'
+                 AND effective_from<=CURRENT_DATE
+                 AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+               ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
+          ) tax_version ON true
          WHERE p.org_id=:org_id
            AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
            AND (:search='' OR p.name ILIKE :pattern OR p.sku ILIKE :pattern
@@ -343,6 +367,10 @@ def products_with_batches(
                product.name AS product_name, product.generic_name, product.hsn_code,
                product.base_uom_code AS unit, product.product_kind AS product_type,
                conversion.id AS uom_conversion_id,
+               tax_version.taxability,
+               CASE WHEN tax_version.taxability IS NULL THEN NULL
+                    WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
+                    ELSE 0 END AS gst_percent,
                product.status='active' AS is_active,
                COALESCE(batch_data.batches, '[]'::jsonb) AS batches,
                COALESCE(batch_data.total_quantity_available, 0) AS total_quantity_available
@@ -356,6 +384,14 @@ def products_with_batches(
                  AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
+          LEFT JOIN LATERAL (
+              SELECT taxability, igst_rate
+                FROM tax.tax_code_versions
+               WHERE code=product.hsn_code AND code_kind='hsn' AND status='active'
+                 AND effective_from<=CURRENT_DATE
+                 AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+               ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
+          ) tax_version ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'batch_id', batch.id, 'product_id', batch.product_id,
@@ -407,25 +443,29 @@ def product_batches(
                batch.expires_on AS expiry_date, batch.mrp AS mrp_per_unit,
                batch.mrp AS sale_price_per_unit,
                conversion.id AS uom_conversion_id,
-               stock.location_id, stock.branch_id,
-               COALESCE(stock.average_unit_cost, 0) AS cost_per_unit,
-               COALESCE(stock.quantity_available, 0) AS quantity_available,
+               balance.location_id, balance.branch_id,
+               location.name AS location_name, branch.name AS branch_name,
+               balance.average_unit_cost AS cost_per_unit,
+               balance.on_hand_quantity AS quantity_available,
                batch.expires_on - CURRENT_DATE AS days_to_expiry,
-               false AS has_pending_sync, 0::numeric AS gst_percent,
+               false AS has_pending_sync,
+               tax_version.taxability,
+               CASE WHEN tax_version.taxability IS NULL THEN NULL
+                    WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
+                    ELSE 0 END AS gst_percent,
                batch.status AS batch_status
           FROM inventory.batches batch
           JOIN catalog.products product
             ON product.org_id=batch.org_id AND product.id=batch.product_id
-          LEFT JOIN LATERAL (
-              SELECT SUM(balance.on_hand_quantity) AS quantity_available,
-                     MAX(balance.average_unit_cost) AS average_unit_cost,
-                     CASE WHEN COUNT(DISTINCT balance.location_id)=1
-                          THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
-                     CASE WHEN COUNT(DISTINCT balance.branch_id)=1
-                          THEN (array_agg(DISTINCT balance.branch_id))[1] END AS branch_id
-                FROM inventory.stock_balances balance
-               WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
-          ) stock ON true
+          JOIN inventory.stock_balances balance
+            ON balance.org_id=batch.org_id AND balance.batch_id=batch.id
+           AND balance.product_id=batch.product_id AND balance.on_hand_quantity>0
+          JOIN inventory.locations location
+            ON location.org_id=balance.org_id AND location.id=balance.location_id
+           AND location.status='active' AND location.allows_sale
+          JOIN core.branches branch
+            ON branch.org_id=balance.org_id AND branch.id=balance.branch_id
+           AND branch.status='active'
           LEFT JOIN LATERAL (
               SELECT id FROM catalog.uom_conversions
                WHERE org_id=product.org_id AND product_id=product.id
@@ -435,9 +475,17 @@ def product_batches(
                  AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
+          LEFT JOIN LATERAL (
+              SELECT taxability, igst_rate
+                FROM tax.tax_code_versions
+               WHERE code=product.hsn_code AND code_kind='hsn' AND status='active'
+                 AND effective_from<=CURRENT_DATE
+                 AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+               ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
+          ) tax_version ON true
          WHERE batch.org_id=:org_id AND batch.product_id=:product_id
            AND batch.status IN ('released','blocked')
-         ORDER BY batch.expires_on NULLS LAST, batch.batch_number
+         ORDER BY batch.expires_on NULLS LAST, batch.batch_number, location.name
     """, {"org_id": org_id, "product_id": product_id})
     return {"batches": rows}
 
@@ -524,6 +572,15 @@ def _insert_party_contact_address_and_tax(
             "org_id": org_id, "party_id": party_id, "gstin": gstin,
             "legal_name": legal_name, "state_code": state_code,
         })
+
+    activated_party = db.execute(text("""
+        UPDATE parties.parties
+           SET status='active', updated_at=transaction_timestamp(), row_version=row_version+1
+         WHERE org_id=:org_id AND id=:party_id AND status='draft'
+     RETURNING id
+    """), {"org_id": org_id, "party_id": party_id}).scalar_one_or_none()
+    if activated_party is None:
+        raise HTTPException(status_code=409, detail="Party activation failed")
     return party_id
 
 
@@ -657,10 +714,12 @@ _PARTY_CONTACTS = """
          ORDER BY c.is_primary DESC, c.id LIMIT 1
     ) contact ON true
     LEFT JOIN LATERAL (
-        SELECT registration_number FROM parties.tax_registrations r
+        SELECT registration_number, status AS registration_status
+          FROM parties.tax_registrations r
          WHERE r.org_id=account.org_id AND r.party_id=account.party_id
-           AND r.registration_type='GSTIN' AND r.status='active'
-         ORDER BY r.valid_from DESC NULLS LAST, r.id LIMIT 1
+           AND r.registration_type='GSTIN'
+           AND r.status IN ('active','pending_verification')
+         ORDER BY (r.status='active') DESC, r.valid_from DESC NULLS LAST, r.id LIMIT 1
     ) registration ON true
 """
 
@@ -675,6 +734,7 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                party.legal_name AS customer_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
+               registration.registration_status AS gst_verification_status,
                COALESCE(substring(registration.registration_number from 1 for 2),
                         address.state_code) AS place_of_supply_state_code,
                account.credit_limit, account.credit_days, 0::numeric AS current_outstanding,
@@ -709,6 +769,7 @@ def customers_with_addresses(
                party.legal_name AS customer_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
+               registration.registration_status AS gst_verification_status,
                COALESCE(substring(registration.registration_number from 1 for 2),
                         primary_address.state_code) AS place_of_supply_state_code,
                account.credit_limit, account.credit_days,
@@ -741,6 +802,160 @@ def customers_with_addresses(
             "total_pages": 1, "has_more": len(rows) == page_size}}
 
 
+def _customer_party_id(db: Session, org_id: UUID, customer_id: UUID) -> UUID:
+    party_id = db.execute(text("""
+        SELECT party_id
+          FROM parties.customer_accounts
+         WHERE org_id=:org_id AND id=:customer_id
+           AND status IN ('active','on_hold')
+    """), {"org_id": org_id, "customer_id": customer_id}).scalar()
+    if party_id is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return party_id
+
+
+@router.get("/customers/{customer_id:uuid}/addresses")
+@router.get("/customers/{customer_id:uuid}/addresses/")
+def customer_addresses(
+    customer_id: UUID,
+    user: dict = MASTER_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    party_id = _customer_party_id(db, org_id, customer_id)
+    rows = _rows(db, """
+        SELECT address.id AS address_id, address.id,
+               address.address_kind AS address_type,
+               address.line1 AS address_line1, address.line2 AS address_line2,
+               address.landmark, address.city, address.state_code,
+               address.state_code AS state, address.postal_code AS pincode,
+               address.country_code AS country_code,
+               address.is_primary AS is_default, contact.phone AS mobile,
+               address.row_version
+          FROM parties.addresses address
+          LEFT JOIN LATERAL (
+              SELECT phone FROM parties.contacts
+               WHERE org_id=address.org_id AND party_id=address.party_id
+                 AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) contact ON true
+         WHERE address.org_id=:org_id AND address.party_id=:party_id
+           AND address.status='active'
+         ORDER BY address.is_primary DESC, address.address_kind, address.id
+    """, {"org_id": org_id, "party_id": party_id})
+    return {"success": True, "data": rows, "customer_id": customer_id,
+            "total_addresses": len(rows)}
+
+
+@router.post(
+    "/customers/{customer_id:uuid}/addresses/",
+    status_code=status.HTTP_201_CREATED,
+    operation_id="create_canonical_customer_address",
+)
+def create_customer_address(
+    customer_id: UUID,
+    address: CanonicalCustomerAddressWrite,
+    user: dict = Depends(PermissionChecker("master", "create")),
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    party_id = _customer_party_id(db, org_id, customer_id)
+    state_code = _state_code(address.state, None)
+    try:
+        if address.is_default:
+            db.execute(text("""
+                UPDATE "parties"."addresses"
+                   SET is_primary=false
+                 WHERE org_id=:org_id AND party_id=:party_id
+                   AND address_kind=:kind AND status='active'
+            """), {"org_id": org_id, "party_id": party_id, "kind": address.address_type})
+        address_id = db.execute(text("""
+            INSERT INTO parties.addresses (
+                org_id, party_id, address_kind, line1, line2, landmark,
+                city, state_code, postal_code, country_code, is_primary, status
+            ) VALUES (
+                :org_id, :party_id, :kind, :line1, :line2, :landmark,
+                :city, :state_code, :postal_code, 'IN',
+                CASE WHEN :is_default THEN true ELSE NOT EXISTS (
+                    SELECT 1 FROM parties.addresses
+                     WHERE org_id=:org_id AND party_id=:party_id
+                       AND address_kind=:kind AND status='active'
+                ) END,
+                'active'
+            ) RETURNING id
+        """), {
+            "org_id": org_id, "party_id": party_id,
+            "kind": address.address_type, "line1": address.address_line1,
+            "line2": address.address_line2, "landmark": address.landmark,
+            "city": address.city, "state_code": state_code,
+            "postal_code": address.pincode, "is_default": address.is_default,
+        }).scalar_one()
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Address conflicts with existing customer data") from exc
+    return {"success": True, "address_id": address_id, "customer_id": customer_id,
+            "message": "Address created"}
+
+
+@router.put(
+    "/customers/{customer_id:uuid}/addresses/{address_id:uuid}",
+    operation_id="update_canonical_customer_address",
+)
+def update_customer_address(
+    customer_id: UUID,
+    address_id: UUID,
+    address: CanonicalCustomerAddressWrite,
+    user: dict = Depends(PermissionChecker("master", "edit")),
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    party_id = _customer_party_id(db, org_id, customer_id)
+    state_code = _state_code(address.state, None)
+    try:
+        if address.is_default:
+            db.execute(text("""
+                UPDATE "parties"."addresses"
+                   SET is_primary=false
+                 WHERE org_id=:org_id AND party_id=:party_id
+                   AND address_kind=:kind AND id<>:address_id AND status='active'
+            """), {"org_id": org_id, "party_id": party_id,
+                     "address_id": address_id, "kind": address.address_type})
+        updated = db.execute(text("""
+            UPDATE "parties"."addresses"
+               SET address_kind=:kind, line1=:line1, line2=:line2,
+                   landmark=:landmark, city=:city, state_code=:state_code,
+                   postal_code=:postal_code,
+                   is_primary=CASE WHEN :is_default THEN true ELSE NOT EXISTS (
+                       SELECT 1 FROM parties.addresses other
+                        WHERE other.org_id=:org_id AND other.party_id=:party_id
+                          AND other.address_kind=:kind AND other.id<>:address_id
+                          AND other.status='active' AND other.is_primary
+                   ) END,
+                   updated_at=transaction_timestamp(), row_version=row_version+1
+             WHERE org_id=:org_id AND party_id=:party_id AND id=:address_id
+               AND status='active'
+         RETURNING id, row_version
+        """), {
+            "org_id": org_id, "party_id": party_id, "address_id": address_id,
+            "kind": address.address_type, "line1": address.address_line1,
+            "line2": address.address_line2, "landmark": address.landmark,
+            "city": address.city, "state_code": state_code,
+            "postal_code": address.pincode, "is_default": address.is_default,
+        }).mappings().first()
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Customer address not found")
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Address conflicts with existing customer data") from exc
+    return {"success": True, "address_id": updated["id"],
+            "row_version": updated["row_version"], "message": "Address updated"}
+
+
 @router.get("/suppliers")
 @router.get("/suppliers/")
 def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
@@ -751,6 +966,7 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                party.legal_name AS supplier_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
+               registration.registration_status AS gst_verification_status,
                account.payment_days, 0::numeric AS current_outstanding,
                party.party_kind AS supplier_type, account.status='active' AS is_active,
                account.status, account.created_at, account.updated_at
@@ -842,6 +1058,7 @@ def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
                concat_ws(', ', organization.registered_address_line1,
                          organization.registered_address_line2) AS registered_address,
                organization.registered_city AS city,
+               organization.registered_state_code AS state_code,
                organization.registered_state_code AS state,
                organization.registered_postal_code AS pincode,
                registration.gstin AS gst_number,
@@ -1028,6 +1245,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                document.{date_column} AS document_date, document.status,
                document.customer_account_id AS customer_id,
                party.legal_name AS customer_name,
+               contact.phone AS customer_phone, contact.email AS customer_email,
                COALESCE(document.grand_total, 0) AS total_amount,
                COALESCE(lines.items_count, 0) AS items_count,
                COALESCE(lines.items, '[]'::jsonb) AS items,
@@ -1036,6 +1254,12 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
           JOIN parties.customer_accounts account
             ON account.org_id=document.org_id AND account.id=document.customer_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
+          LEFT JOIN LATERAL (
+              SELECT phone, email
+                FROM parties.contacts
+               WHERE org_id=party.org_id AND party_id=party.id AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) contact ON true
           LEFT JOIN LATERAL (
               SELECT count(*) AS items_count,
                      jsonb_agg(jsonb_build_object(
@@ -1274,7 +1498,8 @@ def gst_adjustment_notes(user: dict = Depends(PermissionChecker("gst", "view")),
 
 
 @router.get("/reports/tax/hsn")
-def hsn_summary(user: dict = Depends(PermissionChecker("gst", "view")),
+def hsn_summary(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                user: dict = Depends(PermissionChecker("gst", "view")),
                 db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
@@ -1283,13 +1508,23 @@ def hsn_summary(user: dict = Depends(PermissionChecker("gst", "view")),
                SUM(line.gst_taxable_value) AS taxable_value,
                SUM(line.cgst_amount) AS cgst, SUM(line.sgst_amount) AS sgst,
                SUM(line.igst_amount) AS igst, SUM(line.cess_amount) AS cess,
+               SUM(line.cgst_amount + line.sgst_amount + line.igst_amount + line.cess_amount)
+                   AS tax_amount,
+               CASE WHEN SUM(line.gst_taxable_value)=0 THEN 0
+                    ELSE ROUND(
+                        SUM(line.cgst_amount + line.sgst_amount + line.igst_amount)
+                        * 100 / SUM(line.gst_taxable_value),
+                        2
+                    ) END AS tax_rate,
                SUM(line.line_total) AS total_value
           FROM sales.invoice_lines line
           JOIN sales.invoices invoice ON invoice.org_id=line.org_id AND invoice.id=line.invoice_id
           JOIN catalog.products product ON product.org_id=line.org_id AND product.id=line.product_id
-         WHERE line.org_id=:org_id AND invoice.status<>'cancelled'
+         WHERE line.org_id=:org_id AND invoice.status NOT IN ('cancelled','reversed')
+           AND (:date_from IS NULL OR invoice.invoice_date >= CAST(:date_from AS date))
+           AND (:date_to IS NULL OR invoice.invoice_date <= CAST(:date_to AS date))
          GROUP BY product.hsn_code, product.name ORDER BY product.hsn_code, product.name
-    """, {"org_id": org_id})
+    """, _range_params(org_id, from_date, to_date))
     return {"hsn_summary": rows}
 
 
@@ -1298,17 +1533,34 @@ def current_stock(limit: int = Query(200, ge=1, le=1000), offset: int = Query(0,
                   user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     return _rows(db, """
-        SELECT concat_ws(':', balance.product_id, balance.batch_id, balance.location_id) AS stock_id,
-               balance.product_id, product.sku AS product_code,
-               product.name AS product_name, balance.batch_id, batch.batch_number,
-               batch.expires_on AS expiry_date, balance.location_id,
-               location.name AS location_name, balance.on_hand_quantity AS quantity_available,
-               balance.inventory_value, balance.average_unit_cost, product.base_uom_code AS unit
+        SELECT balance.product_id, product.sku AS product_code,
+               product.name AS product_name, product.generic_name,
+               product.hsn_code, product.product_kind AS product_type,
+               product.base_uom_code AS unit,
+               category.name AS category,
+               SUM(balance.on_hand_quantity) AS total_quantity_available,
+               SUM(balance.inventory_value) AS total_value,
+               CASE WHEN SUM(balance.on_hand_quantity)=0 THEN 0
+                    ELSE ROUND(SUM(balance.inventory_value) / SUM(balance.on_hand_quantity), 4)
+                END AS cost_per_unit,
+               COUNT(DISTINCT balance.batch_id) AS total_batches,
+               COUNT(DISTINCT balance.batch_id) FILTER (
+                   WHERE batch.expires_on < CURRENT_DATE
+               ) AS expired_batches,
+               COUNT(DISTINCT balance.batch_id) FILTER (
+                   WHERE batch.expires_on BETWEEN CURRENT_DATE AND CURRENT_DATE + 90
+               ) AS near_expiry_batches,
+               product.cold_chain_required AS requires_cold_chain
           FROM inventory.stock_balances balance
           JOIN catalog.products product ON product.org_id=balance.org_id AND product.id=balance.product_id
           JOIN inventory.batches batch ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
-          JOIN inventory.locations location ON location.org_id=balance.org_id AND location.id=balance.location_id
-         WHERE balance.org_id=:org_id ORDER BY product.name, batch.expires_on NULLS LAST
+          LEFT JOIN catalog.categories category
+            ON category.org_id=product.org_id AND category.id=product.category_id
+         WHERE balance.org_id=:org_id
+         GROUP BY balance.product_id, product.sku, product.name, product.generic_name,
+                  product.hsn_code, product.product_kind, product.base_uom_code,
+                  category.name, product.cold_chain_required
+         ORDER BY product.name, balance.product_id
          LIMIT :limit OFFSET :offset
     """, {"org_id": org_id, "limit": limit, "offset": offset})
 
@@ -1321,7 +1573,7 @@ def batches(limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0)
         SELECT batch.id AS batch_id, batch.product_id, product.name AS product_name,
                product.sku AS product_code, batch.batch_number,
                batch.manufactured_on AS manufacturing_date, batch.expires_on AS expiry_date,
-               batch.mrp, batch.status, batch.status='active' AS is_active,
+               batch.mrp, batch.status, batch.status IN ('released','blocked') AS is_active,
                COALESCE(stock.quantity, 0) AS quantity
           FROM inventory.batches batch
           JOIN catalog.products product ON product.org_id=batch.org_id AND product.id=batch.product_id
@@ -1961,126 +2213,3 @@ def profit_loss_summary(year: int, month: Optional[int] = None, user: dict = FIN
     margin = (totals["net"] / revenue * 100) if revenue else 0
     return {"grossMargin": margin, "operatingMargin": margin,
             "netMargin": margin, "ebitdaMargin": margin}
-
-
-@router.get("/sync/delta")
-def sync_delta(
-    since: datetime, tables: str = "products,batches,customers,employees",
-    user: dict = MASTER_USER, db: Session = Depends(get_db),
-):
-    org_id = _activate(db, user)
-    requested = {name.strip() for name in tables.split(",") if name.strip()}
-    changes: dict[str, list] = {}
-    deactivated: dict[str, list] = {}
-
-    if "products" in requested:
-        changes["products"] = _rows(db, """
-            SELECT product.id AS product_id, product.sku AS product_code,
-                   product.name AS product_name, product.generic_name,
-                   product.hsn_code, product.category_id,
-                   product.status='active' AS is_active,
-                   conversion.id AS uom_conversion_id, product.updated_at
-              FROM catalog.products product
-              LEFT JOIN LATERAL (
-                  SELECT id FROM catalog.uom_conversions
-                   WHERE org_id=product.org_id AND product_id=product.id
-                     AND from_uom_code=product.base_uom_code
-                     AND to_uom_code=product.base_uom_code
-                     AND status='active' AND valid_from<=CURRENT_DATE
-                     AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
-                   ORDER BY valid_from DESC, id LIMIT 1
-              ) conversion ON true
-             WHERE product.org_id=:org_id AND product.updated_at>:since
-        """, {"org_id": org_id, "since": since})
-        deactivated["products"] = [row["product_id"] for row in changes["products"] if not row["is_active"]]
-    if "batches" in requested:
-        changes["batches"] = _rows(db, """
-            SELECT batch.id AS batch_id, batch.product_id, batch.batch_number,
-                   batch.manufactured_on AS manufacturing_date, batch.expires_on AS expiry_date,
-                   batch.mrp AS mrp_per_unit, batch.mrp AS sale_price_per_unit,
-                   COALESCE(stock.quantity_available,0) AS quantity_available,
-                   COALESCE(stock.cost_per_unit,0) AS cost_per_unit,
-                   stock.location_id, stock.branch_id,
-                   conversion.id AS uom_conversion_id,
-                   batch.status AS batch_status, batch.updated_at
-              FROM inventory.batches batch
-              JOIN catalog.products product
-                ON product.org_id=batch.org_id AND product.id=batch.product_id
-              LEFT JOIN LATERAL (
-                  SELECT SUM(on_hand_quantity) quantity_available,
-                         MAX(average_unit_cost) cost_per_unit,
-                         CASE WHEN COUNT(DISTINCT balance.location_id)=1
-                              THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
-                         CASE WHEN COUNT(DISTINCT balance.branch_id)=1
-                              THEN (array_agg(DISTINCT balance.branch_id))[1] END AS branch_id
-                    FROM inventory.stock_balances balance
-                   WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
-              ) stock ON true
-              LEFT JOIN LATERAL (
-                  SELECT id FROM catalog.uom_conversions
-                   WHERE org_id=product.org_id AND product_id=product.id
-                     AND from_uom_code=product.base_uom_code
-                     AND to_uom_code=product.base_uom_code
-                     AND status='active' AND valid_from<=CURRENT_DATE
-                     AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
-                   ORDER BY valid_from DESC, id LIMIT 1
-              ) conversion ON true
-             WHERE batch.org_id=:org_id AND batch.updated_at>:since
-        """, {"org_id": org_id, "since": since})
-        deactivated["batches"] = [row["batch_id"] for row in changes["batches"] if row["batch_status"] != "active"]
-    if "customers" in requested:
-        changes["customers"] = _rows(db, """
-            SELECT account.id AS customer_id, account.customer_code,
-                   party.legal_name AS customer_name, contact.phone AS primary_phone,
-                   contact.email AS primary_email,
-                   COALESCE(substring(registration.registration_number from 1 for 2),
-                            address.state_code) AS place_of_supply_state_code,
-                   account.credit_limit, account.credit_days,
-                   account.status='active' AS is_active, account.updated_at
-              FROM parties.customer_accounts account
-              JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-              LEFT JOIN LATERAL (
-                  SELECT phone, email FROM parties.contacts
-                   WHERE org_id=account.org_id AND party_id=account.party_id AND status='active'
-                   ORDER BY is_primary DESC, id LIMIT 1
-              ) contact ON true
-              LEFT JOIN LATERAL (
-                  SELECT registration_number FROM parties.tax_registrations
-                   WHERE org_id=account.org_id AND party_id=account.party_id
-                     AND registration_type='GSTIN' AND status='active'
-                   ORDER BY valid_from DESC NULLS LAST, id LIMIT 1
-              ) registration ON true
-              LEFT JOIN LATERAL (
-                  SELECT state_code FROM parties.addresses
-                   WHERE org_id=account.org_id AND party_id=account.party_id
-                     AND status='active'
-                   ORDER BY is_primary DESC, id LIMIT 1
-              ) address ON true
-             WHERE account.org_id=:org_id AND account.updated_at>:since
-        """, {"org_id": org_id, "since": since})
-        deactivated["customers"] = [row["customer_id"] for row in changes["customers"] if not row["is_active"]]
-    if "employees" in requested:
-        changes["employees"] = _rows(db, """
-            SELECT id AS employee_id, employee_number AS employee_code,
-                   display_name AS employee_name, job_title AS designation,
-                   work_email AS personal_email, work_phone AS personal_mobile,
-                   status='active' AS is_active, updated_at
-              FROM hr.employees WHERE org_id=:org_id AND updated_at>:since
-        """, {"org_id": org_id, "since": since})
-
-    timestamp = datetime.now(timezone.utc).isoformat()
-    return {"sync_timestamp": timestamp, "sync_type": "delta", "since": since,
-            "changes": changes, "deactivated": deactivated,
-            "counts": {name: len(rows) for name, rows in changes.items()}}
-
-
-@router.get("/sync/status")
-def sync_status(user: dict = MASTER_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT (SELECT MAX(updated_at) FROM catalog.products WHERE org_id=:org_id) products_latest,
-               (SELECT MAX(updated_at) FROM inventory.batches WHERE org_id=:org_id) batches_latest,
-               (SELECT MAX(updated_at) FROM parties.customer_accounts WHERE org_id=:org_id) customers_latest,
-               transaction_timestamp() server_time
-    """, {"org_id": org_id})
-    return rows[0]

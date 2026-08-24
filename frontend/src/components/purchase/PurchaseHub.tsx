@@ -33,7 +33,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
   const [forceModule, setForceModule] = useState<string | null>(null);
 
   // Handle "Record Receipt" from PO list → opens Purchase Entry with prefill
-  const handleRecordReceipt = useCallback(async (poId: number) => {
+  const handleRecordReceipt = useCallback(async (poId: string) => {
     try {
       const response = await purchasesApi.getForEntry(poId);
       const poData = response?.data;

@@ -17,8 +17,8 @@ export const InvoiceBulkActions = React.memo<InvoiceBulkActionsProps>(({
     if (selectedCount === 0) return null;
 
     return (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <div className="flex items-center justify-between">
+        <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center">
                     <span className="text-sm font-medium text-blue-900">
                         {selectedCount} invoice{selectedCount > 1 ? 's' : ''} selected
@@ -29,7 +29,14 @@ export const InvoiceBulkActions = React.memo<InvoiceBulkActionsProps>(({
                         <Download className="w-4 h-4 mr-2" />
                         Export
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={onClear}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onClear}
+                        aria-label="Clear invoice selection"
+                        title="Clear selection"
+                        className="min-w-11"
+                    >
                         <X className="w-4 h-4" />
                     </Button>
                 </div>

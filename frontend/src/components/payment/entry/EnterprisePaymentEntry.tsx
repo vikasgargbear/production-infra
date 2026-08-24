@@ -18,11 +18,8 @@ import {
 } from 'lucide-react';
 
 // Import global components
-import { CustomerSearch, CustomerCreation, useToast } from '../../global';
+import { CanonicalWriteNotice, CustomerSearch, CustomerCreation, useToast } from '../../global';
 import { paymentsApi } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import syncEngine from '../../../services/offline/sync/syncEngine';
 import type { Customer as BaseCustomer } from '../../../types/models';
 
 
@@ -76,36 +73,6 @@ interface PaymentType {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-interface PaymentMode {
-  mode: string;
-  amount: number;
-}
-
-interface InvoiceAllocation {
-  invoice_id: string | number;
-  amount: number;
-}
-
-interface PaymentData {
-  customer_id: string | number;
-  customer_name: string;
-  payment_type: string;
-  payment_date: string;
-  total_amount: number;
-  payment_modes: PaymentMode[];
-  remarks: string | null;
-  collector_name: string | null;
-  route: string | null;
-  invoice_allocations: InvoiceAllocation[];
-  outstanding_invoices: Invoice[];
-}
-
-interface LocalPayment {
-  amount: number;
-  payment_date: string;
-  remarks?: string;
-}
-
 const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, onClose }) => {
   const toast = useToast();
   const [formData, setFormData] = useState<FormData>({
@@ -132,23 +99,6 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   const [allocationMethod, setAllocationMethod] = useState<'fifo' | 'manual'>('fifo');
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [showCustomerCreationModal, setShowCustomerCreationModal] = useState(false);
-
-  // Check for locally stored payments (now checks IDB sync queue)
-  const checkLocalPayments = async () => {
-    try {
-      const queue = await offlineDB.getSyncQueue();
-      const pendingPayments = queue.filter(item =>
-        item.entity_type === 'payment' || item.entity_type === 'payments'
-      );
-      if (pendingPayments.length > 0) {
-        toast.info(`${pendingPayments.length} payment(s) pending sync`);
-      } else {
-        toast.success('No pending payments');
-      }
-    } catch {
-      toast.info('No pending payments');
-    }
-  };
 
   // Fetch outstanding invoices from API
   const fetchOutstandingInvoices = async (customerId: string | number) => {
@@ -319,76 +269,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   };
 
   const handleSave = async () => {
-    if (!validateForm()) return;
-
-    setLoading(true);
-
-    // Calculate total from payment methods
-    const totalAmount = formData.paymentMethods.reduce((sum, mode) =>
-      sum + (parseFloat(mode.amount) || 0), 0
-    );
-
-    // Prepare payment data for backend
-    const paymentData: PaymentData = {
-      customer_id: formData.party!.customer_id,
-      customer_name: formData.party!.customer_name || formData.party!.name || '',
-      payment_type: formData.paymentType,
-      payment_date: formData.paymentDate,
-      total_amount: totalAmount,
-      payment_modes: formData.paymentMethods
-        .filter(mode => mode.mode && mode.amount)
-        .map(mode => ({
-          mode: mode.mode,
-          amount: parseFloat(mode.amount)
-        })),
-      remarks: formData.remarks || null,
-      collector_name: formData.collectorName || null,
-      route: formData.route || null,
-      invoice_allocations: (formData.paymentType === 'order_payment' || formData.paymentType === 'regular_payment')
-        ? selectedInvoices.map(inv => ({
-          invoice_id: inv.id,
-          amount: inv.payingAmount
-        }))
-        : [],
-      outstanding_invoices: outstandingInvoices
-    };
-
-    try {
-      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const paymentNumber = await documentNumberGenerator.generatePaymentNumber();
-
-      // 1. Save to IDB first (offline-first)
-      const localRecord = {
-        temp_id: tempId,
-        _localId: tempId,
-        payment_number: paymentNumber,
-        ...paymentData,
-        invoice_id: paymentData.invoice_allocations?.[0]?.invoice_id || null,
-        sync_status: 'pending',
-        created_at: new Date().toISOString(),
-        created_offline: true
-      };
-
-      const db = await offlineDB.init();
-      await db.put('payments', localRecord);
-
-      // 2. Add to sync queue
-      await offlineDB.addToSyncQueue('payment', tempId, 'create', localRecord);
-
-      toast.success(`Payment of ₹${totalAmount.toLocaleString()} saved${navigator.onLine ? '' : ' (offline)'}${!navigator.onLine ? ' - will sync when online' : ''}`);
-
-      // 3. Background sync if online
-      if (navigator.onLine) {
-        syncEngine.startSync().catch(() => {});
-      }
-
-      onClose();
-    } catch (error: any) {
-      console.error('[PaymentEntry] Save failed:', error);
-      toast.error('Failed to save payment');
-    } finally {
-      setLoading(false);
-    }
+    toast.error('Saving a payment is disabled until a canonical API command is available.');
   };
 
   const renderContent = () => (
@@ -745,14 +626,6 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
             <h1 className="text-xl font-bold text-gray-900">Payment Entry</h1>
           </div>
           <div className="flex items-center space-x-3">
-            <button
-              onClick={checkLocalPayments}
-              className="text-sm text-amber-600 hover:text-amber-800 flex items-center space-x-1 px-3 py-1 hover:bg-amber-50 rounded-lg transition-colors"
-              title="Check locally stored payments"
-            >
-              <AlertCircle className="w-4 h-4" />
-              <span>Local</span>
-            </button>
             {formData.party && (
               <button
                 onClick={() => setShowPaymentHistory(true)}
@@ -772,6 +645,8 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
         </div>
       </div>
 
+      <CanonicalWriteNotice action="Saving a payment" className="border-x-0" />
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
         <div className="px-6 py-6">
@@ -783,7 +658,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
       {/* Footer */}
       <div className="bg-white border-t border-gray-200 p-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Total Amount Display */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
             <p className="text-xs text-blue-600 font-medium">Total Payment Amount</p>
@@ -792,18 +667,18 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
             </p>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="min-h-11 rounded-md border border-gray-300 px-6 py-2 text-gray-700 transition-colors hover:bg-gray-50"
             >
               Cancel
             </button>
 
             <button
               onClick={handleSave}
-              disabled={loading || !formData.party || !formData.paymentType || formData.paymentMethods.every(m => !m.mode || !m.amount)}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+              disabled
+              className="flex min-h-11 cursor-not-allowed items-center space-x-2 rounded-md bg-blue-600 px-6 py-2 text-white opacity-50"
             >
               {loading ? (
                 <>
@@ -813,7 +688,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  <span>Save Payment</span>
+                  <span>Save Payment (Unavailable)</span>
                 </>
               )}
             </button>

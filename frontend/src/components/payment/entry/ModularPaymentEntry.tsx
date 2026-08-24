@@ -6,8 +6,6 @@ import {
 import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
 import { customersApi, invoicesApi } from '../../../services/api';
 import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
-import { submitCustomerPayment } from '../../../services/api/modules/finance/payments.api';
-import { paymentsDataService } from '../../../services/offline/modules/payments/PaymentsDataService';
 import InvoiceSelector from '../shared/InvoiceSelector';
 import PaymentFlowOptimized from '../shared/PaymentFlowOptimized';
 import PaymentSummary from '../shared/PaymentSummary';
@@ -15,10 +13,7 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 
 
 // Import global components
-import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
-import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
+import { CanonicalWriteNotice, CustomerSearch, GSTCalculator, ProceedToReviewComponent, ModuleHeader, Card, CustomerCreation } from '../../global';
 
 
 interface PaymentEntryContentProps {
@@ -39,7 +34,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setCustomer,
     currentStep,
     saving,
-    setSaving,
     setCurrentStep,
     resetPayment,
     message,
@@ -62,16 +56,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // Manual invoice selection state
   const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
   const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
-  const { isOnline } = useNetworkStatus();
-
-  // Generate receipt number on component mount (local-only, instant)
-  React.useEffect(() => {
-    if (!payment.receipt_no || payment.receipt_no === 'RCT-TEMP') {
-      documentNumberGenerator.generateReceiptNumber().then(receiptNo => {
-        setPaymentField('receipt_no', receiptNo);
-      });
-    }
-  }, []);
 
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
@@ -130,7 +114,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       // Ctrl+S to save
       if (e.ctrlKey && e.key === 's' && currentStep === 2) {
         e.preventDefault();
-        savePayment();
+        setMessage('Saving a payment is disabled until a canonical API command is available.', 'error');
       }
       // Ctrl+G for GST Calculator
       if (e.ctrlKey && e.key === 'g') {
@@ -175,128 +159,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   };
 
-  const savePayment = async (): Promise<void> => {
-    setSaving(true);
-    try {
-      // Map payment mode to backend expected format
-      const paymentModeMap: { [key: string]: string } = {
-        'CASH': 'cash',
-        'UPI': 'upi',
-        'BANK': 'bank_transfer',
-        'BANK_TRANSFER': 'bank_transfer',
-        'CHEQUE': 'cheque',
-        'CARD': 'bank_transfer',
-        'CREDIT': 'credit_adjustment',
-        'SPLIT': 'cash' // Use cash for split payments
-      };
-
-      // Prepare payment data matching backend GeneralPaymentCreate schema
-      const paymentData = {
-        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
-        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
-        payment_type: 'invoice_payment', // matches backend pattern
-        amount: parseFloat(payment.amount || '0'),
-        payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
-        reference_number: payment.reference_number || null,
-        notes: payment.remarks || '',
-        // Store allocations separately - will handle after payment creation
-        _allocations: payment.allocations ? payment.allocations.map((alloc: any) => ({
-          invoice_id: alloc.invoice_id,
-          allocated_amount: parseFloat(alloc.allocated_amount || 0)
-        })) : []
-      };
-
-      // Basic validation
-      if (!paymentData.amount || paymentData.amount <= 0 || isNaN(paymentData.amount)) {
-        setMessage('Payment amount is required and must be a valid number', 'error');
-        setSaving(false);
-        return;
-      }
-
-      // Make the actual API call to create payment
-      // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
-      const customerPaymentData = {
-        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
-        customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
-        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
-        amount: parseFloat(payment.amount || '0'),
-        payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
-        reference_number: payment.reference_number || `PMT-${Date.now()}`,
-        notes: payment.remarks || 'Direct payment received',
-        allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
-      };
-      const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
-
-      try {
-        const paymentResult = await submitCustomerPayment(customerId, customerPaymentData);
-
-        if (paymentResult.raw) {
-          const paymentNumber = paymentResult.paymentReference || payment.reference_number;
-
-          setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
-
-          // Allocations are handled by backend through invoice_ids
-          // The backend will create payment_allocations records
-          // Triggers will update customer_outstanding automatically
-          if (payment.allocations && payment.allocations.length > 0) {
-          }
-
-          showFinancialEntryNotification({
-            title: 'Payment Receipt Posted',
-            reference: paymentNumber || payment.receipt_no,
-            amount: paymentData.amount,
-            status: 'confirmed',
-            impacts: [
-              'This money is now marked as received.',
-              'The customer now owes less by this amount.',
-              'If you linked invoices, this payment is used against those bills.'
-            ]
-          });
-          setMessage('Payment saved successfully!', 'success');
-          setCurrentStep(3);
-        } else {
-          throw new Error('Failed to save payment');
-        }
-      } catch (apiError: any) {
-        if (!isOnline || apiError.code === 'ERR_NETWORK') {
-          const offlineId = await paymentsDataService.saveReceipt({
-            receipt_number: payment.receipt_no || `RCPT-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
-            receipt_date: customerPaymentData.payment_date,
-            customer_id: String(customerId),
-            customer_name: selectedCustomer?.customer_name || selectedCustomer?.name || '',
-            amount: customerPaymentData.amount,
-            payment_method: customerPaymentData.payment_mode as any,
-            notes: customerPaymentData.notes,
-            allocated_invoices: (payment.allocations || []).map((allocation: any) => ({
-              invoice_id: String(allocation.invoice_id),
-              invoice_number: String(allocation.invoice_number || allocation.invoice_id),
-              allocated_amount: Number(allocation.amount || allocation.allocated_amount || 0)
-            }))
-          });
-
-          setPaymentField('receipt_no', payment.receipt_no || offlineId);
-          showFinancialEntryNotification({
-            title: 'Payment Receipt Queued',
-            reference: payment.receipt_no || offlineId,
-            amount: paymentData.amount,
-            status: 'queued',
-            impacts: [
-              'The payment is saved on this device for now.',
-              'It will be sent to the main system when the connection works again.',
-              'The customer balance will change in the main system after that sync.'
-            ]
-          });
-          setMessage('Payment saved offline and queued for sync.', 'info');
-          setCurrentStep(3);
-        } else {
-          throw apiError;
-        }
-      }
-    } catch (error: any) {
-      setMessage(error.response?.data?.message || 'Failed to save payment. Please try again.', 'error');
-    } finally {
-      setSaving(false);
-    }
+  const savePayment = (): void => {
+    setMessage('Saving a payment is disabled until a canonical API command is available.', 'error');
   };
 
   const generateReceipt = (): void => {
@@ -555,7 +419,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 </button>
                 <button
                   onClick={handleNewPayment}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  className="min-h-11 rounded-md bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
                 >
                   New Payment
                 </button>
@@ -574,21 +438,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   }
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Payment Entry"
-          documentNumber={payment.receipt_no || 'RCT-' + Date.now().toString().slice(-6)}
+          documentNumber={payment.receipt_no || 'Assigned after posting'}
           status={currentStep === 1 ? 'draft' : 'review'}
           icon={CreditCard}
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="payment"
-          showSaveDraft={currentStep === 1}
-          onSaveDraft={() => {
-            // TODO: Implement save draft
-          }}
+          showSaveDraft={false}
           additionalActions={[
             {
               label: "GST Calculator",
@@ -600,12 +461,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
+        <div className="border-b border-gray-200 bg-white px-4 py-2 text-xs text-gray-600">
+          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-blue-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
 
             {/* Loading State */}
@@ -884,6 +745,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             ) : (
               // Step 2: Payment Summary
               <div className="mb-8">
+                <CanonicalWriteNotice action="Saving a payment" className="mb-4" />
                 <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
                   <CheckCircle className="w-4 h-4 mr-2" />
                   PAYMENT SUMMARY
@@ -914,6 +776,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           totalAmount={parseFloat(payment.amount) || 0}
           proceedText={currentStep === 2 ? 'Save Payment' : 'Continue'}
           saving={saving}
+          disabled={currentStep === 2}
         />
       </div>
 

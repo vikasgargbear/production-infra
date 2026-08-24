@@ -13,9 +13,7 @@ import { returnsApi, purchasesApi, metadataApi } from '../../services/api';
 import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
-import offlineStorage from '../../services/offlineStorage';
 import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
-import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
 
 interface TransportDetails {
@@ -59,14 +57,11 @@ interface PurchaseReturnData {
 const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const historyButtonRef = useRef(null);
   const toast = useToast();
 
   // Refs for keyboard navigation
   const supplierSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
-  const firstInputRef = useRef(null);
   const calculationRequestRef = useRef(0);
 
   // Return data state - matching sales return structure
@@ -104,51 +99,31 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
   const [manualItemCounter, setManualItemCounter] = useState(1);
   const [returnableInvoices, setReturnableInvoices] = useState<any[]>([]);
-  const [availableBatches, setAvailableBatches] = useState({});
 
-  // Network status for offline-first
-  const { isOnline } = useNetworkStatus();
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
 
   // Load return reasons from system settings
   useEffect(() => {
     const loadReturnReasons = async () => {
-      // First set default reasons immediately
-      const defaultReasons = [
-        { value: 'NOT_ORDERED', label: 'Product Not Ordered (Restocks)' },
-        { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
-        { value: 'WRONG_PRODUCT', label: 'Wrong Product Received (Restocks)' },
-        { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
-        { value: 'EXCESS_ORDER', label: 'Excess Order (Restocks)' },
-        { value: 'NEAR_EXPIRY', label: 'Near Expiry (Restocks)' },
-        { value: 'RATE_DISPUTE', label: 'Rate Dispute (Restocks)' },
-        { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue (Restocks)' },
-        { value: 'DAMAGED', label: 'Damaged/Defective Product (No Restock)' },
-        { value: 'OTHER', label: 'Other (Restocks)' }
-      ];
-      setReturnReasons(defaultReasons);
-
-      // Then try to load from backend in background
       try {
-        const cached = await offlineStorage.getOffline('purchase_return_reasons', { persistent: true });
-        if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
-          setReturnReasons(cached.data);
-        }
-
         const response = await metadataApi.getReturnReasons();
         const fetchedReasons = response.data?.purchase_return_reasons || [];
 
         if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
           setReturnReasons(fetchedReasons);
-          await offlineStorage.storeOffline('purchase_return_reasons', fetchedReasons, { persistent: true });
+        } else {
+          setReturnReasons([]);
+          toast.error('The canonical API returned no purchase return reasons.');
         }
       } catch (error) {
+        setReturnReasons([]);
+        toast.error('Unable to load purchase return reasons from the canonical API.');
       }
     };
 
     loadReturnReasons();
-  }, []);
+  }, [toast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -171,8 +146,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             e.preventDefault();
             if (currentStep === 1) {
               handleProceedToReview();
-            } else if (currentStep === 2) {
-              handleSaveReturn();
             }
             break;
           case 'p':
@@ -359,7 +332,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     const calculate = async () => {
       try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase', isOnline);
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase', true);
         if (requestId !== calculationRequestRef.current) return;
         const totals = calculation.totals;
         setReturnData(prev => {
@@ -394,7 +367,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       }
     };
     void calculate();
-  }, [returnData.items, returnData.include_gst, returnData.supplier_id, isOnline, toast]);
+  }, [returnData.items, returnData.include_gst, returnData.supplier_id, toast]);
 
   // Remove manual item
   const removeManualItem = (itemId) => {
@@ -437,24 +410,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   };
 
   // Offline-first save hook
-  const { saving: offlineSaving, handleSaveReturn } = usePurchaseReturnSave({
-    returnData,
-    selectedInvoice,
-    isOnline,
-    validateReturn,
-    onClose,
-    toast
-  });
-
-  // Handle print
-  const handlePrint = () => {
-    window.print();
-  };
+  const { saving, handleSaveReturn, unavailableReason } = usePurchaseReturnSave();
 
   // Step 1: Create Return - Sales Return Style
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-blue-50">
+      <div className="h-full bg-gray-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Purchase Return"
@@ -469,10 +430,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           <KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} />
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto bg-blue-50 p-6">
+          <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6">
             <div className="max-w-6xl mx-auto space-y-6">
               {/* Top Section - Date, Reason, Method - 3-column grid with consistent h-10 heights */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <StandardDatePicker
                   label="Return Date"
                   value={returnData.return_date}
@@ -532,12 +493,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               {selectedSupplier && !showInvoiceSection && showManualEntry && (
                 <div className="mb-4">
                   <button
+                    type="button"
                     onClick={() => {
                       setShowInvoiceSection(true);
                       setShowManualEntry(false);
                       setReturnData(prev => ({ ...prev, items: [] }));
                     }}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    className="min-h-11 rounded-md px-3 text-sm font-medium text-blue-700 hover:bg-blue-50"
                   >
                     ← Back to Invoice Selection
                   </button>
@@ -553,8 +515,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       SELECT SUPPLIER INVOICE
                     </h3>
                     <button
+                      type="button"
                       onClick={handleSkipInvoiceSelection}
-                      className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="min-h-11 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
                       Skip Invoice Selection
                     </button>
@@ -575,6 +538,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={() => {
                           setSelectedInvoice(null);
                           setReturnData(prev => ({
@@ -583,7 +547,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                             items: []
                           }));
                         }}
-                        className="text-red-600 hover:text-red-700"
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-red-700 hover:bg-red-50"
+                        aria-label="Remove selected invoice"
+                        title="Remove selected invoice"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -611,8 +577,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     </h3>
                     {showManualEntry && (
                       <button
+                        type="button"
                         onClick={handleAddManualItem}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        className="flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                       >
                         <Plus className="w-4 h-4" />
                         Add Item
@@ -671,15 +638,17 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               </div>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="min-h-11 rounded-md border border-gray-300 px-6 py-2 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleProceedToReview}
                   disabled={!returnData.items.some(item => item.selected && item.return_quantity > 0)}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="min-h-11 rounded-md bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                 >
                   Proceed to Review
                 </button>
@@ -698,7 +667,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         <ModuleHeader
           title="Review Purchase Return"
           documentNumber={returnData.return_no}
-          status="pending"
+          status="review"
           icon={CheckCircle}
           iconColor="text-green-600"
           onClose={onClose}
@@ -732,10 +701,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-medium text-yellow-900 mb-1">Important</p>
+                  <p className="font-medium text-yellow-900 mb-1">Canonical submission unavailable</p>
                   <p className="text-yellow-700">
-                    Once confirmed, a debit note will be generated and the supplier will be notified.
-                    The return amount of <span className="font-bold">₹{returnData.total_amount.toFixed(2)}</span> will be adjusted against future purchases.
+                    {unavailableReason}
                   </p>
                 </div>
               </div>
@@ -746,15 +714,15 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         {/* Footer - Using Global Component */}
         <ProceedToReviewComponent
           currentStep={2}
-          canProceed={true}
+          canProceed={false}
           onBack={() => setCurrentStep(1)}
           onProceed={handleSaveReturn}
           onReset={undefined}
           totalItems={returnData.items.filter(item => item.selected).length}
           totalAmount={returnData.total_amount}
-          proceedText="Generate Debit Note"
+          proceedText="Canonical submission unavailable"
           backText="Back"
-          saving={offlineSaving || saving}
+          saving={saving}
         />
       </div>
     </div>

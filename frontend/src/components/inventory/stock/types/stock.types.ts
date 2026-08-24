@@ -10,7 +10,7 @@ import React from 'react';
 // ============================================================================
 
 export interface StockItem {
-    product_id: number;
+    product_id: string | number;
     product_name: string;
     product_code?: string;
     generic_name?: string;
@@ -93,10 +93,8 @@ export interface StockTableProps {
     loading: boolean;
     sortConfig: SortConfig;
     onSort: (key: string) => void;
-    onViewDetails: (item: StockItem) => void;
-    onEdit: (item: StockItem) => void;
-    selectedIds: Set<number>;
-    onSelectionChange: (ids: Set<number>) => void;
+    selectedIds: Set<string | number>;
+    onSelectionChange: (ids: Set<string | number>) => void;
 }
 
 export interface StockActionsProps {

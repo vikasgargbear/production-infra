@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2, Settings } from 'lucide-react';
-import { ModuleHeader } from '../../global';
+import { CanonicalWriteNotice, ModuleHeader } from '../../global';
 import { paymentsApi, bankAccountsApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
-import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface BankReconciliationFlowProps {
@@ -34,7 +32,6 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
   const [reconciliationDate, setReconciliationDate] = useState(new Date().toISOString().split('T')[0]);
   const [bankStatementBalance, setBankStatementBalance] = useState(0);
   const [bookBalance, setBookBalance] = useState(0);
-  const [reconciling, setReconciling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +39,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [unreconciledTransactions, setUnreconciledTransactions] = useState<UnreconciledTransaction[]>([]);
 
-  // Load bank accounts and reconciliation data with offline fallback
+  // Load only from the live API. Stale local snapshots are intentionally unsupported.
   const loadReconciliationData = async () => {
     setLoading(true);
     setError(null);
@@ -67,33 +64,10 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
         setUnreconciledTransactions([]);
       }
 
-      // Store data offline for future use
-      await offlineStorage.storeOffline('bank_reconciliation_data', {
-        accounts: accountsData,
-        transactions: transactionsResponse?.data || [],
-        date: reconciliationDate
-      }, {
-        critical: true,
-        persistent: true
-      });
-
     } catch (err) {
-
-      // Try to load from offline storage instead of using mock data
-      const offlineData = await offlineStorage.getOffline('bank_reconciliation_data', { critical: true });
-
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for reconciliation data
-        setBankAccounts(offlineData.data.accounts || []);
-        setUnreconciledTransactions(offlineData.data.transactions || []);
-
-        // Show offline indicator
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        // No offline data available - show proper error instead of mock data
-        setError('Unable to load bank reconciliation data. Please check your connection and try again.');
-        setBankAccounts([]);
-        setUnreconciledTransactions([]);
-      }
+      setError('Unable to load bank reconciliation data from the live API. Please try again.');
+      setBankAccounts([]);
+      setUnreconciledTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -118,66 +92,6 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
     loadReconciliationData();
   }, [reconciliationDate]);
 
-  // Clear old offline data periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      offlineStorage.clearOldData(24); // Clear data older than 24 hours
-    }, 60 * 60 * 1000); // Check every hour
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const startReconciliation = async () => {
-    if (!selectedBank) {
-      setError('Please select a bank account');
-      return;
-    }
-
-    setReconciling(true);
-    setError(null);
-
-    try {
-      // Call the actual reconciliation API
-      const response = await paymentsApi.startBankReconciliation({
-        bank_account: selectedBank,
-        statement_date: reconciliationDate,
-        opening_balance: bookBalance,
-        closing_balance: bankStatementBalance,
-        transactions: unreconciledTransactions.map((transaction) => ({
-          date: transaction.date,
-          description: transaction.description,
-          amount: transaction.amount
-        }))
-      });
-
-      if (response?.data?.reconciliation_id || response?.data?.status === 'completed') {
-        const bankAccount = bankAccounts.find((account) => account.code === selectedBank);
-        showFinancialEntryNotification({
-          title: 'Bank Reconciliation Saved',
-          reference: selectedBank,
-          amount: bankStatementBalance,
-          status: 'confirmed',
-          impacts: [
-            `${bankAccount?.name || 'This bank account'} is now checked against your books.`,
-            difference === 0
-              ? 'Your bank balance and system balance now match.'
-              : `There is still a difference of ₹${Math.abs(difference).toFixed(2)} to review.`,
-            'This helps you trust that bank money and system money are in sync.'
-          ]
-        });
-        // Refresh data after successful reconciliation
-        await loadReconciliationData();
-        setError(null);
-      } else {
-        setError('Reconciliation failed. Please try again.');
-      }
-    } catch (error) {
-      setError('Error during reconciliation. Please check your connection and try again.');
-    } finally {
-      setReconciling(false);
-    }
-  };
-
   // Update book balance when bank account changes
   const handleBankAccountChange = (accountCode: string) => {
     setSelectedBank(accountCode);
@@ -199,7 +113,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
   }
 
   return (
-    <div className="h-full bg-green-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         {/* Header */}
         <ModuleHeader
@@ -220,10 +134,10 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
               icon: RefreshCw
             },
             {
-              label: reconciling ? 'Reconciling...' : 'Start Reconciliation',
-              onClick: startReconciliation,
+              label: 'Start Reconciliation (Unavailable)',
+              onClick: () => undefined,
               variant: 'primary',
-              disabled: !selectedBank || reconciling
+              disabled: true
             }
           ] as any}
         />
@@ -247,12 +161,10 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
         )}
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
-          Keyboard shortcuts: <strong>Ctrl+S</strong> - Start Reconciliation | <strong>Esc</strong> - Close
-        </div>
+        <CanonicalWriteNotice action="Starting bank reconciliation" className="border-x-0" />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-green-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
 
             {/* Reconciliation Setup */}
@@ -341,9 +253,14 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                   <AlertCircle className="w-5 h-5 mr-2 text-orange-600" />
                   Unreconciled Transactions
                 </h3>
-                <button className="px-4 py-2 text-teal-600 hover:text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled
+                  title="Statement import needs a canonical reconciliation command"
+                  className="flex min-h-11 cursor-not-allowed items-center gap-2 rounded-md border border-gray-200 px-4 py-2 text-gray-400"
+                >
                   <Upload className="w-4 h-4" />
-                  Import Statement
+                  Import unavailable
                 </button>
               </div>
 
@@ -380,8 +297,13 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button className="px-3 py-1 text-xs text-teal-600 hover:text-teal-700 border border-teal-200 rounded hover:bg-teal-50">
-                              Match
+                            <button
+                              type="button"
+                              disabled
+                              title="Matching needs a canonical reconciliation command"
+                              className="min-h-11 cursor-not-allowed rounded-md border border-gray-200 px-3 py-2 text-xs text-gray-400"
+                            >
+                              Match unavailable
                             </button>
                           </td>
                         </tr>

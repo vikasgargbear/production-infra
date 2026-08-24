@@ -226,7 +226,7 @@ async def get_all_products_with_batches(
     context: OrgContext = Depends(get_org_context)
 ):
     """
-    Bulk fetch ALL products with embedded batches for offline sync.
+    Bulk fetch products with embedded batches.
     
     Features:
     - Paginated (100 products per page by default)

@@ -26,7 +26,7 @@ interface CreditNotePreviewProps {
 }
 
 const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, customer, invoice = null, includeGst = true, customerDues = 0, returnMethod = 'credit_note' }) => {
-  const { companyDetails } = useCompanyDetails();
+  const { companyDetails, loading: companyLoading, error: companyError } = useCompanyDetails();
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
       day: '2-digit',
@@ -34,6 +34,18 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
       year: 'numeric'
     });
   };
+
+  if (companyLoading) {
+    return <div className="border border-gray-200 bg-white p-6 text-sm text-gray-600">Loading company details…</div>;
+  }
+
+  if (companyError || !companyDetails) {
+    return (
+      <div role="alert" className="border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        Company details are unavailable. Refresh the page before generating this credit note.
+      </div>
+    );
+  }
 
   // Get only selected items with return quantity
   const returnItems = returnData.items.filter(item =>

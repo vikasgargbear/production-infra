@@ -4,8 +4,6 @@ import { productsApi } from '../../../services/api';
 import BatchSelector from '../selector/BatchSelector';
 import { debounce } from '../../../utils/debounce';
 
-import localSearchService from '../../../services/offline/search/localSearchService';
-import { mapProductToCanonical } from '../../../utils/productMapper';
 import { Product } from '../../../types/models/product';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -46,7 +44,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
         const searchInputRef = useRef<HTMLInputElement>(null);
         const dropdownRef = useRef<HTMLDivElement>(null);
-        const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+        const resultRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
         // Expose focus method to parent
         useImperativeHandle(ref, () => ({
@@ -57,9 +55,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
             }
         }));
 
-        // localSearchService auto-initializes on first use, no explicit init needed
-
-        // Instant search using local-first service
+        // Search the canonical API; no device cache or fallback authority.
         const searchProducts = useCallback(
             debounce(async (query: string): Promise<void> => {
                 if (!query || query.length < 2) {
@@ -71,10 +67,41 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                 setLoading(true);
 
                 try {
-                    const results = await localSearchService.searchProducts(query, { limit: 20 });
-
-                    // Map results to canonical format to ensure consistency
-                    const transformedResults: Product[] = results.map(mapProductToCanonical);
+                    const response = await productsApi.search(query, { limit: 20 });
+                    const rows = response?.data;
+                    if (!Array.isArray(rows)) {
+                        throw new Error('Product search returned an invalid canonical response');
+                    }
+                    const transformedResults: Product[] = rows.map((row: any, index: number) => {
+                        if (typeof row?.product_id !== 'string' || typeof row?.product_name !== 'string') {
+                            throw new Error(`Product search row ${index + 1} is missing identity`);
+                        }
+                        const gstPercent = typeof row.gst_percent === 'number'
+                            ? row.gst_percent
+                            : Number(row.gst_percent);
+                        if (!Number.isFinite(gstPercent)) {
+                            throw new Error(`Product search row ${index + 1} has no effective GST classification`);
+                        }
+                        return {
+                            product_id: row.product_id,
+                            product_code: typeof row.product_code === 'string' ? row.product_code : '',
+                            product_name: row.product_name,
+                            product_type: typeof row.product_type === 'string' ? row.product_type : 'medicine',
+                            generic_name: typeof row.generic_name === 'string' ? row.generic_name : undefined,
+                            manufacturer: typeof row.manufacturer === 'string' ? row.manufacturer : undefined,
+                            hsn_code: typeof row.hsn_code === 'string' ? row.hsn_code : undefined,
+                            category: typeof row.category === 'string' ? row.category : undefined,
+                            uom_conversion_id: typeof row.uom_conversion_id === 'string' ? row.uom_conversion_id : undefined,
+                            gst_percent: gstPercent,
+                            requires_prescription: row.requires_prescription === true,
+                            total_quantity_available: typeof row.current_stock === 'number'
+                                ? row.current_stock
+                                : Number(row.current_stock || 0),
+                            total_stock: typeof row.current_stock === 'number'
+                                ? row.current_stock
+                                : Number(row.current_stock || 0),
+                        } as Product;
+                    });
 
                     setSearchResults(transformedResults);
 
@@ -207,11 +234,14 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                 ) : searchResults.length > 0 ? (
                                     <>
                                         {searchResults.map((product, index) => (
-                                            <div
+                                            <button
+                                                type="button"
                                                 key={`product-${product.product_id}-${index}`}
                                                 ref={(el) => (resultRefs.current[index] = el)}
                                                 onClick={() => handleProductSelect(product)}
-                                                className={`px-4 py-3 cursor-pointer border-b border-gray-100 ${index === highlightedIndex
+                                                role="option"
+                                                aria-selected={index === highlightedIndex}
+                                                className={`block w-full min-h-11 px-4 py-3 text-left cursor-pointer border-b border-gray-100 ${index === highlightedIndex
                                                     ? 'bg-blue-50 border-l-4 border-l-blue-500'
                                                     : 'hover:bg-gray-50'
                                                     }`}
@@ -231,7 +261,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                                         <div className="text-xs text-gray-500">GST {product.gst_percent || 0}%</div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </button>
                                         ))}
                                         {/* Create Product option */}
                                         {onCreateProduct && searchQuery.length >= 2 && (

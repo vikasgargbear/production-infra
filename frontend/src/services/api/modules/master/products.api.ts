@@ -75,7 +75,7 @@ export const productsApi = {
     });
   },
 
-  // Bulk fetch ALL products with batches for offline sync
+  // Bulk product/batch read for canonical reporting consumers
   getAllWithBatches: (params: ProductSyncParams = {}) => {
     return apiHelpers.get('/products/all-with-batches', {
       params: {

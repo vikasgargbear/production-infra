@@ -6,8 +6,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { paymentsApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 // Types
 export interface PaymentModeData {
@@ -81,35 +79,6 @@ export interface UsePaymentAnalyticsReturn {
     calculateGrowth: (current: number, previous: number) => string;
 }
 
-const defaultAnalytics: PaymentAnalytics = {
-    totalCollected: 0,
-    paymentCount: 0,
-    averagePaymentAmount: 0,
-    previousPeriod: { totalCollected: 0, paymentCount: 0 },
-    collectionRate: 0,
-    avgCollectionDays: 0,
-    paymentModes: {},
-    reconciliationMetrics: {
-        autoReconciled: 0,
-        manualReview: 0,
-        pending: 0,
-        duplicates: 0,
-        failed: 0
-    },
-    topCustomers: [],
-    overdueAnalysis: {
-        totalOverdue: 0,
-        overdueCount: 0,
-        agingBuckets: {
-            '0-30': { count: 0, amount: 0 },
-            '31-60': { count: 0, amount: 0 },
-            '61-90': { count: 0, amount: 0 },
-            '90+': { count: 0, amount: 0 }
-        }
-    },
-    dailyTrends: []
-};
-
 export function usePaymentAnalytics(): UsePaymentAnalyticsReturn {
     const [dateRange, setDateRange] = useState<DateRangeType>('month');
     const [analytics, setAnalytics] = useState<PaymentAnalytics | null>(null);
@@ -122,49 +91,9 @@ export function usePaymentAnalytics(): UsePaymentAnalyticsReturn {
         setLoading(true);
         setError(null);
 
-        const endDate = new Date();
-        const startDate = new Date();
-
-        switch (dateRange) {
-            case 'today':
-                startDate.setHours(0, 0, 0, 0);
-                break;
-            case 'week':
-                startDate.setDate(startDate.getDate() - 7);
-                break;
-            case 'month':
-                startDate.setMonth(startDate.getMonth() - 1);
-                break;
-            case 'quarter':
-                startDate.setMonth(startDate.getMonth() - 3);
-                break;
-            case 'year':
-                startDate.setFullYear(startDate.getFullYear() - 1);
-                break;
-        }
-
-        try {
-            // Try to get from API (currently defaults as API not ready)
-            const analyticsData = { ...defaultAnalytics };
-            setAnalytics(analyticsData);
-
-            await offlineStorage.storeOffline(`payment_analytics_${dateRange}`, analyticsData, {
-                persistent: true
-            });
-        } catch {
-            // Try offline storage
-            const offlineData = await offlineStorage.getOffline(`payment_analytics_${dateRange}`, { persistent: true });
-
-            if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) {
-                setAnalytics(offlineData.data);
-                setError('Currently using offline data. Some information may be outdated.');
-            } else {
-                setError('Unable to load payment analytics. Please check your connection.');
-                setAnalytics(defaultAnalytics);
-            }
-        } finally {
-            setLoading(false);
-        }
+        setAnalytics(null);
+        setError('Payment analytics are unavailable until the canonical analytics query is implemented.');
+        setLoading(false);
     }, [dateRange]);
 
     const handleRefresh = useCallback(async () => {
@@ -202,15 +131,6 @@ export function usePaymentAnalytics(): UsePaymentAnalyticsReturn {
     useEffect(() => {
         loadAnalytics();
     }, [loadAnalytics]);
-
-    // Clear old offline data periodically
-    useEffect(() => {
-        const interval = setInterval(() => {
-            offlineStorage.clearOldData(24);
-        }, 60 * 60 * 1000);
-
-        return () => clearInterval(interval);
-    }, []);
 
     return {
         analytics,

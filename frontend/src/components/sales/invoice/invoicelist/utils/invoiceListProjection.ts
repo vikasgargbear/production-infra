@@ -25,6 +25,8 @@ export function projectInvoiceListRow(row: any): Invoice {
         invoice_number: String(row.invoice_number || row.document_number || ''),
         customer_id: String(row.customer_id || ''),
         customer_name: String(row.customer_name || ''),
+        customer_phone: typeof row.customer_phone === 'string' ? row.customer_phone : undefined,
+        customer_email: typeof row.customer_email === 'string' ? row.customer_email : undefined,
         invoice_date: String(row.invoice_date || row.document_date || ''),
         due_date: String(row.due_date || ''),
         total_amount: total,

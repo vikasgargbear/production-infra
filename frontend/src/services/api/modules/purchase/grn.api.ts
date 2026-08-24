@@ -72,21 +72,8 @@ export const grnApi = {
         return apiHelpers.get(ENDPOINTS.BY_SUPPLIER(supplierId), { params });
     },
 
-    create: async (data: GRNData): Promise<AxiosResponse> => {
-        const response = await apiHelpers.post(ENDPOINTS.BASE, data);
-
-        // Trigger delta sync after successful GRN creation
-        // New stock received - update IndexedDB
-        if (response?.data?.success || response?.data?.grn_id) {
-            try {
-                const { default: deltaSyncService } = await import('../../../offline/sync/deltaSyncService');
-                deltaSyncService.afterGRNApproved();
-            } catch (e) {
-                console.warn('[GRN-API] Delta sync trigger failed:', e);
-            }
-        }
-
-        return response;
+    create: (data: GRNData): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.BASE, data);
     },
 
     update: (grnId: number, data: Partial<GRNData>): Promise<AxiosResponse> => {

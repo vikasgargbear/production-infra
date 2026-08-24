@@ -61,14 +61,6 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState('');
   const [editedData, setEditedData] = useState<ExtractedData | null>(null);
-  const [forceRender, setForceRender] = useState(0);
-
-  // Debug state changes
-  useEffect(() => {
-  }, [extractedData]);
-
-  useEffect(() => {
-  }, [editedData]);
 
   // Reset state only when modal is opened fresh (not when closing)
   useEffect(() => {
@@ -196,7 +188,9 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
           </h3>
           <button
             onClick={handleClose}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100"
+            aria-label="Close PDF upload"
+            title="Close PDF upload"
           >
             <X size={24} />
           </button>
@@ -208,34 +202,6 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
             {error}
           </div>
         )}
-
-        {/* Debug: Show current state */}
-        <div className="mb-2 p-2 bg-yellow-50 text-xs border border-yellow-300">
-          <div>Debug: extractedData is {extractedData ? 'SET' : 'NULL'}, items: {extractedData?.items?.length || 0}</div>
-          <div>Force render count: {forceRender}</div>
-          <button
-            onClick={() => {
-              setForceRender(prev => prev + 1);
-            }}
-            className="mt-1 px-2 py-1 bg-blue-500 text-white text-xs rounded mr-2"
-          >
-            Force Re-render
-          </button>
-          <button
-            onClick={() => {
-              const testData: ExtractedData = {
-                supplier_name: 'TEST SUPPLIER',
-                invoice_number: 'TEST-001',
-                items: [{ product_name: 'Test Product', quantity: 1, unit_price: 100 }]
-              };
-              setExtractedData(testData);
-              setEditedData(testData);
-            }}
-            className="mt-1 px-2 py-1 bg-green-500 text-white text-xs rounded"
-          >
-            Set Test Data
-          </button>
-        </div>
 
         {!extractedData ? (
           <div className="space-y-4">
@@ -623,23 +589,23 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
             </div>
 
             {/* Note about auto-generation */}
-            <div className="bg-blue-50 p-3 rounded-lg text-sm">
-              <p className="text-blue-700">💡 <strong>Tip:</strong> Leave batch number empty for automatic generation (AUTO-YYYYMMDD-PRODUCTID-XXXX)</p>
-              <p className="text-blue-700">💡 Empty expiry dates will default to 2 years from today</p>
+            <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
+              <p className="text-gray-700">💡 <strong>Tip:</strong> Leave batch number empty for automatic generation (AUTO-YYYYMMDD-PRODUCTID-XXXX)</p>
+              <p className="text-gray-700">💡 Empty expiry dates will default to 2 years from today</p>
             </div>
 
             {/* Actions */}
             <div className="flex gap-3 pt-4">
               <button
                 onClick={handleConfirm}
-                className="flex-1 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 text-white hover:bg-blue-700"
               >
                 <CheckCircle className="w-5 h-5" />
                 Create Purchase Order
               </button>
               <button
                 onClick={handleClose}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="min-h-11 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>

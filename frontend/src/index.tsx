@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './styles/numberInputFix.css';
 import App from './App';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -17,25 +16,10 @@ root.render(
     </React.StrictMode>
 );
 
-// Service worker registration - DISABLED in development to prevent stale caching issues
-// In production, we enable for offline support
-if (process.env.NODE_ENV === 'production') {
-    serviceWorkerRegistration.register({
-        onSuccess: (registration: ServiceWorkerRegistration) => {
-            console.log('[ServiceWorker] ✅ Registered successfully - Offline mode enabled');
-        },
-        onUpdate: (registration: ServiceWorkerRegistration) => {
-            console.log('[ServiceWorker] 🔄 New version available - Reload to update');
-            if (window.confirm('New version available! Reload to update?')) {
-                window.location.reload();
-            }
-        },
-        onOffline: () => {
-            console.log('[ServiceWorker] 📴 You are offline - App will continue to work');
-        }
-    });
-} else {
-    // In development, unregister any existing service worker to ensure fresh code loads
-    serviceWorkerRegistration.unregister();
-    console.log('[Dev] 🔧 Service worker disabled - Fresh code loads on every refresh');
+// The ERP is cloud-authoritative. Remove service workers left by earlier
+// offline builds so API/UI deploys cannot be shadowed by stale cached bundles.
+if ('serviceWorker' in navigator) {
+    void navigator.serviceWorker.getRegistrations().then(registrations => (
+        Promise.all(registrations.map(registration => registration.unregister()))
+    ));
 }

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { bankAccountsApi, companyApi } from '../../../services/api';
 import { useCompany } from '../../../contexts/CompanyContext';
+import { CanonicalWriteNotice } from '../../global';
 
 interface BankAccount {
     id: number | string;
@@ -246,13 +247,16 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                 </h2>
                 <button
                     onClick={handleAddAccount}
-                    disabled={isLoading}
+                    disabled
+                    title="Unavailable until a canonical bank-account command exists"
                     className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Plus className="w-4 h-4" />
                     <span>Add Account</span>
                 </button>
             </div>
+
+            <CanonicalWriteNotice action="Changing bank accounts, UPI IDs, or payment QR codes" className="mb-4" />
 
             {/* Error Message */}
             {error && (
@@ -328,6 +332,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                 <div className="flex items-center space-x-1 ml-4">
                                     <button
                                         onClick={() => handleEditAccount(account)}
+                                        disabled
                                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                                         title="Edit account"
                                     >
@@ -336,6 +341,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                     {!account.is_default_account && (
                                         <button
                                             onClick={() => handleSetDefault(account.id)}
+                                            disabled
                                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                                             title="Set as default"
                                         >
@@ -344,6 +350,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                     )}
                                     <button
                                         onClick={() => handleDeleteAccount(account.id)}
+                                        disabled
                                         className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                                         title="Delete account"
                                     >
@@ -475,6 +482,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                     </button>
                                     <button
                                         onClick={handleSaveNewAccount}
+                                        disabled
                                         className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm"
                                     >
                                         <Check className="w-4 h-4" />
@@ -520,7 +528,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                     )}
                     <div className="flex-1 space-y-3">
                         <div>
-                            <input type="file" id="bank-qr-upload" accept="image/*" onChange={handleQRUpload} className="hidden" />
+                            <input type="file" id="bank-qr-upload" accept="image/*" onChange={handleQRUpload} disabled className="hidden" />
                             <label htmlFor="bank-qr-upload" className="cursor-pointer inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                                 <Upload className="w-4 h-4 mr-1.5" />
                                 {qrPreview ? 'Change QR' : 'Upload QR Code'}
@@ -539,6 +547,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                 />
                                 <button
                                     onClick={handleSaveUpiId}
+                                    disabled
                                     className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                                 >
                                     Save

@@ -39,6 +39,7 @@ import { partyLedgerApi } from '../../services/api';
 import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
+import { useCompany } from '../../contexts/CompanyContext';
 
 interface PartyLedgerProps {
   partyType?: 'customer' | 'supplier';
@@ -89,31 +90,17 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
   const [filterType, setFilterType] = useState('all');
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [orgDetails, setOrgDetails] = useState<any>(null);
+  const { companyInfo } = useCompany();
+  const orgDetails = useMemo(() => companyInfo ? ({
+    organization_name: companyInfo.name,
+    tagline: companyInfo.business_settings?.tagline,
+    address: [companyInfo.address, companyInfo.city, companyInfo.state, companyInfo.pincode].filter(Boolean).join(', '),
+    phone: companyInfo.phone,
+    email: companyInfo.email,
+    gst_number: companyInfo.gst_number,
+  }) : null, [companyInfo]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
-
-  // Fetch organization details for branding
-  useEffect(() => {
-    const fetchOrgDetails = async () => {
-      try {
-        const orgData = JSON.parse(localStorage.getItem('pharma_org_details') || '{}');
-        if (!orgData.organization_name) {
-          // Set default branding
-          orgData.organization_name = 'Pharma Enterprise';
-          orgData.tagline = 'Your Trusted Healthcare Partner';
-        }
-        setOrgDetails(orgData);
-      } catch (error) {
-        console.error('Failed to fetch org details:', error);
-        setOrgDetails({
-          organization_name: 'Pharma Enterprise',
-          tagline: 'Your Trusted Healthcare Partner'
-        });
-      }
-    };
-    fetchOrgDetails();
-  }, []);
 
   // Quick date range handler
   const handleQuickDateRange = (range: string) => {

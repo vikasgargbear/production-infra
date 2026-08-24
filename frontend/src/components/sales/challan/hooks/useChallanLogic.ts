@@ -87,7 +87,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         const requestId = ++calculationRequestRef.current;
         if (!challan.items.length || !challan.customer_id) return;
 
-        void calculateChallanPreview(challan, isOnline)
+        void calculateChallanPreview(challan, true)
             .then(calculation => {
                 if (requestId !== calculationRequestRef.current) return;
                 setChallan(prev => {
@@ -143,22 +143,18 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             });
     }, [challan, isOnline, setChallan]);
 
-    // ==================== GENERATE CHALLAN NUMBER ====================
+    // The canonical API must assign the final document number.
     const generateChallanNumber = useCallback(async () => {
-        try {
-            const documentNumberGenerator = (await import('../../../../services/offline/documents/documentNumberGenerator')).default;
-            const challanNumber = await documentNumberGenerator.generateChallanNumber();
-            setChallan(prev => ({ ...prev, challan_number: challanNumber }));
-        } catch (error) {
-            // Fallback: generate locally without backend (instant)
-            const documentNumberGenerator = (await import('../../../../services/offline/documents/documentNumberGenerator')).default;
-            const fallbackNumber = await documentNumberGenerator.generateNumber('DC', false);
-            setChallan(prev => ({ ...prev, challan_number: fallbackNumber }));
-        }
-    }, [setChallan]);
+        setMessage('Delivery Challan numbers are assigned only by the canonical API after a confirmed submission.');
+        setMessageType('error');
+    }, []);
 
-    // ==================== OFFLINE-FIRST SAVE HOOK ====================
-    const { saving: offlineSaving, handleSaveChallan: offlineSaveChallan } = useChallanSave({
+    // Fail closed until the delivery-challan canonical command is available.
+    const {
+        saving: submissionSaving,
+        submissionUnavailableReason,
+        handleSaveChallan,
+    } = useChallanSave({
         challan,
         selectedCustomer: selectedCustomer as CustomerDetails,
         companyInfo,
@@ -254,8 +250,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         }
     }, [handleCustomerSelect, recalculateTotals, setChallan, setSelectedCustomer]);
 
-    // ==================== SAVE CHALLAN (offline-first) ====================
-    const saveChallan = offlineSaveChallan;
+    const saveChallan = handleSaveChallan;
 
     // ==================== SHARE ON WHATSAPP ====================
     const shareOnWhatsApp = useCallback(() => {
@@ -365,7 +360,8 @@ Expected Delivery: ${challan.expected_delivery_date}
         // Challan-specific UI State
         currentStep,
         setCurrentStep,
-        saving: offlineSaving || saving,
+        saving: submissionSaving || saving,
+        submissionUnavailableReason,
         showCreateCustomer,
         setShowCreateCustomer,
         showCreateProduct,

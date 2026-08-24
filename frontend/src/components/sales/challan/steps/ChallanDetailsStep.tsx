@@ -19,7 +19,7 @@ import {
 import ItemsTableKeyboard from '../../../global/ui/display/ItemsTableUnified';
 import KeyboardShortcuts from '../../../global/ui/KeyboardShortcuts';
 import ImportFromInvoiceModal from '../ui/ImportFromInvoiceModal';
-import { Challan, ChallanItem, CustomerDetails, Employee, ImportData } from '../types/challanTypes';
+import { Challan, CustomerDetails, Employee, ImportData } from '../types/challanTypes';
 
 interface ChallanDetailsStepProps {
     // State
@@ -84,11 +84,11 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
     onContinue
 }) => {
     return (
-        <div className="h-full bg-blue-50">
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header */}
-                <ModuleHeader {...{ title: "Delivery Challan", documentData: challan, status: challan.status, icon: Truck, iconColor: "text-blue-600", onClose, historyType: "challan", showSaveDraft: true, onSaveDraft: () => { } } as any} />
+                <ModuleHeader {...{ title: "Delivery Challan", documentData: challan, status: challan.status, icon: Truck, iconColor: "text-blue-600", onClose, historyType: "challan" } as any} />
 
                 {/* Keyboard Shortcuts */}
                 <KeyboardShortcuts shortcuts={[
@@ -100,7 +100,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                 ]} />
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-blue-50" ref={challanFormRef as unknown as React.RefObject<HTMLDivElement>}>
+                <div className="flex-1 overflow-y-auto bg-gray-50" ref={challanFormRef as unknown as React.RefObject<HTMLDivElement>}>
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
                         {/* Top Section - Dates and Import */}
@@ -126,7 +126,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                 <label className="block text-sm font-medium text-gray-600 mb-2">Import Data</label>
                                 <button
                                     onClick={() => setShowImportModal(true)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
                                 >
                                     <FileInput className="w-4 h-4 text-gray-400" />
                                     <span>Import from Invoice</span>

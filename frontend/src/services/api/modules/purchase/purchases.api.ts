@@ -48,7 +48,7 @@ const ENDPOINTS = {
     BY_SUPPLIER: (id: number) => `/purchases/supplier/${id}`,
     APPROVE: (id: number) => `/purchases/${id}/approve`,
     RECEIVE: (id: number) => `/purchases/${id}/receive`,
-    FOR_ENTRY: (id: number) => `/purchases/${id}/for-entry`
+    FOR_ENTRY: (id: string | number) => `/purchases/${id}/for-entry`
 } as const;
 
 // ============================================
@@ -98,7 +98,7 @@ export const purchasesApi = {
     },
 
     parseInvoice: (formData: FormData): Promise<AxiosResponse> => {
-        return apiHelpers.post('/purchase-orders/parse-invoice', formData, {
+        return apiHelpers.post('/purchase-upload/parse-invoice', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
     },
@@ -112,7 +112,7 @@ export const purchasesApi = {
     },
 
     // Get PO data formatted for Purchase Entry pre-fill
-    getForEntry: (poId: number): Promise<AxiosResponse> => {
+    getForEntry: (poId: string | number): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.FOR_ENTRY(poId));
     },
 

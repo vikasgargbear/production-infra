@@ -65,7 +65,19 @@ interface DebitNotePreviewProps {
 }
 
 const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplier = {}, purchase = {} }) => {
-  const { companyDetails } = useCompanyDetails();
+  const { companyDetails, loading: companyLoading, error: companyError } = useCompanyDetails();
+
+  if (companyLoading) {
+    return <div className="border border-gray-200 bg-white p-6 text-sm text-gray-600">Loading company details…</div>;
+  }
+
+  if (companyError || !companyDetails) {
+    return (
+      <div role="alert" className="border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        Company details are unavailable. Refresh the page before generating this debit note.
+      </div>
+    );
+  }
 
   // Add safety checks for required data
   if (!supplier || !purchase || !returnData) {

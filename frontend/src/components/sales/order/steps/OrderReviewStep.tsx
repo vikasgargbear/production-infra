@@ -106,7 +106,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                 companyInfo={companyInfo as any}
                 showPrintOptions={true}
             >
-                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 print-container order-preview-container">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 print-container order-preview-container">
                     {/* Header */}
                     <div className="mb-4 pb-3 border-b-2 border-blue-300 print-header">
                         <div className="flex justify-between items-start">
@@ -123,8 +123,8 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 </div>
                             </div>
                             <div className="text-right">
-                                <h2 className="text-xl font-bold text-purple-600 mb-2">SALES ORDER</h2>
-                                <div className="bg-purple-50 border border-purple-200 rounded p-2">
+                                <h2 className="text-xl font-bold text-blue-700 mb-2">SALES ORDER</h2>
+                                <div className="bg-gray-50 border border-gray-200 rounded p-2">
                                     <p className="text-sm font-semibold text-gray-700">Order No: {order.order_number}</p>
                                     <p className="text-xs text-gray-600 mt-1">Date: {new Date(order.order_date).toLocaleDateString('en-IN')}</p>
                                 </div>
@@ -264,8 +264,8 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                     <div className="mb-8">
                         <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-4">Order Items</h3>
                         <div className="overflow-x-auto">
-                            <table className="w-full border border-blue-200 print-table">
-                                <thead className="bg-blue-50">
+                            <table className="w-full border border-gray-200 print-table">
+                                <thead className="bg-gray-50">
                                     <tr>
                                         <th className="text-left py-2 px-3 text-xs font-medium text-blue-700 border-b">Item Details</th>
                                         <th className="text-center py-2 px-3 text-xs font-medium text-blue-700 border-b">Qty</th>
@@ -276,7 +276,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 </thead>
                                 <tbody>
                                     {order.items.map((item, index) => (
-                                        <tr key={index} className="border-b hover:bg-blue-50">
+                                        <tr key={index} className="border-b hover:bg-gray-50">
                                             <td className="py-2 px-3">
                                                 <p className="text-sm font-medium">{item.product_name}</p>
                                                 <p className="text-xs text-gray-500">Batch: {item.batch_number || item.batch_number || 'N/A'}</p>
@@ -293,7 +293,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
 
                         {/* Summary */}
                         <div className="mt-4 grid grid-cols-2 gap-4">
-                            <div className="bg-blue-50 p-4 rounded-lg">
+                            <div className="bg-gray-50 p-4 rounded-lg">
                                 <h4 className="text-sm font-semibold text-blue-700 mb-2">GST Breakdown</h4>
                                 <div className="space-y-1">
                                     {order.gst_type === 'IGST' ? (
@@ -320,7 +320,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 </div>
                             </div>
 
-                            <div className="bg-purple-50 p-4 rounded-lg">
+                            <div className="bg-gray-50 p-4 rounded-lg">
                                 <h4 className="text-sm font-semibold text-blue-700 mb-2">Order Summary</h4>
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-sm">
@@ -333,14 +333,14 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     </div>
                                     <div className="flex justify-between text-sm border-t pt-1">
                                         <span className="text-blue-700 font-semibold">Grand Total</span>
-                                        <span className="font-bold text-lg text-purple-600">₹{order.total_amount.toFixed(2)}</span>
+                                        <span className="font-bold text-lg text-blue-700">₹{order.total_amount.toFixed(2)}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Amount in Words */}
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
                             <p className="text-sm"><span className="font-medium">Amount in Words:</span> {numberToWords(order.total_amount)}</p>
                         </div>
 

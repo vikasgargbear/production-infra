@@ -11,6 +11,7 @@ interface ModalFooterProps {
     entityLabel: string;
     entityId?: string;
     onClose: () => void;
+    writeDisabled?: boolean;
 }
 
 const ModalFooter: React.FC<ModalFooterProps> = ({
@@ -21,19 +22,20 @@ const ModalFooter: React.FC<ModalFooterProps> = ({
     isEditing,
     entityLabel,
     entityId,
-    onClose
+    onClose,
+    writeDisabled = false
 }) => {
     const currentIndex = sections.findIndex(s => s.id === activeSection);
 
     return (
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="text-sm text-gray-500">
                     {entityId ? `${entityLabel} ID: ${entityId}` : `New ${entityLabel}`}
                 </div>
 
                 {/* Section Navigation */}
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Button
                         type="button"
                         variant="secondary"
@@ -68,11 +70,11 @@ const ModalFooter: React.FC<ModalFooterProps> = ({
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <Button type="button" variant="secondary" onClick={onClose}>
                         Cancel
                     </Button>
-                    <Button type="submit" variant="primary" disabled={isSaving}>
+                    <Button type="submit" variant="primary" disabled={isSaving || writeDisabled}>
                         {isSaving ? (
                             <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -81,7 +83,7 @@ const ModalFooter: React.FC<ModalFooterProps> = ({
                         ) : (
                             <>
                                 <Save className="w-4 h-4 mr-2" />
-                                {isEditing ? 'Update' : 'Create'}
+                                {writeDisabled ? 'Update unavailable' : isEditing ? 'Update' : 'Create'}
                             </>
                         )}
                     </Button>

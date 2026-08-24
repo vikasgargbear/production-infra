@@ -8,6 +8,7 @@ export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as SearchBar } from './SearchBar';
 export { default as NotesSection } from './forms/NotesSection';
 export { default as LoadingSpinner } from './LoadingSpinner';
+export { default as CanonicalWriteNotice } from './CanonicalWriteNotice';
 
 // Enhanced Input Components
 export { default as ActionButton } from './ActionButton';
@@ -28,7 +29,6 @@ export { Pagination } from './Pagination';
 
 // Layout Components
 export { default as ModuleHeader } from './ModuleHeader';
-export { default as ViewHistoryButton } from './ViewHistoryButton';
 export { default as HistoryTable } from './HistoryTable';
 export { default as AddressForm } from './AddressForm';
 

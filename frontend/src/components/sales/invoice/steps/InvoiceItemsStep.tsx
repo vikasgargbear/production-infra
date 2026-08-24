@@ -2,7 +2,7 @@ import React, { RefObject, useEffect, useCallback } from 'react';
 import { FileText, User, Package, FileInput, AlertCircle, X } from 'lucide-react';
 
 // Global Components
-import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard, DocumentFooter } from '../../../global';
+import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard } from '../../../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 
 // Modals
@@ -16,11 +16,12 @@ import ItemProfitModal from '../../modals/ItemProfitModal';
 
 // Utils
 import { toast } from 'react-toastify';
-import { searchCache } from '../../../../utils/searchCache';
 import { ordersApi, challansApi } from '../../../../services/api';
+import { extractDocumentCollection, extractDocumentDetail } from '../../utils/documentImport';
 
 // Shared Types
-import { Customer, Invoice, InvoiceItem, InvoiceTotals, Employee, ProductForLastDeal } from '../types/invoiceTypes';
+import { Customer, Invoice, InvoiceItem, Employee, ProductForLastDeal } from '../types/invoiceTypes';
+import InvoiceItemsFooter from './InvoiceItemsFooter';
 
 interface InvoiceItemsStepProps {
     invoice: Invoice;
@@ -35,6 +36,7 @@ interface InvoiceItemsStepProps {
     setError: React.Dispatch<React.SetStateAction<string | null>>;
 
     onClose: () => void;
+    onReset: () => void;
     onContinue: () => void;
     // Refs
     productSearchRef: RefObject<HTMLInputElement>;
@@ -81,6 +83,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     setError,
 
     onClose,
+    onReset,
     onContinue,
     // Refs
     productSearchRef,
@@ -128,7 +131,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     }, [handleGlobalKeyDown]);
 
     return (
-        <div className="h-full bg-blue-50">
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header - Using Global ModuleHeader */}
@@ -167,7 +170,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 )}
 
                 {/* Content - Consistent max-width like Purchase */}
-                <div className="flex-1 overflow-y-auto bg-blue-50">
+                <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
 
@@ -293,15 +296,12 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 </div>
 
                 {/* Footer */}
-                <DocumentFooter
+                <InvoiceItemsFooter
                     totalItems={invoice.items?.length || 0}
                     totalAmount={invoice.final_amount || invoice.totals?.final_amount}
-                    onCancel={onClose}
+                    onReset={onReset}
                     onContinue={onContinue}
-                    cancelLabel="Reset"
-                    continueLabel="Continue"
                     continueDisabled={continueDisabled}
-                    continueButtonColor="blue"
                 />
 
             </div>
@@ -325,9 +325,6 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onProductCreated={(product: unknown) => {
                         setShowProductModal(false);
                         // Toast is already shown in ProductCreationModal
-
-                        // Add the created product to search cache immediately
-                        searchCache.addItem('products', product);
 
                         // Optionally auto-add the product to invoice
                         if (product && typeof handleAddItem === 'function') {
@@ -357,16 +354,24 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                             label: 'Sales Orders',
                             loadFunction: async (searchQuery?: string) => {
                                 const response = await ordersApi.getAll({ search: searchQuery, limit: 50 });
-                                return response?.data?.orders || response?.data?.data || response?.data || [];
-                            }
+                                return extractDocumentCollection(response, ['orders', 'sales_orders']);
+                            },
+                            resolveDocument: async (document: any) => {
+                                const response = await ordersApi.getById(document.order_id || document.id);
+                                return extractDocumentDetail(response, ['order', 'sales_order']);
+                            },
                         },
                         {
                             value: 'challan',
                             label: 'Delivery Challans',
                             loadFunction: async (searchQuery?: string) => {
                                 const response = await challansApi.getAll({ search: searchQuery, limit: 50 });
-                                return response?.data?.challans || response?.data?.data || response?.data || [];
-                            }
+                                return extractDocumentCollection(response, ['challans', 'delivery_challans']);
+                            },
+                            resolveDocument: async (document: any) => {
+                                const response = await challansApi.getById(document.challan_id || document.id);
+                                return extractDocumentDetail(response, ['challan', 'delivery_challan']);
+                            },
                         }
                     ]}
                 />

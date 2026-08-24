@@ -486,7 +486,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
   if (!open) return null;
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
 
         {/* Header - Using Global ModuleHeader */}
@@ -508,7 +508,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+        <div className="bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
           Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
         </div>
 
@@ -576,21 +576,24 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
                     loadStockMovements().finally(() => setRefreshing(false));
                   }}
                   disabled={refreshing || loading}
-                  className={`relative p-2.5 rounded-xl transition-all duration-300 ease-out ${refreshing
-                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 border-2 border-blue-400 shadow-lg transform scale-105'
-                    : 'bg-white border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md hover:scale-105'
+                  className={`relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border transition-colors ${refreshing
+                    ? 'bg-gray-100 border-gray-300'
+                    : 'bg-white border-gray-300 hover:bg-gray-100'
                     }`}
                   title="Refresh movements"
+                  aria-label="Refresh stock movements"
                 >
-                  <RefreshCw className={`w-5 h-5 transition-all duration-500 ${refreshing ? 'animate-spin text-white' : 'text-gray-600 hover:text-blue-600'
+                  <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin text-gray-600' : 'text-gray-600'
                     }`} />
                 </button>
 
                 {/* Global Export Button */}
                 <button
                   onClick={exportSelectedCSV}
-                  className="p-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-white border border-gray-300 hover:bg-gray-100 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                   title="Export to CSV"
+                  aria-label="Export stock movements to CSV"
+                  disabled={filteredMovements.length === 0}
                 >
                   <Download className="w-4 h-4 text-gray-600" />
                 </button>

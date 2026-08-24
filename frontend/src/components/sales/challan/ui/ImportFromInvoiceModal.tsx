@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, FileText, ShoppingCart, Calendar } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { invoicesApi, ordersApi } from '../../../../services/api';
+import { extractDocumentCollection, extractDocumentDetail } from '../../utils/documentImport';
 
 interface DocumentItem {
     product_id: string;
@@ -69,15 +71,9 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
     const [searchResults, setSearchResults] = useState<Document[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [loading, setLoading] = useState(false);
+    const [importing, setImporting] = useState(false);
 
-    // Load recent documents on mount
-    useEffect(() => {
-        if (isOpen) {
-            loadRecentDocuments();
-        }
-    }, [isOpen, searchType]);
-
-    const loadRecentDocuments = async () => {
+    const loadRecentDocuments = useCallback(async () => {
         setLoading(true);
         try {
             let results: Document[] = [];
@@ -89,7 +85,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                         (responseData?.invoices && Array.isArray(responseData.invoices)) ? responseData.invoices : [];
             } else {
                 const response = await ordersApi.search('', { limit: 10 });
-                results = response?.data || [];
+                results = extractDocumentCollection(response, ['orders', 'sales_orders']) as Document[];
             }
             setSearchResults(results);
         } catch (error) {
@@ -97,13 +93,19 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
         } finally {
             setLoading(false);
         }
-    };
+    }, [searchType]);
+
+    useEffect(() => {
+        if (isOpen) {
+            void loadRecentDocuments();
+        }
+    }, [isOpen, loadRecentDocuments]);
 
     if (!isOpen) return null;
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
-            loadRecentDocuments();
+            void loadRecentDocuments();
             return;
         }
 
@@ -118,7 +120,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                         (responseData?.invoices && Array.isArray(responseData.invoices)) ? responseData.invoices : [];
             } else {
                 const response = await ordersApi.search(searchQuery);
-                results = response?.data || [];
+                results = extractDocumentCollection(response, ['orders', 'sales_orders']) as Document[];
             }
             setSearchResults(results);
         } catch (error) {
@@ -128,48 +130,64 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
         }
     };
 
-    const handleImport = () => {
+    const handleImport = async () => {
         if (!selectedDoc) return;
 
-        const importData: ImportData = {
-            customer_id: selectedDoc.customer_id,
-            customer_name: selectedDoc.customer_name,
-            customer_details: selectedDoc.customer_details || {
-                customer_id: selectedDoc.customer_id,
-                customer_name: selectedDoc.customer_name,
-                address: selectedDoc.billing_address,
-                city: selectedDoc.billing_city,
-                state: selectedDoc.billing_state,
-                pincode: selectedDoc.billing_pincode,
-                phone: selectedDoc.customer_phone,
-                gst_number: selectedDoc.customer_gst_number
-            },
-            billing_address: selectedDoc.billing_address,
-            delivery_address: selectedDoc.shipping_address || selectedDoc.billing_address,
-            delivery_city: selectedDoc.shipping_city || selectedDoc.billing_city,
-            delivery_state: selectedDoc.shipping_state || selectedDoc.billing_state,
-            delivery_pincode: selectedDoc.shipping_pincode || selectedDoc.billing_pincode,
-            items: (selectedDoc.items || selectedDoc.invoice_items || []).map(item => ({
-                id: Date.now() + Math.random(),
-                product_id: item.product_id,
-                product_name: item.product_name,
-                hsn_code: item.hsn_code,
-                quantity: item.quantity,
-                unit: item.unit || 'NOS',
-                mrp: item.mrp,
-                unit_price: item.unit_price || item.selling_price,
-                gst_percent: item.tax_percent || item.gst_percent || 0,
-                manufacturer: item.manufacturer,
-                category: item.category
-            })),
-            reference_doc: searchType === 'invoice' ?
-                `Invoice: ${selectedDoc.invoice_number}` :
-                `Order: ${selectedDoc.order_number}`,
-            notes: `Delivery for ${searchType === 'invoice' ? 'Invoice' : 'Order'} #${selectedDoc.invoice_number || selectedDoc.order_number}`
-        };
+        setImporting(true);
+        try {
+            const detailResponse = searchType === 'invoice'
+                ? await invoicesApi.getById(selectedDoc.invoice_id!)
+                : await ordersApi.getById(selectedDoc.order_id!);
+            const sourceDoc = extractDocumentDetail(
+                detailResponse,
+                searchType === 'invoice' ? ['invoice'] : ['order', 'sales_order'],
+            ) as unknown as Document;
 
-        onImport(importData);
-        onClose();
+            const importData: ImportData = {
+                customer_id: sourceDoc.customer_id,
+                customer_name: sourceDoc.customer_name,
+                customer_details: sourceDoc.customer_details || {
+                    customer_id: sourceDoc.customer_id,
+                    customer_name: sourceDoc.customer_name,
+                    address: sourceDoc.billing_address,
+                    city: sourceDoc.billing_city,
+                    state: sourceDoc.billing_state,
+                    pincode: sourceDoc.billing_pincode,
+                    phone: sourceDoc.customer_phone,
+                    gst_number: sourceDoc.customer_gst_number
+                },
+                billing_address: sourceDoc.billing_address,
+                delivery_address: sourceDoc.shipping_address || sourceDoc.billing_address,
+                delivery_city: sourceDoc.shipping_city || sourceDoc.billing_city,
+                delivery_state: sourceDoc.shipping_state || sourceDoc.billing_state,
+                delivery_pincode: sourceDoc.shipping_pincode || sourceDoc.billing_pincode,
+                items: (sourceDoc.items || sourceDoc.invoice_items || []).map(item => ({
+                    id: Date.now() + Math.random(),
+                    product_id: item.product_id,
+                    product_name: item.product_name,
+                    hsn_code: item.hsn_code,
+                    quantity: item.quantity,
+                    unit: item.unit || 'NOS',
+                    mrp: item.mrp,
+                    unit_price: item.unit_price || item.selling_price,
+                    gst_percent: item.tax_percent || item.gst_percent || 0,
+                    manufacturer: item.manufacturer,
+                    category: item.category
+                })),
+                reference_doc: searchType === 'invoice' ?
+                    `Invoice: ${sourceDoc.invoice_number}` :
+                    `Order: ${sourceDoc.order_number}`,
+                notes: `Delivery for ${searchType === 'invoice' ? 'Invoice' : 'Order'} #${sourceDoc.invoice_number || sourceDoc.order_number}`
+            };
+
+            onImport(importData);
+            onClose();
+        } catch (error) {
+            console.error('[ChallanImport] Failed to load document details:', error);
+            toast.error('Unable to load document details. Nothing was imported.');
+        } finally {
+            setImporting(false);
+        }
     };
 
     return (
@@ -301,10 +319,10 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                     </button>
                     <button
                         onClick={handleImport}
-                        disabled={!selectedDoc}
+                        disabled={!selectedDoc || importing}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
                     >
-                        Import to Challan
+                        {importing ? 'Loading details...' : 'Import to Challan'}
                     </button>
                 </div>
             </div>

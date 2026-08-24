@@ -36,8 +36,7 @@ export {
     FullScreenModal,
     DocumentImportModal,
     GenericSuccessModal,
-    PDFUploadModal,
-    ShareModal
+    PDFUploadModal
 } from './modals';
 
 // ============== SEARCH COMPONENTS ==============
@@ -121,7 +120,6 @@ export {
     PDFUploadCard,
     // Layout
     ModuleHeader,
-    ViewHistoryButton,
     // Feedback
     Toast,
     ToastProvider,
@@ -137,7 +135,7 @@ export { StandardFormInput, StandardSelect, DocumentSummaryTop } from './ui/Stan
 
 // ============== NAVIGATION COMPONENTS ==============
 export * from './navigation';
-export { ModuleHub, Sidebar } from './navigation';
+export { ModuleHub } from './navigation';
 
 // ============== TYPES ==============
 export const GlobalComponentTypes = {

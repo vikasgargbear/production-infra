@@ -6,6 +6,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { createCrudApi } from '../../utils/createCrudApi';
 
 // ============================================================================
@@ -16,23 +17,25 @@ const crud = createCrudApi({ basePath: '/bank-accounts' });
 export const bankAccountsApi = {
     ...crud,
 
+    create: (_data: any) => rejectCanonicalWrite('Creating a bank account'),
+    update: (_id: number | string, _data: any) => rejectCanonicalWrite('Editing a bank account'),
+    delete: (_id: number | string) => rejectCanonicalWrite('Deleting a bank account'),
+
     // Transactions
     getTransactions: (accountId: number | string, params: any = {}) => {
         return apiHelpers.get(`/bank-accounts/${accountId}/transactions`, { params });
     },
 
-    recordTransaction: (accountId: number | string, data: any) => {
-        return apiHelpers.post(`/bank-accounts/${accountId}/transactions`, data);
-    },
+    recordTransaction: (_accountId: number | string, _data: any) =>
+        rejectCanonicalWrite('Recording a bank transaction'),
 
     // Balance & Reconciliation
     getBalance: (accountId: number | string) => {
         return apiHelpers.get(`/bank-accounts/${accountId}/balance`);
     },
 
-    reconcile: (accountId: number | string, data: any) => {
-        return apiHelpers.post(`/bank-accounts/${accountId}/reconcile`, data);
-    },
+    reconcile: (_accountId: number | string, _data: any) =>
+        rejectCanonicalWrite('Reconciling a bank account'),
 
     getStatement: (accountId: number | string, params: any = {}) => {
         return apiHelpers.get(`/bank-accounts/${accountId}/statement`, { params });
@@ -46,7 +49,6 @@ export const bankAccountsApi = {
         return apiHelpers.get('/bank-accounts', { params: { search: query } });
     },
 
-    setDefaultAccount: (id: number | string) => {
-        return apiHelpers.put(`/bank-accounts/${id}/set-default`, {});
-    }
+    setDefaultAccount: (_id: number | string) =>
+        rejectCanonicalWrite('Changing the default bank account')
 };

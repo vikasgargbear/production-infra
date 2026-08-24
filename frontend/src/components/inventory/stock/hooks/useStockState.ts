@@ -13,7 +13,7 @@ import type { StockUIState, SortConfig } from '../types/stock.types';
 
 interface StockLocalState {
     ui: StockUIState;
-    selectedIds: Set<number>;
+    selectedIds: Set<string | number>;
 }
 
 // ============================================================================
@@ -33,9 +33,9 @@ type StockAction =
     | { type: 'TOGGLE_MORE_FILTERS' }
     | { type: 'TOGGLE_HELP_MODAL' }
     | { type: 'SET_MORE_FILTERS'; filters: { stockStatus?: string; expiryPeriod?: string; packType?: string } }
-    | { type: 'SET_SELECTED_IDS'; ids: Set<number> }
-    | { type: 'TOGGLE_SELECTION'; id: number }
-    | { type: 'SELECT_ALL'; ids: number[] }
+    | { type: 'SET_SELECTED_IDS'; ids: Set<string | number> }
+    | { type: 'TOGGLE_SELECTION'; id: string | number }
+    | { type: 'SELECT_ALL'; ids: Array<string | number> }
     | { type: 'DESELECT_ALL' }
     | { type: 'RESET' };
 

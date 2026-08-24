@@ -17,6 +17,7 @@ import {
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 import ChallanPreview from '../ui/ChallanPreview';
 import { Challan, CustomerDetails, CreatedChallanData } from '../types/challanTypes';
+import { useCompany } from '../../../../contexts/CompanyContext';
 
 interface ChallanPreviewStepProps {
     // State
@@ -24,6 +25,7 @@ interface ChallanPreviewStepProps {
     setChallan: React.Dispatch<React.SetStateAction<Challan>>;
     selectedCustomer: CustomerDetails | null;
     saving: boolean;
+    submissionUnavailableReason: string;
     sameAsBilling: boolean;
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
     showSuccessModal: boolean;
@@ -46,6 +48,7 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
     setChallan,
     selectedCustomer,
     saving,
+    submissionUnavailableReason,
     sameAsBilling,
     setSameAsBilling,
     showSuccessModal,
@@ -58,19 +61,10 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
     onClose,
     onBack
 }) => {
-    // Get company info from localStorage
-    const companyInfo = {
-        name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
-        address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
-        phone: localStorage.getItem('companyPhone') || '7738228969',
-        email: localStorage.getItem('companyEmail') || 'info@aasopharma.com',
-        gst_number: localStorage.getItem('companyGSTIN') || '08AAXCA4042N1Z2',
-        drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
-        logo: localStorage.getItem('companyLogo') || undefined
-    };
+    const { companyInfo } = useCompany();
 
     return (
-        <div className="h-full bg-blue-50">
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header */}
@@ -91,14 +85,14 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                 <KeyboardShortcuts shortcuts={SHORTCUT_SETS.REVIEW} />
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-blue-50">
+                <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
                         {/* Transport Details Section */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-                            <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-blue-100">
-                                <h3 className="text-sm font-semibold text-blue-900 uppercase tracking-wider flex items-center">
-                                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
                                         <Truck className="w-4 h-4 text-white" />
                                     </div>
                                     Transport Details
@@ -239,7 +233,7 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                                 delivery_contact_person: challan.delivery_contact_person || '',
                                 delivery_contact_phone: challan.delivery_contact_phone || ''
                             }}
-                            companyInfo={companyInfo}
+                            companyInfo={(companyInfo || {}) as any}
                         />
 
                         {/* Notes Section */}
@@ -256,18 +250,23 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                 </div>
 
                 {/* Footer */}
-                <DocumentFooter
-                    totalItems={challan.total_quantity || challan.items?.length || 0}
-                    totalAmount={challan.total_amount}
-                    subtotalAmount={challan.total_amount || 0}
-                    taxAmount={0}
-                    grandTotal={challan.total_amount || 0}
-                    onSave={saveChallan}
-                    saveLabel="Generate Challan"
-                    isSaving={saving}
-                    showActionButtons={true}
-                    showPrintOptions={false}
-                />
+                <div id="challan-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                    {submissionUnavailableReason}
+                </div>
+                <fieldset disabled aria-describedby="challan-submission-status">
+                    <DocumentFooter
+                        totalItems={challan.total_quantity || challan.items?.length || 0}
+                        totalAmount={challan.total_amount}
+                        subtotalAmount={challan.total_amount || 0}
+                        taxAmount={0}
+                        grandTotal={challan.total_amount || 0}
+                        onSave={saveChallan}
+                        saveLabel="Generate Challan"
+                        isSaving={saving}
+                        showActionButtons={true}
+                        showPrintOptions={false}
+                    />
+                </fieldset>
 
             </div>
 

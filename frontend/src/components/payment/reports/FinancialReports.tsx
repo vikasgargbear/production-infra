@@ -3,8 +3,7 @@ import {
   TrendingUp, FileText, BarChart3, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHeader } from '../../global';
-import { reportsApi, ledgerApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
+import { reportsApi } from '../../../services/api';
 
 interface FinancialReportsProps {
   onClose?: () => void;
@@ -112,44 +111,18 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({ onClose }) => {
 
         setReportData(newReportData);
 
-        // Store report data offline for future use
-        const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
-        await offlineStorage.storeOffline(storageKey, newReportData, {
-          critical: true,
-          persistent: true
-        });
-
         setError(null);
       } else {
         throw new Error('Invalid report data received');
       }
 
     } catch (error) {
-
-      // Try to load from offline storage instead of using mock data
-      const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
-      const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
-
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for report data
-        setReportData(offlineData.data);
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        setError(`Failed to generate ${reportId} report. Please check your connection and try again.`);
-        setReportData(null);
-      }
+      setError(`Failed to generate ${reportId} report from the live API. Please try again.`);
+      setReportData(null);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Clear old offline data periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      offlineStorage.clearOldData(24); // Clear data older than 24 hours
-    }, 60 * 60 * 1000); // Check every hour
-
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="h-full bg-blue-50">

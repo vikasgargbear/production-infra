@@ -23,9 +23,11 @@ const ActionDropdown: React.FC<{
     return (
         <div className="relative">
             <button
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100"
                 title="More Actions"
+                aria-label={`More actions for invoice ${invoice.invoice_number}`}
             >
                 <MoreVertical className="w-4 h-4" />
             </button>
@@ -41,11 +43,12 @@ const ActionDropdown: React.FC<{
                     <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
                         {canCancel && onCancel && (
                             <button
+                                type="button"
                                 onClick={() => {
                                     onCancel(invoice);
                                     setIsOpen(false);
                                 }}
-                                className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
                             >
                                 <XCircle className="w-4 h-4" />
                                 Cancel Invoice
@@ -102,16 +105,21 @@ ${companyName}`;
 
     // Handle WhatsApp share
     const handleWhatsApp = (invoice: Invoice) => {
+        if (!invoice.customer_phone) return;
+        let phone = invoice.customer_phone.replace(/\D/g, '');
+        if (phone.startsWith('0')) phone = phone.slice(1);
+        if (phone.length === 10) phone = `91${phone}`;
         const message = createInvoiceMessage(invoice);
-        const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
     };
 
     // Handle Email share
     const handleEmail = (invoice: Invoice) => {
+        if (!invoice.customer_email) return;
         const subject = `Invoice ${invoice.invoice_number} - ₹${invoice.total_amount.toLocaleString('en-IN')}`;
         const body = createInvoiceMessage(invoice);
-        const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        const mailto = `mailto:${encodeURIComponent(invoice.customer_email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.location.href = mailto;
     };
 
@@ -239,17 +247,23 @@ ${companyName}`;
                     <div className="flex items-center justify-center gap-0.5">
                         {/* WhatsApp */}
                         <button
+                            type="button"
                             onClick={() => handleWhatsApp(invoice)}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                            title="Share via WhatsApp"
+                            disabled={!invoice.customer_phone}
+                            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-green-700 transition-colors hover:bg-green-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                            title={invoice.customer_phone ? 'Share via WhatsApp' : 'Customer phone unavailable'}
+                            aria-label={`Share invoice ${invoice.invoice_number} via WhatsApp`}
                         >
                             <MessageCircle className="w-4 h-4" />
                         </button>
                         {/* Email */}
                         <button
+                            type="button"
                             onClick={() => handleEmail(invoice)}
-                            className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                            title="Send via Email"
+                            disabled={!invoice.customer_email}
+                            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                            title={invoice.customer_email ? 'Send via email' : 'Customer email unavailable'}
+                            aria-label={`Email invoice ${invoice.invoice_number}`}
                         >
                             <Mail className="w-4 h-4" />
                         </button>

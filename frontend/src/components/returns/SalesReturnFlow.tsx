@@ -12,17 +12,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RotateCcw, User } from 'lucide-react';
 import {
-  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, CustomerSearch, CustomerCreation
+  ModuleHeader, StandardDatePicker, Select, ProceedToReviewComponent, CustomerSearch, CustomerCreation
 } from '../global';
-import GenericSuccessModal from '../global/modals/GenericSuccessModal';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
-import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
-import offlineStorage from '../../services/offlineStorage';
+import { customersApi, invoicesApi, metadataApi } from '../../services/api';
 import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
-import { useNetworkStatus } from '../../hooks/useNetworkStatus';
-import { useCompany } from '../../contexts/CompanyContext';
-import html2pdf from 'html2pdf.js';
 import { toast } from 'react-toastify';
 
 // Import extracted components
@@ -32,20 +26,14 @@ import { ReturnReviewPanel } from './components/ReturnReviewPanel';
 
 // Import hooks and types
 import { useSalesReturnState } from './hooks/useSalesReturnState';
-import type { SalesReturnFlowProps, ReturnFormItem, ReturnReason } from './types/return.types';
+import type { SalesReturnFlowProps, ReturnFormItem } from './types/return.types';
 import type { Customer, Invoice } from '../../types/api.types';
 
-// Import offline-first helpers
-import { saveReturnOffline, type OfflineSalesReturnData } from './utils/offlineReturnSaveHelpers';
-import { showFinancialEntryNotification } from '../../utils/financialEntryNotifier';
+import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBoundaries';
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
-  const { state, dispatch, ui, returnData, selectedCustomer, selectedInvoice, customerDues, returnReasons, manualItemCounter, availableBatches } = useSalesReturnState();
-
-  // Async state (still need for API calls)
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { dispatch, ui, returnData, selectedCustomer, selectedInvoice, customerDues, returnReasons, manualItemCounter, availableBatches } = useSalesReturnState();
 
   // UI state for compact header mode
   const [showDetailsExpanded, setShowDetailsExpanded] = useState(true);
@@ -65,72 +53,30 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
   }, [headerComplete]);
 
-  // Success modal state (like InvoiceFlow)
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [createdReturnData, setCreatedReturnData] = useState<{
-    returnNumber: string;
-    creditNoteNumber?: string;
-    customerId: string | number;
-    customerName: string;
-    customerPhone?: string;
-    customerEmail?: string;
-    totalAmount: number;
-    items: any[];
-  } | null>(null);
-
-  // Company context for success modal
-  const { companyInfo } = useCompany();
-
   // Refs
-  const historyButtonRef = useRef(null);
   const customerSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
-  const firstInputRef = useRef<any>(null);
   const calculationRequestRef = useRef(0);
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
-  const { isOnline } = useNetworkStatus();
-
-  const toastHook = useToast();
-
-  // Initialize return number using centralized generator (local-only, instant)
-  useEffect(() => {
-    documentNumberGenerator.generateSalesReturnNumber().then(returnNo => {
-      dispatch({ type: 'SET_RETURN_DATA', data: { return_no: returnNo } });
-    });
-  }, [dispatch]);
+  const { saving, handleSaveReturn, unavailableReason } = getSalesReturnSubmissionBoundary();
 
   // Load return reasons
   useEffect(() => {
     const loadReturnReasons = async () => {
-      const defaultReasons: ReturnReason[] = [
-        { value: 'NOT_REQUIRED', label: 'Not Required (Restocks)' },
-        { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
-        { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered (Restocks)' },
-        { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
-        { value: 'EXCESS_STOCK', label: 'Excess Stock (Restocks)' },
-        { value: 'RATE_DIFFERENCE', label: 'Rate Difference (Restocks)' },
-        { value: 'CUSTOMER_RETURN', label: 'Customer Return (Restocks)' },
-        { value: 'DAMAGED', label: 'Damaged Product (No Restock)' },
-        { value: 'OTHER', label: 'Other (Restocks)' }
-      ];
-      dispatch({ type: 'SET_RETURN_REASONS', reasons: defaultReasons });
-
       try {
-        const cached = await offlineStorage.getOffline('sales_return_reasons', { persistent: true });
-        if (cached?.data && Array.isArray(cached.data) && cached.data.length > 0) {
-          dispatch({ type: 'SET_RETURN_REASONS', reasons: cached.data });
-        }
-
         const response = await metadataApi.getReturnReasons();
         const fetchedReasons = response.data?.sales_return_reasons || [];
 
         if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
           dispatch({ type: 'SET_RETURN_REASONS', reasons: fetchedReasons });
-          await offlineStorage.storeOffline('sales_return_reasons', fetchedReasons, { persistent: true });
+        } else {
+          dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
+          toast.error('The canonical API returned no sales return reasons.');
         }
       } catch (error) {
-        // Silent fail, keep default reasons
+        dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
+        toast.error('Unable to load sales return reasons from the canonical API.');
       }
     };
 
@@ -152,9 +98,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             break;
           case 's':
             e.preventDefault();
-            if (ui.currentStep === 2) {
-              handleSaveReturn();
-            } else {
+            if (ui.currentStep === 1) {
               handleProceedToReview();
             }
             break;
@@ -215,7 +159,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       console.error('Failed to load invoice items:', error);
       toast.error('Failed to load invoice items');
     }
-  }, [dispatch, toast]);
+  }, [dispatch]);
 
   // Map invoice item to return item
   const mapInvoiceItemToReturnItem = (item: any): ReturnFormItem => {
@@ -421,7 +365,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     const calculate = async () => {
       try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales', isOnline);
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales', true);
         if (requestId !== calculationRequestRef.current) return;
         const totals = calculation.totals;
         let calculatedIndex = 0;
@@ -456,7 +400,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       }
     };
     void calculate();
-  }, [returnData.items, returnData.withhold_gst, returnData.customer_id, isOnline, dispatch]);
+  }, [returnData.items, returnData.withhold_gst, returnData.customer_id, dispatch]);
 
   // Validate return
   const validateReturn = (): boolean => {
@@ -522,223 +466,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
   };
 
-  // Handle save - OFFLINE-FIRST PATTERN
-  // 1. Save to IndexedDB immediately (instant)
-  // 2. Show success to user
-  // 3. Sync to server in background
-  const handleSaveReturn = async () => {
-    if (!validateReturn()) return;
-
-    setSaving(true);
-
-    try {
-      // Prepare offline return data
-      const offlineData: OfflineSalesReturnData = {
-        customer_id: (selectedCustomer as any)?.customer_id || (selectedCustomer as any)?.id,
-        customer_name: (selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name,
-        invoice_id: (selectedInvoice as any)?.invoice_id,
-        invoice_number: (selectedInvoice as any)?.invoice_number,
-        return_date: returnData.return_date,
-        return_reason: returnData.return_reason,
-        return_method: returnData.return_method || 'credit_note',
-        items: returnData.items
-          .filter(item => item.selected && item.return_quantity > 0)
-          .map(item => ({
-            product_id: item.product_id,
-            batch_id: item.batch_id,
-            batch_number: item.batch_number,
-            return_quantity: item.return_quantity,
-            unit_price: item.unit_price,
-            return_value: item.return_value || 0,
-            tax_amount: item.tax_amount || 0,
-            tax_percent: item.tax_percent || 0,
-            disposition: item.disposition || 'RESTOCK',
-            reason: item.return_reason || returnData.return_reason
-          })),
-        subtotal: returnData.subtotal_amount || 0,
-        tax_amount: returnData.tax_amount || 0,
-        total_amount: returnData.total_amount || 0,
-        notes: returnData.return_reason_notes
-      };
-
-      // STEP 1: Save locally first (instant, <100ms)
-      const offlineResult = await saveReturnOffline(offlineData);
-
-      // STEP 2: Show success immediately
-      setCreatedReturnData({
-        returnNumber: offlineResult.return_number,
-        creditNoteNumber: offlineResult.credit_note_number,
-        customerId: offlineData.customer_id as string,
-        customerName: offlineData.customer_name || 'Customer',
-        customerPhone: (selectedCustomer as any)?.phone || (selectedCustomer as any)?.mobile || '',
-        customerEmail: (selectedCustomer as any)?.email || '',
-        totalAmount: returnData.total_amount || 0,
-        items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
-      });
-      setShowSuccessModal(true);
-      showFinancialEntryNotification({
-        title: 'Sales Return Saved Locally',
-        reference: offlineResult.credit_note_number || offlineResult.return_number,
-        amount: returnData.total_amount || 0,
-        status: 'queued',
-        impacts: [
-          'The return is stored locally and queued for backend posting.',
-          'Returned stock is updated on this device immediately.',
-          'Customer credit and GST reversal will confirm after sync succeeds.'
-        ]
-      });
-
-      // STEP 3: Sync to server in background (non-blocking)
-      returnsApi.createSaleReturn(returnData)
-        .then(response => {
-          if (response.data) {
-            console.log('[SalesReturnFlow] ✅ Return synced to server:', response.data.return_no);
-            showFinancialEntryNotification({
-              title: 'Sales Return Posted',
-              reference: response.data.credit_note_no || response.data.return_no || offlineResult.credit_note_number || offlineResult.return_number,
-              amount: response.data.total_amount || returnData.total_amount || 0,
-              status: 'confirmed',
-              impacts: [
-                'The sales return is committed to the backend.',
-                'Inventory and batch balances are adjusted for the returned quantities.',
-                'Customer credit or outstanding balances are updated.',
-                'Sales GST reversal values are available for compliance reporting.'
-              ]
-            });
-            // TODO: Update local record with server IDs
-          }
-        })
-        .catch(syncError => {
-          console.warn('[SalesReturnFlow] ⚠️ Background sync will retry later:', syncError.message);
-          // Return is already saved locally, sync queue will retry
-        });
-
-    } catch (error: any) {
-      // Fallback: If offline save fails, try server directly
-      console.warn('[SalesReturnFlow] Offline save failed, trying server directly:', error.message);
-
-      try {
-        const response = await returnsApi.createSaleReturn(returnData);
-        if (response.data) {
-          const { credit_note_no, return_no } = response.data;
-          setCreatedReturnData({
-            returnNumber: return_no || returnData.return_no,
-            creditNoteNumber: credit_note_no,
-            customerId: (selectedCustomer as any)?.id || (selectedCustomer as any)?.customer_id || '',
-            customerName: (selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name || 'Customer',
-            customerPhone: (selectedCustomer as any)?.phone || (selectedCustomer as any)?.mobile || '',
-            customerEmail: (selectedCustomer as any)?.email || '',
-            totalAmount: returnData.total_amount || 0,
-            items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
-          });
-          setShowSuccessModal(true);
-          showFinancialEntryNotification({
-            title: 'Sales Return Posted',
-            reference: credit_note_no || return_no || returnData.return_no,
-            amount: response.data.total_amount || returnData.total_amount || 0,
-            status: 'confirmed',
-            impacts: [
-              'The sales return is committed to the backend.',
-              'Inventory and batch balances are adjusted for the returned quantities.',
-              'Customer credit or outstanding balances are updated.',
-              'Sales GST reversal values are available for compliance reporting.'
-            ]
-          });
-        }
-      } catch (serverError: any) {
-        const errorMessage = Array.isArray(serverError.message)
-          ? serverError.message[0]?.msg || serverError.message[0] || 'Failed to create return'
-          : typeof serverError.message === 'object'
-            ? JSON.stringify(serverError.message)
-            : serverError.message || 'Failed to create return';
-        toast.error(errorMessage);
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Handle print (from success modal)
-  const handlePrint = () => {
-    window.print();
-  };
-
-  // Handle PDF download (like InvoiceFlow)
-  const handlePDFDownload = useCallback(() => {
-    if (!createdReturnData) return;
-
-    const element = document.getElementById('return-preview');
-    if (!element) {
-      toast.error('Unable to generate PDF - preview not found');
-      return;
-    }
-
-    const options = {
-      margin: [5, 5, 5, 5] as [number, number, number, number],
-      filename: `CreditNote-${createdReturnData.creditNoteNumber || createdReturnData.returnNumber}.pdf`,
-      image: { type: 'jpeg' as const, quality: 1 },
-      html2canvas: {
-        scale: 3,  // Reduced scale - too high can cause blurry output
-        useCORS: true,
-        logging: false,
-        letterRendering: true,
-        windowWidth: 794,  // A4 width in pixels at 96dpi
-        dpi: 300,  // Higher DPI for print quality
-        scrollX: 0,
-        scrollY: -window.scrollY  // Capture from current scroll position
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait' as const,
-        compress: false,  // Disable compression for sharper text
-        precision: 16  // Higher precision
-      },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
-
-    html2pdf().set(options).from(element).save()
-      .catch((err: Error) => toast.error(`PDF generation failed: ${err.message}`));
-  }, [createdReturnData]);
-
-  // Handle WhatsApp share (like InvoiceFlow)
-  const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: number) => {
-    if (!phone) {
-      toast.error('No phone number available for WhatsApp');
-      return;
-    }
-
-    let cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length === 10) {
-      cleanPhone = '91' + cleanPhone;
-    }
-
-    const returnDate = new Date(returnData.return_date).toLocaleDateString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric'
-    });
-    const formattedAmount = amount ? `₹${amount.toLocaleString('en-IN')}` : '';
-    const docNumber = createdReturnData?.creditNoteNumber || createdReturnData?.returnNumber || returnData.return_no;
-
-    const whatsappMessage = `Dear ${customerName || 'Customer'},
-
-Your credit note ${docNumber} dated ${returnDate} for ${formattedAmount} has been created.
-
-This amount will be adjusted against your future purchases.
-
-Thank you for your business!
-${companyInfo?.name || 'Your Company'}`;
-
-    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
-    window.open(whatsappUrl, '_blank');
-  }, [returnData.return_date, companyInfo?.name, createdReturnData]);
-
-  // Handle thermal print (dispatch event for PrintUtility)
-  const handleThermalPrint = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('thermalPrint', {
-      detail: { type: 'credit_note', data: createdReturnData }
-    }));
-  }, [createdReturnData]);
-
   // Step 1: Create Return Form
   if (ui.currentStep === 1) {
     return (
@@ -756,21 +483,6 @@ ${companyInfo?.name || 'Your Company'}`;
 
           {/* Keyboard Shortcuts Bar */}
           <KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} />
-
-          {/* Loading Overlay */}
-          {(loading || saving) && (
-            <div className="absolute inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
-              <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
-                <div className="flex flex-col items-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                  <p className="text-gray-700 font-medium">
-                    {saving ? 'Creating Sales Return...' : 'Loading Invoice Details...'}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-2">Please wait</p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
@@ -1030,7 +742,7 @@ ${companyInfo?.name || 'Your Company'}`;
         <ModuleHeader
           title="Sales Return"
           documentNumber={returnData.return_no}
-          status="pending"
+          status="review"
           icon={RotateCcw}
           iconColor="text-red-600"
           onClose={onClose}
@@ -1054,63 +766,10 @@ ${companyInfo?.name || 'Your Company'}`;
             onSave={handleSaveReturn}
             onBack={() => dispatch({ type: 'SET_STEP', step: 1 })}
             saving={saving}
+            submissionUnavailableReason={unavailableReason}
           />
         </div>
       </div>
-
-      {/* Success Modal - Same pattern as InvoiceFlow */}
-      {showSuccessModal && createdReturnData && (
-        <GenericSuccessModal
-          isOpen={showSuccessModal}
-          onClose={() => {
-            setShowSuccessModal(false);
-            if (onClose) onClose();
-          }}
-          title="Credit Note Created!"
-          documentNumber={createdReturnData.creditNoteNumber || createdReturnData.returnNumber}
-          documentId={createdReturnData.returnNumber}
-          documentType="credit_note"
-          customerName={createdReturnData.customerName}
-          totalAmount={createdReturnData.totalAmount}
-          autoCloseDelay={null}
-          documentData={{
-            customerPhone: createdReturnData.customerPhone,
-            customerEmail: createdReturnData.customerEmail,
-            items: createdReturnData.items,
-            totals: {
-              total_amount: createdReturnData.totalAmount
-            }
-          }}
-          partyDetails={{
-            name: createdReturnData.customerName,
-            phone: createdReturnData.customerPhone,
-            email: createdReturnData.customerEmail
-          }}
-          companyInfo={companyInfo as any}
-          onPrint={handlePrint}
-          onThermalPrint={handleThermalPrint}
-          onWhatsApp={() => handleWhatsAppShare(createdReturnData.customerPhone, createdReturnData.customerName, createdReturnData.totalAmount)}
-          onDownload={handlePDFDownload}
-          showCopy={true}
-          showQuickActions={true}
-        />
-      )}
-
-      {/* Off-screen Preview for PDF Generation */}
-      {createdReturnData && showSuccessModal && (
-        <div className="absolute left-[-9999px] top-0 w-[210mm]" id="return-preview">
-          <ReturnReviewPanel
-            returnData={returnData}
-            selectedCustomer={selectedCustomer}
-            selectedInvoice={selectedInvoice}
-            customerDues={customerDues}
-            onSave={() => { }}
-            onPrint={() => { }}
-            onBack={() => { }}
-            saving={false}
-          />
-        </div>
-      )}
     </div>
   );
 };

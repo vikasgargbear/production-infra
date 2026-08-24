@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, CreditCard, Save, User, Banknote } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
-import { searchCache } from '../../../utils/searchCache';
 
 // ==================== INLINE TRANSFORMER ====================
 
@@ -194,9 +193,6 @@ const SupplierCreationForm = ({
       const response = await suppliersApi.create(dataToSend);
 
       if (response) {
-        // Clear supplier cache to force refresh on next search
-        searchCache.clearType('suppliers');
-
         // Transform response data
         const transformedSupplier = transformSupplierResponse(response.data || response);
 

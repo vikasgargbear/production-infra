@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   FileText,
   ShoppingCart,
@@ -10,11 +10,8 @@ import {
   BarChart3,
   Warehouse,
   Calculator,
-  Settings2,
-  Bell,
-  Loader2
+  Settings2
 } from 'lucide-react';
-import NotificationCenter from './global/NotificationCenter';
 import { usePermissions } from '../hooks/usePermissions';
 import { useCompany } from '../contexts/CompanyContext';
 
@@ -50,31 +47,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const { companyInfo } = useCompany();
   const companyName = companyInfo?.name || 'Company profile not configured';
   const companyLogo = companyInfo?.logo || null;
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { hasModuleAccess } = usePermissions();
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-
-        // Load any other required data here
-        setError(null); // Clear any previous errors
-      } catch (err) {
-        setError('Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-    // Reduced polling frequency since we're not loading notifications
-    const interval = setInterval(loadData, 60000); // Poll every 60 seconds
-    return () => clearInterval(interval);
-  }, []);
 
   const coreActions: ActionItem[] = [
     {
@@ -255,24 +228,21 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       <button
         key={action.id}
         onClick={() => {
-          if (action.id === 'master' || action.id === 'warehouse') {
+          if (action.id === 'warehouse') {
             setActiveTab(action.tab);
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent('navigateToMaster', {
-                detail: action.id === 'warehouse'
-                  ? { module: 'warehouse-master' }
-                  : { module: 'tax-master', tab: 'gst-config' }
+                detail: { module: 'warehouse-master' }
               }));
             }, 100);
           } else {
             setActiveTab(action.tab);
           }
         }}
-        className="group min-h-[132px] rounded-xl border border-gray-200 bg-white p-4 text-left transition-all duration-200 hover:border-blue-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-[140px] sm:p-6"
+        className="group min-h-[132px] rounded-lg border border-gray-200 bg-white p-4 text-left transition-colors hover:border-blue-300 hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-[140px] sm:p-6"
       >
-        {/* Icon with gradient */}
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 shadow-sm transition-all group-hover:from-blue-600 group-hover:to-blue-700">
-          <Icon className="h-7 w-7 text-blue-700 transition-colors group-hover:text-white" />
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 transition-colors group-hover:border-blue-300">
+          <Icon className="h-6 w-6 text-blue-700" />
         </div>
 
         {/* Text */}
@@ -297,24 +267,8 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-red-500 text-lg">{error}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col text-gray-900">
       {/* Clean Header */}
       <div className="px-4 pb-5 pt-5 sm:px-6 sm:pb-8 sm:pt-8">
         <div className="max-w-7xl mx-auto text-center">
@@ -328,8 +282,8 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
                   className="h-10 w-auto"
                 />
               ) : (
-                <div className="w-10 h-10 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-sm">
-                  <FileText className="w-5 h-5 text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white">
+                  <FileText className="w-5 h-5 text-blue-600" />
                 </div>
               )}
               <div className="min-w-0 text-left sm:text-center">
@@ -342,22 +296,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               </div>
             </div>
 
-            {/* Notification Bell */}
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <button
-                  onClick={() => setIsNotificationOpen(!isNotificationOpen)}
-                  className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <Bell className="w-6 h-6" />
-                  {unreadNotifications > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                      {unreadNotifications > 9 ? '9+' : unreadNotifications}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -369,7 +307,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           {/* Core Operations Section */}
           {coreActions.filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'sales')).length > 0 && (
             <div className="mb-8">
-              <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4 text-left">
                 Core Operations
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
@@ -383,7 +321,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           {/* Financial Operations Section */}
           {financialActions.filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'payment')).length > 0 && (
             <div className="mb-5">
-              <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4 text-left">
                 Financial Operations
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
@@ -397,7 +335,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           {/* Analytics & Warehouse Section */}
           {analyticsActions.filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'reports')).length > 0 && (
             <div>
-              <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4 text-left">
                 Analytics & Warehouse
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
@@ -410,12 +348,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
         </div>
       </div>
 
-      {/* Notification Center */}
-      <NotificationCenter
-        isOpen={isNotificationOpen}
-        onClose={() => setIsNotificationOpen(false)}
-        onUnreadCountChange={setUnreadNotifications}
-      />
     </div>
   );
 };

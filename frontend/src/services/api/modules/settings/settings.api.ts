@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -81,17 +82,15 @@ const settingsApi = {
         return apiHelpers.get(ENDPOINTS.GENERAL);
     },
 
-    updateGeneral: (data: GeneralSettings): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.GENERAL, data);
-    },
+    updateGeneral: (_data: GeneralSettings): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Updating general settings'),
 
     getInvoice: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.INVOICE);
     },
 
-    updateInvoice: (data: InvoiceSettings): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.INVOICE, data);
-    },
+    updateInvoice: (_data: InvoiceSettings): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Updating invoice settings'),
 
     getStock: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.STOCK);
@@ -105,17 +104,15 @@ const settingsApi = {
         return apiHelpers.get(ENDPOINTS.TAX);
     },
 
-    updateTax: (data: TaxSettings): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.TAX, data);
-    },
+    updateTax: (_data: TaxSettings): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Updating tax settings'),
 
     getNotification: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.NOTIFICATION);
     },
 
-    updateNotification: (data: NotificationSettings): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.NOTIFICATION, data);
-    },
+    updateNotification: (_data: NotificationSettings): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Updating notification settings'),
 
     getCompanyInfo: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.COMPANY);
@@ -125,15 +122,9 @@ const settingsApi = {
         return apiHelpers.put(ENDPOINTS.COMPANY, data);
     },
 
-    createBackup: (): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.BACKUP}/create`, {}, { responseType: 'blob' });
-    },
+    createBackup: (): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a system backup'),
 
-    restoreBackup: (file: File): Promise<AxiosResponse> => {
-        const formData = new FormData();
-        formData.append('backup', file);
-        return apiHelpers.post(`${ENDPOINTS.BACKUP}/restore`, formData);
-    },
+    restoreBackup: (_file: File): Promise<AxiosResponse> => rejectCanonicalWrite('Restoring a system backup'),
 
     // ============================================
     // Taxes Sub-module (for TaxMaster)
@@ -141,9 +132,9 @@ const settingsApi = {
     taxes: {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/taxes'),
         getById: (id: number | string): Promise<AxiosResponse> => apiHelpers.get(`/taxes/${id}`),
-        create: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.post('/taxes', data),
-        update: (id: number | string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/taxes/${id}`, data),
-        delete: (id: number | string): Promise<AxiosResponse> => apiHelpers.delete(`/taxes/${id}`)
+        create: (_data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a tax rate'),
+        update: (_id: number | string, _data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Editing a tax rate'),
+        delete: (_id: number | string): Promise<AxiosResponse> => rejectCanonicalWrite('Deleting a tax rate')
     },
 
     // ============================================
@@ -152,9 +143,9 @@ const settingsApi = {
     units: {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/units'),
         getById: (id: number | string): Promise<AxiosResponse> => apiHelpers.get(`/units/${id}`),
-        create: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.post('/units', data),
-        update: (id: number | string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/units/${id}`, data),
-        delete: (id: number | string): Promise<AxiosResponse> => apiHelpers.delete(`/units/${id}`)
+        create: (_data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a unit'),
+        update: (_id: number | string, _data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Editing a unit'),
+        delete: (_id: number | string): Promise<AxiosResponse> => rejectCanonicalWrite('Deleting a unit')
     },
 
     // ============================================
@@ -162,7 +153,7 @@ const settingsApi = {
     // ============================================
     system: {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/system'),
-        update: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put('/settings/system', data)
+        update: (_data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Updating system settings')
     },
 
     // ============================================
@@ -171,9 +162,9 @@ const settingsApi = {
     warehouses: {
         getAll: (params?: Record<string, any>): Promise<AxiosResponse> => apiHelpers.get('/warehouses', { params }),
         getById: (id: number | string): Promise<AxiosResponse> => apiHelpers.get(`/warehouses/${id}`),
-        create: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.post('/warehouses', data),
-        update: (id: number | string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/warehouses/${id}`, data),
-        delete: (id: number | string): Promise<AxiosResponse> => apiHelpers.delete(`/warehouses/${id}`)
+        create: (_data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a location'),
+        update: (_id: number | string, _data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Editing a location'),
+        delete: (_id: number | string): Promise<AxiosResponse> => rejectCanonicalWrite('Deleting a location')
     },
 
     // ============================================
@@ -181,8 +172,8 @@ const settingsApi = {
     // ============================================
     features: {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/features'),
-        update: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put('/settings/features', data),
-        toggle: (featureId: string, enabled: boolean): Promise<AxiosResponse> => apiHelpers.put(`/settings/features/${featureId}`, { enabled })
+        update: (_data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Updating feature settings'),
+        toggle: (_featureId: string, _enabled: boolean): Promise<AxiosResponse> => rejectCanonicalWrite('Toggling a feature')
     },
 
     // ============================================
@@ -191,8 +182,8 @@ const settingsApi = {
     integrations: {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/integrations'),
         getById: (id: string): Promise<AxiosResponse> => apiHelpers.get(`/settings/integrations/${id}`),
-        update: (id: string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/settings/integrations/${id}`, data),
-        test: (integrationId: string): Promise<AxiosResponse> => apiHelpers.post(`/settings/integrations/${integrationId}/test`)
+        update: (_id: string, _data: Record<string, any>): Promise<AxiosResponse> => rejectCanonicalWrite('Updating an integration'),
+        test: (_integrationId: string): Promise<AxiosResponse> => rejectCanonicalWrite('Testing a legacy integration')
     }
 };
 

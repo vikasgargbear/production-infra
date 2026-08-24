@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package, RefreshCw, AlertCircle,
-  Search, Eye, Edit, Download, Printer, MessageCircle,
+  Search, Eye, Download, Printer, MessageCircle,
   XCircle, Clock, AlertTriangle, Loader2, ChevronDown
 } from 'lucide-react';
 import { DataTable, StatusBadge, ModuleHeader } from '../../global';
 import { stockApi, batchesApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 
@@ -38,7 +37,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     totalValue: 0
   });
 
-  // Load batches with offline fallback
+  // Load canonical batch data from the API.
   const loadBatches = async () => {
     setLoading(true);
     setError(null);
@@ -56,12 +55,14 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         }
       }
 
+      batchesData = batchesData.map(batch => ({
+        ...batch,
+        quantity_available: Number(batch.quantity_available ?? batch.quantity ?? 0),
+        cost_per_unit: Number(batch.cost_per_unit ?? batch.average_unit_cost ?? 0)
+      }));
+
       if (batchesData.length > 0) {
         setBatches(batchesData);
-
-        // Store data offline (Unified DB)
-        // Store individually for fast lookup
-        await offlineDB.storeBatches(batchesData);
 
         // Calculate stats from real data
         calculateStats(batchesData);
@@ -72,28 +73,11 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         });
       }
     } catch (error) {
-
-      // Try to load from offline DB
-      try {
-        const offlineData = await offlineDB.getAll('batches');
-
-        if (offlineData && offlineData.length > 0) {
-          setBatches(offlineData);
-          calculateStats(offlineData);
-
-          // Show offline indicator
-          setError('Currently using offline data. Some information may be outdated.');
-        } else {
-          throw new Error('No offline data');
-        }
-      } catch (dbError) {
-        // No offline data available - show proper error
-        setError('Unable to load batch data. Please check your connection.');
-        setBatches([]);
-        setStats({
-          expiringSoon: 0, nearExpiry: 0, expired: 0, outOfStock: 0, totalBatches: 0, totalValue: 0
-        });
-      }
+      setError('Unable to load batch data. Please check your connection.');
+      setBatches([]);
+      setStats({
+        expiringSoon: 0, nearExpiry: 0, expired: 0, outOfStock: 0, totalBatches: 0, totalValue: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -150,7 +134,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     });
   };
 
-  // Load batch movements with offline fallback
+  // Load batch movements from the API.
   const loadBatchMovements = async (batchId) => {
     try {
       const response = await stockApi.getBatchMovements(batchId);
@@ -169,21 +153,9 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
 
       setBatchMovements(movementsData);
 
-      // Store movements cache
-      if (movementsData.length > 0) {
-        await offlineDB.setCache(`batch_movements_${batchId}`, movementsData);
-      }
     } catch (error) {
-
-      // Try to load from offline cache
-      const offlineData = await offlineDB.getCache(`batch_movements_${batchId}`, 60); // 1 hour max
-
-      if (offlineData) {
-        setBatchMovements(offlineData);
-      } else {
-        setBatchMovements([]);
-        setError('Unable to load movement data. Please check your connection.');
-      }
+      setBatchMovements([]);
+      setError('Unable to load movement data. Please check your connection.');
     }
   };
 
@@ -399,14 +371,6 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     }
   }, [open]);
 
-  // Clear old offline data periodically
-  // REMOVED: offlineDB handles cache invalidation logic via getCache arguments
-  /*
-  useEffect(() => {
-    // ...
-  }, []);
-  */
-
   // Define columns for DataTable - Streamlined for no horizontal scroll
   const columns = [
     {
@@ -471,16 +435,11 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         <div className="flex items-center justify-center gap-1">
           <button
             onClick={() => handleBatchSelect(batch)}
-            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             title="View Movements"
+            aria-label={`View movements for batch ${batch.batch_number}`}
           >
             <Eye className="w-4 h-4" />
-          </button>
-          <button
-            className="p-1.5 text-gray-500 hover:bg-gray-50 rounded transition-colors"
-            title="Edit"
-          >
-            <Edit className="w-4 h-4" />
           </button>
         </div>
       ),
@@ -497,7 +456,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         <ModuleHeader
           title="Batch Tracking"
           icon={Package}
-          iconColor="text-purple-600"
+          iconColor="text-blue-600"
           onClose={onClose}
           historyType="batch"
           additionalActions={[

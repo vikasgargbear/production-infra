@@ -105,7 +105,7 @@ const MobileBottomNavigation: React.FC<MobileBottomNavigationProps> = ({
           <section
             id="mobile-more-navigation"
             aria-label="More modules"
-            className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] rounded-t-2xl border-t border-gray-200 bg-white px-4 pb-5 pt-3 shadow-2xl"
+            className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] rounded-t-lg border border-gray-200 bg-white px-4 pb-5 pt-3"
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-gray-300" />
             <div className="mb-3 flex items-center justify-between">
@@ -150,7 +150,7 @@ const MobileBottomNavigation: React.FC<MobileBottomNavigationProps> = ({
 
       <nav
         aria-label="Primary mobile navigation"
-        className="md:hidden fixed inset-x-0 bottom-0 z-[70] border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_18px_rgba(15,23,42,0.10)] backdrop-blur"
+        className="fixed inset-x-0 bottom-0 z-[70] border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         <div
           className="grid h-16"

@@ -28,7 +28,7 @@ export const StockActions = React.memo<StockActionsProps>(({
 
             <button
                 onClick={onExport}
-                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex min-h-11 items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Export to CSV"
             >
                 <Download className="w-4 h-4" />
@@ -37,7 +37,7 @@ export const StockActions = React.memo<StockActionsProps>(({
 
             <button
                 onClick={onPrint}
-                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                className="flex min-h-11 items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Print"
             >
                 <Printer className="w-4 h-4" />
@@ -46,7 +46,7 @@ export const StockActions = React.memo<StockActionsProps>(({
 
             <button
                 onClick={onWhatsApp}
-                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                className="flex min-h-11 items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Send via WhatsApp"
             >
                 <MessageCircle className="w-4 h-4" />

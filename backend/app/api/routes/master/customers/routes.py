@@ -55,7 +55,7 @@ async def get_all_customers_with_addresses(
     context: OrgContext = Depends(get_org_context)
 ):
     """
-    Get all customers with their addresses embedded (for offline sync).
+    Get all customers with their addresses embedded.
     Similar to /products/all-with-batches pattern.
     
     Returns customers with:

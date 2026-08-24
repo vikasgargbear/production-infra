@@ -8,11 +8,7 @@
 import React, { useState } from 'react';
 import {
     Search,
-    Download,
     Eye,
-    Edit,
-    Trash2,
-    Plus,
     CreditCard,
     CheckCircle,
     Clock,
@@ -93,10 +89,6 @@ const PaymentTracking: React.FC = () => {
                         <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
                         {refreshing ? 'Refreshing...' : 'Refresh'}
                     </button>
-                    <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
-                        <Plus className="h-4 w-4 mr-2" />
-                        New Payment
-                    </button>
                 </div>
             </div>
 
@@ -112,7 +104,7 @@ const PaymentTracking: React.FC = () => {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div className="bg-white rounded-lg p-6 border border-gray-200">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-gray-600">Today's Collection</p>
@@ -126,7 +118,7 @@ const PaymentTracking: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div className="bg-white rounded-lg p-6 border border-gray-200">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-gray-600">Total Collection</p>
@@ -140,7 +132,7 @@ const PaymentTracking: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div className="bg-white rounded-lg p-6 border border-gray-200">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-gray-600">Pending Amount</p>
@@ -154,7 +146,7 @@ const PaymentTracking: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div className="bg-white rounded-lg p-6 border border-gray-200">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-gray-600">Completed</p>
@@ -170,7 +162,7 @@ const PaymentTracking: React.FC = () => {
             </div>
 
             {/* Filters and Search */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
                     <div className="flex-1 max-w-md">
                         <div className="relative">
@@ -192,10 +184,13 @@ const PaymentTracking: React.FC = () => {
                             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="all">All Status</option>
-                            <option value="completed">Completed</option>
-                            <option value="pending">Pending</option>
-                            <option value="bounced">Bounced</option>
-                            <option value="failed">Failed</option>
+                            <option value="posted">Posted</option>
+                            <option value="draft">Draft</option>
+                            <option value="submitted">Submitted</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="reversed">Reversed</option>
+                            <option value="cancelled">Cancelled</option>
                         </select>
 
                         <select
@@ -221,16 +216,12 @@ const PaymentTracking: React.FC = () => {
                             <option value="last_month">Last Month</option>
                         </select>
 
-                        <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">
-                            <Download className="h-4 w-4 mr-2" />
-                            Export
-                        </button>
                     </div>
                 </div>
             </div>
 
             {/* Payments Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200">
                     <h3 className="text-lg font-medium text-gray-900">
                         Payments ({filteredPayments.length})
@@ -258,27 +249,27 @@ const PaymentTracking: React.FC = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredPayments.map((payment) => {
                                     const StatusIcon = getStatusIcon(payment.status);
-                                    const ModeIcon = getPaymentModeIcon(payment.paymentMode || '');
+                                    const ModeIcon = getPaymentModeIcon(payment.method);
 
                                     return (
                                         <tr key={payment.id} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{payment.invoiceNumber || 'N/A'}</div>
-                                                <div className="text-sm text-gray-500">{payment.paymentDate || 'N/A'}</div>
+                                                <div className="text-sm font-medium text-gray-900">{payment.paymentNumber}</div>
+                                                <div className="text-sm text-gray-500">{payment.date}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{payment.customerName || 'Unknown'}</div>
+                                                <div className="text-sm font-medium text-gray-900">{payment.partyName}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    ₹{(payment.paymentAmount || 0).toLocaleString()}
+                                                    ₹{payment.amount.toLocaleString()}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center">
                                                     <ModeIcon className="w-4 h-4 mr-2 text-gray-500" />
                                                     <span className="text-sm text-gray-900">
-                                                        {paymentModes.find(m => m.id === payment.paymentMode)?.name || 'Unknown'}
+                                                        {paymentModes.find(m => m.id === payment.method)?.name || payment.method}
                                                     </span>
                                                 </div>
                                             </td>
@@ -292,19 +283,19 @@ const PaymentTracking: React.FC = () => {
                                                 <div className="flex items-center space-x-2">
                                                     <button
                                                         onClick={() => handlePaymentSelect(payment)}
-                                                        className="text-blue-600 hover:text-blue-900"
+                                                        className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-900"
+                                                        aria-label={`View payment ${payment.paymentNumber}`}
+                                                        title="View payment"
                                                     >
                                                         <Eye className="h-4 w-4" />
-                                                    </button>
-                                                    <button className="text-gray-600 hover:text-gray-900">
-                                                        <Edit className="h-4 w-4" />
                                                     </button>
                                                     {/* Cancel button - only for non-cancelled payments */}
                                                     {(payment.status as string) !== 'cancelled' && (
                                                         <button
                                                             onClick={() => handleCancelPayment(payment)}
-                                                            className="text-red-600 hover:text-red-900"
-                                                            title="Cancel Payment"
+                                                            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-amber-700 hover:bg-amber-50"
+                                                            aria-label={`Review cancellation availability for payment ${payment.paymentNumber}`}
+                                                            title="Cancellation availability"
                                                         >
                                                             <XCircle className="h-4 w-4" />
                                                         </button>
@@ -329,7 +320,9 @@ const PaymentTracking: React.FC = () => {
                                 <h2 className="text-xl font-bold text-gray-900">Payment Details</h2>
                                 <button
                                     onClick={() => setShowDetails(false)}
-                                    className="p-2 hover:bg-gray-100 rounded-lg"
+                                    className="flex min-h-11 min-w-11 items-center justify-center rounded-md hover:bg-gray-100"
+                                    aria-label="Close payment details"
+                                    title="Close"
                                 >
                                     <XCircle className="w-5 h-5 text-gray-500" />
                                 </button>
@@ -342,15 +335,15 @@ const PaymentTracking: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Invoice No</label>
-                                    <p className="text-sm text-gray-900">{selectedPayment.invoiceNumber || 'N/A'}</p>
+                                    <p className="text-sm text-gray-900">{selectedPayment.paymentNumber}</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Customer</label>
-                                    <p className="text-sm text-gray-900">{selectedPayment.customerName || 'Unknown'}</p>
+                                    <p className="text-sm text-gray-900">{selectedPayment.partyName}</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Amount</label>
-                                    <p className="text-sm text-gray-900">₹{(selectedPayment.paymentAmount || 0).toLocaleString()}</p>
+                                    <p className="text-sm text-gray-900">₹{selectedPayment.amount.toLocaleString()}</p>
                                 </div>
                             </div>
                         </div>
@@ -365,9 +358,9 @@ const PaymentTracking: React.FC = () => {
                 documentType="payment"
                 document={paymentToCancel ? {
                     id: paymentToCancel.id,
-                    document_number: paymentToCancel.invoiceNumber || `PAY-${paymentToCancel.id}`,
-                    customer_name: paymentToCancel.customerName,
-                    amount: paymentToCancel.paymentAmount
+                    document_number: paymentToCancel.paymentNumber,
+                    customer_name: paymentToCancel.partyName,
+                    amount: paymentToCancel.amount
                 } : null}
                 onCancelled={handleCancelSuccess}
             />

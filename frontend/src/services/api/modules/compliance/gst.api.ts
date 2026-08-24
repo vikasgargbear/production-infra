@@ -6,6 +6,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // Type definitions
 interface GSTFilters {
@@ -63,9 +64,8 @@ export const gstApi = {
             return apiHelpers.get(`${ENDPOINTS.RETURNS}/status`, { params: { period } });
         },
 
-        fileReturn: (returnType: string, data: any) => {
-            return apiHelpers.post(`${ENDPOINTS.RETURNS}/${returnType}`, data);
-        }
+        fileReturn: (_returnType: string, _data: any) =>
+            rejectCanonicalWrite('Filing a GST return')
     },
 
     // =========================================================================
@@ -107,9 +107,8 @@ export const gstApi = {
             return apiHelpers.get(`${ENDPOINTS.RECONCILIATION}/details`, { params: { period } });
         },
 
-        reconcile: (data: any) => {
-            return apiHelpers.post(`${ENDPOINTS.RECONCILIATION}/reconcile`, data);
-        }
+        reconcile: (_data: any) =>
+            rejectCanonicalWrite('Running GST reconciliation')
     },
 
     // =========================================================================
@@ -121,9 +120,8 @@ export const gstApi = {
             return apiHelpers.get(ENDPOINTS.SETTINGS);
         },
 
-        updateConfig: (config: any) => {
-            return apiHelpers.put(ENDPOINTS.SETTINGS, config);
-        },
+        updateConfig: (_config: any) =>
+            rejectCanonicalWrite('Updating GST settings'),
 
         getTaxRates: () => {
             return apiHelpers.get(ENDPOINTS.TAX_RATES);

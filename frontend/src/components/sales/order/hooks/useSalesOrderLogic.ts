@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
-import { apiClient, usersApi, authApi } from '../../../../services/api';
+import { apiClient, usersApi } from '../../../../services/api';
 import { calculateSalesOrderPreview } from '../../../../services/calculations/salesOrderCalculationService';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
@@ -64,6 +64,7 @@ type ProductInput = Product & {
 
 interface ImportData {
     customer_id?: number | string;
+    customer_name?: string;
     customer_details?: Customer;
     billing_address?: string;
     shipping_address?: string;
@@ -81,6 +82,7 @@ export interface UseSalesOrderLogicReturn {
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
     employees: Employee[];
     saving: boolean;
+    submissionUnavailableReason: string;
     message: string;
     messageType: string;
     selectedBankAccount: BankAccount | null;
@@ -133,8 +135,8 @@ const createInitialOrder = (): Order => ({
     status: 'pending',
     payment_terms: 'credit',
     reference_no: '',
-    sales_person: localStorage.getItem('userName') || 'Admin',
-    created_by: localStorage.getItem('userName') || 'Admin',
+    sales_person: '',
+    created_by: '',
     terms_conditions: 'Standard terms apply',
     notes: '',
     discount_amount: 0,
@@ -167,11 +169,15 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [createdOrderData, setCreatedOrderData] = useState<CreatedOrderData | null>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-    // Network status for offline-first
+    // Network status is retained for read-only API availability messaging.
     const { isOnline } = useNetworkStatus();
 
-    // Offline-first save hook
-    const { saving: offlineSaving, handleSaveOrder: offlineSaveOrder } = useSalesOrderSave({
+    // Fail closed until the sales-order canonical command is available.
+    const {
+        saving: submissionSaving,
+        submissionUnavailableReason,
+        handleSaveOrder,
+    } = useSalesOrderSave({
         order,
         selectedCustomer,
         isOnline,
@@ -208,27 +214,11 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 } else {
                     throw new Error('No users returned');
                 }
-            } catch {
-                const currentUser = authApi.getCurrentUser() as Employee | null;
-                const fallbackUser: Employee = currentUser ? {
-                    user_id: currentUser.user_id || currentUser.id,
-                    full_name: currentUser.full_name || currentUser.name || 'Current User',
-                    email: currentUser.email
-                } : {
-                    user_id: undefined,
-                    full_name: companyInfo.name ? `${companyInfo.name} User` : 'User',
-                    email: companyInfo.email || ''
-                };
-
-                setEmployees([fallbackUser]);
-
-                if (!order.created_by && fallbackUser.user_id) {
-                    setOrder(prev => ({
-                        ...prev,
-                        created_by: fallbackUser.user_id || null,
-                        created_by_name: fallbackUser.full_name
-                    }));
-                }
+            } catch (error) {
+                console.error('[SalesOrder] Unable to load sales users from the API:', error);
+                setEmployees([]);
+                setMessage('Unable to load sales users from the API.');
+                setMessageType('error');
             }
         };
 
@@ -259,7 +249,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     selectedCustomer?.customer_id || selectedCustomer?.id || order.customer_id
                 )
             };
-            const result = await calculateSalesOrderPreview(orderData, isOnline);
+            const result = await calculateSalesOrderPreview(orderData, true);
 
             if (requestId !== calculationRequestRef.current) {
                 return;
@@ -305,7 +295,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             console.error('Calculation error:', error);
             toast.error('Unable to calculate order totals. Please review the entered item values.');
         }
-    }, [isOnline, order, selectedCustomer]);
+    }, [order, selectedCustomer]);
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
@@ -454,9 +444,13 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
     // Handle import
     const handleImport = useCallback((importData: ImportData): void => {
-        if (importData.customer_id && importData.customer_details) {
-            setSelectedCustomer(importData.customer_details);
-            handleCustomerSelect(importData.customer_details);
+        if (importData.customer_id) {
+            const importedCustomer = importData.customer_details || {
+                customer_id: importData.customer_id,
+                customer_name: importData.customer_name || '',
+            } as Customer;
+            setSelectedCustomer(importedCustomer);
+            void handleCustomerSelect(importedCustomer);
         }
 
         if (importData.billing_address) {
@@ -533,8 +527,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         recalculateTotals(updatedItems);
     }, [order.items, removeItem, recalculateTotals]);
 
-    // Save order - delegates to offline-first useSalesOrderSave hook
-    const saveOrder = offlineSaveOrder;
+    const saveOrder = handleSaveOrder;
 
     // Print order
     const printOrder = useCallback((): void => {
@@ -580,7 +573,8 @@ Expected Delivery: ${order.expected_delivery_date}
         sameAsBilling,
         setSameAsBilling,
         employees,
-        saving: offlineSaving,
+        saving: submissionSaving,
+        submissionUnavailableReason,
         message,
         messageType,
         selectedBankAccount,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   CreditCard, Save, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
-import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
+import { CanonicalWriteNotice, DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
 import { notesApi } from '../../../services/api';
 import { calculateNotePreview } from '../../../services/calculations/noteCalculationService';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
@@ -463,13 +463,10 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           ] as any}
         />
 
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
-          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+F</strong> - Search Invoice | <strong>Ctrl+S</strong> - Save Draft | <strong>Esc</strong> - Close
-        </div>
+        <CanonicalWriteNotice action="Creating a credit note" className="border-x-0" />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-green-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <div className="px-6 py-6">
 
             {/* Error Display */}
@@ -555,6 +552,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           totalAmount={totals.grandTotal}
           proceedText={showReviewPage ? 'Create Credit Note' : 'Continue to Review'}
           saving={saving}
+          disabled={showReviewPage}
         />
       </div>
     </div>

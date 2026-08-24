@@ -4,8 +4,8 @@ import { invoicesApi } from '../../../services/api';
 import type { ReturnInvoiceSelectorProps } from '../types/return.types';
 
 interface InvoiceData {
-    id?: number;
-    invoice_id?: number;
+    id?: string | number;
+    invoice_id?: string | number;
     invoice_number: string;
     invoice_date: string;
     final_amount?: number;
@@ -42,66 +42,23 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
         setError(null);
 
         try {
-            // Try API first (online mode)
-            if (navigator.onLine) {
-                const response = await invoicesApi.search({
-                    customer_id: customerId,
-                    skip: (pageNum - 1) * ITEMS_PER_PAGE,
-                    limit: ITEMS_PER_PAGE,
-                    sort: 'invoice_date',
-                    order: 'desc'
-                });
+            const response = await invoicesApi.search({
+                customer_id: customerId,
+                skip: (pageNum - 1) * ITEMS_PER_PAGE,
+                limit: ITEMS_PER_PAGE,
+                sort: 'invoice_date',
+                order: 'desc'
+            });
 
-                const data = (response as any)?.data || response;
-                const invoiceList = data?.invoices || (Array.isArray(data) ? data : []);
-                setInvoices(invoiceList);
-                setTotalCount(data?.total || invoiceList.length);
-            } else {
-                // Offline mode: use cached invoices from IndexedDB
-                const { default: offlineDB } = await import('../../../services/offline/core/offlineDatabase');
-                const allInvoices = await offlineDB.getAll('invoices');
-
-                // Filter by customer ID
-                const customerInvoices = allInvoices.filter(
-                    (inv: any) => String(inv.customer_id) === String(customerId)
-                );
-
-                // Sort by date descending
-                customerInvoices.sort((a: any, b: any) =>
-                    new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime()
-                );
-
-                // Paginate
-                const start = (pageNum - 1) * ITEMS_PER_PAGE;
-                const paginatedInvoices = customerInvoices.slice(start, start + ITEMS_PER_PAGE);
-
-                setInvoices(paginatedInvoices);
-                setTotalCount(customerInvoices.length);
-
-                if (customerInvoices.length === 0) {
-                    setError('No cached invoices. Sync when online.');
-                }
-            }
+            const data = (response as any)?.data || response;
+            const invoiceList = data?.invoices || (Array.isArray(data) ? data : []);
+            setInvoices(invoiceList);
+            setTotalCount(data?.total || invoiceList.length);
         } catch (err) {
             console.error('Failed to fetch invoices:', err);
-
-            // Fallback to IndexedDB on any error
-            try {
-                const { default: offlineDB } = await import('../../../services/offline/core/offlineDatabase');
-                const allInvoices = await offlineDB.getAll('invoices');
-                const customerInvoices = allInvoices.filter(
-                    (inv: any) => String(inv.customer_id) === String(customerId)
-                );
-                customerInvoices.sort((a: any, b: any) =>
-                    new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime()
-                );
-                const start = (pageNum - 1) * ITEMS_PER_PAGE;
-                setInvoices(customerInvoices.slice(start, start + ITEMS_PER_PAGE));
-                setTotalCount(customerInvoices.length);
-            } catch (offlineErr) {
-                setError('Failed to load invoices');
-                setInvoices([]);
-            }
+            setError('Failed to load invoices from the canonical API.');
+            setInvoices([]);
+            setTotalCount(0);
         } finally {
             setLoading(false);
         }

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
 import { useSettingsEntity } from '../hooks';
+import { CanonicalWriteNotice } from '../../global';
 
 // ============================================================================
 // Types
@@ -313,7 +314,9 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                             </button>
                             <button
                                 onClick={() => setShowModal(true)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                                disabled
+                                title="Unavailable until a canonical tax command exists"
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
                             >
                                 <Plus className="w-4 h-4" /><span>Add Tax</span>
                             </button>
@@ -321,6 +324,8 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                     </div>
                 </div>
             </div>
+
+            <CanonicalWriteNotice action="Changing tax rates" className="mx-6 mt-4" />
 
             {/* Filters */}
             <div className="bg-white border-b border-gray-200 px-6 py-3">
@@ -432,6 +437,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                                     <td className="px-6 py-4 text-center">
                                                         <button
                                                             onClick={() => handleToggleActive(tax.id)}
+                                                            disabled
                                                             className={`px-2 py-1 text-xs rounded-full ${tax.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
                                                         >
                                                             {tax.isActive ? 'Active' : 'Inactive'}
@@ -439,10 +445,10 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
                                                         <div className="flex items-center justify-center space-x-2">
-                                                            <button onClick={() => handleEdit(tax)} className="p-1 text-blue-600 hover:bg-blue-50 rounded">
+                                                            <button onClick={() => handleEdit(tax)} disabled title="Edit unavailable" className="p-1 text-blue-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed">
                                                                 <Edit2 className="w-4 h-4" />
                                                             </button>
-                                                            <button onClick={() => handleDelete(tax.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
+                                                            <button onClick={() => handleDelete(tax.id)} disabled title="Delete unavailable" className="p-1 text-red-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed">
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>
                                                         </div>
@@ -662,7 +668,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                 <button type="button" onClick={handleCloseModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
                                     Cancel
                                 </button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                <button type="submit" disabled className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed">
                                     {editingEntity ? 'Update Tax' : 'Add Tax'}
                                 </button>
                             </div>

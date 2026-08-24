@@ -1,7 +1,6 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { Building2, MapPin, FileText, Globe, Briefcase, Check } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
-import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
 import { APP_CONFIG } from '../../../config/app.config';
 import { FullScreenModal } from '../modals/FullScreenModal';
@@ -282,8 +281,6 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
             const response = await suppliersApi.create(supplierData);
 
             if (response) {
-                searchCache.clearType('suppliers');
-
                 const transformedSupplier = transformSupplier((response.data || response) as Record<string, unknown>);
 
                 toast.success('Supplier created successfully');

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CheckCircle, X, Printer, Download, Copy, Share2, Mail, MessageCircle, FileText, LucideIcon } from 'lucide-react';
+import { CheckCircle, X, Printer, Download, Copy, Mail, MessageCircle, FileText, LucideIcon } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -85,14 +85,12 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
     additionalActions = [],
     showCopy = true,
     autoCloseDelay = null,
-    enableShare = true,
     partyDetails = null,
     companyInfo = {},
     documentData = {},
     showQuickActions = true
 }) => {
     const [copied, setCopied] = useState<boolean>(false);
-    const [showShareModal, setShowShareModal] = useState<boolean>(false);
     const printUtilityRef = useRef<PrintUtilityRef>(null);
 
     useEffect(() => {
@@ -336,21 +334,6 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                         </div>
                     )}
 
-                    {/* Legacy Action Buttons */}
-                    {!showQuickActions && (
-                        <div className="grid grid-cols-2 gap-3">
-                            {enableShare && (
-                                <button
-                                    onClick={() => setShowShareModal(true)}
-                                    className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-all transform hover:scale-105 col-span-2"
-                                >
-                                    <Share2 className="w-4 h-4" />
-                                    Share Document
-                                </button>
-                            )}
-                        </div>
-                    )}
-
                     {/* Additional custom actions */}
                     {additionalActions.length > 0 && (
                         <div className="grid grid-cols-2 gap-2 mt-3">
@@ -385,14 +368,6 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                 {/* PrintUtility removed for now - using direct callbacks */}
             </div>
 
-            {/* TODO: ShareDocument component was removed - replace with ShareModal if sharing is needed */}
-            {/* enableShare && (
-                <ShareModal
-                    show={showShareModal}
-                    onClose={() => setShowShareModal(false)}
-                    ...
-                />
-            ) */}
         </div>
     );
 };

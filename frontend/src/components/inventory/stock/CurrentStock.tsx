@@ -10,7 +10,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X } from 'lucide-react';
 import apiClient from '../../../services/api/apiClient';
 import { ModuleHeader } from '../../global';
 import { jsPDF } from 'jspdf';
@@ -23,6 +22,7 @@ import { StockActions } from './components/StockActions';
 // Import hooks and types
 import { useStockState } from './hooks/useStockState';
 import type { StockItem, CurrentStockProps, StockFilters as StockFiltersType } from './types/stock.types';
+import { normalizeCurrentStock } from './utils/normalizeCurrentStock';
 
 const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => {
   // Use centralized state management (replaces 24 useState!)
@@ -31,8 +31,6 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
   // Data state (consolidated)
   const [stockData, setStockData] = useState<StockItem[]>([]);
   const [allProducts, setAllProducts] = useState<StockItem[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<StockItem | null>(null);
-  const [editingProduct, setEditingProduct] = useState<StockItem | null>(null);
 
   // Async state
   const [loading, setLoading] = useState<boolean>(true);
@@ -56,51 +54,16 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
       const response = await apiClient.get('/inventory/stock/current', {
         params: {
           limit: 100,
-          skip: page * 100
+          offset: page * 100
         }
       });
 
-      let products: any[] = [];
-      if (response?.data?.stocks && Array.isArray(response.data.stocks)) {
-        products = response.data.stocks.map(stock => ({
-          product_id: stock.product_id,
-          product_name: stock.product_name,
-          product_code: stock.product_code,
-          generic_name: stock.generic_name,
-          category: stock.category || '',
-          product_type: stock.product_type || 'standard',
-          product_class: stock.product_class || 'medicine',
-          manufacturer: stock.manufacturer,
-          brand: stock.brand,
-          hsn_code: stock.hsn_code,
-          unit: stock.unit || 'Units',
-          total_quantity_available: stock.total_quantity_available || stock.total_quantity || 0,
-          total_quantity_reserved: stock.allocated_quantity || 0,
-          mrp_per_unit: stock.mrp_per_unit || 0,
-          cost_per_unit: stock.average_cost || 0,
-          sale_price_per_unit: stock.sale_price_per_unit || 0,
-          reorder_level: stock.reorder_level || 0,
-          low_stock: stock.is_below_minimum || stock.is_below_reorder || false,
-          expiry_alert: stock.near_expiry_batches > 0,
-          total_batches: stock.total_batches || 0,
-          expired_batches: stock.expired_batches || 0,
-          near_expiry_batches: stock.near_expiry_batches || 0,
-          total_value: stock.total_value || 0,
-          stock_value: stock.total_value || 0,
-          available_stock: stock.total_quantity_available || stock.total_quantity || 0,
-          batches: []
-        }));
-      } else if (response?.data && Array.isArray(response.data)) {
-        products = response.data;
-      } else {
-        products = [];
-      }
+      const payload = response?.data?.stocks ?? response?.data;
+      const products = normalizeCurrentStock(payload);
 
       setHasMore(products.length === 100);
 
-      // Basic validation - ensure required fields
-      const validProducts = products.filter(p => p.product_id && p.product_name);
-      const transformedData = validProducts as StockItem[];
+      const transformedData = products as StockItem[];
 
       if (reset || page === 0) {
         setAllProducts(transformedData);
@@ -197,16 +160,6 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
     const direction = ui.sortConfig.key === key && ui.sortConfig.direction === 'asc' ? 'desc' : 'asc';
     dispatch({ type: 'SET_SORT', config: { key, direction } });
   }, [ui.sortConfig, dispatch]);
-
-  const handleViewDetails = useCallback((item: StockItem) => {
-    setSelectedProduct(item);
-    dispatch({ type: 'TOGGLE_DETAILS' });
-  }, [dispatch]);
-
-  const handleEdit = useCallback((item: StockItem) => {
-    setEditingProduct(item);
-    dispatch({ type: 'TOGGLE_EDIT_MODAL' });
-  }, [dispatch]);
 
   const handleFilterChange = useCallback((filters: Partial<StockFiltersType>) => {
     if ('searchQuery' in filters) dispatch({ type: 'SET_SEARCH_QUERY', query: filters.searchQuery || '' });
@@ -332,8 +285,6 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
             loading={loading}
             sortConfig={ui.sortConfig}
             onSort={handleSort}
-            onViewDetails={handleViewDetails}
-            onEdit={handleEdit}
             selectedIds={selectedIds}
             onSelectionChange={(ids) => dispatch({ type: 'SET_SELECTED_IDS', ids })}
           />
@@ -347,17 +298,6 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
           onWhatsApp={handleWhatsApp}
         />
 
-        {/* Edit Modal - TODO: Re-enable when ProductEditModal is available */}
-        {/* {ui.showEditModal && editingProduct && (
-          <ProductEditModal
-            product={editingProduct}
-            onClose={() => dispatch({ type: 'TOGGLE_EDIT_MODAL' })}
-            onSave={async () => {
-              await handleRefresh();
-              dispatch({ type: 'TOGGLE_EDIT_MODAL' })}
-            }}
-          />
-        )} */}
       </div>
     </div>
   );

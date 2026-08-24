@@ -89,9 +89,6 @@ from .api.routes.org import company
 # Settings (already in folder)
 from .api.routes.settings import router as settings_router
 
-# Offline Sync
-from .api.routes import sync as sync_router
-
 # Standalone utilities (remain at root level)
 from .api.routes import metadata
 from .api.routes import calculations
@@ -322,9 +319,6 @@ api.include_router(company.router, prefix="/company", tags=["Company"])
 
 # --- Settings ---
 api.include_router(settings_router, prefix="/settings", tags=["Settings"])
-
-# --- Offline Sync ---
-api.include_router(sync_router.router, tags=["Offline Sync"])
 
 # --- Utilities ---
 api.include_router(documents.router, tags=["Documents"])

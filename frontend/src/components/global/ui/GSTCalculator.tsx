@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Info, X } from 'lucide-react';
+import { useCompany } from '../../../contexts/CompanyContext';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -332,6 +333,7 @@ const GSTCalculatorComponent: React.FC<GSTCalculatorComponentProps> = ({
     showDetails = true,
     onClose,
 }) => {
+    const { companyInfo } = useCompany();
     const [gstResult, setGstResult] = useState<GSTResult | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const calculator = new GSTCalculator();
@@ -346,7 +348,7 @@ const GSTCalculatorComponent: React.FC<GSTCalculatorComponentProps> = ({
 
         try {
             const result = calculator.calculateGST({
-                sellerGSTIN: orderData?.sellerGSTIN || localStorage.getItem('company_gst_number') || '',
+                sellerGSTIN: orderData?.sellerGSTIN || companyInfo?.gst_number || '',
                 customerGSTIN: orderData?.customerGSTIN,
                 billingState: orderData?.billingState ||
                     calculator.getStateFromPincode(orderData?.billingPincode),

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { MapPin, Edit2, Check, X, Plus, Phone, Building2, Home, LucideIcon } from 'lucide-react';
-import { apiClient } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
+import { apiClient, customersApi } from '../../../services/api';
+import { INDIAN_STATES, indianStateName } from '../../../utils/indianStates';
 
 // Imports from centralized types
 import type {
@@ -50,46 +50,18 @@ export interface AddressFormProps {
 
 // ==================== COMPONENT ====================
 
-// Indian states list with GST codes
-const INDIAN_STATES = [
-    { code: '01', name: 'Jammu and Kashmir' },
-    { code: '02', name: 'Himachal Pradesh' },
-    { code: '03', name: 'Punjab' },
-    { code: '04', name: 'Chandigarh' },
-    { code: '05', name: 'Uttarakhand' },
-    { code: '06', name: 'Haryana' },
-    { code: '07', name: 'Delhi' },
-    { code: '08', name: 'Rajasthan' },
-    { code: '09', name: 'Uttar Pradesh' },
-    { code: '10', name: 'Bihar' },
-    { code: '11', name: 'Sikkim' },
-    { code: '12', name: 'Arunachal Pradesh' },
-    { code: '13', name: 'Nagaland' },
-    { code: '14', name: 'Manipur' },
-    { code: '15', name: 'Mizoram' },
-    { code: '16', name: 'Tripura' },
-    { code: '17', name: 'Meghalaya' },
-    { code: '18', name: 'Assam' },
-    { code: '19', name: 'West Bengal' },
-    { code: '20', name: 'Jharkhand' },
-    { code: '21', name: 'Odisha' },
-    { code: '22', name: 'Chhattisgarh' },
-    { code: '23', name: 'Madhya Pradesh' },
-    { code: '24', name: 'Gujarat' },
-    { code: '26', name: 'Dadra and Nagar Haveli and Daman and Diu' },
-    { code: '27', name: 'Maharashtra' },
-    { code: '28', name: 'Andhra Pradesh' },
-    { code: '29', name: 'Karnataka' },
-    { code: '30', name: 'Goa' },
-    { code: '31', name: 'Lakshadweep' },
-    { code: '32', name: 'Kerala' },
-    { code: '33', name: 'Tamil Nadu' },
-    { code: '34', name: 'Puducherry' },
-    { code: '35', name: 'Andaman and Nicobar Islands' },
-    { code: '36', name: 'Telangana' },
-    { code: '37', name: 'Andhra Pradesh (New)' },
-    { code: '38', name: 'Ladakh' }
-];
+type AddressValidationErrors = Partial<Record<'address_line1' | 'city' | 'state' | 'pincode', string>>;
+
+export const validateCustomerAddress = (data: Partial<AddressData>): AddressValidationErrors => {
+    const errors: AddressValidationErrors = {};
+    if (!data.address_line1?.trim()) errors.address_line1 = 'Address line 1 is required';
+    if (!data.city?.trim()) errors.city = 'City is required';
+    if (!data.state?.trim()) errors.state = 'State is required';
+    if (!/^\d{6}$/.test(String(data.pincode || '').trim())) {
+        errors.pincode = 'Enter a valid 6-digit pincode';
+    }
+    return errors;
+};
 
 const AddressForm: React.FC<AddressFormProps> = ({
     customer,
@@ -111,6 +83,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
     const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
     const [isDefault, setIsDefault] = useState<boolean>(false);
     const [loadingAddresses, setLoadingAddresses] = useState<boolean>(false);
+    const [addressLoadError, setAddressLoadError] = useState<string>('');
+    const [saving, setSaving] = useState<boolean>(false);
+    const [saveError, setSaveError] = useState<string>('');
+    const [fieldErrors, setFieldErrors] = useState<AddressValidationErrors>({});
 
     const customerIdRef = useRef<string | number | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -210,45 +186,13 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
     const fetchCustomerAddresses = async (customerId: string | number): Promise<void> => {
         setLoadingAddresses(true);
+        setAddressLoadError('');
         try {
-            const cacheKey = `customer_addresses_${customerId}`;
-            const cached = localStorage.getItem(cacheKey);
-            const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-            const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
-
-            let syncedAddresses: SavedAddress[] = [];
-
-            // Try to get from cache or API
-            if (cached && cacheAge < 5 * 60 * 1000) {
-                syncedAddresses = JSON.parse(cached);
-            } else {
-                try {
-                    const response = await apiClient.get(`/customers/${customerId}/addresses`);
-                    if (response.data?.success && response.data.data) {
-                        syncedAddresses = response.data.data;
-                        localStorage.setItem(cacheKey, JSON.stringify(syncedAddresses));
-                        localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
-                    }
-                } catch (apiError) {
-                    console.warn('[AddressForm] API fetch failed, using local data:', apiError);
-                    // Continue with local data only
-                }
+            const response = await apiClient.get(`/customers/${customerId}/addresses`);
+            if (!response.data?.success || !Array.isArray(response.data.data)) {
+                throw new Error('The server returned an invalid address response.');
             }
-
-            // OFFLINE-FIRST: Get locally pending addresses from IndexedDB
-            let pendingAddresses: SavedAddress[] = [];
-            try {
-                pendingAddresses = await offlineDB.getCustomerAddresses(customerId);
-                // Filter to only pending (not-yet-synced) addresses
-                pendingAddresses = pendingAddresses.filter((a: any) =>
-                    a.sync_status === 'pending' && String(a.id).startsWith('temp_addr_')
-                );
-            } catch (e) {
-                console.warn('[AddressForm] Error getting local addresses:', e);
-            }
-
-            // Merge synced + pending addresses
-            const allAddresses = [...syncedAddresses, ...pendingAddresses];
+            const allAddresses: SavedAddress[] = response.data.data;
 
             const filteredAddresses = allAddresses.filter(addr =>
                 !addr.address_type || addr.address_type === addressType || addr.is_default
@@ -264,19 +208,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
             }
         } catch (error) {
             console.error('[AddressForm] Failed to fetch addresses:', error);
-            const fallbackAddress: SavedAddress = {
-                id: 'default',
-                label: addressType === 'billing' ? 'Billing Address' : 'Shipping Address',
-                address_line1: (typeof customer?.address === 'string' ? customer.address : customer?.address?.address_line1) || (customer as any)?.address_line1 || '',
-                address_line2: (customer as any)?.address2 || (customer as any)?.address_line2 || '',
-                city: customer?.city || (customer as any)?.billing_city || '',
-                state: customer?.state || (customer as any)?.state || (customer as any)?.billing_state || '',
-                pincode: (customer as any)?.pincode || (customer as any)?.pincode || (customer as any)?.billing_pincode || '',
-                mobile: (customer as any)?.mobile || (customer as any)?.phone || customer?.primary_phone || '',
-                country: ''
-            };
-            setSavedAddresses([fallbackAddress]);
-            selectAddress(fallbackAddress);
+            setSavedAddresses([]);
+            setAddressLoadError('Saved addresses could not be loaded from the server.');
         } finally {
             setLoadingAddresses(false);
         }
@@ -292,7 +225,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
             address_line1: address.address_line1 || address.address || '',
             address_line2: address.address_line2 || address.address2 || '',
             city: address.city || '',
-            state: address.state || (address as any).state_name || '',
+            state: indianStateName(address.state || (address as any).state_code || (address as any).state_name),
             pincode: address.pincode || '',
             country: address.country || 'India',
             mobile: mobileNumber,
@@ -331,6 +264,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
     const handleFieldChange = (field: keyof AddressData, value: string): void => {
         const newData = { ...formData, [field]: value };
         setFormData(newData);
+        setSaveError('');
+        if (field in fieldErrors) {
+            setFieldErrors(previous => ({ ...previous, [field]: undefined }));
+        }
 
         const addressString = buildAddressString(newData);
         if (onChange) {
@@ -347,6 +284,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
         setIsEditing(true);
         setShowDropdown(false);
         setSelectedAddressId(null);
+        setSaveError('');
+        setFieldErrors({});
 
         const mobileNumber = customer?.mobile || customer?.phone ||
             customer?.primary_phone || (customer as any)?.contact_number || (customer as any)?.mobile || '';
@@ -364,114 +303,82 @@ const AddressForm: React.FC<AddressFormProps> = ({
     };
 
     const handleSave = async (): Promise<void> => {
-        const addressString = buildAddressString(formData);
         const customerId = customer?.customer_id;
-
         if (!customerId) {
-            console.error('[AddressForm] No customer ID');
+            setSaveError('Select a saved customer before adding an address.');
+            return;
+        }
+
+        const validationErrors = validateCustomerAddress(formData);
+        if (Object.keys(validationErrors).length > 0) {
+            setFieldErrors(validationErrors);
+            setSaveError('Complete the required address fields before saving.');
             return;
         }
 
         const addressPayload = {
-            address_line1: formData.address_line1,
-            address_line2: formData.address_line2,
-            city: formData.city,
-            state: formData.state,
-            pincode: formData.pincode,
-            mobile: formData.mobile,
-            landmark: formData.landmark,
+            address_line1: String(formData.address_line1).trim(),
+            address_line2: formData.address_line2?.trim() || undefined,
+            city: String(formData.city).trim(),
+            state: String(formData.state).trim(),
+            pincode: String(formData.pincode).trim(),
+            landmark: formData.landmark?.trim() || undefined,
             address_type: addressType,
             is_default: isDefault
         };
 
-        if (isAddingNew) {
-            // ADDING NEW ADDRESS
-            try {
-                // OFFLINE-FIRST: Save to IndexedDB immediately
-                const tempId = await offlineDB.saveCustomerAddress(customerId, addressPayload);
-                console.log('[AddressForm] Saved new address offline:', tempId);
-
-                // Add to local state immediately
-                const newAddr = { id: tempId, ...addressPayload, sync_status: 'pending' };
-                setSavedAddresses(prev => [...prev, newAddr as any]);
-
-                // Try to sync to API (non-blocking)
-                try {
-                    const response = await apiClient.post(`/customers/${customerId}/addresses/`, addressPayload);
-                    if (response.data?.success) {
-                        await offlineDB.markAddressSynced(tempId, response.data.address_id);
-                        console.log('[AddressForm] New address synced:', response.data.address_id);
-
-                        // Refresh list
-                        const cacheKey = `customer_addresses_${customerId}`;
-                        localStorage.removeItem(cacheKey);
-                        await fetchCustomerAddresses(customerId);
-                    }
-                } catch (syncError) {
-                    console.warn('[AddressForm] API sync failed, will retry later:', syncError);
+        setSaving(true);
+        setSaveError('');
+        let accepted = false;
+        try {
+            if (isAddingNew) {
+                const response = await customersApi.createAddress(String(customerId), addressPayload);
+                if (!response.data?.success || !response.data?.address_id) {
+                    throw new Error('The server did not confirm the saved address.');
                 }
-            } catch (error) {
-                console.error('[AddressForm] Failed to save address:', error);
-            }
-        } else if (isEditing && selectedAddressId) {
-            // EDITING EXISTING ADDRESS
-            try {
-                // Update local state immediately with new formData (including mobile)
-                const updatedAddress = { ...addressPayload, id: selectedAddressId, address_id: selectedAddressId };
-                setSavedAddresses(prev => prev.map(addr =>
-                    (addr.id === selectedAddressId || addr.address_id === selectedAddressId)
-                        ? { ...addr, ...updatedAddress }
-                        : addr
-                ));
-
-                // Also update formData to ensure display reflects changes immediately
-                setFormData(prev => ({ ...prev, ...addressPayload }));
-                console.log('[AddressForm] Updated address locally with mobile:', addressPayload.mobile);
-
-                // Only sync to API if it's a real database address (not a temp local one)
+                await fetchCustomerAddresses(customerId);
+                accepted = true;
+            } else if (isEditing && selectedAddressId) {
                 const addressIdStr = String(selectedAddressId);
-                const isLocalPending = addressIdStr.startsWith('temp_addr_');
-
-                if (!isLocalPending) {
-                    // Try to sync to API (non-blocking) - don't refetch to avoid overwriting local state
-                    try {
-                        await apiClient.put(`/customers/${customerId}/addresses/${selectedAddressId}`, addressPayload);
-                        console.log('[AddressForm] Address update synced to server');
-
-                        // Clear cache so next full page load gets fresh data
-                        const cacheKey = `customer_addresses_${customerId}`;
-                        localStorage.removeItem(cacheKey);
-                        // NOTE: Not calling fetchCustomerAddresses here to preserve local state with updated mobile
-                    } catch (syncError) {
-                        console.warn('[AddressForm] Address update sync failed:', syncError);
-                        // Local update already applied - user sees correct data
-                    }
-                } else {
-                    // Update the IndexedDB record so sync queue sends edited data
-                    try {
-                        const db = await offlineDB.init();
-                        const existingRecord = await db.get('customer_addresses', addressIdStr);
-                        if (existingRecord) {
-                            const updatedRecord = {
-                                ...existingRecord,
-                                ...addressPayload,
-                                updated_at: new Date().toISOString()
-                            };
-                            await db.put('customer_addresses', updatedRecord);
-                            console.log('[AddressForm] Updated IndexedDB record for pending address:', addressIdStr);
-                        }
-                    } catch (dbError) {
-                        console.warn('[AddressForm] Failed to update IndexedDB record:', dbError);
-                    }
+                if (addressIdStr.startsWith('temp_addr_')) {
+                    throw new Error('This legacy offline address was never accepted by the server. Recreate it.');
                 }
-            } catch (error) {
-                console.error('[AddressForm] Failed to update address:', error);
+                const response = await customersApi.updateAddress(
+                    String(customerId),
+                    addressIdStr,
+                    addressPayload,
+                );
+                if (!response.data?.success) {
+                    throw new Error('The server did not confirm the address update.');
+                }
+                await fetchCustomerAddresses(customerId);
+                const updatedAddress = {
+                    ...addressPayload,
+                    mobile: formData.mobile,
+                    id: selectedAddressId,
+                    address_id: selectedAddressId,
+                };
+                setSavedAddresses(previous => previous.map(address =>
+                    address.id === selectedAddressId || address.address_id === selectedAddressId
+                        ? { ...address, ...updatedAddress }
+                        : address,
+                ));
+                accepted = true;
             }
+        } catch (error: any) {
+            const detail = error?.response?.data?.detail;
+            setSaveError(typeof detail === 'string' ? detail : 'Address was not saved. Check the details and try again.');
+        } finally {
+            setSaving(false);
         }
 
+        if (!accepted) return;
+
+        const addressString = buildAddressString(formData);
         setIsEditing(false);
         setIsAddingNew(false);
         setIsDefault(false);
+        setFieldErrors({});
 
         if (onChange) {
             onChange(addressString);
@@ -574,6 +481,17 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 <div className="absolute top-14 left-0 right-0 z-20 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                     {loadingAddresses ? (
                         <div className="p-4 text-center text-gray-500">Loading addresses...</div>
+                    ) : addressLoadError ? (
+                        <div role="alert" className="p-4 text-center">
+                            <p className="text-sm text-red-700">{addressLoadError}</p>
+                            <button
+                                type="button"
+                                onClick={() => customer?.customer_id && fetchCustomerAddresses(customer.customer_id)}
+                                className="mt-3 min-h-11 rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                            >
+                                Retry
+                            </button>
+                        </div>
                     ) : (
                         <>
                             {/* Filter to only shipping addresses for Indian GST compliance - billing comes from backend */}
@@ -659,17 +577,22 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         {/* Row 1: Address Line 1 */}
                         <div className="col-span-2">
                             <input
+                                aria-label="Address line 1"
+                                aria-invalid={Boolean(fieldErrors.address_line1)}
                                 type="text"
                                 value={formData.address_line1}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line1', e.target.value)}
                                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                 placeholder="Address Line 1 *"
                             />
+                            {fieldErrors.address_line1 && <p className="mt-1 text-xs text-red-600">{fieldErrors.address_line1}</p>}
                         </div>
 
                         {/* Row 2: Address Line 2 | Landmark */}
                         <div>
                             <input
+                                aria-label="City"
+                                aria-invalid={Boolean(fieldErrors.city)}
                                 type="text"
                                 value={formData.address_line2}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line2', e.target.value)}
@@ -697,26 +620,33 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                 placeholder="City *"
                             />
+                            {fieldErrors.city && <p className="mt-1 text-xs text-red-600">{fieldErrors.city}</p>}
                         </div>
 
                         <div>
                             <select
+                                aria-label="State"
+                                aria-invalid={Boolean(fieldErrors.state)}
                                 value={formData.state}
                                 onChange={(e: ChangeEvent<HTMLSelectElement>) => handleFieldChange('state', e.target.value)}
                                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                             >
                                 <option value="">Select State *</option>
-                                {INDIAN_STATES.map(state => (
-                                    <option key={state.code} value={state.name}>
-                                        {state.name}
+                                {INDIAN_STATES.map(([code, name]) => (
+                                    <option key={code} value={name}>
+                                        {name}
                                     </option>
                                 ))}
                             </select>
+                            {fieldErrors.state && <p className="mt-1 text-xs text-red-600">{fieldErrors.state}</p>}
                         </div>
 
                         {/* Row 4: Pincode | Mobile */}
                         <div>
                             <input
+                                aria-label="Pincode"
+                                aria-invalid={Boolean(fieldErrors.pincode)}
+                                inputMode="numeric"
                                 type="text"
                                 value={formData.pincode}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('pincode', e.target.value)}
@@ -724,20 +654,29 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                 placeholder="Pincode *"
                                 maxLength={6}
                             />
+                            {fieldErrors.pincode && <p className="mt-1 text-xs text-red-600">{fieldErrors.pincode}</p>}
                         </div>
 
                         <div className="relative">
                             <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <input
+                                aria-label="Customer mobile"
                                 type="tel"
                                 value={formData.mobile}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('mobile', e.target.value)}
                                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                placeholder="Mobile *"
+                                placeholder="Customer mobile"
                                 maxLength={10}
                             />
+                            <p className="mt-1 text-xs text-gray-500">Used on this document; customer contact remains unchanged.</p>
                         </div>
                     </div>
+
+                    {saveError && (
+                        <p role="alert" className="rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-red-700">
+                            {saveError}
+                        </p>
+                    )}
 
                     {/* Action row: Checkbox | Cancel | Save */}
                     <div className="flex items-center justify-between pt-2 border-t border-gray-100">
@@ -755,17 +694,21 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         {/* Buttons on right */}
                         <div className="flex items-center gap-3">
                             <button
+                                type="button"
                                 onClick={handleCancel}
+                                disabled={saving}
                                 className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 onClick={handleSave}
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5"
+                                disabled={saving}
+                                className="min-h-11 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 rounded-lg transition-colors flex items-center gap-1.5"
                             >
                                 <Check className="w-4 h-4" />
-                                Save
+                                {saving ? 'Saving…' : 'Save address'}
                             </button>
                         </div>
                     </div>
@@ -807,4 +750,3 @@ export default AddressForm;
 
 // Re-export types for external use
 export type { AddressData, SavedAddress, Customer };
-

@@ -420,6 +420,8 @@ export function DataTable<T extends Record<string, any>>({
             <Button
               variant="outline"
               size="sm"
+              aria-label="First page"
+              title="First page"
               onClick={() => onPageChange?.(1)}
               disabled={currentPage === 1}
             >
@@ -428,6 +430,8 @@ export function DataTable<T extends Record<string, any>>({
             <Button
               variant="outline"
               size="sm"
+              aria-label="Previous page"
+              title="Previous page"
               onClick={() => onPageChange?.(currentPage - 1)}
               disabled={currentPage === 1}
             >
@@ -441,6 +445,8 @@ export function DataTable<T extends Record<string, any>>({
             <Button
               variant="outline"
               size="sm"
+              aria-label="Next page"
+              title="Next page"
               onClick={() => onPageChange?.(currentPage + 1)}
               disabled={currentPage === totalPages}
             >
@@ -449,6 +455,8 @@ export function DataTable<T extends Record<string, any>>({
             <Button
               variant="outline"
               size="sm"
+              aria-label="Last page"
+              title="Last page"
               onClick={() => onPageChange?.(totalPages)}
               disabled={currentPage === totalPages}
             >

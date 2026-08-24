@@ -100,8 +100,8 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                 {/* Party & Transport Details Section - 3 columns */}
                 <div className="grid grid-cols-3 gap-4 mb-6">
                     {/* Bill To Box */}
-                    <div className="border border-gray-300 rounded-lg p-4 bg-blue-50 print-colors">
-                        <h3 className="text-xs font-bold text-blue-700 uppercase mb-3 border-b border-blue-200 pb-1">Bill To</h3>
+                    <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 print-colors">
+                        <h3 className="text-xs font-bold text-gray-700 uppercase mb-3 border-b border-gray-200 pb-1">Bill To</h3>
                         <div className="space-y-1">
                             <p className="font-semibold text-gray-900 text-sm">{challan.customer_name || 'N/A'}</p>
                             {challan.customer_details ? (

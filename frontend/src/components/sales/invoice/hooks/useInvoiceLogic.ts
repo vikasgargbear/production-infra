@@ -2,13 +2,11 @@ import { useState, useEffect, useCallback, useRef, RefObject, Dispatch, SetState
 import { toast } from 'react-toastify';
 import { calculateInvoicePreview } from '../../../../services/calculations/invoiceCalculationService';
 import { employeesApi } from '../../../../services/api';
-import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { getTodayBusinessDate, getDaysFromToday } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 import { determineGstType } from '../../../gst/utils/gstCalculations';
-import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 
 // Shared Types - Single Source of Truth
 import {
@@ -23,10 +21,8 @@ import {
     CreatedInvoiceData,
     GstType
 } from '../types/invoiceTypes';
-import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
 import { prepareItemForInvoice } from '../utils/invoiceItemUtils';
 import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
-import { useInvoiceDraft } from './useInvoiceDraft';
 import { useInvoiceSave } from './useInvoiceSave';
 
 // ==================== HOOK-SPECIFIC TYPE EXTENSIONS ====================
@@ -171,12 +167,49 @@ export interface UseInvoiceLogicReturn {
     handleRemoveItem: (index: number) => void;
     handleImport: (importData: ImportData) => Promise<void>;
     handleApplyBillDiscount: (discountData: DiscountData) => void;
+    resetInvoice: () => void;
     handleSaveInvoice: () => Promise<void>;
 
 }
 
 // ==================== HELPER FUNCTIONS ====================
 // (Moved to ../utils/invoiceItemUtils.ts)
+
+export const createInitialInvoice = (): Invoice => ({
+    invoice_number: '',
+    invoice_date: getTodayBusinessDate(),
+    due_date: getDaysFromToday(30),
+    items: [],
+    customer_details: null,
+    billing_address: '',
+    shipping_address: '',
+    gst_type: 'CGST/SGST',
+    delivery_type: 'PICKUP',
+    transport_company: '',
+    vehicle_number: '',
+    driver_phone: '',
+    lr_number: '',
+    freight_charges: 0,
+    discount_amount: 0,
+    discount_percent: 0,
+    discount_type: 'percentage',
+    payment_mode: 'credit',
+    payment_status: 'pending',
+    payments: [{ id: '1', method: 'credit', amount: 0, reference: '' }],
+    notes: '',
+    salesperson_id: null,
+    e_invoice_applicable: false,
+    e_invoice_number: '',
+    irn: '',
+    ack_no: '',
+    ack_date: '',
+    qr_code: '',
+    eway_bill_number: '',
+    eway_bill_date: '',
+    eway_bill_valid_upto: '',
+    final_amount: 0,
+    totals: null,
+});
 
 // ==================== MAIN HOOK ====================
 
@@ -191,46 +224,7 @@ export const useInvoiceLogic = (
     const { companyInfo } = useCompany();
 
     // Core State - using canonical backend names
-    const [invoice, setInvoice] = useState<Invoice>({
-        invoice_number: '',
-        invoice_date: getTodayBusinessDate(),
-        due_date: getDaysFromToday(30),
-        items: [],
-        customer_details: null,
-        billing_address: '',
-        shipping_address: '',
-        gst_type: 'CGST/SGST',
-        delivery_type: 'PICKUP',
-        transport_company: '',
-        vehicle_number: '',
-        driver_phone: '',
-        lr_number: '',
-        freight_charges: 0,
-        discount_amount: 0,
-        discount_percent: 0,
-        discount_type: 'percentage',
-        payment_mode: 'credit',
-        payment_status: 'pending',
-        payments: [{
-            id: '1',
-            method: 'credit',
-            amount: 0,
-            reference: ''
-        }],
-        notes: '',
-        salesperson_id: null,
-        e_invoice_applicable: false,
-        e_invoice_number: '',
-        irn: '',
-        ack_no: '',
-        ack_date: '',
-        qr_code: '',
-        eway_bill_number: '',
-        eway_bill_date: '',
-        eway_bill_valid_upto: '',
-        final_amount: 0,
-        totals: null
-    });
+    const [invoice, setInvoice] = useState<Invoice>(createInitialInvoice);
 
     // Supporting State
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -265,10 +259,7 @@ export const useInvoiceLogic = (
     const deliveryChargesRef = useRef<HTMLInputElement | null>(null);
 
 
-    // Draft Management (auto-save + loading)
-    useInvoiceDraft({ invoice, selectedCustomer });
-
-    // Save Logic (validation + offline-first + background sync)
+    // Save Logic: canonical API confirmation only.
     const { saving, handleSaveInvoice } = useInvoiceSave({
         invoice,
         selectedCustomer,
@@ -287,68 +278,22 @@ export const useInvoiceLogic = (
             try {
                 setIsLoading(true);
 
-                // Generate invoice number locally (instant, no API call)
-                // Backend assigns the real number on save
-                if (!invoice.invoice_number) {
-                    const invoiceNumber = await documentNumberGenerator.generateInvoiceNumber();
-                    setInvoice(prev => ({ ...prev, invoice_number: invoiceNumber }));
-                }
-
-                // Load employees for MR selection with caching
+                // The canonical API assigns the final invoice number on execute.
+                // Load employee choices directly from the API without local caches.
                 try {
-                    const cached = storageService.getItem<Employee[]>(STORAGE_KEYS.EMPLOYEES_CACHE);
-                    const cacheTime = storageService.getItem<string>(STORAGE_KEYS.EMPLOYEES_CACHE_TIME);
-                    const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
-
-                    if (cached && cacheAge < 2 * 60 * 1000) {
-                        console.log('[Invoice] Using cached employees');
-                        const uniqueCached = Array.from(
-                            new Map(cached.map(e => [e.employee_id, e])).values()
-                        );
-                        setEmployees(uniqueCached);
-                    } else {
-                        console.log('[Invoice] Fetching employees from API');
-                        const employeeResponse = await employeesApi.getAll({ limit: 100 });
-
-                        const rawData = employeeResponse?.data || employeeResponse || [];
-                        const employeesList = Array.isArray(rawData)
-                            ? rawData
-                            : ((rawData as { data?: Employee[]; employees?: Employee[] }).data ||
-                                (rawData as { employees?: Employee[] }).employees || []);
-
-                        if (Array.isArray(employeesList) && employeesList.length > 0) {
-                            const uniqueEmployees = Array.from(
-                                new Map(employeesList.map((e: Employee) => [e.employee_id, e])).values()
-                            );
-
-                            setEmployees(uniqueEmployees);
-                            storageService.setItem(STORAGE_KEYS.EMPLOYEES_CACHE, uniqueEmployees);
-                            storageService.setItem(STORAGE_KEYS.EMPLOYEES_CACHE_TIME, Date.now().toString());
-                            console.log('[Invoice] Cached', uniqueEmployees.length, 'employees');
-                        } else {
-                            throw new Error('Empty or invalid employee response');
-                        }
-                    }
+                    const employeeResponse = await employeesApi.getAll({ limit: 100 });
+                    const rawData = employeeResponse?.data || employeeResponse || [];
+                    const employeesList = Array.isArray(rawData)
+                        ? rawData
+                        : ((rawData as { data?: Employee[]; employees?: Employee[] }).data ||
+                            (rawData as { employees?: Employee[] }).employees || []);
+                    const uniqueEmployees = Array.from(
+                        new Map(employeesList.map((employee: Employee) => [employee.employee_id, employee])).values()
+                    );
+                    setEmployees(uniqueEmployees);
                 } catch (employeeError) {
-                    console.warn('Unable to fetch employees from API:', (employeeError as Error).message);
-
-                    // OFFLINE FALLBACK: Try to get employees from IndexedDB
-                    try {
-                        console.log('[Invoice] Attempting to load employees from offline DB...');
-                        const offlineEmployees = await offlineDB.getAll('employees') as Employee[];
-                        if (offlineEmployees && offlineEmployees.length > 0) {
-                            const uniqueOffline = Array.from(
-                                new Map(offlineEmployees.map(e => [e.employee_id, e])).values()
-                            );
-                            setEmployees(uniqueOffline);
-                            console.log(`[Invoice] Loaded ${uniqueOffline.length} employees from offline cache`);
-                        } else {
-                            setEmployees([]);
-                        }
-                    } catch (offlineError) {
-                        console.error('[Invoice] Offline employee load failed:', offlineError);
-                        setEmployees([]);
-                    }
+                    console.error('Unable to fetch employees from API:', employeeError);
+                    setEmployees([]);
                 }
 
                 // If prefilled data provided, merge it
@@ -384,7 +329,7 @@ export const useInvoiceLogic = (
         let cancelled = false;
         const timeoutId = window.setTimeout(async () => {
             try {
-                const result = await calculateInvoicePreview(invoice, isOnline);
+                const result = await calculateInvoicePreview(invoice, true);
                 if (cancelled) return;
 
                 setInvoice(prev => ({
@@ -457,8 +402,6 @@ export const useInvoiceLogic = (
         const billingAddress =
             (customer.address_info?.billing_address ||
                 customer.billing_address?.street ||
-                // Fallback for offline flat structure
-                ((customer as any).address_line1 ? `${(customer as any).address_line1}${(customer as any).city ? `, ${(customer as any).city}` : ''}${(customer as any).state ? `, ${(customer as any).state}` : ''}` : '') ||
                 '') as string;
 
         setInvoice(prev => ({
@@ -482,76 +425,7 @@ export const useInvoiceLogic = (
             ? prepareItemForInvoice(product as any)
             : prepareItemForInvoice(product as any);
 
-        // OFFLINE: If no batch selected, fetch best batch from IndexedDB
-        if (!isOnline && !invoiceItem.batch_id && invoiceItem.product_id) {
-            try {
-                console.log(`[Invoice] Fetching offline batches for product ${invoiceItem.product_id}...`);
-                const batches = await offlineDB.getBatchesForProduct(invoiceItem.product_id);
-
-                if (batches && batches.length > 0) {
-                    // Filter for valid batches (stock > 0) and sort by expiry
-                    const validBatches = batches
-                        .filter((b: any) => (b.quantity_available || 0) > 0)
-                        .sort((a: any, b: any) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
-
-                    // Use best valid batch, or just the first one if all out of stock
-                    const bestBatch = validBatches[0] || batches[0];
-
-                    if (bestBatch) {
-                        console.log('[Invoice] Auto-selected offline batch:', bestBatch);
-
-                        // Update item with batch details
-                        invoiceItem.batch_id = String(bestBatch.batch_id);
-                        invoiceItem.batch_number = bestBatch.batch_number;
-                        invoiceItem.expiry_date = bestBatch.expiry_date;
-                        invoiceItem.manufacturing_date = bestBatch.manufacturing_date;
-
-                        // CRITICAL: Update pricing from batch
-                        const mrp = Number(bestBatch.mrp_per_unit || 0);
-                        const unit_price = Number(bestBatch.sale_price_per_unit || 0);
-
-                        invoiceItem.mrp = mrp;
-                        invoiceItem.unit_price = unit_price;
-                        // CANONICAL: unit_price is single source of truth
-                        invoiceItem.available_quantity = Number(bestBatch.quantity_available || 0);
-
-                        // Pack Info - using backend-standard names
-                        invoiceItem.units_per_pack = Number(bestBatch.units_per_pack || 1);
-                        invoiceItem.packages_per_box = Number(bestBatch.packages_per_box || 1);
-
-                        // Recalculate tax if needed
-                        // (Usually tax % is from product, but tax amount depends on unit_price)
-
-                        toast.info(`Offline: Auto-selected batch ${bestBatch.batch_number} (Qty: ${bestBatch.quantity_available})`);
-                    }
-                } else {
-                    console.warn('[Invoice] No offline batches found for product');
-                }
-            } catch (err) {
-                console.error('[Invoice] Error fetching offline batches:', err);
-            }
-        }
-
         console.log('📦 [ADD ITEM] Transformed product:', invoiceItem);
-
-        // OFFLINE SUPPORT: Cache batch in IndexedDB
-        if (invoiceItem.batch_id) {
-            try {
-                await offlineDB.storeBatches([{
-                    batch_id: invoiceItem.batch_id,
-                    product_id: invoiceItem.product_id,
-                    batch_number: invoiceItem.batch_number,
-                    expiry_date: invoiceItem.expiry_date,
-                    manufacturing_date: invoiceItem.manufacturing_date,
-                    quantity_available: invoiceItem.available_quantity || 0,
-                    mrp_per_unit: invoiceItem.mrp,
-                    sale_price_per_unit: invoiceItem.unit_price, // Maps to unit_price
-                }]);
-                console.log('📦 [ADD ITEM] Batch cached in IndexedDB for offline use');
-            } catch (e) {
-                console.warn('📦 [ADD ITEM] Failed to cache batch:', e);
-            }
-        }
 
         if (!invoiceItem || !invoiceItem.product_name) {
             toast.error('Invalid product data');
@@ -602,7 +476,7 @@ export const useInvoiceLogic = (
         });
 
         // Message already shown via toast.success above
-    }, [isOnline]);
+    }, []);
 
     const handleUpdateItem = useCallback((index: number, field: string, value: unknown) => {
         console.log(`🔄 [UPDATE ITEM] Index: ${index}, Field: ${field}, Value: ${value}`);
@@ -662,6 +536,16 @@ export const useInvoiceLogic = (
             discount_amount: discountData.type === 'fixed' ? (discountData.amount || 0) : 0,
             discount_percent: discountData.type === 'percentage' ? (discountData.percentage || 0) : 0
         }));
+    }, []);
+
+    const resetInvoice = useCallback(() => {
+        setInvoice(createInitialInvoice());
+        setSelectedCustomer(null);
+        setSelectedMR(null);
+        setSameAsShipping(true);
+        setCreatedInvoiceData(null);
+        setShowSuccessModal(false);
+        setError(null);
     }, []);
 
 
@@ -726,6 +610,7 @@ export const useInvoiceLogic = (
         handleRemoveItem,
         handleImport,
         handleApplyBillDiscount,
+        resetInvoice,
         handleSaveInvoice,
 
     };

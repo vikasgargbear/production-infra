@@ -506,7 +506,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           iconColor={returnTypeConfig[returnType].iconColor}
           onClose={onClose}
           showSaveDraft={false}
-          onSaveDraft={() => { }}
           additionalActions={[
             {
               label: "Refresh",

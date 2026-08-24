@@ -7,7 +7,7 @@ import { Loader2, AlertCircle, Package } from 'lucide-react';
 import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
-import { invoicesApi, gstApi } from '../../../services/api';
+import { gstApi } from '../../../services/api';
 
 interface HSNSummaryReportProps {
     dateRange: DateRange;
@@ -27,6 +27,39 @@ interface HSNItem {
     tax_amount: number;
 }
 
+const canonicalNumber = (value: unknown, field: string): number => {
+    if (value === null || value === undefined || value === '') {
+        throw new Error(`HSN response is missing ${field}`);
+    }
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) throw new Error(`HSN response has invalid ${field}`);
+    return parsed;
+};
+
+export const normalizeHsnSummary = (rows: unknown): HSNItem[] => {
+    if (!Array.isArray(rows)) throw new Error('HSN response must contain an array');
+    return rows.map((row: Record<string, unknown>, index) => {
+        if (!row || typeof row !== 'object') throw new Error(`HSN row ${index + 1} is invalid`);
+        if (typeof row.hsn_code !== 'string' || typeof row.description !== 'string') {
+            throw new Error(`HSN row ${index + 1} is missing identity fields`);
+        }
+        return {
+            hsn_code: row.hsn_code,
+            description: row.description,
+            quantity: canonicalNumber(row.quantity, 'quantity'),
+            taxable_value: canonicalNumber(row.taxable_value, 'taxable_value'),
+            tax_rate: canonicalNumber(row.tax_rate, 'tax_rate'),
+            tax_amount: canonicalNumber(row.tax_amount, 'tax_amount'),
+        };
+    });
+};
+
+const hsnTotals = (rows: HSNItem[]) => ({
+    quantity: rows.reduce((sum, row) => sum + row.quantity, 0),
+    taxable: rows.reduce((sum, row) => sum + row.taxable_value, 0),
+    tax: rows.reduce((sum, row) => sum + row.tax_amount, 0),
+});
+
 const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshTrigger, onDataReady }) => {
     const [data, setData] = useState<HSNItem[]>([]);
     const [loading, setLoading] = useState(false);
@@ -39,72 +72,19 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
             setError(null);
 
             try {
-                // Try API first
-                try {
-                    const response = await gstApi.reports.hsnSummary({
-                        from_date: dateRange.from,
-                        to_date: dateRange.to
-                    });
-                    const responseData = response?.data || response;
-
-                    if (responseData?.hsn_summary) {
-                        setData(responseData.hsn_summary);
-                        onDataReady?.(responseData.hsn_summary);
-                        return;
-                    }
-                } catch {
-                    // Fall back to computing from invoices
-                }
-
-                // Compute from invoices
-                const invoiceRes = await invoicesApi.getAll({
+                const response = await gstApi.reports.hsnSummary({
                     from_date: dateRange.from,
-                    to_date: dateRange.to,
-                    limit: 5000
+                    to_date: dateRange.to
                 });
-                const invoiceData = invoiceRes?.data || invoiceRes;
-                const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
-
-                const hsnGroups: Record<string, HSNItem> = {};
-
-                invoices.forEach((inv: any) => {
-                    const items = inv.items || [];
-                    items.forEach((item: any) => {
-                        const hsn = item.hsn_code || item.hsn || item.product_hsn || 'N/A';
-                        const qty = item.quantity || 0;
-                        const unit_price = item.unit_price || item.unit_price || 0;
-                        const taxableValue = qty * unit_price;
-                        const taxRate = item.tax_percent || item.gst_percent || 18;
-                        const taxAmount = (taxableValue * taxRate) / 100;
-
-                        if (!hsnGroups[hsn]) {
-                            hsnGroups[hsn] = {
-                                hsn_code: hsn,
-                                description: item.product_name || 'Product',
-                                quantity: 0,
-                                taxable_value: 0,
-                                tax_rate: taxRate,
-                                tax_amount: 0
-                            };
-                        }
-
-                        hsnGroups[hsn].quantity += qty;
-                        hsnGroups[hsn].taxable_value += taxableValue;
-                        hsnGroups[hsn].tax_amount += taxAmount;
-                    });
-                });
-
-                const hsnArray = Object.values(hsnGroups).sort((a, b) => b.taxable_value - a.taxable_value);
-                setData(hsnArray);
-                onDataReady?.(hsnArray);
-
-                const totalQty = hsnArray.reduce((s, h) => s + h.quantity, 0);
-                const totalTaxable = hsnArray.reduce((s, h) => s + h.taxable_value, 0);
-                const totalTax = hsnArray.reduce((s, h) => s + h.tax_amount, 0);
-                setTotals({ quantity: totalQty, taxable: totalTaxable, tax: totalTax });
-
+                const responseData = response?.data || response;
+                const normalized = normalizeHsnSummary(responseData?.hsn_summary);
+                setData(normalized);
+                setTotals(hsnTotals(normalized));
+                onDataReady?.(normalized);
             } catch (err) {
-                setError('Failed to load HSN summary');
+                setData([]);
+                setTotals({ quantity: 0, taxable: 0, tax: 0 });
+                setError(err instanceof Error ? err.message : 'Failed to load HSN summary');
             } finally {
                 setLoading(false);
             }
@@ -165,7 +145,7 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                     columns={[
                         { key: 'hsn_code', header: 'HSN Code' },
                         { key: 'description', header: 'Description' },
-                        { key: 'quantity', header: 'Quantity', render: (v) => v.toLocaleString() },
+                        { key: 'quantity', header: 'Quantity', render: (v) => Number(v).toLocaleString() },
                         { key: 'taxable_value', header: 'Taxable Value', render: (v) => formatCurrency(v) },
                         { key: 'tax_rate', header: 'Tax Rate', render: (v) => `${v}%` },
                         { key: 'tax_amount', header: 'Tax Amount', render: (v) => formatCurrency(v) }

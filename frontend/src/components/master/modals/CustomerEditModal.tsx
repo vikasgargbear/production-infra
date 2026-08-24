@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, Phone, Shield, CreditCard, Building } from 'lucide-react';
 import { customersApi, metadataApi } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import syncEngine from '../../../services/offline/sync/syncEngine';
 import { useToast } from '../../global/ui/feedback/Toast';
+import { CanonicalWriteNotice } from '../../global';
 import Input from '../../global/ui/forms/Input';
 import { FORM_STYLES } from '../../../constants/formStyles';
 import ModalShell from './shared/ModalShell';
@@ -160,37 +159,11 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
       };
 
       if (customer) {
-        await customersApi.update(customer.customer_id, dataToSave);
-        toast.success('Customer updated successfully');
+        setError('Editing a customer is disabled until a canonical API command is available.');
+        return;
       } else {
-        if (!dataToSave.customer_code) {
-          dataToSave.customer_code = `CUST${Date.now().toString().slice(-6)}`;
-        }
-
-        const tempId = `LOCAL_CUST_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-        const localRecord = {
-          id: tempId,
-          customer_id: tempId,
-          _localId: tempId,
-          ...dataToSave,
-          name: dataToSave.customer_name,
-          phone: dataToSave.primary_phone,
-          sync_status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          created_offline: true
-        };
-
-        const db = await offlineDB.init();
-        await db.put('customers', localRecord);
-        await offlineDB.addToSyncQueue('customer', tempId, 'create', localRecord);
-
-        toast.success(`Customer created${navigator.onLine ? '' : ' (offline)'}${!navigator.onLine ? ' - will sync when online' : ''}`);
-
-        if (navigator.onLine) {
-          syncEngine.startSync().catch(() => {});
-        }
+        await customersApi.create(dataToSave);
+        toast.success('Customer created successfully');
       }
 
       onSave();
@@ -234,9 +207,11 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
           entityLabel="Customer"
           entityId={customer?.customer_id}
           onClose={onClose}
+          writeDisabled={!!customer}
         />
       }
     >
+      {customer && <CanonicalWriteNotice action="Editing a customer" className="mb-4" />}
       {/* Basic Information Section */}
       {activeSection === 'basic' && (
         <div className="space-y-4">

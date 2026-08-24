@@ -458,7 +458,7 @@ const BulkUploadInline: React.FC<BulkUploadInlineProps> = ({ onProductsUploaded 
       <button
         onClick={() => setShowMenu(!showMenu)}
         disabled={uploading}
-        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="min-h-11 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
         title="Bulk upload products from Excel"
       >
         {uploading ? (

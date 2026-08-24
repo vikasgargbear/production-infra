@@ -3,9 +3,8 @@ import {
   FileText, Plus, AlertCircle, CheckCircle,
   Calculator, X, Search, Calendar, Loader2, RefreshCw
 } from 'lucide-react';
-import { ModuleHeader } from '../../global';
+import { CanonicalWriteNotice, ModuleHeader } from '../../global';
 import { journalApi } from '../../../services/api';
-import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface FinancialJournalFlowProps {
@@ -29,7 +28,6 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
     { id: '2', account_code: '', account_name: '', debit_amount: 0, credit_amount: 0, narration: '' }
   ]);
   const [isBalanced, setIsBalanced] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   // API data states
   const [isLoading, setIsLoading] = useState(false);
@@ -55,15 +53,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
 
     } catch (error) {
       setError('Failed to load chart of accounts');
-      // Fallback accounts
-      setAccounts([
-        { account_code: '1101', account_name: 'Cash in Hand' },
-        { account_code: '1102', account_name: 'Bank - Current Account' },
-        { account_code: '1201', account_name: 'Accounts Receivable' },
-        { account_code: '2101', account_name: 'Accounts Payable' },
-        { account_code: '4001', account_name: 'Sales Revenue' },
-        { account_code: '5001', account_name: 'Purchase Expense' }
-      ]);
+      setAccounts([]);
     } finally {
       setIsLoading(false);
     }
@@ -89,9 +79,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
         switch (e.key) {
           case 's':
             e.preventDefault();
-            if (isBalanced) {
-              saveJournal();
-            }
+            setError('Posting a journal entry is disabled until a canonical API command is available.');
             break;
           case 'a':
             e.preventDefault();
@@ -134,80 +122,15 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
     setLines(prev => prev.filter(line => line.id !== lineId));
   };
 
-  const saveJournal = async () => {
-    if (!isBalanced) {
-      setError('Journal entries must be balanced before saving');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      setError(null);
-
-      // Validate required fields
-      for (const line of lines) {
-        if (!line.account_code.trim()) {
-          throw new Error('Account code is required for all lines');
-        }
-        if (!line.account_name.trim()) {
-          throw new Error('Account name is required for all lines');
-        }
-        if (line.debit_amount === 0 && line.credit_amount === 0) {
-          throw new Error('At least one amount (debit or credit) must be entered for each line');
-        }
-        if (line.debit_amount > 0 && line.credit_amount > 0) {
-          throw new Error('A line cannot have both debit and credit amounts');
-        }
-      }
-
-      // Prepare journal entry data for API
-      const journalData = {
-        journal_date: journalDate,
-        reference_number: '', // Could add reference field
-        narration: narration,
-        lines: lines.map(line => ({
-          account_code: line.account_code,
-          account_name: line.account_name,
-          debit_amount: line.debit_amount,
-          credit_amount: line.credit_amount,
-          narration: line.narration
-        }))
-      };
-
-      // Call the actual API to save the journal entry
-      const response = await journalApi.create(journalData as any);
-
-      showFinancialEntryNotification({
-        title: 'Journal Entry Posted',
-        reference: response.data?.journal_number,
-        amount: totalDebit,
-        status: 'confirmed',
-        impacts: [
-          'This adjustment is now saved in your accounts.',
-          'One side goes up and the other side goes down by the same amount.',
-          'Your financial reports will now use this new entry.'
-        ]
-      });
-
-      // Reset form after successful save
-      setLines([
-        { id: '1', account_code: '', account_name: '', debit_amount: 0, credit_amount: 0, narration: '' },
-        { id: '2', account_code: '', account_name: '', debit_amount: 0, credit_amount: 0, narration: '' }
-      ]);
-      setNarration('');
-
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Error saving journal entry');
-    } finally {
-      setSaving(false);
-    }
+  const saveJournal = () => {
+    setError('Posting a journal entry is disabled until a canonical API command is available.');
   };
 
   const totalDebit = lines.reduce((sum, line) => sum + (line.debit_amount || 0), 0);
   const totalCredit = lines.reduce((sum, line) => sum + (line.credit_amount || 0), 0);
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         {/* Header */}
         <ModuleHeader
@@ -228,21 +151,19 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
               disabled: refreshing
             },
             {
-              label: saving ? 'Saving...' : 'Post Entry',
+              label: 'Post Entry (Unavailable)',
               onClick: saveJournal,
               variant: 'primary',
-              disabled: !isBalanced || saving
+              disabled: true
             }
           ] as any}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+S</strong> - Post Entry | <strong>Ctrl+A</strong> - Add Line | <strong>Esc</strong> - Close
-        </div>
+        <CanonicalWriteNotice action="Posting a journal entry" className="border-x-0" />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-blue-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
 
             {/* Loading State */}

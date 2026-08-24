@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -77,18 +78,9 @@ export const notesApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${noteId}`);
     },
 
-    create: (data: NoteData): Promise<AxiosResponse> => {
-        return apiHelpers.post(
-            data.note_type === 'debit' ? ENDPOINTS.DEBIT : ENDPOINTS.CREDIT,
-            data
-        );
-    },
+    create: (_data: NoteData): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a credit or debit note'),
 
-    delete: (noteId: number | string, cancellationReason: string = 'Cancelled'): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${noteId}`, {
-            params: { cancellation_reason: cancellationReason }
-        });
-    },
+    delete: (_noteId: number | string, _cancellationReason: string = 'Cancelled'): Promise<AxiosResponse> => rejectCanonicalWrite('Deleting a credit or debit note'),
 
     getReasons: (noteType?: 'credit' | 'debit'): Promise<AxiosResponse> => {
         if (noteType === 'credit') {

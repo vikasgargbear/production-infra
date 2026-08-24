@@ -6,6 +6,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { Role, ApiResponse, ApiListResponse } from '../../../../types/api.types';
 
 const ENDPOINTS = {
@@ -34,21 +35,14 @@ export const roleManagementApi = {
     },
 
     // Create custom role
-    create: (data: Partial<Role>) => {
-        return apiHelpers.post<ApiResponse<Role>>(ENDPOINTS.BASE, data);
-    },
+    create: (_data: Partial<Role>) => rejectCanonicalWrite('Creating a role'),
 
     // Update role
-    update: (roleId: number | string, data: Partial<Role>) => {
-        return apiHelpers.put<ApiResponse<Role>>(ENDPOINTS.DETAILS(roleId), data);
-    },
+    update: (_roleId: number | string, _data: Partial<Role>) => rejectCanonicalWrite('Editing a role'),
 
     // Delete role
-    delete: (roleId: number | string, reassignTo: number | string | null = null) => {
-        return apiHelpers.delete<ApiResponse<void>>(ENDPOINTS.DETAILS(roleId), {
-            params: reassignTo ? { reassign_to: reassignTo } : {}
-        });
-    },
+    delete: (_roleId: number | string, _reassignTo: number | string | null = null) =>
+        rejectCanonicalWrite('Deleting a role'),
 
     // =========================================================================
     // PERMISSIONS
@@ -60,9 +54,8 @@ export const roleManagementApi = {
     },
 
     // Update role permissions
-    updatePermissions: (roleId: number | string, permissions: string[]) => {
-        return apiHelpers.put<ApiResponse<Role>>(ENDPOINTS.PERMISSIONS(roleId), { permissions });
-    },
+    updatePermissions: (_roleId: number | string, _permissions: string[]) =>
+        rejectCanonicalWrite('Editing role permissions'),
 
     // Get user's effective permissions
     getUserPermissions: (userId: number | string) => {
@@ -79,16 +72,13 @@ export const roleManagementApi = {
     // =========================================================================
 
     // Assign role to users
-    assignToUsers: (roleId: number | string, userIds: (number | string)[]) => {
-        return apiHelpers.post<ApiResponse<void>>(ENDPOINTS.ASSIGN, { role_id: roleId, user_ids: userIds });
-    },
+    assignToUsers: (_roleId: number | string, _userIds: (number | string)[]) =>
+        rejectCanonicalWrite('Assigning a role to users'),
 
     // =========================================================================
     // SETUP
     // =========================================================================
 
     // Setup default roles (Admin only)
-    setupDefaults: () => {
-        return apiHelpers.post<ApiResponse<{ message: string }>>(ENDPOINTS.DEFAULT);
-    }
+    setupDefaults: () => rejectCanonicalWrite('Creating default roles')
 };

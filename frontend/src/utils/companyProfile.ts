@@ -1,56 +1,64 @@
-import type { CompanyContextInfo } from '../types/common/company.types';
+import type { BankAccount, CompanyContextInfo } from '../types/common/company.types';
+import { indianStateName } from './indianStates';
 
-const ownValue = (source: Record<string, any>, keys: string[], fallback = ''): string => {
-    for (const key of keys) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-            const value = source[key];
-            if (Array.isArray(value)) return String(value.find(Boolean) ?? '');
-            return String(value ?? '');
-        }
-    }
-    return fallback;
+export function unwrapCompanyProfileResponse(response: any): Record<string, any> | null {
+    const transport = response?.data ?? response;
+    const profile = transport?.success && transport?.data
+        ? transport.data
+        : transport;
+    return profile && typeof profile === 'object' ? profile : null;
+}
+
+const textValue = (value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    return typeof value === 'string' ? value : '';
 };
 
-/** Normalize the canonical organization projection without hiding missing live facts behind stale cache. */
+const firstText = (value: unknown): string => (
+    Array.isArray(value) ? textValue(value.find(item => typeof item === 'string')) : ''
+);
+
+/** Decode only the canonical organization projection; no cache or legacy aliases. */
 export function normalizeCompanyProfile(
     profile: Record<string, any>,
-    cached: CompanyContextInfo,
 ): CompanyContextInfo | null {
-    const name = ownValue(
-        profile,
-        ['name', 'company_name', 'legal_name', 'org_name', 'trade_name'],
-        cached.name,
-    ).trim();
+    const name = textValue(profile.legal_name || profile.org_name).trim();
     if (!name) return null;
 
-    const licenceText = Object.prototype.hasOwnProperty.call(profile, 'licenses')
-        ? (profile.licenses || []).map((license: Record<string, any>) =>
+    if (!Array.isArray(profile.licenses) || !Array.isArray(profile.bank_accounts)) {
+        return null;
+    }
+
+    const licenceText = profile.licenses
+        .filter((license: unknown) => license && typeof license === 'object')
+        .map((license: Record<string, any>) =>
             `${license.license_type_code}: ${license.license_number}`,
-        ).join(' / ')
-        : ownValue(
-            profile,
-            ['drug_license_number', 'drug_license'],
-            cached.drug_license_number,
-        );
+        ).join(' / ');
+
+    const bankAccounts = profile.bank_accounts.filter(
+        (account: unknown): account is BankAccount => Boolean(
+            account && typeof account === 'object'
+            && typeof (account as BankAccount).bank_name === 'string'
+            && typeof (account as BankAccount).ifsc_code === 'string',
+        ),
+    );
 
     return {
         name,
-        address: ownValue(profile, ['address', 'registered_address'], cached.address),
-        city: ownValue(profile, ['city', 'registered_city'], cached.city),
-        state: ownValue(profile, ['state', 'state_code', 'registered_state_code'], cached.state),
-        pincode: ownValue(profile, ['pincode', 'postal_code', 'registered_postal_code'], cached.pincode),
-        phone: ownValue(profile, ['phone', 'contact_numbers'], cached.phone),
-        email: ownValue(profile, ['email', 'email_addresses'], cached.email),
-        gst_number: ownValue(profile, ['gst_number', 'gstin'], cached.gst_number),
-        pan_number: ownValue(profile, ['pan_number', 'pan'], cached.pan_number),
+        address: textValue(profile.registered_address),
+        city: textValue(profile.city),
+        state: indianStateName(textValue(profile.state_code || profile.state)),
+        pincode: textValue(profile.pincode),
+        phone: firstText(profile.contact_numbers),
+        email: firstText(profile.email_addresses),
+        gst_number: textValue(profile.gst_number),
+        pan_number: textValue(profile.pan_number),
         drug_license_number: licenceText,
-        fssai_number: ownValue(profile, ['fssai_number'], cached.fssai_number),
-        msme_number: ownValue(profile, ['msme_number'], cached.msme_number),
-        logo: profile.logo ?? profile.logo_url ?? cached.logo,
-        bankAccounts: Object.prototype.hasOwnProperty.call(profile, 'bank_accounts')
-            ? (profile.bank_accounts || [])
-            : cached.bankAccounts,
-        paymentQR: profile.payment_qr_code ?? cached.paymentQR,
-        business_settings: profile.business_settings ?? cached.business_settings ?? {},
+        fssai_number: '',
+        msme_number: '',
+        logo: null,
+        bankAccounts,
+        paymentQR: null,
+        business_settings: {},
     };
 }

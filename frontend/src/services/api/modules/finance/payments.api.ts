@@ -4,6 +4,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -71,12 +72,6 @@ export interface BankReconciliationData {
     }>;
 }
 
-function paymentIdempotencyKey(operation: string): string {
-    const random = globalThis.crypto?.randomUUID?.()
-        || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    return `${operation}_${random}`;
-}
-
 // ============================================
 // API Module
 // ============================================
@@ -94,19 +89,11 @@ export const paymentsApi = {
         return apiHelpers.get(`/payments/${paymentId}`);
     },
 
-    create: (data: PaymentData): Promise<AxiosResponse> => {
-        return apiHelpers.post('/payments', data, {
-            headers: {
-                'X-Idempotency-Key': paymentIdempotencyKey('payment_create')
-            }
-        });
-    },
+    create: (_data: PaymentData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Posting a payment'),
 
-    // Compatibility shim for older sync paths. The backend currently has no
-    // canonical payment update route, so this preserves the existing caller contract.
-    update: (paymentId: number | string, data: Partial<PaymentData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`/payments/${paymentId}`, data);
-    },
+    update: (_paymentId: number | string, _data: Partial<PaymentData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Editing a payment'),
 
     // Get receipts (customer payments)
     getReceipts: (params: PaymentParams = {}): Promise<AxiosResponse> => {
@@ -144,40 +131,17 @@ export const paymentsApi = {
         });
     },
 
-    // The backend does not currently expose an unreconciled-transactions read endpoint.
-    // Keep the caller contract stable by returning an empty list until that route exists.
-    getUnreconciledTransactions: (params: { date?: string; bank_account?: string } = {}): Promise<AxiosResponse> => {
-        return Promise.resolve({
-            data: [],
-            status: 200,
-            statusText: 'OK',
-            headers: {},
-            config: { params }
-        } as AxiosResponse);
-    },
+    getUnreconciledTransactions: (_params: { date?: string; bank_account?: string } = {}): Promise<AxiosResponse> =>
+        Promise.reject(new Error('The canonical unreconciled-transactions query is not available.')),
 
     // Start bank reconciliation
-    startBankReconciliation: (data: BankReconciliationData): Promise<AxiosResponse> => {
-        return apiHelpers.post('/payments/bank-reconciliation', {
-            bank_account: data.bank_account,
-            statement_date: data.statement_date || data.reconciliation_date,
-            opening_balance: data.opening_balance ?? data.book_balance ?? 0,
-            closing_balance: data.closing_balance ?? data.bank_statement_balance ?? 0,
-            transactions: data.transactions || []
-        });
-    }
+    startBankReconciliation: (_data: BankReconciliationData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Starting bank reconciliation')
 };
 
 export async function submitCustomerPayment(
-    customerId: number | string,
-    data: CustomerPaymentData
+    _customerId: number | string,
+    _data: CustomerPaymentData
 ): Promise<SubmittedCustomerPayment> {
-    const response = await apiHelpers.post(`/customers/${customerId}/payment`, data);
-    const paymentResult = response.data?.data || response.data || {};
-
-    return {
-        paymentId: paymentResult.payment_id,
-        paymentReference: paymentResult.payment_reference || paymentResult.reference_number || data.reference_number,
-        raw: paymentResult
-    };
+    return rejectCanonicalWrite('Posting a customer payment');
 }

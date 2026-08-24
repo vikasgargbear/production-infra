@@ -8,11 +8,6 @@ jest.mock('../../apiClient', () => ({
     },
 }));
 
-jest.mock('../../../offline/sync/deltaSyncService', () => ({
-    __esModule: true,
-    default: { afterInvoiceCreated: jest.fn() },
-}));
-
 describe('canonical invoice web transport', () => {
     it('uses prepare, approve, execute, then reads the authoritative invoice', async () => {
         const post = apiHelpers.post as jest.Mock;

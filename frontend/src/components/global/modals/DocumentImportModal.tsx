@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Search, FileText, Calendar, CheckCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -23,28 +23,36 @@ interface DocumentItem {
   available_quantity?: number;
 }
 
-interface ImportData {
+export interface ImportData {
   source_type: string;
   source_id: string | number;
   customer_id?: string | number;
   customer_name?: string;
+  customer_details?: any;
+  customer?: any;
+  billing_address?: string;
+  shipping_address?: string;
   items: DocumentItem[];
   transport_details?: any;
+  delivery_details?: any;
   payment_details?: any;
   notes?: string;
   reference_number?: string;
+}
+
+export interface DocumentImportType {
+  value: string;
+  label: string;
+  icon?: React.ComponentType<any>;
+  loadFunction: (searchQuery?: string) => Promise<any[]>;
+  resolveDocument?: (document: any) => Promise<any>;
 }
 
 interface DocumentImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (data: ImportData) => void;
-  documentTypes?: Array<{
-    value: string;
-    label: string;
-    icon?: React.ComponentType<any>;
-    loadFunction: (searchQuery?: string) => Promise<any[]>;
-  }>;
+  documentTypes?: DocumentImportType[];
   title?: string;
 }
 
@@ -64,24 +72,12 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   const selectedTypeLabel = documentTypes.find(type => type.value === selectedType)?.label
     || 'documents';
 
-  useEffect(() => {
-    if (!selectedType && documentTypes[0]?.value) {
-      setSelectedType(documentTypes[0].value);
-    }
-  }, [documentTypes, selectedType]);
-
-  useEffect(() => {
-    if (isOpen && selectedType) {
-      loadDocuments();
-    }
-  }, [isOpen, selectedType]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async (query: string = '') => {
     setLoading(true);
     try {
       const typeConfig = documentTypes.find(t => t.value === selectedType);
       if (typeConfig && typeConfig.loadFunction) {
-        const results = await typeConfig.loadFunction(searchQuery);
+        const results = await typeConfig.loadFunction(query);
         setDocuments(Array.isArray(results) ? results : []);
       }
     } catch (error) {
@@ -90,13 +86,25 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentTypes, selectedType]);
+
+  useEffect(() => {
+    if (!selectedType && documentTypes[0]?.value) {
+      setSelectedType(documentTypes[0].value);
+    }
+  }, [documentTypes, selectedType]);
+
+  useEffect(() => {
+    if (isOpen && selectedType) {
+      void loadDocuments();
+    }
+  }, [isOpen, selectedType, loadDocuments]);
 
   const handleSearch = () => {
-    loadDocuments();
+    void loadDocuments(searchQuery);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!selectedDoc) {
       toast.warning('Please select a document to import');
       return;
@@ -105,8 +113,12 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     setImporting(true);
 
     try {
+      const typeConfig = documentTypes.find(type => type.value === selectedType);
+      const sourceDocument = typeConfig?.resolveDocument
+        ? await typeConfig.resolveDocument(selectedDoc)
+        : selectedDoc;
       // Format items for import
-      const formattedItems = (selectedDoc.items || []).map((item: any) => ({
+      const formattedItems = (sourceDocument.items || sourceDocument.line_items || []).map((item: any) => ({
         product_id: item.product_id,
         product_name: item.product_name || item.name,
         product_code: item.product_code || item.code,
@@ -122,16 +134,28 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
         tax_rate: parseFloat(item.tax_rate || item.gst_percent || '0')
       }));
 
+      const customerDetails = sourceDocument.customer_details
+        || sourceDocument.customer
+        || (sourceDocument.customer_id ? {
+          customer_id: sourceDocument.customer_id,
+          customer_name: sourceDocument.customer_name || '',
+        } : undefined);
+
       const importData: ImportData = {
         source_type: selectedType,
-        source_id: selectedDoc.id || selectedDoc.invoice_id || selectedDoc.order_id || selectedDoc.challan_id,
-        customer_id: selectedDoc.customer_id,
-        customer_name: selectedDoc.customer_name,
+        source_id: sourceDocument.id || sourceDocument.invoice_id || sourceDocument.order_id || sourceDocument.challan_id,
+        customer_id: sourceDocument.customer_id,
+        customer_name: sourceDocument.customer_name,
+        customer_details: customerDetails,
+        customer: customerDetails,
+        billing_address: sourceDocument.billing_address,
+        shipping_address: sourceDocument.shipping_address || sourceDocument.delivery_address,
         items: formattedItems,
-        transport_details: selectedDoc.transport_details,
-        payment_details: selectedDoc.payment_details,
-        notes: selectedDoc.notes,
-        reference_number: selectedDoc.invoice_number || selectedDoc.order_number || selectedDoc.challan_number
+        transport_details: sourceDocument.transport_details,
+        delivery_details: sourceDocument.delivery_details || sourceDocument.transport_details,
+        payment_details: sourceDocument.payment_details,
+        notes: sourceDocument.notes,
+        reference_number: sourceDocument.invoice_number || sourceDocument.order_number || sourceDocument.challan_number
       };
 
       onImport(importData);

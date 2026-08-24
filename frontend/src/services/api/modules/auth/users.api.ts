@@ -6,7 +6,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { cleanData } from '../../utils/dataUtils';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import {
     User,
     CreateUserRequest,
@@ -40,21 +40,13 @@ export const usersApi = {
     },
 
     // Create new user
-    create: (data: CreateUserRequest) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.post<ApiResponse<User>>(ENDPOINTS.BASE, cleanedData);
-    },
+    create: (_data: CreateUserRequest) => rejectCanonicalWrite('Creating a user'),
 
     // Update user
-    update: (id: number | string, data: UpdateUserRequest) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.put<ApiResponse<User>>(ENDPOINTS.DETAILS(id), cleanedData);
-    },
+    update: (_id: number | string, _data: UpdateUserRequest) => rejectCanonicalWrite('Editing a user'),
 
     // Delete user
-    delete: (id: number | string) => {
-        return apiHelpers.delete<ApiResponse<void>>(ENDPOINTS.DETAILS(id));
-    },
+    delete: (_id: number | string) => rejectCanonicalWrite('Deleting a user'),
 
     // =========================================================================
     // CURRENT USER
@@ -70,14 +62,11 @@ export const usersApi = {
     // =========================================================================
 
     // Update password
-    updatePassword: (id: number | string, passwords: PasswordUpdate) => {
-        return apiHelpers.post<ApiResponse<void>>(ENDPOINTS.PASSWORD(id), passwords);
-    },
+    updatePassword: (_id: number | string, _passwords: PasswordUpdate) =>
+        rejectCanonicalWrite('Updating a user password'),
 
     // Reset password
-    resetPassword: (email: string) => {
-        return apiHelpers.post<ApiResponse<{ message: string }>>(ENDPOINTS.RESET_PASSWORD, { email });
-    }
+    resetPassword: (_email: string) => rejectCanonicalWrite('Resetting a user password')
 };
 
 export default usersApi;

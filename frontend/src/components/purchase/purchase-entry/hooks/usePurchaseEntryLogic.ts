@@ -6,12 +6,10 @@
  * The main component handles only rendering.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { purchasesApi } from '../../../../services/api';
-import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 import { calculatePurchaseOrderPreview } from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
-import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { usePurchaseEntrySave } from './usePurchaseEntrySave';
 
 // Types
@@ -126,7 +124,7 @@ export interface UsePurchaseEntryLogicReturn {
     handleBulkUpload: (products: any[]) => void;
     handleUpdateItem: (index: number, field: string, value: any) => void;
     handleRemoveItem: (index: number) => void;
-    handleSavePurchase: () => Promise<void>;
+    handleSavePurchase?: undefined;
     validatePurchase: () => boolean;
     handlePrint: () => void;
     handlePDFUpload: (file: File) => Promise<void>;
@@ -173,7 +171,6 @@ export function usePurchaseEntryLogic({
     const [purchase, setPurchase] = useState<PurchaseData>(() => getInitialPurchase(prefilledData));
     const [selectedSupplier, setSelectedSupplier] = useState(prefilledData?.supplier_details || null);
     const [currentStep, setCurrentStep] = useState(1);
-    const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     // Modal States
@@ -188,28 +185,10 @@ export function usePurchaseEntryLogic({
     const [extractedPDFData, setExtractedPDFData] = useState<any>(null);
     const [newProductToAdd, setNewProductToAdd] = useState<any>(null);
     const [currentEditItem, setCurrentEditItem] = useState<any>(null);
-    const [createdPurchaseData, setCreatedPurchaseData] = useState<CreatedPurchaseData | null>(null);
+    const [createdPurchaseData] = useState<CreatedPurchaseData | null>(null);
     const calculationRequestRef = useRef(0);
     const purchaseRef = useRef(purchase);
     purchaseRef.current = purchase;
-
-    // Network status for offline-first
-    const { isOnline } = useNetworkStatus();
-
-    // Generate purchase number on mount
-    useEffect(() => {
-        const generateAndSetPurchaseNumber = async () => {
-            try {
-                const purchaseNumber = await documentNumberGenerator.generatePurchaseNumber();
-                setPurchase(prev => ({ ...prev, purchase_number: purchaseNumber }));
-            } catch (error) {
-                // Fallback: generate locally without backend (instant)
-                const fallbackNumber = await documentNumberGenerator.generateNumber('PUR', false);
-                setPurchase(prev => ({ ...prev, purchase_number: fallbackNumber }));
-            }
-        };
-        generateAndSetPurchaseNumber();
-    }, []);
 
     // Calculate totals
     const calculateTotals = useCallback(async (purchaseData: PurchaseData) => {
@@ -227,7 +206,7 @@ export function usePurchaseEntryLogic({
         }
 
         try {
-            const calculation = await calculatePurchaseOrderPreview(purchaseData, isOnline);
+            const calculation = await calculatePurchaseOrderPreview(purchaseData, true);
             if (requestId !== calculationRequestRef.current) return;
             const totals = calculation.totals;
             setPurchase(prev => {
@@ -260,7 +239,7 @@ export function usePurchaseEntryLogic({
                 toast.error(calculationError instanceof Error ? calculationError.message : 'Unable to calculate purchase totals');
             }
         }
-    }, [isOnline, toast]);
+    }, [toast]);
 
     // Trigger calculations when items change
     useEffect(() => {
@@ -412,25 +391,7 @@ export function usePurchaseEntryLogic({
         return Object.keys(newErrors).length === 0;
     }, [selectedSupplier, purchase.items]);
 
-    const generateInvoiceNumber = useCallback((): string => {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-        return `INV-${year}${month}${day}-${random}`;
-    }, []);
-
-    // Offline-first save hook
-    const { saving: offlineSaving, handleSavePurchase } = usePurchaseEntrySave({
-        purchase,
-        selectedSupplier,
-        isOnline,
-        setCreatedPurchaseData,
-        setShowSuccessModal,
-        validatePurchase,
-        generateInvoiceNumber
-    });
+    const { saving, handleSavePurchase } = usePurchaseEntrySave();
 
     const handlePrint = useCallback(() => {
         const printContent = document.getElementById('purchase-print-area');
@@ -564,7 +525,7 @@ export function usePurchaseEntryLogic({
         setSelectedSupplier,
         currentStep,
         setCurrentStep,
-        saving: offlineSaving || saving,
+        saving,
         errors,
         setErrors,
         showSupplierModal,

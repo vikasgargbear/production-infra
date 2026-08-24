@@ -1,8 +1,7 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback } from 'react';
 import { Building2, Phone, MapPin, UserPlus, Trash2 } from 'lucide-react';
 import { EntitySearch, EntitySearchRef, EntitySearchProps } from './EntitySearch';
 import { suppliersApi } from '../../../services/api';
-import searchCache, { smartSearch } from '../../../utils/searchCache';
 
 /**
  * Supplier interface for type safety
@@ -51,7 +50,7 @@ export interface SupplierSearchRef extends EntitySearchRef { }
  * SupplierSearch - Supplier-specific search component built on EntitySearch
  * 
  * This is a thin wrapper that provides:
- * - Supplier-specific search function using smartSearch cache
+ * - Supplier-specific search function using the canonical API
  * - Supplier-specific result rendering (contact person, GST status)
  * - Supplier-specific selected state rendering
  * 
@@ -74,30 +73,14 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
     },
     ref
 ) => {
-    // Supplier search function using smart cache
-    const searchSuppliers = async (query: string): Promise<Supplier[]> => {
-        try {
-            const results = await smartSearch(
-                'suppliers',
-                query,
-                suppliersApi.search.bind(suppliersApi),
-                { limit: 20 }
-            );
-            return results as Supplier[];
-        } catch (error) {
-            // Fallback to direct API search
-            try {
-                const response = await suppliersApi.search(query);
-                const results = (response as any)?.data || response || [];
-                if (results.length > 0) {
-                    searchCache.setItems('suppliers', results);
-                }
-                return results;
-            } catch {
-                return [];
-            }
+    const searchSuppliers = useCallback(async (query: string): Promise<Supplier[]> => {
+        const response = await suppliersApi.search(query, { limit: 20 });
+        const rows = response?.data;
+        if (!Array.isArray(rows)) {
+            throw new Error('Supplier search returned an invalid canonical response');
         }
-    };
+        return rows as Supplier[];
+    }, []);
 
     // Render supplier result in dropdown
     const renderSupplierResult = (supplier: Supplier, isHighlighted: boolean, index: number) => (

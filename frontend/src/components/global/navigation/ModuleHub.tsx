@@ -304,9 +304,11 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           </div>
           {isExpanded && (
             <button
+              type="button"
               onClick={toggleLockExpanded}
-              className={`p-1.5 rounded transition-colors ${lockExpanded ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors ${lockExpanded ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
               title={lockExpanded ? 'Unlock sidebar' : 'Lock sidebar open'}
+              aria-label={lockExpanded ? 'Unlock sidebar' : 'Lock sidebar open'}
             >
               {lockExpanded ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
             </button>

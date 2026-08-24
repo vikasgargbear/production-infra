@@ -94,7 +94,6 @@ import utilsApi from './modules/settings/utils.api';
 // =========================================================================
 // SYSTEM
 // =========================================================================
-import { syncApi } from './modules/system/sync.api';
 import { documentsApi } from './modules/system/documents.api';
 
 // =========================================================================
@@ -174,7 +173,6 @@ export {
   utilsApi,
 
   // System
-  syncApi,
   documentsApi,
 
   // Utilities
@@ -223,7 +221,7 @@ const apiModules = {
   settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi },
 
   // System
-  system: { sync: syncApi, documents: documentsApi }
+  system: { documents: documentsApi }
 };
 
 // For backward compatibility: export the raw axios instance as default

@@ -26,14 +26,6 @@ jest.mock('../../services/auth/supabaseClient', () => ({
     }),
 }));
 
-jest.mock('../../services/offline/modules/sales', () => ({
-    salesSyncService: {
-        stop: jest.fn(),
-        performInitialSync: jest.fn(() => Promise.resolve()),
-    },
-}));
-
-
 function token(overrides = {}) {
     const payload = {
         user_id: 42,

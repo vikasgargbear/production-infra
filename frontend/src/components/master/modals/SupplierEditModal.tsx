@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Phone, Shield, CreditCard, Building, Banknote } from 'lucide-react';
 import { suppliersApi, metadataApi } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import syncEngine from '../../../services/offline/sync/syncEngine';
 import { useToast } from '../../global/ui/feedback/Toast';
+import { CanonicalWriteNotice } from '../../global';
 import Input from '../../global/ui/forms/Input';
 import { FORM_STYLES } from '../../../constants/formStyles';
 import ModalShell from './shared/ModalShell';
@@ -165,40 +164,12 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
       };
 
       if (supplier) {
-        const response = await suppliersApi.update(supplier.supplier_id, dataToSave);
-        toast.success('Supplier updated successfully');
-        onSave(response.data || dataToSave);
+        setError('Editing a supplier is disabled until a canonical API command is available.');
+        return;
       } else {
-        if (!dataToSave.supplier_code) {
-          dataToSave.supplier_code = `SUPP${Date.now().toString().slice(-6)}`;
-        }
-
-        const tempId = `LOCAL_SUPP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-        const localRecord = {
-          id: tempId,
-          supplier_id: tempId,
-          _localId: tempId,
-          ...dataToSave,
-          name: dataToSave.supplier_name,
-          phone: dataToSave.primary_phone,
-          sync_status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          created_offline: true
-        };
-
-        const db = await offlineDB.init();
-        await db.put('suppliers', localRecord);
-        await offlineDB.addToSyncQueue('supplier', tempId, 'create', localRecord);
-
-        toast.success(`Supplier created${navigator.onLine ? '' : ' (offline)'}${!navigator.onLine ? ' - will sync when online' : ''}`);
-
-        if (navigator.onLine) {
-          syncEngine.startSync().catch(() => {});
-        }
-
-        onSave(localRecord);
+        const response = await suppliersApi.create(dataToSave);
+        toast.success('Supplier created successfully');
+        onSave(response.data || dataToSave);
       }
 
       onClose();
@@ -242,9 +213,11 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
           entityLabel="Supplier"
           entityId={supplier?.supplier_id}
           onClose={onClose}
+          writeDisabled={!!supplier}
         />
       }
     >
+      {supplier && <CanonicalWriteNotice action="Editing a supplier" className="mb-4" />}
       {/* Basic Information Section */}
       {activeSection === 'basic' && (
         <div className="space-y-4">

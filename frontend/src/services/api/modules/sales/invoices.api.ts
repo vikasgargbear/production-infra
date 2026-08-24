@@ -7,11 +7,14 @@
 
 import { apiHelpers } from '../../apiClient';
 import { API_CONFIG } from '../../../../config/api.config';
-import { cleanData } from '../../utils/dataUtils';
 import {
+    approveAndExecuteCanonicalAction,
     canonicalExecutionCompleted,
     executeCanonicalAction,
+    prepareCanonicalAction,
+    type CanonicalCommandPreview,
 } from '../../canonicalOperatorActions';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -76,23 +79,7 @@ export const invoicesApi = {
     },
 
     /** Create new invoice */
-    create: async (data: InvoiceData) => {
-        const cleanedData = cleanData(data);
-        const response = await apiHelpers.post(ENDPOINTS.CREATE, cleanedData);
-
-        // Trigger delta sync after successful invoice creation
-        // Stock levels changed - update IndexedDB
-        if (response?.data?.success || response?.data?.invoice_id) {
-            try {
-                const { default: deltaSyncService } = await import('../../../offline/sync/deltaSyncService');
-                deltaSyncService.afterInvoiceCreated();
-            } catch (e) {
-                console.warn('[InvoiceAPI] Delta sync trigger failed:', e);
-            }
-        }
-
-        return response;
-    },
+    create: (_data: InvoiceData) => rejectCanonicalWrite('Legacy invoice creation'),
 
     /**
      * Post a reviewed canonical invoice command from the first-party ERP UI.
@@ -110,14 +97,6 @@ export const invoicesApi = {
         const canonicalInvoice = completed && resourceId
             ? await apiHelpers.get(`/canonical/invoices/${resourceId}`)
             : null;
-        if (completed) {
-            try {
-                const { default: deltaSyncService } = await import('../../../offline/sync/deltaSyncService');
-                deltaSyncService.afterInvoiceCreated();
-            } catch (e) {
-                console.warn('[InvoiceAPI] Delta sync trigger failed:', e);
-            }
-        }
         return {
             ...executed,
             data: {
@@ -131,30 +110,53 @@ export const invoicesApi = {
         };
     },
 
-    /** Update invoice (only for draft invoices) */
-    update: (id: number | string, data: Partial<InvoiceData>) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.put(ENDPOINTS.UPDATE(id), cleanedData);
+    /** Prepare the immutable authoritative server preview without approving it. */
+    prepareCanonical: (data: Record<string, unknown>) => {
+        const { invoice_number: _displayNumber, ...payload } = data;
+        return prepareCanonicalAction('sales.invoice.prepare', payload);
     },
 
-    /** Delete invoice */
-    delete: (id: number | string) => {
-        return apiHelpers.delete(ENDPOINTS.DELETE(id));
+    /** Approve and execute only the exact preview the actor just confirmed. */
+    executePreparedCanonical: async (preview: CanonicalCommandPreview) => {
+        const { executed } = await approveAndExecuteCanonicalAction(
+            'sales.invoice.prepare',
+            preview,
+        );
+        const completed = canonicalExecutionCompleted(executed.data);
+        const resourceId = executed?.data?.resource_id;
+        const canonicalInvoice = completed && resourceId
+            ? await apiHelpers.get(`/canonical/invoices/${resourceId}`)
+            : null;
+        return {
+            ...executed,
+            data: {
+                ...executed.data,
+                success: completed,
+                invoice_id: resourceId,
+                invoice_number: canonicalInvoice?.data?.invoice_number,
+                total_amount: canonicalInvoice?.data?.total_amount,
+                canonical_preview: preview,
+            },
+        };
     },
+
+    /** Update invoice (only for draft invoices) */
+    update: (_id: number | string, _data: Partial<InvoiceData>) =>
+        rejectCanonicalWrite('Invoice editing'),
+
+    /** Delete invoice */
+    delete: (_id: number | string) => rejectCanonicalWrite('Invoice deletion'),
 
     // =========================================================================
     // INVOICE ACTIONS
     // =========================================================================
 
     /** Generate invoice number */
-    generateNumber: () => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/generate-number`, {});
-    },
+    generateNumber: () => rejectCanonicalWrite('Standalone invoice numbering'),
 
     /** Cancel invoice */
-    cancel: (id: number | string, reason: string, createCreditNote: boolean = false) => {
-        return apiHelpers.post(ENDPOINTS.CANCEL(id), { reason, create_credit_note: createCreditNote });
-    },
+    cancel: (_id: number | string, _reason: string, _createCreditNote: boolean = false) =>
+        rejectCanonicalWrite('Invoice cancellation'),
 
     /** Get invoice PDF */
     getPDF: (id: number | string) => {
@@ -162,9 +164,8 @@ export const invoicesApi = {
     },
 
     /** Send invoice via email */
-    sendEmail: (id: number | string, emailData: EmailData) => {
-        return apiHelpers.post(ENDPOINTS.EMAIL(id), emailData);
-    },
+    sendEmail: (_id: number | string, _emailData: EmailData) =>
+        rejectCanonicalWrite('Invoice email delivery'),
 
     // =========================================================================
     // SEARCH & FILTERS
@@ -209,9 +210,8 @@ export const invoicesApi = {
     },
 
     /** Record payment for invoice */
-    recordPayment: (id: number | string, paymentData: PaymentData) => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/${id}/record-payment`, paymentData);
-    },
+    recordPayment: (_id: number | string, _paymentData: PaymentData) =>
+        rejectCanonicalWrite('Invoice payment recording'),
 
     /** Get payment history for invoice */
     getPaymentHistory: (id: number | string) => {
@@ -238,27 +238,16 @@ export const invoicesApi = {
     },
 
     /** Save invoice draft */
-    saveDraft: (data: { draft_id?: string; customer_id?: number; items: unknown[]; totals?: unknown; created_by?: string }) => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/drafts`, {
-            draft_id: data.draft_id,
-            customer_id: data.customer_id,
-            items: data.items,
-            totals: data.totals,
-            metadata: {
-                last_modified: new Date().toISOString(),
-                created_by: data.created_by || 'CURRENT_USER'
-            }
-        });
-    },
+    saveDraft: (_data: { draft_id?: string; customer_id?: number; items: unknown[]; totals?: unknown; created_by?: string }) =>
+        rejectCanonicalWrite('Invoice drafts'),
 
     // =========================================================================
     // ORDER CONVERSION (migrated from invoiceApiService.ts)
     // =========================================================================
 
     /** Generate invoice from order */
-    generateFromOrder: (orderId: number | string) => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/generate-from-order`, { order_id: orderId });
-    }
+    generateFromOrder: (_orderId: number | string) =>
+        rejectCanonicalWrite('Sales-order conversion')
 };
 
 // Re-export types for external use

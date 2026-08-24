@@ -37,15 +37,15 @@ const documentTypeConfig = {
     label: 'Purchase Orders',
     numberLabel: 'Purchase Order #',
     icon: ClipboardList,
-    activeClass: 'bg-purple-50 text-purple-700 border-purple-200',
-    iconColor: 'text-purple-600'
+    activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
   },
   grn: {
     label: 'GRN',
     numberLabel: 'GRN #',
     icon: Truck,
-    activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    iconColor: 'text-emerald-600'
+    activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
   }
 };
 
@@ -246,7 +246,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   };
 
   const handleExport = () => {
-    const selected = purchases.filter(p => selectedIds.has(p.id));
+    const selected = selectedIds.size > 0
+      ? purchases.filter(p => selectedIds.has(p.id))
+      : purchases;
     const csvData = [
       ['PO Number', 'Supplier', 'Date', 'Amount', 'Paid', 'Pending', 'Status'],
       ...selected.map(p => [
@@ -355,8 +357,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           {documentType === 'purchase_order' && onRecordReceipt &&
             ['draft', 'pending', 'partial', 'confirmed', 'approved'].includes(purchase.status) && (
             <button
-              onClick={() => onRecordReceipt(parseInt(purchase.id))}
-              className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+              onClick={() => onRecordReceipt(purchase.id)}
+              className="min-h-11 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
               title="Record Receipt (Create Purchase Entry from this PO)"
             >
               <Package className="w-3.5 h-3.5 inline mr-1" />
@@ -368,8 +370,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
               const message = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
               window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
             }}
-            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             title="Share via WhatsApp"
+            aria-label={`Share ${purchase.po_number} via WhatsApp`}
           >
             <MessageCircle className="w-4 h-4" />
           </button>
@@ -379,8 +382,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
               const body = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
               window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             }}
-            className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition-colors"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             title="Send via Email"
+            aria-label={`Email ${purchase.po_number}`}
           >
             <Mail className="w-4 h-4" />
           </button>
@@ -391,7 +395,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   ];
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
 
         {/* Header - Using Global ModuleHeader */}
@@ -417,8 +421,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             {
               label: "Export All",
               onClick: handleExport,
-              variant: "default",
-              className: "bg-gray-900 hover:bg-gray-800 text-white"
+              variant: "secondary"
             }
           ] as any}
         />
@@ -505,6 +508,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                 fetchPurchases(1, searchParams);
               }}
               onSearchChange={handleSearchChange}
+              showFilters={ui.showFilters}
+              onToggleFilters={() => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
             />
 
             {/* Bulk Actions */}

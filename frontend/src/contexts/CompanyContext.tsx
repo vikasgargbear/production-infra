@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { companyApi } from '../services/api';
 import type { CompanyContextInfo as CompanyInfo } from '../types/common/company.types';
 import { useAuth } from './AuthContext';
-import { normalizeCompanyProfile } from '../utils/companyProfile';
+import { normalizeCompanyProfile, unwrapCompanyProfileResponse } from '../utils/companyProfile';
 
 interface CompanyContextValue {
     companyInfo: CompanyInfo | null;
@@ -53,142 +53,28 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
     const loadCompanyData = async () => {
         setLoading(true);
         setError(null);
-
         try {
-            // PRIMARY: Load from localStorage immediately (synced during login)
-            const cachedCompanyInfo: CompanyInfo = {
-                name: localStorage.getItem('companyName') || '',
-                address: localStorage.getItem('companyAddress') || '',
-                city: localStorage.getItem('companyCity') || '',
-                state: localStorage.getItem('companyState') || '',
-                pincode: localStorage.getItem('companyPincode') || '',
-                phone: localStorage.getItem('companyPhone') || '',
-                email: localStorage.getItem('companyEmail') || '',
-                gst_number: localStorage.getItem('companyGST') || '',
-                pan_number: localStorage.getItem('companyPan') || '',
-                drug_license_number: localStorage.getItem('companyDrugLicense') || '',
-                fssai_number: localStorage.getItem('companyFssai') || '',
-                msme_number: localStorage.getItem('companyMsme') || '',
-                logo: localStorage.getItem('companyLogo') || null,
-                bankAccounts: JSON.parse(localStorage.getItem('companyBankAccounts') || '[]'),
-                paymentQR: localStorage.getItem('companyPaymentQR') || null,
-                business_settings: JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}'),
-            };
-
-            // Set cached data immediately - this enables offline-first behavior
-            if (cachedCompanyInfo.name) {
-                setCompanyInfo(cachedCompanyInfo);
-                setLoading(false); // Unblock UI immediately with cached data
+            const response = await companyApi.getCompanyInfo();
+            const profileData = unwrapCompanyProfileResponse(response);
+            const apiCompanyInfo = profileData ? normalizeCompanyProfile(profileData) : null;
+            if (!apiCompanyInfo) {
+                throw new Error('The canonical company profile response is invalid');
             }
-
-            // BACKGROUND: Try to refresh from API (don't block on this)
-            try {
-                const response = await companyApi.getCompanyInfo();
-                const rawResponse = (response as any).data || response;
-
-                // Handle both wrapped {success, data} and direct response formats
-                const profileData = rawResponse.success && rawResponse.data
-                    ? rawResponse.data
-                    : rawResponse;
-
-                const apiCompanyInfo = profileData
-                    ? normalizeCompanyProfile(profileData, cachedCompanyInfo)
-                    : null;
-                if (apiCompanyInfo) {
-
-                    setCompanyInfo(apiCompanyInfo);
-
-                    // Update localStorage with fresh data
-                    localStorage.setItem('companyName', apiCompanyInfo.name);
-                    localStorage.setItem('companyAddress', apiCompanyInfo.address);
-                    localStorage.setItem('companyCity', apiCompanyInfo.city);
-                    localStorage.setItem('companyState', apiCompanyInfo.state);
-                    localStorage.setItem('companyPincode', apiCompanyInfo.pincode);
-                    localStorage.setItem('companyPhone', apiCompanyInfo.phone);
-                    localStorage.setItem('companyEmail', apiCompanyInfo.email);
-                    localStorage.setItem('companyGST', apiCompanyInfo.gst_number);
-                    localStorage.setItem('companyPan', apiCompanyInfo.pan_number);
-                    localStorage.setItem('companyDrugLicense', apiCompanyInfo.drug_license_number);
-                    localStorage.setItem('companyFssai', apiCompanyInfo.fssai_number);
-                    localStorage.setItem('companyMsme', apiCompanyInfo.msme_number);
-                    localStorage.setItem('companyBankAccounts', JSON.stringify(apiCompanyInfo.bankAccounts));
-                    if (apiCompanyInfo.logo) {
-                        localStorage.setItem('companyLogo', apiCompanyInfo.logo);
-                    }
-                    if (apiCompanyInfo.paymentQR) {
-                        localStorage.setItem('companyPaymentQR', apiCompanyInfo.paymentQR);
-                    }
-                    if (apiCompanyInfo.business_settings) {
-                        localStorage.setItem('companyBusinessSettings', JSON.stringify(apiCompanyInfo.business_settings));
-                    }
-                    // Note: org_id is already in localStorage from login/sync, no need to fetch again
-                }
-            } catch (apiError) {
-                console.error('Failed to fetch company profile:', apiError);
-                // Continue with cached data
-            }
+            setCompanyInfo(apiCompanyInfo);
         } catch (err) {
-            setError(err instanceof Error ? err : new Error(String(err)));
-            setCompanyInfo({
-                name: '',
-                address: '',
-                city: '',
-                state: '',
-                pincode: '',
-                phone: '',
-                email: '',
-                gst_number: '',
-                pan_number: '',
-                drug_license_number: '',
-                fssai_number: '',
-                msme_number: '',
-                logo: null,
-                bankAccounts: [],
-                paymentQR: null,
-            });
+            const failure = err instanceof Error ? err : new Error(String(err));
+            setError(failure);
+            setCompanyInfo(null);
         } finally {
             setLoading(false);
         }
     };
 
     const updateCompanyInfo = async (updates: Partial<CompanyInfo>) => {
-        try {
-            setLoading(true);
-
-            const updatedInfo: CompanyInfo = { ...companyInfo!, ...updates };
-            setCompanyInfo(updatedInfo);
-
-            // Update localStorage
-            Object.entries(updates).forEach(([key, value]) => {
-                if (key === 'gst') {
-                    localStorage.setItem('companyGST', value as string);
-                } else if (key === 'state') {
-                    localStorage.setItem('companyState', value as string);
-                } else if (key === 'business_settings') {
-                    localStorage.setItem('companyBusinessSettings', JSON.stringify(value));
-                } else {
-                    localStorage.setItem(`company${key.charAt(0).toUpperCase() + key.slice(1)}`, String(value));
-                }
-            });
-
-            // Try to update via API
-            try {
-                const response = await companyApi.updateCompanyInfo(updates);
-                if (!response?.data?.success) {
-                    throw new Error(response?.data?.message || 'Failed to update company info');
-                }
-            } catch (apiError) {
-                // Continue with local update
-            }
-
-            return { success: true, data: updatedInfo };
-        } catch (err) {
-            const error = err instanceof Error ? err : new Error(String(err));
-            setError(error);
-            return { success: false, error };
-        } finally {
-            setLoading(false);
-        }
+        void updates;
+        const updateError = new Error('Canonical company profile updates are not available');
+        setError(updateError);
+        return { success: false, error: updateError };
     };
 
     const value: CompanyContextValue = {

@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -52,20 +53,11 @@ export const paymentAllocationApi = {
         });
     },
 
-    allocate: (data: AllocationData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.ALLOCATE, data);
-    },
+    allocate: (_data: AllocationData): Promise<AxiosResponse> => rejectCanonicalWrite('Allocating a payment'),
 
-    allocateBulk: (data: AllocationData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.ALLOCATE_BULK, data);
-    },
+    allocateBulk: (_data: AllocationData): Promise<AxiosResponse> => rejectCanonicalWrite('Allocating payments in bulk'),
 
-    autoAllocate: (paymentId: number, method: 'fifo' | 'lifo' | 'proportional' = 'fifo'): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.AUTO_ALLOCATE, {
-            payment_id: paymentId,
-            method
-        });
-    },
+    autoAllocate: (_paymentId: number, _method: 'fifo' | 'lifo' | 'proportional' = 'fifo'): Promise<AxiosResponse> => rejectCanonicalWrite('Automatically allocating a payment'),
 
     getPaymentAllocations: (paymentId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/payment/${paymentId}/allocations`);
@@ -75,7 +67,5 @@ export const paymentAllocationApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/invoice/${invoiceId}/payments`);
     },
 
-    deallocate: (allocationId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/allocation/${allocationId}`);
-    }
+    deallocate: (_allocationId: number): Promise<AxiosResponse> => rejectCanonicalWrite('Removing a payment allocation')
 };

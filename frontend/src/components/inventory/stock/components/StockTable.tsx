@@ -6,8 +6,6 @@
 
 import React from 'react';
 import {
-    Eye,
-    Edit2,
     AlertTriangle,
     CheckCircle,
     TrendingDown
@@ -30,8 +28,6 @@ export const StockTable = React.memo<StockTableProps>(({
     loading,
     sortConfig,
     onSort,
-    onViewDetails,
-    onEdit,
     selectedIds,
     onSelectionChange
 }) => {
@@ -48,7 +44,7 @@ export const StockTable = React.memo<StockTableProps>(({
         }
     };
 
-    const handleSelectOne = (id: number) => {
+    const handleSelectOne = (id: string | number) => {
         const newIds = new Set(selectedIds);
         if (newIds.has(id)) {
             newIds.delete(id);
@@ -113,9 +109,6 @@ export const StockTable = React.memo<StockTableProps>(({
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Status
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Actions
-                            </th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -173,24 +166,6 @@ export const StockTable = React.memo<StockTableProps>(({
                                                     Expiring Soon
                                                 </span>
                                             )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center space-x-1">
-                                            <button
-                                                onClick={() => onViewDetails(item)}
-                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                title="View Details"
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => onEdit(item)}
-                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                title="Edit"
-                                            >
-                                                <Edit2 className="w-4 h-4" />
-                                            </button>
                                         </div>
                                     </td>
                                 </tr>

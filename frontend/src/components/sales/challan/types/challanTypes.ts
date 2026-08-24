@@ -208,6 +208,7 @@ export interface UseChallanLogicReturn {
     currentStep: number;
     setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
     saving: boolean;
+    submissionUnavailableReason: string;
     showCreateCustomer: boolean;
     setShowCreateCustomer: React.Dispatch<React.SetStateAction<boolean>>;
     showCreateProduct: boolean;

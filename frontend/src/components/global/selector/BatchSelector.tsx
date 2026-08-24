@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, ReactNode } from 'react';
 import { X, Package, AlertCircle, CheckCircle, Shield, Clock, Box } from 'lucide-react';
 import { batchesApi } from '../../../services/api';
-import { searchCache } from '../../../utils/searchCache';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import { hasCanonicalBatchIdentity, mergeProductAndBatch } from '../../../utils/productMapper';
+import { mergeProductAndBatch } from '../../../utils/productMapper';
 import type { Product as CanonicalProduct } from '../../../types/models';
 
 // ==================== HELPERS ====================
 
-/** Generate consistent cache key for batches */
-const getBatchCacheKey = (productId: string | number): string => `batches_${productId}`;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const canUseCachedBatches = (batches: unknown): batches is any[] =>
-    Array.isArray(batches) && batches.length > 0 && batches.every(hasCanonicalBatchIdentity);
+const requiredNumber = (value: unknown, field: string, row: number): number => {
+    if (value === null || value === undefined || value === '') {
+        throw new Error(`Batch row ${row} is missing ${field}`);
+    }
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) throw new Error(`Batch row ${row} has invalid ${field}`);
+    return parsed;
+};
 
 // Simple class concatenation helper (replaces cx from invoiceStyles)
 const cx = (...classNames: (string | boolean | undefined | null)[]) =>
@@ -22,10 +25,10 @@ const cx = (...classNames: (string | boolean | undefined | null)[]) =>
 
 // Modal styles derived from theme components
 const styles = {
-    modalOverlay: 'fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4',
+    modalOverlay: 'fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4',
     modalHeader: 'bg-white px-6 py-4 border-b border-gray-200',
     modalBody: 'p-6 overflow-y-auto max-h-[calc(90vh-100px)]',
-    iconButton: 'p-2 hover:bg-gray-100 rounded-lg transition-colors group',
+    iconButton: 'min-h-11 min-w-11 p-2 hover:bg-gray-100 rounded-md transition-colors group flex items-center justify-center',
 };
 
 // ==================== TYPE DEFINITIONS ====================
@@ -41,7 +44,7 @@ type Product = CanonicalProduct & {
 };
 
 interface Batch {
-    batch_id: number | string;
+    batch_id: string;
     batch_number: string;
     expiry_date: string;
     manufacturing_date: string;
@@ -51,12 +54,14 @@ interface Batch {
     cost_per_unit: number;
     days_to_expiry: number | null;
     has_pending_sync: boolean;
-    product_id?: number | string;
+    product_id: string;
     product_name: string;
     gst_percent: number;
     location_id?: string;
     branch_id?: string;
     uom_conversion_id?: string;
+    location_name?: string;
+    branch_name?: string;
     // Pack info
     units_per_pack?: number;
     packages_per_box?: number;
@@ -89,7 +94,6 @@ interface BatchSelectorProps {
     onBatchSelect: (productWithBatch: ProductWithBatch) => void;
     onClose: () => void;
     mode?: 'modal' | 'inline' | 'dropdown';
-    allowCreateDefault?: boolean;
     showExpiryStatus?: boolean;
     sortBy?: 'expiry' | 'quantity' | 'manufacturing';
     sortOrder?: 'asc' | 'desc';
@@ -108,7 +112,6 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     onBatchSelect,
     onClose,
     mode = 'modal',
-    allowCreateDefault = true,
     showExpiryStatus = true,
     sortBy = 'expiry',
     sortOrder = 'desc',
@@ -126,7 +129,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const [focusedIndex, setFocusedIndex] = useState<number>(-1);
     const hasLoadedRef = useRef<number | string | false>(false);
     const containerRef = useRef<HTMLDivElement>(null);
-    const batchRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const batchRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
     useEffect(() => {
         if (show && product && mode === 'modal') {
@@ -156,132 +159,69 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const loadBatches = async (): Promise<void> => {
         if (!product) return;
 
-        // OPTIMIZATION: Use embedded batches if available (no API call needed)
-        if (canUseCachedBatches(product.batches)) {
-            console.log('[BatchSelector] Using embedded batches from product (OPTIMIZED)');
-            processBatches(product.batches);
-            return;
-        }
-
         const productId = product.product_id || product.id;
-        if (!productId) {
-            console.warn('[BatchSelector] No product ID available');
-            setError('Product ID not available');
+        if (!UUID.test(String(productId || ''))) {
+            setError('This product is missing its canonical UUID. Re-select it and try again.');
             return;
         }
-        const cacheKey = getBatchCacheKey(productId);
-
-        // LAYER 1: Memory cache (instant)
-        const cachedBatches = searchCache.get(cacheKey, {});
-        if (canUseCachedBatches(cachedBatches)) {
-            console.log('[BatchSelector] Using memory cache (instant)');
-            processBatches(cachedBatches);
-            return;
-        }
-
-        try {
-            const offlineBatches = await offlineDB.getBatchesByProduct(productId);
-            if (canUseCachedBatches(offlineBatches)) {
-                console.log(`[BatchSelector] Loaded ${offlineBatches.length} batches from IndexedDB (instant)`);
-                processBatches(offlineBatches);
-                searchCache.set(cacheKey, {}, offlineBatches); // Promote to memory cache
-                // NOTE: No background API refresh needed - data is fresh from search-with-batches
-                return;
-            }
-        } catch (offlineError) {
-            console.warn('[BatchSelector] IndexedDB load failed:', offlineError);
-        }
-
-        // No local data - must fetch from API
         setLoading(true);
         setError(null);
 
         try {
-            await fetchAndStoreBatches(productId as string | number, true);
+            const response = await batchesApi.getByProduct(String(productId));
+            const batchesData = response.data?.batches;
+            if (!Array.isArray(batchesData)) {
+                throw new Error('Batch API returned an invalid canonical response');
+            }
+            processBatches(batchesData);
         } catch (error) {
             console.error('[BatchSelector] API load failed:', error);
-            setError('Failed to load batches. Please try again.');
-
-            if (allowCreateDefault && product) {
-                const fallbackBatch = createDefaultBatch(product);
-                setBatches([fallbackBatch]);
-            }
+            setBatches([]);
+            setError(error instanceof Error ? error.message : 'Failed to load batches. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchAndStoreBatches = async (productId: string | number, showLoadingSpinner: boolean = true): Promise<Batch[]> => {
-        try {
-            const response = await batchesApi.getByProduct(productId);
-            const batchesData = response.data?.batches || response.data || [];
-
-            // Update caches
-            searchCache.set(getBatchCacheKey(productId), {}, batchesData);
-
-            try {
-                await offlineDB.storeBatches(batchesData);
-            } catch (e) {
-                console.warn('[BatchSelector] IndexedDB cache failed:', e);
-            }
-
-            // ALWAYS update UI with fresh data (critical for pricing accuracy)
-            // The showLoadingSpinner flag only controls whether we showed a spinner initially
-            processBatches(batchesData);
-            console.log(`[BatchSelector] UI updated with ${batchesData.length} fresh batches from API`);
-
-            return batchesData;
-        } catch (error) {
-            console.error('[BatchSelector] Failed to fetch batches:', error);
-            throw error;
-        }
-    };
-
     const processBatches = (batchesData: any[]): void => {
-        console.log('🔍 [BatchSelector] Raw batch data from API/cache:', batchesData);
-
-        let processedBatches: Batch[] = batchesData.map(batch => {
-            // DEBUG: Log raw batch pricing
-            console.log(`🔍 [BatchSelector] Batch ${batch.batch_id} raw pricing:`, {
-                sale_price_per_unit: batch.sale_price_per_unit,
-                mrp_per_unit: batch.mrp_per_unit,
-                cost_per_unit: batch.cost_per_unit
-            });
+        let processedBatches: Batch[] = batchesData.map((batch, index) => {
+            const row = index + 1;
+            for (const [field, value] of [
+                ['batch_id', batch.batch_id], ['product_id', batch.product_id],
+                ['location_id', batch.location_id], ['branch_id', batch.branch_id],
+                ['uom_conversion_id', batch.uom_conversion_id],
+            ]) {
+                if (!UUID.test(String(value || ''))) throw new Error(`Batch row ${row} has invalid ${field}`);
+            }
+            if (typeof batch.batch_number !== 'string' || typeof batch.product_name !== 'string'
+                || typeof batch.expiry_date !== 'string') {
+                throw new Error(`Batch row ${row} is missing identity fields`);
+            }
 
             const daysToExpiry = batch.expiry_date
                 ? Math.ceil((new Date(batch.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
                 : null;
 
-            const available = parseInt(batch.quantity_available || 0);
-
             const processed = {
                 batch_id: batch.batch_id,
-                batch_number: batch.batch_number || '',
-                expiry_date: batch.expiry_date || '',
-                manufacturing_date: batch.manufacturing_date || '',
-                quantity_available: available,
-                sale_price_per_unit: parseFloat(batch.sale_price_per_unit || 0),
-                mrp_per_unit: parseFloat(batch.mrp_per_unit || 0),
-                cost_per_unit: parseFloat(batch.cost_per_unit || 0),
+                batch_number: batch.batch_number,
+                expiry_date: typeof batch.expiry_date === 'string' ? batch.expiry_date : '',
+                manufacturing_date: typeof batch.manufacturing_date === 'string' ? batch.manufacturing_date : '',
+                quantity_available: requiredNumber(batch.quantity_available, 'quantity_available', row),
+                sale_price_per_unit: requiredNumber(batch.sale_price_per_unit, 'sale_price_per_unit', row),
+                mrp_per_unit: requiredNumber(batch.mrp_per_unit, 'mrp_per_unit', row),
+                cost_per_unit: requiredNumber(batch.cost_per_unit, 'cost_per_unit', row),
                 days_to_expiry: daysToExpiry,
                 has_pending_sync: false,
-                product_id: batch.product_id || product?.product_id,
-                product_name: batch.product_name || product?.product_name || '',
-                gst_percent: batch.gst_percent || product?.gst_percent || 0,
+                product_id: batch.product_id,
+                product_name: batch.product_name,
+                gst_percent: requiredNumber(batch.gst_percent, 'gst_percent', row),
                 location_id: batch.location_id,
                 branch_id: batch.branch_id,
-                uom_conversion_id: batch.uom_conversion_id || product?.uom_conversion_id,
-                // Pack info - essential for display
-                units_per_pack: parseInt(batch.units_per_pack || 1),
-                packages_per_box: parseInt(batch.packages_per_box || 1),
-                pack_type: batch.pack_type || 'Unit'
+                uom_conversion_id: batch.uom_conversion_id,
+                location_name: typeof batch.location_name === 'string' ? batch.location_name : undefined,
+                branch_name: typeof batch.branch_name === 'string' ? batch.branch_name : undefined,
             };
-
-            // DEBUG: Log processed batch pricing
-            console.log(`🔍 [BatchSelector] Batch ${batch.batch_id} processed:`, {
-                sale_price_per_unit: processed.sale_price_per_unit,
-                mrp_per_unit: processed.mrp_per_unit
-            });
 
             return processed;
         });
@@ -331,26 +271,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
     };
 
-    const createDefaultBatch = (prod: Product): Batch => {
-        const expiryDate = new Date(Date.now() + (INVOICE_CONFIG as any).BATCH.DEFAULT_BATCH.EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-        return {
-            batch_id: `default_${prod.product_id}`,
-            batch_number: (INVOICE_CONFIG as any).BATCH.DEFAULT_BATCH.BATCH_NUMBER,
-            expiry_date: expiryDate.toISOString(),
-            manufacturing_date: '',
-            quantity_available: (INVOICE_CONFIG as any).BATCH.DEFAULT_BATCH.QUANTITY,
-            mrp_per_unit: prod.mrp_per_unit || prod.mrp || 0,
-            sale_price_per_unit: prod.sale_price_per_unit || prod.unit_price || prod.mrp || 0,
-            cost_per_unit: 0,
-            days_to_expiry: (INVOICE_CONFIG as any).BATCH.DEFAULT_BATCH.EXPIRY_DAYS,
-            has_pending_sync: false,
-            product_id: prod.product_id,
-            product_name: prod.product_name || '',
-            gst_percent: prod.gst_percent || 0
-        };
-    };
-
     const handleBatchSelect = (batch: Batch): void => {
+        if (batch.quantity_available <= 0) {
+            setError('This batch has no saleable stock. Refresh and select another batch.');
+            return;
+        }
         setSelectedBatch(batch);
 
         // Use centralized mapper to merge data correctly (ensures batch price > product price)
@@ -383,17 +308,10 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             good: Shield
         };
 
-        const gradientMap: Record<string, string> = {
-            expired: 'from-red-700 to-red-800',
-            critical: 'from-red-500 to-red-600',
-            warning: 'from-amber-500 to-amber-600',
-            good: 'from-emerald-500 to-emerald-600'
-        };
-
         return {
             ...status,
             icon: iconMap[status.status],
-            gradient: gradientMap[status.status],
+            gradient: '',
             days: daysToExpiry
         } as ExpiryInfo;
     };
@@ -404,16 +322,20 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const isFocused = typeof index === 'number' && index === focusedIndex;
 
         return (
-            <div
+            <button
+                type="button"
                 key={String(batch.batch_id)}
                 ref={(el) => { if (typeof index === 'number') batchRefs.current[index] = el; }}
                 onClick={() => handleBatchSelect(batch)}
+                role="option"
+                aria-selected={isSelected}
+                aria-label={`Select batch ${batch.batch_number} from ${batch.location_name || 'saleable stock'}`}
                 className={cx(
-                    'relative group cursor-pointer rounded-lg border-2 transition-all duration-200 bg-white hover:shadow-md mb-2',
+                    'relative group block w-full cursor-pointer rounded-lg border text-left transition-colors bg-white mb-2',
                     isSelected
-                        ? 'border-blue-500 shadow-lg bg-blue-50'
+                        ? 'border-blue-500 bg-blue-50'
                         : isFocused
-                            ? 'border-blue-400 ring-2 ring-blue-300 bg-blue-50/50'
+                            ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-50'
                             : 'border-gray-200 hover:border-blue-300'
                 )}
             >
@@ -435,6 +357,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                                 {batch.batch_number}
                             </span>
                         </div>
+                        {batch.location_name && (
+                            <div className="mt-1 text-xs text-gray-500">
+                                {batch.location_name}{batch.branch_name ? ` · ${batch.branch_name}` : ''}
+                            </div>
+                        )}
                     </div>
 
                     <div>
@@ -513,7 +440,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         </div>
                     </div>
                 )}
-            </div>
+            </button>
         );
     };
 
@@ -533,14 +460,14 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     <p className="text-red-600 font-medium">{error}</p>
                     <button
                         onClick={loadBatches}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="mt-4 min-h-11 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                     >
                         Retry
                     </button>
                 </div>
             ) : batches.length === 0 ? (
                 <div className="text-center py-20">
-                    <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-inner">
+                    <div className="w-20 h-20 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center mx-auto mb-5">
                         <Package className="w-12 h-12 text-gray-400" />
                     </div>
                     <p className="text-gray-900 font-bold text-xl">No Batches Available</p>
@@ -571,7 +498,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
     if (mode === 'inline') {
         return (
-            <div className={cx('bg-white rounded-lg shadow-sm', className)} ref={containerRef}>
+            <div className={cx('bg-white rounded-lg border border-gray-200', className)} ref={containerRef}>
                 <div className="p-4">
                     <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                         <Box className="w-4 h-4 mr-2" />
@@ -588,7 +515,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     if (mode === 'dropdown') {
         return (
             <div className={cx('relative', className)} ref={containerRef}>
-                <div className="absolute z-10 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200"
+                <div className="absolute z-10 mt-1 w-full bg-white rounded-lg border border-gray-200"
                     style={{ maxHeight, overflowY: 'auto' }}>
                     <div className="p-4">
                         {renderContent()}
@@ -645,15 +572,18 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     return (
         <div className={styles.modalOverlay}>
             <div
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden outline-none"
+                className="bg-white rounded-lg border border-gray-200 w-full max-w-4xl max-h-[90vh] overflow-hidden outline-none"
                 tabIndex={-1}
                 onKeyDown={handleKeyDown}
                 ref={containerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="batch-selector-title"
             >
                 <div className={styles.modalHeader}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg font-bold text-gray-900">Select Batch</h3>
+                            <h3 id="batch-selector-title" className="text-lg font-bold text-gray-900">Select Batch</h3>
                             <p className="text-sm text-gray-500 mt-0.5">{product?.product_name}</p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -665,8 +595,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                                 <kbd className="px-1 py-0.5 bg-gray-100 rounded border border-gray-200 text-gray-500 font-mono text-[10px]">Esc</kbd> Close
                             </span>
                             <button
+                                type="button"
                                 onClick={onClose}
-                                className={cx(styles.iconButton, 'rounded-xl')}
+                                className={styles.iconButton}
+                                aria-label="Close batch selector"
+                                title="Close"
                             >
                                 <X className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
                             </button>

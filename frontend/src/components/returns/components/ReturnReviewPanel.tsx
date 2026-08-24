@@ -5,9 +5,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
 import { useCompany } from '../../../contexts/CompanyContext';
-import { ModuleHeader, DocumentFooter } from '../../global';
+import { DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
 
 // Return reason value to label mapping
@@ -40,7 +39,8 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     onSave,
     onPrint,
     onBack,
-    saving
+    saving,
+    submissionUnavailableReason
 }) => {
     // Use same company context as Invoice for consistency
     const { companyInfo } = useCompany();
@@ -112,6 +112,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
     // Handle save with notes
     const handleSave = () => {
+        if (!onSave) return;
         // Update returnData with notes before save
         returnData.return_reason_notes = notes;
         onSave();
@@ -454,12 +455,17 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
             </div>
 
             {/* Footer - Using Global DocumentFooter */}
+            {submissionUnavailableReason && (
+                <div className="border-t border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-800">
+                    {submissionUnavailableReason}
+                </div>
+            )}
             <DocumentFooter
                 totalItems={selectedItems.length}
                 grandTotal={returnData.total_amount}
                 subtotalAmount={returnData.subtotal_amount}
                 taxAmount={returnData.tax_amount}
-                onSave={handleSave}
+                onSave={onSave ? handleSave : undefined}
                 isSaving={saving}
                 saveLabel="Confirm Return"
                 showActionButtons={true}

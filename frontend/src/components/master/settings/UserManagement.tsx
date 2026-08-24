@@ -10,6 +10,7 @@ import {
 } from '../../../config/userRoles.config';
 import { User } from '../../../types/models/user';
 import type { Role } from '../../../types/api.types';
+import { CanonicalWriteNotice } from '../../global';
 import {
   clearErpSessionStorage,
   getErpAccessToken,
@@ -491,7 +492,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+              disabled
+              title="Unavailable until a canonical user command exists"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               <span>Add User</span>
@@ -499,6 +502,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
           </div>
         </div>
       </div>
+
+      <CanonicalWriteNotice action="Changing users" className="mx-6 mt-4" />
 
       {/* Demo Mode Banner */}
       {/* Removed demo mode banner as it's no longer used */}
@@ -568,6 +573,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
             <p className="text-gray-600 mb-4">Get started by adding your first user.</p>
             <button
               onClick={() => setShowAddModal(true)}
+              disabled
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -609,6 +615,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => handleStatusToggle(user.id)}
+                            disabled
                             className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${user.status === 'active'
                               ? 'bg-green-100 text-green-800 hover:bg-green-200'
                               : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
@@ -654,21 +661,24 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
                           <div className="flex items-center justify-center space-x-2">
                             <button
                               onClick={() => handleEdit(user)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              disabled
+                              className="p-1 text-blue-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
                               title="Edit User"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleResetPassword(user)}
-                              className="p-1 text-amber-600 hover:bg-amber-50 rounded"
+                              disabled
+                              className="p-1 text-amber-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
                               title="Reset Password"
                             >
                               <Key className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(user.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              disabled
+                              className="p-1 text-red-600 rounded disabled:text-gray-300 disabled:cursor-not-allowed"
                               title="Delete User"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -931,7 +941,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={true}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSaving ? (

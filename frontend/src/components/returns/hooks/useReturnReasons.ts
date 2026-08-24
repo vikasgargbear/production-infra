@@ -1,21 +1,9 @@
-/**
- * Custom hook for managing return reasons with caching
- */
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { metadataApi } from '../../../services/api';
-
-// ============================================================================
-// Types
-// ============================================================================
 
 interface ReturnReason {
     value: string;
     label: string;
-}
-
-interface CachedReasons {
-    data: ReturnReason[];
-    timestamp: number;
 }
 
 interface UseReturnReasonsReturn {
@@ -23,114 +11,45 @@ interface UseReturnReasonsReturn {
     loading: boolean;
     error: string | null;
     reload: () => Promise<void>;
-    clearCache: () => void;
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const CACHE_KEY = 'return_reasons_cache';
-const CACHE_DURATION = 3600000; // 1 hour
-
-const DEFAULT_REASONS: ReturnReason[] = [
-    { value: 'NOT_REQUIRED', label: 'Not Required (Restocks)' },
-    { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
-    { value: 'WRONG_ITEM', label: 'Wrong Item Delivered (Restocks)' },
-    { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
-    { value: 'SHORT_EXPIRY', label: 'Short Expiry (Restocks)' },
-    { value: 'BATCH_RECALL', label: 'Batch Recall (Restocks)' },
-    { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit (No Restock)' },
-    { value: 'DAMAGED', label: 'Damaged Product (No Restock)' },
-    { value: 'OTHER', label: 'Other (Restocks)' }
-];
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-function getCachedReasons(): ReturnReason[] {
-    try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-            const parsed: CachedReasons = JSON.parse(cached);
-            if (parsed.timestamp && Date.now() - parsed.timestamp < CACHE_DURATION) {
-                return parsed.data;
-            }
-        }
-    } catch {
-        // Ignore cache errors
-    }
-    return [];
-}
-
-function cacheReasons(reasons: ReturnReason[]): void {
-    try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-            data: reasons,
-            timestamp: Date.now()
-        }));
-    } catch {
-        // Ignore cache errors
-    }
-}
-
-// ============================================================================
-// Hook
-// ============================================================================
-
+/** Load return reasons from the canonical metadata API without local fallback. */
 export function useReturnReasons(): UseReturnReasonsReturn {
-    const [reasons, setReasons] = useState<ReturnReason[]>(getCachedReasons);
+    const [reasons, setReasons] = useState<ReturnReason[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const loadReasons = useCallback(async (): Promise<void> => {
+        setLoading(true);
+        setError(null);
         try {
-            setLoading(true);
-            setError(null);
-
             const response = await metadataApi.getReturnReasons();
+            const payload = response?.data;
+            const rawReasons = Array.isArray(payload)
+                ? payload
+                : payload?.return_reasons || payload?.sales_return_reasons || payload?.purchase_return_reasons || [];
 
-            if (response?.data && Array.isArray(response.data)) {
-                const formattedReasons: ReturnReason[] = response.data.map((reason: Record<string, unknown>) => ({
-                    value: String(reason.value || reason.code || reason.id || ''),
-                    label: String(reason.label || reason.name || reason.description || '')
-                }));
-
-                setReasons(formattedReasons);
-                cacheReasons(formattedReasons);
-            } else {
-                setReasons(DEFAULT_REASONS);
-                cacheReasons(DEFAULT_REASONS);
+            if (!Array.isArray(rawReasons) || rawReasons.length === 0) {
+                throw new Error('The canonical API returned no return reasons.');
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load return reasons');
-            setReasons(DEFAULT_REASONS);
-            cacheReasons(DEFAULT_REASONS);
+
+            setReasons(rawReasons.map((reason: Record<string, unknown>) => ({
+                value: String(reason.value || reason.code || reason.id || ''),
+                label: String(reason.label || reason.name || reason.description || '')
+            })));
+        } catch (loadError) {
+            setReasons([]);
+            setError(loadError instanceof Error ? loadError.message : 'Failed to load return reasons from the canonical API.');
         } finally {
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        if (reasons.length === 0) {
-            loadReasons();
-        }
-    }, [reasons.length, loadReasons]);
-
-    const clearCache = useCallback((): void => {
-        localStorage.removeItem(CACHE_KEY);
-        setReasons([]);
-        loadReasons();
+        void loadReasons();
     }, [loadReasons]);
 
-    return {
-        reasons,
-        loading,
-        error,
-        reload: loadReasons,
-        clearCache
-    };
+    return { reasons, loading, error, reload: loadReasons };
 }
 
-export type { ReturnReason, UseReturnReasonsReturn };
+export default useReturnReasons;

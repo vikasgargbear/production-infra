@@ -31,31 +31,4 @@ test.describe('ERP calculation smoke', () => {
     await expect(page.getByTestId('payment-remaining')).toHaveText('1497.50');
   });
 
-  test('can persist an offline credit note into IndexedDB and the sync queue', async ({ page }) => {
-    await page.getByTestId('seed-offline-note').click();
-    await expect(page.getByTestId('offline-note-status')).toHaveText(/queued:[1-9]\d*/);
-  });
-
-  test('can queue all critical offline document types for later replay', async ({ page }) => {
-    await page.getByTestId('seed-critical-offline-docs').click();
-
-    const expectedEntities = [
-      'invoices',
-      'sales_orders',
-      'delivery_challans',
-      'purchase_orders',
-      'purchase_entries',
-      'sales_returns',
-      'purchase_returns',
-      'payments',
-      'payment_receipts',
-      'credit_debit_notes',
-      'stock_adjustments',
-      'stock_transfers'
-    ];
-
-    for (const entity of expectedEntities) {
-      await expect(page.getByTestId('critical-offline-status')).toContainText(`"${entity}": 1`);
-    }
-  });
 });

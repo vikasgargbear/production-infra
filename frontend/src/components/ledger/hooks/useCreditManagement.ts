@@ -2,12 +2,11 @@
  * useCreditManagement Hook
  * 
  * Extracted from CreditManagement.js
- * Handles credit data loading, filtering, stats calculation, and offline fallback.
+ * Handles live API credit data loading, filtering, and stats calculation.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { customersApi, invoicesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 // Types
 export interface OutstandingInvoice {
@@ -100,7 +99,7 @@ export function useCreditManagement(): UseCreditManagementReturn {
     // Modal state
     const [showDetails, setShowDetails] = useState(false);
 
-    // Load credit data with offline fallback
+    // Load credit data only from the live API.
     const loadCreditData = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -151,28 +150,14 @@ export function useCreditManagement(): UseCreditManagementReturn {
 
                 setCreditStats(stats);
 
-                // Store offline
-                await offlineStorage.storeOffline('credit_management', {
-                    customers: customersData,
-                    stats
-                }, { critical: true, persistent: true });
             } else {
                 setCustomers([]);
                 setCreditStats(initialStats);
             }
         } catch (err) {
-            // Try offline fallback
-            const offlineData = await offlineStorage.getOffline('credit_management', { critical: true });
-
-            if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) {
-                setCustomers(offlineData.data.customers);
-                setCreditStats(offlineData.data.stats);
-                setError('Currently using offline data. Some information may be outdated.');
-            } else {
-                setError('Unable to load credit management data. Please check your connection.');
-                setCustomers([]);
-                setCreditStats(initialStats);
-            }
+            setError('Unable to load credit management data from the live API. Please try again.');
+            setCustomers([]);
+            setCreditStats(initialStats);
         } finally {
             setLoading(false);
         }
@@ -274,14 +259,6 @@ export function useCreditManagement(): UseCreditManagementReturn {
     useEffect(() => {
         loadCreditData();
     }, [loadCreditData]);
-
-    // Periodic cleanup
-    useEffect(() => {
-        const interval = setInterval(() => {
-            offlineStorage.clearOldData(24);
-        }, 60 * 60 * 1000);
-        return () => clearInterval(interval);
-    }, []);
 
     return {
         customers,

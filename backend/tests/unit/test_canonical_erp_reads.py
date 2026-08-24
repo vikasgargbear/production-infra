@@ -40,6 +40,8 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
         ("/products/{product_id}", {"PUT"}),
         ("/customers/", {"POST"}),
         ("/suppliers/", {"POST"}),
+        ("/customers/{customer_id:uuid}/addresses/", {"POST"}),
+        ("/customers/{customer_id:uuid}/addresses/{address_id:uuid}", {"PUT"}),
     ]
 
 
@@ -85,6 +87,36 @@ def test_canonical_routes_precede_legacy_compatibility_routes() -> None:
         assert writes[0].endpoint is endpoint
 
 
+def test_uuid_customer_address_routes_precede_legacy_integer_routes() -> None:
+    routes = [route for route in canonical_erp_reads.router.routes if isinstance(route, APIRoute)]
+    paths = {(route.path, frozenset(route.methods)) for route in routes}
+
+    assert ("/customers/{customer_id:uuid}/addresses", frozenset({"GET"})) in paths
+    assert ("/customers/{customer_id:uuid}/addresses/", frozenset({"POST"})) in paths
+    assert (
+        "/customers/{customer_id:uuid}/addresses/{address_id:uuid}",
+        frozenset({"PUT"}),
+    ) in paths
+
+
+def test_offline_sync_routes_are_not_registered() -> None:
+    routes = [route for route in canonical_erp_reads.router.routes if isinstance(route, APIRoute)]
+    assert not any(route.path.startswith("/sync/") for route in routes)
+
+
+def test_party_creation_activates_party_before_active_account_commit() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+    assert "SET status='active', updated_at=transaction_timestamp()" in source
+    assert "WHERE org_id=:org_id AND id=:party_id AND status='draft'" in source
+    assert "Party activation failed" in source
+
+
+def test_customer_address_primary_is_scoped_by_address_kind() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+    assert source.count("address_kind=:kind") >= 4
+    assert "other.address_kind=:kind" in source
+
+
 def test_canonical_reads_activate_rls_and_do_not_use_legacy_schemas() -> None:
     source = canonical_erp_reads.__file__
     text = open(source, encoding="utf-8").read()
@@ -110,8 +142,20 @@ def test_batch_reads_use_canonical_inventory_lifecycle_states() -> None:
 def test_batch_reads_project_branch_from_authoritative_stock_balance() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 
-    assert source.count("COUNT(DISTINCT balance.branch_id)=1") == 3
+    assert source.count("COUNT(DISTINCT balance.branch_id)=1") == 2
+    assert "JOIN inventory.stock_balances balance" in source
+    assert "balance.on_hand_quantity>0" in source
+    assert "location.allows_sale" in source
     assert "COUNT(DISTINCT location.branch_id)=1" not in source
+
+
+def test_product_and_batch_reads_project_effective_canonical_gst_rate() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+
+    assert source.count("FROM tax.tax_code_versions") >= 4
+    assert "tax_version.taxability='taxable'" in source
+    assert "tax_version.taxability IS NULL THEN NULL" in source
+    assert "tax_version.igst_rate" in source
 
 
 def test_company_profile_projects_canonical_invoice_identity_and_settlement_details() -> None:
@@ -123,6 +167,23 @@ def test_company_profile_projects_canonical_invoice_identity_and_settlement_deta
     assert "COALESCE(bank.accounts, '[]'::jsonb) AS bank_accounts" in source
     assert "FROM compliance.licenses" in source
     assert "FROM finance.bank_accounts" in source
+
+
+def test_hsn_report_projects_complete_numeric_contract_for_selected_period() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+
+    assert "AS tax_amount" in source
+    assert "AS tax_rate" in source
+    assert ":date_from IS NULL OR invoice.invoice_date" in source
+    assert ":date_to IS NULL OR invoice.invoice_date" in source
+
+
+def test_current_stock_projects_one_canonical_row_per_product() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+
+    assert "SUM(balance.on_hand_quantity) AS total_quantity_available" in source
+    assert "SUM(balance.inventory_value) AS total_value" in source
+    assert "GROUP BY balance.product_id" in source
 
 
 class ProductDraftDatabase:

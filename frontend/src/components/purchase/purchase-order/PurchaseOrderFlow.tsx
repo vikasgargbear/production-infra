@@ -13,8 +13,9 @@ import {
   StandardDatePicker
 } from '../../global';
 import { usePurchaseOrderLogic } from './hooks';
+import { PURCHASE_ORDER_SUBMIT_UNAVAILABLE_REASON } from './hooks/usePurchaseOrderSave';
 import { toast } from 'react-toastify';
-import { searchCache } from '../../../utils/searchCache';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 /**
  * PurchaseOrderFlow - Purchase Order using the full global document system
@@ -359,6 +360,11 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
   // Review content for step 2
   const reviewContent = (
     <>
+      <CanonicalWriteNotice
+        title="Purchase order submission is not available yet"
+        description={PURCHASE_ORDER_SUBMIT_UNAVAILABLE_REASON}
+        className="mb-4"
+      />
       {/* Delivery & Payment Terms */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
@@ -646,7 +652,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             handleSupplierSelect(supplier);
             setShowSupplierModal(false);
             toast.success('Supplier created successfully');
-            searchCache.clear();
           }}
         />
       )}
@@ -658,7 +663,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           onProductCreated={(product) => {
             setShowProductModal(false);
             toast.success('Product created successfully');
-            searchCache.clear();
             if (product) {
               handleAddItem(product);
             }

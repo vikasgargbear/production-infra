@@ -15,9 +15,10 @@ import CustomerCreation from '../../global/creation/CustomerCreation';
 import { ProductCreationModal } from '../../global';
 import { DocumentImportModal } from '../../global/modals';
 import { useSalesOrderLogic } from './hooks/useSalesOrderLogic';
+import { salesOrderImportDocumentTypes } from './salesOrderImportTypes';
 import OrderItemsStep from './steps/OrderItemsStep';
 import OrderReviewStep from './steps/OrderReviewStep';
-import type { Customer, Product } from '../../../types/models';
+import type { Customer } from '../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -41,6 +42,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         sameAsBilling,
         setSameAsBilling,
         saving,
+        submissionUnavailableReason,
         message,
         messageType,
         selectedBankAccount,
@@ -118,22 +120,22 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         <>
             {/* Step 1: Create Order */}
             {currentStep === 1 && (
-                <div className="h-full bg-blue-50">
+                <div className="h-full bg-gray-50">
                     <div className="h-full flex flex-col">
                         <ModuleHeader
                             title="Sales Order"
                             documentNumber={order.order_number}
                             status={order.status}
                             icon={ShoppingCart}
-                            iconColor="text-purple-600"
+                            iconColor="text-blue-600"
                             onClose={onClose}
                         />
 
-                        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+                        <div className="bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
                             Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
                         </div>
 
-                        <div className="flex-1 overflow-y-auto bg-blue-50">
+                        <div className="flex-1 overflow-y-auto bg-gray-50">
                             <OrderItemsStep
                                 order={order}
                                 setOrder={setOrder}
@@ -159,11 +161,10 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             totalAmount={order.total_amount}
                             onCancel={onClose}
                             onContinue={() => setCurrentStep(2)}
-                            onSave={() => { }}
                             cancelLabel="Cancel"
                             continueLabel="Continue"
                             continueDisabled={!order.customer_id || order.items.length === 0}
-                            continueButtonColor="purple"
+                            continueButtonColor="blue"
                         />
                     </div>
 
@@ -199,6 +200,8 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             isOpen={showImportModal}
                             onClose={() => setShowImportModal(false)}
                             onImport={handleImport as any}
+                            title="Import from Invoice or Delivery Challan"
+                            documentTypes={salesOrderImportDocumentTypes}
                         />
                     )}
                 </div>
@@ -206,14 +209,14 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
 
             {/* Step 2: Review and Confirm */}
             {currentStep === 2 && (
-                <div className="h-full bg-blue-50">
+                <div className="h-full bg-gray-50">
                     <div className="h-full flex flex-col">
                         <ModuleHeader
                             title="Review Order"
                             documentNumber={order.order_number}
                             status={order.status}
                             icon={ShoppingCart}
-                            iconColor="text-purple-600"
+                            iconColor="text-blue-600"
                             onClose={onClose}
                             additionalActions={[
                                 {
@@ -224,11 +227,11 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             ]}
                         />
 
-                        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+                        <div className="bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
                             Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Order | <strong>Esc</strong> - Back
                         </div>
 
-                        <div className="flex-1 overflow-y-auto bg-blue-50">
+                        <div className="flex-1 overflow-y-auto bg-gray-50">
                             <OrderReviewStep
                                 order={order}
                                 setOrder={setOrder}
@@ -243,19 +246,24 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             />
                         </div>
 
-                        <DocumentFooter
-                            totalItems={order.total_quantity}
-                            totalAmount={order.total_amount}
-                            subtotalAmount={order.subtotal_amount}
-                            taxAmount={order.tax_amount}
-                            roundOffAmount={order.round_off}
-                            grandTotal={order.total_amount}
-                            onSave={saveOrder}
-                            saveLabel="Generate Order"
-                            isSaving={saving}
-                            showActionButtons={true}
-                            showPrintOptions={false}
-                        />
+                        <div id="sales-order-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                            {submissionUnavailableReason}
+                        </div>
+                        <fieldset disabled aria-describedby="sales-order-submission-status">
+                            <DocumentFooter
+                                totalItems={order.total_quantity}
+                                totalAmount={order.total_amount}
+                                subtotalAmount={order.subtotal_amount}
+                                taxAmount={order.tax_amount}
+                                roundOffAmount={order.round_off}
+                                grandTotal={order.total_amount}
+                                onSave={saveOrder}
+                                saveLabel="Generate Order"
+                                isSaving={saving}
+                                showActionButtons={true}
+                                showPrintOptions={false}
+                            />
+                        </fieldset>
                     </div>
                 </div>
             )}

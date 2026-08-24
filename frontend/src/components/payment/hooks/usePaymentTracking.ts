@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { paymentsApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 import {
     CreditCard,
     Banknote,
@@ -16,27 +15,22 @@ import {
     FileText,
     CheckCircle,
     Clock,
-    XCircle,
-    AlertTriangle
+    XCircle
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // Types
 export interface Payment {
-    id: number | string;
-    customerName?: string;
-    customerPhone?: string;
-    invoiceNumber?: string;
-    invoiceAmount?: number;
-    paymentAmount: number;
-    paymentDate?: string;
-    paymentMode?: string;
-    transactionId?: string;
-    status: 'completed' | 'pending' | 'bounced' | 'failed';
-    remarks?: string;
+    id: string;
+    partyName: string;
+    paymentNumber: string;
+    amount: number;
+    date: string;
+    method: string;
+    reference?: string;
+    direction: string;
+    status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'posted' | 'reversed' | 'cancelled';
     notes?: string;
-    split_payments?: { mode: string; amount: number; reference?: string }[];
-    attachments?: string[];
 }
 
 export interface PaymentMode {
@@ -54,7 +48,7 @@ export interface PaymentStats {
     pendingCount: number;
 }
 
-export type StatusFilter = 'all' | 'completed' | 'pending' | 'bounced' | 'failed';
+export type StatusFilter = 'all' | Payment['status'];
 export type DateFilter = 'all' | 'today' | 'yesterday' | 'last_week' | 'last_month';
 
 export interface UsePaymentTrackingReturn {
@@ -97,9 +91,44 @@ const paymentModesList: PaymentMode[] = [
     { id: 'upi', name: 'UPI', icon: Smartphone, color: 'purple' },
     { id: 'cheque', name: 'Cheque', icon: FileText, color: 'blue' },
     { id: 'cash', name: 'Cash', icon: Banknote, color: 'green' },
-    { id: 'rtgs_neft', name: 'RTGS/NEFT', icon: Building, color: 'orange' },
-    { id: 'card', name: 'Card', icon: CreditCard, color: 'pink' }
+    { id: 'bank_transfer', name: 'Bank Transfer', icon: Building, color: 'blue' },
+    { id: 'card', name: 'Card', icon: CreditCard, color: 'blue' },
+    { id: 'other', name: 'Other', icon: CreditCard, color: 'gray' }
 ];
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PAYMENT_STATUSES = new Set<Payment['status']>([
+    'draft', 'submitted', 'approved', 'rejected', 'posted', 'reversed', 'cancelled',
+]);
+
+const decodePayments = (value: unknown): Payment[] => {
+    if (!Array.isArray(value)) throw new Error('Payment API returned an invalid canonical response');
+    return value.map((row: any, index) => {
+        const amount = typeof row?.amount === 'number' ? row.amount : Number(row?.amount);
+        if (!UUID.test(String(row?.payment_id || ''))
+            || typeof row?.payment_number !== 'string'
+            || typeof row?.party_name !== 'string'
+            || typeof row?.payment_date !== 'string'
+            || typeof row?.payment_method !== 'string'
+            || typeof row?.direction !== 'string'
+            || !PAYMENT_STATUSES.has(row?.status)
+            || !Number.isFinite(amount)) {
+            throw new Error(`Payment row ${index + 1} is missing canonical fields`);
+        }
+        return {
+            id: row.payment_id,
+            partyName: row.party_name,
+            paymentNumber: row.payment_number,
+            amount,
+            date: row.payment_date,
+            method: row.payment_method,
+            reference: typeof row.reference_number === 'string' ? row.reference_number : undefined,
+            direction: row.direction,
+            status: row.status,
+            notes: typeof row.notes === 'string' ? row.notes : undefined,
+        };
+    });
+};
 
 export function usePaymentTracking(): UsePaymentTrackingReturn {
     const [payments, setPayments] = useState<Payment[]>([]);
@@ -119,28 +148,10 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
 
         try {
             const response = await paymentsApi.getAll();
-            const paymentsData = response?.data?.payments || [];
-
-            if (Array.isArray(paymentsData)) {
-                setPayments(paymentsData);
-
-                await offlineStorage.storeOffline('payments', paymentsData, {
-                    critical: true,
-                    persistent: true
-                });
-            } else {
-                setPayments([]);
-            }
-        } catch {
-            const offlineData = await offlineStorage.getOffline('payments', { critical: true });
-
-            if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) {
-                setPayments(offlineData.data);
-                setError('Currently using offline data. Some information may be outdated.');
-            } else {
-                setError('Unable to load payment data. Please check your connection.');
-                setPayments([]);
-            }
+            setPayments(decodePayments(response?.data?.payments));
+        } catch (loadError) {
+            setError(loadError instanceof Error ? loadError.message : 'Unable to load payment data from the live API.');
+            setPayments([]);
         } finally {
             setLoading(false);
         }
@@ -167,9 +178,9 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(payment =>
-                payment.customerName?.toLowerCase().includes(term) ||
-                payment.invoiceNumber?.toLowerCase().includes(term) ||
-                payment.transactionId?.toLowerCase().includes(term)
+                payment.partyName.toLowerCase().includes(term) ||
+                payment.paymentNumber.toLowerCase().includes(term) ||
+                payment.reference?.toLowerCase().includes(term)
             );
         }
 
@@ -180,7 +191,7 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
 
         // Mode filter
         if (modeFilter !== 'all') {
-            filtered = filtered.filter(payment => payment.paymentMode === modeFilter);
+            filtered = filtered.filter(payment => payment.method === modeFilter);
         }
 
         // Date filter
@@ -192,16 +203,16 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
 
             switch (dateFilter) {
                 case 'today':
-                    filtered = filtered.filter(p => p.paymentDate === today);
+                    filtered = filtered.filter(p => p.date === today);
                     break;
                 case 'yesterday':
-                    filtered = filtered.filter(p => p.paymentDate === yesterday);
+                    filtered = filtered.filter(p => p.date === yesterday);
                     break;
                 case 'last_week':
-                    filtered = filtered.filter(p => p.paymentDate && p.paymentDate >= lastWeek);
+                    filtered = filtered.filter(p => p.date >= lastWeek);
                     break;
                 case 'last_month':
-                    filtered = filtered.filter(p => p.paymentDate && p.paymentDate >= lastMonth);
+                    filtered = filtered.filter(p => p.date >= lastMonth);
                     break;
             }
         }
@@ -216,19 +227,19 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
         }
 
         const today = new Date().toISOString().split('T')[0];
-        const todayPayments = payments.filter(p => p.paymentDate === today && p.status === 'completed');
-        const todayCollection = todayPayments.reduce((sum, p) => sum + (p.paymentAmount || 0), 0);
+        const todayPayments = payments.filter(p => p.date === today && p.status === 'posted');
+        const todayCollection = todayPayments.reduce((sum, p) => sum + p.amount, 0);
 
         const totalCollection = payments
-            .filter(p => p.status === 'completed')
-            .reduce((sum, p) => sum + (p.paymentAmount || 0), 0);
+            .filter(p => p.status === 'posted')
+            .reduce((sum, p) => sum + p.amount, 0);
 
         const pendingAmount = payments
-            .filter(p => p.status === 'pending')
-            .reduce((sum, p) => sum + (p.paymentAmount || 0), 0);
+            .filter(p => ['draft', 'submitted', 'approved'].includes(p.status))
+            .reduce((sum, p) => sum + p.amount, 0);
 
-        const completedCount = payments.filter(p => p.status === 'completed').length;
-        const pendingCount = payments.filter(p => p.status === 'pending').length;
+        const completedCount = payments.filter(p => p.status === 'posted').length;
+        const pendingCount = payments.filter(p => ['draft', 'submitted', 'approved'].includes(p.status)).length;
 
         return {
             todayCollection,
@@ -242,20 +253,26 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
     // Helpers
     const getStatusColor = useCallback((status: string): string => {
         switch (status) {
-            case 'completed': return 'bg-green-100 text-green-800 border-green-200';
-            case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            case 'bounced':
-            case 'failed': return 'bg-red-100 text-red-800 border-red-200';
+            case 'posted': return 'bg-green-100 text-green-800 border-green-200';
+            case 'draft':
+            case 'submitted':
+            case 'approved': return 'bg-amber-100 text-amber-800 border-amber-200';
+            case 'rejected':
+            case 'reversed':
+            case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
             default: return 'bg-gray-100 text-gray-800 border-gray-200';
         }
     }, []);
 
     const getStatusIcon = useCallback((status: string): LucideIcon => {
         switch (status) {
-            case 'completed': return CheckCircle;
-            case 'pending': return Clock;
-            case 'bounced': return XCircle;
-            case 'failed': return AlertTriangle;
+            case 'posted': return CheckCircle;
+            case 'draft':
+            case 'submitted':
+            case 'approved': return Clock;
+            case 'rejected':
+            case 'reversed':
+            case 'cancelled': return XCircle;
             default: return Clock;
         }
     }, []);
@@ -279,15 +296,6 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
     useEffect(() => {
         loadPayments();
     }, [loadPayments]);
-
-    // Clear old offline data periodically
-    useEffect(() => {
-        const interval = setInterval(() => {
-            offlineStorage.clearOldData(24);
-        }, 60 * 60 * 1000);
-
-        return () => clearInterval(interval);
-    }, []);
 
     return {
         payments,

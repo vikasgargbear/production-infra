@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Package, Save, AlertCircle, TrendingUp, TrendingDown, Settings,
+  Package, AlertCircle, TrendingUp, TrendingDown, Settings,
   Plus, X, Trash2, Upload, Download, Loader2, RefreshCw
 } from 'lucide-react';
 import {
@@ -8,15 +8,10 @@ import {
   NotesSection, useToast
 } from '../../global';
 import { stockApi } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import syncEngine from '../../../services/offline/sync/syncEngine';
 import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../../constants/stockAdjustment';
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,9 +90,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             break;
           case 's':
             e.preventDefault();
-            if (currentStep === 2) {
-              handleSubmit();
-            } else {
+            if (currentStep === 1) {
               handleProceedToReview();
             }
             break;
@@ -185,7 +178,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       };
 
       setAdjustmentReasons(reasons);
-      // offlineStorage.storeOffline('adjustment_reasons', reasons, { persistent: true });
 
       toast.success('Adjustment reasons refreshed');
     } catch (error) {
@@ -366,73 +358,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     if (validateAdjustment()) {
       setCurrentStep(2);
       window.scrollTo(0, 0);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!validateAdjustment()) return;
-
-    setSaving(true);
-    try {
-      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const adjustmentNumber = await documentNumberGenerator.generateAdjustmentNumber();
-
-      const adjustmentPayload = {
-        adjustment_type: adjustmentData.adjustment_type,
-        reason: adjustmentData.reason,
-        notes: adjustmentData.notes,
-        adjustment_date: new Date(adjustmentData.adjustment_date).toISOString(),
-        items: adjustmentData.items.map(item => ({
-          product_id: item.product_id,
-          quantity: adjustmentData.adjustment_type === 'decrease' ? -item.adjustment_quantity : item.adjustment_quantity,
-          batch_number: null
-        }))
-      };
-
-      // 1. Save locally first (offline-first)
-      const localRecord = {
-        temp_id: tempId,
-        _localId: tempId,
-        adjustment_number: adjustmentNumber,
-        ...adjustmentPayload,
-        sync_status: 'pending',
-        created_at: new Date().toISOString(),
-        created_offline: true
-      };
-
-      const db = await offlineDB.init();
-      await db.put('stock_adjustments', localRecord);
-
-      // 2. Update local stock optimistically
-      const stockUpdates = adjustmentData.items.map(item => ({
-        product_id: item.product_id,
-        batch_id: item.batch_id,
-        quantity: item.adjustment_quantity
-      }));
-
-      if (adjustmentData.adjustment_type === 'increase') {
-        await offlineDB.addStockLocally(stockUpdates);
-      } else {
-        await offlineDB.deductStockLocally(stockUpdates);
-      }
-
-      // 3. Add to sync queue
-      await offlineDB.addToSyncQueue('stock_adjustment', tempId, 'create', localRecord);
-
-      toast.success(`Stock adjustment saved${navigator.onLine ? '' : ' (offline)'}. ${!navigator.onLine ? 'Will sync when online.' : ''}`);
-
-      // 4. Background sync if online
-      if (navigator.onLine) {
-        syncEngine.startSync().catch(() => {});
-      }
-
-      setTimeout(() => onClose(), 1500);
-
-    } catch (error) {
-      console.error('[StockAdjustment] Save failed:', error);
-      toast.error('Failed to save stock adjustment');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -827,9 +752,10 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         <div className="flex items-start space-x-3">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-amber-800">Please Review Carefully</p>
+            <p className="text-sm font-medium text-amber-800">Review only</p>
             <p className="text-sm text-amber-700 mt-1">
-              Stock adjustments cannot be reversed. Make sure all quantities and products are correct before confirming.
+              Submission is unavailable until the canonical online stock-adjustment action is connected.
+              No inventory request was sent and nothing was changed.
             </p>
           </div>
         </div>
@@ -936,10 +862,8 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       createContent={createContent}
       reviewContent={reviewContent}
       onClose={onClose}
-      onSave={handleSubmit}
       canProceedToReview={isAdjustmentValid}
       footerTotals={{ itemCount: adjustmentData.items.length }}
-      isSaving={saving}
       additionalActions={[
         {
           label: "Refresh",

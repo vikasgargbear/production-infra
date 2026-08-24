@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -55,19 +56,16 @@ export const journalApi = {
     },
 
     // Create journal entry
-    create: (data: JournalEntryData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: JournalEntryData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Posting a journal entry'),
 
     // Update
-    update: (entryId: number, data: Partial<JournalEntryData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${entryId}`, data);
-    },
+    update: (_entryId: number, _data: Partial<JournalEntryData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Editing a journal entry'),
 
     // Delete
-    delete: (entryId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${entryId}`);
-    },
+    delete: (_entryId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Deleting a journal entry'),
 
     // Get voucher types
     getVoucherTypes: (): Promise<AxiosResponse> => {

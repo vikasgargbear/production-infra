@@ -8,6 +8,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -146,21 +147,13 @@ export const ledgerApi = {
     },
 
     // ENTRIES & RECONCILIATION
-    createEntry: (data: LedgerEntryData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.PARTY_ENTRY, data);
-    },
+    createEntry: (_data: LedgerEntryData): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a ledger entry'),
 
-    reconcileEntries: (data: { transaction_ids: number[] }): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.RECONCILE, data);
-    },
+    reconcileEntries: (_data: { transaction_ids: number[] }): Promise<AxiosResponse> => rejectCanonicalWrite('Reconciling ledger entries'),
 
-    reconcileEntry: (ledgerId: number): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.PARTY_RECONCILE(ledgerId));
-    },
+    reconcileEntry: (_ledgerId: number): Promise<AxiosResponse> => rejectCanonicalWrite('Reconciling a ledger entry'),
 
-    reconcileTransactions: (transactionIds: number[]): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.PARTY_V2_BASE}/reconcile-bulk`, { transaction_ids: transactionIds });
-    },
+    reconcileTransactions: (_transactionIds: number[]): Promise<AxiosResponse> => rejectCanonicalWrite('Reconciling ledger transactions'),
 
     // REMINDERS
     getPendingReminders: (reminderDate: string | null = null): Promise<AxiosResponse> => {
@@ -176,13 +169,9 @@ export const ledgerApi = {
         });
     },
 
-    setCollectionReminder: (customerId: number, reminderData: ReminderData): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.COLLECTIONS}/${customerId}/reminder`, reminderData);
-    },
+    setCollectionReminder: (_customerId: number, _reminderData: ReminderData): Promise<AxiosResponse> => rejectCanonicalWrite('Setting a collection reminder'),
 
-    updateCollectionStatus: (customerId: number, status: string): Promise<AxiosResponse> => {
-        return apiHelpers.patch(`${ENDPOINTS.COLLECTIONS}/${customerId}/status`, { status });
-    },
+    updateCollectionStatus: (_customerId: number, _status: string): Promise<AxiosResponse> => rejectCanonicalWrite('Changing collection status'),
 
     // DASHBOARD & ANALYTICS
     getDashboardStats: async (params: AgingParams = {}): Promise<{

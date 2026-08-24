@@ -7,6 +7,7 @@
 
 import { apiHelpers } from '../../apiClient';
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // ============================================================================
 // TYPES
@@ -27,6 +28,9 @@ const crud = createCrudApi({ basePath: '/suppliers', createPath: '/suppliers/' }
 
 export const suppliersApi = {
   ...crud,
+
+  update: (_id: number | string, _data: any) => rejectCanonicalWrite('Editing a supplier'),
+  delete: (_id: number | string) => rejectCanonicalWrite('Deleting a supplier'),
 
   // Search suppliers
   search: (query: string, params: SupplierParams = {}) => {

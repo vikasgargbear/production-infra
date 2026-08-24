@@ -137,7 +137,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <div className="relative">
                                 <button
                                     onClick={() => setShowThermalOptions(!showThermalOptions)}
-                                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                                    className="min-h-11 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <Receipt className="w-4 h-4" />
                                     Thermal Print
@@ -171,7 +171,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         {onPrint && (
                             <button
                                 onClick={onPrint}
-                                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                className="min-h-11 px-6 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <Printer className="w-4 h-4" />
                                 Print
@@ -184,7 +184,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                                 ref={saveButtonRef}
                                 onClick={onSave}
                                 disabled={isSaving}
-                                className="min-h-11 flex-1 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm sm:flex-none sm:px-8"
+                                className="min-h-11 flex-1 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed font-medium sm:flex-none sm:px-8"
                             >
                                 <Save className="w-5 h-5" />
                                 {isSaving ? 'Generating...' : saveLabel}
