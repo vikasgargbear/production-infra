@@ -47,7 +47,7 @@ describe('canonical party creation contracts', () => {
       city: 'Mumbai',
       state: 'Maharashtra',
       pincode: '400001',
-      credit_limit: 0,
+      credit_limit: '0.00',
       credit_days: 0,
     });
     customersApi.create(payload);
@@ -104,5 +104,24 @@ describe('canonical party creation contracts', () => {
     expect(apiErrorMessage(error, 'fallback')).toBe(
       'body.primary_phone: String should match pattern; body.pincode: Field required',
     );
+  });
+
+  it('fails closed instead of calling retired customer and supplier mutation routes', async () => {
+    await expect(customersApi.update('customer-uuid', { customer_name: 'Changed' }))
+      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    await expect(customersApi.delete('customer-uuid'))
+      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    await expect(customersApi.updateCreditLimit('customer-uuid', 1000))
+      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    await expect(customersApi.sendSMS('customer-uuid', 'message'))
+      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    await expect(suppliersApi.update('supplier-uuid', { supplier_name: 'Changed' }))
+      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    await expect(suppliersApi.delete('supplier-uuid'))
+      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+
+    expect(apiHelpers.put).not.toHaveBeenCalled();
+    expect(apiHelpers.delete).not.toHaveBeenCalled();
+    expect(apiHelpers.post).not.toHaveBeenCalled();
   });
 });

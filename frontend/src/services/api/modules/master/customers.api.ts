@@ -8,6 +8,8 @@
 import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
+import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
 
 // ============================================================================
 // TYPES
@@ -35,7 +37,7 @@ export interface CanonicalCustomerCreateInput {
   pincode?: string;
   gst_number?: string;
   pan_number?: string;
-  credit_limit?: number;
+  credit_limit?: string;
   credit_days?: number;
 }
 
@@ -51,7 +53,7 @@ const canonicalPhone = (value: unknown): string => {
 /** Keep the browser write boundary aligned with the reviewed canonical schema. */
 export const toCanonicalCustomerCreate = (input: Record<string, any>): CanonicalCustomerCreateInput => {
   const address = input.address && typeof input.address === 'object' ? input.address : {};
-  return cleanData({
+  const payload = {
     customer_name: input.customer_name,
     customer_code: input.customer_code,
     customer_type: input.customer_type || 'retail',
@@ -65,9 +67,16 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
     pincode: firstDefined(input.pincode, address.pincode),
     gst_number: optionalText(input.gst_number)?.toUpperCase(),
     pan_number: optionalText(input.pan_number)?.toUpperCase(),
-    credit_limit: input.credit_limit ?? 0,
+    credit_limit: normalizeExactDecimal(
+      input.credit_limit ?? '0',
+      'Customer credit limit',
+      { scale: 2, maximumWholeDigits: 18 },
+    ),
     credit_days: input.credit_days ?? 0,
-  }) as CanonicalCustomerCreateInput;
+  };
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null),
+  ) as unknown as CanonicalCustomerCreateInput;
 };
 
 // ============================================================================
@@ -82,6 +91,12 @@ export const customersApi = {
   create: (data: Record<string, any>) => {
     return apiHelpers.post('/customers/', toCanonicalCustomerCreate(data));
   },
+
+  // Customer-account edits and lifecycle changes do not yet have a reviewed
+  // canonical command. Keep every caller away from the retired CRUD routes.
+  update: (_id: number | string, _data: Record<string, any>) =>
+    rejectCanonicalWrite('Editing a customer'),
+  delete: (_id: number | string) => rejectCanonicalWrite('Deleting a customer'),
 
   // Get customers with embedded addresses from the live API
   getAllWithAddresses: (params: any = {}) => {
@@ -122,9 +137,9 @@ export const customersApi = {
 
   // Update credit limit
   updateCreditLimit: (customerId: number | string, creditLimit: number) => {
-    return apiHelpers.patch(`/customers/${customerId}`, {
-      credit_limit: creditLimit
-    });
+    void customerId;
+    void creditLimit;
+    return rejectCanonicalWrite('Changing a customer credit limit');
   },
 
   // Get customer ledger
@@ -151,6 +166,8 @@ export const customersApi = {
 
   // Send SMS to customer
   sendSMS: (customerId: number | string, message: string) => {
-    return apiHelpers.post(`/customers/${customerId}/sms`, { message });
+    void customerId;
+    void message;
+    return rejectCanonicalWrite('Sending a customer SMS');
   }
 };

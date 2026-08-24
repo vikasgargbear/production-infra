@@ -39,7 +39,7 @@ interface CustomerFormData {
     gst_number: string;
     pan_number: string;
     // Credit
-    credit_limit: number;
+    credit_limit: string;
     credit_days: number;
     // Address
     address: {
@@ -109,7 +109,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         gst_number: '',
         pan_number: '',
         // Credit
-        credit_limit: 5000,
+        credit_limit: '5000.00',
         credit_days: 0,
         // Address
         address: {
@@ -215,7 +215,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 gst_number: formData.gst_number || null,
                 pan_number: formData.pan_number || null,
                 // Credit
-                credit_limit: parseFloat(String(formData.credit_limit || 0)),
+                credit_limit: formData.credit_limit || '0.00',
                 credit_days: parseInt(String(formData.credit_days || 0)),
                 // Address
                 address_line1: formData.address.address_line1,
@@ -610,8 +610,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         <label className={labelClass}>Credit Limit (₹)</label>
                                         <input
                                             type="number"
+                                            inputMode="decimal"
+                                            step="0.01"
                                             value={formData.credit_limit}
-                                            onChange={(e) => updateField('credit_limit', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => updateField('credit_limit', e.target.value)}
                                             className={inputNoIconClass}
                                             placeholder="5000"
                                             min={0}

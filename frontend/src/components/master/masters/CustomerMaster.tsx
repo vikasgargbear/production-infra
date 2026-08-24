@@ -6,19 +6,18 @@
  */
 import React from 'react';
 import {
-  Users, Search, Plus, Edit2, Trash2,
-  AlertCircle, Check
+  Users, Search, Plus, AlertCircle
 } from 'lucide-react';
 import { customersApi, ledgerApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
-import CustomerEditModal from '../modals/CustomerEditModal';
 import CustomerFlow from '../customers/CustomerFlow';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
 import ContactActions from './ContactActions';
 import { mergeCustomersWithCanonicalAging } from './customerAgingProjection';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 // ============================================================================
 // Types
@@ -96,10 +95,7 @@ const getCreditStatus = (customer: Customer) => {
 // Column Definitions
 // ============================================================================
 
-const getColumns = (
-  handleEdit: (c: Customer) => void,
-  handleDelete: (id: string | number) => Promise<void>
-): Column<Customer>[] => [
+const getColumns = (): Column<Customer>[] => [
     {
       key: 'customer_name',
       header: 'Customer',
@@ -202,30 +198,11 @@ const getColumns = (
       header: 'Actions',
       align: 'center' as const,
       sortable: false,
-      render: (_, customer) => (
-        <div className="flex items-center justify-center space-x-2">
-          <button
-            onClick={() => handleEdit(customer)}
-            aria-label={`Edit ${customer?.customer_name || 'customer'}`}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center text-blue-600 hover:text-blue-700 rounded transition-colors"
-            disabled={!customer}
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleDelete(customer?.customer_id)}
-            aria-label={`${customer?.is_active !== false ? 'Deactivate' : 'Reactivate'} ${customer?.customer_name || 'customer'}`}
-            className={`${customer?.is_active !== false
-              ? 'text-amber-600 hover:text-amber-700'
-              : 'text-green-600 hover:text-green-700'
-              } inline-flex min-h-11 min-w-11 items-center justify-center rounded transition-colors`}
-            disabled={!customer?.customer_id}
-            title={customer?.is_active !== false ? 'Deactivate Customer' : 'Reactivate Customer'}
-          >
-            {customer?.is_active !== false ? <Trash2 className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-          </button>
-        </div>
-      )
+      render: () => (
+        <span className="text-sm text-gray-500" title="A canonical customer edit command is not available">
+          Read only
+        </span>
+      ),
     }
   ];
 
@@ -246,14 +223,7 @@ const CustomerMaster: React.FC = () => {
     setFilterValue,
     showAddModal,
     setShowAddModal,
-    editingEntity,
-    setEditingEntity,
-    selectedIds,
-    setSelectedIds,
-    handleEdit,
-    handleDelete,
     handleSaved,
-    handleBulkDelete,
     searchInputRef
   } = useEntityMaster<Customer>({
     entityName: 'customer',
@@ -268,7 +238,7 @@ const CustomerMaster: React.FC = () => {
     softDelete: true
   });
 
-  const columns = getColumns(handleEdit, handleDelete);
+  const columns = getColumns();
 
   // Summary stats
   const total = customers.length;
@@ -300,11 +270,6 @@ const CustomerMaster: React.FC = () => {
           <span className="text-green-600">Active: <strong>{active}</strong></span>
           <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
           <span className="text-gray-600">Outstanding: <strong className="text-gray-900">{totalOutstanding == null ? 'Unavailable' : `₹${totalOutstanding.toLocaleString()}`}</strong></span>
-          {selectedIds.length > 0 && (
-            <Button variant="danger" size="sm" onClick={handleBulkDelete}>
-              <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
-            </Button>
-          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -340,6 +305,11 @@ const CustomerMaster: React.FC = () => {
         </div>
       )}
 
+      <CanonicalWriteNotice
+        action="Editing customers or changing customer status"
+        description="New customer accounts use the canonical API. Existing customer edits and status changes remain unavailable until their reviewed cloud commands exist."
+      />
+
       {/* Customer List */}
       <ContentCard title="Customer List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Users}>
         {customers.length === 0 && !isLoading ? (
@@ -359,9 +329,7 @@ const CustomerMaster: React.FC = () => {
             loading={isLoading}
             emptyMessage="No customers found"
             emptyIcon={<Users className="w-12 h-12 text-gray-400" />}
-            selectable={true}
-            selectedRows={filteredEntities.filter(c => selectedIds.includes(String(c.customer_id)))}
-            onSelectionChange={(selected) => setSelectedIds(selected.map(c => String(c.customer_id)))}
+            selectable={false}
             hoverable={true}
             striped={true}
             paginated={true}
@@ -371,23 +339,12 @@ const CustomerMaster: React.FC = () => {
         )}
       </ContentCard>
 
-      {/* Canonical online create flow; legacy modal remains edit-only. */}
-      {showAddModal && !editingEntity && (
+      {/* Canonical online create flow; unsupported edits are not rendered. */}
+      {showAddModal && (
         <CustomerFlow
           open={true}
           onClose={() => setShowAddModal(false)}
           onCustomerCreated={handleSaved}
-        />
-      )}
-      {editingEntity && (
-        <CustomerEditModal
-          isOpen={true}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingEntity(null);
-          }}
-          onSave={handleSaved}
-          customer={editingEntity}
         />
       )}
     </GlobalLayout>
