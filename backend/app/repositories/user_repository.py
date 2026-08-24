@@ -22,7 +22,7 @@ class UserRepository:
         """Resolve one active canonical membership from an admin-assigned tenant."""
         db.execute(
             text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
-            {"auth_user_id": str(auth_user_id), "org_id": str(organization_id)},
+            {"auth_user_id": auth_user_id, "org_id": organization_id},
         )
         result = db.execute(text("""
             WITH active_grants AS (
@@ -104,7 +104,7 @@ class UserRepository:
             WHERE user_row.auth_user_id=:auth_user_id
               AND user_row.status='active'
             LIMIT 2
-        """), {"auth_user_id": str(auth_user_id), "org_id": str(organization_id)})
+        """), {"auth_user_id": auth_user_id, "org_id": organization_id})
         rows = result.fetchall()
         if not rows:
             return None

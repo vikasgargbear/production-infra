@@ -75,8 +75,8 @@ def test_identity_lookup_activates_canonical_context_and_returns_permissions():
     assert len(database.calls) == 2
     assert "erp_security.activate_context" in database.calls[0][0]
     assert database.calls[0][1] == {
-        "auth_user_id": str(AUTH_USER_ID),
-        "org_id": str(ORG_ID),
+        "auth_user_id": AUTH_USER_ID,
+        "org_id": ORG_ID,
     }
     lookup_sql = database.calls[1][0]
     for relation in (

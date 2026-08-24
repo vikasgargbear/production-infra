@@ -17,14 +17,17 @@ def build_erp_token_claims(user_data: Dict[str, Any]) -> Dict[str, Any]:
     if user_data.get("is_admin"):
         branch_scope = "all"
 
+    role_id = user_data.get("role_id")
+
     return {
-        "user_id": user_data["user_id"],
+        "user_id": str(user_data["user_id"]),
         "email": user_data["email"],
         "org_id": str(user_data["org_id"]),
-        "role_id": user_data.get("role_id"),
+        "role_id": str(role_id) if role_id is not None else None,
         "branch_ids": [str(branch_id) for branch_id in branch_ids],
         "branch_scope": branch_scope,
         "data_access_level": data_access_level,
         "is_admin": user_data.get("is_admin", False),
         "full_name": user_data.get("full_name"),
+        "permissions": user_data.get("permissions") or {},
     }

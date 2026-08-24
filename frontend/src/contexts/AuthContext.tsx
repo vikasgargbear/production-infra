@@ -64,7 +64,8 @@ interface JWTPayload {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const SESSION_EXCHANGE_RETRY_DELAYS_MS = [0, 1500, 3000, 6000, 12000] as const;
+const SESSION_EXCHANGE_RETRY_DELAYS_MS = [0, 1500, 3000] as const;
+const SESSION_EXCHANGE_TIMEOUT_MS = 12000;
 
 const wait = (delayMs: number): Promise<void> => (
     new Promise((resolve) => window.setTimeout(resolve, delayMs))
@@ -75,13 +76,21 @@ async function requestErpSession(accessToken: string): Promise<Response> {
 
     for (const delayMs of SESSION_EXCHANGE_RETRY_DELAYS_MS) {
         if (delayMs > 0) await wait(delayMs);
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(
+            () => controller.abort(),
+            SESSION_EXCHANGE_TIMEOUT_MS,
+        );
         try {
             return await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${accessToken}` },
+                signal: controller.signal,
             });
         } catch (error) {
             networkError = error;
+        } finally {
+            window.clearTimeout(timeoutId);
         }
     }
 
@@ -260,7 +269,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 return;
             }
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                void exchangeSupabaseSession(session.access_token);
+                void exchangeSupabaseSession(session.access_token).then((result) => {
+                    if (active && !result.success) clearErpSession();
+                });
             }
         });
 

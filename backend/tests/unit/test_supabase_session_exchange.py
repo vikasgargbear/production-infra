@@ -9,12 +9,19 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.routes.auth import oauth
+from app.core.auth.jwt_auth import decode_jwt
 from app.core.auth.supabase_auth import SupabaseAuthService
 from app.main import app
 
 
 AUTH_USER_ID = "8d19f4e8-3e4b-46a8-b7d9-87f30ddaf41c"
 ORG_ID = "9e1b4f9e-2dcc-47f5-8dfa-938005806841"
+ERP_USER_ID = UUID("9f43f231-c0ec-4be5-a116-cabae4c45eb9")
+ROLE_ID = UUID("71aa0ceb-6499-4de7-932a-d3743991d23e")
+BRANCH_IDS = [
+    UUID("ec9e5e5c-206f-45d6-93dd-1bdb5d4436a1"),
+    UUID("08eb1210-7d9d-4d85-9301-8f3987794c69"),
+]
 supabase_auth_module = importlib.import_module("app.core.auth.supabase_auth")
 
 
@@ -39,15 +46,15 @@ def _identity(**overrides):
 
 def _membership(**overrides):
     membership = {
-        "user_id": 42,
+        "user_id": ERP_USER_ID,
         "auth_user_id": UUID(AUTH_USER_ID),
         "username": "operator",
         "email": "operator@example.com",
         "full_name": "ERP Operator",
         "org_id": UUID(ORG_ID),
         "is_active": True,
-        "role_id": 7,
-        "branch_ids": [5, 9],
+        "role_id": ROLE_ID,
+        "branch_ids": BRANCH_IDS,
         "is_admin": False,
         "org_name": "AASO Pharma",
         "org_active": True,
@@ -212,10 +219,37 @@ def test_exchange_issues_tenant_scoped_token_from_verified_mapping(monkeypatch):
     assert result["access_token"] == "erp-access-token"
     assert captured["supabase_token"] == "supabase-access-token"
     assert captured["claims"]["auth_user_id"] == AUTH_USER_ID
+    assert captured["claims"]["user_id"] == str(ERP_USER_ID)
     assert captured["claims"]["org_id"] == "9e1b4f9e-2dcc-47f5-8dfa-938005806841"
-    assert captured["claims"]["branch_ids"] == ["5", "9"]
+    assert captured["claims"]["role_id"] == str(ROLE_ID)
+    assert captured["claims"]["branch_ids"] == [str(value) for value in BRANCH_IDS]
     assert captured["claims"]["branch_scope"] == "multi"
+    assert captured["claims"]["permissions"] == {"sales.read": True}
     assert captured["claims"]["auth_provider"] == "google"
+
+
+def test_exchange_encodes_canonical_uuid_claims(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        lambda *_args: _membership(),
+    )
+
+    result = _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+    claims = decode_jwt(result["access_token"], check_blacklist=False)
+
+    assert claims["user_id"] == str(ERP_USER_ID)
+    assert claims["role_id"] == str(ROLE_ID)
+    assert claims["branch_ids"] == [str(value) for value in BRANCH_IDS]
+    assert claims["permissions"] == {"sales.read": True}
 
 
 def test_supabase_identity_lookup_fails_closed_without_configuration():

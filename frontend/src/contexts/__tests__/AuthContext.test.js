@@ -97,6 +97,7 @@ test('email password is sent only to Supabase and ERP receives the bearer token'
         {
             method: 'POST',
             headers: { Authorization: 'Bearer supabase-access' },
+            signal: expect.any(AbortSignal),
         },
     );
     expect(JSON.stringify(fetch.mock.calls)).not.toContain('private-password');
@@ -154,6 +155,7 @@ test('Supabase token refresh silently renews the ERP session', async () => {
         expect.stringContaining('/api/auth/oauth/supabase/session'),
         expect.objectContaining({
             headers: { Authorization: 'Bearer rotated-access' },
+            signal: expect.any(AbortSignal),
         }),
     ));
     expect(currentAuth.isAuthenticated).toBe(true);
