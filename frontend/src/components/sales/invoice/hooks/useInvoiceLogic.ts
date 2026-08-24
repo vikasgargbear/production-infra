@@ -22,7 +22,10 @@ import {
     GstType,
     CustomerAddress,
 } from '../types/invoiceTypes';
-import { prepareItemForInvoice } from '../utils/invoiceItemUtils';
+import {
+    prepareImportedItemsForInvoice,
+    prepareSelectedProductForInvoice,
+} from '../utils/invoiceItemUtils';
 import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
 import { useInvoiceSave } from './useInvoiceSave';
 
@@ -306,7 +309,9 @@ export const useInvoiceLogic = (
                         handleCustomerSelect(prefilledData.customer as Customer);
                     }
                     if (prefilledData.items && prefilledData.items.length > 0) {
-                        const transformedItems = prefilledData.items.map(item => prepareItemForInvoice(item as any));
+                        const transformedItems = prefilledData.items.map(
+                            prepareSelectedProductForInvoice,
+                        );
                         setInvoice(prev => ({ ...prev, items: transformedItems }));
                     }
                 }
@@ -447,10 +452,7 @@ export const useInvoiceLogic = (
 
         console.log('📦 [ADD ITEM] Raw product from search:', product);
 
-        // If product already has batch_id, it came from BatchSelector
-        const invoiceItem = product.batch_id
-            ? prepareItemForInvoice(product as any)
-            : prepareItemForInvoice(product as any);
+        const invoiceItem = prepareSelectedProductForInvoice(product);
 
         console.log('📦 [ADD ITEM] Transformed product:', invoiceItem);
 
@@ -532,12 +534,15 @@ export const useInvoiceLogic = (
         try {
             if (!importData) return;
 
+            const transformedItems = importData.items && importData.items.length > 0
+                ? prepareImportedItemsForInvoice(importData.items)
+                : null;
+
             if (importData.customer) {
                 handleCustomerSelect(importData.customer as Customer);
             }
 
-            if (importData.items && importData.items.length > 0) {
-                const transformedItems = importData.items.map(item => prepareItemForInvoice(item as any));
+            if (transformedItems) {
                 setInvoice(prev => ({ ...prev, items: transformedItems }));
             }
 

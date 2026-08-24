@@ -12,6 +12,7 @@
 import type {
     FreeSupplyTaxTreatment as SharedFreeSupplyTaxTreatment,
 } from '../../types/salesSharedTypes';
+import type { CanonicalImportLine } from '../../utils/documentImport';
 
 // ==================== BASE TYPES ====================
 
@@ -530,7 +531,7 @@ export interface PrefilledData {
 /** Import data from order/challan */
 export interface ImportData {
     customer?: Customer;
-    items?: ProductInput[];
+    items?: CanonicalImportLine[];
     delivery_details?: {
         delivery_type?: string;
         delivery_charges?: number;

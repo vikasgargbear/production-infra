@@ -16,9 +16,9 @@ export interface ProductInput {
     product_name?: string;
     name?: string;
     product_code?: string;
-    batch_id?: number | string;
+    batch_id?: number | string | null;
     batch_number?: string;
-    expiry_date?: string;
+    expiry_date?: string | null;
     manufacturing_date?: string;
     sale_price_per_unit?: number;
     unit_price?: number;
@@ -32,8 +32,8 @@ export interface ProductInput {
     gst_percent?: number;
     tax_rate?: number;
     hsn_code?: string;
-    quantity?: number;
-    free_quantity?: number;
+    quantity: number;
+    free_quantity: number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     discount_percent?: number;
     best_batch?: any; // Nested batch data from API
@@ -42,22 +42,12 @@ export interface ProductInput {
 
 function nonNegativeQuantity(
     value: unknown,
-    defaultValue: number,
     label: string,
 ): number {
-    const candidate = value ?? defaultValue;
-    if (
-        (typeof candidate !== 'number' && typeof candidate !== 'string')
-        || (typeof candidate === 'string' && candidate.trim() === '')
-    ) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
         throw new Error(`${label} must be a finite non-negative number.`);
     }
-
-    const quantity = Number(candidate);
-    if (!Number.isFinite(quantity) || quantity < 0) {
-        throw new Error(`${label} must be a finite non-negative number.`);
-    }
-    return quantity;
+    return value;
 }
 
 /**
@@ -135,8 +125,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         expiry_date: expiryDate,
         unit_price: unitPrice,  // ✅ CANONICAL
         mrp: mrp,
-        quantity: nonNegativeQuantity(product.quantity, 1, 'Quantity'),
-        free_quantity: nonNegativeQuantity(product.free_quantity, 0, 'Free quantity'),
+        quantity: nonNegativeQuantity(product.quantity, 'Quantity'),
+        free_quantity: nonNegativeQuantity(product.free_quantity, 'Free quantity'),
         free_supply_tax_treatment:
             product.free_supply_tax_treatment || 'excluded_from_taxable_value',
         unit: ''

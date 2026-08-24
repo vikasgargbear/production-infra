@@ -22,6 +22,7 @@ describe('DocumentImportModal detail resolution', () => {
             customer_name: 'Synthetic Customer',
             items: [{
                 product_id: 'product-1', product_name: 'Carton', quantity: 1,
+                free_quantity: 0,
                 unit_price: 150, batch_id: 'batch-1', batch_number: 'BATCH-1',
             }],
         });

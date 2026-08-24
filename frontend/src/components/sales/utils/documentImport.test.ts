@@ -45,6 +45,7 @@ describe('Sales document import envelope normalization', () => {
             batch_id: '20000000-0000-7000-8000-000000000001',
             batch_number: 'BATCH-1',
             quantity: 2,
+            free_quantity: 0,
             unit_price: '150.25',
             tax_rate: '12',
         }])).toEqual([expect.objectContaining({
@@ -242,12 +243,20 @@ describe('Sales document import envelope normalization', () => {
     });
 
     it.each([
-        [{ product_id: 'p', product_name: 'Product', quantity: 1, unit_price: 10 }, 'batch allocation'],
-        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B', quantity: 0, unit_price: 10 }, 'positive billed or free quantity'],
-        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B', quantity: 1 }, 'canonical rate'],
+        [{ product_id: 'p', product_name: 'Product', quantity: 1, free_quantity: 0, unit_price: 10 }, 'batch allocation'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B', quantity: 0, free_quantity: 0, unit_price: 10 }, 'positive billed or free quantity'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B', quantity: 1, free_quantity: 0 }, 'canonical rate'],
         [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
-            quantity: 1, unit_price: 10, free_supply_tax_treatment: 'unknown' },
+            quantity: 1, free_quantity: 0, unit_price: 10, free_supply_tax_treatment: 'unknown' },
         'invalid free-supply tax treatment'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
+            quantity: 1, unit_price: 10 }, 'billed and free quantities separately'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
+            quantity: 1, free_quantity: null, unit_price: 10 }, 'billed and free quantities separately'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
+            free_quantity: 1, unit_price: 10 }, 'billed and free quantities separately'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
+            quantity: null, free_quantity: 1, unit_price: 10 }, 'billed and free quantities separately'],
     ])('fails closed for incomplete canonical line %#', (line, message) => {
         expect(() => projectCanonicalImportLines([line])).toThrow(message);
     });

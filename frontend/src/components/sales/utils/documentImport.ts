@@ -359,7 +359,7 @@ export function projectCanonicalImportLines(
             item.batch_number ?? (item.best_batch as Record<string, unknown> | undefined)?.batch_number ?? '',
         ).trim();
         const quantity = finiteNumber(item.dispatched_quantity ?? item.quantity);
-        const freeQuantity = finiteNumber(item.free_quantity) ?? 0;
+        const freeQuantity = finiteNumber(item.free_quantity);
         const unitPrice = finiteNumber(
             item.unit_price ?? item.sale_price ?? item.selling_price ?? item.quoted_unit_rate,
         );
@@ -367,7 +367,10 @@ export function projectCanonicalImportLines(
         if (productId === undefined || productId === null || productName === '') {
             throw new Error(`Line ${index + 1} is missing its canonical product identity.`);
         }
-        if (quantity === null || quantity < 0 || freeQuantity < 0 || quantity + freeQuantity <= 0) {
+        if (quantity === null || freeQuantity === null) {
+            throw new Error(`Line ${index + 1} must identify billed and free quantities separately.`);
+        }
+        if (quantity < 0 || freeQuantity < 0 || quantity + freeQuantity <= 0) {
             throw new Error(`Line ${index + 1} has no positive billed or free quantity.`);
         }
         if (unitPrice === null || unitPrice < 0) {

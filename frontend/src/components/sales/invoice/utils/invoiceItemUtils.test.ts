@@ -1,4 +1,8 @@
-import { prepareItemForInvoice } from './invoiceItemUtils';
+import {
+    prepareImportedItemsForInvoice,
+    prepareItemForInvoice,
+    prepareSelectedProductForInvoice,
+} from './invoiceItemUtils';
 
 describe('prepareItemForInvoice free-supply treatment', () => {
     it.each([
@@ -28,15 +32,29 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         }));
     });
 
-    it('defaults newly selected products to excluded free-supply valuation', () => {
-        const item = prepareItemForInvoice({
+    it('defaults quantities only at the explicit new-product selection boundary', () => {
+        const item = prepareSelectedProductForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Canonical item',
-            quantity: 1,
             unit_price: 100,
         });
 
+        expect(item.quantity).toBe(1);
+        expect(item.free_quantity).toBe(0);
         expect(item.free_supply_tax_treatment).toBe('excluded_from_taxable_value');
+    });
+
+    it('does not replace explicit selection quantities with defaults', () => {
+        const item = prepareSelectedProductForInvoice({
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Explicit selection quantity',
+            quantity: 0,
+            free_quantity: 0.5,
+            unit_price: 100,
+        });
+
+        expect(item.quantity).toBe(0);
+        expect(item.free_quantity).toBe(0.5);
     });
 
     it.each([
@@ -84,13 +102,27 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         ['non-finite free quantity', 1, Number.NaN],
         ['blank billed quantity', '', 0],
         ['non-numeric free quantity', 1, 'not-a-number'],
-    ])('fails closed for %s', (_case, quantity, freeQuantity) => {
-        expect(() => prepareItemForInvoice({
+    ])('fails closed for canonical import with %s', (_case, quantity, freeQuantity) => {
+        expect(() => prepareImportedItemsForInvoice([{
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Invalid canonical item',
             quantity,
             free_quantity: freeQuantity,
             unit_price: 100,
-        } as any)).toThrow('must be a finite non-negative number');
+        } as any])).toThrow('must be a finite non-negative number');
+    });
+
+    it.each([
+        ['absent billed quantity', { free_quantity: 0 }],
+        ['null billed quantity', { quantity: null, free_quantity: 0 }],
+        ['absent free quantity', { quantity: 1 }],
+        ['null free quantity', { quantity: 1, free_quantity: null }],
+    ])('fails closed for canonical import with %s', (_case, quantities) => {
+        expect(() => prepareImportedItemsForInvoice([{
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Incomplete canonical import',
+            unit_price: 100,
+            ...quantities,
+        } as any])).toThrow('must be a finite non-negative number');
     });
 });
