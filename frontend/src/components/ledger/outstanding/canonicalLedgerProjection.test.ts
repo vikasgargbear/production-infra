@@ -6,7 +6,9 @@ const payload = () => ({
     customer_name: 'Exact Buyer',
     phone: '', email: '',
     total_outstanding: '9007199254740993.01',
-    overdue_amount: '0.01',
+    overdue_amount: '9007199254740993.01',
+    current: '0.00', days_1_30: '9007199254740993.01',
+    days_31_60: '0.00', days_61_90: '0.00', over_90: '0.00',
     credit_limit: '9999999999999999.99',
     invoice_count: 1,
     overdue_invoices: 1,
@@ -20,7 +22,7 @@ const payload = () => ({
     }],
   }],
   summary: {
-    total: '9007199254740993.01', overdue: '0.01', party_count: 1,
+    total: '9007199254740993.01', overdue: '9007199254740993.01', party_count: 1,
     current: '0.00', current_count: 0,
     '1_30': '9007199254740993.01', '1_30_count': 1,
     '31_60': '0.00', '31_60_count': 0,
@@ -42,5 +44,5 @@ test('fails closed on numeric or malformed authoritative money', () => {
 
   const incomplete = payload();
   delete (incomplete as any).summary;
-  expect(() => projectCanonicalLedger(incomplete)).toThrow('incomplete');
+  expect(() => projectCanonicalLedger(incomplete)).toThrow('summary is invalid');
 });

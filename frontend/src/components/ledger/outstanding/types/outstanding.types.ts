@@ -19,8 +19,6 @@ export interface PartyOutstanding {
     oldest_invoice_days: number;
     credit_limit?: string;
     invoices?: InvoiceDetail[];
-    total_advance?: string;
-    customer_net_position?: string;
 }
 
 export interface InvoiceDetail {
@@ -38,7 +36,6 @@ export interface InvoiceDetail {
 
 export interface OutstandingSummary {
     total_receivable: string;
-    total_payable: string;
     total_overdue: string;
     party_count: number;
     overdue_party_count: number;
@@ -65,9 +62,6 @@ export interface OutstandingProps {
 
 export interface OutstandingSummaryCardsProps {
     summary: OutstandingSummary;
-    totalAdvances: string;
-    netPosition: string;
-    partyType: 'customer' | 'supplier';
 }
 
 export interface OutstandingFiltersProps {
@@ -112,18 +106,11 @@ export interface OutstandingUIState {
     showDetailsView: boolean;
 }
 
-export interface AllocationModalState {
-    isOpen: boolean;
-    customerId: number | null;
-    customerName: string;
-}
-
 export interface OutstandingState {
     expandedParties: Set<string>;
     filters: OutstandingFilters;
     ui: OutstandingUIState;
     selectedParty: PartyOutstanding | null;
-    allocationModal: AllocationModalState;
 }
 
 // ============================================================================
@@ -133,7 +120,4 @@ export interface OutstandingState {
 export interface OutstandingApiResponse {
     parties: PartyOutstanding[];
     summary: OutstandingSummary;
-    total_advances: string;
-    net_position: string;
-    customer_advances: Record<string, string>;
 }

@@ -16,9 +16,10 @@ import {
   AlertCircle,
   Loader2
 } from 'lucide-react';
-import apiClient from '../../services/api/apiClient';
+import { ledgerApi } from '../../services/api';
 import { ModuleHeader } from '../global';
 import { formatExactCurrency } from '../../utils/exactDecimal';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 
 // Import extracted components
 import { OutstandingSummaryBar } from './outstanding/components/OutstandingSummaryBar';
@@ -42,35 +43,13 @@ const Outstanding: React.FC<OutstandingProps> = ({
   const { state, dispatch, filters, ui, selectedParty } = useOutstandingState();
   const [exportFeedback, setExportFeedback] = React.useState<{ type: 'info' | 'error'; message: string } | null>(null);
 
-  // Auto-expand customer when navigating from Collection Center
-  React.useEffect(() => {
-    if (initialCustomerId) {
-      dispatch({ type: 'TOGGLE_PARTY_EXPANSION', partyId: initialCustomerId });
-      // Clear the initial customer after expanding
-      onCustomerChange?.();
-    }
-  }, [dispatch, initialCustomerId, onCustomerChange]);
-
   // Fetch outstanding data using the ledger aging API (works on production)
   const { data, isLoading, refetch, error } = useQuery({
-    queryKey: ['outstanding-data', partyType, filters],
+    queryKey: ['canonical-outstanding-aging', partyType],
     queryFn: async () => {
       try {
-        // Use the ledger/aging endpoint which returns party-level outstanding with aging
-        const response = await apiClient.get('/ledger/aging', {
-          params: { party_type: partyType }
-        });
-
-        const responseData = response.data || {};
-        const { parties, summary } = projectCanonicalLedger(responseData);
-
-        return {
-          parties,
-          summary,
-          total_advances: '0.00',
-          net_position: '0.00',
-          customer_advances: {}
-        };
+        const response = await ledgerApi.getAging({ party_type: partyType });
+        return projectCanonicalLedger(response.data);
       } catch (err) {
         console.error('Outstanding API error:', err);
         throw err;
@@ -82,20 +61,24 @@ const Outstanding: React.FC<OutstandingProps> = ({
   });
 
   const parties = useMemo(() => data?.parties || [], [data?.parties]);
-  const summary = data?.summary || {
-    total_receivable: '0.00',
-    total_payable: '0.00',
-    total_overdue: '0.00',
-    party_count: 0,
-    overdue_party_count: 0,
-    aging_summary: {
-      current: { count: 0, amount: '0.00' },
-      '1-30': { count: 0, amount: '0.00' },
-      '31-60': { count: 0, amount: '0.00' },
-      '61-90': { count: 0, amount: '0.00' },
-      over_90: { count: 0, amount: '0.00' }
+  const summary = data?.summary;
+
+  React.useEffect(() => {
+    if (!initialCustomerId || !data) return;
+    if (!isCanonicalUuid(initialCustomerId)) {
+      setExportFeedback({ type: 'error', message: 'The requested customer identity is not a canonical UUID.' });
+      onCustomerChange?.();
+      return;
     }
-  };
+    const party = data.parties.find(candidate => candidate.party_id === initialCustomerId);
+    if (party) {
+      dispatch({ type: 'SET_SELECTED_PARTY', party });
+      dispatch({ type: 'SET_DETAILS_VIEW', show: true });
+    } else {
+      setExportFeedback({ type: 'error', message: 'The requested customer has no visible canonical outstanding balance.' });
+    }
+    onCustomerChange?.();
+  }, [data, dispatch, initialCustomerId, onCustomerChange]);
 
   // Filter parties based on search and status
   const filteredParties = useMemo(() => {
@@ -257,7 +240,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
                   <p className="text-gray-600">Loading outstanding data...</p>
                 </div>
-              ) : error ? (
+              ) : error || !data || !summary ? (
                 <div role="alert" className="rounded-lg border border-red-200 bg-white p-8 text-center">
                   <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
                   <p className="font-medium text-red-700">Outstanding data is unavailable</p>
@@ -274,9 +257,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 <>
                   <OutstandingSummaryBar
                     summary={summary}
-                    totalAdvances={data?.total_advances || '0.00'}
-                    netPosition={data?.net_position || '0.00'}
-                    partyType={partyType}
                   />
 
                   <OutstandingFilters

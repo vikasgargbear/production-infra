@@ -8,10 +8,7 @@ import { formatExactCurrency } from '../../../../utils/exactDecimal';
 import type { OutstandingSummaryCardsProps } from '../types/outstanding.types';
 
 export const OutstandingSummaryBar = React.memo<OutstandingSummaryCardsProps>(({
-    summary,
-    totalAdvances,
-    netPosition,
-    partyType
+    summary
 }) => {
     return (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">

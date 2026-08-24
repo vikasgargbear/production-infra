@@ -9,14 +9,3 @@ export type {
     CreditStats,
     UseCreditManagementReturn
 } from './useCreditManagement';
-
-export { useOutstanding } from './useOutstanding';
-export type {
-    PartyOutstanding,
-    InvoiceDetail,
-    Summary,
-    AgingSummary,
-    OutstandingFilters,
-    AllocationModalState,
-    UseOutstandingReturn
-} from './useOutstanding';

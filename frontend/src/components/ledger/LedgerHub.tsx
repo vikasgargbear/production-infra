@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  DollarSign, TrendingUp,
+  DollarSign,
   AlertTriangle, FileText,
-  Archive, Loader2, RefreshCw, AlertCircle
+  Archive
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import PartyLedger from './PartyLedger';
@@ -25,11 +25,6 @@ interface LedgerModule {
 }
 
 const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
-  // API data states
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
   // Navigation state for switching between modules
   const [activeModule, setActiveModule] = useState<string>('party-statement');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -48,13 +43,7 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       description: 'View transaction history',
       icon: FileText,
       color: 'blue',
-      component: (props: any) => (
-        <PartyLedger
-          {...props}
-          initialCustomerId={selectedCustomerId}
-          onCustomerChange={() => setSelectedCustomerId(null)}
-        />
-      )
+      component: (props: any) => <PartyLedger {...props} />
     },
     {
       id: 'outstanding',
@@ -86,32 +75,6 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       )
     }
   ];
-
-  useEffect(() => {
-    // Load initial data if needed
-    loadInitialData();
-  }, []);
-
-  const loadInitialData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Here you would load any initial ledger data
-      // For now, we'll just set a default state
-
-    } catch (error) {
-      setError('Failed to load initial ledger data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadInitialData();
-    setRefreshing(false);
-  };
 
   return (
     <ModuleHub

@@ -139,7 +139,7 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <div className="text-sm text-gray-600 mb-2">Total Outstanding</div>
                     <div className="text-2xl font-bold text-gray-900">
@@ -160,24 +160,6 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                    <div className="text-sm text-gray-600 mb-2">Unallocated Advance</div>
-                    <div className="text-2xl font-bold text-green-600">
-                        {formatExactCurrency(party.total_advance || '0.00', 'Customer advance')}
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                    <div className="text-sm text-gray-600 mb-2">Net Position</div>
-                    <div className="text-2xl font-bold">
-                        <span className="text-blue-600">
-                            {formatExactCurrency(party.total_outstanding, 'Customer net outstanding')}
-                            <div className="text-sm font-normal text-gray-500 mt-1">
-                                Amount to receive
-                            </div>
-                        </span>
-                    </div>
-                </div>
             </div>
 
             {/* Outstanding Invoices Table */}
