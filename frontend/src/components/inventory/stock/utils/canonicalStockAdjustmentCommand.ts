@@ -4,9 +4,13 @@ import type {
   CanonicalCommandPreview,
 } from '../../../../services/api/canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import { exactDecimalUnits } from '../../../../utils/exactDecimal';
 
-const DECIMAL_PATTERN = /^(0|[1-9]\d{0,13})(?:\.(\d{1,6}))?$/;
 const MICRO = 1_000_000n;
+const MAX_QUANTITY_UNITS = (10n ** 20n) - 1n;
+const QUANTITY_OPTIONS = { scale: 6, maximumWholeDigits: 14 } as const;
+const MONEY_OPTIONS = { scale: 2, maximumWholeDigits: 18 } as const;
+const UNIT_COST_OPTIONS = { scale: 4, maximumWholeDigits: 16 } as const;
 
 export type CycleCountEvidence = {
   evidence_attachment_id: string;
@@ -20,7 +24,7 @@ export type CycleCountUom = {
   uom_conversion_id: string;
   from_uom_code: string;
   to_uom_code: string;
-  multiplier: string | number;
+  multiplier: string;
 };
 
 export type CycleCountEligibility = {
@@ -29,7 +33,7 @@ export type CycleCountEligibility = {
   counted_by_membership_id: string;
   product_id: string;
   batch_id: string;
-  system_base_quantity: string | number;
+  system_base_quantity: string;
   uom_conversions: CycleCountUom[];
   evidence: CycleCountEvidence[];
 };
@@ -40,9 +44,9 @@ export type CycleCountItem = {
   branchId: string;
   locationId: string;
   uomConversionId: string;
-  uomMultiplier: string | number;
+  uomMultiplier: string;
   countedQuantity: string;
-  systemBaseQuantity: string | number;
+  systemBaseQuantity: string;
 };
 
 export type CycleCountCommandInput = {
@@ -57,19 +61,29 @@ export type CycleCountCommandInput = {
 export type CycleCountReadback = {
   command_request_id: string;
   inventory_document_id: string;
+  document_number: string;
+  branch_id: string;
   status: 'posted';
+  journal_entry_id: string;
   journal_status: 'posted';
-  total_gain_base_quantity: string | number;
-  total_gain_value: string | number;
+  journal_debit_total: string;
+  journal_credit_total: string;
+  accounting_event_id: string;
+  total_gain_base_quantity: string;
+  total_gain_value: string;
   lines: Array<{
+    inventory_document_line_id: string;
     product_id: string;
     batch_id: string;
-    gain_base_quantity: string | number;
-    gain_value: string | number;
-    ledger_quantity_delta: string | number;
-    ledger_value_delta: string | number;
-    counted_base_quantity: string | number;
-    current_on_hand_quantity: string | number;
+    ledger_entry_id: string;
+    system_base_quantity: string;
+    counted_base_quantity: string;
+    gain_base_quantity: string;
+    unit_cost: string;
+    gain_value: string;
+    ledger_quantity_delta: string;
+    ledger_value_delta: string;
+    current_on_hand_quantity: string;
   }>;
 };
 
@@ -80,22 +94,41 @@ const requireCommandPreview = (preview: CanonicalCommandPreview): CanonicalComma
   return preview;
 };
 
-const decimalUnits = (value: string | number, field: string): bigint => {
-  const text = String(value);
-  const match = DECIMAL_PATTERN.exec(text);
-  if (!match) throw new Error(`${field} must be a non-negative decimal with at most six decimal places.`);
-  const [whole, fraction = ''] = text.split('.');
-  return BigInt(whole) * MICRO + BigInt(fraction.padEnd(6, '0'));
+const exactStringUnits = (
+  value: unknown,
+  field: string,
+  options: typeof QUANTITY_OPTIONS | typeof MONEY_OPTIONS | typeof UNIT_COST_OPTIONS,
+): bigint => {
+  if (typeof value !== 'string' || value.trim() !== value) {
+    throw new Error(`${field} must remain an exact decimal string.`);
+  }
+  return exactDecimalUnits(value, field, options);
 };
 
-const multipliedBaseUnits = (quantity: string, multiplier: string | number): bigint => {
-  const quantityUnits = decimalUnits(quantity, 'Physical count');
-  const multiplierUnits = decimalUnits(multiplier, 'UOM multiplier');
-  if (quantityUnits <= 0n || multiplierUnits <= 0n) {
+const quantityUnits = (value: unknown, field: string): bigint => (
+  exactStringUnits(value, field, QUANTITY_OPTIONS)
+);
+
+const moneyUnits = (value: unknown, field: string): bigint => (
+  exactStringUnits(value, field, MONEY_OPTIONS)
+);
+
+const unitCostUnits = (value: unknown, field: string): bigint => (
+  exactStringUnits(value, field, UNIT_COST_OPTIONS)
+);
+
+const multipliedBaseUnits = (quantity: string, multiplier: string): bigint => {
+  const inputUnits = quantityUnits(quantity, 'Physical count');
+  const multiplierUnits = quantityUnits(multiplier, 'UOM multiplier');
+  if (inputUnits <= 0n || multiplierUnits <= 0n) {
     throw new Error('Physical count and UOM multiplier must be positive.');
   }
-  const product = quantityUnits * multiplierUnits;
-  return (product + MICRO / 2n) / MICRO;
+  const product = inputUnits * multiplierUnits;
+  const rounded = (product + MICRO / 2n) / MICRO;
+  if (rounded > MAX_QUANTITY_UNITS) {
+    throw new Error('Physical count in base units exceeds the canonical numeric(20,6) boundary.');
+  }
+  return rounded;
 };
 
 export const indiaLocalDate = (instant: Date = new Date()): string => {
@@ -136,7 +169,7 @@ export const loadCycleCountEligibility = async (params: {
   ]) {
     if (!isCanonicalUuid(value)) throw new Error(`Cycle-count eligibility returned invalid ${field}.`);
   }
-  decimalUnits(eligibility.system_base_quantity, 'System base quantity');
+  quantityUnits(eligibility.system_base_quantity, 'System base quantity');
   if (!Array.isArray(eligibility.uom_conversions) || eligibility.uom_conversions.length === 0) {
     throw new Error('No eligible cycle-count UOM is configured for this product.');
   }
@@ -145,7 +178,7 @@ export const loadCycleCountEligibility = async (params: {
   }
   eligibility.uom_conversions.forEach((uom) => {
     if (!isCanonicalUuid(uom.uom_conversion_id)) throw new Error('Cycle-count UOM identity is invalid.');
-    if (decimalUnits(uom.multiplier, 'UOM multiplier') <= 0n) throw new Error('Cycle-count UOM multiplier must be positive.');
+    if (quantityUnits(uom.multiplier, 'UOM multiplier') <= 0n) throw new Error('Cycle-count UOM multiplier must be positive.');
   });
   eligibility.evidence.forEach((item) => {
     if (!isCanonicalUuid(item.evidence_attachment_id)) throw new Error('Cycle-count evidence identity is invalid.');
@@ -182,7 +215,7 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
       if (!isCanonicalUuid(value)) throw new Error(`Cycle-count item has invalid ${field}.`);
     }
     const countedBaseUnits = multipliedBaseUnits(item.countedQuantity, item.uomMultiplier);
-    const systemBaseUnits = decimalUnits(item.systemBaseQuantity, 'System base quantity');
+    const systemBaseUnits = quantityUnits(item.systemBaseQuantity, 'System base quantity');
     if (countedBaseUnits <= systemBaseUnits) {
       throw new Error('This pilot supports only a positive cycle-count gain; counted stock must exceed system stock.');
     }
@@ -219,7 +252,12 @@ export const loadAndVerifyCycleCountReadback = async (
   const readback = response.data;
   if (
     readback.command_request_id !== preview.command_request_id
+    || !isCanonicalUuid(readback.inventory_document_id)
     || readback.inventory_document_id !== execution.resource_id
+    || !readback.document_number
+    || !isCanonicalUuid(readback.branch_id)
+    || !isCanonicalUuid(readback.journal_entry_id)
+    || !isCanonicalUuid(readback.accounting_event_id)
     || readback.status !== 'posted'
     || readback.journal_status !== 'posted'
     || !Array.isArray(readback.lines)
@@ -227,15 +265,49 @@ export const loadAndVerifyCycleCountReadback = async (
   ) {
     throw new Error('Cycle-count execution did not reconcile to posted stock and journal data.');
   }
+  const totalGainQuantity = quantityUnits(readback.total_gain_base_quantity, 'Total gain quantity');
+  const totalGainValue = moneyUnits(readback.total_gain_value, 'Total gain value');
+  if (
+    totalGainQuantity <= 0n
+    || totalGainValue <= 0n
+    || moneyUnits(readback.journal_debit_total, 'Journal debit total') !== totalGainValue
+    || moneyUnits(readback.journal_credit_total, 'Journal credit total') !== totalGainValue
+  ) {
+    throw new Error('Cycle-count totals do not reconcile to the posted valuation journal.');
+  }
+  let lineGainQuantity = 0n;
+  let lineGainValue = 0n;
   readback.lines.forEach((line) => {
     if (
-      decimalUnits(line.gain_base_quantity, 'Gain quantity') !== decimalUnits(line.ledger_quantity_delta, 'Ledger quantity')
-      || decimalUnits(line.gain_value, 'Gain value') !== decimalUnits(line.ledger_value_delta, 'Ledger value')
-      || decimalUnits(line.counted_base_quantity, 'Counted quantity') !== decimalUnits(line.current_on_hand_quantity, 'Current stock')
+      !isCanonicalUuid(line.inventory_document_line_id)
+      || !isCanonicalUuid(line.product_id)
+      || !isCanonicalUuid(line.batch_id)
+      || !isCanonicalUuid(line.ledger_entry_id)
+    ) {
+      throw new Error('Cycle-count readback returned an invalid canonical line identity.');
+    }
+    const systemQuantity = quantityUnits(line.system_base_quantity, 'System quantity');
+    const countedQuantity = quantityUnits(line.counted_base_quantity, 'Counted quantity');
+    const gainQuantity = quantityUnits(line.gain_base_quantity, 'Gain quantity');
+    const gainValue = moneyUnits(line.gain_value, 'Gain value');
+    const unitCost = unitCostUnits(line.unit_cost, 'Unit cost');
+    if (
+      gainQuantity <= 0n
+      || gainValue <= 0n
+      || unitCost <= 0n
+      || countedQuantity !== systemQuantity + gainQuantity
+      || gainQuantity !== quantityUnits(line.ledger_quantity_delta, 'Ledger quantity')
+      || gainValue !== moneyUnits(line.ledger_value_delta, 'Ledger value')
+      || countedQuantity !== quantityUnits(line.current_on_hand_quantity, 'Current stock')
     ) {
       throw new Error('Cycle-count readback differs from its posted ledger evidence.');
     }
+    lineGainQuantity += gainQuantity;
+    lineGainValue += gainValue;
   });
+  if (lineGainQuantity !== totalGainQuantity || lineGainValue !== totalGainValue) {
+    throw new Error('Cycle-count document totals differ from its posted line evidence.');
+  }
   return readback;
 };
 
@@ -274,6 +346,13 @@ export const executeApprovedCycleCount = async (
   );
   if (!response.data || !['executed', 'succeeded'].includes(response.data.status)) {
     throw new Error('Cycle-count command did not reach a terminal succeeded state.');
+  }
+  if (
+    !isCanonicalUuid(response.data.resource_id)
+    || ('command_request_id' in response.data && response.data.command_request_id !== preview.command_request_id)
+    || ('idempotency_replayed' in response.data && typeof response.data.idempotency_replayed !== 'boolean')
+  ) {
+    throw new Error('Cycle-count execution returned an invalid idempotent command result.');
   }
   return response.data;
 };

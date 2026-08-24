@@ -1415,7 +1415,50 @@ def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(
     )
     assert response.status_code == 200
     assert fake.calls[-1][2]["reason_code"] == "cycle_count"
+    assert fake.calls[-1][2]["lines"][0]["batch_counts"][0]["counted_quantity"] == "12.000000"
     assert "idempotency_key" not in fake.calls[-1][2]
+
+    accepted_call_count = len(fake.calls)
+    for invalid_quantity in (
+        12,
+        "9007199254740993",
+        "12.0000001",
+        "0",
+        "-1",
+        "NaN",
+    ):
+        invalid_payload = {
+            **payload,
+            "lines": [{
+                **payload["lines"][0],
+                "batch_counts": [{
+                    **payload["lines"][0]["batch_counts"][0],
+                    "counted_quantity": invalid_quantity,
+                }],
+            }],
+        }
+        invalid_quantity_response = client.post(
+            "/api/internal/mcp/actions/inventory.adjustment.prepare/prepare",
+            json=invalid_payload,
+            headers={"Idempotency-Key": payload["idempotency_key"]},
+        )
+        assert invalid_quantity_response.status_code == 422
+        assert len(fake.calls) == accepted_call_count
+
+    duplicate_batch_payload = {
+        **payload,
+        "lines": [{
+            **payload["lines"][0],
+            "batch_counts": payload["lines"][0]["batch_counts"] * 2,
+        }],
+    }
+    duplicate_batch_response = client.post(
+        "/api/internal/mcp/actions/inventory.adjustment.prepare/prepare",
+        json=duplicate_batch_payload,
+        headers={"Idempotency-Key": payload["idempotency_key"]},
+    )
+    assert duplicate_batch_response.status_code == 422
+    assert len(fake.calls) == accepted_call_count
 
     payload["direction"] = "decrease"
     invalid = client.post(

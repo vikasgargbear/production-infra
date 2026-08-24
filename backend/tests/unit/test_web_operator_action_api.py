@@ -175,3 +175,86 @@ def test_web_prepare_maps_fefo_policy_rejection_to_structured_conflict(monkeypat
     assert error.value.status_code == 409
     assert error.value.detail["code"] == "BATCH_BLOCKED"
     assert error.value.detail["metadata"]["reason"] == "FEFO_ALLOCATION_REQUIRED"
+
+
+def test_web_cycle_count_preserves_exact_strings_and_rejects_inexact_quantities(monkeypatch):
+    operation = "inventory.adjustment.prepare"
+    command_id = uuid4()
+    calls = []
+
+    class Service:
+        def deployment_readiness(self):
+            return True
+
+        def adapter_readiness(self):
+            return {operation: True}
+
+        def prepare(self, **kwargs):
+            calls.append(kwargs)
+            return PreparedCommand(
+                command_request_id=command_id,
+                command_type=operation,
+                preview_hash="sha256:" + "b" * 64,
+                expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+                resolved_references=(),
+                source_versions=(),
+                calculation_ruleset=(),
+                inventory_impact=(),
+                financial_impact=(),
+                tax_impact=(),
+            )
+
+    monkeypatch.setattr(web, "_resolve_context", lambda *_args, **_kwargs: SimpleNamespace())
+    counted_at = datetime.now(timezone.utc)
+    payload = {
+        "idempotency_key": "erp-web-inventory-adjustment:test-0001",
+        "branch_id": str(uuid4()),
+        "adjustment_date": counted_at.astimezone(
+            timezone.utc
+        ).date().isoformat(),
+        "counted_at": counted_at.isoformat(),
+        "counted_by_membership_id": str(uuid4()),
+        "location_id": str(uuid4()),
+        "reason_code": "cycle_count",
+        "evidence_attachment_id": str(uuid4()),
+        "lines": [{
+            "product_id": str(uuid4()),
+            "uom_conversion_id": str(uuid4()),
+            "batch_counts": [{
+                "batch_id": str(uuid4()),
+                "counted_quantity": "12.000001",
+            }],
+        }],
+    }
+
+    response = web.prepare_action(
+        web.OperatorCommandType(operation),
+        payload,
+        user=_user(),
+        db=object(),
+        service=Service(),
+    )
+    assert response.command_request_id == command_id
+    assert calls[0]["payload"]["lines"][0]["batch_counts"][0]["counted_quantity"] == "12.000001"
+
+    for invalid_quantity in (12, "9007199254740993", "12.0000001", "0", "-1", "NaN"):
+        invalid_payload = {
+            **payload,
+            "lines": [{
+                **payload["lines"][0],
+                "batch_counts": [{
+                    **payload["lines"][0]["batch_counts"][0],
+                    "counted_quantity": invalid_quantity,
+                }],
+            }],
+        }
+        with pytest.raises(HTTPException) as error:
+            web.prepare_action(
+                web.OperatorCommandType(operation),
+                invalid_payload,
+                user=_user(),
+                db=object(),
+                service=Service(),
+            )
+        assert error.value.status_code == 422
+    assert len(calls) == 1

@@ -34,10 +34,10 @@ type AdjustmentItem = {
   batch_number: string;
   branch_id: string;
   location_id: string;
-  quantity_available: string | number;
+  quantity_available: string;
   counted_quantity: string;
   uom_conversion_id: string;
-  uom_multiplier: string | number;
+  uom_multiplier: string;
   uom_options: CycleCountUom[];
   unit: string;
   expiry_date?: string;

@@ -44,7 +44,40 @@ const validInput = {
   }],
 };
 
+const validReadback = {
+  command_request_id: ids.command,
+  inventory_document_id: ids.document,
+  document_number: 'SC-2026-000001',
+  branch_id: ids.branch,
+  status: 'posted',
+  journal_entry_id: ids.membership,
+  journal_status: 'posted',
+  journal_debit_total: '1.00',
+  journal_credit_total: '1.00',
+  total_gain_base_quantity: '0.000010',
+  total_gain_value: '1.00',
+  accounting_event_id: ids.command,
+  lines: [{
+    inventory_document_line_id: ids.evidence,
+    product_id: ids.product,
+    batch_id: ids.batch,
+    ledger_entry_id: ids.uom,
+    system_base_quantity: '12.345670',
+    counted_base_quantity: '12.345680',
+    gain_base_quantity: '0.000010',
+    unit_cost: '100000.0000',
+    gain_value: '1.00',
+    ledger_quantity_delta: '0.000010',
+    ledger_value_delta: '1.00',
+    current_on_hand_quantity: '12.345680',
+  }],
+} as const;
+
 describe('canonical cycle-count gain command', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('uses India-local dates instead of the browser UTC date', () => {
     expect(indiaLocalDate(instant)).toBe('2026-08-25');
   });
@@ -67,11 +100,43 @@ describe('canonical cycle-count gain command', () => {
     });
   });
 
-  it.each(['1.2345678', '-1', 'NaN', '', '0'])('fails closed for invalid or non-gain count %s', countedQuantity => {
+  it.each(['1.2345678', '-1', 'NaN', '', '0', ' 1', '01', '1e3'])('fails closed for invalid or non-gain count %s', countedQuantity => {
     expect(() => buildCycleCountGainPayload({
       ...validInput,
       items: [{ ...validInput.items[0], countedQuantity }],
     })).toThrow();
+  });
+
+  it('rejects quantities above numeric(20,6) without JavaScript number coercion', () => {
+    expect(() => buildCycleCountGainPayload({
+      ...validInput,
+      items: [{ ...validInput.items[0], countedQuantity: '9007199254740993' }],
+    })).toThrow('canonical decimal precision');
+    expect(() => buildCycleCountGainPayload({
+      ...validInput,
+      items: [{
+        ...validInput.items[0],
+        countedQuantity: '99999999999999.999999',
+        uomMultiplier: '2',
+      }],
+    })).toThrow('numeric(20,6)');
+  });
+
+  it('accepts six fractional places and rejects over-scale values before prepare', () => {
+    expect(buildCycleCountGainPayload({
+      ...validInput,
+      items: [{
+        ...validInput.items[0],
+        countedQuantity: '12.345671',
+        uomMultiplier: '1.000000',
+      }],
+    })).toMatchObject({
+      lines: [{ batch_counts: [{ counted_quantity: '12.345671' }] }],
+    });
+    expect(() => buildCycleCountGainPayload({
+      ...validInput,
+      items: [{ ...validInput.items[0], countedQuantity: '12.3456711' }],
+    })).toThrow('canonical decimal precision');
   });
 
   it('rejects a decrease and an exact no-op after UOM conversion', () => {
@@ -123,29 +188,95 @@ describe('canonical cycle-count gain command', () => {
     })).resolves.toMatchObject({ counted_by_membership_id: ids.membership });
   });
 
-  it('requires exact stock and journal readback after execution', async () => {
+  it('accepts an exact zero system balance when the physical count is a positive gain', async () => {
     (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
-      command_request_id: ids.command,
-      inventory_document_id: ids.document,
-      status: 'posted',
-      journal_status: 'posted',
-      total_gain_base_quantity: '0.000010',
-      total_gain_value: '1.00',
-      lines: [{
-        product_id: ids.product,
-        batch_id: ids.batch,
-        gain_base_quantity: '0.000010',
-        ledger_quantity_delta: '0.000010',
-        gain_value: '1.00',
-        ledger_value_delta: '1.00',
-        counted_base_quantity: '12.345680',
-        current_on_hand_quantity: '12.345680',
+      branch_id: ids.branch,
+      location_id: ids.location,
+      counted_by_membership_id: ids.membership,
+      product_id: ids.product,
+      batch_id: ids.batch,
+      system_base_quantity: '0.000000',
+      uom_conversions: [{
+        uom_conversion_id: ids.uom,
+        from_uom_code: 'EA',
+        to_uom_code: 'EA-BASE',
+        multiplier: '1.000000',
+      }],
+      evidence: [{
+        evidence_attachment_id: ids.evidence,
+        status: 'verified',
+        document_date: '2026-08-25',
+        verified_at: instant.toISOString(),
+        retention_until: '2027-08-25',
       }],
     } });
+    await expect(loadCycleCountEligibility({
+      branchId: ids.branch,
+      locationId: ids.location,
+      batchId: ids.batch,
+      adjustmentDate: '2026-08-25',
+    })).resolves.toMatchObject({ system_base_quantity: '0.000000' });
+
+    expect(buildCycleCountGainPayload({
+      ...validInput,
+      items: [{
+        ...validInput.items[0],
+        systemBaseQuantity: '0.000000',
+        countedQuantity: '0.000001',
+        uomMultiplier: '1.000000',
+      }],
+    })).toMatchObject({
+      lines: [{ batch_counts: [{ counted_quantity: '0.000001' }] }],
+    });
+  });
+
+  it('rejects numeric JSON decimal facts from eligibility instead of accepting rounded values', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
+      branch_id: ids.branch,
+      location_id: ids.location,
+      counted_by_membership_id: ids.membership,
+      product_id: ids.product,
+      batch_id: ids.batch,
+      system_base_quantity: 9007199254740992,
+      uom_conversions: [{
+        uom_conversion_id: ids.uom,
+        from_uom_code: 'PK',
+        to_uom_code: 'EA',
+        multiplier: '1.000000',
+      }],
+      evidence: [{
+        evidence_attachment_id: ids.evidence,
+        status: 'verified',
+        document_date: '2026-08-25',
+        verified_at: instant.toISOString(),
+        retention_until: '2027-08-25',
+      }],
+    } });
+    await expect(loadCycleCountEligibility({
+      branchId: ids.branch,
+      locationId: ids.location,
+      batchId: ids.batch,
+      adjustmentDate: '2026-08-25',
+    })).rejects.toThrow('exact decimal string');
+  });
+
+  it('requires exact stock and journal readback after execution', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: validReadback });
     await expect(loadAndVerifyCycleCountReadback(
       { command_request_id: ids.command, preview_hash: `sha256:${'a'.repeat(64)}` },
       { status: 'succeeded', resource_id: ids.document },
     )).resolves.toMatchObject({ inventory_document_id: ids.document });
+  });
+
+  it('fails closed when exact line, document, or journal totals drift', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
+      ...validReadback,
+      journal_debit_total: '1.01',
+    } });
+    await expect(loadAndVerifyCycleCountReadback(
+      { command_request_id: ids.command, preview_hash: `sha256:${'a'.repeat(64)}` },
+      { status: 'succeeded', resource_id: ids.document },
+    )).rejects.toThrow('valuation journal');
   });
 
   it('keeps independent approval and requester execution as separate stable calls', async () => {
@@ -170,5 +301,51 @@ describe('canonical cycle-count gain command', () => {
       expect.objectContaining({
         idempotency_key: `erp-web-inventory-adjustment-execute:${ids.command}`,
       }));
+  });
+
+  it('reuses the exact execute idempotency key and permits only matching replay readback', async () => {
+    const preview = { command_request_id: ids.command, preview_hash: `sha256:${'c'.repeat(64)}` };
+    (apiHelpers.post as jest.Mock)
+      .mockResolvedValueOnce({ data: {
+        command_request_id: ids.command,
+        status: 'succeeded',
+        resource_id: ids.document,
+        idempotency_replayed: false,
+      } })
+      .mockResolvedValueOnce({ data: {
+        command_request_id: ids.command,
+        status: 'succeeded',
+        resource_id: ids.document,
+        idempotency_replayed: true,
+      } });
+
+    await expect(executeApprovedCycleCount(preview)).resolves.toMatchObject({ idempotency_replayed: false });
+    const replay = await executeApprovedCycleCount(preview);
+    expect(replay).toMatchObject({ idempotency_replayed: true });
+
+    (apiHelpers.get as jest.Mock)
+      .mockResolvedValueOnce({ data: validReadback })
+      .mockResolvedValueOnce({ data: validReadback });
+    await expect(loadAndVerifyCycleCountReadback(preview, replay)).resolves.toEqual(validReadback);
+    await expect(loadAndVerifyCycleCountReadback(preview, replay)).resolves.toEqual(validReadback);
+
+    expect(apiHelpers.post).toHaveBeenCalledTimes(2);
+    expect(apiHelpers.post).toHaveBeenNthCalledWith(1,
+      `/web/actions/commands/${ids.command}/execute`,
+      {
+        preview_hash: preview.preview_hash,
+        idempotency_key: `erp-web-inventory-adjustment-execute:${ids.command}`,
+      });
+    expect(apiHelpers.post).toHaveBeenNthCalledWith(2,
+      `/web/actions/commands/${ids.command}/execute`,
+      {
+        preview_hash: preview.preview_hash,
+        idempotency_key: `erp-web-inventory-adjustment-execute:${ids.command}`,
+      });
+    expect(apiHelpers.get).toHaveBeenCalledTimes(2);
+    expect(apiHelpers.get).toHaveBeenNthCalledWith(1,
+      `/web/actions/inventory-adjustment/commands/${ids.command}/readback`);
+    expect(apiHelpers.get).toHaveBeenNthCalledWith(2,
+      `/web/actions/inventory-adjustment/commands/${ids.command}/readback`);
   });
 });
