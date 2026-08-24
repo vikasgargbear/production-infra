@@ -1,6 +1,7 @@
 import type { AxiosResponse } from 'axios';
 
 import { clientUuid } from '../../utils/clientUuid';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import { apiHelpers } from './apiClient';
 
 export type CanonicalOperationKey =
@@ -40,7 +41,6 @@ export interface CanonicalApprovedExecution {
   executed: AxiosResponse<CanonicalCommandExecution>;
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH_PATTERN = /^sha256:[0-9a-f]{64}$/i;
 
 function requirePreview(value: unknown): CanonicalCommandPreview {
@@ -48,7 +48,7 @@ function requirePreview(value: unknown): CanonicalCommandPreview {
     throw new Error('Canonical command prepare returned no preview. Nothing was approved or executed.');
   }
   const preview = value as Partial<CanonicalCommandPreview>;
-  if (!preview.command_request_id || !UUID_PATTERN.test(preview.command_request_id)) {
+  if (!preview.command_request_id || !isCanonicalUuid(preview.command_request_id)) {
     throw new Error('Canonical command prepare returned an invalid command identity. Nothing was approved or executed.');
   }
   if (!preview.preview_hash || !PREVIEW_HASH_PATTERN.test(preview.preview_hash)) {
@@ -65,7 +65,7 @@ function requireExecution(value: unknown): CanonicalCommandExecution {
   if (!execution.status || typeof execution.status !== 'string') {
     throw new Error('Canonical command execute returned an invalid status. Confirm server status before retrying.');
   }
-  if (execution.resource_id && !UUID_PATTERN.test(execution.resource_id)) {
+  if (execution.resource_id && !isCanonicalUuid(execution.resource_id)) {
     throw new Error('Canonical command execute returned an invalid resource identity. Confirm server status before retrying.');
   }
   return execution as CanonicalCommandExecution;

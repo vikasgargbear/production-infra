@@ -4,11 +4,10 @@ import { batchesApi } from '../../../services/api';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import { mergeProductAndBatch } from '../../../utils/productMapper';
+import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Product as CanonicalProduct } from '../../../types/models';
 
 // ==================== HELPERS ====================
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const requiredNumber = (value: unknown, field: string, row: number): number => {
     if (value === null || value === undefined || value === '') {
@@ -160,7 +159,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         if (!product) return;
 
         const productId = product.product_id || product.id;
-        if (!UUID.test(String(productId || ''))) {
+        if (!isCanonicalUuid(productId)) {
             setError('This product is missing its canonical UUID. Re-select it and try again.');
             return;
         }
@@ -191,7 +190,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 ['location_id', batch.location_id], ['branch_id', batch.branch_id],
                 ['uom_conversion_id', batch.uom_conversion_id],
             ]) {
-                if (!UUID.test(String(value || ''))) throw new Error(`Batch row ${row} has invalid ${field}`);
+                if (!isCanonicalUuid(value)) throw new Error(`Batch row ${row} has invalid ${field}`);
             }
             if (typeof batch.batch_number !== 'string' || typeof batch.product_name !== 'string'
                 || typeof batch.expiry_date !== 'string') {

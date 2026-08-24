@@ -1,6 +1,7 @@
 import type { Customer } from '../../../../types/models/customer';
 import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { CompanyInfo } from '../../../../types/common/company.types';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 
 type CanonicalDiscountKind = 'none' | 'percent' | 'amount';
 
@@ -20,7 +21,7 @@ const decimal = (value: unknown): string => {
 
 const requiredUuid = (value: unknown, label: string): string => {
     const normalized = String(value ?? '').trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)) {
+    if (!isCanonicalUuid(normalized)) {
         throw new Error(`${label} is missing its canonical UUID. Re-select it and try again.`);
     }
     return normalized;

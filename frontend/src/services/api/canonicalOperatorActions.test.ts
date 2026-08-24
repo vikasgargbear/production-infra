@@ -12,7 +12,7 @@ jest.mock('../../utils/clientUuid', () => ({
   clientUuid: () => '20000000-0000-4000-8000-000000000001',
 }));
 
-const commandId = '10000000-0000-4000-8000-000000000001';
+const commandId = '10000000-0000-7000-8000-000000000001';
 const previewHash = `sha256:${'a'.repeat(64)}`;
 
 describe('canonical browser command transport', () => {

@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { paymentsApi } from '../../../services/api';
+import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import {
     CreditCard,
     Banknote,
@@ -96,7 +97,6 @@ const paymentModesList: PaymentMode[] = [
     { id: 'other', name: 'Other', icon: CreditCard, color: 'gray' }
 ];
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PAYMENT_STATUSES = new Set<Payment['status']>([
     'draft', 'submitted', 'approved', 'rejected', 'posted', 'reversed', 'cancelled',
 ]);
@@ -105,7 +105,7 @@ const decodePayments = (value: unknown): Payment[] => {
     if (!Array.isArray(value)) throw new Error('Payment API returned an invalid canonical response');
     return value.map((row: any, index) => {
         const amount = typeof row?.amount === 'number' ? row.amount : Number(row?.amount);
-        if (!UUID.test(String(row?.payment_id || ''))
+        if (!isCanonicalUuid(row?.payment_id)
             || typeof row?.payment_number !== 'string'
             || typeof row?.party_name !== 'string'
             || typeof row?.payment_date !== 'string'
