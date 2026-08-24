@@ -293,6 +293,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     onRemoveItem={handleRemoveItem}
                                     productSearchRef={productSearchRef as any}
                                     currencySymbol="₹"
+                                    preserveExactDecimals
                                 />
                                 {batchAllocationError && (
                                     <div
@@ -401,7 +402,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
             <TaxDetailModal
                 isOpen={showTaxDetailModal}
                 onClose={() => setShowTaxDetailModal(false)}
-                invoice={invoice}
+                invoice={invoice as any}
             />
 
             <CashCalculatorModal

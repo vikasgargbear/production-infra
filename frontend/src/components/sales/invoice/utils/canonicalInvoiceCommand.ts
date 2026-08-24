@@ -4,6 +4,12 @@ import type { FreeSupplyTaxTreatment, InvoiceItem } from '../types/invoiceTypes'
 import type { CompanyInfo } from '../../../../types/common/company.types';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { indianStateCode } from '../../../../utils/indianStates';
+import {
+    addExactDecimals,
+    compareExactDecimals,
+    exactDecimalUnits,
+    normalizeExactDecimal,
+} from '../../../../utils/exactDecimal';
 
 type CanonicalDiscountKind = 'none' | 'percent' | 'amount';
 
@@ -13,13 +19,12 @@ interface CanonicalDiscount {
     document_discount_value: string;
 }
 
-const decimal = (value: unknown): string => {
-    const parsed = Number(value ?? 0);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-        throw new Error('Invoice quantities and amounts must be non-negative numbers');
-    }
-    return String(parsed);
-};
+const quantity = (value: unknown, label = 'Invoice quantity'): string =>
+    normalizeExactDecimal(value ?? 0, label, { scale: 6 });
+const rate = (value: unknown, label = 'Invoice rate'): string =>
+    normalizeExactDecimal(value ?? 0, label, { scale: 4 });
+const discount = (value: unknown, label = 'Invoice discount'): string =>
+    normalizeExactDecimal(value ?? 0, label, { scale: 6 });
 
 const requiredUuid = (value: unknown, label: string): string => {
     const normalized = String(value ?? '').trim();
@@ -29,11 +34,11 @@ const requiredUuid = (value: unknown, label: string): string => {
     return normalized;
 };
 
-const requiredDecimal = (value: unknown, label: string): string => {
+const requiredQuantity = (value: unknown, label: string): string => {
     if (value === undefined || value === null || value === '') {
         throw new Error(`${label} is missing`);
     }
-    return decimal(value);
+    return quantity(value, label);
 };
 
 const nonEmpty = (value: unknown): boolean => String(value ?? '').trim().length > 0;
@@ -91,29 +96,30 @@ const validateImportedAllocationLineage = (item: InvoiceItem, index: number): vo
         || String(item.source_line_id) !== dispatchLineId) {
         throw new Error(`${prefix} dispatch allocation lineage is inconsistent`);
     }
-    const baseBilled = Number(requiredDecimal(
+    const baseBilled = requiredQuantity(
         item.base_billed_quantity,
         `${prefix} base billed quantity`,
-    ));
-    const baseFree = Number(requiredDecimal(
+    );
+    const baseFree = requiredQuantity(
         item.base_free_quantity,
         `${prefix} base free quantity`,
-    ));
-    const sourceBilled = Number(requiredDecimal(
+    );
+    const sourceBilled = requiredQuantity(
         item.source_billed_quantity,
         `${prefix} source billed quantity`,
-    ));
-    const sourceFree = Number(requiredDecimal(
+    );
+    const sourceFree = requiredQuantity(
         item.source_free_quantity,
         `${prefix} source free quantity`,
-    ));
-    if (Number(item.quantity) !== sourceBilled
-        || Number(item.free_quantity) !== sourceFree) {
+    );
+    if (compareExactDecimals(item.quantity, sourceBilled, `${prefix} billed quantity`, { scale: 6 }) !== 0
+        || compareExactDecimals(item.free_quantity, sourceFree, `${prefix} free quantity`, { scale: 6 }) !== 0) {
         throw new Error(
             `${prefix} dispatch quantity was edited after import. Re-import the canonical dispatch before invoicing.`,
         );
     }
-    if (baseBilled + baseFree <= 0) {
+    if (exactDecimalUnits(baseBilled, `${prefix} base billed quantity`, { scale: 6 })
+        + exactDecimalUnits(baseFree, `${prefix} base free quantity`, { scale: 6 }) <= 0n) {
         throw new Error(`${prefix} dispatch allocation has no positive base quantity`);
     }
 };
@@ -169,20 +175,21 @@ export function companyInvoiceValidationError(
 }
 
 const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
-    const percent = Number(invoice.discount_percent || 0);
-    const amount = Number(invoice.discount_amount || 0);
-    if (invoice.discount_type === 'fixed' && amount > 0) {
+    const percent = discount(invoice.discount_percent ?? 0, 'Invoice discount percent');
+    const amount = rate(invoice.discount_amount ?? 0, 'Invoice discount amount');
+    if (invoice.discount_type === 'fixed'
+        && exactDecimalUnits(amount, 'Invoice discount amount', { scale: 4 }) > 0n) {
         return {
             document_discount_kind: 'amount',
             document_discount_basis: 'price_value',
-            document_discount_value: decimal(amount),
+            document_discount_value: amount,
         };
     }
-    if (percent > 0) {
+    if (exactDecimalUnits(percent, 'Invoice discount percent', { scale: 6 }) > 0n) {
         return {
             document_discount_kind: 'percent',
             document_discount_basis: 'price_value',
-            document_discount_value: decimal(percent),
+            document_discount_value: percent,
         };
     }
     return {
@@ -200,13 +207,19 @@ const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
 export function invoiceBatchAllocationValidationError(invoice: Invoice): string | null {
     for (const [index, item] of invoice.items.entries()) {
         if (fulfillmentSource(item) === 'dispatch_allocated') continue;
-        const availableQuantity = Number(item.available_quantity ?? item.quantity_available);
-        if (!Number.isFinite(availableQuantity) || availableQuantity < 0) {
+        let availableQuantity: string;
+        try {
+            availableQuantity = quantity(item.available_quantity ?? item.quantity_available, `Item ${index + 1} selected batch availability`);
+        } catch {
             return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
         }
-        const requestedQuantity = Number(item.quantity || 0) + Number(item.free_quantity || 0);
-        if (requestedQuantity > availableQuantity) {
-            return `Item ${index + 1} needs ${requestedQuantity} units but the selected batch has ${availableQuantity}. Multi-batch allocation is not available yet; reduce the quantity or stop and refresh stock.`;
+        try {
+            const requestedQuantity = addExactDecimals([item.quantity ?? 0, item.free_quantity ?? 0], `Item ${index + 1} requested quantity`, { scale: 6 });
+            if (compareExactDecimals(requestedQuantity, availableQuantity, `Item ${index + 1} availability`, { scale: 6 }) > 0) {
+                return `Item ${index + 1} needs ${requestedQuantity} units but the selected batch has ${availableQuantity}. Multi-batch allocation is not available yet; reduce the quantity or stop and refresh stock.`;
+            }
+        } catch (error) {
+            return error instanceof Error ? error.message : `Item ${index + 1} quantity is invalid`;
         }
     }
     return null;
@@ -260,12 +273,13 @@ export function canonicalInvoiceValidationError(
                     return 'All direct-issue items must use one stock location';
                 }
             }
-            const billedQuantity = Number(decimal(item.quantity));
-            const freeQuantity = Number(decimal(item.free_quantity));
-            decimal(item.unit_price);
-            decimal(item.discount_percent);
+            const billedQuantity = quantity(item.quantity, `Item ${index + 1} billed quantity`);
+            const freeQuantity = quantity(item.free_quantity ?? 0, `Item ${index + 1} free quantity`);
+            rate(item.unit_price, `Item ${index + 1} unit rate`);
+            discount(item.discount_percent ?? 0, `Item ${index + 1} discount`);
             freeSupplyTaxTreatment(item.free_supply_tax_treatment);
-            if (billedQuantity <= 0 && freeQuantity <= 0) {
+            if (exactDecimalUnits(billedQuantity, `Item ${index + 1} billed quantity`, { scale: 6 }) <= 0n
+                && exactDecimalUnits(freeQuantity, `Item ${index + 1} free quantity`, { scale: 6 }) <= 0n) {
                 return `Item ${index + 1} billed or free quantity must be greater than zero`;
             }
             branchId ??= itemBranch;
@@ -299,7 +313,7 @@ export function buildCanonicalInvoicePreparePayload(
     const firstDirectIssueItem = invoice.items.find(
         item => fulfillmentSource(item) === 'direct_issue',
     );
-    const freight = Number(invoice.freight_charges || 0);
+    const freight = rate(invoice.freight_charges ?? 0, 'Invoice freight');
     return {
         idempotency_key: idempotencyKey,
         branch_id: requiredUuid(firstItem.branch_id, 'Invoice branch'),
@@ -307,10 +321,10 @@ export function buildCanonicalInvoicePreparePayload(
         document_discount: documentDiscount(invoice),
         rounding_policy: 'none',
         zero_rated_payment_mode: 'not_applicable',
-        ...(freight > 0 ? {
+        ...(exactDecimalUnits(freight, 'Invoice freight', { scale: 4 }) > 0n ? {
             charge_lines: [{
                 charge_code: 'freight',
-                quoted_amount: decimal(freight),
+                quoted_amount: freight,
                 price_basis: 'tax_exclusive',
                 document_discount_eligible: false,
             }],
@@ -326,9 +340,9 @@ export function buildCanonicalInvoicePreparePayload(
             },
         } : {}),
         lines: invoice.items.map((item, index) => {
-            const discountPercent = Number(item.discount_percent || 0);
-            const billedQuantity = decimal(item.quantity);
-            const freeQuantity = decimal(item.free_quantity);
+            const discountPercent = discount(item.discount_percent ?? 0, `Item ${index + 1} discount`);
+            const billedQuantity = quantity(item.quantity, `Item ${index + 1} billed quantity`);
+            const freeQuantity = quantity(item.free_quantity ?? 0, `Item ${index + 1} free quantity`);
             const source = fulfillmentSource(item);
             return {
                 product_id: requiredUuid(item.product_id, `Item ${index + 1} product`),
@@ -338,12 +352,12 @@ export function buildCanonicalInvoicePreparePayload(
                 free_supply_tax_treatment: freeSupplyTaxTreatment(
                     item.free_supply_tax_treatment,
                 ),
-                quoted_unit_rate: decimal(item.unit_price),
+                quoted_unit_rate: rate(item.unit_price, `Item ${index + 1} unit rate`),
                 price_basis: 'tax_exclusive',
-                line_discount: discountPercent > 0 ? {
+                line_discount: exactDecimalUnits(discountPercent, `Item ${index + 1} discount`, { scale: 6 }) > 0n ? {
                     line_discount_kind: 'percent',
                     line_discount_basis: 'price_value',
-                    line_discount_value: decimal(discountPercent),
+                    line_discount_value: discountPercent,
                 } : {
                     line_discount_kind: 'none',
                     line_discount_basis: 'price_value',
@@ -363,11 +377,11 @@ export function buildCanonicalInvoicePreparePayload(
                             item.dispatch_line_id,
                             `Item ${index + 1} dispatch line`,
                         ),
-                        allocated_base_billed_quantity: requiredDecimal(
+                        allocated_base_billed_quantity: requiredQuantity(
                             item.base_billed_quantity,
                             `Item ${index + 1} base billed quantity`,
                         ),
-                        allocated_base_free_quantity: requiredDecimal(
+                        allocated_base_free_quantity: requiredQuantity(
                             item.base_free_quantity,
                             `Item ${index + 1} base free quantity`,
                         ),

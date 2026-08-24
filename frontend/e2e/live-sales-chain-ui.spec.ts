@@ -1,0 +1,118 @@
+/* eslint-disable jest/valid-expect, jest/valid-title, testing-library/prefer-screen-queries */
+// True visible-UI evidence: network inspection below is readback only.
+import { expect, Page, Response, test } from '@playwright/test';
+import { chooseHubModule, loginToLiveErp, openHomeAction, returnHome } from './support/live-erp';
+
+const baseURL = process.env.PLAYWRIGHT_LIVE_BASE_URL || '';
+const email = process.env.PLAYWRIGHT_LIVE_EMAIL || '';
+const password = process.env.PLAYWRIGHT_LIVE_PASSWORD || '';
+const enabled = /^https:\/\//.test(baseURL) && Boolean(email && password)
+  && process.env.PLAYWRIGHT_LIVE_WRITES === 'true';
+
+const response = (page: Page, method: string, path: RegExp): Promise<Response> =>
+  page.waitForResponse(r => r.request().method() === method && path.test(new URL(r.url()).pathname), { timeout: 45_000 });
+const json = async (r: Response): Promise<any> => {
+  const text = await r.text(); expect(r.status(), text).toBeGreaterThanOrEqual(200); expect(r.status(), text).toBeLessThan(300);
+  return JSON.parse(text);
+};
+async function choose(page: Page, placeholder: RegExp, query: string, option: RegExp): Promise<void> {
+  await page.getByPlaceholder(placeholder).fill(query); await page.getByText(option).first().click();
+}
+
+test.describe('live desktop sales-chain visible UI acceptance', () => {
+  test.skip(!enabled, 'Requires HTTPS test ERP credentials and explicit PLAYWRIGHT_LIVE_WRITES=true');
+  test.use({ baseURL, viewport: { width: 1440, height: 1000 } });
+  test.beforeEach(async ({ page }) => loginToLiveErp(page, email, password));
+
+  test('mandatory fields fail closed, then Order -> Challan -> Invoice posts through visible CTAs', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    await openHomeAction(page, 'Sales'); await chooseHubModule(page, 'Sales', 'Sales Order');
+    await page.getByRole('button', { name: /continue/i }).click();
+    await expect(page.getByText(/select a customer|add at least one item/i).first()).toBeVisible();
+    await choose(page, /search customer/i, 'Demo Retail', /Demo Retail/i);
+    await choose(page, /search product/i, 'Synthetic Corrugated', /Synthetic Corrugated Pharmacy Packing Carton/i);
+    await page.getByRole('button', { name: /continue/i }).click();
+    await page.getByRole('button', { name: 'Generate Order', exact: true }).click();
+    const orderReview = page.getByRole('dialog', { name: 'Review exact sales order' });
+    await expect(orderReview).toBeVisible();
+    await orderReview.getByRole('checkbox').check();
+    const orderExecute = response(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    const orderReadback = response(page, 'GET', /\/api\/canonical\/sales-orders\/[0-9a-f-]+\/acceptance-readback$/);
+    await orderReview.getByRole('button', { name: 'Approve & Post' }).click();
+    const order = await json(await orderExecute); expect(String(order.resource_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    const orderDetail = await json(await orderReadback);
+    await page.screenshot({ path: testInfo.outputPath('sales-order-posted.png'), fullPage: true });
+
+    await returnHome(page); await openHomeAction(page, 'Sales'); await chooseHubModule(page, 'Sales', 'Delivery Challan');
+    await page.getByRole('button', { name: /import/i }).click();
+    await page.getByRole('button', { name: /sales order/i }).click();
+    await page.getByText(String(orderDetail.order_number), { exact: true }).first().click();
+    await page.getByRole('button', { name: 'Import to Challan', exact: true }).click();
+    await page.getByRole('button', { name: /continue/i }).click();
+    await page.getByRole('button', { name: 'Generate Challan', exact: true }).click();
+    const dispatchReview = page.getByRole('dialog', { name: 'Review exact delivery dispatch' });
+    await expect(dispatchReview).toBeVisible();
+    await dispatchReview.getByRole('checkbox').check();
+    const dispatchExecute = response(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    const dispatchReadback = response(page, 'GET', /\/api\/canonical\/sales-dispatches\/[0-9a-f-]+\/acceptance-readback$/);
+    await dispatchReview.getByRole('button', { name: 'Approve & Post' }).click();
+    const dispatch = await json(await dispatchExecute); expect(String(dispatch.resource_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    const dispatchDetail = await json(await dispatchReadback);
+    await page.screenshot({ path: testInfo.outputPath('dispatch-posted.png'), fullPage: true });
+
+    await returnHome(page); await openHomeAction(page, 'Sales'); await chooseHubModule(page, 'Sales', 'Create Invoice');
+    await page.getByRole('button', { name: /import/i }).click();
+    await page.getByRole('button', { name: /delivery challan/i }).click();
+    await page.getByText(String(dispatchDetail.challan_number), { exact: true }).first().click();
+    await page.getByRole('button', { name: 'Import Selected', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await page.getByRole('button', { name: /continue to preview/i }).click();
+    await page.getByRole('button', { name: 'Generate Invoice', exact: true }).click();
+    const invoiceReview = page.getByRole('dialog', { name: 'Review exact sales invoice' });
+    await expect(invoiceReview).toBeVisible();
+    await invoiceReview.getByRole('checkbox').check();
+    const invoiceExecute = response(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    const invoiceReadback = response(page, 'GET', /\/api\/canonical\/sales-invoices\/[0-9a-f-]+\/posting-readback$/);
+    await invoiceReview.getByRole('button', { name: 'Approve & Post' }).click();
+    const invoice = await json(await invoiceExecute); expect(String(invoice.resource_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    const invoiceDetail = await json(await invoiceReadback);
+    expect(String(invoiceDetail.sales_invoice_id)).toBe(String(invoice.resource_id));
+    await page.screenshot({ path: testInfo.outputPath('sales-invoice-posted.png'), fullPage: true });
+    await testInfo.attach('visible-sales-chain-created-ids.json', { contentType: 'application/json', body: JSON.stringify({
+      sales_order_id: order.resource_id, dispatch_id: dispatch.resource_id, sales_invoice_id: invoice.resource_id,
+    }, null, 2) });
+  });
+
+  test('direct invoice visibly recommends FEFO but permits an explicit eligible batch choice', async ({ page }, testInfo) => {
+    await openHomeAction(page, 'Sales'); await chooseHubModule(page, 'Sales', 'Create Invoice');
+    await choose(page, /search customer/i, 'Demo Retail', /Demo Retail/i);
+    await page.getByPlaceholder(/search product/i).fill('Synthetic Corrugated');
+    await page.getByText(/Synthetic Corrugated Pharmacy Packing Carton/i).first().click();
+    const dialog = page.getByRole('dialog');
+    const recommended = dialog.getByRole('option').filter({ hasText: /Recommended FEFO batch/i });
+    await expect(recommended).toHaveCount(1);
+    const explicitAlternative = dialog.getByRole('option').filter({ hasNotText: /Recommended FEFO batch|Unavailable/i });
+    expect(await explicitAlternative.count(), 'fixture needs a second eligible batch in the earliest-expiry FEFO tier').toBeGreaterThan(0);
+    // Default recommendation is deterministic; the user can explicitly choose another eligible batch in the same FEFO tier.
+    await explicitAlternative.first().click();
+    const row = page.getByRole('row').filter({ hasText: /Synthetic Corrugated Pharmacy Packing Carton/i });
+    await row.locator('input[type="number"]').nth(0).fill('1.125000');
+    await row.locator('input[type="number"]').nth(1).fill('84.1250');
+    await expect(row.locator('input[type="number"]').nth(0)).toHaveValue('1.125000');
+    await expect(row.locator('input[type="number"]').nth(1)).toHaveValue('84.1250');
+    await expect(page.getByText(/batch/i).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await page.getByRole('button', { name: /continue to preview/i }).click();
+    const prepareRequest = page.waitForRequest(request => request.method() === 'POST'
+      && /\/api\/web\/actions\/sales\.invoice\.prepare\/prepare$/.test(new URL(request.url()).pathname));
+    await page.getByRole('button', { name: 'Generate Invoice', exact: true }).click();
+    const preparedPayload = (await prepareRequest).postDataJSON();
+    expect(preparedPayload.lines[0].billed_quantity).toBe('1.125000');
+    expect(preparedPayload.lines[0].quoted_unit_rate).toBe('84.1250');
+    const review = page.getByRole('dialog', { name: 'Review exact sales invoice' });
+    await expect(review).toBeVisible();
+    await review.getByRole('button', { name: 'Back' }).click();
+    await page.screenshot({ path: testInfo.outputPath('direct-invoice-explicit-batch-choice.png'), fullPage: true });
+    // Prepare is read-only command review; Back proves no approve/execute occurs.
+  });
+});

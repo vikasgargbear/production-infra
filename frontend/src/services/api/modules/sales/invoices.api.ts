@@ -117,28 +117,28 @@ export const invoicesApi = {
     },
 
     /** Approve and execute only the exact preview the actor just confirmed. */
-    executePreparedCanonical: async (preview: CanonicalCommandPreview) => {
+    executePreparedCanonical: async (preview: CanonicalCommandPreview, lifecycleId: string) => {
         const { executed } = await approveAndExecuteCanonicalAction(
             'sales.invoice.prepare',
             preview,
+            lifecycleId,
         );
         const completed = canonicalExecutionCompleted(executed.data);
         const resourceId = executed?.data?.resource_id;
-        const canonicalInvoice = completed && resourceId
-            ? await apiHelpers.get(`/canonical/invoices/${resourceId}`)
-            : null;
         return {
             ...executed,
             data: {
                 ...executed.data,
                 success: completed,
                 invoice_id: resourceId,
-                invoice_number: canonicalInvoice?.data?.invoice_number,
-                total_amount: canonicalInvoice?.data?.total_amount,
                 canonical_preview: preview,
             },
         };
     },
+
+    /** Strict posted readback with invoice, tax, journal, receivable and stock evidence. */
+    getCanonicalPostingReadback: (id: string) =>
+        apiHelpers.get(`/canonical/sales-invoices/${id}/posting-readback`),
 
     /** Update invoice (only for draft invoices) */
     update: (_id: number | string, _data: Partial<InvoiceData>) =>

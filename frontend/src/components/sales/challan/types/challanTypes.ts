@@ -49,6 +49,10 @@ export interface ChallanItem {
     batch_id?: string | number | null;
     batch_number?: string;
     expiry_date?: string | null;
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
+    source_order_line_id?: string;
     quantity: number;
     free_quantity?: number;
     unit?: string;
@@ -113,6 +117,7 @@ export interface Challan {
     // Document info - DB: challan_id (integer NOT NULL), challan_number (text NOT NULL), challan_date (date NOT NULL)
     challan_id: number;  // REQUIRED - DB: integer NOT NULL
     challan_number: string;  // REQUIRED - DB: text NOT NULL
+    source_order_id?: string;
     challan_date: string;  // REQUIRED - DB: date NOT NULL
     expected_delivery_date: string;
     status: ChallanStatus;
@@ -182,6 +187,7 @@ export interface Employee {
 
 /** Data structure for importing from invoice/order */
 export interface ImportData {
+    source_order_id?: string;
     customer_id?: string | number;
     customer_name?: string;
     customer_details?: CustomerDetails;
@@ -230,6 +236,8 @@ export interface UseChallanLogicReturn {
     setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
     saving: boolean;
     submissionUnavailableReason: string;
+    preparedPreview: import('../../../../services/api/canonicalOperatorActions').CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     showCreateCustomer: boolean;
     setShowCreateCustomer: React.Dispatch<React.SetStateAction<boolean>>;
     showCreateProduct: boolean;
@@ -260,6 +268,8 @@ export interface UseChallanLogicReturn {
     updateItem: (index: number, field: string, value: any) => void;
     removeItem: (itemId: number | string) => void;
     saveChallan: () => Promise<void>;
+    confirmPreparedChallan: () => Promise<void>;
+    closeChallanReview: () => void;
     shareOnWhatsApp: () => void;
     printChallan: () => void;
     thermalPrintChallan: (width?: string) => void;

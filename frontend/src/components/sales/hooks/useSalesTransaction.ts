@@ -212,12 +212,17 @@ export function useSalesTransaction<
                 product_id: product.product_id,
                 product_name: product.product_name,
                 hsn_code: product.hsn_code,
+                batch_id: product.batch_id,
+                batch_number: product.batch_number,
+                branch_id: product.branch_id,
+                location_id: product.location_id,
+                uom_conversion_id: product.uom_conversion_id,
                 quantity,
                 unit: product.unit || product.base_uom || product.uom_code || '',
                 mrp: product.mrp || 0,
                 unit_price: unitPrice,  // ✅ CANONICAL
                 gst_percent: includeGst ? (product.gst_percent || 0) : undefined
-            } as TItem;
+            } as unknown as TItem;
 
             const updatedItems = [...document.items, newItem];
             setDocument(prev => ({ ...prev, items: updatedItems } as TDoc));

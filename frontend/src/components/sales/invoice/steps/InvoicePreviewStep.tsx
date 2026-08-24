@@ -75,10 +75,11 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                                     product_name: item.product_name || item.name,
                                     hsn_code: item.hsn_code,
                                     batch_number: item.batch_number || item.batch_number,
-                                    quantity: item.quantity,
-                                    free_quantity: item.free_quantity || 0,
-                                    unit_price: item.unit_price || item.selling_price,
-                                    discount_percent: item.discount_percent || 0,
+                                    // PrintUtility is presentation-only; the command builder retains exact strings.
+                                    quantity: Number(item.quantity || 0),
+                                    free_quantity: Number(item.free_quantity || 0),
+                                    unit_price: Number(item.unit_price || item.selling_price || 0),
+                                    discount_percent: Number(item.discount_percent || 0),
                                     gst_percent: item.gst_percent || item.tax_percent || 0,
                                     total: item.total || item.line_total
                                 })),

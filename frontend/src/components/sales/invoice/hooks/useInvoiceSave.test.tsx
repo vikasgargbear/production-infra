@@ -2,28 +2,46 @@ import { act, renderHook } from '@testing-library/react';
 import { toast } from 'react-toastify';
 import { invoicesApi } from '../../../../services/api';
 import { showFinancialEntryNotification } from '../../../../utils/financialEntryNotifier';
-import { formatCanonicalInvoiceConfirmation, useInvoiceSave } from './useInvoiceSave';
+import { useInvoiceSave } from './useInvoiceSave';
 
 jest.mock('react-toastify', () => ({ toast: { error: jest.fn() } }));
 jest.mock('../../../../services/api', () => ({
     invoicesApi: {
         prepareCanonical: jest.fn(),
         executePreparedCanonical: jest.fn(),
+        getCanonicalPostingReadback: jest.fn(),
     },
 }));
 jest.mock('../../../../utils/financialEntryNotifier', () => ({
     showFinancialEntryNotification: jest.fn(),
 }));
-jest.mock('../../../../utils/clientUuid', () => ({ clientUuid: () => 'client-uuid' }));
+jest.mock('../../../../utils/clientUuid', () => ({ clientUuid: () => '10000000-0000-4000-8000-000000000099' }));
 jest.mock('../utils/canonicalInvoiceCommand', () => ({
     invoicePreviewValidationError: jest.fn(() => null),
-    buildCanonicalInvoicePreparePayload: jest.fn(() => ({ idempotency_key: 'erp-web-invoice:client-uuid' })),
+    buildCanonicalInvoicePreparePayload: jest.fn((invoice, _customer, key) => ({
+        idempotency_key: key,
+        invoice_total: String(invoice.final_amount),
+    })),
 }));
+
+const preview = {
+    command_request_id: '10000000-0000-4000-8000-000000000001',
+    preview_hash: `sha256:${'a'.repeat(64)}`,
+    financial_impact: [{ receivable: '150.00' }],
+    tax_impact: [{ igst_total: '0.00' }],
+    inventory_impact: [{}],
+};
+
+const posted = {
+    sales_invoice_id: '10000000-0000-4000-8000-000000000002',
+    invoice_number: 'INV-2026-0001',
+    invoice_total: '150.00',
+};
 
 const createProps = (isOnline: boolean) => ({
     invoice: {
         invoice_number: '',
-        final_amount: 150,
+        final_amount: '150.00',
         items: [{ product_id: 'product-1' }],
     } as any,
     selectedCustomer: {
@@ -40,106 +58,97 @@ const createProps = (isOnline: boolean) => ({
     setError: jest.fn(),
 });
 
-describe('useInvoiceSave API-only policy', () => {
+describe('useInvoiceSave reviewed canonical lifecycle', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        jest.spyOn(window, 'confirm').mockReturnValue(true);
-        (invoicesApi.prepareCanonical as jest.Mock).mockResolvedValue({
-            data: {
-                command_request_id: '10000000-0000-4000-8000-000000000001',
-                preview_hash: `sha256:${'a'.repeat(64)}`,
-                financial_impact: [{ receivable: '150.00' }],
-                tax_impact: [{ igst_total: '0.00' }],
-                inventory_impact: [{}],
-            },
+        (invoicesApi.prepareCanonical as jest.Mock).mockResolvedValue({ data: preview });
+        (invoicesApi.executePreparedCanonical as jest.Mock).mockResolvedValue({
+            data: { success: true, invoice_id: posted.sales_invoice_id },
         });
+        (invoicesApi.getCanonicalPostingReadback as jest.Mock).mockResolvedValue({ data: posted });
     });
 
     it('does not create or queue an invoice without an API connection', async () => {
         const props = createProps(false);
         const { result } = renderHook(() => useInvoiceSave(props));
-
         await act(async () => result.current.handleSaveInvoice());
-
         expect(invoicesApi.prepareCanonical).not.toHaveBeenCalled();
         expect(props.setCreatedInvoiceData).not.toHaveBeenCalled();
         expect(props.setShowSuccessModal).not.toHaveBeenCalled();
         expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('No local or queued invoice'));
     });
 
-    it('shows success only after the canonical API confirms ID and number', async () => {
-        (invoicesApi.executePreparedCanonical as jest.Mock).mockResolvedValue({
-            data: {
-                success: true,
-                invoice_id: 'invoice-uuid',
-                invoice_number: 'INV-2026-0001',
-                total_amount: 150,
-            },
-        });
+    it('prepares an immutable preview and waits for the visible acknowledgement CTA', async () => {
         const props = createProps(true);
         const { result } = renderHook(() => useInvoiceSave(props));
-
         await act(async () => result.current.handleSaveInvoice());
+        expect(result.current.preparedPreview).toEqual(preview);
+        expect(result.current.reviewOpen).toBe(true);
+        expect(invoicesApi.executePreparedCanonical).not.toHaveBeenCalled();
+        expect(props.setCreatedInvoiceData).not.toHaveBeenCalled();
+    });
 
+    it('Back closes review and reopening the unchanged draft reuses its preview and idempotency', async () => {
+        const props = createProps(true);
+        const { result } = renderHook(() => useInvoiceSave(props));
+        await act(async () => result.current.handleSaveInvoice());
+        act(() => result.current.closeInvoiceReview());
+        expect(result.current.reviewOpen).toBe(false);
+        await act(async () => result.current.handleSaveInvoice());
+        expect(result.current.reviewOpen).toBe(true);
         expect(invoicesApi.prepareCanonical).toHaveBeenCalledTimes(1);
-        expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Authoritative backend preview'));
-        expect(invoicesApi.executePreparedCanonical).toHaveBeenCalledTimes(1);
+        expect(invoicesApi.executePreparedCanonical).not.toHaveBeenCalled();
+    });
+
+    it('posts only after explicit confirmation and verifies exact canonical readback', async () => {
+        const props = createProps(true);
+        const { result } = renderHook(() => useInvoiceSave(props));
+        await act(async () => result.current.handleSaveInvoice());
+        await act(async () => result.current.confirmPreparedInvoice());
+        expect(invoicesApi.executePreparedCanonical).toHaveBeenCalledWith(
+            preview,
+            '10000000-0000-4000-8000-000000000099',
+        );
+        expect(invoicesApi.getCanonicalPostingReadback).toHaveBeenCalledWith(posted.sales_invoice_id);
         expect(props.setCreatedInvoiceData).toHaveBeenCalledWith(expect.objectContaining({
-            invoiceId: 'invoice-uuid',
-            invoiceNumber: 'INV-2026-0001',
+            invoiceId: posted.sales_invoice_id,
+            invoiceNumber: posted.invoice_number,
             isOffline: false,
         }));
         expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
         expect(showFinancialEntryNotification).toHaveBeenCalledWith(expect.objectContaining({
             status: 'confirmed',
-            reference: 'INV-2026-0001',
+            reference: posted.invoice_number,
         }));
     });
 
-    it('keeps the flow in an error state when the API does not confirm execution', async () => {
-        (invoicesApi.executePreparedCanonical as jest.Mock).mockResolvedValue({ data: { success: false } });
+    it('retries GET-only after execute succeeded but authoritative readback was temporarily unavailable', async () => {
+        (invoicesApi.getCanonicalPostingReadback as jest.Mock)
+            .mockRejectedValueOnce(new Error('readback unavailable'))
+            .mockResolvedValueOnce({ data: posted });
         const props = createProps(true);
         const { result } = renderHook(() => useInvoiceSave(props));
-
         await act(async () => result.current.handleSaveInvoice());
-
-        expect(props.setCreatedInvoiceData).not.toHaveBeenCalled();
-        expect(props.setShowSuccessModal).not.toHaveBeenCalled();
-        expect(props.setError).toHaveBeenLastCalledWith(expect.stringContaining('did not confirm'));
+        await act(async () => result.current.confirmPreparedInvoice());
+        await act(async () => result.current.confirmPreparedInvoice());
+        expect(invoicesApi.executePreparedCanonical).toHaveBeenCalledTimes(1);
+        expect(invoicesApi.getCanonicalPostingReadback).toHaveBeenCalledTimes(2);
+        expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
     });
 
-    it('does not approve or execute when the actor cancels the server preview', async () => {
-        (window.confirm as jest.Mock).mockReturnValue(false);
+    it('retries a response-lost execute with the same command and lifecycle instead of preparing again', async () => {
+        (invoicesApi.executePreparedCanonical as jest.Mock)
+            .mockRejectedValueOnce(new Error('connection closed after POST'))
+            .mockResolvedValueOnce({ data: { success: true, invoice_id: posted.sales_invoice_id } });
         const props = createProps(true);
         const { result } = renderHook(() => useInvoiceSave(props));
-
         await act(async () => result.current.handleSaveInvoice());
-
+        await act(async () => result.current.confirmPreparedInvoice());
+        await act(async () => result.current.confirmPreparedInvoice());
         expect(invoicesApi.prepareCanonical).toHaveBeenCalledTimes(1);
-        expect(invoicesApi.executePreparedCanonical).not.toHaveBeenCalled();
-        expect(props.setError).toHaveBeenLastCalledWith(expect.stringContaining('No invoice was created'));
-    });
-
-    it('adds CGST and SGST numerically and renders structured warnings', () => {
-        const confirmation = formatCanonicalInvoiceConfirmation({
-            command_request_id: '10000000-0000-4000-8000-000000000001',
-            preview_hash: `sha256:${'a'.repeat(64)}`,
-            financial_impact: [{ receivable: '113.50' }],
-            tax_impact: [{
-                cgst_total: '6.75',
-                sgst_total: '6.75',
-                igst_total: '0.00',
-                cess_total: '0.00',
-            }],
-            inventory_impact: [{}],
-            policy_warnings: [{
-                code: 'REVIEW_CREDIT',
-                message: 'Customer credit should be reviewed.',
-            }],
-        });
-
-        expect(confirmation).toContain('GST impact: ₹13.50');
-        expect(confirmation).toContain('- REVIEW_CREDIT: Customer credit should be reviewed.');
-        expect(confirmation).not.toContain('[object Object]');
+        expect(invoicesApi.executePreparedCanonical).toHaveBeenCalledTimes(2);
+        expect((invoicesApi.executePreparedCanonical as jest.Mock).mock.calls[0])
+            .toEqual((invoicesApi.executePreparedCanonical as jest.Mock).mock.calls[1]);
+        expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
     });
 });

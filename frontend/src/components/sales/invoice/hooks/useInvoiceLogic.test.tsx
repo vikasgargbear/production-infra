@@ -93,7 +93,7 @@ describe('useInvoiceLogic selected quantity boundary', () => {
             free: 0.125001,
             treatment: 'excluded_from_taxable_value' as const,
         },
-    ])('preserves a $label through hook state and the final prepare payload', async ({
+    ])('keeps a $label in draft state but rejects its fractional JS number at the posting boundary', async ({
         billed,
         free,
         treatment,
@@ -116,25 +116,13 @@ describe('useInvoiceLogic selected quantity boundary', () => {
             free_supply_tax_treatment: treatment,
         }));
 
-        const payload = buildCanonicalInvoicePreparePayload({
-            ...result.current.invoice,
-            billing_address: '1 Canonical Customer Road',
-            shipping_address: '1 Canonical Customer Road',
-            delivery_type: 'PICKUP',
-        }, customer, `erp-web-invoice:${billed}:${free}`);
-        expect(payload.lines).toEqual([expect.objectContaining({
-            product_id: ids.product,
-            uom_conversion_id: ids.uom,
-            billed_quantity: String(billed),
-            free_quantity: String(free),
-            free_supply_tax_treatment: treatment,
-            fulfillment_source: 'direct_issue',
-            batch_allocations: [{
-                batch_id: ids.batch,
-                billed_quantity: String(billed),
-                free_quantity: String(free),
-            }],
-        })]);
+        expect(() => buildCanonicalInvoicePreparePayload({
+                ...result.current.invoice,
+                billing_address: '1 Canonical Customer Road',
+                shipping_address: '1 Canonical Customer Road',
+                delivery_type: 'PICKUP',
+            }, customer, `erp-web-invoice:${billed}:${free}`),
+        ).toThrow(/must remain an exact decimal string/i);
     });
 
     it('adds the exact billed/free selection when the same batch is selected again', async () => {

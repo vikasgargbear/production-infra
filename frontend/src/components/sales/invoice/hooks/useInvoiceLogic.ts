@@ -28,6 +28,7 @@ import {
 } from '../utils/invoiceItemUtils';
 import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
 import { useInvoiceSave } from './useInvoiceSave';
+import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 
 // ==================== HOOK-SPECIFIC TYPE EXTENSIONS ====================
 // These extend shared types with required fields for the hook's internal state
@@ -40,6 +41,10 @@ export interface InvoiceItem extends SharedInvoiceItem {
     gst_percent: number;
     quantity: number;
     free_quantity: number;
+    base_billed_quantity?: number;
+    base_free_quantity?: number;
+    source_billed_quantity?: number;
+    source_free_quantity?: number;
     discount_percent: number;
     // Calculated fields (use canonical names from enterpriseCalculator)
     subtotal?: number;
@@ -135,6 +140,8 @@ export interface UseInvoiceLogicReturn {
     showSuccessModal: boolean;
     setShowSuccessModal: Dispatch<SetStateAction<boolean>>;
     createdInvoiceData: CreatedInvoiceData | null;
+    preparedPreview: CanonicalCommandPreview | null;
+    reviewOpen: boolean;
 
     // Modal States
     showCustomerModal: boolean;
@@ -175,6 +182,8 @@ export interface UseInvoiceLogicReturn {
     handleApplyBillDiscount: (discountData: DiscountData) => void;
     resetInvoice: () => void;
     handleSaveInvoice: () => Promise<void>;
+    confirmPreparedInvoice: () => Promise<void>;
+    closeInvoiceReview: () => void;
 
 }
 
@@ -266,7 +275,14 @@ export const useInvoiceLogic = (
 
 
     // Save Logic: canonical API confirmation only.
-    const { saving, handleSaveInvoice } = useInvoiceSave({
+    const {
+        saving,
+        preparedPreview,
+        reviewOpen,
+        handleSaveInvoice,
+        confirmPreparedInvoice,
+        closeInvoiceReview,
+    } = useInvoiceSave({
         invoice,
         selectedCustomer,
         companyInfo,
@@ -607,6 +623,8 @@ export const useInvoiceLogic = (
         showSuccessModal,
         setShowSuccessModal,
         createdInvoiceData,
+        preparedPreview,
+        reviewOpen,
 
         // Modal States
         showCustomerModal,
@@ -647,6 +665,8 @@ export const useInvoiceLogic = (
         handleApplyBillDiscount,
         resetInvoice,
         handleSaveInvoice,
+        confirmPreparedInvoice,
+        closeInvoiceReview,
 
     };
 };

@@ -8,6 +8,12 @@
 import { apiHelpers } from '../../apiClient';
 import { createCrudApi } from '../../utils/createCrudApi';
 import { OrderStatus, PriorityLevel } from '../../../../constants';
+import {
+  approveAndExecuteCanonicalAction,
+  canonicalExecutionCompleted,
+  prepareCanonicalAction,
+  type CanonicalCommandPreview,
+} from '../../canonicalOperatorActions';
 
 // Type definitions
 type OrderId = number | string;
@@ -37,6 +43,18 @@ const crud = createCrudApi({ basePath: '/sales-orders/' });
 
 export const ordersApi = {
   ...crud,
+
+  prepareCanonical: (payload: Record<string, unknown>) =>
+    prepareCanonicalAction('sales.order.prepare', payload),
+
+  executePreparedCanonical: async (preview: CanonicalCommandPreview, lifecycleId: string) => {
+    const { executed } = await approveAndExecuteCanonicalAction('sales.order.prepare', preview, lifecycleId);
+    if (!canonicalExecutionCompleted(executed.data) || !executed.data.resource_id) {
+      throw new Error('Canonical sales-order execution did not return a completed resource identity.');
+    }
+    return executed;
+  },
+  getCanonical: (id: string) => apiHelpers.get(`/canonical/sales-orders/${id}/acceptance-readback`),
 
   /** Create multiple orders in bulk */
   createBulk: (ordersData: any[]) => {

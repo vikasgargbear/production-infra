@@ -167,7 +167,11 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     const {
         saving: submissionSaving,
         submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
         handleSaveChallan,
+        confirmPreparedChallan,
+        closeChallanReview,
     } = useChallanSave({
         challan,
         selectedCustomer: selectedCustomer as CustomerDetails,
@@ -264,6 +268,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
 
             setChallan(prev => ({
                 ...prev,
+                source_order_id: importData.source_order_id,
                 items: formattedItems,
                 notes: importData.notes || prev.notes,
                 total_quantity: formattedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -391,6 +396,8 @@ Expected Delivery: ${challan.expected_delivery_date}
         setCurrentStep,
         saving: submissionSaving || saving,
         submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
         showCreateCustomer,
         setShowCreateCustomer,
         showCreateProduct,
@@ -421,6 +428,8 @@ Expected Delivery: ${challan.expected_delivery_date}
         updateItem,
         removeItem,
         saveChallan,
+        confirmPreparedChallan,
+        closeChallanReview,
         shareOnWhatsApp,
         printChallan,
         thermalPrintChallan,

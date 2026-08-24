@@ -17,6 +17,9 @@ export interface OrderItem {
     batch_id?: number | string | null;
     batch_number?: string;
     expiry_date?: string | null;
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
 
     // Quantities
     quantity: number;

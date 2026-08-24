@@ -433,6 +433,7 @@ export function projectCanonicalImportLines(
 
         projected.push({
             product_id: productId as string | number,
+            source_line_id: (item.source_line_id ?? item.id) as string | number | undefined,
             source_document_kind: item.source_document_kind as (
                 CanonicalSourceDocumentKind | undefined
             ),

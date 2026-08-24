@@ -147,9 +147,11 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
             const challanItems: ChallanItem[] = importableItems.map((item, index) => ({
                 ...item,
                 id: `imported-${Date.now()}-${index}`,
+                source_order_line_id: searchType === 'order' ? String(item.source_line_id ?? '') : undefined,
             }));
 
             const importData: ImportData = {
+                source_order_id: searchType === 'order' ? sourceDoc.order_id : undefined,
                 customer_id: sourceDoc.customer_id,
                 customer_name: sourceDoc.customer_name,
                 customer_details: sourceDoc.customer_details || {

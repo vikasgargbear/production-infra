@@ -11,6 +11,7 @@ import ChallanDetailsStep from './steps/ChallanDetailsStep';
 import ChallanPreviewStep from './steps/ChallanPreviewStep';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 
 interface ChallanFlowProps {
     open?: boolean;
@@ -161,6 +162,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
 
     // Step 2: Preview & Save
     return (
+        <>
         <ChallanPreviewStep
             // State
             challan={logic.challan}
@@ -184,6 +186,15 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
             onClose={onClose}
             onBack={() => logic.setCurrentStep(1)}
         />
+        <CanonicalSalesCommandReview
+            title="Review exact delivery dispatch"
+            preview={logic.preparedPreview}
+            open={logic.reviewOpen}
+            posting={logic.saving}
+            onBack={logic.closeChallanReview}
+            onPost={logic.confirmPreparedChallan}
+        />
+        </>
     );
 };
 

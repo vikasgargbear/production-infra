@@ -19,6 +19,7 @@ import { salesOrderImportDocumentTypes } from './salesOrderImportTypes';
 import OrderItemsStep from './steps/OrderItemsStep';
 import OrderReviewStep from './steps/OrderReviewStep';
 import type { Customer } from '../../../types/models';
+import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -45,6 +46,8 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         setSameAsBilling,
         saving,
         submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
         message,
         messageType,
         selectedBankAccount,
@@ -66,6 +69,8 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         updateItem,
         removeItem,
         saveOrder,
+        confirmPreparedOrder,
+        closeOrderReview,
         printOrder,
         shareOnWhatsApp,
         resetOrder,
@@ -263,10 +268,10 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             />
                         </div>
 
-                        <div id="sales-order-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                        {submissionUnavailableReason && <div id="sales-order-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
                             {submissionUnavailableReason}
-                        </div>
-                        <fieldset disabled aria-describedby="sales-order-submission-status">
+                        </div>}
+                        <fieldset disabled={Boolean(submissionUnavailableReason)} aria-describedby={submissionUnavailableReason ? "sales-order-submission-status" : undefined}>
                             <DocumentFooter
                                 totalItems={order.total_quantity}
                                 totalAmount={order.total_amount}
@@ -336,6 +341,14 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                     companyInfo={companyInfo as any}
                 />
             )}
+            <CanonicalSalesCommandReview
+                title="Review exact sales order"
+                preview={preparedPreview}
+                open={reviewOpen}
+                posting={saving}
+                onBack={closeOrderReview}
+                onPost={confirmPreparedOrder}
+            />
 
             {/* Cancel confirmation modal */}
             {showCancelConfirm && (

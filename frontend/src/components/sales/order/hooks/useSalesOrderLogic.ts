@@ -13,6 +13,7 @@ import { useCompany } from '../../../../contexts/CompanyContext';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 import type { ImportData } from '../../../global/modals/DocumentImportModal';
+import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -43,6 +44,9 @@ interface CompanyInfo {
 
 // Using canonical Product type from /types/models - extended with UI fields
 type ProductInput = Product & {
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
     batch_id?: number | string;
     batch_number?: string;
     quantity?: number;
@@ -65,6 +69,8 @@ export interface UseSalesOrderLogicReturn {
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
     saving: boolean;
     submissionUnavailableReason: string;
+    preparedPreview: CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     message: string;
     messageType: string;
     selectedBankAccount: BankAccount | null;
@@ -91,6 +97,8 @@ export interface UseSalesOrderLogicReturn {
     removeItem: (index: number) => void;
     updateItemQuantity: (itemId: number | string, newQuantity: number) => void;
     saveOrder: () => Promise<void>;
+    confirmPreparedOrder: () => Promise<void>;
+    closeOrderReview: () => void;
     printOrder: () => void;
     shareOnWhatsApp: () => void;
     resetOrder: () => void;
@@ -157,7 +165,11 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const {
         saving: submissionSaving,
         submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
         handleSaveOrder,
+        confirmPreparedOrder,
+        closeOrderReview,
     } = useSalesOrderSave({
         order,
         selectedCustomer,
@@ -371,6 +383,9 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 hsn_code: product.hsn_code,
                 batch_id: product.batch_id,
                 batch_number: product.batch_number || product.batch_number,
+                branch_id: product.branch_id,
+                location_id: product.location_id,
+                uom_conversion_id: product.uom_conversion_id,
                 quantity,
                 unit: product.unit || product.uom || 'NOS',
                 pack_size: product.pack_size || product.pack_type,
@@ -547,6 +562,8 @@ Expected Delivery: ${order.expected_delivery_date}
         setSameAsBilling,
         saving: submissionSaving,
         submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
         message,
         messageType,
         selectedBankAccount,
@@ -569,6 +586,8 @@ Expected Delivery: ${order.expected_delivery_date}
         removeItem,
         updateItemQuantity,
         saveOrder,
+        confirmPreparedOrder,
+        closeOrderReview,
         printOrder,
         shareOnWhatsApp,
         resetOrder,

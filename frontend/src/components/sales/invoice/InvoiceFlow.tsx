@@ -20,6 +20,7 @@ import {
     invoiceBatchAllocationValidationError,
     invoicePreviewValidationError,
 } from './utils/canonicalInvoiceCommand';
+import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -69,6 +70,8 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         showSuccessModal,
         setShowSuccessModal,
         createdInvoiceData,
+        preparedPreview,
+        reviewOpen,
 
         // Modal States
         showCustomerModal,
@@ -108,6 +111,8 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         handleApplyBillDiscount,
         resetInvoice,
         handleSaveInvoice,
+        confirmPreparedInvoice,
+        closeInvoiceReview,
 
     } = useInvoiceLogic(onClose, prefilledData);
 
@@ -121,7 +126,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     // ESC key handling for modal hierarchy
     const anyModalOpen = showGSTCalculator || showCustomerModal || showProductModal || showImportModal ||
         showBillDiscountModal || showTaxDetailModal || showCashCalculatorModal ||
-        showLastDealModal || showItemProfitModal;
+        showLastDealModal || showItemProfitModal || reviewOpen;
 
     useEscapeKey(
         useCallback(() => {
@@ -380,6 +385,15 @@ ${companyInfo?.name || 'Your Company'}`;
                     saving={saving}
                 />
             )}
+
+            <CanonicalSalesCommandReview
+                title="Review exact sales invoice"
+                preview={preparedPreview}
+                open={reviewOpen}
+                posting={saving}
+                onBack={closeInvoiceReview}
+                onPost={confirmPreparedInvoice}
+            />
 
             {/* Success Modal - Stays open for print/whatsapp actions */}
             {showSuccessModal && createdInvoiceData && (

@@ -39,9 +39,9 @@ const invoice = {
     invoice_date: '2026-08-24',
     delivery_type: 'PICKUP',
     discount_type: 'percentage',
-    discount_percent: 5,
+    discount_percent: '5',
     discount_amount: 0,
-    freight_charges: 12.5,
+    freight_charges: '12.5',
     billing_address: '1 Canonical Customer Road',
     shipping_address: '1 Canonical Customer Road',
     items: [{
@@ -50,14 +50,14 @@ const invoice = {
         uom_conversion_id: ids.uom,
         branch_id: ids.branch,
         location_id: ids.location,
-        quantity: 2,
-        free_quantity: 1,
-        available_quantity: 10,
-        unit_price: 100,
-        discount_percent: 10,
+        quantity: '2',
+        free_quantity: '1',
+        available_quantity: '10',
+        unit_price: '100',
+        discount_percent: '10',
         hsn_code: '481910',
         product_type: 'consumable',
-    }],
+    } as any],
 } as Invoice;
 
 const company = {
@@ -84,11 +84,11 @@ describe('canonical invoice command', () => {
             document_discount: {
                 document_discount_kind: 'percent',
                 document_discount_basis: 'price_value',
-                document_discount_value: '5',
+                document_discount_value: '5.000000',
             },
             charge_lines: [{
                 charge_code: 'freight',
-                quoted_amount: '12.5',
+                quoted_amount: '12.5000',
                 price_basis: 'tax_exclusive',
                 document_discount_eligible: false,
             }],
@@ -97,13 +97,13 @@ describe('canonical invoice command', () => {
             product_id: ids.product,
             uom_conversion_id: ids.uom,
             fulfillment_source: 'direct_issue',
-            billed_quantity: '2',
-            free_quantity: '1',
-            quoted_unit_rate: '100',
+            billed_quantity: '2.000000',
+            free_quantity: '1.000000',
+            quoted_unit_rate: '100.0000',
             batch_allocations: [{
                 batch_id: ids.batch,
-                billed_quantity: '2',
-                free_quantity: '1',
+                billed_quantity: '2.000000',
+                free_quantity: '1.000000',
             }],
         }));
     });
@@ -125,11 +125,11 @@ describe('canonical invoice command', () => {
                 batch_id: ids.batch,
                 batch_number: 'BATCH-IMPORT',
                 expiry_date: null,
-                base_quantity: 1.5,
-                base_billed_quantity: 1.25,
-                base_free_quantity: 0.25,
-                billed_quantity: 1.25,
-                free_quantity: 0.25,
+                base_quantity: 3,
+                base_billed_quantity: 2,
+                base_free_quantity: 1,
+                billed_quantity: 2,
+                free_quantity: 1,
             },
             expectedSource: 'direct_issue',
         },
@@ -149,11 +149,11 @@ describe('canonical invoice command', () => {
                 batch_id: ids.batch,
                 batch_number: 'BATCH-IMPORT',
                 expiry_date: null,
-                base_quantity: 15,
-                base_billed_quantity: 12.5,
-                base_free_quantity: 2.5,
-                billed_quantity: 1.25,
-                free_quantity: 0.25,
+                base_quantity: 30,
+                base_billed_quantity: 20,
+                base_free_quantity: 10,
+                billed_quantity: 2,
+                free_quantity: 1,
             },
             expectedSource: 'dispatch_allocated',
         },
@@ -169,12 +169,12 @@ describe('canonical invoice command', () => {
                 hsn_code: '481910',
                 branch_id: ids.branch,
                 uom_conversion_id: ids.uom,
-                quantity: 1.25,
-                free_quantity: 0.25,
+                quantity: 2,
+                free_quantity: 1,
                 unit_price: 100,
                 discount_percent: 0,
                 free_supply_tax_treatment: 'included_at_unit_rate',
-                available_quantity: 2.75,
+                available_quantity: 3,
                 batch_allocations: [allocation],
             }]),
         );
@@ -208,13 +208,13 @@ describe('canonical invoice command', () => {
         });
         expect(line.batch_allocations).toEqual(isDispatch ? undefined : [{
             batch_id: ids.batch,
-            billed_quantity: '1.25',
-            free_quantity: '0.25',
+            billed_quantity: '2.000000',
+            free_quantity: '1.000000',
         }]);
         expect(line.dispatch_allocations).toEqual(isDispatch ? [{
                 dispatch_line_id: ids.dispatchLine,
-                allocated_base_billed_quantity: '12.5',
-                allocated_base_free_quantity: '2.5',
+                allocated_base_billed_quantity: '20.000000',
+                allocated_base_free_quantity: '10.000000',
             }] : undefined);
 
         let editedError: Error | undefined;
@@ -273,7 +273,7 @@ describe('canonical invoice command', () => {
         } as Invoice;
 
         expect(canonicalInvoiceValidationError(insufficient, customer)).toMatch(
-            /needs 11 units but the selected batch has 10.*multi-batch allocation is not available/i,
+            /needs 11\.000000 units but the selected batch has 10\.000000.*multi-batch allocation is not available/i,
         );
         expect(() => buildCanonicalInvoicePreparePayload(
             insufficient,
@@ -285,26 +285,26 @@ describe('canonical invoice command', () => {
     it.each([
         {
             label: 'free-only supply included at the quoted unit rate',
-            billed: 0,
-            free: 2,
+            billed: '0',
+            free: '2',
             treatment: 'included_at_unit_rate' as const,
         },
         {
             label: 'free-only supply excluded from taxable value',
-            billed: 0,
-            free: 3,
+            billed: '0',
+            free: '3',
             treatment: 'excluded_from_taxable_value' as const,
         },
         {
             label: 'mixed billed and free supply',
-            billed: 4,
-            free: 1,
+            billed: '4',
+            free: '1',
             treatment: 'included_at_unit_rate' as const,
         },
         {
             label: 'fractional billed and free supply',
-            billed: 1.25,
-            free: 0.375,
+            billed: '1.25',
+            free: '0.375',
             treatment: 'excluded_from_taxable_value' as const,
         },
     ])('builds the exact canonical prepare payload for $label', ({
@@ -324,6 +324,10 @@ describe('canonical invoice command', () => {
             }],
         } as Invoice;
         const idempotencyKey = `erp-web-invoice:${treatment}:${billed}:${free}`;
+        const fixed6 = (value: string) => {
+            const [whole, fraction = ''] = value.split('.');
+            return `${whole}.${fraction.padEnd(6, '0')}`;
+        };
 
         expect(canonicalInvoiceValidationError(testInvoice, customer)).toBeNull();
         expect(buildCanonicalInvoicePreparePayload(
@@ -352,22 +356,22 @@ describe('canonical invoice command', () => {
             lines: [{
                 product_id: ids.product,
                 uom_conversion_id: ids.uom,
-                billed_quantity: String(billed),
-                free_quantity: String(free),
+                billed_quantity: fixed6(billed),
+                free_quantity: fixed6(free),
                 free_supply_tax_treatment: treatment,
-                quoted_unit_rate: '100',
+                quoted_unit_rate: '100.0000',
                 price_basis: 'tax_exclusive',
                 line_discount: {
                     line_discount_kind: 'percent',
                     line_discount_basis: 'price_value',
-                    line_discount_value: '10',
+                    line_discount_value: '10.000000',
                 },
                 document_discount_eligible: true,
                 fulfillment_source: 'direct_issue',
                 batch_allocations: [{
                     batch_id: ids.batch,
-                    billed_quantity: String(billed),
-                    free_quantity: String(free),
+                    billed_quantity: fixed6(billed),
+                    free_quantity: fixed6(free),
                 }],
             }],
         });

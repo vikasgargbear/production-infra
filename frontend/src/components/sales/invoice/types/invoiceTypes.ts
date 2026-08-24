@@ -214,8 +214,8 @@ export interface InvoiceItem {
     manufacturing_date?: string;
 
     // Quantities
-    quantity?: number;
-    free_quantity?: number;
+    quantity?: number | string;
+    free_quantity?: number | string;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     source_line_id?: string | number;
     source_document_kind?: CanonicalSourceDocumentKind;
@@ -227,19 +227,19 @@ export interface InvoiceItem {
     invoice_dispatch_allocation_id?: string | null;
     dispatch_id?: string | null;
     dispatch_line_id?: string | null;
-    base_billed_quantity?: number;
-    base_free_quantity?: number;
-    source_billed_quantity?: number;
-    source_free_quantity?: number;
-    ordered_quantity?: number;
-    dispatched_quantity?: number;
+    base_billed_quantity?: number | string;
+    base_free_quantity?: number | string;
+    source_billed_quantity?: number | string;
+    source_free_quantity?: number | string;
+    ordered_quantity?: number | string;
+    dispatched_quantity?: number | string;
 
     // Pricing - CANONICAL ONLY
-    unit_price?: number;  // CANONICAL: selling price per unit
+    unit_price?: number | string;  // Exact string is preserved through the canonical posting boundary
     cost_per_unit?: number;
 
     // Discounts - CANONICAL ONLY
-    discount_percent?: number;  // CANONICAL: % discount on item
+    discount_percent?: number | string;  // Exact string is preserved through the canonical posting boundary
     discount_amount?: number;   // CANONICAL: calculated discount amount
 
     // Taxes

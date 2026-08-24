@@ -6,7 +6,7 @@
  * to IndexedDB and failed requests are never converted into local documents.
  */
 
-import { Dispatch, SetStateAction, useCallback, useState } from 'react';
+import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { invoicesApi } from '../../../../services/api';
 import { Customer } from '../../../../types/models/customer';
@@ -16,6 +16,7 @@ import { clientUuid } from '../../../../utils/clientUuid';
 import type { Invoice } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import {
     buildCanonicalInvoicePreparePayload,
     invoicePreviewValidationError,
@@ -34,7 +35,11 @@ export interface UseInvoiceSaveProps {
 
 export interface UseInvoiceSaveReturn {
     saving: boolean;
+    preparedPreview: CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     handleSaveInvoice: () => Promise<void>;
+    confirmPreparedInvoice: () => Promise<void>;
+    closeInvoiceReview: () => void;
 }
 
 export const formatInvoiceSubmissionError = (error: unknown): string => {
@@ -56,68 +61,6 @@ export const formatInvoiceSubmissionError = (error: unknown): string => {
     return apiError.message || 'Invoice submission failed. No invoice was created.';
 };
 
-const firstImpact = (value: unknown): Record<string, unknown> =>
-    Array.isArray(value) && value[0] && typeof value[0] === 'object'
-        ? value[0] as Record<string, unknown>
-        : {};
-
-const numericMoney = (value: unknown): number | null => {
-    if (value === null || value === undefined || value === '') return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-};
-
-const formatTaxImpact = (value: unknown): string => {
-    const impacts = Array.isArray(value)
-        ? value.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
-        : [];
-    if (impacts.length === 0) return 'server calculated';
-
-    const explicitTotals = impacts.map(impact =>
-        numericMoney(impact.total_tax ?? impact.amount),
-    );
-    if (explicitTotals.every(total => total !== null)) {
-        const total = explicitTotals.reduce<number>((sum, amount) => sum + Number(amount), 0);
-        return total.toFixed(2);
-    }
-
-    const components = ['cgst_total', 'sgst_total', 'igst_total', 'cess_total'] as const;
-    const amounts = impacts.flatMap(impact => components.map(component => numericMoney(impact[component])));
-    if (!amounts.some(amount => amount !== null)) return 'server calculated';
-    return amounts.reduce<number>((sum, amount) => sum + Number(amount || 0), 0).toFixed(2);
-};
-
-const formatPolicyWarning = (warning: unknown): string => {
-    if (typeof warning === 'string') return warning;
-    if (!warning || typeof warning !== 'object') return String(warning ?? 'Unspecified policy warning');
-    const structured = warning as Record<string, unknown>;
-    const code = String(structured.code || structured.type || '').trim();
-    const message = String(structured.message || structured.detail || structured.warning || '').trim();
-    if (code && message) return `${code}: ${message}`;
-    return message || code || 'Unspecified policy warning';
-};
-
-export const formatCanonicalInvoiceConfirmation = (preview: CanonicalCommandPreview): string => {
-    const finance = firstImpact(preview.financial_impact);
-    const inventory = Array.isArray(preview.inventory_impact) ? preview.inventory_impact : [];
-    const total = finance.receivable || finance.grand_total || finance.amount || 'server calculated';
-    const taxTotal = formatTaxImpact(preview.tax_impact);
-    const warnings = Array.isArray(preview.policy_warnings) && preview.policy_warnings.length > 0
-        ? `Warnings:\n${preview.policy_warnings.map(warning => `- ${formatPolicyWarning(warning)}`).join('\n')}`
-        : '';
-
-    return [
-        'Authoritative backend preview',
-        `Customer receivable: ₹${total}`,
-        `GST impact: ₹${taxTotal}`,
-        `Inventory movements: ${inventory.length}`,
-        warnings,
-        '',
-        'Post this invoice now?',
-        'Choose Cancel to leave without creating or queuing anything.',
-    ].filter(line => line !== '').join('\n');
-};
-
 export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn {
     const {
         invoice,
@@ -130,6 +73,12 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         setError,
     } = props;
     const [saving, setSaving] = useState(false);
+    const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const executedResourceId = useRef<string | null>(null);
+    const idempotencyKey = useRef(`erp-web-invoice:${clientUuid()}`);
+    const lifecycleId = useRef(clientUuid());
+    const preparedFingerprint = useRef<string | null>(null);
 
     const handleSaveInvoice = useCallback(async () => {
         setError(null);
@@ -147,51 +96,29 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             return;
         }
 
+        if (saving) return;
         setSaving(true);
         try {
-            const payload = buildCanonicalInvoicePreparePayload(
+            let payload = buildCanonicalInvoicePreparePayload(
                 invoice,
                 selectedCustomer!,
-                `erp-web-invoice:${clientUuid()}`,
+                idempotencyKey.current,
             );
-            const prepared = await invoicesApi.prepareCanonical(payload);
-            const confirmed = window.confirm(formatCanonicalInvoiceConfirmation(prepared.data));
-            if (!confirmed) {
-                setError('Invoice posting was cancelled. No invoice was created or queued.');
-                return;
+            let fingerprint = JSON.stringify(payload);
+            if (preparedFingerprint.current && preparedFingerprint.current !== fingerprint) {
+                idempotencyKey.current = `erp-web-invoice:${clientUuid()}`;
+                lifecycleId.current = clientUuid();
+                executedResourceId.current = null;
+                setPreparedPreview(null);
+                payload = buildCanonicalInvoicePreparePayload(invoice, selectedCustomer!, idempotencyKey.current);
+                fingerprint = JSON.stringify(payload);
             }
-            const response = await invoicesApi.executePreparedCanonical(prepared.data);
-            const result = response?.data;
-            const invoiceId = result?.invoice_id;
-            const invoiceNumber = result?.invoice_number;
-            if (!result?.success || !invoiceId || !invoiceNumber) {
-                throw new Error('The API did not confirm the invoice. No invoice was created.');
+            if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
+                const prepared = await invoicesApi.prepareCanonical(payload);
+                preparedFingerprint.current = fingerprint;
+                setPreparedPreview(prepared.data);
             }
-
-            setInvoice(previous => ({ ...previous, invoice_number: invoiceNumber }));
-            setCreatedInvoiceData({
-                invoiceId: String(invoiceId),
-                invoiceNumber,
-                customerName: selectedCustomer!.customer_name,
-                customerPhone: selectedCustomer!.primary_phone || '',
-                customerEmail: selectedCustomer!.primary_email || '',
-                totalAmount: Number(result.total_amount ?? invoice.final_amount ?? 0),
-                items: invoice.items,
-                isOffline: false,
-            });
-            setShowSuccessModal(true);
-            showFinancialEntryNotification({
-                title: 'Sales Invoice Posted',
-                reference: invoiceNumber,
-                amount: Number(result.total_amount ?? invoice.final_amount ?? 0),
-                status: 'confirmed',
-                impacts: [
-                    'The invoice is committed to the backend sales ledger.',
-                    'Inventory is reduced against the selected batches.',
-                    'Customer receivable and outstanding balances are refreshed.',
-                    'Output GST values are recorded for compliance reporting.',
-                ],
-            });
+            setReviewOpen(true);
         } catch (error) {
             const message = formatInvoiceSubmissionError(error);
             setError(message);
@@ -203,6 +130,91 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         companyInfo,
         invoice,
         isOnline,
+        preparedPreview,
+        saving,
+        selectedCustomer,
+        setError,
+    ]);
+
+    const confirmPreparedInvoice = useCallback(async () => {
+        if (!preparedPreview || saving) return;
+        if (!selectedCustomer) {
+            const message = 'The selected customer changed after review. Return and prepare the invoice again.';
+            setError(message);
+            toast.error(message);
+            return;
+        }
+
+        setSaving(true);
+        try {
+            if (!executedResourceId.current) {
+                const executed = await invoicesApi.executePreparedCanonical(preparedPreview, lifecycleId.current);
+                const invoiceId = executed?.data?.invoice_id;
+                if (!executed?.data?.success || !invoiceId) {
+                    throw new Error('The API did not confirm the invoice. No invoice was created.');
+                }
+                executedResourceId.current = String(invoiceId);
+            }
+
+            const invoiceId = executedResourceId.current;
+            const readback = (await invoicesApi.getCanonicalPostingReadback(invoiceId)).data;
+            if (!readback || String(readback.sales_invoice_id) !== invoiceId) {
+                throw new Error('Invoice posted, but authoritative readback could not be verified. Retry to perform GET-only reconciliation.');
+            }
+            const invoiceNumber = String(readback.invoice_number || '');
+            if (!invoiceNumber) {
+                throw new Error('Invoice posted, but authoritative readback omitted its invoice number.');
+            }
+
+            const authoritativeTotal = normalizeExactDecimal(
+                readback.invoice_total,
+                'Posted invoice total',
+                { scale: 2 },
+            );
+            // GenericSuccessModal and the transient toast are presentation-only
+            // consumers; the canonical readback remains the exact string above.
+            const presentationTotal = Number(authoritativeTotal);
+            setInvoice(previous => ({ ...previous, invoice_number: invoiceNumber }));
+            setCreatedInvoiceData({
+                invoiceId: String(invoiceId),
+                invoiceNumber,
+                customerName: selectedCustomer!.customer_name,
+                customerPhone: selectedCustomer!.primary_phone || '',
+                customerEmail: selectedCustomer!.primary_email || '',
+                totalAmount: presentationTotal,
+                items: invoice.items,
+                isOffline: false,
+            });
+            setShowSuccessModal(true);
+            showFinancialEntryNotification({
+                title: 'Sales Invoice Posted',
+                reference: invoiceNumber,
+                amount: presentationTotal,
+                status: 'confirmed',
+                impacts: [
+                    'The invoice is committed to the backend sales ledger.',
+                    'Inventory is reduced against the selected batches.',
+                    'Customer receivable and outstanding balances are refreshed.',
+                    'Output GST values are recorded for compliance reporting.',
+                ],
+            });
+            executedResourceId.current = null;
+            preparedFingerprint.current = null;
+            idempotencyKey.current = `erp-web-invoice:${clientUuid()}`;
+            lifecycleId.current = clientUuid();
+            setPreparedPreview(null);
+            setReviewOpen(false);
+        } catch (error) {
+            const message = formatInvoiceSubmissionError(error);
+            setError(message);
+            toast.error(message);
+        } finally {
+            setSaving(false);
+        }
+    }, [
+        invoice,
+        preparedPreview,
+        saving,
         selectedCustomer,
         setCreatedInvoiceData,
         setError,
@@ -210,7 +222,14 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         setShowSuccessModal,
     ]);
 
-    return { saving, handleSaveInvoice };
+    return {
+        saving,
+        preparedPreview,
+        reviewOpen,
+        handleSaveInvoice,
+        confirmPreparedInvoice,
+        closeInvoiceReview: () => setReviewOpen(false),
+    };
 }
 
 export default useInvoiceSave;

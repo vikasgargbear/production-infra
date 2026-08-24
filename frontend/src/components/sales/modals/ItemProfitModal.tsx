@@ -226,7 +226,7 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
                                                 </td>
                                                 <td className="px-3 py-2 text-center">{item.quantity}</td>
                                                 <td className="px-3 py-2 text-right">₹{item.costRate.toFixed(2)}</td>
-                                                <td className="px-3 py-2 text-right">₹{(item.unit_price || 0).toFixed(2)}</td>
+                                                <td className="px-3 py-2 text-right">₹{Number(item.unit_price || 0).toFixed(2)}</td>
                                                 <td className="px-3 py-2 text-right">₹{item.totalCost.toFixed(2)}</td>
                                                 <td className="px-3 py-2 text-right">₹{item.totalSelling.toFixed(2)}</td>
                                                 <td className={`px-3 py-2 text-right font-semibold ${item.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
