@@ -44,6 +44,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     errors,
     purchaseOrderValidationError,
     canonicalReview,
+    executedResourceId,
 
     // Modal states
     showSupplierModal,
@@ -326,6 +327,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
         }}
         onProceedToReview={prepareForReview}
         onSave={handleSavePurchaseOrder}
+        saveLabel={executedResourceId ? 'Reconcile Purchase Order' : 'Approve & Create PO'}
         isSaving={saving}
 
         // Footer totals

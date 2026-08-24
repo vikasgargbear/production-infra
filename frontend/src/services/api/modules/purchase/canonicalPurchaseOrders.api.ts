@@ -76,7 +76,6 @@ export interface CanonicalPurchaseOrderReadback {
 
 export interface CanonicalPurchaseOrderExecutionResult {
     execution: CanonicalCommandExecution;
-    readback: CanonicalPurchaseOrderReadback;
 }
 
 const quantityPattern = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
@@ -206,23 +205,27 @@ export const canonicalPurchaseOrdersApi = {
 
     executePrepared: async (
         preview: CanonicalCommandPreview,
+        lifecycleId: string,
     ): Promise<CanonicalPurchaseOrderExecutionResult> => {
         const { executed } = await approveAndExecuteCanonicalAction(
             'procurement.purchase_order.prepare',
             preview,
+            lifecycleId,
         );
-        if (!canonicalExecutionCompleted(executed.data) || !executed.data.resource_id) {
+        if (!canonicalExecutionCompleted(executed.data)
+            || !isCanonicalUuid(executed.data.resource_id)) {
             throw new Error('Canonical purchase-order execution did not confirm a resource.');
         }
+        return { execution: executed.data };
+    },
+
+    readback: async (purchaseOrderId: string): Promise<CanonicalPurchaseOrderReadback> => {
+        if (!isCanonicalUuid(purchaseOrderId)) {
+            throw new Error('Canonical purchase-order readback requires a valid document identity.');
+        }
         const readback = await apiHelpers.get<CanonicalPurchaseOrderReadback>(
-            `/canonical/purchase-orders/${executed.data.resource_id}`,
+            `/canonical/purchase-orders/${purchaseOrderId}`,
         );
-        return {
-            execution: executed.data,
-            readback: requireCanonicalPurchaseOrderReadback(
-                readback.data,
-                executed.data.resource_id,
-            ),
-        };
+        return requireCanonicalPurchaseOrderReadback(readback.data, purchaseOrderId);
     },
 };

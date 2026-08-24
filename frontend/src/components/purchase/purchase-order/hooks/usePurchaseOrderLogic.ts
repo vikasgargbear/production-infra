@@ -92,6 +92,7 @@ export interface UsePurchaseOrderLogicReturn {
     errors: Record<string, string>;
     purchaseOrderValidationError: string | null;
     canonicalReview: CanonicalPurchaseOrderReview | null;
+    executedResourceId: string | null;
 
     // Modal states
     showSupplierModal: boolean;
@@ -239,6 +240,7 @@ export function usePurchaseOrderLogic({
         saving,
         preparingReview,
         canonicalReview,
+        executedResourceId,
         prepareForReview,
         handleSavePurchaseOrder,
     } = usePurchaseOrderSave({
@@ -277,6 +279,7 @@ export function usePurchaseOrderLogic({
         errors,
         purchaseOrderValidationError,
         canonicalReview,
+        executedResourceId,
         showSupplierModal,
         setShowSupplierModal,
         showProductModal,

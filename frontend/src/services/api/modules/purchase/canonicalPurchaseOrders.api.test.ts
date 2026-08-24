@@ -167,15 +167,18 @@ describe('canonical purchase-order readback', () => {
         (apiHelpers.get as jest.Mock).mockResolvedValue({ data: readback() });
 
         await canonicalPurchaseOrdersApi.prepare({ branch_id: UUID });
-        const result = await canonicalPurchaseOrdersApi.executePrepared(preview);
+        const lifecycleId = 'd3000000-0000-7000-8000-000000000009';
+        const result = await canonicalPurchaseOrdersApi.executePrepared(preview, lifecycleId);
+        const detail = await canonicalPurchaseOrdersApi.readback(UUID);
 
         expect(prepareCanonicalAction).toHaveBeenCalledWith(
             'procurement.purchase_order.prepare', { branch_id: UUID },
         );
         expect(approveAndExecuteCanonicalAction).toHaveBeenCalledWith(
-            'procurement.purchase_order.prepare', preview,
+            'procurement.purchase_order.prepare', preview, lifecycleId,
         );
         expect(apiHelpers.get).toHaveBeenCalledWith(`/canonical/purchase-orders/${UUID}`);
-        expect(result.readback.purchase_order_number).toBe('PO-1');
+        expect(result.execution.resource_id).toBe(UUID);
+        expect(detail.purchase_order_number).toBe('PO-1');
     });
 });

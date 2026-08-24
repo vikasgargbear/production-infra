@@ -42,6 +42,7 @@ export interface UsePurchaseOrderSaveReturn {
     saving: boolean;
     preparingReview: boolean;
     canonicalReview: CanonicalPurchaseOrderReview | null;
+    executedResourceId: string | null;
     prepareForReview: () => Promise<boolean>;
     handleSavePurchaseOrder: () => Promise<void>;
 }
@@ -100,7 +101,13 @@ export function usePurchaseOrderSave(
     const [preparingReview, setPreparingReview] = useState(false);
     const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
     const [canonicalReview, setCanonicalReview] = useState<CanonicalPurchaseOrderReview | null>(null);
-    const prepareIdentityRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
+    const [executedResourceId, setExecutedResourceId] = useState<string | null>(null);
+    const prepareIdentityRef = useRef<{
+        fingerprint: string;
+        idempotencyKey: string;
+        lifecycleId: string;
+        executedResourceId?: string;
+    } | null>(null);
 
     const currentFingerprint = useCallback(() => JSON.stringify({
         branchId,
@@ -146,7 +153,9 @@ export function usePurchaseOrderSave(
                 prepareIdentityRef.current = {
                     fingerprint,
                     idempotencyKey: `erp-web-purchase-order:${clientUuid()}`,
+                    lifecycleId: clientUuid(),
                 };
+                setExecutedResourceId(null);
             }
             const payload = buildCanonicalPurchaseOrderPreparePayload(
                 purchaseOrder,
@@ -196,12 +205,27 @@ export function usePurchaseOrderSave(
             toast.error(message);
             return;
         }
-        if (!window.confirm(formatCanonicalPurchaseOrderConfirmation(canonicalReview))) return;
-
         setSaving(true);
         setErrors({});
         try {
-            const { readback } = await canonicalPurchaseOrdersApi.executePrepared(preparedPreview);
+            const attempt = prepareIdentityRef.current;
+            if (!attempt) {
+                throw new Error('Purchase-order submission identity was lost. Prepare the review again.');
+            }
+            let purchaseOrderId = attempt.executedResourceId;
+            if (!purchaseOrderId) {
+                if (!window.confirm(formatCanonicalPurchaseOrderConfirmation(canonicalReview))) return;
+                const { execution } = await canonicalPurchaseOrdersApi.executePrepared(
+                    preparedPreview,
+                    attempt.lifecycleId,
+                );
+                purchaseOrderId = execution.resource_id!;
+                // Persist the terminal server identity before detail readback so
+                // a transient GET failure can never trigger a second approval.
+                attempt.executedResourceId = purchaseOrderId;
+                setExecutedResourceId(purchaseOrderId);
+            }
+            const readback = await canonicalPurchaseOrdersApi.readback(purchaseOrderId);
             const readbackTaxCents = [
                 readback.cgst_amount, readback.sgst_amount,
                 readback.igst_amount, readback.cess_amount,
@@ -253,6 +277,7 @@ export function usePurchaseOrderSave(
         saving,
         preparingReview,
         canonicalReview,
+        executedResourceId,
         prepareForReview,
         handleSavePurchaseOrder,
     };
