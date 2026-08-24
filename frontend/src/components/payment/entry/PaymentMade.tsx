@@ -8,7 +8,7 @@ import {
   reconcileSupplierPayment, type PostedSupplierPayment,
 } from '../../../services/api/modules/finance/canonicalSupplierPayments.api';
 import {
-  allocateSupplierFifo, buildSupplierPaymentPreparePayload, localBusinessDate,
+  allocateSupplierFifo, buildSupplierPaymentPreparePayload,
   supplierMoneyToMinor, supplierMinorToMoney, type SupplierPaymentContext,
   type SupplierPaymentPreparePayload,
 } from './supplierPaymentCommand';
@@ -28,7 +28,8 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
   const [supplierId, setSupplierId] = useState('');
   const [branchId, setBranchId] = useState('');
   const [bankId, setBankId] = useState('');
-  const [paymentDate, setPaymentDate] = useState(localBusinessDate());
+  const [paymentDate, setPaymentDate] = useState('');
+  const [maximumPaymentDate, setMaximumPaymentDate] = useState('');
   const [method, setMethod] = useState<'upi' | 'bank_transfer'>('upi');
   const [reference, setReference] = useState('');
   const [amount, setAmount] = useState('');
@@ -42,18 +43,28 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
   const [error, setError] = useState('');
   const prepareAttempt = useRef(`erp-web-supplier-payment-prepare:${clientUuid()}`);
   const lifecycle = useRef(clientUuid());
+  const contextRequestSequence = useRef(0);
 
-  const load = useCallback(async (dateValue: string) => {
+  const load = useCallback(async (dateValue?: string) => {
+    const requestSequence = ++contextRequestSequence.current;
     setBusy(true); setError('');
     try {
       const next = (await canonicalSupplierPaymentsApi.getContext(dateValue)).data;
+      if (requestSequence !== contextRequestSequence.current) return;
       setContext(next);
+      setPaymentDate(next.payment_date);
+      setMaximumPaymentDate(current => current || next.payment_date);
       setBankId(current => current || next.bank_accounts[0]?.bank_account_id || '');
-    } catch (requestError) { setContext(null); setError(errorMessage(requestError)); }
-    finally { setBusy(false); }
+    } catch (requestError) {
+      if (requestSequence === contextRequestSequence.current) {
+        setContext(null); setError(errorMessage(requestError));
+      }
+    } finally {
+      if (requestSequence === contextRequestSequence.current) setBusy(false);
+    }
   }, []);
 
-  useEffect(() => { void load(paymentDate); }, [load, paymentDate]);
+  useEffect(() => { void load(); }, [load]);
 
   const supplier = context?.suppliers.find(row => row.supplier_account_id === supplierId) || null;
   const bank = context?.bank_accounts.find(row => row.bank_account_id === bankId) || null;
@@ -127,11 +138,11 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
 
         {step === 'entry' && context && <>
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Payment details</h2><button type="button" onClick={() => void load(paymentDate)} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 px-4"><RefreshCw className="mr-2 inline h-4 w-4" />Refresh</button></div>
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Payment details</h2><button type="button" onClick={() => void load(paymentDate || undefined)} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 px-4"><RefreshCw className="mr-2 inline h-4 w-4" />Refresh</button></div>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="text-sm font-medium">Supplier<select value={supplierId} onChange={event => chooseSupplier(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select supplier</option>{context.suppliers.map(row => <option key={row.supplier_account_id} value={row.supplier_account_id}>{row.supplier_code} — {row.supplier_name}</option>)}</select></label>
               <label className="text-sm font-medium">Branch<select value={branchId} onChange={event => { invalidate(); setBranchId(event.target.value); setAllocations([]); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select branch</option>{context.branches.map(row => <option key={row.branch_id} value={row.branch_id}>{row.branch_code} — {row.branch_name}</option>)}</select></label>
-              <label className="text-sm font-medium">Local payment date<input type="date" max={localBusinessDate()} value={paymentDate} onChange={event => { invalidate(); setPaymentDate(event.target.value); }} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
+              <label className="text-sm font-medium">Organization payment date<input type="date" max={maximumPaymentDate || undefined} value={paymentDate} onChange={event => { const nextDate = event.target.value; invalidate(); setPaymentDate(nextDate); if (nextDate) void load(nextDate); else setContext(null); }} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
               <label className="text-sm font-medium">Bank and settlement ledger<select value={bankId} onChange={event => { invalidate(); setBankId(event.target.value); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select INR bank</option>{context.bank_accounts.map(row => <option key={row.bank_account_id} value={row.bank_account_id}>{row.bank_name} — {row.account_holder_name} ({row.ifsc})</option>)}</select></label>
               <label className="text-sm font-medium">Method<select value={method} onChange={event => { invalidate(); setMethod(event.target.value as typeof method); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option></select></label>
               <label className="text-sm font-medium">Bank / UPI reference<input value={reference} onChange={event => { invalidate(); setReference(event.target.value); }} maxLength={256} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>

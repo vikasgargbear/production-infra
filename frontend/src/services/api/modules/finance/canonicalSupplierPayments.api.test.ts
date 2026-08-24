@@ -1,4 +1,5 @@
 import { canonicalSupplierPaymentsApi, reconcileSupplierPayment } from './canonicalSupplierPayments.api';
+import { apiHelpers } from '../../apiClient';
 
 jest.mock('../../apiClient', () => ({ apiHelpers: { get: jest.fn(), post: jest.fn() } }));
 
@@ -22,6 +23,18 @@ const posted = (): any => ({
   external_reference: 'UPI-REF', amount: '40.01',
   allocation_reconciled: true, journal_balanced: true, payable_residuals_reconciled: true,
   allocations: [{ open_item_id: ids.item, amount: '40.01', principal_amount: '100.03', effective_allocated_amount: '60.02', residual_amount: '40.01' }],
+});
+
+test('lets the backend choose the authoritative organization date on bootstrap', async () => {
+  (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {} });
+  await canonicalSupplierPaymentsApi.getContext();
+  expect(apiHelpers.get).toHaveBeenCalledWith('/canonical/supplier-payments/context');
+
+  await canonicalSupplierPaymentsApi.getContext('2026-08-24');
+  expect(apiHelpers.get).toHaveBeenLastCalledWith(
+    '/canonical/supplier-payments/context',
+    { params: { payment_date: '2026-08-24' } },
+  );
 });
 
 test('reconciles exact allocations and payable residual strings', async () => {

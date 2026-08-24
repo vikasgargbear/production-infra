@@ -59,8 +59,11 @@ export interface PostedSupplierPayment {
 }
 
 export const canonicalSupplierPaymentsApi = {
-  getContext: (paymentDate: string): Promise<AxiosResponse<SupplierPaymentContext>> =>
-    apiHelpers.get('/canonical/supplier-payments/context', { params: { payment_date: paymentDate } }),
+  getContext: (paymentDate?: string): Promise<AxiosResponse<SupplierPaymentContext>> => (
+    paymentDate
+      ? apiHelpers.get('/canonical/supplier-payments/context', { params: { payment_date: paymentDate } })
+      : apiHelpers.get('/canonical/supplier-payments/context')
+  ),
   getPosted: (paymentId: string): Promise<AxiosResponse<PostedSupplierPayment>> =>
     apiHelpers.get(`/canonical/supplier-payments/${paymentId}`),
 };
