@@ -195,6 +195,27 @@ def test_source_projection_names_exact_lineage_and_no_legacy_routes():
     assert "localStorage" not in source
 
 
+def test_return_http_contract_exposes_source_review_and_posted_readback():
+    contracts = {
+        (route.path, tuple(sorted(route.methods or ())))
+        for route in canonical_return_reads.router.routes
+    }
+    assert (
+        "/canonical/returns/sales-invoices/{invoice_id}/context",
+        ("GET",),
+    ) in contracts
+    assert (
+        "/canonical/returns/supplier-invoices/{invoice_id}/context",
+        ("GET",),
+    ) in contracts
+    assert ("/canonical/returns/sales/{return_id}", ("GET",)) in contracts
+    assert ("/canonical/returns/purchases/{return_id}", ("GET",)) in contracts
+    assert (
+        "/canonical/returns/commands/{command_request_id}/review",
+        ("GET",),
+    ) in contracts
+
+
 def test_independent_return_review_and_web_context_forbid_self_approval():
     review = inspect.getsource(canonical_return_reads.return_command_review)
     context = inspect.getsource(web_operator_actions._resolve_context)
