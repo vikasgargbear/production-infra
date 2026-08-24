@@ -1,24 +1,34 @@
-/** Purchase Return canonical submission boundary. */
+/** Purchase Return canonical prepare boundary. */
+
+import { buildPurchaseReturnPreparePayload } from '../utils/canonicalReturnCommand';
 
 export const PURCHASE_RETURN_SUBMIT_UNAVAILABLE_REASON =
     'Purchase return submission is unavailable until original supplier-invoice, goods-receipt line, batch allocation, and GST treatment identities are canonically mapped.';
 
 export interface UsePurchaseReturnSaveReturn {
-    saving: false;
-    handleSaveReturn?: undefined;
+    canPrepare: boolean;
     unavailableReason: string;
 }
 
-export function getPurchaseReturnSubmissionBoundary(): UsePurchaseReturnSaveReturn {
-    return {
-        saving: false,
-        handleSaveReturn: undefined,
-        unavailableReason: PURCHASE_RETURN_SUBMIT_UNAVAILABLE_REASON
-    };
+export function getPurchaseReturnSubmissionBoundary(returnData: Record<string, unknown>): UsePurchaseReturnSaveReturn {
+    try {
+        buildPurchaseReturnPreparePayload(
+            returnData,
+            'erp-web-purchase-return-prepare:boundary-probe',
+        );
+        return { canPrepare: true, unavailableReason: '' };
+    } catch (error) {
+        return {
+            canPrepare: false,
+            unavailableReason: error instanceof Error
+                ? `Canonical purchase return is blocked: ${error.message}`
+                : PURCHASE_RETURN_SUBMIT_UNAVAILABLE_REASON,
+        };
+    }
 }
 
-export function usePurchaseReturnSave(): UsePurchaseReturnSaveReturn {
-    return getPurchaseReturnSubmissionBoundary();
+export function usePurchaseReturnSave(returnData: Record<string, unknown>): UsePurchaseReturnSaveReturn {
+    return getPurchaseReturnSubmissionBoundary(returnData);
 }
 
 export default usePurchaseReturnSave;

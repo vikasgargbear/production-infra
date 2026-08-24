@@ -162,6 +162,35 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         <td className="px-3 py-2">
                                             <div className="text-sm font-medium text-gray-900">{row.product_name}</div>
                                             <div className="text-xs text-gray-500">{row.batch_number || 'No Batch'}</div>
+                                            {isFromInvoice && (
+                                                <div className="mt-2 grid gap-2">
+                                                    <select
+                                                        aria-label={`Return condition for ${row.product_name}`}
+                                                        value={String((row as any).return_condition || '')}
+                                                        onChange={(event) => onUpdateItem(index, 'return_condition', event.target.value)}
+                                                        className="min-h-11 rounded border border-gray-300 bg-white px-2 text-xs"
+                                                    >
+                                                        <option value="">Select condition</option>
+                                                        <option value="sealed_resaleable">Sealed / resaleable</option>
+                                                        <option value="opened">Opened</option>
+                                                        <option value="damaged">Damaged</option>
+                                                        <option value="expired">Expired</option>
+                                                        <option value="recalled">Recalled</option>
+                                                        <option value="quality_hold">Quality hold</option>
+                                                    </select>
+                                                    <select
+                                                        aria-label={`Quarantine location for ${row.product_name}`}
+                                                        value={String((row as any).to_location_id || '')}
+                                                        onChange={(event) => onUpdateItem(index, 'to_location_id', event.target.value)}
+                                                        className="min-h-11 rounded border border-gray-300 bg-white px-2 text-xs"
+                                                    >
+                                                        <option value="">Select quarantine location</option>
+                                                        {((row as any).quarantine_locations || []).map((location: any) => (
+                                                            <option key={location.id} value={location.id}>{location.code} · {location.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* Pack Info */}
@@ -199,7 +228,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                     max={isFromInvoice ? originalPaidQty : undefined}
                                                     step={1}
                                                     decimalPlaces={0}
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', Number(val))}
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
                                                     selectOnFocus={true}
                                                     className="w-16"
@@ -218,7 +247,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                     max={isFromInvoice ? originalFreeQty : undefined}
                                                     step={1}
                                                     decimalPlaces={0}
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', Number(val))}
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
                                                     selectOnFocus={true}
                                                     className="w-14"

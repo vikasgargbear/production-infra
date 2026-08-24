@@ -47,16 +47,16 @@ export function updateSalesReturnItem(
     field: string,
     rawValue: unknown,
 ): ReturnFormItem {
-    const value = Math.max(0, finiteNumber(rawValue));
+    const value = String(rawValue ?? '').trim();
     if (field === 'return_paid_qty' || field === 'quantity') {
         const paid = value;
         const free = finiteNumber(item.return_free_qty);
-        return { ...item, return_paid_qty: paid, return_quantity: paid + free };
+        return { ...item, return_paid_qty: paid, return_quantity: finiteNumber(paid) + free };
     }
     if (field === 'return_free_qty') {
         const paid = finiteNumber(item.return_paid_qty ?? item.return_quantity);
         const free = value;
-        return { ...item, return_free_qty: free, return_quantity: paid + free };
+        return { ...item, return_free_qty: free, return_quantity: paid + finiteNumber(free) };
     }
     return { ...item, [field]: rawValue };
 }

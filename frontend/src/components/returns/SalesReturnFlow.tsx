@@ -15,7 +15,8 @@ import {
   ModuleHeader, StandardDatePicker, Select, ProceedToReviewComponent, CustomerSearch, CustomerCreation
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { customersApi, invoicesApi, metadataApi } from '../../services/api';
+import { customersApi, metadataApi } from '../../services/api';
+import { canonicalReturnsApi } from '../../services/api/modules/returns/canonicalReturns.api';
 import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import { toast } from 'react-toastify';
 
@@ -30,7 +31,9 @@ import type { SalesReturnFlowProps, ReturnFormItem } from './types/return.types'
 import type { Customer, Invoice } from '../../types/api.types';
 
 import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBoundaries';
-import { projectInvoiceLineToSalesReturn, updateSalesReturnItem } from './utils/salesReturnProjection';
+import { updateSalesReturnItem } from './utils/salesReturnProjection';
+import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
+import { clientUuid } from '../../utils/clientUuid';
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -38,6 +41,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // UI state for compact header mode
   const [showDetailsExpanded, setShowDetailsExpanded] = useState(true);
+  const [preparing, setPreparing] = useState(false);
+  const [preparedApproval, setPreparedApproval] = useState<AwaitingIndependentApproval | null>(null);
+  const prepareKeyRef = useRef(`erp-web-sales-return-prepare:${clientUuid()}`);
 
   // Determine if all required header fields are filled (for compact mode)
   const headerComplete = Boolean(
@@ -60,7 +66,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const calculationRequestRef = useRef(0);
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
-  const { saving, handleSaveReturn, unavailableReason } = getSalesReturnSubmissionBoundary();
+  const { canPrepare, unavailableReason } = getSalesReturnSubmissionBoundary(returnData as any);
 
   // Load return reasons
   useEffect(() => {
@@ -87,6 +93,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'r':
@@ -111,6 +118,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       }
 
       if (e.key === 'Escape') {
+        if (preparedApproval) return;
         if (ui.showCustomerModal) dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' });
         else if (ui.currentStep === 2) dispatch({ type: 'SET_STEP', step: 1 });
         else onClose();
@@ -119,7 +127,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [ui.currentStep, ui.showCustomerModal, dispatch, onClose]);
+  }, [ui.currentStep, ui.showCustomerModal, dispatch, onClose, preparedApproval]);
 
   // Handle invoice selection
   const handleInvoiceSelect = useCallback(async (invoice: Invoice | null) => {
@@ -141,14 +149,55 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     // Load invoice items from API
     try {
-      const response = await invoicesApi.getById((invoice as any).id || (invoice as any).invoice_id);
-      // API returns invoice directly (not wrapped in {success, data})
-      const fullInvoice = response?.data || response;
-      const items = fullInvoice?.items || [];
+      const response = await canonicalReturnsApi.getSalesContext(
+        String((invoice as any).id || (invoice as any).invoice_id),
+        returnDataRef.current.return_date,
+      );
+      const context = response.data;
+      const items = context.lines || [];
 
       if (items.length > 0) {
-        const mappedItems = items.map((item: any) => mapInvoiceItemToReturnItem(item));
-        dispatch({ type: 'SET_RETURN_DATA', data: { items: mappedItems } });
+        const onlyQuarantine = context.quarantine_locations.length === 1
+          ? context.quarantine_locations[0].id
+          : '';
+        const mappedItems = items.map((item: any) => ({
+          ...item,
+          id: item.invoice_dispatch_allocation_id,
+          invoice_item_id: item.original_invoice_line_id,
+          paid_quantity: Number(item.returnable_billed_quantity),
+          free_quantity: Number(item.returnable_free_quantity),
+          return_paid_qty: item.returnable_billed_quantity,
+          return_free_qty: item.returnable_free_quantity,
+          return_quantity: Number(item.returnable_billed_quantity) + Number(item.returnable_free_quantity),
+          max_returnable_qty: Number(item.returnable_billed_quantity) + Number(item.returnable_free_quantity),
+          max_paid_qty: item.returnable_billed_quantity,
+          max_free_qty: item.returnable_free_quantity,
+          unit_price: Number(item.quoted_unit_rate),
+          tax_percent: Number(item.cgst_rate) + Number(item.sgst_rate) + Number(item.igst_rate) + Number(item.cess_rate),
+          batch_number: item.batch_number,
+          expiry_date: item.expires_on,
+          selected: true,
+          is_manual: false,
+          return_condition: '',
+          to_location_id: onlyQuarantine,
+          quarantine_locations: context.quarantine_locations,
+        }));
+        dispatch({
+          type: 'SET_SELECTED_INVOICE',
+          invoice: { ...(invoice as any), ...context } as Invoice,
+        });
+        dispatch({
+          type: 'SET_RETURN_DATA',
+          data: {
+            branch_id: context.branch_id,
+            items: mappedItems,
+            supported_gst_treatments: context.supported_gst_treatments,
+            statutory_itc_reversal_evidence: context.statutory_itc_reversal_evidence,
+            gst_tax_treatment: '',
+            recipient_itc_reversal_evidence_attachment_id: '',
+            recipient_itc_reversal_confirmed_at: '',
+          },
+        });
         // Items loaded silently - no toast needed
       } else {
         toast.warning('No items found in this invoice');
@@ -161,11 +210,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       toast.error('Failed to load invoice items');
     }
   }, [dispatch]);
-
-  // Map invoice item to return item
-  const mapInvoiceItemToReturnItem = (item: any): ReturnFormItem => {
-    return projectInvoiceLineToSalesReturn(item);
-  };
 
   // Handle customer selection
   const handleCustomerSelect = useCallback(async (customer: Customer | null) => {
@@ -426,6 +470,20 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
   };
 
+  const handlePrepareReturn = async () => {
+    if (!canPrepare || preparedApproval) return;
+    setPreparing(true);
+    try {
+      const result = await prepareCanonicalSalesReturn(returnData as any, prepareKeyRef.current);
+      setPreparedApproval(result);
+      toast.success('Immutable sales-return preview prepared for independent approval.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to prepare canonical sales return.');
+    } finally {
+      setPreparing(false);
+    }
+  };
+
   // Step 1: Create Return Form
   if (ui.currentStep === 1) {
     return (
@@ -617,37 +675,64 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 invoiceSearchRef={invoiceSearchRef}
               />
 
-              {/* GST Withholding Option - Moved closer to items table, only for B2B */}
-              {selectedCustomer && (selectedCustomer as any).gst_number && (
-                <div className="mb-4 bg-white border border-gray-300 rounded-lg p-4 flex items-center justify-between shadow-sm">
+              {selectedInvoice && (
+                <div className="mb-4 grid gap-4 rounded-lg border border-gray-300 bg-white p-4 shadow-sm md:grid-cols-2">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">GST Treatment</p>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      {returnData.withhold_gst
-                        ? 'GST will NOT be included in return amount'
-                        : 'GST will be included in return amount (standard)'
-                      }
-                    </p>
+                    <Select
+                      label="GST treatment"
+                      required
+                      value={(returnData as any).gst_tax_treatment || ''}
+                      onChange={(value) => dispatch({
+                        type: 'SET_RETURN_DATA',
+                        data: {
+                          gst_tax_treatment: value as any,
+                          withhold_gst: value === 'commercial_only',
+                          recipient_itc_reversal_evidence_attachment_id: '',
+                          recipient_itc_reversal_confirmed_at: '',
+                        },
+                      })}
+                      options={((returnData as any).supported_gst_treatments || []).map((value: string) => ({
+                        value,
+                        label: value === 'statutory'
+                          ? 'Statutory GST credit (evidence required)'
+                          : 'Commercial only (no GST adjustment)',
+                      }))}
+                      placeholder="Choose GST treatment"
+                    />
                   </div>
-                  <label className="flex items-center cursor-pointer">
-                    <span className="text-sm text-gray-700 mr-3 font-medium">Withhold GST</span>
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={returnData.withhold_gst || false}
-                        onChange={(e) => dispatch({
+                  {(returnData as any).gst_tax_treatment === 'statutory' && (
+                    <div className="space-y-2">
+                      <Select
+                        label="Recipient ITC-reversal evidence"
+                        required
+                        value={(returnData as any).recipient_itc_reversal_evidence_attachment_id || ''}
+                        onChange={(value) => dispatch({
                           type: 'SET_RETURN_DATA',
-                          data: { withhold_gst: e.target.checked }
+                          data: { recipient_itc_reversal_evidence_attachment_id: String(value || '') },
                         })}
-                        className="sr-only"
+                        options={((returnData as any).statutory_itc_reversal_evidence || []).map((item: any) => ({
+                          value: item.id,
+                          label: `${item.original_filename} · ${item.status}`,
+                        }))}
+                        placeholder="Select verified evidence"
                       />
-                      <div className={`w-11 h-6 rounded-full transition-colors border ${returnData.withhold_gst ? 'bg-orange-500 border-orange-600' : 'bg-gray-200 border-gray-300'
-                        }`}>
-                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${returnData.withhold_gst ? 'translate-x-5' : ''
-                          }`}></div>
-                      </div>
+                      <label className="flex min-h-11 items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean((returnData as any).recipient_itc_reversal_confirmed_at)}
+                          onChange={(event) => dispatch({
+                            type: 'SET_RETURN_DATA',
+                            data: {
+                              recipient_itc_reversal_confirmed_at: event.target.checked
+                                ? new Date().toISOString()
+                                : '',
+                            },
+                          })}
+                        />
+                        I confirm the recipient reversed ITC for this evidence.
+                      </label>
                     </div>
-                  </label>
+                  )}
                 </div>
               )}
 
@@ -723,10 +808,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             selectedCustomer={selectedCustomer}
             selectedInvoice={selectedInvoice}
             customerDues={customerDues}
-            onSave={handleSaveReturn}
-            onBack={() => dispatch({ type: 'SET_STEP', step: 1 })}
-            saving={saving}
-            submissionUnavailableReason={unavailableReason}
+            onSave={canPrepare && !preparedApproval ? handlePrepareReturn : undefined}
+            onBack={preparedApproval ? () => undefined : () => dispatch({ type: 'SET_STEP', step: 1 })}
+            saving={preparing}
+            submissionUnavailableReason={preparedApproval?.message || unavailableReason}
+            preparedPreview={preparedApproval?.preview}
           />
         </div>
       </div>

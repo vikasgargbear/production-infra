@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import inspect
+from pathlib import Path
+from copy import deepcopy
+from datetime import date
+from decimal import Decimal
+from uuid import UUID
+
+import pytest
+from pydantic import ValidationError
+
+from app.api.routes import canonical_return_reads, web_operator_actions
+from app.api.routes.canonical_return_reads import (
+    PostedReturnReadback,
+    PurchaseReturnableAllocation,
+    SalesReturnableAllocation,
+)
+
+
+def uid(index: int) -> UUID:
+    return UUID(f"d3000000-0000-7000-8000-{index:012d}")
+
+
+def sales_line() -> dict:
+    return {
+        "original_invoice_line_id": uid(1),
+        "invoice_dispatch_allocation_id": uid(2),
+        "dispatch_id": uid(3),
+        "dispatch_line_id": uid(4),
+        "product_id": uid(5),
+        "product_name": "Exact product",
+        "sku": "EXACT-1",
+        "batch_id": uid(6),
+        "batch_number": "B-1",
+        "expires_on": date(2027, 8, 25),
+        "uom_code": "BOX",
+        "uom_conversion_factor": Decimal("10.000001"),
+        "allocated_base_billed_quantity": Decimal("21.234562123456"),
+        "allocated_base_free_quantity": Decimal("0.000010000001"),
+        "returned_base_billed_quantity": Decimal("0"),
+        "returned_base_free_quantity": Decimal("0"),
+        "remaining_base_billed_quantity": Decimal("21.234562123456"),
+        "remaining_base_free_quantity": Decimal("0.000010000001"),
+        "returnable_billed_quantity": Decimal("2.123456"),
+        "returnable_free_quantity": Decimal("0.000001"),
+        "quoted_unit_rate": Decimal("99.123456"),
+        "cgst_rate": Decimal("6"),
+        "sgst_rate": Decimal("6"),
+        "igst_rate": Decimal("0"),
+        "cess_rate": Decimal("0"),
+        "hsn_code": "481910",
+    }
+
+
+def purchase_line() -> dict:
+    value = sales_line()
+    for key in (
+        "original_invoice_line_id",
+        "invoice_dispatch_allocation_id",
+        "dispatch_id",
+        "dispatch_line_id",
+    ):
+        value.pop(key)
+    value.update(
+        {
+            "supplier_invoice_line_id": uid(7),
+            "supplier_invoice_receipt_allocation_id": uid(8),
+            "goods_receipt_id": uid(9),
+            "goods_receipt_line_id": uid(10),
+            "from_location_id": uid(11),
+            "from_location_code": "MAIN",
+            "from_location_name": "Main",
+            "from_location_type": "saleable",
+            "stock_on_hand_base_quantity": Decimal("22"),
+            "average_unit_cost": Decimal("80.123456"),
+        }
+    )
+    return value
+
+
+def posted() -> dict:
+    return {
+        "return_id": uid(20),
+        "return_number": "SR-1",
+        "return_date": date(2026, 8, 25),
+        "status": "posted",
+        "source_document_id": uid(21),
+        "branch_id": uid(22),
+        "party_account_id": uid(23),
+        "gst_tax_treatment": "statutory",
+        "net_value_total": Decimal("100"),
+        "gst_taxable_total": Decimal("100"),
+        "cgst_total": Decimal("6"),
+        "sgst_total": Decimal("6"),
+        "igst_total": Decimal("0"),
+        "cess_total": Decimal("0"),
+        "rounding_adjustment": Decimal("0"),
+        "grand_total": Decimal("112"),
+        "adjustment_note_id": uid(24),
+        "adjustment_note_number": "CN-1",
+        "adjustment_note_total": Decimal("112"),
+        "tax_document_id": uid(25),
+        "tax_document_total": Decimal("112"),
+        "inventory_document_id": uid(26),
+        "inventory_direction": "receipt",
+        "inventory_total_base_quantity": Decimal("2"),
+        "inventory_total_value": Decimal("80"),
+        "journal_entry_id": uid(27),
+        "journal_debit_total": Decimal("192"),
+        "journal_credit_total": Decimal("192"),
+        "journal_line_debit_total": Decimal("192"),
+        "journal_line_credit_total": Decimal("192"),
+        "residual_open_item_amount": Decimal("12"),
+        "lines": [{
+            "return_line_id": uid(28),
+            "source_line_id": uid(29),
+            "source_allocation_id": uid(30),
+            "product_id": uid(31),
+            "batch_id": uid(32),
+            "location_id": uid(33),
+            "billed_quantity": Decimal("2"),
+            "free_quantity": Decimal("0"),
+            "base_billed_quantity": Decimal("2"),
+            "base_free_quantity": Decimal("0"),
+            "net_value_amount": Decimal("100"),
+            "gst_taxable_value": Decimal("100"),
+            "cgst_amount": Decimal("6"),
+            "sgst_amount": Decimal("6"),
+            "igst_amount": Decimal("0"),
+            "cess_amount": Decimal("0"),
+            "line_total": Decimal("112"),
+            "inventory_document_line_id": uid(34),
+            "inventory_base_quantity": Decimal("2"),
+            "inventory_extended_cost": Decimal("80"),
+            "stock_ledger_entry_id": uid(35),
+            "stock_quantity_delta": Decimal("2"),
+            "stock_value_delta": Decimal("80"),
+        }],
+        "allocations": [{
+            "allocation_id": uid(36),
+            "open_item_id": uid(37),
+            "amount": Decimal("100"),
+        }],
+    }
+
+
+def test_exact_sales_and_purchase_remainders_reconcile():
+    assert SalesReturnableAllocation.model_validate(sales_line()).returnable_billed_quantity == Decimal("2.123456")
+    assert PurchaseReturnableAllocation.model_validate(purchase_line()).average_unit_cost == Decimal("80.123456")
+
+
+def test_projection_rejects_non_reconciling_quantity():
+    value = purchase_line()
+    value["remaining_base_billed_quantity"] += Decimal("0.000001")
+    with pytest.raises(ValidationError, match="do not reconcile"):
+        PurchaseReturnableAllocation.model_validate(value)
+
+
+def test_posted_readback_reconciles_inventory_tax_journal_and_open_item():
+    assert PostedReturnReadback.model_validate(posted()).grand_total == Decimal("112")
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        (("journal_credit_total",), Decimal("191"), "journal header"),
+        (("lines", 0, "stock_value_delta"), Decimal("79"), "stock ledger"),
+        (("residual_open_item_amount",), Decimal("11"), "open-item effects"),
+    ],
+)
+def test_posted_readback_rejects_cross_system_drift(path, value, message):
+    payload = deepcopy(posted())
+    target = payload
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(ValidationError, match=message):
+        PostedReturnReadback.model_validate(payload)
+
+
+def test_source_projection_names_exact_lineage_and_no_legacy_routes():
+    source = inspect.getsource(canonical_return_reads)
+    for required in (
+        "sales.invoice_dispatch_allocations",
+        "procurement.supplier_invoice_receipt_allocations",
+        "inventory.stock_ledger_entries",
+        "tax.portal_document_lines",
+        "finance.adjustment_notes",
+        "finance.journal_entries",
+        "finance.open_items",
+    ):
+        assert required in source
+    assert "/api/purchases/" not in source
+    assert "localStorage" not in source
+
+
+def test_independent_return_review_and_web_context_forbid_self_approval():
+    review = inspect.getsource(canonical_return_reads.return_command_review)
+    context = inspect.getsource(web_operator_actions._resolve_context)
+    assert "requested_by_membership_id<>:membership_id" in review
+    assert "approval_policy='separate_approver'" in review
+    assert "operation_key == \"automation.command.approve\"" in context
+    assert "command.requested_by_membership_id<>membership.id" in context
+    invariant = (
+        Path(__file__).parents[3]
+        / "database/canonical/invariants_agent/baseline-invariants-agent-enforcements.json"
+    ).read_text()
+    assert "NEW.approver_membership_id = request_row.requested_by_membership_id" in invariant
+    assert "separate approval requires a distinct approver" in invariant

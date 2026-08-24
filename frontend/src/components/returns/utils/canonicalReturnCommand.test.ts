@@ -1,0 +1,128 @@
+import {
+  buildPurchaseReturnPreparePayload,
+  buildSalesReturnPreparePayload,
+  canonicalDecimal,
+} from './canonicalReturnCommand';
+
+const ids = {
+  branch: 'd3000000-0000-7000-8000-000000000001',
+  invoice: 'd3000000-0000-7000-8000-000000000002',
+  line: 'd3000000-0000-7000-8000-000000000003',
+  allocation: 'd3000000-0000-7000-8000-000000000004',
+  batch: 'd3000000-0000-7000-8000-000000000005',
+  location: 'd3000000-0000-7000-8000-000000000006',
+  receipt: 'd3000000-0000-7000-8000-000000000007',
+  address: 'd3000000-0000-7000-8000-000000000008',
+  evidence: 'd3000000-0000-7000-8000-000000000009',
+};
+
+const sales = () => ({
+  branch_id: ids.branch,
+  invoice_id: ids.invoice,
+  return_date: '2026-08-25',
+  return_reason: 'DAMAGED',
+  gst_tax_treatment: 'commercial_only',
+  supported_gst_treatments: ['commercial_only'],
+  items: [{
+    selected: true,
+    original_invoice_line_id: ids.line,
+    invoice_dispatch_allocation_id: ids.allocation,
+    batch_id: ids.batch,
+    to_location_id: ids.location,
+    return_condition: 'damaged',
+    return_paid_qty: '900719925474.123456',
+    return_free_qty: '0.000001',
+    returnable_billed_quantity: '900719925474.123456',
+    returnable_free_quantity: '0.000001',
+  }],
+});
+
+const purchase = () => ({
+  branch_id: ids.branch,
+  supplier_invoice_id: ids.invoice,
+  return_date: '2026-08-25',
+  return_reason: 'EXCESS_QUANTITY',
+  gst_tax_treatment: 'commercial_only',
+  supported_gst_treatments: ['commercial_only'],
+  supplier_destination_address_id: ids.address,
+  transport_details: { transport_mode: 'in_person', distance_km: '0' },
+  items: [{
+    selected: true,
+    goods_receipt_line_id: ids.receipt,
+    supplier_invoice_line_id: ids.line,
+    supplier_invoice_receipt_allocation_id: ids.allocation,
+    batch_id: ids.batch,
+    from_location_id: ids.location,
+    return_paid_qty: '2.123456',
+    return_free_qty: '0.000001',
+    returnable_billed_quantity: '2.123456',
+    returnable_free_quantity: '0.000001',
+    uom_conversion_factor: '10.000001',
+    stock_on_hand_base_quantity: '22',
+  }],
+});
+
+describe('canonical return command builders', () => {
+  it('normalizes decimal text without passing through JavaScript Number', () => {
+    expect(canonicalDecimal('900719925474.123456', 'amount')).toBe('900719925474.123456');
+    expect(canonicalDecimal('2.120000', 'amount')).toBe('2.12');
+    expect(() => canonicalDecimal('1e3', 'amount')).toThrow(/decimal string/);
+    expect(() => canonicalDecimal('0.1234567', 'amount')).toThrow(/six places/);
+  });
+
+  it('preserves exact billed/free sales quantities and canonical lineage', () => {
+    const payload: any = buildSalesReturnPreparePayload(
+      sales(),
+      'erp-web-sales-return-prepare:test-0001',
+    );
+    expect(payload.lines[0]).toMatchObject({
+      original_invoice_line_id: ids.line,
+      invoice_dispatch_allocation_id: ids.allocation,
+      billed_quantity: '900719925474.123456',
+      free_quantity: '0.000001',
+    });
+  });
+
+  it('rejects sales quantity beyond the exact source remainder', () => {
+    const value = sales();
+    value.items[0].return_paid_qty = '900719925474.123457';
+    expect(() => buildSalesReturnPreparePayload(value, 'erp-web-sales-return-prepare:test-0002'))
+      .toThrow(/authoritative billed\/free remainder/);
+  });
+
+  it('requires statutory evidence when statutory GST is selected', () => {
+    const value: any = sales();
+    value.gst_tax_treatment = 'statutory';
+    value.supported_gst_treatments = ['commercial_only', 'statutory'];
+    expect(() => buildSalesReturnPreparePayload(value, 'erp-web-sales-return-prepare:test-0003'))
+      .toThrow(/ITC-reversal evidence/);
+  });
+
+  it('builds an invoiced purchase return with exact receipt lineage', () => {
+    const payload: any = buildPurchaseReturnPreparePayload(
+      purchase(),
+      'erp-web-purchase-return-prepare:test-0001',
+    );
+    expect(payload.return_source_kind).toBe('invoiced');
+    expect(payload.lines[0]).toMatchObject({
+      goods_receipt_line_id: ids.receipt,
+      supplier_invoice_receipt_allocation_id: ids.allocation,
+      billed_quantity: '2.123456',
+      free_quantity: '0.000001',
+    });
+  });
+
+  it('rejects a purchase quantity above exact stock at its original location', () => {
+    const value = purchase();
+    value.items[0].stock_on_hand_base_quantity = '21.23457';
+    expect(() => buildPurchaseReturnPreparePayload(value, 'erp-web-purchase-return-prepare:test-0002'))
+      .toThrow(/authoritative stock/);
+  });
+
+  it('rejects duplicate supplier invoice or receipt lineage', () => {
+    const value = purchase();
+    value.items.push({ ...value.items[0], batch_id: 'd3000000-0000-7000-8000-000000000010' });
+    expect(() => buildPurchaseReturnPreparePayload(value, 'erp-web-purchase-return-prepare:test-0003'))
+      .toThrow(/cannot repeat/);
+  });
+});

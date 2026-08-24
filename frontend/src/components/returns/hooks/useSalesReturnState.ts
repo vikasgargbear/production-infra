@@ -7,6 +7,7 @@
 import { useReducer } from 'react';
 import type { ReturnUIState, ReturnFormData, ReturnReason } from '../types/return.types';
 import type { Customer, Invoice } from '../../../types/api.types';
+import { indiaBusinessDate } from '../utils/returnBusinessDate';
 
 // ============================================================================
 // State Type
@@ -47,7 +48,7 @@ type ReturnAction =
 
 const initialReturnData: ReturnFormData = {
     return_no: '',
-    return_date: new Date().toISOString().split('T')[0],
+    return_date: indiaBusinessDate(),
     customer_id: '',
     customer_details: null,
     invoice_id: '',
@@ -66,7 +67,13 @@ const initialReturnData: ReturnFormData = {
     include_gst: true,
     credit_adjustment_type: 'future',
     return_type: 'credit_note', // Default to credit note
-    withhold_gst: false // Default GST included
+    withhold_gst: true,
+    gst_tax_treatment: '',
+    supported_gst_treatments: [],
+    statutory_itc_reversal_evidence: [],
+    recipient_itc_reversal_evidence_attachment_id: '',
+    recipient_itc_reversal_confirmed_at: '',
+    branch_id: ''
 };
 
 const initialState: ReturnLocalState = {

@@ -40,7 +40,8 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     onPrint,
     onBack,
     saving,
-    submissionUnavailableReason
+    submissionUnavailableReason,
+    preparedPreview
 }) => {
     // Use same company context as Invoice for consistency
     const { companyInfo } = useCompany();
@@ -451,6 +452,18 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             </div>
                         </div>
                     </div>
+                    {preparedPreview && (
+                        <div role="status" className="mb-4 rounded-lg border border-blue-300 bg-blue-50 p-4 text-sm text-blue-950">
+                            <p className="font-semibold">Immutable canonical preview prepared</p>
+                            <p className="mt-1 break-all">Command: {preparedPreview.command_request_id}</p>
+                            <p className="mt-1 break-all">Preview hash: {preparedPreview.preview_hash}</p>
+                            <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedPreview.inventory_impact || [], null, 2)}</pre>
+                                <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedPreview.financial_impact || [], null, 2)}</pre>
+                                <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedPreview.tax_impact || [], null, 2)}</pre>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
