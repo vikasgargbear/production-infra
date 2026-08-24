@@ -345,7 +345,7 @@ const OrderList: React.FC = () => {
                             </button>
                             <button
                                 onClick={whatsappSelected}
-                                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+                                className="px-3 py-2 min-h-[44px] border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center space-x-1"
                             >
                                 <MessageCircle className="w-4 h-4" />
                                 <span>WhatsApp</span>

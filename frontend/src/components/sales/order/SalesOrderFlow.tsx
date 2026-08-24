@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, AlertTriangle } from 'lucide-react';
 import {
     ModuleHeader,
     DocumentFooter,
@@ -33,6 +33,7 @@ interface SalesOrderFlowProps {
 
 const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose }) => {
     const [currentStep, setCurrentStep] = useState(1);
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
     // Use the extracted hook for all state and logic
     const {
@@ -114,6 +115,16 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentStep, showCustomerModal, showProductModal, showImportModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal, onClose]);
 
+    /** Ask for confirmation before discarding a partially-filled order. */
+    const handleCancelRequest = () => {
+        const hasUnsavedData = Boolean(order.customer_id) || order.items.length > 0;
+        if (hasUnsavedData) {
+            setShowCancelConfirm(true);
+        } else {
+            onClose();
+        }
+    };
+
     if (!open) return null;
 
     return (
@@ -132,7 +143,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         />
 
                         <div className="bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
-                            Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
+                            Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Esc</strong> - Close
                         </div>
 
                         <div className="flex-1 overflow-y-auto bg-gray-50">
@@ -159,7 +170,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         <DocumentFooter
                             totalItems={order.total_quantity}
                             totalAmount={order.total_amount}
-                            onCancel={onClose}
+                            onCancel={handleCancelRequest}
                             onContinue={() => setCurrentStep(2)}
                             cancelLabel="Cancel"
                             continueLabel="Continue"
@@ -318,6 +329,44 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                     }}
                     companyInfo={companyInfo as any}
                 />
+            )}
+
+            {/* Cancel confirmation modal */}
+            {showCancelConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div
+                        className="w-full max-w-sm rounded-lg border border-gray-200 bg-white shadow-xl"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="cancel-order-confirm-title"
+                    >
+                        <div className="flex items-center gap-3 border-b border-gray-200 p-4">
+                            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
+                            <h3 id="cancel-order-confirm-title" className="text-base font-semibold text-gray-900">
+                                Cancel this order?
+                            </h3>
+                        </div>
+                        <p className="px-4 py-3 text-sm text-gray-600">
+                            Your order details will not be saved. This action cannot be undone.
+                        </p>
+                        <div className="flex justify-end gap-2 border-t border-gray-200 p-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowCancelConfirm(false)}
+                                className="min-h-11 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Back
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setShowCancelConfirm(false); onClose(); }}
+                                className="min-h-11 rounded-md border border-red-500 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                            >
+                                Confirm Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );
