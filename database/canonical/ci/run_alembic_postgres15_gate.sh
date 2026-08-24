@@ -64,4 +64,6 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_goods_receipt_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_supplier_invoice_reads_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_adjustment_web_runtime_role.py
