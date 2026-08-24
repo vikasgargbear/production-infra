@@ -103,9 +103,11 @@ def test_endpoint_wires_decimal_values_and_uuid_scope():
 
 def test_invalid_date_range_fails_before_database_access():
     db = _Database([])
-    with pytest.raises(HTTPException, match="date_to"):
+    with pytest.raises(HTTPException) as raised:
         reads.get_party_statement(uuid4(), "customer", date(2026, 8, 2), date(2026, 8, 1),
                                   1, 100, _user(uuid4(), uuid4()), db)
+    assert raised.value.status_code == 422
+    assert "date_to" in str(raised.value.detail)
     assert db.calls == []
 
 
