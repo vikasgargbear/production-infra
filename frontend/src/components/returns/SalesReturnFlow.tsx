@@ -35,6 +35,7 @@ import { updateSalesReturnItem } from './utils/salesReturnProjection';
 import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
+import { CANONICAL_SALES_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -74,7 +75,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     const loadReturnReasons = async () => {
       try {
         const response = await metadataApi.getReturnReasons();
-        const fetchedReasons = response.data?.sales_return_reasons || [];
+        const fetchedReasons = (response.data?.sales_return_reasons || []).filter(
+          (reason: { value: string }) => CANONICAL_SALES_RETURN_REASON_VALUES.includes(reason.value),
+        );
 
         if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
           dispatch({ type: 'SET_RETURN_REASONS', reasons: fetchedReasons });

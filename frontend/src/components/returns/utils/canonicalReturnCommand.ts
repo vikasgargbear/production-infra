@@ -21,6 +21,9 @@ const PURCHASE_REASON_CODES: Record<string, string> = {
   WRONG_PRODUCT: 'wrong_supply',
 };
 
+export const CANONICAL_SALES_RETURN_REASON_VALUES = Object.freeze(Object.keys(SALES_REASON_CODES));
+export const CANONICAL_PURCHASE_RETURN_REASON_VALUES = Object.freeze(Object.keys(PURCHASE_REASON_CODES));
+
 export function canonicalDecimal(value: unknown, label: string): string {
   const text = String(value ?? '').trim();
   const match = DECIMAL_PATTERN.exec(text);

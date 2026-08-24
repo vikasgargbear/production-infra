@@ -21,6 +21,7 @@ import { prepareCanonicalPurchaseReturn, type AwaitingIndependentApproval } from
 import { clientUuid } from '../../utils/clientUuid';
 import { indiaBusinessDate } from './utils/returnBusinessDate';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
+import { CANONICAL_PURCHASE_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
 
 interface TransportDetails {
   transport_mode: string;
@@ -140,7 +141,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     const loadReturnReasons = async () => {
       try {
         const response = await metadataApi.getReturnReasons();
-        const fetchedReasons = response.data?.purchase_return_reasons || [];
+        const fetchedReasons = (response.data?.purchase_return_reasons || []).filter(
+          (reason: { value: string }) => CANONICAL_PURCHASE_RETURN_REASON_VALUES.includes(reason.value),
+        );
 
         if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
           setReturnReasons(fetchedReasons);
