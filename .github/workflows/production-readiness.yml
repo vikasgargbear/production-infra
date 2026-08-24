@@ -370,6 +370,8 @@ jobs:
       - run: npm run lint:critical
       - run: npm run test:ci -- --runInBand
       - run: CI=false npm run build
+      - name: Install Playwright video support
+        run: npx playwright install ffmpeg
       - run: npm run test:e2e
         env:
           PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
@@ -726,6 +728,8 @@ jobs:
             *) echo "Live browser target must use HTTPS" >&2; exit 2 ;;
           esac
       - run: npm ci
+      - name: Install Playwright video support
+        run: npx playwright install ffmpeg
       - run: npm run test:e2e:live:writes
       - name: Upload live browser traces, screenshots, videos, and reports
         if: always()
