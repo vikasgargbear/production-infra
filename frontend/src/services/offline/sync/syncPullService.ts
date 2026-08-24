@@ -231,6 +231,9 @@ class SyncPullService {
                 batch_id: String(batch.batch_id),
                 product_id: String(batch.product_id || product.product_id || product.id),
                 batch_number: batch.batch_number || '',
+                location_id: batch.location_id,
+                branch_id: batch.branch_id,
+                uom_conversion_id: batch.uom_conversion_id || product.uom_conversion_id,
 
                 // Dates
                 manufacturing_date: batch.manufacturing_date || null,
@@ -270,6 +273,7 @@ class SyncPullService {
             product_id: productId,
             product_name: product.product_name || product.name || '',
             product_code: product.product_code || product.code || '',
+            uom_conversion_id: product.uom_conversion_id,
             hsn_code: product.hsn_code || '',
             category: product.category_name || product.category || '',
             manufacturer: product.manufacturer_name || product.manufacturer || '',
@@ -456,6 +460,7 @@ class SyncPullService {
             secondary_phone: customer.secondary_phone || '',
             whatsapp_number: customer.whatsapp_number || '',
             gst_number: customer.gst_number || customer.gst_number || '',
+            place_of_supply_state_code: customer.place_of_supply_state_code || billingAddress.state_code || '',
             customer_type: customer.customer_type || 'regular',
             business_type: customer.business_type || '',
             credit_limit: customer.credit_limit || 0,

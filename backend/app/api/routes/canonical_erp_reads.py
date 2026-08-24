@@ -182,6 +182,7 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
     return _rows(db, """
         SELECT p.id AS product_id, p.sku AS product_code, p.name AS product_name,
                p.generic_name, p.product_kind AS product_type, p.base_uom_code AS unit,
+               conversion.id AS uom_conversion_id,
                CASE WHEN p.status='draft' AND p.hsn_code='0000' THEN NULL ELSE p.hsn_code END AS hsn_code,
                p.dosage_form, p.strength_display, p.drug_schedule,
                p.requires_prescription, p.cold_chain_required,
@@ -193,6 +194,14 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                 FROM inventory.stock_balances balance
                WHERE balance.org_id=p.org_id AND balance.product_id=p.id
           ) stock ON true
+          LEFT JOIN LATERAL (
+              SELECT id FROM catalog.uom_conversions
+               WHERE org_id=p.org_id AND product_id=p.id
+                 AND from_uom_code=p.base_uom_code AND to_uom_code=p.base_uom_code
+                 AND status='active' AND valid_from<=CURRENT_DATE
+                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+               ORDER BY valid_from DESC, id LIMIT 1
+          ) conversion ON true
          WHERE p.org_id=:org_id
            AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
            AND (:search='' OR p.name ILIKE :pattern OR p.sku ILIKE :pattern
@@ -333,10 +342,20 @@ def products_with_batches(
         SELECT product.id AS product_id, product.sku AS product_code,
                product.name AS product_name, product.generic_name, product.hsn_code,
                product.base_uom_code AS unit, product.product_kind AS product_type,
+               conversion.id AS uom_conversion_id,
                product.status='active' AS is_active,
                COALESCE(batch_data.batches, '[]'::jsonb) AS batches,
                COALESCE(batch_data.total_quantity_available, 0) AS total_quantity_available
           FROM catalog.products product
+          LEFT JOIN LATERAL (
+              SELECT id FROM catalog.uom_conversions
+               WHERE org_id=product.org_id AND product_id=product.id
+                 AND from_uom_code=product.base_uom_code
+                 AND to_uom_code=product.base_uom_code
+                 AND status='active' AND valid_from<=CURRENT_DATE
+                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+               ORDER BY valid_from DESC, id LIMIT 1
+          ) conversion ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'batch_id', batch.id, 'product_id', batch.product_id,
@@ -346,14 +365,23 @@ def products_with_batches(
                          'sale_price_per_unit', batch.mrp,
                          'cost_per_unit', COALESCE(stock.average_unit_cost, 0),
                          'quantity_available', COALESCE(stock.quantity_available, 0),
+                         'location_id', stock.location_id,
+                         'branch_id', stock.branch_id,
+                         'uom_conversion_id', conversion.id,
                          'batch_status', batch.status
                      ) ORDER BY batch.expires_on NULLS LAST, batch.batch_number) AS batches,
                      COALESCE(SUM(stock.quantity_available), 0) AS total_quantity_available
                 FROM inventory.batches batch
                 LEFT JOIN LATERAL (
                     SELECT SUM(balance.on_hand_quantity) AS quantity_available,
-                           MAX(balance.average_unit_cost) AS average_unit_cost
+                           MAX(balance.average_unit_cost) AS average_unit_cost,
+                           CASE WHEN COUNT(DISTINCT balance.location_id)=1
+                                THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
+                           CASE WHEN COUNT(DISTINCT location.branch_id)=1
+                                THEN (array_agg(DISTINCT location.branch_id))[1] END AS branch_id
                       FROM inventory.stock_balances balance
+                      JOIN inventory.locations location
+                        ON location.org_id=balance.org_id AND location.id=balance.location_id
                      WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
                 ) stock ON true
                WHERE batch.org_id=product.org_id AND batch.product_id=product.id
@@ -380,6 +408,8 @@ def product_batches(
                batch.batch_number, batch.manufactured_on AS manufacturing_date,
                batch.expires_on AS expiry_date, batch.mrp AS mrp_per_unit,
                batch.mrp AS sale_price_per_unit,
+               conversion.id AS uom_conversion_id,
+               stock.location_id, stock.branch_id,
                COALESCE(stock.average_unit_cost, 0) AS cost_per_unit,
                COALESCE(stock.quantity_available, 0) AS quantity_available,
                batch.expires_on - CURRENT_DATE AS days_to_expiry,
@@ -390,10 +420,25 @@ def product_batches(
             ON product.org_id=batch.org_id AND product.id=batch.product_id
           LEFT JOIN LATERAL (
               SELECT SUM(balance.on_hand_quantity) AS quantity_available,
-                     MAX(balance.average_unit_cost) AS average_unit_cost
+                     MAX(balance.average_unit_cost) AS average_unit_cost,
+                     CASE WHEN COUNT(DISTINCT balance.location_id)=1
+                          THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
+                     CASE WHEN COUNT(DISTINCT location.branch_id)=1
+                          THEN (array_agg(DISTINCT location.branch_id))[1] END AS branch_id
                 FROM inventory.stock_balances balance
+                JOIN inventory.locations location
+                  ON location.org_id=balance.org_id AND location.id=balance.location_id
                WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
           ) stock ON true
+          LEFT JOIN LATERAL (
+              SELECT id FROM catalog.uom_conversions
+               WHERE org_id=product.org_id AND product_id=product.id
+                 AND from_uom_code=product.base_uom_code
+                 AND to_uom_code=product.base_uom_code
+                 AND status='active' AND valid_from<=CURRENT_DATE
+                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+               ORDER BY valid_from DESC, id LIMIT 1
+          ) conversion ON true
          WHERE batch.org_id=:org_id AND batch.product_id=:product_id
            AND batch.status IN ('released','blocked')
          ORDER BY batch.expires_on NULLS LAST, batch.batch_number
@@ -634,12 +679,20 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                party.legal_name AS customer_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
+               COALESCE(substring(registration.registration_number from 1 for 2),
+                        address.state_code) AS place_of_supply_state_code,
                account.credit_limit, account.credit_days, 0::numeric AS current_outstanding,
                party.party_kind AS customer_type, account.status='active' AS is_active,
                account.status, account.created_at, account.updated_at
           FROM parties.customer_accounts account
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
           {_PARTY_CONTACTS}
+          LEFT JOIN LATERAL (
+              SELECT state_code FROM parties.addresses
+               WHERE org_id=account.org_id AND party_id=account.party_id
+                 AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) address ON true
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
            AND (:search='' OR party.legal_name ILIKE :pattern
                 OR account.customer_code ILIKE :pattern OR COALESCE(contact.phone,'') ILIKE :pattern)
@@ -660,12 +713,20 @@ def customers_with_addresses(
                party.legal_name AS customer_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
+               COALESCE(substring(registration.registration_number from 1 for 2),
+                        primary_address.state_code) AS place_of_supply_state_code,
                account.credit_limit, account.credit_days,
                account.status='active' AS is_active, account.updated_at,
                COALESCE(address_data.addresses, '[]'::jsonb) AS addresses
           FROM parties.customer_accounts account
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
           {_PARTY_CONTACTS}
+          LEFT JOIN LATERAL (
+              SELECT state_code FROM parties.addresses
+               WHERE org_id=account.org_id AND party_id=account.party_id
+                 AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) primary_address ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'address_id', address.id, 'address_type', address.address_kind,
@@ -981,6 +1042,33 @@ def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
         row.update(invoice_id=row["id"], invoice_number=row["document_number"],
                    invoice_date=row["document_date"])
     return {"invoices": rows, "total": len(rows)}
+
+
+@router.get("/canonical/invoices/{invoice_id}")
+def canonical_invoice(
+    invoice_id: UUID,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT invoice.id AS invoice_id, invoice.invoice_number,
+               invoice.invoice_date, invoice.status,
+               invoice.customer_account_id AS customer_id,
+               party.legal_name AS customer_name,
+               invoice.grand_total AS total_amount,
+               invoice.created_at, invoice.updated_at
+          FROM sales.invoices invoice
+          JOIN parties.customer_accounts account
+            ON account.org_id=invoice.org_id
+           AND account.id=invoice.customer_account_id
+          JOIN parties.parties party
+            ON party.org_id=account.org_id AND party.id=account.party_id
+         WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
+    """, {"org_id": org_id, "invoice_id": invoice_id})
+    if len(rows) != 1:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return rows[0]
 
 
 @router.get("/sales-orders/")
@@ -1861,10 +1949,22 @@ def sync_delta(
 
     if "products" in requested:
         changes["products"] = _rows(db, """
-            SELECT id AS product_id, sku AS product_code, name AS product_name,
-                   generic_name, hsn_code, category_id, status='active' AS is_active,
-                   updated_at FROM catalog.products
-             WHERE org_id=:org_id AND updated_at>:since
+            SELECT product.id AS product_id, product.sku AS product_code,
+                   product.name AS product_name, product.generic_name,
+                   product.hsn_code, product.category_id,
+                   product.status='active' AS is_active,
+                   conversion.id AS uom_conversion_id, product.updated_at
+              FROM catalog.products product
+              LEFT JOIN LATERAL (
+                  SELECT id FROM catalog.uom_conversions
+                   WHERE org_id=product.org_id AND product_id=product.id
+                     AND from_uom_code=product.base_uom_code
+                     AND to_uom_code=product.base_uom_code
+                     AND status='active' AND valid_from<=CURRENT_DATE
+                     AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                   ORDER BY valid_from DESC, id LIMIT 1
+              ) conversion ON true
+             WHERE product.org_id=:org_id AND product.updated_at>:since
         """, {"org_id": org_id, "since": since})
         deactivated["products"] = [row["product_id"] for row in changes["products"] if not row["is_active"]]
     if "batches" in requested:
@@ -1874,14 +1974,33 @@ def sync_delta(
                    batch.mrp AS mrp_per_unit, batch.mrp AS sale_price_per_unit,
                    COALESCE(stock.quantity_available,0) AS quantity_available,
                    COALESCE(stock.cost_per_unit,0) AS cost_per_unit,
+                   stock.location_id, stock.branch_id,
+                   conversion.id AS uom_conversion_id,
                    batch.status AS batch_status, batch.updated_at
               FROM inventory.batches batch
+              JOIN catalog.products product
+                ON product.org_id=batch.org_id AND product.id=batch.product_id
               LEFT JOIN LATERAL (
                   SELECT SUM(on_hand_quantity) quantity_available,
-                         MAX(average_unit_cost) cost_per_unit
+                         MAX(average_unit_cost) cost_per_unit,
+                         CASE WHEN COUNT(DISTINCT balance.location_id)=1
+                              THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
+                         CASE WHEN COUNT(DISTINCT location.branch_id)=1
+                              THEN (array_agg(DISTINCT location.branch_id))[1] END AS branch_id
                     FROM inventory.stock_balances balance
+                    JOIN inventory.locations location
+                      ON location.org_id=balance.org_id AND location.id=balance.location_id
                    WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
               ) stock ON true
+              LEFT JOIN LATERAL (
+                  SELECT id FROM catalog.uom_conversions
+                   WHERE org_id=product.org_id AND product_id=product.id
+                     AND from_uom_code=product.base_uom_code
+                     AND to_uom_code=product.base_uom_code
+                     AND status='active' AND valid_from<=CURRENT_DATE
+                     AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                   ORDER BY valid_from DESC, id LIMIT 1
+              ) conversion ON true
              WHERE batch.org_id=:org_id AND batch.updated_at>:since
         """, {"org_id": org_id, "since": since})
         deactivated["batches"] = [row["batch_id"] for row in changes["batches"] if row["batch_status"] != "active"]
@@ -1889,7 +2008,10 @@ def sync_delta(
         changes["customers"] = _rows(db, """
             SELECT account.id AS customer_id, account.customer_code,
                    party.legal_name AS customer_name, contact.phone AS primary_phone,
-                   contact.email AS primary_email, account.credit_limit, account.credit_days,
+                   contact.email AS primary_email,
+                   COALESCE(substring(registration.registration_number from 1 for 2),
+                            address.state_code) AS place_of_supply_state_code,
+                   account.credit_limit, account.credit_days,
                    account.status='active' AS is_active, account.updated_at
               FROM parties.customer_accounts account
               JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
@@ -1898,6 +2020,18 @@ def sync_delta(
                    WHERE org_id=account.org_id AND party_id=account.party_id AND status='active'
                    ORDER BY is_primary DESC, id LIMIT 1
               ) contact ON true
+              LEFT JOIN LATERAL (
+                  SELECT registration_number FROM parties.tax_registrations
+                   WHERE org_id=account.org_id AND party_id=account.party_id
+                     AND registration_type='GSTIN' AND status='active'
+                   ORDER BY valid_from DESC NULLS LAST, id LIMIT 1
+              ) registration ON true
+              LEFT JOIN LATERAL (
+                  SELECT state_code FROM parties.addresses
+                   WHERE org_id=account.org_id AND party_id=account.party_id
+                     AND status='active'
+                   ORDER BY is_primary DESC, id LIMIT 1
+              ) address ON true
              WHERE account.org_id=:org_id AND account.updated_at>:since
         """, {"org_id": org_id, "since": since})
         deactivated["customers"] = [row["customer_id"] for row in changes["customers"] if not row["is_active"]]

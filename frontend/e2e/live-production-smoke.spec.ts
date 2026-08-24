@@ -152,6 +152,53 @@ test.describe('live ERP pilot', () => {
     expect(continued.status()).toBeLessThan(300);
     await expect(page.getByText('Invoice Details', { exact: true })).toBeVisible();
 
+    const previewCalculation = page.waitForResponse(response => (
+      /\/api\/calculations\/invoice(?:\?|$)/.test(response.url())
+      && response.request().method() === 'POST'
+    ));
+    await page.getByRole('button', { name: 'Continue to Preview', exact: true }).click();
+    const previewed = await previewCalculation;
+    expect(previewed.status(), await previewed.text()).toBeGreaterThanOrEqual(200);
+    expect(previewed.status()).toBeLessThan(300);
+    await expect(page.getByText('Invoice Preview', { exact: true })).toBeVisible();
+
+    if (writesEnabled) {
+      const prepare = page.waitForResponse(response => (
+        /\/api\/web\/actions\/sales\.invoice\.prepare\/prepare$/.test(response.url())
+        && response.request().method() === 'POST'
+      ));
+      const approve = page.waitForResponse(response => (
+        /\/api\/web\/actions\/commands\/[0-9a-f-]+\/approve$/.test(response.url())
+        && response.request().method() === 'POST'
+      ));
+      const execute = page.waitForResponse(response => (
+        /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/.test(response.url())
+        && response.request().method() === 'POST'
+      ));
+      const readback = page.waitForResponse(response => (
+        /\/api\/canonical\/invoices\/[0-9a-f-]+$/.test(response.url())
+        && response.request().method() === 'GET'
+      ));
+
+      await page.getByRole('button', { name: 'Generate Invoice', exact: true }).last().click();
+      const [prepared, approved, executed, confirmed] = await Promise.all([
+        prepare, approve, execute, readback,
+      ]);
+      for (const response of [prepared, approved, executed, confirmed]) {
+        const body = await response.text();
+        expect(response.status(), `${response.url()} ${body.slice(0, 1500)}`).toBeGreaterThanOrEqual(200);
+        expect(response.status(), `${response.url()} ${body.slice(0, 1500)}`).toBeLessThan(300);
+      }
+      const execution = await executed.json();
+      const authoritative = await confirmed.json();
+      expect(execution.resource_id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(authoritative.invoice_id).toBe(execution.resource_id);
+      expect(authoritative.invoice_number).toBeTruthy();
+      expect(Number(authoritative.total_amount)).toBeGreaterThan(0);
+      await expect(page.getByText('Invoice Created!', { exact: true })).toBeVisible();
+      await expect(page.getByText(authoritative.invoice_number, { exact: true })).toBeVisible();
+    }
+
     await assertNoVisibleFailure(page);
     await failures.assertClean(testInfo);
   });

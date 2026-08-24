@@ -51,6 +51,9 @@ interface Batch {
     product_id?: number | string;
     product_name: string;
     gst_percent: number;
+    location_id?: string;
+    branch_id?: string;
+    uom_conversion_id?: string;
     // Pack info
     units_per_pack?: number;
     packages_per_box?: number;
@@ -262,6 +265,9 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 product_id: batch.product_id || product?.product_id,
                 product_name: batch.product_name || product?.product_name || '',
                 gst_percent: batch.gst_percent || product?.gst_percent || 0,
+                location_id: batch.location_id,
+                branch_id: batch.branch_id,
+                uom_conversion_id: batch.uom_conversion_id || product?.uom_conversion_id,
                 // Pack info - essential for display
                 units_per_pack: parseInt(batch.units_per_pack || 1),
                 packages_per_box: parseInt(batch.packages_per_box || 1),

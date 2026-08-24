@@ -8,6 +8,7 @@
 import { apiHelpers } from '../../apiClient';
 import { API_CONFIG } from '../../../../config/api.config';
 import { cleanData } from '../../utils/dataUtils';
+import { clientUuid } from '../../../../utils/clientUuid';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -88,6 +89,59 @@ export const invoicesApi = {
         }
 
         return response;
+    },
+
+    /**
+     * Post a reviewed canonical invoice command from the first-party ERP UI.
+     * The final Generate click is the actor confirmation; every later step is
+     * hash-bound so a changed preview cannot be executed.
+     */
+    createCanonical: async (data: Record<string, unknown>) => {
+        const { invoice_number: _displayNumber, ...payload } = data;
+        const prepared = await apiHelpers.post(
+            '/web/actions/sales.invoice.prepare/prepare',
+            payload
+        );
+        const commandId = prepared.data.command_request_id;
+        const previewHash = prepared.data.preview_hash;
+        const keySuffix = clientUuid();
+
+        await apiHelpers.post(`/web/actions/commands/${commandId}/approve`, {
+            preview_hash: previewHash,
+            approval_intent: 'approve',
+            idempotency_key: `erp-web-approve:${keySuffix}`,
+        });
+        const executed = await apiHelpers.post(
+            `/web/actions/commands/${commandId}/execute`,
+            {
+                preview_hash: previewHash,
+                idempotency_key: `erp-web-execute:${keySuffix}`,
+            }
+        );
+        const completed = ['executed', 'succeeded'].includes(executed?.data?.status);
+        const resourceId = executed?.data?.resource_id;
+        const canonicalInvoice = completed && resourceId
+            ? await apiHelpers.get(`/canonical/invoices/${resourceId}`)
+            : null;
+        if (completed) {
+            try {
+                const { default: deltaSyncService } = await import('../../../offline/sync/deltaSyncService');
+                deltaSyncService.afterInvoiceCreated();
+            } catch (e) {
+                console.warn('[InvoiceAPI] Delta sync trigger failed:', e);
+            }
+        }
+        return {
+            ...executed,
+            data: {
+                ...executed.data,
+                success: completed,
+                invoice_id: resourceId,
+                invoice_number: canonicalInvoice?.data?.invoice_number,
+                total_amount: canonicalInvoice?.data?.total_amount,
+                canonical_preview: prepared.data,
+            },
+        };
     },
 
     /** Update invoice (only for draft invoices) */

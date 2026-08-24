@@ -53,6 +53,9 @@ export function mapBatchToCanonical(raw: RawBatchInput): ProductBatch {
         manufacturing_date: raw.manufacturing_date || undefined,
         expiry_date: raw.expiry_date || '',
         quantity_available: Number(raw.quantity_available || 0),
+        location_id: raw.location_id,
+        branch_id: raw.branch_id,
+        uom_conversion_id: raw.uom_conversion_id,
 
         // Canonical Pricing
         mrp_per_unit: mrp,
@@ -91,6 +94,7 @@ export function mapProductToCanonical(raw: RawProductInput): Product {
         product_code: raw.product_code || '',
         product_name: raw.product_name || '',
         product_type: raw.product_type || 'general',  // Required field
+        uom_conversion_id: raw.uom_conversion_id,
 
         // Optional fields
         generic_name: raw.generic_name,
@@ -193,6 +197,9 @@ export function mergeProductAndBatch(product: Product, batch: ProductBatch) {
         units_per_pack: batch.units_per_pack,
         packages_per_box: batch.packages_per_box,
         pack_type: batch.pack_type,
+        location_id: batch.location_id,
+        branch_id: batch.branch_id,
+        uom_conversion_id: batch.uom_conversion_id || product.uom_conversion_id,
 
         // Keep product tax
         gst_percent: product.gst_percent

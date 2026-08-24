@@ -15,6 +15,7 @@ export interface Product {
   product_code: string;   // NOT NULL (was incorrectly optional!)
   product_name: string;   // NOT NULL
   product_type: string;   // NOT NULL (was missing!)
+  uom_conversion_id?: string;
 
   // Nullable fields from DB
   generic_name?: string;
@@ -109,6 +110,9 @@ export interface ProductBatch {
   sale_price?: number;
 
   location?: string;
+  location_id?: string;
+  branch_id?: string;
+  uom_conversion_id?: string;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;

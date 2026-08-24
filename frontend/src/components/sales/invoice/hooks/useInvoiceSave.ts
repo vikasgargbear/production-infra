@@ -15,9 +15,14 @@ import { getTodayBusinessDate } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
 import { deductStockLocally } from '../../utils/offlineSaveHelpers';
-import type { Invoice, InvoiceItem } from './useInvoiceLogic';
+import type { Invoice } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
 import { showFinancialEntryNotification } from '../../../../utils/financialEntryNotifier';
+import { clientUuid } from '../../../../utils/clientUuid';
+import {
+    buildCanonicalInvoicePreparePayload,
+    canonicalInvoiceValidationError,
+} from '../utils/canonicalInvoiceCommand';
 
 export interface UseInvoiceSaveProps {
     invoice: Invoice;
@@ -56,9 +61,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
 
         validate: () => {
             setError(null);
-            if (!selectedCustomer) return 'Please select a customer';
-            if (invoice.items.length === 0) return 'Please add at least one item';
-            return null;
+            return canonicalInvoiceValidationError(invoice, selectedCustomer);
         },
 
         preparePayload: () => ({
@@ -99,7 +102,13 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             eway_bill_number: invoice.eway_bill_number || ''
         }),
 
-        apiCall: (data: any) => invoicesApi.create(data),
+        apiCall: () => invoicesApi.createCanonical(
+            buildCanonicalInvoicePreparePayload(
+                invoice,
+                selectedCustomer!,
+                `erp-web-invoice:${clientUuid()}`,
+            ),
+        ),
 
         stockOperation: async () => {
             await deductStockLocally(invoice.items);
@@ -135,11 +144,11 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             localStorage.removeItem('invoice_draft');
         },
 
-        onServerSuccess: (_response: any, _tempId: string, docNo: string, payload: any) => {
+        onServerSuccess: (_response: any, _tempId: string, docNo: string) => {
             showFinancialEntryNotification({
                 title: 'Sales Invoice Posted',
                 reference: docNo,
-                amount: payload.total_amount,
+                amount: invoice.final_amount,
                 status: 'confirmed',
                 impacts: [
                     'The invoice is committed to the backend sales ledger.',

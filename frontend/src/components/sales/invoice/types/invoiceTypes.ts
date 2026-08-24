@@ -193,6 +193,9 @@ export interface InvoiceItem {
     // Batch info
     batch_number?: string;
     batch_id?: number | string;
+    location_id?: string;
+    branch_id?: string;
+    uom_conversion_id?: string;
     expiry_date?: string;
     manufacturing_date?: string;
 

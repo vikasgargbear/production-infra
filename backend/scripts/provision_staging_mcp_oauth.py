@@ -18,6 +18,8 @@ import requests
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
 CLIENT_NAME = "AASOPharma canonical staging MCP"
+WEB_CLIENT_ID = "aasopharma-erp-web"
+WEB_CLIENT_NAME = "AASOPharma canonical staging web"
 TEST_CALLBACK = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
 REDIRECT_URIS = (
     TEST_CALLBACK,
@@ -224,6 +226,9 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
     agent_grant_id = str(
         uuid5(NAMESPACE_URL, f"canonical-staging-mcp-agent:{DEMO_ORG_ID}:{run_id}")
     )
+    web_agent_grant_id = str(
+        uuid5(NAMESPACE_URL, f"canonical-staging-web-agent:{DEMO_ORG_ID}:{run_id}")
+    )
     with psycopg2.connect(database_url) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -340,6 +345,43 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                     REVIEWER_MEMBERSHIP_ID,
                 ),
             )
+            cursor.execute(
+                """
+                UPDATE automation.agent_grants
+                   SET status='suspended', row_version=row_version+1
+                 WHERE org_id=%s AND subject_membership_id=%s AND client_id=%s
+                   AND status='active'
+                """,
+                (DEMO_ORG_ID, TEST_MEMBERSHIP_ID, WEB_CLIENT_ID),
+            )
+            cursor.execute(
+                """
+                INSERT INTO automation.agent_grants (
+                    org_id,id,subject_membership_id,client_id,client_display_name,
+                    branch_id,authorization_mode,consent_version,consent_text_hash,
+                    consented_by_membership_id,consented_at,granted_by_membership_id,
+                    granted_at,expires_at,status,created_by_membership_id,
+                    updated_by_membership_id
+                ) VALUES (
+                    %s,%s,%s,%s,%s,NULL,'self_consent','staging-web-e2e-v1',
+                    extensions.digest('canonical staging first-party web command consent','sha256'),
+                    %s,transaction_timestamp(),%s,transaction_timestamp(),
+                    transaction_timestamp()+interval '30 days','active',%s,%s
+                ) ON CONFLICT (org_id,id) DO UPDATE SET
+                    status='active', row_version=agent_grants.row_version+1
+                """,
+                (
+                    DEMO_ORG_ID,
+                    web_agent_grant_id,
+                    TEST_MEMBERSHIP_ID,
+                    WEB_CLIENT_ID,
+                    WEB_CLIENT_NAME,
+                    TEST_MEMBERSHIP_ID,
+                    REVIEWER_MEMBERSHIP_ID,
+                    REVIEWER_MEMBERSHIP_ID,
+                    REVIEWER_MEMBERSHIP_ID,
+                ),
+            )
             cursor.executemany(
                 """
                 INSERT INTO automation.agent_grant_capabilities (
@@ -358,6 +400,28 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                         REVIEWER_MEMBERSHIP_ID,
                     )
                     for capability, allow_sensitive in READ_CAPABILITIES
+                ],
+            )
+            cursor.executemany(
+                """
+                INSERT INTO automation.agent_grant_capabilities (
+                    org_id, agent_grant_id, capability_code, operation_mode,
+                    risk_class, approval_policy, maximum_amount, currency_code,
+                    allow_sensitive_read, status, created_by_membership_id
+                ) VALUES (
+                    %s,%s,%s,'write','consequential_write',%s,
+                    '1000000.00','INR',false,'active',%s
+                ) ON CONFLICT (org_id, agent_grant_id, capability_code) DO NOTHING
+                """,
+                [
+                    (
+                        DEMO_ORG_ID,
+                        web_agent_grant_id,
+                        capability,
+                        approval,
+                        REVIEWER_MEMBERSHIP_ID,
+                    )
+                    for capability, approval in WRITE_CAPABILITIES
                 ],
             )
             cursor.executemany(
@@ -400,6 +464,22 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
             )
             cursor.execute(
                 """
+                INSERT INTO automation.agent_grant_capabilities (
+                    org_id, agent_grant_id, capability_code, operation_mode,
+                    risk_class, approval_policy, maximum_amount, currency_code,
+                    allow_sensitive_read, status, created_by_membership_id
+                ) VALUES (%s,%s,%s,'read','read_only','none',NULL,NULL,false,'active',%s)
+                ON CONFLICT (org_id, agent_grant_id, capability_code) DO NOTHING
+                """,
+                (
+                    DEMO_ORG_ID,
+                    web_agent_grant_id,
+                    STATUS_CAPABILITY,
+                    REVIEWER_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
                 SELECT user_row.auth_user_id::text, grant_row.client_id,
                        count(capability.capability_code)
                   FROM core.users AS user_row
@@ -423,6 +503,33 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
             )
             if cursor.fetchone() != (auth_user_id, client_id, expected_capabilities):
                 raise ProvisioningError("Staging MCP test grant binding did not reconcile exactly")
+            cursor.execute(
+                """
+                SELECT user_row.auth_user_id::text, grant_row.client_id,
+                       count(capability.capability_code)
+                  FROM core.users AS user_row
+                  JOIN core.memberships AS membership
+                    ON membership.user_id=user_row.id AND membership.org_id=%s
+                  JOIN automation.agent_grants AS grant_row
+                    ON grant_row.org_id=membership.org_id
+                   AND grant_row.subject_membership_id=membership.id
+                  JOIN automation.agent_grant_capabilities AS capability
+                    ON capability.org_id=grant_row.org_id
+                   AND capability.agent_grant_id=grant_row.id
+                 WHERE user_row.id=%s AND membership.id=%s
+                   AND grant_row.id=%s AND grant_row.status='active'
+                   AND capability.status='active'
+                 GROUP BY user_row.auth_user_id,grant_row.client_id
+                """,
+                (DEMO_ORG_ID, TEST_USER_ID, TEST_MEMBERSHIP_ID, web_agent_grant_id),
+            )
+            expected_web_capabilities = len(WRITE_CAPABILITIES) + 1
+            if cursor.fetchone() != (
+                auth_user_id,
+                WEB_CLIENT_ID,
+                expected_web_capabilities,
+            ):
+                raise ProvisioningError("Staging web test grant binding did not reconcile exactly")
     return True
 
 

@@ -127,6 +127,9 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         gst_percent: parseFloat(String(product.gst_percent || product.tax_rate || 0)),
         hsn_code: product.hsn_code || '',
         discount_percent: parseFloat(String(product.discount_percent || 0)),
+        location_id: product.location_id || bestBatch?.location_id,
+        branch_id: product.branch_id || bestBatch?.branch_id,
+        uom_conversion_id: product.uom_conversion_id || bestBatch?.uom_conversion_id,
         // Pack info - from batch or product
         units_per_pack: parseInt(String(
             bestBatch?.units_per_pack || product.units_per_pack || 1

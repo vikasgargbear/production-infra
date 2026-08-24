@@ -25,7 +25,7 @@ export interface UseDocumentSaveConfig {
     getDocNumber?: () => Promise<string>;  // override for custom number logic
 
     stockOperation?: () => Promise<void>;  // caller handles deduct/add
-    onSuccess: (tempId: string, docNo: string) => void;  // called after local save + stock op
+    onSuccess: (tempId: string, docNo: string, response?: any) => void;  // called after local save + stock op
     onSaveComplete?: () => void;
     onServerSuccess?: (response: any, tempId: string, docNo: string, payload: any) => void | Promise<void>;
     onSyncQueued?: (tempId: string, docNo: string, payload: any, reason: 'offline' | 'sync_failed') => void | Promise<void>;
@@ -83,9 +83,11 @@ export function useDocumentSave(config: UseDocumentSaveConfig): UseDocumentSaveR
             if (cfg.isOnline) {
                 try {
                     const response = await cfg.apiCall({ ...payload, [cfg.docNumberField]: docNo });
+                    const confirmedDocNo = response?.data?.[cfg.docNumberField] || docNo;
                     try {
                         await offlineDB.add(cfg.idbStoreName, {
                             ...localDoc,
+                            [cfg.docNumberField]: confirmedDocNo,
                             sync_status: 'synced',
                             created_offline: false,
                         });
@@ -99,8 +101,8 @@ export function useDocumentSave(config: UseDocumentSaveConfig): UseDocumentSaveR
                         // are diagnostics, not a reason to claim that the write failed.
                         console.warn(`[DocumentSave] Server write succeeded but local cache failed: ${cfg.entityType}`, cacheError);
                     }
-                    cfg.onSuccess(tempId, docNo);
-                    await cfg.onServerSuccess?.(response, tempId, docNo, payload);
+                    cfg.onSuccess(tempId, confirmedDocNo, response);
+                    await cfg.onServerSuccess?.(response, tempId, confirmedDocNo, payload);
                 } catch (syncError: any) {
                     if (cfg.handleConflict && syncError.response?.status === 409) {
                         cfg.handleConflict(syncError);

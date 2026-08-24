@@ -98,6 +98,7 @@ from .api.routes import calculations
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
 from .api.routes import canonical_erp_reads
+from .api.routes import web_operator_actions
 from .api.routes.internal import (
     mcp_actions,
     mcp_agent_grants,
@@ -257,6 +258,7 @@ api.include_router(mcp_agent_grants.router)
 api.include_router(mcp_canonical_reads.router)
 api.include_router(mcp_canonical_resolution_reads.router)
 api.include_router(mcp_actions.router)
+api.include_router(web_operator_actions.router)
 api.include_router(tax_provider.router)
 
 # --- Audit ---
