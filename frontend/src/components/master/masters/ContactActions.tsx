@@ -9,19 +9,31 @@ interface ContactActionsProps {
   whatsapp?: string | null;
 }
 
-const phoneHref = (value: string): string => `tel:${value.replace(/[^+\d]/g, '')}`;
-const whatsappHref = (value: string): string => {
+export const indianContactDigits = (value: string | null | undefined): string | null => {
+  if (!value) return null;
   const digits = value.replace(/\D/g, '');
-  const international = digits.length === 10 ? `91${digits}` : digits;
-  return `https://wa.me/${international}`;
+  if (/^[6-9]\d{9}$/.test(digits)) return `91${digits}`;
+  if (/^91[6-9]\d{9}$/.test(digits)) return digits;
+  if (/^0[6-9]\d{9}$/.test(digits)) return `91${digits.slice(1)}`;
+  return null;
+};
+
+export const canonicalContactEmail = (value: string | null | undefined): string | null => {
+  const email = value?.trim();
+  return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 };
 
 /** Explicit contact links. They never send a message or make a call automatically. */
-const ContactActions: React.FC<ContactActionsProps> = ({ name, phone, email, whatsapp }) => (
+const ContactActions: React.FC<ContactActionsProps> = ({ name, phone, email, whatsapp }) => {
+  const phoneDigits = indianContactDigits(phone);
+  const whatsappDigits = indianContactDigits(whatsapp);
+  const emailAddress = canonicalContactEmail(email);
+
+  return (
   <div className="flex items-center gap-1" aria-label={`Contact ${name}`}>
-    {phone && (
+    {phoneDigits && (
       <a
-        href={phoneHref(phone)}
+        href={`tel:+${phoneDigits}`}
         aria-label={`Call ${name}`}
         title={`Call ${phone}`}
         className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
@@ -29,9 +41,9 @@ const ContactActions: React.FC<ContactActionsProps> = ({ name, phone, email, wha
         <Phone className="h-4 w-4" aria-hidden="true" />
       </a>
     )}
-    {email && (
+    {emailAddress && (
       <a
-        href={`mailto:${encodeURIComponent(email)}`}
+        href={`mailto:${encodeURIComponent(emailAddress)}`}
         aria-label={`Email ${name}`}
         title={`Email ${email}`}
         className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
@@ -39,9 +51,9 @@ const ContactActions: React.FC<ContactActionsProps> = ({ name, phone, email, wha
         <Mail className="h-4 w-4" aria-hidden="true" />
       </a>
     )}
-    {whatsapp && (
+    {whatsappDigits && (
       <a
-        href={whatsappHref(whatsapp)}
+        href={`https://wa.me/${whatsappDigits}`}
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Open WhatsApp for ${name}`}
@@ -51,8 +63,9 @@ const ContactActions: React.FC<ContactActionsProps> = ({ name, phone, email, wha
         <WhatsAppIcon className="h-4 w-4" />
       </a>
     )}
-    {!phone && !email && !whatsapp && <span className="text-sm text-gray-400">No contact details</span>}
+    {!phoneDigits && !emailAddress && !whatsappDigits && <span className="text-sm text-gray-400">No valid contact details</span>}
   </div>
-);
+  );
+};
 
 export default ContactActions;

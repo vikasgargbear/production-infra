@@ -35,5 +35,26 @@ test('does not render dead controls when contact data is absent', () => {
   render(<ContactActions name="No Contact" />);
 
   expect(screen.queryByRole('link')).toBeNull();
-  expect(screen.getByText('No contact details')).not.toBeNull();
+  expect(screen.getByText('No valid contact details')).not.toBeNull();
+});
+
+test('fails closed for malformed communication destinations', () => {
+  render(
+    <ContactActions
+      name="Malformed Contact"
+      phone="123"
+      email="not-an-email"
+      whatsapp="555"
+    />
+  );
+
+  expect(screen.queryByRole('link')).toBeNull();
+  expect(screen.getByText('No valid contact details')).not.toBeNull();
+});
+
+test('normalizes a domestic trunk prefix without creating a send action', () => {
+  render(<ContactActions name="Local Contact" phone="09876543210" />);
+
+  expect(screen.getByRole('link', { name: 'Call Local Contact' }).getAttribute('href'))
+    .toBe('tel:+919876543210');
 });
