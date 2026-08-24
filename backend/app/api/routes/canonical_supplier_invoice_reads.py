@@ -178,9 +178,9 @@ class SupplierInvoiceContextCharge(BaseModel):
     quoted_amount: Decimal
     expense_price_basis: Literal["tax_exclusive", "tax_inclusive"]
     expense_document_discount_eligible: bool
-    net_value_account_id: UUID
-    account_code: str
-    account_name: str
+    net_value_account_id: Optional[UUID]
+    account_code: Optional[str]
+    account_name: Optional[str]
 
 
 class SupplierInvoiceContextResponse(BaseModel):
@@ -642,14 +642,9 @@ def supplier_invoice_context(
                order_line.quoted_unit_rate AS quoted_amount,
                order_line.price_basis AS expense_price_basis,
                order_line.document_discount_eligible AS expense_document_discount_eligible,
-               order_line.net_value_account_id,
-               account.code AS account_code, account.name AS account_name
+               NULL::uuid AS net_value_account_id,
+               NULL::text AS account_code, NULL::text AS account_name
           FROM procurement.purchase_order_lines order_line
-          JOIN finance.accounts account
-            ON account.org_id=order_line.org_id
-           AND account.id=order_line.net_value_account_id
-           AND account.account_type='expense' AND account.currency_code='INR'
-           AND account.status='active' AND NOT account.allows_party_posting
          WHERE order_line.org_id=:org_id
            AND order_line.purchase_order_id=:purchase_order_id
            AND order_line.line_kind='charge'
@@ -663,7 +658,12 @@ def supplier_invoice_context(
            AND line_kind='charge'
     """, {**params, "purchase_order_id": header["purchase_order_id"]})
     if charge_count and int(charge_count["count"]) != len(expense_charge_lines):
-        blockers.append("Every PO charge requires a reviewed freight, packing, insurance, or handling expense account")
+        blockers.append("Every PO charge must use freight, packing, insurance, or handling")
+    if expense_charge_lines:
+        blockers.append(
+            "PO charge lines lack an authoritative effective expense-account mapping; "
+            "supplier-invoice posting remains unavailable"
+        )
 
     payload = {
         **header,

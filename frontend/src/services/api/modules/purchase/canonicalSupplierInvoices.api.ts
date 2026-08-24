@@ -77,9 +77,9 @@ export interface CanonicalSupplierInvoiceContext {
     quoted_amount: string;
     expense_price_basis: 'tax_exclusive' | 'tax_inclusive';
     expense_document_discount_eligible: boolean;
-    net_value_account_id: string;
-    account_code: string;
-    account_name: string;
+    net_value_account_id: string | null;
+    account_code: string | null;
+    account_name: string | null;
   }>;
   inventory_effect: 'already_capitalized_by_goods_receipt';
   supplier_invoice_inventory_value_delta: string;

@@ -1,3 +1,4 @@
+import inspect
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -191,6 +192,23 @@ def test_routes_are_uuid_only_and_registered():
     assert paths["/api/canonical/supplier-invoices/eligible-receipts"]["get"]["operationId"].startswith(
         "eligible_receipts"
     )
+
+
+def test_po_charges_fail_closed_without_inventing_an_account_column():
+    charge = reads.SupplierInvoiceContextCharge(
+        purchase_order_line_id=uuid4(),
+        expense_charge_code="freight",
+        quoted_amount=Decimal("10.00"),
+        expense_price_basis="tax_exclusive",
+        expense_document_discount_eligible=True,
+        net_value_account_id=None,
+        account_code=None,
+        account_name=None,
+    )
+    assert charge.net_value_account_id is None
+    source = inspect.getsource(reads.supplier_invoice_context)
+    assert "order_line.net_value_account_id" not in source
+    assert "authoritative effective expense-account mapping" in source
 
 
 def test_context_preserves_exact_quantities_and_inventory_value():
