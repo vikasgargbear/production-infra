@@ -234,4 +234,18 @@ describe('GenericSuccessModal accessibility', () => {
     );
     expect(screen.getByRole('button', { name: /close/i })).toBeInTheDocument();
   });
+
+  it('renders an exact decimal-string amount without JavaScript number coercion', () => {
+    const { default: GenericSuccessModal } = require('../components/global/modals/GenericSuccessModal');
+    render(
+      React.createElement(GenericSuccessModal, {
+        isOpen: true,
+        onClose: jest.fn(),
+        documentType: 'purchase-order',
+        totalAmount: '9007199254740993.01',
+        showQuickActions: false,
+      })
+    );
+    expect(screen.getByText('₹9007199254740993.01')).toBeInTheDocument();
+  });
 });

@@ -131,3 +131,44 @@ test('rejects seven-decimal quantities without changing displayed or stored valu
   expect(desktopFreeQuantity.value).toBe('0');
   expect(onUpdateItem).not.toHaveBeenCalled();
 });
+
+test('exact-decimal mode preserves canonical input strings while default mode stays numeric', () => {
+  const exactUpdate = jest.fn();
+  const item = {
+    product_id: 'd3000000-0000-7000-8000-000000000015',
+    batch_id: 'd3000000-0000-7000-8000-000000000016',
+    product_name: 'Exact Carton',
+    batch_number: 'BATCH-EXACT',
+    quantity: '900719925474.123456',
+    free_quantity: '0.000001',
+    unit_price: '9007199254740993.01',
+    discount_percent: '0.10',
+  };
+  const { unmount } = render(
+    <ItemsTable
+      items={[item]}
+      onUpdateItem={exactUpdate}
+      onRemoveItem={jest.fn()}
+      preserveExactDecimals
+    />,
+  );
+
+  fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '0.123456' } });
+  fireEvent.change(screen.getByLabelText('Rate'), { target: { value: '9007199254740993.02' } });
+  fireEvent.change(screen.getByLabelText('Discount %'), { target: { value: '0.20' } });
+  expect(exactUpdate).toHaveBeenCalledWith(0, 'quantity', '0.123456');
+  expect(exactUpdate).toHaveBeenCalledWith(0, 'unit_price', '9007199254740993.02');
+  expect(exactUpdate).toHaveBeenCalledWith(0, 'discount_percent', '0.20');
+  unmount();
+
+  const defaultUpdate = jest.fn();
+  render(
+    <ItemsTable
+      items={[{ ...item, quantity: 1, unit_price: 10, discount_percent: 0 }]}
+      onUpdateItem={defaultUpdate}
+      onRemoveItem={jest.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } });
+  expect(defaultUpdate).toHaveBeenCalledWith(0, 'quantity', 2);
+});

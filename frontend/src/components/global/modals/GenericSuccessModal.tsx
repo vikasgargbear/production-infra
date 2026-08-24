@@ -42,7 +42,7 @@ interface GenericSuccessModalProps {
     documentId?: string | number;
     documentType?: string;
     customerName?: string;
-    totalAmount?: number;
+    totalAmount?: number | string;
     onPrint?: () => void;
     onDownload?: () => void;
     onWhatsApp?: () => void;
@@ -94,6 +94,14 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
     const printUtilityRef = useRef<PrintUtilityRef>(null);
     const dialogRef = useRef<HTMLDivElement>(null);
     const previousFocusRef = useRef<HTMLElement | null>(null);
+    const formattedTotalAmount = (() => {
+        if (totalAmount === undefined) return undefined;
+        if (typeof totalAmount === 'number') return totalAmount.toFixed(2);
+        const match = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(totalAmount.trim());
+        if (!match) return undefined;
+        const [whole, fraction = ''] = totalAmount.trim().split('.');
+        return `${whole}.${fraction.padEnd(2, '0')}`;
+    })();
 
     // Focus trap: capture trigger element, trap focus inside dialog, restore on close.
     useEffect(() => {
@@ -266,10 +274,10 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                             </div>
                         )}
 
-                        {totalAmount !== undefined && (
+                        {formattedTotalAmount !== undefined && (
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-700">Amount:</span>
-                                <span className="text-sm font-semibold text-gray-900">₹{totalAmount.toFixed(2)}</span>
+                                <span className="text-sm font-semibold text-gray-900">₹{formattedTotalAmount}</span>
                             </div>
                         )}
                     </div>
@@ -284,7 +292,7 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                             onWhatsApp();
                                         } else {
                                             const phone = partyDetails?.phone || documentData.customerPhone || '';
-                                            const message = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}\nAmount: ₹${totalAmount?.toFixed(2) || '0'}\nFor: ${customerName}`;
+                                            const message = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}\nAmount: ₹${formattedTotalAmount || '0'}\nFor: ${customerName}`;
                                             const formattedPhone = phone.replace(/^\+91|^91/, '');
                                             const whatsappUrl = `https://wa.me/91${formattedPhone}?text=${encodeURIComponent(message)}`;
                                             window.open(whatsappUrl, '_blank');
@@ -301,7 +309,7 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                     onClick={() => {
                                         const email = partyDetails?.email || documentData.customerEmail || '';
                                         const subject = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}`;
-                                        const body = `Dear ${customerName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber}\nAmount: ₹${totalAmount?.toFixed(2) || '0'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
+                                        const body = `Dear ${customerName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber}\nAmount: ₹${formattedTotalAmount || '0'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
                                         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                                         window.open(gmailUrl, '_blank');
                                     }}

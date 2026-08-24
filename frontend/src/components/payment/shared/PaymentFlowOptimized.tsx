@@ -5,6 +5,7 @@ import { Card } from '../../global';
 import { CustomerSearch } from '../../global';
 import { bankAccountsApi } from '../../../services/api';
 import { localBusinessDate } from '../../../contexts/PaymentContext';
+import { moneyToCents } from '../entry/customerReceiptCommand';
 
 interface SplitPayment {
   type: string;
@@ -101,8 +102,9 @@ const PaymentFlowOptimized: React.FC = () => {
     }
 
     if (field === 'amount') {
-      const amount = parseFloat(value);
-      if (value && (isNaN(amount) || amount <= 0)) {
+      let valid = false;
+      try { valid = moneyToCents(value) > 0n; } catch { valid = false; }
+      if (value && !valid) {
         setError(field, 'Enter valid amount');
       }
     }

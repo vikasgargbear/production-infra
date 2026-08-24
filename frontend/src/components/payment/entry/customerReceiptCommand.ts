@@ -1,4 +1,5 @@
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
+import { exactDecimalString, exactDecimalUnits } from '../../../utils/exactDecimal';
 
 export type CanonicalReceiptMethod = 'bank_transfer' | 'card' | 'upi';
 
@@ -44,19 +45,16 @@ export interface CanonicalCustomerReceiptPreparePayload {
 
 const MONEY_PATTERN = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/;
 
-export function moneyToCents(value: string | number): number {
+export function moneyToCents(value: string | number): bigint {
   const text = String(value).trim();
   const match = MONEY_PATTERN.exec(text);
   if (!match) throw new Error('Amount must be a non-negative value with at most two decimal places.');
-  const [whole, fraction = ''] = text.split('.');
-  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
-  if (!Number.isSafeInteger(cents)) throw new Error('Amount is outside the supported range.');
-  return cents;
+  return exactDecimalUnits(value, 'Amount', { scale: 2, maximumWholeDigits: 18 });
 }
 
-export function centsToMoney(cents: number): string {
-  if (!Number.isSafeInteger(cents) || cents < 0) throw new Error('Invalid money value.');
-  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+export function centsToMoney(cents: bigint): string {
+  if (cents < 0n) throw new Error('Invalid money value.');
+  return exactDecimalString(cents, 2);
 }
 
 export function canonicalReceiptMethod(paymentMode: string): CanonicalReceiptMethod | null {
@@ -79,10 +77,12 @@ export function allocateReceiptByMethod(
   method: 'fifo' | 'lifo' | 'highest',
 ): ReceiptAllocation[] {
   let remaining = moneyToCents(amount);
-  if (remaining <= 0) return [];
+  if (remaining <= 0n) return [];
   const ordered = [...invoices].sort((left, right) => {
     if (method === 'highest') {
-      return moneyToCents(right.amount_due) - moneyToCents(left.amount_due)
+      const leftDue = moneyToCents(left.amount_due);
+      const rightDue = moneyToCents(right.amount_due);
+      return (rightDue > leftDue ? 1 : rightDue < leftDue ? -1 : 0)
         || left.invoice_id.localeCompare(right.invoice_id);
     }
     const dateOrder = left.invoice_date.localeCompare(right.invoice_date)
@@ -91,9 +91,10 @@ export function allocateReceiptByMethod(
   });
   const allocations: ReceiptAllocation[] = [];
   for (const invoice of ordered) {
-    if (remaining === 0) break;
-    const applied = Math.min(remaining, moneyToCents(invoice.amount_due));
-    if (applied <= 0) continue;
+    if (remaining === 0n) break;
+    const due = moneyToCents(invoice.amount_due);
+    const applied = remaining < due ? remaining : due;
+    if (applied <= 0n) continue;
     allocations.push({
       invoice_id: invoice.invoice_id,
       invoice_number: invoice.invoice_number,
@@ -117,7 +118,7 @@ export function buildCustomerReceiptPreparePayload(
     throw new Error('Customer advance posting is unavailable until its reviewed canonical command is connected.');
   }
   const amountCents = moneyToCents(draft.amount);
-  if (amountCents <= 0) throw new Error('Receipt amount must be greater than zero.');
+  if (amountCents <= 0n) throw new Error('Receipt amount must be greater than zero.');
   if (!isCanonicalUuid(draft.customer_account_id)) throw new Error('Select a canonical customer account.');
   if (!isCanonicalUuid(draft.bank_account_id) || !isCanonicalUuid(draft.settlement_account_id)) {
     throw new Error('Select a canonical bank settlement account.');
@@ -129,7 +130,7 @@ export function buildCustomerReceiptPreparePayload(
   const byInvoice = new Map(outstandingInvoices.map(invoice => [invoice.invoice_id, invoice]));
   const seenOpenItems = new Set<string>();
   const branches = new Set<string>();
-  let allocatedCents = 0;
+  let allocatedCents = 0n;
   const allocations = draft.allocations.map(allocation => {
     const invoice = byInvoice.get(allocation.invoice_id);
     if (!invoice || !isCanonicalUuid(invoice.open_item_id) || !isCanonicalUuid(invoice.branch_id)) {
@@ -139,7 +140,7 @@ export function buildCustomerReceiptPreparePayload(
     seenOpenItems.add(invoice.open_item_id!);
     branches.add(invoice.branch_id!);
     const cents = moneyToCents(allocation.amount);
-    if (cents <= 0 || cents > moneyToCents(invoice.amount_due)) {
+    if (cents <= 0n || cents > moneyToCents(invoice.amount_due)) {
       throw new Error(`Allocation for ${invoice.invoice_number} exceeds its authoritative outstanding amount.`);
     }
     allocatedCents += cents;

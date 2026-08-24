@@ -87,12 +87,12 @@ const decimalValue = (value: unknown, label: string): string => {
     return normalized;
 };
 
-const sumMoney = (values: unknown[], label: string): number => values.reduce<number>(
+const sumMoney = (values: unknown[], label: string): bigint => values.reduce<bigint>(
     (sum, value) => sum + canonicalMoneyCents(value, label),
-    0,
+    0n,
 );
 
-const assertMoneyEqual = (actual: number, expected: unknown, label: string): void => {
+const assertMoneyEqual = (actual: bigint, expected: unknown, label: string): void => {
     if (actual !== canonicalMoneyCents(expected, label)) {
         throw new Error(`Canonical purchase-order readback ${label} does not reconcile.`);
     }

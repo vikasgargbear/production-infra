@@ -20,10 +20,25 @@ describe('projectPaymentOutstandingInvoices', () => {
       invoice_id: invoiceId,
       open_item_id: openItemId,
       branch_id: branchId,
-      total_amount: 168,
-      amount_due: 150,
-      total_allocated: 18
+      total_amount: '168.00',
+      amount_due: '150.00',
+      total_allocated: '18.00'
     })]);
+  });
+
+  it('reconciles values beyond JavaScript safe integers without drift', () => {
+    expect(projectPaymentOutstandingInvoices({ invoice_count: 1, invoices: [{
+      invoice_id: '0198ea37-2b1d-7c8d-9123-123456789abc',
+      open_item_id: '0198ea37-2b1e-7c8d-9123-123456789abc',
+      branch_id: '0198ea37-2b1f-7c8d-9123-123456789abc',
+      invoice_number: 'BIG-1', invoice_date: '2026-08-24',
+      total_amount: '9007199254740993.31', allocated: '0.20',
+      due: '9007199254740993.11', payment_status: 'partial',
+    }] })[0]).toEqual(expect.objectContaining({
+      total_amount: '9007199254740993.31',
+      total_allocated: '0.20',
+      amount_due: '9007199254740993.11',
+    }));
   });
 
   it('fails closed for malformed or incomplete rows', () => {

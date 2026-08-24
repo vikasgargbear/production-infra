@@ -22,6 +22,10 @@ import { clientUuid } from '../../utils/clientUuid';
 import { indiaBusinessDate } from './utils/returnBusinessDate';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { CANONICAL_PURCHASE_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
+import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
+
+const purchaseQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const purchaseRateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 
 interface TransportDetails {
   transport_mode: string;
@@ -72,9 +76,8 @@ interface PurchaseReturnData {
 }
 
 const isPositiveDecimalText = (value: unknown) => {
-  const text = String(value ?? '').trim();
-  return /^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?$/.test(text)
-    && !/^0(?:\.0+)?$/.test(text);
+  try { return exactDecimalUnits(value, 'Purchase return quantity', purchaseQuantityOptions) > 0n; }
+  catch { return false; }
 };
 
 const PurchaseReturnFlowV2 = ({ onClose }) => {
@@ -232,13 +235,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             invoice_item_id: item.supplier_invoice_line_id,
             return_paid_qty: item.returnable_billed_quantity,
             return_free_qty: item.returnable_free_quantity,
-            return_quantity: Number(item.returnable_billed_quantity),
-            original_quantity: Number(item.returnable_billed_quantity),
+            return_quantity: item.returnable_billed_quantity,
+            original_quantity: item.returnable_billed_quantity,
             selected: true,
-            unit_price: Number(item.quoted_unit_rate),
-            tax_percent: Number(item.cgst_rate) + Number(item.sgst_rate) + Number(item.igst_rate) + Number(item.cess_rate),
+            unit_price: item.quoted_unit_rate,
+            tax_percent: addExactDecimals([item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate], 'Purchase return tax rate', purchaseRateOptions),
             discount_percent: 0,
-            max_returnable_qty: Number(item.returnable_billed_quantity),
+            max_returnable_qty: item.returnable_billed_quantity,
             disposition: 'RESTOCK',
             restock: true
           } as any;
@@ -347,7 +350,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           let calculatedIndex = 0;
           let itemValuesChanged = false;
           const items = prev.items.map(item => {
-            if (!item.selected || item.return_quantity <= 0) return item;
+            if (!item.selected || !isPositiveDecimalText(item.return_quantity)) return item;
             const calculated = calculation.items[calculatedIndex++] || {};
             const totalAmount = Number(calculated.total_amount || 0);
             const taxableAmount = Number(calculated.taxable_amount || 0);
@@ -390,7 +393,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     }
 
     const overLimitItem = returnData.items.find(item => item.selected
-      && Number(item.return_quantity) > Number(item.max_returnable_qty ?? item.original_quantity ?? 0));
+      && isPositiveDecimalText(item.return_quantity)
+      && compareExactDecimals(
+        item.return_quantity,
+        item.max_returnable_qty ?? item.original_quantity ?? '0',
+        `Purchase return quantity for ${item.product_name || 'item'}`,
+        purchaseQuantityOptions,
+      ) > 0);
     if (overLimitItem) {
       toast.error(`${overLimitItem.product_name || 'Return item'} exceeds the available return quantity.`);
       return false;

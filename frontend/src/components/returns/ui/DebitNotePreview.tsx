@@ -3,19 +3,20 @@ import { FileText, Building2, Phone, Mail, Truck } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { determineGstType } from '../../gst/utils/gstCalculations';
+import { exactDecimalUnits } from '../../../utils/exactDecimal';
 
 interface ReturnItem {
   id?: string | number;
   selected?: boolean;
-  return_quantity: number;
+  return_quantity: number | string;
   product_name: string;
   hsn_code?: string;
   batch_number?: string;
   expiry_date?: string;
   expiry?: string;
-  unit_price: number;
-  discount_percent?: number;
-  tax_percent?: number;
+  unit_price: number | string;
+  discount_percent?: number | string;
+  tax_percent?: number | string;
   discount_amount?: number;
   taxable_amount?: number;
   cgst_amount?: number;
@@ -98,9 +99,12 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
   };
 
   // Get only selected items with return quantity
-  const returnItems = returnData.items.filter(item =>
-    item.selected && item.return_quantity > 0
-  );
+  const returnItems = returnData.items.filter(item => {
+    if (!item.selected) return false;
+    try {
+      return exactDecimalUnits(item.return_quantity, 'Return quantity', { scale: 6, maximumWholeDigits: 14 }) > 0n;
+    } catch { return false; }
+  });
 
   // Determine GST type using GSTIN state codes
   const gstType = determineGstType(

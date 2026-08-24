@@ -1,13 +1,16 @@
 import type { ItemsTableItem } from '../../global/ui/display/ItemsTableUnified';
+import { exactDecimalUnits, normalizeExactDecimal } from '../../../utils/exactDecimal';
+
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 
 export interface PurchaseReturnProjectionItem extends ItemsTableItem {
   id: string | number;
   product_id: number | string;
   product_name: string;
   batch_id: number | string;
-  return_quantity: number;
-  original_quantity: number;
-  max_returnable_qty: number;
+  return_quantity: number | string;
+  original_quantity: number | string;
+  max_returnable_qty: number | string;
   selected: boolean;
   is_manual: boolean;
 }
@@ -16,8 +19,12 @@ export function manualPurchaseReturnItem(product: any): PurchaseReturnProjection
   if (!product?.product_id || !product?.batch_id) {
     throw new Error('Select a product and an available batch to add this return item.');
   }
-  const availableQuantity = Number(product.quantity_available ?? product.available_quantity ?? 0);
-  if (!Number.isFinite(availableQuantity) || availableQuantity <= 0) {
+  const availableQuantity = normalizeExactDecimal(
+    product.quantity_available ?? product.available_quantity ?? '0',
+    'Available return quantity',
+    quantityOptions,
+  );
+  if (exactDecimalUnits(availableQuantity, 'Available return quantity', quantityOptions) <= 0n) {
     throw new Error('The selected batch has no available quantity to return.');
   }
   return {
@@ -28,9 +35,9 @@ export function manualPurchaseReturnItem(product: any): PurchaseReturnProjection
     batch_id: product.batch_id,
     batch_number: product.batch_number || '',
     original_quantity: availableQuantity,
-    return_quantity: 1,
-    unit_price: Number(product.cost_per_unit ?? product.unit_price ?? 0),
-    tax_percent: Number(product.gst_percent ?? product.tax_percent ?? 0),
+    return_quantity: '1.000000',
+    unit_price: normalizeExactDecimal(product.cost_per_unit ?? product.unit_price ?? '0', 'Return unit price', quantityOptions),
+    tax_percent: normalizeExactDecimal(product.gst_percent ?? product.tax_percent ?? '0', 'Return tax rate', quantityOptions),
     discount_percent: 0,
     selected: true,
     is_manual: true,
@@ -44,8 +51,8 @@ export function manualPurchaseReturnItem(product: any): PurchaseReturnProjection
 export function purchaseReturnItemsForTable(items: any[]): ItemsTableItem[] {
   return items.map(item => ({
     ...item,
-    quantity: Number(item.return_quantity || 0),
-    gst_percent: Number(item.tax_percent || 0),
+    quantity: String(item.return_quantity || '0'),
+    gst_percent: String(item.tax_percent || '0'),
   }));
 }
 
@@ -56,7 +63,7 @@ export function updatePurchaseReturnItem(items: any[], index: number, field: str
     const nextValue = ['return_paid_qty', 'return_free_qty'].includes(stateField)
       ? String(value ?? '').trim()
       : ['return_quantity', 'unit_price'].includes(stateField)
-        ? Number(value || 0)
+        ? String(value ?? '').trim()
         : value;
     return { ...item, [stateField]: nextValue };
   });

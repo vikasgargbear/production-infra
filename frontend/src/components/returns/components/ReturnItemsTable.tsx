@@ -8,6 +8,15 @@ import React, { useMemo, useRef, useCallback } from 'react';
 import { Trash2, Package } from 'lucide-react';
 import { ProductSearch, EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
+import { exactDecimalUnits } from '../../../utils/exactDecimal';
+
+const isPositiveQuantity = (value: unknown): boolean => {
+    try {
+        return exactDecimalUnits(value, 'Return quantity', { scale: 6, maximumWholeDigits: 14 }) > 0n;
+    } catch {
+        return false;
+    }
+};
 
 export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     items,
@@ -145,8 +154,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         </thead>
                         <tbody>
                             {items.map((row, index) => {
-                                const originalPaidQty = parseFloat(String(row.paid_quantity || 0));
-                                const originalFreeQty = parseFloat(String(row.free_quantity || 0));
+                                const originalPaidQty = String(row.paid_quantity || '0');
+                                const originalFreeQty = String(row.free_quantity || '0');
                                 const isFromInvoice = !row.is_manual && !!selectedInvoice;
                                 const total = calculateItemTotal(row);
 
@@ -210,7 +219,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <td className="px-3 py-2 text-center">
                                                 <div className="text-sm text-gray-900 font-medium">
                                                     {originalPaidQty}
-                                                    {originalFreeQty > 0 && (
+                                                    {isPositiveQuantity(originalFreeQty) && (
                                                         <span className="text-green-600 ml-1">+{originalFreeQty}</span>
                                                     )}
                                                 </div>
@@ -223,11 +232,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
                                                     value={row.return_paid_qty ?? row.return_quantity ?? 0}
-                                                    type="number"
-                                                    min={0}
-                                                    max={isFromInvoice ? originalPaidQty : undefined}
-                                                    step={1}
-                                                    decimalPlaces={0}
+                                                    type="text"
                                                     onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
                                                     selectOnFocus={true}
@@ -242,11 +247,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
                                                     value={row.return_free_qty ?? 0}
-                                                    type="number"
-                                                    min={0}
-                                                    max={isFromInvoice ? originalFreeQty : undefined}
-                                                    step={1}
-                                                    decimalPlaces={0}
+                                                    type="text"
                                                     onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
                                                     selectOnFocus={true}

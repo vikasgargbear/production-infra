@@ -9,12 +9,20 @@ import {
   ProductCreationModal,
   GenericSuccessModal,
   ContentCard,
-  NumberInput,
   StandardDatePicker
 } from '../../global';
 import { usePurchaseOrderLogic } from './hooks';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
+import { exactDecimalUnits } from '../../../utils/exactDecimal';
+
+const hasPositiveExactQuantity = (value: unknown, label: string): boolean => {
+  try {
+    return exactDecimalUnits(value, label, { scale: 6, maximumWholeDigits: 14 }) > 0n;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * PurchaseOrderFlow - Purchase Order using the full global document system
@@ -64,8 +72,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     handleRemoveItem,
     prepareForReview,
     handleSavePurchaseOrder,
-    handlePrint,
-    formatCurrency
+    handlePrint
   } = usePurchaseOrderLogic({ prefilledData, onClose });
 
   // ==================== JSX RENDERING ====================
@@ -179,9 +186,12 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             onRemoveItem={handleRemoveItem}
             showTotals={false}
             title=""
+            preserveExactDecimals
           />
 
-          {purchaseOrder.items.map((item, index) => Number(item.free_quantity ?? 0) > 0 && (
+          {purchaseOrder.items.map((item, index) => hasPositiveExactQuantity(
+            item.free_quantity ?? 0, `Item ${index + 1} free quantity`,
+          ) && (
             <label key={String(item.id)} className="mt-3 block border border-gray-200 bg-white p-3 text-sm">
               <span className="mb-2 block font-medium text-gray-800">
                 Free-supply tax treatment for {item.product_name}
@@ -201,13 +211,12 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           <div className="mt-4 grid gap-3 border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">
               Document discount
-              <NumberInput
+              <input
                 value={purchaseOrder.discount_amount}
-                onChange={(value) => setPurchaseOrder(prev => ({ ...prev, discount_amount: value || 0 }))}
-                min={0}
-                decimals={2}
-                prefix="₹"
-                className="mt-1 w-full"
+                onChange={(event) => setPurchaseOrder(prev => ({ ...prev, discount_amount: event.target.value }))}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
               />
             </label>
             <div className="border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
@@ -280,7 +289,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                   <td className="px-3 py-3 font-mono text-xs text-gray-600">{item.uom_conversion_id}</td>
                   <td className="px-3 py-3 text-right">{item.quantity}</td>
                   <td className="px-3 py-3 text-right">{item.free_quantity ?? 0}</td>
-                  <td className="px-3 py-3 text-right">{formatCurrency(item.unit_price)}</td>
+                  <td className="px-3 py-3 text-right">₹{String(item.unit_price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -290,12 +299,12 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
 
       <ContentCard title="Backend totals" subtitle="These values—not browser arithmetic—are bound to the approval hash." actions={undefined}>
         <dl className="ml-auto grid max-w-md grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <dt className="text-gray-600">CGST</dt><dd className="text-right">{formatCurrency(canonicalReview.cgstTotal)}</dd>
-          <dt className="text-gray-600">SGST</dt><dd className="text-right">{formatCurrency(canonicalReview.sgstTotal)}</dd>
-          <dt className="text-gray-600">IGST</dt><dd className="text-right">{formatCurrency(canonicalReview.igstTotal)}</dd>
-          <dt className="text-gray-600">Cess</dt><dd className="text-right">{formatCurrency(canonicalReview.cessTotal)}</dd>
+          <dt className="text-gray-600">CGST</dt><dd className="text-right">₹{canonicalReview.cgstTotal}</dd>
+          <dt className="text-gray-600">SGST</dt><dd className="text-right">₹{canonicalReview.sgstTotal}</dd>
+          <dt className="text-gray-600">IGST</dt><dd className="text-right">₹{canonicalReview.igstTotal}</dd>
+          <dt className="text-gray-600">Cess</dt><dd className="text-right">₹{canonicalReview.cessTotal}</dd>
           <dt className="border-t border-gray-300 pt-3 font-semibold text-gray-900">Supplier commitment</dt>
-          <dd className="border-t border-gray-300 pt-3 text-right text-lg font-bold text-blue-700">{formatCurrency(canonicalReview.supplierCommitment)}</dd>
+          <dd className="border-t border-gray-300 pt-3 text-right text-lg font-bold text-blue-700">₹{canonicalReview.supplierCommitment}</dd>
         </dl>
       </ContentCard>
     </div>

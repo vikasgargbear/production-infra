@@ -1,17 +1,30 @@
 import type { ReturnFormItem } from '../types/return.types';
+import { addExactDecimals, normalizeExactDecimal } from '../../../utils/exactDecimal';
 
-const finiteNumber = (value: unknown, fallback = 0): number => {
-    const result = Number(value);
-    return Number.isFinite(result) ? result : fallback;
-};
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const rateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const exact = (value: unknown, label: string, fallback = '0'): string => (
+    normalizeExactDecimal(value ?? fallback, label, quantityOptions)
+);
+const sum = (values: readonly unknown[], label: string): string => (
+    addExactDecimals(values, label, quantityOptions)
+);
 
 /** Project one canonical invoice line without inventing tax or quantity facts. */
 export function projectInvoiceLineToSalesReturn(item: Record<string, unknown>): ReturnFormItem {
-    const paidQuantity = finiteNumber(item.paid_quantity ?? item.quantity);
-    const freeQuantity = finiteNumber(item.free_quantity);
-    const totalQuantity = paidQuantity + freeQuantity;
-    const componentTax = finiteNumber(item.cgst_rate) + finiteNumber(item.sgst_rate) + finiteNumber(item.igst_rate);
-    const taxPercent = finiteNumber(item.tax_percent ?? item.gst_percent ?? item.tax_rate, componentTax);
+    const paidQuantity = exact(item.paid_quantity ?? item.quantity, 'Paid quantity');
+    const freeQuantity = exact(item.free_quantity, 'Free quantity');
+    const totalQuantity = sum([paidQuantity, freeQuantity], 'Total quantity');
+    const componentTax = addExactDecimals(
+        [item.cgst_rate ?? '0', item.sgst_rate ?? '0', item.igst_rate ?? '0'],
+        'Component tax rate',
+        rateOptions,
+    );
+    const taxPercent = normalizeExactDecimal(
+        item.tax_percent ?? item.gst_percent ?? item.tax_rate ?? componentTax,
+        'Tax rate',
+        rateOptions,
+    );
 
     return {
         ...item,
@@ -25,8 +38,8 @@ export function projectInvoiceLineToSalesReturn(item: Record<string, unknown>): 
         return_quantity: totalQuantity,
         return_paid_qty: paidQuantity,
         return_free_qty: freeQuantity,
-        unit_price: finiteNumber(item.unit_price),
-        discount_percent: finiteNumber(item.discount_percent),
+        unit_price: exact(item.unit_price, 'Unit price'),
+        discount_percent: exact(item.discount_percent, 'Discount percent'),
         tax_percent: taxPercent,
         max_returnable_qty: totalQuantity,
         max_paid_qty: paidQuantity,
@@ -50,13 +63,17 @@ export function updateSalesReturnItem(
     const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
     if (field === 'return_paid_qty' || field === 'quantity') {
         const paid = value;
-        const free = finiteNumber(item.return_free_qty);
-        return { ...item, return_paid_qty: paid, return_quantity: finiteNumber(paid) + free };
+        const free = item.return_free_qty ?? '0';
+        let total = String(paid ?? '');
+        try { total = sum([paid, free], 'Return quantity'); } catch { /* prepare fails closed */ }
+        return { ...item, return_paid_qty: paid, return_quantity: total };
     }
     if (field === 'return_free_qty') {
-        const paid = finiteNumber(item.return_paid_qty ?? item.return_quantity);
+        const paid = item.return_paid_qty ?? item.return_quantity ?? '0';
         const free = value;
-        return { ...item, return_free_qty: free, return_quantity: paid + finiteNumber(free) };
+        let total = String(free ?? '');
+        try { total = sum([paid, free], 'Return quantity'); } catch { /* prepare fails closed */ }
+        return { ...item, return_free_qty: free, return_quantity: total };
     }
     return { ...item, [field]: rawValue };
 }

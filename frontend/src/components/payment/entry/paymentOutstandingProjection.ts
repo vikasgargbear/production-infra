@@ -1,14 +1,16 @@
+import { centsToMoney, moneyToCents } from './customerReceiptCommand';
+
 export interface PaymentOutstandingInvoice {
   invoice_id: string;
   open_item_id?: string;
   branch_id?: string;
   invoice_number: string;
   invoice_date: string;
-  total_amount: number;
-  paid_amount: number;
-  amount_due: number;
-  remaining_due: number;
-  total_allocated: number;
+  total_amount: string;
+  paid_amount: string;
+  amount_due: string;
+  remaining_due: string;
+  total_allocated: string;
   payment_status: string;
 }
 
@@ -20,13 +22,17 @@ const canonicalUuid = (value: unknown, field: string): string => {
   return text;
 };
 
-const money = (value: unknown, field: string): number => {
+const money = (value: unknown, field: string): string => {
   if (typeof value !== 'string') throw new Error(`Outstanding invoice projection has invalid ${field}.`);
   const text = value.trim();
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(text)) {
     throw new Error(`Outstanding invoice projection has invalid ${field}.`);
   }
-  return Number(text);
+  try {
+    return centsToMoney(moneyToCents(text));
+  } catch {
+    throw new Error(`Outstanding invoice projection has invalid ${field}.`);
+  }
 };
 
 export function projectPaymentOutstandingInvoices(payload: unknown): PaymentOutstandingInvoice[] {
@@ -60,7 +66,8 @@ export function projectPaymentOutstandingInvoices(payload: unknown): PaymentOuts
       const amountDue = money(invoice.due, 'due');
       const totalAmount = money(invoice.total_amount, 'total_amount');
       const allocated = money(invoice.allocated, 'allocated');
-      if (amountDue <= 0 || Math.round(amountDue * 100) + Math.round(allocated * 100) !== Math.round(totalAmount * 100)) {
+      if (moneyToCents(amountDue) <= 0n
+        || moneyToCents(amountDue) + moneyToCents(allocated) !== moneyToCents(totalAmount)) {
         throw new Error('Outstanding invoice projection money does not reconcile.');
       }
       const invoiceNumber = String(invoice.invoice_number || '').trim();
@@ -81,6 +88,6 @@ export function projectPaymentOutstandingInvoices(payload: unknown): PaymentOuts
       };
     })
     .sort((left, right) => (
-      new Date(left.invoice_date).getTime() - new Date(right.invoice_date).getTime()
+      left.invoice_date.localeCompare(right.invoice_date)
     ));
 }

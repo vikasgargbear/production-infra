@@ -88,6 +88,9 @@ describe('usePurchaseOrderSave terminal retry boundary', () => {
         expect(canonicalPurchaseOrdersApi.executePrepared).toHaveBeenCalledTimes(1);
         expect(canonicalPurchaseOrdersApi.readback).toHaveBeenCalledTimes(2);
         expect(window.confirm).toHaveBeenCalledTimes(1);
+        expect(setters.setCreatedPOData).toHaveBeenCalledWith(expect.objectContaining({
+            totalAmount: '112.00',
+        }));
         expect(setters.setShowSuccessModal).toHaveBeenCalledWith(true);
     });
 });

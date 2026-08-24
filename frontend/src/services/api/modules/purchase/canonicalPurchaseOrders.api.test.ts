@@ -153,6 +153,30 @@ describe('canonical purchase-order readback', () => {
         expect(requireCanonicalPurchaseOrderReadback(tiny).total_amount).toBe('0.03');
     });
 
+    it('reconciles readback totals beyond JavaScript safe integers exactly', () => {
+        const largeLine = {
+            ...productLine(),
+            gross_amount: '9007199254740993.01',
+            net_value_amount: '9007199254740993.01',
+            gst_taxable_value: '9007199254740993.01',
+            cgst_amount: '0.10',
+            sgst_amount: '0.20',
+            line_total: '9007199254740993.31',
+        };
+        const large = {
+            ...readback(),
+            subtotal: '9007199254740993.01',
+            net_value_total: '9007199254740993.01',
+            taxable_amount: '9007199254740993.01',
+            cgst_amount: '0.10',
+            sgst_amount: '0.20',
+            total_amount: '9007199254740993.31',
+            items: [largeLine],
+        };
+        expect(requireCanonicalPurchaseOrderReadback(large).total_amount)
+            .toBe('9007199254740993.31');
+    });
+
     it('uses canonical prepare, approve, execute and dedicated detail readback only', async () => {
         const preview = {
             command_request_id: UUID,

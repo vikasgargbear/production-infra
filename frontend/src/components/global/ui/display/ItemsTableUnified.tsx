@@ -10,15 +10,15 @@ export interface ItemsTableItem {
     name?: string;
     batch_id?: number | string;
     batch_number?: string;
-    quantity?: number;
-    unit_price?: number;
+    quantity?: number | string;
+    unit_price?: number | string;
     mrp?: number;
     discount?: number;
-    discount_percent?: number;
-    gst_percent?: number;
-    tax_rate?: number;
-    free_quantity?: number;
-    free?: number;
+    discount_percent?: number | string;
+    gst_percent?: number | string;
+    tax_rate?: number | string;
+    free_quantity?: number | string;
+    free?: number | string;
     expiry_date?: string;
     packages_per_box?: number;
     units_per_pack?: number;
@@ -49,6 +49,7 @@ export interface ItemsTableProps {
     totals?: ItemsTableTotals;
     title?: string;
     className?: string;
+    preserveExactDecimals?: boolean;
 }
 
 type NavigationDirection = 'right' | 'next' | 'left' | 'down' | 'up';
@@ -60,7 +61,7 @@ const QUANTITY_DECIMAL_PLACES = 6;
 const QUANTITY_INPUT_STEP = '0.000001';
 const QUANTITY_PRECISION_ERROR = 'Quantity supports up to 6 decimal places.';
 
-const visibleQuantityDecimalPlaces = (value: number | undefined): number => {
+const visibleQuantityDecimalPlaces = (value: number | string | undefined): number => {
     const fraction = String(value ?? 0).split('.')[1] || '';
     return Math.min(fraction.length, QUANTITY_DECIMAL_PLACES);
 };
@@ -79,7 +80,8 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     showTotals = false,
     totals,
     title = 'Items',
-    className = ''
+    className = '',
+    preserveExactDecimals = false,
 }, ref) => {
 
     const readOnly = readOnlyProp !== undefined ? readOnlyProp : mode === 'preview';
@@ -106,15 +108,14 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             return;
         }
 
-        const parsed = Number(rawValue);
-        if (!Number.isFinite(parsed) || parsed < 0) return;
+        if (rawValue === '') return;
         setMobileQuantityErrors(previous => {
             if (!previous[errorKey]) return previous;
             const next = { ...previous };
             delete next[errorKey];
             return next;
         });
-        onUpdateItem?.(index, field, parsed);
+        onUpdateItem?.(index, field, preserveExactDecimals ? rawValue : Number(rawValue));
     };
 
     useImperativeHandle(ref, () => ({
@@ -248,10 +249,10 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 {mobileQuantityErrors[`${index}-quantity`] && <span id={`mobile-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-quantity`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
-                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
                             </label>
                             <label className="text-xs font-medium text-gray-600">Discount %
-                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
                                 <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
@@ -339,6 +340,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         readOnly={readOnly}
                                         selectOnFocus={true}
                                         className="w-20"
+                                        preserveDecimalString={preserveExactDecimals}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">
@@ -362,6 +364,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         readOnly={readOnly}
                                         selectOnFocus={true}
                                         className="w-24"
+                                        preserveDecimalString={preserveExactDecimals}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">
@@ -379,6 +382,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         readOnly={readOnly}
                                         selectOnFocus={true}
                                         className="w-20"
+                                        preserveDecimalString={preserveExactDecimals}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">
@@ -396,6 +400,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         readOnly={readOnly}
                                         selectOnFocus={true}
                                         className="w-16"
+                                        preserveDecimalString={preserveExactDecimals}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">

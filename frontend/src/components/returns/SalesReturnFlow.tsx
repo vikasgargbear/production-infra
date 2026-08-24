@@ -36,6 +36,13 @@ import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from '.
 import { clientUuid } from '../../utils/clientUuid';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { CANONICAL_SALES_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
+import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
+
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const rateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const positiveExactQuantity = (value: unknown): boolean => {
+  try { return exactDecimalUnits(value, 'Return quantity', quantityOptions) > 0n; } catch { return false; }
+};
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -168,16 +175,16 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           ...item,
           id: item.invoice_dispatch_allocation_id,
           invoice_item_id: item.original_invoice_line_id,
-          paid_quantity: Number(item.returnable_billed_quantity),
-          free_quantity: Number(item.returnable_free_quantity),
+          paid_quantity: item.returnable_billed_quantity,
+          free_quantity: item.returnable_free_quantity,
           return_paid_qty: item.returnable_billed_quantity,
           return_free_qty: item.returnable_free_quantity,
-          return_quantity: Number(item.returnable_billed_quantity) + Number(item.returnable_free_quantity),
-          max_returnable_qty: Number(item.returnable_billed_quantity) + Number(item.returnable_free_quantity),
+          return_quantity: addExactDecimals([item.returnable_billed_quantity, item.returnable_free_quantity], 'Return quantity', quantityOptions),
+          max_returnable_qty: addExactDecimals([item.returnable_billed_quantity, item.returnable_free_quantity], 'Maximum return quantity', quantityOptions),
           max_paid_qty: item.returnable_billed_quantity,
           max_free_qty: item.returnable_free_quantity,
-          unit_price: Number(item.quoted_unit_rate),
-          tax_percent: Number(item.cgst_rate) + Number(item.sgst_rate) + Number(item.igst_rate) + Number(item.cess_rate),
+          unit_price: item.quoted_unit_rate,
+          tax_percent: addExactDecimals([item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate], 'Return tax rate', rateOptions),
           batch_number: item.batch_number,
           expiry_date: item.expires_on,
           selected: true,
@@ -369,7 +376,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Calculate totals whenever items or GST setting changes
   useEffect(() => {
     const requestId = ++calculationRequestRef.current;
-    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) return;
+    if (!returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity))) return;
 
     const calculate = async () => {
       try {
@@ -379,7 +386,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         let calculatedIndex = 0;
         let itemValuesChanged = false;
         const items = returnDataRef.current.items.map(item => {
-          if (!item.selected || item.return_quantity <= 0) return item;
+          if (!item.selected || !positiveExactQuantity(item.return_quantity)) return item;
           const calculated = calculation.items[calculatedIndex++] || {};
           const totalAmount = Number(calculated.total_amount || 0);
           const taxableAmount = Number(calculated.taxable_amount || 0);
@@ -422,7 +429,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       return false;
     }
 
-    const hasSelectedItems = returnData.items.some(item => item.selected && item.return_quantity > 0);
+    const hasSelectedItems = returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity));
     if (!hasSelectedItems) {
       toast.error('Please add items to return');
       return false;
@@ -430,7 +437,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     if (ui.showManualEntry) {
       const itemsWithoutBatch = returnData.items.filter(item =>
-        item.selected && item.return_quantity > 0 && !item.batch_id && !item.batch_number
+        item.selected && positiveExactQuantity(item.return_quantity) && !item.batch_id && !item.batch_number
       );
 
       if (itemsWithoutBatch.length > 0) {
@@ -446,17 +453,26 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     for (const item of returnData.items) {
       if (item.selected) {
-        if (item.return_quantity <= 0) {
+        if (!positiveExactQuantity(item.return_quantity)) {
           toast.error(`Please enter a valid return quantity for ${item.product_name}`);
           return false;
         }
 
-        if (item.is_manual && item.unit_price <= 0) {
+        if (item.is_manual && exactDecimalUnits(
+          item.unit_price,
+          `Unit price for ${item.product_name}`,
+          rateOptions,
+        ) <= 0n) {
           toast.error(`Please enter a valid unit price for ${item.product_name}`);
           return false;
         }
 
-        if (!item.is_manual && item.return_quantity > item.max_returnable_qty) {
+        if (!item.is_manual && compareExactDecimals(
+          item.return_quantity,
+          item.max_returnable_qty,
+          `Return quantity for ${item.product_name}`,
+          quantityOptions,
+        ) > 0) {
           toast.error(`Return quantity exceeds available quantity for ${item.product_name}`);
           return false;
         }
@@ -761,7 +777,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           {/* Footer */}
           <ProceedToReviewComponent
             currentStep={1}
-            canProceed={Boolean(selectedCustomer && (selectedInvoice || ui.showManualEntry) && returnData.items.some(item => item.selected && item.return_quantity > 0))}
+            canProceed={Boolean(selectedCustomer && (selectedInvoice || ui.showManualEntry) && returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity)))}
             onBack={undefined}
             onProceed={handleProceedToReview}
             onReset={() => {

@@ -49,7 +49,15 @@ describe('canonical customer receipt command', () => {
   it('apportions decimal amounts without float drift', () => {
     const second = { ...invoiceA, invoice_id: '0198ea37-2b24-7c8d-9123-123456789abc', open_item_id: '0198ea37-2b25-7c8d-9123-123456789abc', invoice_number: 'B', invoice_date: '2026-08-21', amount_due: '0.20' };
     expect(allocateReceiptByMethod('0.30', [{ ...invoiceA, amount_due: '0.10' }, second], 'fifo').map(row => row.amount)).toEqual(['0.10', '0.20']);
-    expect(moneyToCents('0.30')).toBe(30);
+    expect(moneyToCents('0.30')).toBe(30n);
+  });
+
+  it('allocates amounts beyond JavaScript safe integers without rounding', () => {
+    const large = { ...invoiceA, amount_due: '9007199254740993.01' };
+    expect(allocateReceiptByMethod('9007199254740993.01', [large], 'fifo'))
+      .toEqual([{ invoice_id: invoiceA.invoice_id, invoice_number: invoiceA.invoice_number, amount: '9007199254740993.01' }]);
+    expect(moneyToCents('9007199254740993.01')).toBe(900719925474099301n);
+    expect(() => moneyToCents(9007199254740993)).toThrow('exact decimal string');
   });
 
   it.each(['CASH', 'CHEQUE', 'SPLIT'])('fails closed for unsupported %s receipts', payment_mode => {
@@ -72,6 +80,8 @@ describe('canonical customer receipt command', () => {
     expect(() => buildCustomerReceiptPreparePayload({ ...base, amount: '169.00' }, [invoiceA], 'receipt:test')).toThrow('exactly equal');
     expect(() => buildCustomerReceiptPreparePayload(base, [{ ...invoiceA, open_item_id: undefined }], 'receipt:test')).toThrow('lacks canonical allocation evidence');
     expect(() => buildCustomerReceiptPreparePayload({ ...base, amount: '168.001' }, [invoiceA], 'receipt:test')).toThrow('at most two decimal places');
+    expect(() => buildCustomerReceiptPreparePayload({ ...base, amount: '1e2' }, [invoiceA], 'receipt:test')).toThrow('at most two decimal places');
+    expect(() => buildCustomerReceiptPreparePayload({ ...base, amount: 'not-money' }, [invoiceA], 'receipt:test')).toThrow('at most two decimal places');
   });
 
   it('blocks Escape from reopening a draft after the payment has posted', () => {

@@ -1,5 +1,6 @@
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import { exactDecimalString, exactDecimalUnits } from '../../../../utils/exactDecimal';
 import type {
     PurchaseOrderData,
     PurchaseOrderItem,
@@ -48,15 +49,21 @@ const canonicalDecimal = (
     label: string,
     pattern: RegExp,
 ): string => {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-        throw new Error(`${label} must be a finite non-negative number.`);
-    }
-    const normalized = String(value);
+    const normalized = String(value ?? '').trim();
     if (!pattern.test(normalized)) {
         throw new Error(`${label} exceeds canonical decimal precision.`);
     }
+    const fractionDigits = pattern === MONEY_PATTERN ? 2 : pattern === UNIT_RATE_PATTERN ? 4 : 6;
+    exactDecimalUnits(value, label, {
+        scale: fractionDigits,
+        maximumWholeDigits: pattern === MONEY_PATTERN ? 18 : pattern === UNIT_RATE_PATTERN ? 16 : 14,
+    });
     return normalized;
 };
+
+const quantityUnits = (value: string, label: string): bigint => (
+    exactDecimalUnits(value, label, { scale: 6, maximumWholeDigits: 14 })
+);
 
 const freeSupplyTreatment = (item: PurchaseOrderItem, index: number): FreeSupplyTaxTreatment => {
     if (
@@ -65,7 +72,7 @@ const freeSupplyTreatment = (item: PurchaseOrderItem, index: number): FreeSupply
     ) {
         return item.free_supply_tax_treatment;
     }
-    if (Number(item.free_quantity ?? 0) === 0) {
+    if (quantityUnits(canonicalDecimal(item.free_quantity ?? 0, 'Free quantity', QUANTITY_PATTERN), 'Free quantity') === 0n) {
         // The canonical schema requires the field even when there is no free
         // supply; excluded is then mathematically inert, not a pricing default.
         return 'excluded_from_taxable_value';
@@ -107,7 +114,7 @@ export function canonicalPurchaseOrderValidationError(
                 `Item ${index + 1} free quantity`,
                 QUANTITY_PATTERN,
             );
-            if (Number(billed) <= 0 && Number(free) <= 0) {
+            if (quantityUnits(billed, 'Billed quantity') <= 0n && quantityUnits(free, 'Free quantity') <= 0n) {
                 throw new Error(`Item ${index + 1} needs a positive billed or free quantity.`);
             }
             const rate = canonicalDecimal(
@@ -115,7 +122,7 @@ export function canonicalPurchaseOrderValidationError(
                 `Item ${index + 1} quoted rate`,
                 UNIT_RATE_PATTERN,
             );
-            if (Number(rate) <= 0) {
+            if (exactDecimalUnits(rate, 'Quoted rate', { scale: 4, maximumWholeDigits: 16 }) <= 0n) {
                 throw new Error(`Item ${index + 1} quoted rate must be greater than zero.`);
             }
             const discount = canonicalDecimal(
@@ -123,7 +130,7 @@ export function canonicalPurchaseOrderValidationError(
                 `Item ${index + 1} discount`,
                 QUANTITY_PATTERN,
             );
-            if (Number(discount) > 100) {
+            if (quantityUnits(discount, 'Discount') > 100_000_000n) {
                 throw new Error(`Item ${index + 1} discount cannot exceed 100%.`);
             }
             freeSupplyTreatment(item, index);
@@ -134,7 +141,7 @@ export function canonicalPurchaseOrderValidationError(
             'Purchase-order freight',
             MONEY_PATTERN,
         );
-        if (Number(freight) !== 0) {
+        if (exactDecimalUnits(freight, 'Freight', { scale: 2, maximumWholeDigits: 18 }) !== 0n) {
             return 'Freight requires a canonical charge-line identity and is not available in this form.';
         }
         return null;
@@ -167,7 +174,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
             'Supplier',
         ),
         tax_charge_mechanism: 'normal',
-        document_discount: Number(documentDiscount) > 0 ? {
+        document_discount: exactDecimalUnits(documentDiscount, 'Document discount', { scale: 2, maximumWholeDigits: 18 }) > 0n ? {
             document_discount_kind: 'amount',
             document_discount_basis: 'price_value',
             document_discount_value: documentDiscount,
@@ -208,7 +215,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
                     UNIT_RATE_PATTERN,
                 ),
                 price_basis: 'tax_exclusive',
-                line_discount: Number(discount) > 0 ? {
+                line_discount: quantityUnits(discount, 'Line discount') > 0n ? {
                     line_discount_kind: 'percent',
                     line_discount_basis: 'price_value',
                     line_discount_value: discount,
@@ -223,7 +230,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
     };
 }
 
-export const canonicalMoneyCents = (value: unknown, label: string): number => {
+export const canonicalMoneyCents = (value: unknown, label: string): bigint => {
     if (typeof value !== 'string' && typeof value !== 'number') {
         throw new Error(`Canonical purchase-order preview is missing ${label}.`);
     }
@@ -231,25 +238,22 @@ export const canonicalMoneyCents = (value: unknown, label: string): number => {
     if (!MONEY_PATTERN.test(normalized)) {
         throw new Error(`Canonical purchase-order preview returned invalid ${label}.`);
     }
-    const [whole, fraction = ''] = normalized.split('.');
-    const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
-    if (!Number.isSafeInteger(cents)) {
-        throw new Error(`Canonical purchase-order ${label} exceeds safe money range.`);
-    }
-    return cents;
+    return exactDecimalUnits(value, `Canonical purchase-order ${label}`, {
+        scale: 2,
+        maximumWholeDigits: 18,
+    });
 };
 
 export const canonicalMoneyString = (value: unknown, label: string): string => {
-    const cents = canonicalMoneyCents(value, label);
-    return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+    return exactDecimalString(canonicalMoneyCents(value, label), 2);
 };
 
 const addMoney = (...values: string[]): string => {
-    const cents = values.reduce(
+    const cents = values.reduce<bigint>(
         (sum, value) => sum + canonicalMoneyCents(value, 'money total'),
-        0,
+        0n,
     );
-    return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+    return exactDecimalString(cents, 2);
 };
 
 export function canonicalPurchaseOrderReview(

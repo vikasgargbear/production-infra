@@ -5,6 +5,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
+import { exactDecimalUnits } from '../../../utils/exactDecimal';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
@@ -48,7 +49,12 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     const [notes, setNotes] = useState(returnData.return_reason_notes || '');
 
     const selectedItems = useMemo(() =>
-        returnData.items.filter(item => item.selected && item.return_quantity > 0),
+        returnData.items.filter(item => {
+            if (!item.selected) return false;
+            try {
+                return exactDecimalUnits(item.return_quantity, 'Return quantity', { scale: 6, maximumWholeDigits: 14 }) > 0n;
+            } catch { return false; }
+        }),
         [returnData.items]
     );
 

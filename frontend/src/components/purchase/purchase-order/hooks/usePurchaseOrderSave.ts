@@ -15,6 +15,7 @@ import {
     canonicalPurchaseOrderReview,
     canonicalPurchaseOrderValidationError,
     canonicalMoneyCents,
+    canonicalMoneyString,
     type CanonicalPurchaseOrderReview,
     type PurchaseOrderSupplier,
 } from '../utils/canonicalPurchaseOrderCommand';
@@ -171,12 +172,6 @@ export function usePurchaseOrderSave(
             );
             setPreparedPreview(prepared.data);
             setCanonicalReview(review);
-            setPurchaseOrder(previous => ({
-                ...previous,
-                tax_amount: Number(review.gstTotal),
-                total_amount: Number(review.supplierCommitment),
-                net_amount: Number(review.supplierCommitment),
-            }));
             return true;
         } catch (error) {
             const message = submissionError(error);
@@ -229,7 +224,7 @@ export function usePurchaseOrderSave(
             const readbackTaxCents = [
                 readback.cgst_amount, readback.sgst_amount,
                 readback.igst_amount, readback.cess_amount,
-            ].reduce((sum, value) => sum + canonicalMoneyCents(value, 'readback GST'), 0);
+            ].reduce<bigint>((sum, value) => sum + canonicalMoneyCents(value, 'readback GST'), 0n);
             if (
                 readback.branch_id !== canonicalReview.branchId
                 || readback.supplier_id !== canonicalReview.supplierId
@@ -242,19 +237,13 @@ export function usePurchaseOrderSave(
             setPurchaseOrder(previous => ({
                 ...previous,
                 po_no: readback.purchase_order_number,
-                gross_amount: Number(readback.subtotal),
-                discount_amount: Number(readback.discount_total),
-                freight_charges: Number(readback.charges_total),
-                tax_amount: readbackTaxCents / 100,
-                net_amount: Number(readback.total_amount),
-                total_amount: Number(readback.total_amount),
                 status: readback.status,
             }));
             setCreatedPOData({
                 poId: readback.purchase_order_id,
                 poNumber: readback.purchase_order_number,
                 supplierName: readback.supplier_name,
-                totalAmount: Number(readback.total_amount),
+                totalAmount: canonicalMoneyString(readback.total_amount, 'readback total'),
             });
             setShowSuccessModal(true);
         } catch (error) {

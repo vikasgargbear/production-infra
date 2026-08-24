@@ -48,19 +48,19 @@ export interface BaseReturnItem {
     batch_number?: string;
 
     // Quantities
-    original_quantity: number;
-    return_quantity: number;
+    original_quantity: number | string;
+    return_quantity: number | string;
 
     // Pricing
-    unit_price: number;
+    unit_price: number | string;
     discount_amount?: number;
-    discount_percent?: number;
+    discount_percent?: number | string;
 
     // Tax
-    tax_percent?: number;
-    cgst_rate?: number;
-    sgst_rate?: number;
-    igst_rate?: number;
+    tax_percent?: number | string;
+    cgst_rate?: number | string;
+    sgst_rate?: number | string;
+    igst_rate?: number | string;
 
     // Selection state
     selected?: boolean;

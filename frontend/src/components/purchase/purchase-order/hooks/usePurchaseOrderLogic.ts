@@ -26,15 +26,15 @@ export interface PurchaseOrderItem {
     uom_conversion_id?: string;
     batch_number?: string;
     expiry_date?: string;
-    quantity: number;
+    quantity: number | string;
     unit?: string;
-    unit_price: number;
+    unit_price: number | string;
     mrp?: number;
     expected_rate?: number;
     tax_percent: number;
     gst_percent?: number;
-    discount_percent?: number;
-    free_quantity?: number;
+    discount_percent?: number | string;
+    free_quantity?: number | string;
     free_supply_tax_treatment?:
         | 'excluded_from_taxable_value'
         | 'included_at_unit_rate';
@@ -58,7 +58,7 @@ export interface PurchaseOrderData {
     delivery_location: string;
     transport_mode: string;
     gross_amount: number;
-    discount_amount: number;
+    discount_amount: number | string;
     tax_amount: number;
     freight_charges: number;
     net_amount: number;
@@ -71,7 +71,7 @@ export interface CreatedPOData {
     poNumber: string;
     poId: string | number;
     supplierName: string;
-    totalAmount: number;
+    totalAmount: number | string;
 }
 
 export interface UsePurchaseOrderLogicProps {
@@ -114,7 +114,6 @@ export interface UsePurchaseOrderLogicReturn {
     handleSavePurchaseOrder: () => Promise<void>;
     validatePurchaseOrder: () => boolean;
     handlePrint: () => void;
-    formatCurrency: (amount: number | string) => string;
 }
 
 export const getInitialPurchaseOrder = (prefilledData?: Partial<PurchaseOrderData> | null): PurchaseOrderData => ({
@@ -130,7 +129,7 @@ export const getInitialPurchaseOrder = (prefilledData?: Partial<PurchaseOrderDat
     delivery_location: 'Main Warehouse',
     transport_mode: 'By Road',
     gross_amount: 0,
-    discount_amount: 0,
+    discount_amount: '0',
     tax_amount: 0,
     freight_charges: 0,
     net_amount: 0,
@@ -180,15 +179,15 @@ export function usePurchaseOrderLogic({
             uom_conversion_id: product.uom_conversion_id,
             batch_number: product.batch_number || '',
             expiry_date: product.expiry_date || '',
-            quantity: 1,
+            quantity: '1',
             unit: product.unit || product.uom || '',
-            unit_price: product.unit_price || product.purchase_rate || 0,
+            unit_price: String(product.unit_price || product.purchase_rate || 0),
             mrp: product.mrp || 0,
             expected_rate: product.unit_price || product.purchase_rate || 0,
             tax_percent: product.gst_percent ?? product.tax_percent ?? 0,
             gst_percent: product.gst_percent ?? product.tax_percent ?? 0,
-            discount_percent: 0,
-            free_quantity: 0,
+            discount_percent: '0',
+            free_quantity: '0',
             free_supply_tax_treatment: product.free_supply_tax_treatment,
             pack_type: product.pack_type || '',
             pack_size: product.pack_size,
@@ -204,11 +203,12 @@ export function usePurchaseOrderLogic({
     }, []);
 
     const handleUpdateItem = useCallback((index: number, field: string, value: any) => {
+        const exactFields = new Set(['quantity', 'unit_price', 'discount_percent', 'free_quantity', 'free']);
         setPurchaseOrder(prev => ({
             ...prev,
             items: (prev.items || []).map((item, i) => {
                 if (i === index) {
-                    return { ...item, [field]: value };
+                    return { ...item, [field]: exactFields.has(field) ? String(value) : value };
                 }
                 return item;
             })
@@ -263,10 +263,6 @@ export function usePurchaseOrderLogic({
         window.print();
     }, []);
 
-    const formatCurrency = useCallback((amount: number | string): string => {
-        return `₹${(parseFloat(String(amount)) || 0).toFixed(2)}`;
-    }, []);
-
     return {
         purchaseOrder,
         setPurchaseOrder,
@@ -294,8 +290,7 @@ export function usePurchaseOrderLogic({
         prepareForReview,
         handleSavePurchaseOrder,
         validatePurchaseOrder,
-        handlePrint,
-        formatCurrency
+        handlePrint
     };
 }
 

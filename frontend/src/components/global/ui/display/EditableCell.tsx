@@ -30,6 +30,7 @@ export interface EditableCellProps {
     decimalPlaces?: number;
     maxDecimalPlaces?: number;
     decimalPlacesErrorMessage?: string;
+    preserveDecimalString?: boolean;
     onFocus?: (e: FocusEvent<HTMLInputElement>) => void;
     onBlur?: (e: FocusEvent<HTMLInputElement>) => void;
 }
@@ -56,7 +57,8 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     maxDecimalPlaces,
     decimalPlacesErrorMessage,
     onFocus: onFocusProp,
-    onBlur: onBlurProp
+    onBlur: onBlurProp,
+    preserveDecimalString = false,
 }, ref) => {
     const [localValue, setLocalValue] = useState<string | number>(value);
     const [isEditing, setIsEditing] = useState(false);
@@ -108,6 +110,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     }));
 
     const formatValue = (val: string | number): string => {
+        if (preserveDecimalString) return String(val);
         if (type === 'number') {
             const num = parseFloat(String(val));
             if (isNaN(num)) return '';
@@ -127,6 +130,17 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
 
         if (type === 'number') {
             const cleaned = String(val).replace(/[^0-9.-]/g, '');
+            if (preserveDecimalString) {
+                processedValue = cleaned || '0';
+                setLocalValue(processedValue);
+                setValidationError(null);
+                onChange?.(processedValue);
+                if (onSave && processedValue !== originalValue) {
+                    onSave(processedValue);
+                    setOriginalValue(processedValue);
+                }
+                return true;
+            }
             let num = parseFloat(cleaned);
 
             if (isNaN(num)) {

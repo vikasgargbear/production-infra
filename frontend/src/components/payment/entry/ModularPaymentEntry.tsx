@@ -33,6 +33,14 @@ interface PaymentEntryContentProps {
   onClose: () => void;
 }
 
+const isPositiveExactMoney = (value: unknown): boolean => {
+  try { return moneyToCents(String(value ?? '')) > 0n; } catch { return false; }
+};
+
+const exactMoneySum = (values: readonly (string | number)[]): string => (
+  centsToMoney(values.reduce<bigint>((sum, value) => sum + moneyToCents(value), 0n))
+);
+
 // Inner component that uses the context
 const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) => {
   const {
@@ -80,7 +88,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
     // Only auto-allocate if user explicitly chose a method other than manual
-    if (payment.amount && parseFloat(payment.amount) > 0 &&
+    if (payment.amount && isPositiveExactMoney(payment.amount) &&
       outstandingInvoices && outstandingInvoices.length > 0 &&
       payment.allocation_method && payment.allocation_method !== 'manual' &&
       ['fifo', 'lifo', 'highest'].includes(payment.allocation_method)) {
@@ -278,7 +286,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
   // Handle manual invoice selection with proper allocation amounts
   const handleManualInvoiceSelection = (checked: boolean, invoiceId: string, invoice: any) => {
-    let paymentCents = 0;
+    let paymentCents = 0n;
     try { paymentCents = moneyToCents(payment.amount); } catch { return; }
     const newSelected = new Set(selectedInvoiceIds);
     let newManualAllocations = { ...manualAllocations };
@@ -287,7 +295,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       newSelected.add(invoiceId);
 
       // Calculate remaining payment amount after existing allocations
-      let totalAllocated = 0;
+      let totalAllocated = 0n;
       Object.entries(newManualAllocations).forEach(([id, amount]) => {
         if (id !== invoiceId) {
           totalAllocated += moneyToCents(amount);
@@ -296,9 +304,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
       const remainingAmount = paymentCents - totalAllocated;
       // Allocate the minimum of remaining payment or invoice due amount
-      const allocateAmount = Math.min(remainingAmount, moneyToCents(invoice.amount_due));
+      const invoiceDue = moneyToCents(invoice.amount_due);
+      const allocateAmount = remainingAmount < invoiceDue ? remainingAmount : invoiceDue;
 
-      if (allocateAmount > 0) {
+      if (allocateAmount > 0n) {
         newManualAllocations[invoiceId] = centsToMoney(allocateAmount);
       } else {
         // No remaining payment to allocate — surface non-blocking inline message
@@ -378,7 +387,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 Payment Recorded Successfully!
               </h2>
               <p className="text-2xl font-bold text-gray-900 mb-8">
-                Amount: ₹{parseFloat(payment.amount).toFixed(2)}
+                Amount: ₹{centsToMoney(moneyToCents(payment.amount))}
               </p>
 
               <div className="flex justify-center space-x-3">
@@ -500,7 +509,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         </h3>
                         <div className="flex items-center space-x-3">
                           {/* FIFO Quick Allocation Button */}
-                          {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && parseFloat(payment.amount) > 0 && (
+                          {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && isPositiveExactMoney(payment.amount) && (
                             <button
                               onClick={() => {
                                 setPaymentField('allocation_method', 'fifo');
@@ -557,7 +566,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 {payment.allocation_method === 'highest' && '💰 Highest First Applied'}
                               </span>
                               <span className="text-sm text-blue-600">
-                                ({payment.allocations.length} invoices, ₹{centsToMoney(payment.allocations.reduce((sum, allocation) => sum + moneyToCents(allocation.amount), 0))})
+                                ({payment.allocations.length} invoices, ₹{centsToMoney(payment.allocations.reduce<bigint>((sum, allocation) => sum + moneyToCents(allocation.amount), 0n))})
                               </span>
                             </div>
                             <button
@@ -600,7 +609,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         <div>
                           {/* Summary row */}
                           <div className="mb-3 text-sm text-gray-600">
-                            <span>{outstandingInvoices.length} invoices • Outstanding: ₹{outstandingInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_due || 0), 0).toFixed(2)}</span>
+                            <span>{outstandingInvoices.length} invoices • Outstanding: ₹{exactMoneySum(outstandingInvoices.map(inv => inv.amount_due))}</span>
                           </div>
 
                           {/* Simple table */}
@@ -616,17 +625,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                         onChange={(e) => {
                                           if (e.target.checked) {
                                             // Select all with FIFO-like allocation up to payment amount
-                                            let paymentAmount = 0;
+                                            let paymentAmount = 0n;
                                             try { paymentAmount = moneyToCents(payment.amount); } catch { return; }
                                             const newSelected = new Set<string>();
                                             const newAllocations: Record<string, string> = {};
                                             let remainingPayment = paymentAmount;
 
                                             outstandingInvoices.forEach((inv: any) => {
-                                              if (remainingPayment > 0) {
+                                              if (remainingPayment > 0n) {
                                                 const id = inv.invoice_id;
                                                 newSelected.add(id);
-                                                const allocateAmount = Math.min(remainingPayment, moneyToCents(inv.amount_due));
+                                                const due = moneyToCents(inv.amount_due);
+                                                const allocateAmount = remainingPayment < due ? remainingPayment : due;
                                                 newAllocations[id] = centsToMoney(allocateAmount);
                                                 remainingPayment -= allocateAmount;
                                               }
@@ -687,16 +697,16 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                       </td>
                                       <td className="py-2 px-2 font-medium">{invoice.invoice_number}</td>
                                       <td className="py-2 px-2 text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
-                                      <td className="text-right py-2 px-2">₹{(invoice.total_amount || 0).toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2">₹{invoice.total_amount}</td>
                                       <td className="text-right py-2 px-2 text-gray-600">
-                                        ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
-                                        {invoice.total_allocated > 0 && (
+                                        ₹{centsToMoney(moneyToCents(invoice.total_amount) - moneyToCents(invoice.amount_due))}
+                                        {moneyToCents(invoice.total_allocated) > 0n && (
                                           <span className="block text-xs text-blue-600">
-                                            (incl. ₹{invoice.total_allocated.toFixed(2)} recent)
+                                            (incl. ₹{invoice.total_allocated} recent)
                                           </span>
                                         )}
                                       </td>
-                                      <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due.toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due}</td>
                                       <td className="text-right py-2 px-2 font-medium text-green-600">
                                         {payment.allocation_method === 'manual'
                                           ? (isSelected ? `₹${manualAllocations[invoiceId] || '0.00'}` : '-')
@@ -747,7 +757,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           }}
           onReset={currentStep === 1 ? resetPayment : undefined}
           totalItems={payment.allocations ? payment.allocations.length : 0}
-          totalAmount={parseFloat(payment.amount) || 0}
+          totalAmount={payment.amount || '0.00'}
           proceedText={currentStep === 2 ? (postedPaymentId ? 'Reconcile Receipt' : 'Post Receipt') : 'Continue'}
           saving={saving}
           disabled={false}
