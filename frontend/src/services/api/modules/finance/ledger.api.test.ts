@@ -18,25 +18,25 @@ describe('canonical ledger dashboard projection', () => {
         get
             .mockResolvedValueOnce({
                 data: {
-                    aging_data: [{ total_outstanding: 1563.99 }],
-                    summary: { overdue: 0 },
+                    aging_data: [{ total_outstanding: '9007199254740993.01' }],
+                    summary: { total: '9007199254740993.01', overdue: '0.00' },
                 },
             })
             .mockResolvedValueOnce({
                 data: {
-                    aging_data: [{ total_outstanding: 400 }],
-                    summary: { overdue: 25 },
+                    aging_data: [{ total_outstanding: '400.00' }],
+                    summary: { total: '400.00', overdue: '25.00' },
                 },
             });
 
         const result = await ledgerApi.getDashboardStats();
 
         expect(result).toEqual({
-            total_receivables: 1563.99,
-            total_payables: 400,
-            net_position: 1163.99,
-            overdue_receivables: 0,
-            overdue_payables: 25,
+            total_receivables: '9007199254740993.01',
+            total_payables: '400.00',
+            net_position: '9007199254740593.01',
+            overdue_receivables: '0.00',
+            overdue_payables: '25.00',
             collection_efficiency: null,
             payment_efficiency: null,
             cash_flow_trend: 'neutral',

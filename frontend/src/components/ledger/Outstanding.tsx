@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../../services/api/apiClient';
 import { ModuleHeader } from '../global';
-import { formatCurrency } from '../../utils/formatters';
+import { formatExactCurrency } from '../../utils/exactDecimal';
 
 // Import extracted components
 import { OutstandingSummaryBar } from './outstanding/components/OutstandingSummaryBar';
@@ -28,7 +28,8 @@ import { PartyDetailsView } from './outstanding/components/PartyDetailsView';
 
 // Import hooks and types
 import { useOutstandingState } from './outstanding/hooks/useOutstandingState';
-import type { OutstandingProps, PartyOutstanding, OutstandingSummary } from './outstanding/types/outstanding.types';
+import type { OutstandingProps, PartyOutstanding } from './outstanding/types/outstanding.types';
+import { hasPositiveMoney, projectCanonicalLedger } from './outstanding/canonicalLedgerProjection';
 
 const Outstanding: React.FC<OutstandingProps> = ({
   partyType = 'customer',
@@ -60,63 +61,13 @@ const Outstanding: React.FC<OutstandingProps> = ({
         });
 
         const responseData = response.data || {};
-        const agingData = responseData.aging_data || [];
-        const summaryData = responseData.summary || {};
-
-        // Transform aging_data to PartyOutstanding format
-        const parties: PartyOutstanding[] = agingData.map((party: any) => ({
-          party_id: String(party.customer_id || party.supplier_id || party.party_id),
-          party_name: party.customer_name || party.supplier_name || party.party_name || 'Unknown',
-          party_phone: party.phone || party.primary_phone || '',
-          party_email: party.email || party.primary_email || '',
-          total_outstanding: parseFloat(party.total_outstanding || party.total_payable || 0),
-          total_advance: parseFloat(party.advance || 0),
-          customer_net_position: parseFloat(party.net_balance || party.total_outstanding || 0),
-          total_overdue: parseFloat(party.overdue_amount || party.overdue || 0),
-          invoice_count: parseInt(party.pending_invoices || party.invoice_count || 0),
-          overdue_count: parseInt(party.overdue_invoices || 0),
-          oldest_invoice_days: parseInt(party.max_overdue_days || party.oldest_invoice_days || 0),
-          credit_limit: parseFloat(party.credit_limit || 0),
-          credit_utilization: parseFloat(party.credit_utilization || 0),
-          invoices: Array.isArray(party.invoices) ? party.invoices : []
-        }));
-
-        // Build summary from response
-        const summary: OutstandingSummary = {
-          total_receivable: parseFloat(summaryData.total || summaryData.total_receivable || 0),
-          total_payable: parseFloat(summaryData.total_payable || 0),
-          total_overdue: parseFloat(summaryData.overdue || summaryData.total_overdue || 0),
-          party_count: parseInt(summaryData.party_count || parties.length),
-          overdue_party_count: parties.filter(p => p.total_overdue > 0).length,
-          aging_summary: {
-            current: {
-              count: parseInt(summaryData.current_count || 0),
-              amount: parseFloat(summaryData.current || 0)
-            },
-            '1-30': {
-              count: parseInt(summaryData['1_30_count'] || 0),
-              amount: parseFloat(summaryData['1_30'] || summaryData.bucket_1_30 || 0)
-            },
-            '31-60': {
-              count: parseInt(summaryData['31_60_count'] || 0),
-              amount: parseFloat(summaryData['31_60'] || summaryData.bucket_31_60 || 0)
-            },
-            '61-90': {
-              count: parseInt(summaryData['61_90_count'] || 0),
-              amount: parseFloat(summaryData['61_90'] || summaryData.bucket_61_90 || 0)
-            },
-            over_90: {
-              count: parseInt(summaryData['over_90_count'] || 0),
-              amount: parseFloat(summaryData['over_90'] || summaryData.bucket_90_plus || 0)
-            }
-          }
-        };
+        const { parties, summary } = projectCanonicalLedger(responseData);
 
         return {
           parties,
           summary,
-          total_advances: 0,
-          net_position: 0,
+          total_advances: '0.00',
+          net_position: '0.00',
           customer_advances: {}
         };
       } catch (err) {
@@ -131,17 +82,17 @@ const Outstanding: React.FC<OutstandingProps> = ({
 
   const parties = useMemo(() => data?.parties || [], [data?.parties]);
   const summary = data?.summary || {
-    total_receivable: 0,
-    total_payable: 0,
-    total_overdue: 0,
+    total_receivable: '0.00',
+    total_payable: '0.00',
+    total_overdue: '0.00',
     party_count: 0,
     overdue_party_count: 0,
     aging_summary: {
-      current: { count: 0, amount: 0 },
-      '1-30': { count: 0, amount: 0 },
-      '31-60': { count: 0, amount: 0 },
-      '61-90': { count: 0, amount: 0 },
-      over_90: { count: 0, amount: 0 }
+      current: { count: 0, amount: '0.00' },
+      '1-30': { count: 0, amount: '0.00' },
+      '31-60': { count: 0, amount: '0.00' },
+      '61-90': { count: 0, amount: '0.00' },
+      over_90: { count: 0, amount: '0.00' }
     }
   };
 
@@ -160,14 +111,11 @@ const Outstanding: React.FC<OutstandingProps> = ({
 
     // Apply status filter
     if (filters.status === 'overdue') {
-      filtered = filtered.filter((party: any) => party.total_overdue > 0);
+      filtered = filtered.filter((party: PartyOutstanding) => hasPositiveMoney(party.total_overdue, 'Party overdue'));
     } else if (filters.status === 'current') {
-      filtered = filtered.filter((party: any) => party.total_overdue === 0);
+      filtered = filtered.filter((party: PartyOutstanding) => !hasPositiveMoney(party.total_overdue, 'Party overdue'));
     } else if (filters.status === 'net-outstanding') {
-      filtered = filtered.filter((party: any) => {
-        const netPosition = party.customer_net_position || ((party.total_advance || 0) - party.total_outstanding);
-        return netPosition > 0;
-      });
+      filtered = filtered.filter((party: PartyOutstanding) => hasPositiveMoney(party.total_outstanding, 'Party outstanding'));
     }
 
     return filtered;
@@ -324,8 +272,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 <>
                   <OutstandingSummaryBar
                     summary={summary}
-                    totalAdvances={data?.total_advances || 0}
-                    netPosition={data?.net_position || 0}
+                    totalAdvances={data?.total_advances || '0.00'}
+                    netPosition={data?.net_position || '0.00'}
                     partyType={partyType}
                   />
 
@@ -365,19 +313,12 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       { key: 'over_90', label: 'Over 90 days', color: 'bg-red-500' }
                     ] as const).map(({ key, label, color }) => {
                       const bucket = summary.aging_summary[key];
-                      const percentage = summary.total_receivable > 0
-                        ? Math.min(100, (bucket.amount / summary.total_receivable) * 100)
-                        : 0;
-
                       return (
                         <div key={key} className="rounded-lg border border-gray-200 p-4">
                           <div className="text-sm font-medium text-gray-600">{label}</div>
-                          <div className="mt-2 text-xl font-semibold text-gray-900">{formatCurrency(bucket.amount)}</div>
+                          <div className="mt-2 text-xl font-semibold text-gray-900">{formatExactCurrency(bucket.amount, `${label} outstanding`)}</div>
                           <div className="mt-1 text-xs text-gray-500">{bucket.count} {bucket.count === 1 ? 'party' : 'parties'}</div>
-                          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100">
-                            <div className={`h-full rounded-full ${color}`} style={{ width: `${percentage}%` }} />
-                          </div>
-                          <div className="mt-1 text-right text-xs text-gray-500">{percentage.toFixed(0)}%</div>
+                          <div className={`mt-3 h-1.5 rounded-full ${color}`} aria-hidden="true" />
                         </div>
                       );
                     })}

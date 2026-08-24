@@ -4,17 +4,12 @@
  * Shows B2B and B2C invoices with credit/debit note adjustments
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { DataTable } from '../../global';
-import type { DateRange, GSTR1Data } from '../types';
-import {
-    transformInvoicesToGSTR1,
-    applyNoteAdjustments,
-    classifyGSTR1Notes,
-    formatCurrency
-} from '../utils';
-import { gstApi, invoicesApi } from '../../../services/api';
+import type { DateRange } from '../types';
+import { gstApi } from '../../../services/api';
+import { formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
 interface GSTR1ReportProps {
     dateRange?: DateRange;
@@ -25,13 +20,49 @@ interface GSTR1ReportProps {
     onExport?: () => void;
 }
 
+const localISODate = (value: Date): string => [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0'),
+].join('-');
+
 const currentMonthRange = (): DateRange => {
     const today = new Date();
     return {
-        from: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10),
-        to: today.toISOString().slice(0, 10),
+        from: localISODate(new Date(today.getFullYear(), today.getMonth(), 1)),
+        to: localISODate(today),
     };
 };
+
+type ExactB2BRow = {
+    gst_number: string;
+    name: string;
+    invoices: number;
+    taxableValue: string;
+    cgst: string;
+    sgst: string;
+    igst: string;
+    cess: string;
+    totalTax: string;
+};
+
+type ExactB2CBucket = Omit<ExactB2BRow, 'gst_number' | 'name' | 'invoices'> & { count: number };
+
+type ExactGSTR1Data = {
+    b2b: ExactB2BRow[];
+    b2c: { small: ExactB2CBucket; large: ExactB2CBucket };
+    notes: Array<Record<string, unknown> & { direction: 'credit' | 'debit' }>;
+    summary: {
+        totalInvoices: number;
+        totalTaxableValue: string;
+        totalTax: string;
+        netAdjustment: string;
+    };
+};
+
+const exactMoney = (value: unknown, label: string) => normalizeAuthoritativeDecimal(value, label, {
+    scale: 2, maximumWholeDigits: 20, allowNegative: true,
+});
 
 const GSTR1Report: React.FC<GSTR1ReportProps> = ({
     dateRange = currentMonthRange(),
@@ -39,37 +70,12 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
     showTaxBreakdown = false,
     onDataReady,
 }) => {
-    const [data, setData] = useState<GSTR1Data | null>(null);
+    const onDataReadyRef = useRef(onDataReady);
+    onDataReadyRef.current = onDataReady;
+    const [data, setData] = useState<ExactGSTR1Data | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [creditDebitNotes, setCreditDebitNotes] = useState<any[]>([]);
-
-    // Load invoice data
-    const loadInvoices = async (): Promise<any[]> => {
-        const response = await invoicesApi.getAll({
-            date_from: dateRange.from,
-            date_to: dateRange.to,
-            limit: 500
-        });
-        const responseData = response?.data || response;
-        return Array.isArray(responseData) ? responseData : responseData?.invoices || [];
-    };
-
-    // Load credit/debit notes
-    const loadCreditDebitNotes = async (): Promise<any[]> => {
-        try {
-            const response = await gstApi.reports.creditDebitNotes({
-                from_date: dateRange.from,
-                to_date: dateRange.to,
-                note_type: 'all',
-                side: 'sales'
-            });
-            const responseData = response?.data || response;
-            return responseData?.notes || [];
-        } catch {
-            return [];
-        }
-    };
 
     // Load data
     useEffect(() => {
@@ -78,23 +84,43 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
             setError(null);
 
             try {
-                const [invoices, notes] = await Promise.all([
-                    loadInvoices(),
-                    loadCreditDebitNotes()
-                ]);
-
-                const salesNotes = classifyGSTR1Notes(notes);
-                setCreditDebitNotes(salesNotes);
-
-                const baseData = transformInvoicesToGSTR1(invoices);
-                const adjustedSummary = applyNoteAdjustments(baseData.summary, salesNotes);
-
-                const result = {
-                    ...baseData,
-                    summary: adjustedSummary
+                const response = await gstApi.reports.gstr1({
+                    date_from: dateRange.from,
+                    date_to: dateRange.to,
+                });
+                const payload = response?.data || response;
+                const result: ExactGSTR1Data = {
+                    b2b: (payload?.b2b || []).map((row: any) => ({
+                        ...row,
+                        taxableValue: exactMoney(row.taxableValue, 'GSTR-1 B2B taxable value'),
+                        cgst: exactMoney(row.cgst, 'GSTR-1 B2B CGST'),
+                        sgst: exactMoney(row.sgst, 'GSTR-1 B2B SGST'),
+                        igst: exactMoney(row.igst, 'GSTR-1 B2B IGST'),
+                        cess: exactMoney(row.cess, 'GSTR-1 B2B cess'),
+                        totalTax: exactMoney(row.totalTax, 'GSTR-1 B2B total tax'),
+                    })),
+                    b2c: {
+                        small: payload?.b2c?.small,
+                        large: payload?.b2c?.large,
+                    },
+                    notes: payload?.notes || [],
+                    summary: {
+                        totalInvoices: payload?.summary?.totalInvoices,
+                        totalTaxableValue: exactMoney(payload?.summary?.totalTaxableValue, 'GSTR-1 taxable value'),
+                        totalTax: exactMoney(payload?.summary?.totalTax, 'GSTR-1 total tax'),
+                        netAdjustment: exactMoney(payload?.summary?.netAdjustment, 'GSTR-1 net adjustment'),
+                    },
                 };
+                for (const [label, bucket] of Object.entries(result.b2c)) {
+                    if (!bucket || !Number.isSafeInteger(bucket.count)) throw new Error(`GSTR-1 ${label} count is invalid`);
+                    for (const field of ['taxableValue', 'cgst', 'sgst', 'igst', 'cess', 'totalTax'] as const) {
+                        bucket[field] = exactMoney(bucket[field], `GSTR-1 ${label} ${field}`);
+                    }
+                }
+                if (!Number.isSafeInteger(result.summary.totalInvoices)) throw new Error('GSTR-1 invoice count is invalid');
+                setCreditDebitNotes(result.notes);
                 setData(result);
-                onDataReady?.(result);
+                onDataReadyRef.current?.(result);
             } catch (err) {
                 setError('Failed to load GSTR1 data');
             } finally {
@@ -128,13 +154,13 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
         { key: 'gst_number', header: 'GSTIN' },
         { key: 'name', header: 'Party Name' },
         { key: 'invoices', header: 'Invoices' },
-        { key: 'taxableValue', header: 'Taxable Value', render: (v: number) => formatCurrency(v) },
+        { key: 'taxableValue', header: 'Taxable Value', render: (v: string) => formatExactCurrency(v, 'GSTR-1 taxable value') },
         ...(showTaxBreakdown ? [
-            { key: 'cgst', header: 'CGST', render: (v: number) => formatCurrency(v) },
-            { key: 'sgst', header: 'SGST', render: (v: number) => formatCurrency(v) },
-            { key: 'igst', header: 'IGST', render: (v: number) => formatCurrency(v) }
+            { key: 'cgst', header: 'CGST', render: (v: string) => formatExactCurrency(v, 'GSTR-1 CGST') },
+            { key: 'sgst', header: 'SGST', render: (v: string) => formatExactCurrency(v, 'GSTR-1 SGST') },
+            { key: 'igst', header: 'IGST', render: (v: string) => formatExactCurrency(v, 'GSTR-1 IGST') }
         ] : []),
-        { key: 'totalTax', header: 'Total Tax', render: (_v: number, row: any) => formatCurrency((row.cgst || 0) + (row.sgst || 0) + (row.igst || 0)) }
+        { key: 'totalTax', header: 'Total Tax', render: (v: string) => formatExactCurrency(v, 'GSTR-1 total tax') }
     ];
 
     return (
@@ -147,15 +173,15 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Taxable Value</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data?.summary.totalTaxableValue || 0)}</div>
+                    <div className="text-2xl font-bold">{formatExactCurrency(data?.summary.totalTaxableValue || '0.00', 'GSTR-1 taxable value')}</div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Total GST</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data?.summary.totalTax || 0)}</div>
+                    <div className="text-2xl font-bold">{formatExactCurrency(data?.summary.totalTax || '0.00', 'GSTR-1 total tax')}</div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Net Adjustment</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data?.summary.netAdjustment || 0)}</div>
+                    <div className="text-2xl font-bold">{formatExactCurrency(data?.summary.netAdjustment || '0.00', 'GSTR-1 net adjustment')}</div>
                 </div>
             </div>
 
@@ -183,11 +209,11 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                         </div>
                         <div className="flex justify-between">
                             <span>Taxable:</span>
-                            <span>{formatCurrency(data?.b2c.small.taxableValue || 0)}</span>
+                            <span>{formatExactCurrency(data?.b2c.small.taxableValue || '0.00', 'GSTR-1 B2C small taxable')}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Total GST:</span>
-                            <span>{formatCurrency((data?.b2c.small.cgst || 0) + (data?.b2c.small.sgst || 0) + (data?.b2c.small.igst || 0))}</span>
+                            <span>{formatExactCurrency(data?.b2c.small.totalTax || '0.00', 'GSTR-1 B2C small tax')}</span>
                         </div>
                     </div>
                 </div>
@@ -200,11 +226,11 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                         </div>
                         <div className="flex justify-between">
                             <span>Taxable:</span>
-                            <span>{formatCurrency(data?.b2c.large.taxableValue || 0)}</span>
+                            <span>{formatExactCurrency(data?.b2c.large.taxableValue || '0.00', 'GSTR-1 B2C large taxable')}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Total GST:</span>
-                            <span>{formatCurrency((data?.b2c.large.cgst || 0) + (data?.b2c.large.sgst || 0) + (data?.b2c.large.igst || 0))}</span>
+                            <span>{formatExactCurrency(data?.b2c.large.totalTax || '0.00', 'GSTR-1 B2C large tax')}</span>
                         </div>
                     </div>
                 </div>
@@ -217,11 +243,11 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                     <div className="text-sm space-y-1">
                         <div className="flex justify-between">
                             <span>Credit Notes:</span>
-                            <span>{creditDebitNotes.filter(n => n.gstr1Direction === 'credit').length}</span>
+                            <span>{creditDebitNotes.filter(n => n.direction === 'credit').length}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Debit Notes:</span>
-                            <span>{creditDebitNotes.filter(n => n.gstr1Direction === 'debit').length}</span>
+                            <span>{creditDebitNotes.filter(n => n.direction === 'debit').length}</span>
                         </div>
                     </div>
                 </div>

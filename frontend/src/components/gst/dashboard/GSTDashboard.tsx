@@ -7,22 +7,23 @@ import {
 import SummaryCard from '../../global/ui/display/SummaryCard';
 import ModuleHeader from '../../global/ui/ModuleHeader';
 import { gstApi } from '../../../services/api';
+import { compareExactDecimals, formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
 interface GSTDashboardProps {
   onNavigateToReports?: () => void;
 }
 
 interface TaxBreakdown {
-  cgst: number;
-  sgst: number;
-  igst: number;
-  total: number;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  total: string;
 }
 
 interface DashboardState {
   outputTax: TaxBreakdown;
   inputCredit: TaxBreakdown;
-  netPayable: number;
+  netPayable: string;
   totalInvoices: number;
   totalSuppliers: number;
   totalSupplierInvoices: number;
@@ -34,26 +35,26 @@ interface GSTDashboardSummaryPayload {
     start?: string;
     end?: string;
   };
-  outputTax?: number;
-  inputCredit?: number;
-  netPayable?: number;
+  outputTax?: string;
+  inputCredit?: string;
+  netPayable?: string;
   summary?: {
     total_invoices?: number;
     total_suppliers?: number;
     total_supplier_invoices?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    purchase_cgst_amount?: number;
-    purchase_sgst_amount?: number;
-    purchase_igst_amount?: number;
+    cgst_amount?: string;
+    sgst_amount?: string;
+    igst_amount?: string;
+    purchase_cgst_amount?: string;
+    purchase_sgst_amount?: string;
+    purchase_igst_amount?: string;
   };
 }
 
 const EMPTY_STATE: DashboardState = {
-  outputTax: { cgst: 0, sgst: 0, igst: 0, total: 0 },
-  inputCredit: { cgst: 0, sgst: 0, igst: 0, total: 0 },
-  netPayable: 0,
+  outputTax: { cgst: '0.00', sgst: '0.00', igst: '0.00', total: '0.00' },
+  inputCredit: { cgst: '0.00', sgst: '0.00', igst: '0.00', total: '0.00' },
+  netPayable: '0.00',
   totalInvoices: 0,
   totalSuppliers: 0,
   totalSupplierInvoices: 0,
@@ -80,21 +81,24 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
       const summary = gstData?.summary || {};
 
       if (requestId !== requestRef.current) return;
+      const money = (value: unknown, label: string) => normalizeAuthoritativeDecimal(value, label, {
+        scale: 2, maximumWholeDigits: 20, allowNegative: true,
+      });
       setPeriodRange(gstData.period || null);
       setData({
         outputTax: {
-          cgst: summary.cgst_amount || 0,
-          sgst: summary.sgst_amount || 0,
-          igst: summary.igst_amount || 0,
-          total: gstData?.outputTax || 0,
+          cgst: money(summary.cgst_amount, 'Output CGST'),
+          sgst: money(summary.sgst_amount, 'Output SGST'),
+          igst: money(summary.igst_amount, 'Output IGST'),
+          total: money(gstData?.outputTax, 'Output tax'),
         },
         inputCredit: {
-          cgst: summary.purchase_cgst_amount || 0,
-          sgst: summary.purchase_sgst_amount || 0,
-          igst: summary.purchase_igst_amount || 0,
-          total: gstData?.inputCredit || 0,
+          cgst: money(summary.purchase_cgst_amount, 'Input CGST'),
+          sgst: money(summary.purchase_sgst_amount, 'Input SGST'),
+          igst: money(summary.purchase_igst_amount, 'Input IGST'),
+          total: money(gstData?.inputCredit, 'Input credit'),
         },
-        netPayable: gstData?.netPayable || 0,
+        netPayable: money(gstData?.netPayable, 'Net GST payable'),
         totalInvoices: summary.total_invoices || 0,
         totalSuppliers: summary.total_suppliers || 0,
         totalSupplierInvoices: summary.total_supplier_invoices || 0,
@@ -126,8 +130,14 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
     return () => clearTimeout(timeout);
   }, [loadDashboardData]);
 
-  const fmt = (amount: number) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(amount);
+  const fmt = (amount: string) => formatExactCurrency(amount, 'GST dashboard amount');
+  const isPositive = (amount: string, label: string) => compareExactDecimals(amount, '0.00', label, {
+    scale: 2, maximumWholeDigits: 20, allowNegative: true,
+  }) > 0;
+  const netIsPayable = compareExactDecimals(data.netPayable, '0.00', 'Net GST payable', {
+    scale: 2, maximumWholeDigits: 20, allowNegative: true,
+  }) >= 0;
+  const displayNet = data.netPayable.startsWith('-') ? data.netPayable.slice(1) : data.netPayable;
 
   const selectedPeriodLabel = periodRange?.start && periodRange?.end
     ? `${new Date(`${periodRange.start}T00:00:00`).toLocaleDateString('en-IN', {
@@ -218,8 +228,8 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
           <SummaryCard
             title="Net GST Payable"
             items={[
-              { label: 'Amount', value: fmt(Math.abs(data.netPayable)), isBold: true },
-              { label: 'Status', value: data.netPayable >= 0 ? 'Payable' : 'Refundable', color: data.netPayable >= 0 ? '#F59E0B' : '#10B981' }
+              { label: 'Amount', value: fmt(displayNet), isBold: true },
+              { label: 'Status', value: netIsPayable ? 'Payable' : 'Refundable', color: netIsPayable ? '#F59E0B' : '#10B981' }
             ]}
             headerContent={<IndianRupee className="w-6 h-6 text-amber-600" />}
           />
@@ -269,13 +279,13 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
                   <TrendingUp className="w-4 h-4 text-red-500 mr-1" /> Output Tax (Sales)
                 </h4>
                 <div className="space-y-1 text-sm">
-                  {data.outputTax.cgst > 0 && (
+                  {isPositive(data.outputTax.cgst, 'Output CGST') && (
                     <div className="flex justify-between"><span className="text-gray-600">CGST</span><span>{fmt(data.outputTax.cgst)}</span></div>
                   )}
-                  {data.outputTax.sgst > 0 && (
+                  {isPositive(data.outputTax.sgst, 'Output SGST') && (
                     <div className="flex justify-between"><span className="text-gray-600">SGST</span><span>{fmt(data.outputTax.sgst)}</span></div>
                   )}
-                  {data.outputTax.igst > 0 && (
+                  {isPositive(data.outputTax.igst, 'Output IGST') && (
                     <div className="flex justify-between"><span className="text-gray-600">IGST</span><span>{fmt(data.outputTax.igst)}</span></div>
                   )}
                   <div className="flex justify-between font-semibold border-t pt-1">
@@ -290,13 +300,13 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
                   <TrendingDown className="w-4 h-4 text-green-500 mr-1" /> Input Credit (Purchases)
                 </h4>
                 <div className="space-y-1 text-sm">
-                  {data.inputCredit.cgst > 0 && (
+                  {isPositive(data.inputCredit.cgst, 'Input CGST') && (
                     <div className="flex justify-between"><span className="text-gray-600">CGST</span><span>{fmt(data.inputCredit.cgst)}</span></div>
                   )}
-                  {data.inputCredit.sgst > 0 && (
+                  {isPositive(data.inputCredit.sgst, 'Input SGST') && (
                     <div className="flex justify-between"><span className="text-gray-600">SGST</span><span>{fmt(data.inputCredit.sgst)}</span></div>
                   )}
-                  {data.inputCredit.igst > 0 && (
+                  {isPositive(data.inputCredit.igst, 'Input IGST') && (
                     <div className="flex justify-between"><span className="text-gray-600">IGST</span><span>{fmt(data.inputCredit.igst)}</span></div>
                   )}
                   <div className="flex justify-between font-semibold border-t pt-1">
@@ -314,8 +324,8 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
                   <span>Less: Input Credit</span><span className="text-green-600">- {fmt(data.inputCredit.total)}</span>
                 </div>
                 <div className="flex justify-between font-bold border-t mt-2 pt-2">
-                  <span>Net {data.netPayable >= 0 ? 'Payable' : 'Refundable'}</span>
-                  <span className={data.netPayable >= 0 ? 'text-red-600' : 'text-green-600'}>{fmt(Math.abs(data.netPayable))}</span>
+                  <span>Net {netIsPayable ? 'Payable' : 'Refundable'}</span>
+                  <span className={netIsPayable ? 'text-red-600' : 'text-green-600'}>{fmt(displayNet)}</span>
                 </div>
               </div>
             </div>

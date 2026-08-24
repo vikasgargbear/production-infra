@@ -10,6 +10,7 @@
 import { apiHelpers } from '../../apiClient';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
+import { normalizeAuthoritativeDecimal, subtractExactDecimals } from '../../../../utils/exactDecimal';
 
 // ============================================
 // Type Definitions
@@ -177,11 +178,11 @@ export const ledgerApi = {
 
     // DASHBOARD & ANALYTICS
     getDashboardStats: async (params: AgingParams = {}): Promise<{
-        total_receivables: number;
-        total_payables: number;
-        net_position: number;
-        overdue_receivables: number;
-        overdue_payables: number;
+        total_receivables: string;
+        total_payables: string;
+        net_position: string;
+        overdue_receivables: string;
+        overdue_payables: string;
         collection_efficiency: null;
         payment_efficiency: null;
         cash_flow_trend: 'neutral';
@@ -191,18 +192,20 @@ export const ledgerApi = {
             apiHelpers.get(ENDPOINTS.PARTY_AGING, { params: { ...params, party_type: 'supplier' } })
         ]);
 
-        const customerData = customerAging.data?.aging_data || [];
-        const supplierData = supplierAging.data?.aging_data || [];
-
-        const totalReceivables = customerData.reduce((sum: number, c: any) => sum + (c.total_outstanding || 0), 0);
-        const totalPayables = supplierData.reduce((sum: number, s: any) => sum + (s.total_outstanding || 0), 0);
-        const overdueReceivables = Number(customerAging.data?.summary?.overdue || 0);
-        const overduePayables = Number(supplierAging.data?.summary?.overdue || 0);
+        const money = (value: unknown, label: string) => normalizeAuthoritativeDecimal(value, label, {
+            scale: 2, maximumWholeDigits: 20, allowNegative: true,
+        });
+        const totalReceivables = money(customerAging.data?.summary?.total, 'Ledger receivables');
+        const totalPayables = money(supplierAging.data?.summary?.total, 'Ledger payables');
+        const overdueReceivables = money(customerAging.data?.summary?.overdue, 'Ledger overdue receivables');
+        const overduePayables = money(supplierAging.data?.summary?.overdue, 'Ledger overdue payables');
 
         return {
             total_receivables: totalReceivables,
             total_payables: totalPayables,
-            net_position: totalReceivables - totalPayables,
+            net_position: subtractExactDecimals(totalReceivables, totalPayables, 'Ledger net position', {
+                scale: 2, maximumWholeDigits: 20, allowNegative: true,
+            }),
             overdue_receivables: overdueReceivables,
             overdue_payables: overduePayables,
             collection_efficiency: null,

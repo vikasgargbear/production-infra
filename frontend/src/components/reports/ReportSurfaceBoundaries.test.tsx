@@ -5,22 +5,14 @@ import GSTR3BReport from '../gst/reports/GSTR3BReport';
 import GSTReportsContainer from '../gst/reports/GSTReportsContainer';
 import PurchaseReport from './PurchaseReport';
 
-const mockGetInvoices = jest.fn();
-const mockSearchInvoices = jest.fn();
-const mockGetSupplierInvoices = jest.fn();
-const mockGetCreditDebitNotes = jest.fn();
+const mockGstr1 = jest.fn();
+const mockGstr3b = jest.fn();
 
 jest.mock('../../services/api', () => ({
-  invoicesApi: {
-    getAll: (...args: unknown[]) => mockGetInvoices(...args),
-    search: (...args: unknown[]) => mockSearchInvoices(...args),
-  },
-  supplierInvoicesApi: {
-    getAll: (...args: unknown[]) => mockGetSupplierInvoices(...args),
-  },
   gstApi: {
     reports: {
-      creditDebitNotes: (...args: unknown[]) => mockGetCreditDebitNotes(...args),
+      gstr1: (...args: unknown[]) => mockGstr1(...args),
+      gstr3b: (...args: unknown[]) => mockGstr3b(...args),
     },
   },
 }));
@@ -38,17 +30,27 @@ jest.mock('../gst/hooks/useGSTExport', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockGetInvoices.mockResolvedValue({ data: { invoices: [] } });
-  mockSearchInvoices.mockResolvedValue({ data: { invoices: [] } });
-  mockGetSupplierInvoices.mockResolvedValue({ data: { invoices: [] } });
-  mockGetCreditDebitNotes.mockResolvedValue({ data: { notes: [] } });
+  mockGstr1.mockResolvedValue({ data: {
+    b2b: [], notes: [],
+    b2c: {
+      small: { count: 0, taxableValue: '0.00', cgst: '0.00', sgst: '0.00', igst: '0.00', cess: '0.00', totalTax: '0.00' },
+      large: { count: 0, taxableValue: '0.00', cgst: '0.00', sgst: '0.00', igst: '0.00', cess: '0.00', totalTax: '0.00' },
+    },
+    summary: { totalInvoices: 0, totalTaxableValue: '0.00', totalTax: '0.00', netAdjustment: '0.00' },
+  } });
+  mockGstr3b.mockResolvedValue({ data: {
+    outputTax: { cgst: '0.00', sgst: '0.00', igst: '0.00', cess: '0.00', total: '0.00' },
+    inputCredit: { cgst: '0.00', sgst: '0.00', igst: '0.00', cess: '0.00', total: '0.00' },
+    payable: { cgst: '0.00', sgst: '0.00', igst: '0.00', cess: '0.00', total: '0.00' },
+    netPayable: '0.00',
+  } });
 });
 
 test('GSTR-1 can mount directly without a supplied date range', async () => {
   render(<GSTR1Report />);
 
-  await waitFor(() => expect(mockGetInvoices).toHaveBeenCalledTimes(1));
-  expect(mockGetInvoices.mock.calls[0][0]).toEqual(expect.objectContaining({
+  await waitFor(() => expect(mockGstr1).toHaveBeenCalledTimes(1));
+  expect(mockGstr1.mock.calls[0][0]).toEqual(expect.objectContaining({
     date_from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     date_to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
   }));
@@ -58,47 +60,32 @@ test('GSTR-1 can mount directly without a supplied date range', async () => {
 test('GSTR-3B can mount directly without a supplied date range', async () => {
   render(<GSTR3BReport />);
 
-  await waitFor(() => expect(mockSearchInvoices).toHaveBeenCalledTimes(1));
-  expect(mockSearchInvoices.mock.calls[0][0]).toEqual(expect.objectContaining({
+  await waitFor(() => expect(mockGstr3b).toHaveBeenCalledTimes(1));
+  expect(mockGstr3b.mock.calls[0][0]).toEqual(expect.objectContaining({
     date_from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     date_to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-  }));
-  expect(mockGetSupplierInvoices.mock.calls[0][0]).toEqual(expect.objectContaining({
-    from_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    to_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
   }));
   expect(await screen.findByText('Net GST Payable')).toBeTruthy();
 });
 
-test('GSTR-3B derives output and input tax from posted invoice headers', async () => {
+test('GSTR-3B preserves authoritative money beyond JavaScript safe integers', async () => {
   const onDataReady = jest.fn();
-  mockSearchInvoices.mockResolvedValue({
-    data: {
-      invoices: [
-        { status: 'posted', cgst_amount: '6', sgst_amount: '6', igst_amount: 0, cess_amount: '1' },
-        { status: 'draft', cgst_amount: 400, sgst_amount: 400, igst_amount: 400, cess_amount: 400 },
-        { status: 'cancelled', cgst_amount: 500, sgst_amount: 500, igst_amount: 500, cess_amount: 500 },
-      ],
-    },
-  });
-  mockGetSupplierInvoices.mockResolvedValue({
-    data: {
-      invoices: [
-        { status: 'posted', cgst_amount: 2, sgst_amount: 2, igst_amount: '3', cess_amount: 0.5 },
-        { status: 'approved', cgst_amount: 50, sgst_amount: 50, igst_amount: 50, cess_amount: 50 },
-        { status: 'reversed', cgst_amount: 100, sgst_amount: 100, igst_amount: 100, cess_amount: 100 },
-      ],
-    },
-  });
+  mockGstr3b.mockResolvedValue({ data: {
+    outputTax: { cgst: '9007199254740993.01', sgst: '2.00', igst: '0.00', cess: '0.00', total: '9007199254740995.01' },
+    inputCredit: { cgst: '0.01', sgst: '0.00', igst: '0.00', cess: '0.00', total: '0.01' },
+    payable: { cgst: '9007199254740993.00', sgst: '2.00', igst: '0.00', cess: '0.00', total: '9007199254740995.00' },
+    netPayable: '9007199254740995.00',
+  } });
 
   render(<GSTR3BReport onDataReady={onDataReady} />);
 
   await waitFor(() => expect(onDataReady).toHaveBeenCalledWith({
-    outputTax: { cgst: 6, sgst: 6, igst: 0, cess: 1, total: 13 },
-    inputCredit: { cgst: 2, sgst: 2, igst: 3, cess: 0.5, total: 7.5 },
-    netPayable: 5.5,
+    outputTax: { cgst: '9007199254740993.01', sgst: '2.00', igst: '0.00', cess: '0.00', total: '9007199254740995.01' },
+    inputCredit: { cgst: '0.01', sgst: '0.00', igst: '0.00', cess: '0.00', total: '0.01' },
+    payable: { cgst: '9007199254740993.00', sgst: '2.00', igst: '0.00', cess: '0.00', total: '9007199254740995.00' },
+    netPayable: '9007199254740995.00',
   }));
-  expect(mockGetSupplierInvoices).toHaveBeenCalledTimes(1);
+  expect((await screen.findAllByText('₹9,00,71,99,25,47,40,995.00')).length).toBeGreaterThan(0);
 });
 
 test('purchase report never displays the removed sample totals', () => {

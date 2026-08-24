@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ledgerApi, reportsApi } from '../../../services/api';
+import { ledgerApi } from '../../../services/api';
 
 // ============================================
 // Type Definitions
@@ -31,11 +31,11 @@ export type ReportType =
     | 'trends';
 
 export interface DashboardStats {
-    total_receivables: number;
-    total_payables: number;
-    net_position: number;
-    overdue_receivables: number;
-    overdue_payables: number;
+    total_receivables: string;
+    total_payables: string;
+    net_position: string;
+    overdue_receivables: string;
+    overdue_payables: string;
     collection_efficiency: number | null;
     payment_efficiency: number | null;
     cash_flow_trend: 'positive' | 'negative' | 'neutral';
@@ -84,11 +84,11 @@ const getDefaultFilters = (): ReportFilters => {
 };
 
 const defaultStats: DashboardStats = {
-    total_receivables: 0,
-    total_payables: 0,
-    net_position: 0,
-    overdue_receivables: 0,
-    overdue_payables: 0,
+    total_receivables: '0.00',
+    total_payables: '0.00',
+    net_position: '0.00',
+    overdue_receivables: '0.00',
+    overdue_payables: '0.00',
     collection_efficiency: null,
     payment_efficiency: null,
     cash_flow_trend: 'neutral'

@@ -67,6 +67,18 @@ export function normalizeExactDecimal(
   return exactDecimalString(exactDecimalUnits(value, label, options), options.scale);
 }
 
+/** Validate and normalize a canonical API decimal that must have crossed JSON as a string. */
+export function normalizeAuthoritativeDecimal(
+  value: unknown,
+  label: string,
+  options: ExactDecimalOptions,
+): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${label} must remain an exact decimal string.`);
+  }
+  return normalizeExactDecimal(value, label, options);
+}
+
 export function compareExactDecimals(
   left: unknown,
   right: unknown,
@@ -88,4 +100,33 @@ export function addExactDecimals(
     0n,
   );
   return exactDecimalString(total, options.scale);
+}
+
+export function subtractExactDecimals(
+  left: unknown,
+  right: unknown,
+  label: string,
+  options: ExactDecimalOptions,
+): string {
+  return exactDecimalString(
+    exactDecimalUnits(left, `${label} left`, options)
+      - exactDecimalUnits(right, `${label} right`, options),
+    options.scale,
+  );
+}
+
+/** Format exact API money without ever passing through IEEE-754 arithmetic. */
+export function formatExactCurrency(value: unknown, label = 'Money'): string {
+  const normalized = normalizeExactDecimal(value, label, {
+    scale: 2,
+    maximumWholeDigits: 20,
+    allowNegative: true,
+  });
+  const sign = normalized.startsWith('-') ? '-' : '';
+  const [whole, fraction] = normalized.replace(/^-/, '').split('.');
+  const lastThree = whole.slice(-3);
+  const leading = whole.slice(0, -3);
+  const groupedLeading = leading.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  const grouped = leading ? `${groupedLeading},${lastThree}` : lastThree;
+  return `${sign}₹${grouped}.${fraction}`;
 }

@@ -12,16 +12,15 @@ export interface PartyOutstanding {
     party_name: string;
     party_phone: string;
     party_email: string;
-    total_outstanding: number;
-    total_overdue: number;
+    total_outstanding: string;
+    total_overdue: string;
     invoice_count: number;
     overdue_count: number;
     oldest_invoice_days: number;
-    credit_limit?: number;
-    credit_utilization?: number;
+    credit_limit?: string;
     invoices?: InvoiceDetail[];
-    total_advance?: number;
-    customer_net_position?: number;
+    total_advance?: string;
+    customer_net_position?: string;
 }
 
 export interface InvoiceDetail {
@@ -29,26 +28,26 @@ export interface InvoiceDetail {
     invoice_number: string;
     invoice_date: string;
     due_date: string;
-    original_amount: number;
-    paid_amount: number;
-    current_outstanding: number;
+    original_amount: string;
+    paid_amount: string;
+    current_outstanding: string;
     days_overdue: number;
     aging_bucket: 'current' | '1-30' | '31-60' | '61-90' | 'over_90';
     status: 'pending' | 'partial' | 'overdue';
 }
 
 export interface OutstandingSummary {
-    total_receivable: number;
-    total_payable: number;
-    total_overdue: number;
+    total_receivable: string;
+    total_payable: string;
+    total_overdue: string;
     party_count: number;
     overdue_party_count: number;
     aging_summary: {
-        current: { count: number; amount: number };
-        '1-30': { count: number; amount: number };
-        '31-60': { count: number; amount: number };
-        '61-90': { count: number; amount: number };
-        over_90: { count: number; amount: number };
+        current: { count: number; amount: string };
+        '1-30': { count: number; amount: string };
+        '31-60': { count: number; amount: string };
+        '61-90': { count: number; amount: string };
+        over_90: { count: number; amount: string };
     };
 }
 
@@ -66,8 +65,8 @@ export interface OutstandingProps {
 
 export interface OutstandingSummaryCardsProps {
     summary: OutstandingSummary;
-    totalAdvances: number;
-    netPosition: number;
+    totalAdvances: string;
+    netPosition: string;
     partyType: 'customer' | 'supplier';
 }
 
@@ -134,7 +133,7 @@ export interface OutstandingState {
 export interface OutstandingApiResponse {
     parties: PartyOutstanding[];
     summary: OutstandingSummary;
-    total_advances: number;
-    net_position: number;
-    customer_advances: Record<string, number>;
+    total_advances: string;
+    net_position: string;
+    customer_advances: Record<string, string>;
 }

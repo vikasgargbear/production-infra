@@ -17,12 +17,6 @@ interface GSTFilters {
     [key: string]: unknown;
 }
 
-interface GSTCalculateParams {
-    amount: number;
-    hsnCode: string;
-    isInterstate?: boolean;
-}
-
 const ENDPOINTS = {
     BASE: '/gst',
     DASHBOARD: '/gst/dashboard',
@@ -74,11 +68,11 @@ export const gstApi = {
 
     reports: {
         gstr1: (filters: GSTFilters = {}) => {
-            return apiHelpers.get(`${ENDPOINTS.REPORTS}/gstr1`, { params: filters });
+            return apiHelpers.get(`${ENDPOINTS.BASE}/reports/gstr1`, { params: filters });
         },
 
         gstr3b: (filters: GSTFilters = {}) => {
-            return apiHelpers.get(`${ENDPOINTS.REPORTS}/gstr3b`, { params: filters });
+            return apiHelpers.get(`${ENDPOINTS.BASE}/reports/gstr3b`, { params: filters });
         },
 
         gstr2a: (filters: GSTFilters = {}) => {

@@ -1,8 +1,8 @@
 import { transformInvoicesToGSTR1 } from './gstTransforms';
 import { applyNoteAdjustments, classifyGSTR1Notes } from './gstCalculations';
 
-test('GSTR-1 uses posted canonical header totals and buyer GSTIN', () => {
-    const report = transformInvoicesToGSTR1([
+test('legacy browser-side GSTR-1 classification fails closed without a reviewed rule', () => {
+    expect(() => transformInvoicesToGSTR1([
         {
             status: 'posted',
             customer_id: 'customer-1',
@@ -32,32 +32,7 @@ test('GSTR-1 uses posted canonical header totals and buyer GSTIN', () => {
             sgst_amount: 99,
             igst_amount: 99,
         },
-    ]);
-
-    expect(report.b2b).toEqual([{
-        gst_number: '27ABCDE1234F1Z5',
-        name: 'Registered Buyer',
-        invoices: 1,
-        taxableValue: 100.5,
-        cgst: 6.03,
-        sgst: 6.03,
-        igst: 0,
-    }]);
-    expect(report.b2c.small).toEqual({
-        count: 1,
-        taxableValue: 50,
-        cgst: 3,
-        sgst: 3,
-        igst: 0,
-    });
-    expect(report.summary).toEqual({
-        totalInvoices: 2,
-        totalTaxableValue: 150.5,
-        totalCGST: 9.03,
-        totalSGST: 9.03,
-        totalIGST: 0,
-        totalTax: 18.06,
-    });
+    ])).toThrow('canonical date-effective GSTR-1 API');
 });
 
 test('GSTR-1 classifies only canonical outward sales notes', () => {

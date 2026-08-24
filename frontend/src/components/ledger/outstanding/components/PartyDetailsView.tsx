@@ -7,7 +7,7 @@
 import React, { useMemo } from 'react';
 import { CreditCard, Clock } from 'lucide-react';
 import { DataTable } from '../../../global';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatExactCurrency } from '../../../../utils/exactDecimal';
 import { format, parseISO } from 'date-fns';
 import type { PartyDetailsViewProps, InvoiceDetail } from '../types/outstanding.types';
 
@@ -49,21 +49,21 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
             key: 'original_amount',
             header: 'Amount',
             align: 'right' as const,
-            render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.original_amount),
+            render: (_: any, invoice: InvoiceDetail) => formatExactCurrency(invoice.original_amount, 'Invoice original amount'),
             width: '120px'
         },
         {
             key: 'paid_amount',
             header: 'Paid',
             align: 'right' as const,
-            render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.paid_amount),
+            render: (_: any, invoice: InvoiceDetail) => formatExactCurrency(invoice.paid_amount, 'Invoice paid amount'),
             width: '120px'
         },
         {
             key: 'current_outstanding',
             header: 'Outstanding',
             align: 'right' as const,
-            render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.current_outstanding),
+            render: (_: any, invoice: InvoiceDetail) => formatExactCurrency(invoice.current_outstanding, 'Invoice outstanding'),
             width: '120px'
         },
         {
@@ -113,10 +113,6 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
         }
     ], []);
 
-    const netPosition = (party as any).customer_net_position ||
-        ((party as any).total_advance || 0) - party.total_outstanding;
-    const isCredit = netPosition <= 0;
-
     return (
         <div className="max-w-7xl mx-auto px-6 py-6">
             {/* Customer Contact Info */}
@@ -147,7 +143,7 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <div className="text-sm text-gray-600 mb-2">Total Outstanding</div>
                     <div className="text-2xl font-bold text-gray-900">
-                        {formatCurrency(party.total_outstanding)}
+                        {formatExactCurrency(party.total_outstanding, 'Customer outstanding')}
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
                         {party.invoice_count} invoices
@@ -157,7 +153,7 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <div className="text-sm text-gray-600 mb-2">Overdue Amount</div>
                     <div className="text-2xl font-bold text-red-600">
-                        {formatCurrency(party.total_overdue)}
+                        {formatExactCurrency(party.total_overdue, 'Customer overdue')}
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
                         {party.overdue_count} overdue
@@ -167,17 +163,17 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <div className="text-sm text-gray-600 mb-2">Unallocated Advance</div>
                     <div className="text-2xl font-bold text-green-600">
-                        {formatCurrency((party as any).total_advance || 0)}
+                        {formatExactCurrency(party.total_advance || '0.00', 'Customer advance')}
                     </div>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <div className="text-sm text-gray-600 mb-2">Net Position</div>
                     <div className="text-2xl font-bold">
-                        <span className={isCredit ? 'text-green-600' : 'text-blue-600'}>
-                            {formatCurrency(Math.abs(netPosition))}
+                        <span className="text-blue-600">
+                            {formatExactCurrency(party.total_outstanding, 'Customer net outstanding')}
                             <div className="text-sm font-normal text-gray-500 mt-1">
-                                {isCredit ? 'Customer has advance' : 'Amount to receive'}
+                                Amount to receive
                             </div>
                         </span>
                     </div>

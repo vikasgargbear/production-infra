@@ -177,40 +177,8 @@ export function groupByGSTIN(invoices: any[]): Map<string, B2BInvoice> {
  * Calculate B2C summary (invoices without GSTIN)
  */
 export function calculateB2CSummary(invoices: any[]): { small: B2CData; large: B2CData } {
-    const small: B2CData = {
-        count: 0,
-        taxableValue: 0,
-        cgst: 0,
-        sgst: 0,
-        igst: 0
-    };
-
-    const large: B2CData = {
-        count: 0,
-        taxableValue: 0,
-        cgst: 0,
-        sgst: 0,
-        igst: 0
-    };
-
-    const B2C_THRESHOLD = 250000; // Rs. 2.5 lakhs
-
-    invoices.forEach(invoice => {
-        const hasGSTIN = invoice.customer_gst_number || invoice.gst_number;
-        if (hasGSTIN) return; // Skip B2B invoices
-
-        const taxableValue = toAmount(invoice.taxable_amount);
-        const isLarge = taxableValue >= B2C_THRESHOLD;
-
-        const target = isLarge ? large : small;
-        target.count += 1;
-        target.taxableValue += taxableValue;
-        target.cgst += toAmount(invoice.cgst_amount);
-        target.sgst += toAmount(invoice.sgst_amount);
-        target.igst += toAmount(invoice.igst_amount);
-    });
-
-    return { small, large };
+    void invoices;
+    throw new Error('B2C classification requires the canonical date-effective GSTR-1 API.');
 }
 
 /**

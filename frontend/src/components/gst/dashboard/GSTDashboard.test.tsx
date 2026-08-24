@@ -16,19 +16,25 @@ describe('GSTDashboard periods', () => {
       .mockResolvedValueOnce({
         data: {
           period: { key: 'current', start: '2026-08-01', end: '2026-08-24' },
-          outputTax: 12,
-          inputCredit: 5,
-          netPayable: 7,
-          summary: {},
+          outputTax: '9007199254740993.01',
+          inputCredit: '5.00',
+          netPayable: '9007199254740988.01',
+          summary: {
+            cgst_amount: '9007199254740993.01', sgst_amount: '0.00', igst_amount: '0.00',
+            purchase_cgst_amount: '5.00', purchase_sgst_amount: '0.00', purchase_igst_amount: '0.00',
+          },
         },
       })
       .mockResolvedValueOnce({
         data: {
           period: { key: 'previous', start: '2026-07-01', end: '2026-07-31' },
-          outputTax: 3,
-          inputCredit: 1,
-          netPayable: 2,
-          summary: {},
+          outputTax: '3.00',
+          inputCredit: '1.00',
+          netPayable: '2.00',
+          summary: {
+            cgst_amount: '3.00', sgst_amount: '0.00', igst_amount: '0.00',
+            purchase_cgst_amount: '1.00', purchase_sgst_amount: '0.00', purchase_igst_amount: '0.00',
+          },
         },
       });
 

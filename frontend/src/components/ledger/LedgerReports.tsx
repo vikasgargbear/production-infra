@@ -9,16 +9,11 @@ import {
   BarChart3,
   TrendingUp,
   TrendingDown,
-  Calendar,
   Download,
-  Filter,
-  FileText,
   DollarSign,
   Users,
-  Building,
   CreditCard,
   AlertCircle,
-  CheckCircle,
   Clock,
   Target,
   Activity,
@@ -29,6 +24,7 @@ import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ledgerApi } from '../../services/api';
 import { DatePicker, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
+import { compareExactDecimals, formatExactCurrency } from '../../utils/exactDecimal';
 import {
   LineChart,
   Line,
@@ -63,11 +59,11 @@ interface ReportFilters {
 }
 
 interface DashboardStats {
-  total_receivables: number;
-  total_payables: number;
-  net_position: number;
-  overdue_receivables: number;
-  overdue_payables: number;
+  total_receivables: string;
+  total_payables: string;
+  net_position: string;
+  overdue_receivables: string;
+  overdue_payables: string;
   collection_efficiency: number | null;
   payment_efficiency: number | null;
   cash_flow_trend: 'positive' | 'negative' | 'neutral';
@@ -152,11 +148,11 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
   });
 
   const dashboardStats: DashboardStats = stats ?? {
-    total_receivables: 0,
-    total_payables: 0,
-    net_position: 0,
-    overdue_receivables: 0,
-    overdue_payables: 0,
+    total_receivables: '0.00',
+    total_payables: '0.00',
+    net_position: '0.00',
+    overdue_receivables: '0.00',
+    overdue_payables: '0.00',
     collection_efficiency: null,
     payment_efficiency: null,
     cash_flow_trend: 'neutral' as const
@@ -707,10 +703,10 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                     <div>
                       <p className="text-sm text-gray-500">Total Receivables</p>
                       <p className="text-2xl font-bold text-green-600">
-                        {formatCurrency(dashboardStats.total_receivables)}
+                        {formatExactCurrency(dashboardStats.total_receivables, 'Total receivables')}
                       </p>
                       <p className="text-sm text-red-500">
-                        Overdue: {formatCurrency(dashboardStats.overdue_receivables)}
+                        Overdue: {formatExactCurrency(dashboardStats.overdue_receivables, 'Overdue receivables')}
                       </p>
                     </div>
                     <TrendingUp className="h-10 w-10 text-green-400" />
@@ -722,10 +718,10 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                     <div>
                       <p className="text-sm text-gray-500">Total Payables</p>
                       <p className="text-2xl font-bold text-red-600">
-                        {formatCurrency(dashboardStats.total_payables)}
+                        {formatExactCurrency(dashboardStats.total_payables, 'Total payables')}
                       </p>
                       <p className="text-sm text-red-500">
-                        Overdue: {formatCurrency(dashboardStats.overdue_payables)}
+                        Overdue: {formatExactCurrency(dashboardStats.overdue_payables, 'Overdue payables')}
                       </p>
                     </div>
                     <TrendingDown className="h-10 w-10 text-red-400" />
@@ -755,9 +751,11 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-500">Net Position</p>
-                      <p className={`text-2xl font-bold ${dashboardStats.net_position >= 0 ? 'text-green-600' : 'text-red-600'
+                      <p className={`text-2xl font-bold ${compareExactDecimals(dashboardStats.net_position, '0.00', 'Net position', {
+                        scale: 2, maximumWholeDigits: 20, allowNegative: true,
+                      }) >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>
-                        {formatCurrency(Math.abs(dashboardStats.net_position))}
+                        {formatExactCurrency(dashboardStats.net_position, 'Net position')}
                       </p>
                       <p className="text-sm text-gray-500">
                         {dashboardStats.cash_flow_trend === 'positive' ? '↑' :

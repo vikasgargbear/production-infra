@@ -11,7 +11,6 @@ import {
   Mail,
   MessageSquare,
   AlertCircle,
-  Clock,
   Target,
   Search,
   PhoneCall,
@@ -22,6 +21,7 @@ import { format, parseISO } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { ModuleHeader } from '../global';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
+import { compareExactDecimals, formatExactCurrency, normalizeAuthoritativeDecimal } from '../../utils/exactDecimal';
 
 interface CollectionCenterProps {
   embedded?: boolean;
@@ -35,34 +35,35 @@ interface CollectionItem {
   customer_phone: string;
   customer_email: string;
   customer_address: string;
-  total_outstanding: number;
-  overdue_amount: number;
+  total_outstanding: string;
+  overdue_amount: string;
   days_overdue: number;
   oldest_invoice_date: string;
   last_payment_date?: string;
-  last_contact_date?: string;
   contact_attempts: number;
-  collection_status: 'pending' | 'contacted' | 'promised' | 'partial' | 'dispute' | 'legal';
-  priority: 'low' | 'medium' | 'high' | 'critical';
+  collection_status: 'current' | 'overdue';
+  priority: 'current' | '1-30' | '31-60' | '61-90' | '90+';
   assigned_to?: string;
   next_follow_up?: string;
-  promise_date?: string;
-  promise_amount?: number;
-  notes?: string;
-  payment_behavior: 'regular' | 'delayed' | 'defaulter';
 }
 
 interface CollectionStats {
-  total_outstanding: number;
-  total_overdue: number;
-  collections_today: number;
-  collections_mtd: number;
-  promise_amount: number;
+  total_outstanding: string;
+  total_overdue: string;
+  collections_today: string;
+  collections_mtd: string;
   customers_count: number;
   critical_accounts: number;
-  success_rate: number;
-  collection_change?: number;
+  success_rate: null;
 }
+
+const exactMoney = (value: unknown, label: string) => normalizeAuthoritativeDecimal(value, label, {
+  scale: 2, maximumWholeDigits: 20, allowNegative: false,
+});
+
+const positiveMoney = (value: string, label: string) => compareExactDecimals(value, '0.00', label, {
+  scale: 2, maximumWholeDigits: 20, allowNegative: false,
+}) > 0;
 
 const CollectionCenter: React.FC<CollectionCenterProps> = ({
   embedded = false,
@@ -91,45 +92,20 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
         // Transform parties data to collection items
         const collections: CollectionItem[] = parties.map((party: any) => {
-          // Determine priority based on risk score
-          let priority: 'low' | 'medium' | 'high' | 'critical' = 'low';
-          let collectionStatus: CollectionItem['collection_status'] = 'pending';
-
-          if (party.riskScore > 80 || party.daysOverdue > 90) {
-            priority = 'critical';
-            collectionStatus = 'dispute';
-          } else if (party.riskScore > 60 || party.daysOverdue > 60) {
-            priority = 'high';
-            collectionStatus = 'promised';
-          } else if (party.riskScore > 40 || party.daysOverdue > 30) {
-            priority = 'medium';
-            collectionStatus = 'contacted';
-          } else if (party.daysOverdue > 0) {
-            priority = 'low';
-            collectionStatus = 'pending';
-          }
-
           return {
             customer_id: String(party.id),
             customer_name: party.name || 'Unknown',
             customer_phone: party.phone || '',
             customer_email: party.email || '',
             customer_address: party.location || '',
-            total_outstanding: party.outstandingAmount || 0,
-            overdue_amount: party.overdueAmount || 0,
+            total_outstanding: exactMoney(party.outstandingAmount, 'Collection outstanding'),
+            overdue_amount: exactMoney(party.overdueAmount, 'Collection overdue'),
             days_overdue: party.daysOverdue || 0,
             oldest_invoice_date: party.oldestInvoiceDate || '',
             last_payment_date: party.lastPayment,
-            last_contact_date: party.lastFollowUp,
             contact_attempts: 0,
-            collection_status: collectionStatus,
-            priority: priority,
-            assigned_to: party.assignedAgent,
-            next_follow_up: party.lastFollowUp,
-            promise_date: party.promiseDate,
-            promise_amount: 0,
-            notes: undefined,
-            payment_behavior: party.paymentHistory === 'Good' ? 'regular' : party.paymentHistory === 'Average' ? 'delayed' : 'defaulter'
+            collection_status: party.agingStatus,
+            priority: party.agingBand,
           } as CollectionItem;
         });
 
@@ -149,20 +125,18 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         }
 
         // Calculate stats from summary
-        const criticalCount = collections.filter(c => c.priority === 'critical').length;
+        const criticalCount = collections.filter(c => c.priority === '90+').length;
 
         return {
           collections: filteredData,
           stats: {
-            total_outstanding: summary.totalOutstanding || 0,
-            total_overdue: summary.overdueAmount || 0,
-            collections_today: summary.currentDayCollections || 0,
-            collections_mtd: summary.currentMonthCollections || 0,
-            promise_amount: 0,
+            total_outstanding: exactMoney(summary.totalOutstanding, 'Collection total outstanding'),
+            total_overdue: exactMoney(summary.overdueAmount, 'Collection total overdue'),
+            collections_today: exactMoney(summary.currentDayCollections, 'Collections today'),
+            collections_mtd: exactMoney(summary.currentMonthCollections, 'Collections month to date'),
             customers_count: collections.length,
             critical_accounts: criticalCount,
-            success_rate: summary.collectionEfficiency || 0,
-            collection_change: 0
+            success_rate: null,
           }
         };
       } catch (error) {
@@ -175,15 +149,13 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
   const collections = useMemo(() => data?.collections || [], [data?.collections]);
   const stats: CollectionStats = data?.stats || {
-    total_outstanding: 0,
-    total_overdue: 0,
-    collections_today: 0,
-    collections_mtd: 0,
-    promise_amount: 0,
+    total_outstanding: '0.00',
+    total_overdue: '0.00',
+    collections_today: '0.00',
+    collections_mtd: '0.00',
     customers_count: 0,
     critical_accounts: 0,
-    success_rate: 0,
-    collection_change: 0
+    success_rate: null,
   };
 
   // Filter collections
@@ -196,7 +168,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         item.customer_name.toLowerCase().includes(query) ||
         item.customer_phone.includes(query) ||
         item.customer_email?.toLowerCase().includes(query) ||
-        item.notes?.toLowerCase().includes(query)
+        item.customer_address?.toLowerCase().includes(query)
       );
     }
 
@@ -207,7 +179,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   const sendWhatsApp = (customer: CollectionItem) => {
     if (!customer.customer_phone) return;
     const message = encodeURIComponent(
-      `Dear ${customer.customer_name},\n\nYour outstanding amount is ₹${customer.total_outstanding.toLocaleString('en-IN')}. Please make the payment at your earliest convenience.\n\nThank you!`
+      `Dear ${customer.customer_name},\n\nYour outstanding amount is ${formatExactCurrency(customer.total_outstanding, 'Collection outstanding')}. Please make the payment at your earliest convenience.\n\nThank you!`
     );
     // Remove any non-numeric characters from phone number
     let cleanPhone = customer.customer_phone.replace(/\D/g, '');
@@ -224,7 +196,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     if (!customer.customer_email) return;
     const subject = encodeURIComponent('Payment Reminder');
     const body = encodeURIComponent(
-      `Dear ${customer.customer_name},\n\nThis is a friendly reminder about your outstanding payment of ₹${customer.total_outstanding.toLocaleString('en-IN')}.\n\nPlease process the payment at your earliest convenience.\n\nThank you for your business!`
+      `Dear ${customer.customer_name},\n\nThis is a friendly reminder about your outstanding payment of ${formatExactCurrency(customer.total_outstanding, 'Collection outstanding')}.\n\nPlease process the payment at your earliest convenience.\n\nThank you for your business!`
     );
     window.location.href = `mailto:${customer.customer_email}?subject=${subject}&body=${body}`;
   };
@@ -237,7 +209,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   const sendSMS = (customer: CollectionItem) => {
     if (!customer.customer_phone) return;
     const message = encodeURIComponent(
-      `Payment reminder: ₹${customer.total_outstanding.toLocaleString('en-IN')} outstanding. Please pay at your earliest convenience.`
+      `Payment reminder: ${formatExactCurrency(customer.total_outstanding, 'Collection outstanding')} outstanding. Please pay at your earliest convenience.`
     );
     window.location.href = `sms:${customer.customer_phone}?body=${message}`;
   };
@@ -264,10 +236,11 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
   const getPriorityBadge = (priority: string) => {
     const colors = {
-      low: 'bg-green-100 text-green-700',
-      medium: 'bg-yellow-100 text-yellow-700',
-      high: 'bg-orange-100 text-orange-700',
-      critical: 'bg-red-100 text-red-700'
+      current: 'bg-green-100 text-green-700',
+      '1-30': 'bg-yellow-100 text-yellow-700',
+      '31-60': 'bg-orange-100 text-orange-700',
+      '61-90': 'bg-red-100 text-red-700',
+      '90+': 'bg-red-100 text-red-800'
     };
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[priority as keyof typeof colors]}`}>
@@ -278,12 +251,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
   const getStatusBadge = (status: string) => {
     const colors = {
-      pending: 'bg-gray-100 text-gray-700',
-      contacted: 'bg-blue-100 text-blue-700',
-      promised: 'bg-purple-100 text-purple-700',
-      partial: 'bg-orange-100 text-orange-700',
-      dispute: 'bg-red-100 text-red-700',
-      legal: 'bg-red-100 text-red-700'
+      current: 'bg-green-100 text-green-700',
+      overdue: 'bg-red-100 text-red-700'
     };
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status as keyof typeof colors]}`}>
@@ -354,7 +323,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
                   <span className="mb-1 block text-xs text-gray-500">Total Outstanding</span>
                   <span className="text-lg font-semibold text-gray-900">
-                    ₹{(stats.total_outstanding || 0).toLocaleString('en-IN')}
+                    {formatExactCurrency(stats.total_outstanding, 'Collection total outstanding')}
                   </span>
                   <span className="mt-1 block text-xs text-gray-500">
                     {stats.customers_count} Customers
@@ -363,39 +332,34 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
                   <span className="mb-1 block text-xs text-gray-500">Collections Today</span>
                   <span className="text-lg font-semibold text-gray-900">
-                    ₹{(stats.collections_today || 0).toLocaleString('en-IN')}
+                    {formatExactCurrency(stats.collections_today, 'Collections today')}
                   </span>
-                  {stats.collection_change && (
-                    <span className={`mt-1 block text-xs ${stats.collection_change > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {stats.collection_change > 0 ? '↑' : '↓'} {Math.abs(stats.collection_change || 0)}%
-                    </span>
-                  )}
                 </div>
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
                   <span className="mb-1 block text-xs text-gray-500">MTD Collections</span>
                   <span className="text-lg font-semibold text-gray-900">
-                    ₹{(stats.collections_mtd || 0).toLocaleString('en-IN')}
+                    {formatExactCurrency(stats.collections_mtd, 'Collections month to date')}
                   </span>
                   <span className="text-xs text-gray-500 block mt-1">
                     This Month
                   </span>
                 </div>
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
-                  <span className="mb-1 block text-xs text-gray-500">Critical Accounts</span>
+                  <span className="mb-1 block text-xs text-gray-500">90+ Day Accounts</span>
                   <span className="text-lg font-semibold text-gray-900">
                     {stats.critical_accounts || 0}
                   </span>
                   <span className="mt-1 block text-xs text-amber-700">
-                    High Priority
+                    By invoice due date
                   </span>
                 </div>
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
                   <span className="mb-1 block text-xs text-gray-500">Collection Efficiency</span>
                   <span className="text-lg font-semibold text-gray-900">
-                    {Math.round(stats.success_rate || 0)}%
+                    Unavailable
                   </span>
                   <span className="text-xs text-gray-500 block mt-1">
-                    Success Rate
+                    No authoritative target configured
                   </span>
                 </div>
               </div>
@@ -417,24 +381,14 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                         Overdue
                       </button>
                       <button type="button"
-                        onClick={() => setFilters({ ...filters, priority: filters.priority === 'critical' ? 'all' : 'critical' })}
-                        className={`min-h-11 px-3 py-2 rounded-md text-sm font-medium transition-colors ${filters.priority === 'critical'
+                        onClick={() => setFilters({ ...filters, priority: filters.priority === '90+' ? 'all' : '90+' })}
+                        className={`min-h-11 px-3 py-2 rounded-md text-sm font-medium transition-colors ${filters.priority === '90+'
                           ? 'bg-orange-100 text-orange-700 border border-orange-300'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                       >
                         <Zap className="w-4 h-4 inline mr-1" />
-                        Critical
-                      </button>
-                      <button type="button"
-                        onClick={() => setFilters({ ...filters, status: filters.status === 'promised' ? 'all' : 'promised' })}
-                        className={`min-h-11 px-3 py-2 rounded-md text-sm font-medium transition-colors ${filters.status === 'promised'
-                          ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                      >
-                        <Clock className="w-4 h-4 inline mr-1" />
-                        Promised
+                        90+ Days
                       </button>
                     </div>
 
@@ -463,7 +417,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outstanding</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age & Priority</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Contact</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Payment</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quick Actions</th>
                       </tr>
@@ -488,11 +442,11 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-sm font-semibold text-gray-900">
-                                ₹{item.total_outstanding?.toLocaleString('en-IN')}
+                                {formatExactCurrency(item.total_outstanding, 'Collection outstanding')}
                               </div>
-                              {item.overdue_amount > 0 && (
+                              {positiveMoney(item.overdue_amount, 'Collection overdue') && (
                                 <div className="text-xs text-red-600">
-                                  Overdue: ₹{item.overdue_amount?.toLocaleString('en-IN')}
+                                  Overdue: {formatExactCurrency(item.overdue_amount, 'Collection overdue')}
                                 </div>
                               )}
                             </td>
@@ -507,24 +461,14 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-sm text-gray-600">
-                                {item.last_contact_date ?
-                                  format(parseISO(item.last_contact_date), 'dd MMM, HH:mm') :
-                                  'Never'
+                                {item.last_payment_date ?
+                                  format(parseISO(item.last_payment_date), 'dd MMM yyyy') :
+                                  'No posted allocation'
                                 }
                               </div>
-                              {item.contact_attempts > 0 && (
-                                <div className="text-xs text-gray-500">
-                                  {item.contact_attempts} attempts
-                                </div>
-                              )}
                             </td>
                             <td className="px-6 py-4">
                               {getStatusBadge(item.collection_status)}
-                              {item.promise_date && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Promise: {format(parseISO(item.promise_date), 'dd MMM')}
-                                </div>
-                              )}
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center justify-center space-x-1">

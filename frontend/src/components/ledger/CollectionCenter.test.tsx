@@ -46,22 +46,22 @@ describe('Collection Center failure transparency', () => {
   it('enables each communication CTA only when canonical contact data exists', async () => {
     (apiClient.get as jest.Mock).mockResolvedValue({ data: {
       summary: {
-        totalOutstanding: 100,
-        overdueAmount: 60,
-        currentDayCollections: 10,
-        currentMonthCollections: 25,
-        collectionEfficiency: 20,
+        totalOutstanding: '9007199254740993.01',
+        overdueAmount: '60.00',
+        currentDayCollections: '10.00',
+        currentMonthCollections: '25.00',
+        collectionEfficiency: null,
       },
       parties: [{
         id: '018f0000-0000-7000-8000-000000000001',
         name: 'Canonical Buyer',
         phone: '9876543210',
         email: 'buyer@example.com',
-        outstandingAmount: 100,
-        overdueAmount: 60,
+        outstandingAmount: '9007199254740993.01',
+        overdueAmount: '60.00',
         daysOverdue: 45,
-        riskScore: 40,
-        paymentHistory: 'Average',
+        agingStatus: 'overdue',
+        agingBand: '31-60',
       }],
     } });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -77,5 +77,7 @@ describe('Collection Center failure transparency', () => {
     expect(screen.getByRole('button', { name: 'Email Canonical Buyer' }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: 'Call Canonical Buyer' }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: 'Send SMS to Canonical Buyer' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getAllByText('₹9,00,71,99,25,47,40,993.01').length).toBeGreaterThan(0);
+    expect(screen.getByText('Unavailable')).toBeTruthy();
   });
 });
