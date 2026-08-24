@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import inspect
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -218,7 +219,21 @@ def test_distinct_approver_context_is_not_bound_to_requester_grant():
     assert context.branch_ids == (branch_id,)
     assert db.calls[1][1]["approval_mode"] is True
     assert ":approval_mode OR" in db.calls[1][0]
-    assert "command.requested_by_membership_id<>membership.id" in db.calls[1][0]
+    assert "command.approval_policy<>'separate_approver'" in db.calls[1][0]
+    assert "OR command.requested_by_membership_id<>membership.id" in db.calls[1][0]
+
+
+def test_actor_confirmation_approval_keeps_requester_eligible():
+    """Only persisted separate-approver commands exclude their requester.
+
+    Purchase orders and customer receipts use actor confirmation, so the
+    shared web authority resolver must not turn their explicit confirmation
+    into an impossible second-user requirement.
+    """
+    source = inspect.getsource(web._resolve_context)
+
+    assert "command.approval_policy<>'separate_approver'" in source
+    assert "OR command.requested_by_membership_id<>membership.id" in source
 
 
 def test_review_returns_exact_immutable_preview_for_distinct_member(monkeypatch):

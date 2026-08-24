@@ -249,7 +249,11 @@ def _resolve_context(
                     command.agent_grant_id=grant_row.id
                     AND command.requested_by_membership_id=membership.id
                ))
-               AND (NOT :approval_mode OR command.requested_by_membership_id<>membership.id)
+               AND (
+                   NOT :approval_mode
+                   OR command.approval_policy<>'separate_approver'
+                   OR command.requested_by_membership_id<>membership.id
+               )
                AND (grant_row.branch_id IS NULL
                     OR (:command_request_id IS NULL
                         AND grant_row.branch_id=ANY(CAST(:branch_ids AS uuid[])))

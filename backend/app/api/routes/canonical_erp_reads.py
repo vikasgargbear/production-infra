@@ -3414,11 +3414,10 @@ def _canonical_receivable_rows(
           FROM receivables receivable
           JOIN parties.parties party
             ON party.org_id=receivable.org_id AND party.id=receivable.party_id
-           AND party.status='active'
           JOIN parties.customer_accounts account
             ON account.org_id=receivable.org_id
            AND account.id=receivable.customer_account_id
-           AND account.party_id=party.id AND account.status='active'
+           AND account.party_id=party.id
           LEFT JOIN LATERAL (
               SELECT party_contact.phone, party_contact.email
                 FROM parties.contacts party_contact

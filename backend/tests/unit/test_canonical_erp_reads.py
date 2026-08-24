@@ -1059,7 +1059,9 @@ def test_canonical_receivables_use_effective_allocations_and_tenant_scope() -> N
     assert "allocation.org_id=:org_id" in source
     assert "reversal.reversal_of_allocation_id=allocation.id" in source
     assert "item.item_side='receivable'" in source
-    assert "item.status<>'reversed'" in source
+    # Outstanding receivables must exclude both reversed and already-settled
+    # items. The canonical state constraint permits only open/settled/reversed.
+    assert "item.status='open'" in source
     assert "finance.accounting_events" in source
     assert "event.sales_invoice_id IS NOT NULL" in source
     assert "sales.invoices" in source
