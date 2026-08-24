@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download, Eye, Edit, Printer,
-  MoreHorizontal, Package, RotateCcw,
-  X, Check, AlertCircle, RefreshCw, XCircle, Users, Truck
+  Download, Package, RotateCcw,
+  X, AlertCircle, RefreshCw, XCircle, Users, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
 import { returnsApi } from '../../services/api';
@@ -54,11 +53,9 @@ interface Return {
 // Bulk action bar
 const BulkActionBar: React.FC<{
   selectedCount: number;
-  onApprove: () => void;
-  onReject: () => void;
   onExport: () => void;
   onClear: () => void;
-}> = ({ selectedCount, onApprove, onReject, onExport, onClear }) => {
+}> = ({ selectedCount, onExport, onClear }) => {
   if (selectedCount === 0) return null;
 
   return (
@@ -70,14 +67,6 @@ const BulkActionBar: React.FC<{
           </span>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={onApprove}>
-            <Check className="w-4 h-4 mr-2" />
-            Approve
-          </Button>
-          <Button variant="outline" size="sm" onClick={onReject}>
-            <X className="w-4 h-4 mr-2" />
-            Reject
-          </Button>
           <Button variant="outline" size="sm" onClick={onExport}>
             <Download className="w-4 h-4 mr-2" />
             Export
@@ -311,25 +300,22 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     return () => clearTimeout(timeoutId);
   };
 
-  // Action handlers
-  const handleViewReturn = (returnItem: Return) => {
-    // TODO: Navigate to return view page or open modal
-    alert(`Viewing return: ${returnItem.return_no}`);
-  };
-
-  const handleEditReturn = (returnItem: Return) => {
-    // TODO: Navigate to return edit page or open modal
-    alert(`Editing return: ${returnItem.return_no}`);
-  };
-
-  const handlePrintReturn = (returnItem: Return) => {
-    // TODO: Open print dialog or generate PDF
-    alert(`Printing return: ${returnItem.return_no}`);
-  };
-
-  const handleMoreOptions = (returnItem: Return) => {
-    // TODO: Show dropdown menu with more options
-    alert(`More options for return: ${returnItem.return_no}`);
+  const handleExportSelected = () => {
+    const selected = returns.filter(item => selectedReturns.includes(item.id));
+    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Return #', 'Date', 'Type', 'Party', 'Original Document', 'Amount', 'Status'],
+      ...selected.map(item => [item.return_no, item.return_date, item.return_type,
+        item.customer_name || item.supplier_name || '', item.original_document_no,
+        item.total_amount, item.status])
+    ];
+    const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `returns-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const formatCurrency = (amount: number) => {
@@ -483,45 +469,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: 'Action',
       render: (value: any, returnItem: Return) => (
         <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleViewReturn(returnItem)}
-            title="View Return"
-            className="h-10 w-10 p-0 hover:bg-blue-50"
-          >
-            <Eye className="w-5 h-5 text-blue-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleEditReturn(returnItem)}
-            title="Edit Return"
-            className="h-10 w-10 p-0 hover:bg-green-50"
-          >
-            <Edit className="w-5 h-5 text-green-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handlePrintReturn(returnItem)}
-            title="Print Return"
-            className="h-10 w-10 p-0 hover:bg-purple-50"
-          >
-            <Printer className="w-5 h-5 text-purple-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleMoreOptions(returnItem)}
-            title="More Options"
-            className="h-10 w-10 p-0 hover:bg-gray-50"
-          >
-            <MoreHorizontal className="w-5 h-5 text-gray-600" />
-          </Button>
           {/* Cancel button - only for non-cancelled, non-completed returns */}
           {returnItem.status !== 'cancelled' && returnItem.status !== 'completed' && (
             <Button
@@ -534,9 +484,12 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
               <XCircle className="w-5 h-5 text-red-500" />
             </Button>
           )}
+          {(returnItem.status === 'cancelled' || returnItem.status === 'completed') && (
+            <span className="text-sm text-gray-400">No actions</span>
+          )}
         </div>
       ),
-      width: '180px',
+      width: '110px',
     },
   ];
 
@@ -626,9 +579,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedReturns.length}
-              onApprove={() => {/* TODO: Implement approve selected */ }}
-              onReject={() => {/* TODO: Implement reject selected */ }}
-              onExport={() => {/* TODO: Implement export selected */ }}
+              onExport={handleExportSelected}
               onClear={() => setSelectedReturns([])}
             />
 

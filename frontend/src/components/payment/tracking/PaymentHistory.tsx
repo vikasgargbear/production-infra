@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { History, Search, Filter, Download, X, RefreshCw, CreditCard, Eye, Printer, MessageCircle, Mail } from 'lucide-react';
+import { History, Search, Filter, Download, X, RefreshCw, CreditCard, MessageCircle, Mail } from 'lucide-react';
 import { ModuleHeader, InlineFilterPanel, DataTable, Pagination, StatusBadge } from '../../global';
 import { paymentsApi } from '../../../services/api';
 import { useCompany } from '../../../contexts/CompanyContext';
@@ -97,6 +97,23 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
     fetchPayments(pagination.page);
   };
 
+  const handleExport = () => {
+    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Payment #', 'Date', 'Party', 'Type', 'Amount', 'Mode', 'Status', 'Reference'],
+      ...payments.map(payment => [payment.payment_id, payment.payment_date, payment.party_name,
+        payment.payment_type, payment.amount, payment.payment_mode, payment.payment_status,
+        payment.reference_no || ''])
+    ];
+    const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payments-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const columns = [
     {
       key: 'payment_date',
@@ -168,30 +185,6 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
         return <StatusBadge status={config.status} label={config.label} />;
       },
       width: '100px'
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      align: 'center' as const,
-      render: (_: any, payment: Payment) => (
-        <div className="flex items-center justify-center space-x-1">
-          <button
-            onClick={() => toast.info(`Opening payment ${payment.payment_id} - Feature coming soon`)}
-            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            title="View Payment"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => toast.info(`Print payment ${payment.payment_id} - Feature coming soon`)}
-            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded transition-colors"
-            title="Print Receipt"
-          >
-            <Printer className="w-4 h-4" />
-          </button>
-        </div>
-      ),
-      width: '100px'
     }
   ];
 
@@ -220,9 +213,9 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
             },
             {
               label: "Export All",
-              onClick: () => toast.info('Export feature coming soon'),
-              variant: "default",
-              className: "bg-gray-900 hover:bg-gray-800 text-white"
+              onClick: handleExport,
+              variant: "outline",
+              className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
             }
           ] as any}
         />

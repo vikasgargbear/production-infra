@@ -33,6 +33,28 @@ def _default_schema_doc_paths() -> List[Path]:
     return sorted(schema_directory.glob("*.md"))
 
 
+def _default_canonical_domain_paths() -> List[Path]:
+    """Return canonical domain catalogs used during the legacy-read transition."""
+    repository_root = Path(__file__).resolve().parents[4]
+    return sorted((repository_root / "database" / "canonical" / "domains").glob("*.json"))
+
+
+def _parse_canonical_domains(paths: Iterable[Path]) -> Dict[str, Set[str]]:
+    schema_map: Dict[str, Set[str]] = {}
+    for domain_path in paths:
+        document = json.loads(domain_path.read_text(encoding="utf-8"))
+        for table in document.get("tables", []):
+            name = table.get("name")
+            columns = table.get("columns", [])
+            if not isinstance(name, str) or "." not in name:
+                continue
+            schema_map.setdefault(name, set()).update(
+                column[0] for column in columns
+                if isinstance(column, list) and column and isinstance(column[0], str)
+            )
+    return schema_map
+
+
 def _default_live_evidence_path() -> Path:
     repository_root = Path(__file__).resolve().parents[4]
     return repository_root / "database" / "live-schema-evidence.json"
@@ -162,6 +184,7 @@ def extract_tables_and_columns(sql: str) -> List[Tuple[str, str]]:
     # Pattern 1: alias.column (e.g., "c.customer_name")
     # We need to track aliases to their actual tables
     alias_map = {}
+    table_tokens = set()
     
     # Find table aliases from FROM/JOIN clauses
     # Pattern: FROM schema.table alias or FROM table alias
@@ -173,6 +196,7 @@ def extract_tables_and_columns(sql: str) -> List[Tuple[str, str]]:
         
         full_table = f"{schema}.{table}" if schema else table
         alias_map[alias.lower()] = full_table
+        table_tokens.add(full_table.lower())
     
     # Find column references
     # Pattern: identifier.column or just column
@@ -180,6 +204,10 @@ def extract_tables_and_columns(sql: str) -> List[Tuple[str, str]]:
     for match in re.finditer(column_pattern, sql):
         table_or_alias = match.group(1).lower()
         column = match.group(2)
+
+        # A schema-qualified table in FROM/JOIN is not a column reference.
+        if f"{table_or_alias}.{column}".lower() in table_tokens:
+            continue
         
         # Skip common SQL keywords used as prefixes
         if table_or_alias in ['current_timestamp', 'current_date', 'information_schema']:
@@ -193,7 +221,9 @@ def extract_tables_and_columns(sql: str) -> List[Tuple[str, str]]:
     return references
 
 
-def validate_query(sql: str, strict: bool = True) -> Dict[str, any]:
+def validate_query(
+    sql: str, strict: bool = True, schema_override: Optional[Dict[str, Set[str]]] = None
+) -> Dict[str, any]:
     """
     Validate SQL query against schema doc.
     
@@ -207,7 +237,7 @@ def validate_query(sql: str, strict: bool = True) -> Dict[str, any]:
     Raises:
         ValueError: If strict=True and validation fails
     """
-    schema = parse_schema_doc()
+    schema = schema_override or parse_schema_doc()
     
     if not schema:
         return {"valid": True, "warnings": ["Schema doc not found - skipping validation"]}
@@ -270,6 +300,17 @@ def validate_module(module_path: Path) -> Dict[str, any]:
         return {"error": f"File not found: {module_path}"}
     
     content = module_path.read_text()
+    schema_override = None
+    if module_path.name == "canonical_erp_reads.py":
+        # This deliberately isolated compatibility router reads the canonical
+        # catalogs while the remaining legacy route modules are retired.
+        schema_override = {
+            table: set(columns) for table, columns in parse_schema_doc().items()
+        }
+        for table, columns in _parse_canonical_domains(
+            _default_canonical_domain_paths()
+        ).items():
+            schema_override.setdefault(table, set()).update(columns)
     
     # Extract SQL from text() calls and triple-quoted strings
     sql_pattern = r'(?:text\(["""\']{1,3}|["""\']{3})(.*?)(?:["""\']{1,3}\)|["""\']{3})'
@@ -295,7 +336,7 @@ def validate_module(module_path: Path) -> Dict[str, any]:
         }
         
         try:
-            validation = validate_query(sql, strict=False)
+            validation = validate_query(sql, strict=False, schema_override=schema_override)
             if validation["valid"]:
                 results["valid_queries"] += 1
             else:

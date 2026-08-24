@@ -356,6 +356,12 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     return true;
   };
 
+  const isAdjustmentValid = () => Boolean(
+    adjustmentData.adjustment_type
+    && adjustmentData.reason
+    && adjustmentData.items.length > 0
+  );
+
   const handleProceedToReview = () => {
     if (validateAdjustment()) {
       setCurrentStep(2);
@@ -931,6 +937,8 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       reviewContent={reviewContent}
       onClose={onClose}
       onSave={handleSubmit}
+      canProceedToReview={isAdjustmentValid}
+      footerTotals={{ itemCount: adjustmentData.items.length }}
       isSaving={saving}
       additionalActions={[
         {

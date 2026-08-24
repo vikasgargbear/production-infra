@@ -61,6 +61,14 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const selectedTypeLabel = documentTypes.find(type => type.value === selectedType)?.label
+    || 'documents';
+
+  useEffect(() => {
+    if (!selectedType && documentTypes[0]?.value) {
+      setSelectedType(documentTypes[0].value);
+    }
+  }, [documentTypes, selectedType]);
 
   useEffect(() => {
     if (isOpen && selectedType) {
@@ -199,7 +207,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder={`Search ${selectedType}s by number or customer...`}
+                placeholder={`Search ${selectedTypeLabel.toLowerCase()} by number or customer...`}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -220,7 +228,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
             </div>
           ) : documents.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No {selectedType}s found
+              No {selectedTypeLabel.toLowerCase()} found
             </div>
           ) : (
             <div className="space-y-2">

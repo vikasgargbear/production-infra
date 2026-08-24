@@ -97,6 +97,7 @@ from .api.routes import metadata
 from .api.routes import calculations
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
+from .api.routes import canonical_erp_reads
 from .api.routes.internal import (
     mcp_actions,
     mcp_agent_grants,
@@ -260,6 +261,9 @@ api.include_router(tax_provider.router)
 
 # --- Audit ---
 api.include_router(audit_router, tags=["Audit Trail"])
+
+# Register canonical compatibility before legacy routes with overlapping paths.
+api.include_router(canonical_erp_reads.router, tags=["Canonical ERP Reads"])
 
 # --- Master Data ---
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])

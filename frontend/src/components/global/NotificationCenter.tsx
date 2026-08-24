@@ -21,6 +21,7 @@ import offlineStorage from '../../services/offlineStorage';
 interface NotificationCenterProps {
   isOpen: boolean;
   onClose: () => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
 type NotificationType = 'stock_low' | 'expiry' | 'payment_due' | 'scheme_expiry' | 'einvoice_failed' | 'system_alert' | 'success' | string;
@@ -37,7 +38,11 @@ interface Notification {
   data?: Record<string, unknown>;
 }
 
-const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose }) => {
+const NotificationCenter: React.FC<NotificationCenterProps> = ({
+  isOpen,
+  onClose,
+  onUnreadCountChange,
+}) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread' | 'critical'>('all');
   const [loading, setLoading] = useState(true);
@@ -60,8 +65,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
         setNotifications([]);
       }
     } catch (err) {
-      // No data available - show empty state
-      setError('Unable to load notifications. Please check your connection and try again.');
+      // Notifications are optional. A missing local cache is a valid empty state.
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -198,6 +202,10 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  useEffect(() => {
+    onUnreadCountChange?.(unreadCount);
+  }, [onUnreadCountChange, unreadCount]);
+
   // Load data on component mount
   useEffect(() => {
     if (isOpen) {
@@ -217,8 +225,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-end pt-16 pr-4">
-      <div className="bg-white rounded-xl shadow-2xl w-96 max-h-[80vh] overflow-hidden">
+    <div className="fixed inset-0 z-[80] flex items-end justify-end bg-black/50 sm:items-start sm:p-4 sm:pt-16">
+      <div className="max-h-[calc(100dvh-1rem)] w-full overflow-hidden rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl sm:max-h-[80vh] sm:w-96 sm:rounded-xl sm:pb-0">
         {/* Header */}
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">

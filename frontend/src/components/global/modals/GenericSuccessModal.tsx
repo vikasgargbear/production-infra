@@ -266,7 +266,7 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className={`grid gap-2 ${onDownload ? 'grid-cols-3' : 'grid-cols-2'}`}>
                                 <button
                                     onClick={() => {
                                         if (onPrint) {
@@ -323,19 +323,15 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={() => {
-                                        if (onDownload) {
-                                            onDownload();
-                                        } else {
-                                            alert('PDF download will be implemented');
-                                        }
-                                    }}
-                                    className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all group"
-                                >
-                                    <Download className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
-                                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Download</span>
-                                </button>
+                                {onDownload && (
+                                    <button
+                                        onClick={onDownload}
+                                        className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all group"
+                                    >
+                                        <Download className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
+                                        <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Download</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}

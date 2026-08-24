@@ -59,15 +59,11 @@ export interface InvoiceTableProps {
     loading: boolean;
     onToggleSelect: (id: string) => void;
     onToggleSelectAll: () => void;
-    onViewInvoice: (invoice: Invoice) => void;
-    onPrintInvoice: (invoice: Invoice) => void;
     onCancelInvoice?: (invoice: Invoice) => void;
 }
 
 export interface InvoiceBulkActionsProps {
     selectedCount: number;
-    onMarkPaid: () => void;
-    onSendReminder: () => void;
     onExport: () => void;
     onClear: () => void;
 }

@@ -421,7 +421,9 @@ const InventoryReport: React.FC = () => {
             <Activity className="h-8 w-8 text-purple-600 mb-2" />
             <p className="text-sm text-gray-600">Avg Turnover</p>
             <p className="text-xl font-bold">
-              {(inventory.reduce((acc, item) => acc + item.turnoverRate, 0) / inventory.length).toFixed(1)}x
+              {(inventory.length > 0
+                ? inventory.reduce((acc, item) => acc + item.turnoverRate, 0) / inventory.length
+                : 0).toFixed(1)}x
             </p>
           </div>
         </div>

@@ -83,27 +83,17 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
 }) => {
     const [showThermalOptions, setShowThermalOptions] = useState(false);
 
-    const getButtonColorClasses = (color: string): string => {
-        switch (color) {
-            case 'purple':
-                return 'bg-purple-600 hover:bg-purple-700';
-            case 'green':
-                return 'bg-green-600 hover:bg-green-700';
-            case 'orange':
-                return 'bg-orange-600 hover:bg-orange-700';
-            case 'red':
-                return 'bg-red-600 hover:bg-red-700';
-            default:
-                return 'bg-blue-600 hover:bg-blue-700';
-        }
-    };
+    // Keep the main forward action visually identical in every document flow.
+    // The legacy color prop remains accepted so existing callers do not break.
+    const getButtonColorClasses = (_color: string): string =>
+        'bg-blue-600 hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2';
 
     return (
-        <div className={`border-t border-gray-200 bg-white px-6 py-3 ${className}`}>
+        <div className={`border-t border-gray-200 bg-white px-3 py-3 sm:px-6 ${className}`}>
             {showActionButtons ? (
                 // Review page layout - single line like step 1
-                <div className="flex justify-between items-center min-h-[36px]">
-                    <div className="flex items-center gap-6 text-sm">
+                <div className="flex min-h-[36px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-3 text-sm sm:gap-6">
                         {totalItems > 0 && (
                             <span className="text-gray-600">
                                 Items: <strong>{totalItems}</strong>
@@ -141,7 +131,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
                         {/* Thermal Print button with dropdown */}
                         {onThermalPrint && (
                             <div className="relative">
@@ -194,7 +184,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                                 ref={saveButtonRef}
                                 onClick={onSave}
                                 disabled={isSaving}
-                                className="px-8 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                                className="min-h-11 flex-1 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm sm:flex-none sm:px-8"
                             >
                                 <Save className="w-5 h-5" />
                                 {isSaving ? 'Generating...' : saveLabel}
@@ -204,7 +194,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                 </div>
             ) : (
                 // Standard layout for create/edit pages - optimized for speed
-                <div className="flex justify-between items-center min-h-[36px]">
+                <div className="flex min-h-[36px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4 text-sm">
                         {totalItems > 0 && (
                             <span className="text-gray-600">
@@ -218,11 +208,11 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
                         {onCancel && (
                             <button
                                 onClick={onCancel}
-                                className="px-6 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                                className="min-h-11 flex-1 px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors sm:flex-none sm:px-6"
                             >
                                 {cancelLabel}
                             </button>
@@ -231,7 +221,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <button
                                 onClick={onContinue}
                                 disabled={continueDisabled}
-                                className={`px-6 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${getButtonColorClasses(continueButtonColor)}`}
+                                className={`min-h-11 flex-1 justify-center px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed sm:flex-none sm:px-6 ${getButtonColorClasses(continueButtonColor)}`}
                             >
                                 {continueLabel}
                                 <ArrowRight className="w-4 h-4" />

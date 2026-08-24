@@ -408,11 +408,39 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 </>
               )}
 
-              {/* Aging Analysis View (simplified for now) */}
+              {/* Aging Analysis View */}
               {ui.viewMode === 'aging' && (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h3 className="text-lg font-semibold mb-4">Aging Analysis</h3>
-                  <p className="text-gray-500">Detailed aging analysis view coming soon</p>
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                  <div className="mb-5">
+                    <h3 className="text-lg font-semibold text-gray-900">Aging Analysis</h3>
+                    <p className="mt-1 text-sm text-gray-500">Outstanding balances grouped by how long they have been due.</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {([
+                      { key: 'current', label: 'Current', color: 'bg-blue-500' },
+                      { key: '1-30', label: '1–30 days', color: 'bg-cyan-500' },
+                      { key: '31-60', label: '31–60 days', color: 'bg-amber-500' },
+                      { key: '61-90', label: '61–90 days', color: 'bg-orange-500' },
+                      { key: 'over_90', label: 'Over 90 days', color: 'bg-red-500' }
+                    ] as const).map(({ key, label, color }) => {
+                      const bucket = summary.aging_summary[key];
+                      const percentage = summary.total_receivable > 0
+                        ? Math.min(100, (bucket.amount / summary.total_receivable) * 100)
+                        : 0;
+
+                      return (
+                        <div key={key} className="rounded-lg border border-gray-200 p-4">
+                          <div className="text-sm font-medium text-gray-600">{label}</div>
+                          <div className="mt-2 text-xl font-semibold text-gray-900">{formatCurrency(bucket.amount)}</div>
+                          <div className="mt-1 text-xs text-gray-500">{bucket.count} {bucket.count === 1 ? 'party' : 'parties'}</div>
+                          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                            <div className={`h-full rounded-full ${color}`} style={{ width: `${percentage}%` }} />
+                          </div>
+                          <div className="mt-1 text-right text-xs text-gray-500">{percentage.toFixed(0)}%</div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

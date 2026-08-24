@@ -32,9 +32,9 @@ const PermissionGate: React.FC<PermissionGateProps> = ({
 }) => {
   const { hasPermission, isLoading } = usePermissions();
 
-  // While loading, render children to avoid flicker
+  // Never expose protected actions while authorization is unresolved.
   if (isLoading) {
-    return <>{children}</>;
+    return <>{fallback}</>;
   }
 
   if (!hasPermission(module, permission)) {

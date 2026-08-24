@@ -10,14 +10,13 @@
 
 import React, { useEffect, useCallback, useState } from 'react';
 import {
-  Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical,
+  Download, Edit, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical,
   FileText, ClipboardList, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
 import { supplierInvoicesApi, purchasesApi, grnApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { useCompany } from '../../contexts/CompanyContext';
-import { toast } from 'react-toastify';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
@@ -29,18 +28,21 @@ type DocumentType = 'supplier_invoice' | 'purchase_order' | 'grn';
 const documentTypeConfig = {
   supplier_invoice: {
     label: 'Supplier Invoices',
+    numberLabel: 'Supplier Invoice #',
     icon: FileText,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     iconColor: 'text-blue-600'
   },
   purchase_order: {
     label: 'Purchase Orders',
+    numberLabel: 'Purchase Order #',
     icon: ClipboardList,
     activeClass: 'bg-purple-50 text-purple-700 border-purple-200',
     iconColor: 'text-purple-600'
   },
   grn: {
     label: 'GRN',
+    numberLabel: 'GRN #',
     icon: Truck,
     activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     iconColor: 'text-emerald-600'
@@ -310,7 +312,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     },
     {
       key: 'po_number',
-      header: 'Purchase #',
+      header: documentTypeConfig[documentType].numberLabel,
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="text-sm text-gray-600">{purchase.po_number}</div>
       ),
@@ -354,27 +356,13 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             ['draft', 'pending', 'partial', 'confirmed', 'approved'].includes(purchase.status) && (
             <button
               onClick={() => onRecordReceipt(parseInt(purchase.id))}
-              className="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
+              className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
               title="Record Receipt (Create Purchase Entry from this PO)"
             >
               <Package className="w-3.5 h-3.5 inline mr-1" />
               Receipt
             </button>
           )}
-          <button
-            onClick={() => toast.info(`Opening purchase ${purchase.po_number} - Feature coming soon`)}
-            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            title="View Purchase"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => toast.info(`Print purchase ${purchase.po_number} - Feature coming soon`)}
-            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded transition-colors"
-            title="Print"
-          >
-            <Printer className="w-4 h-4" />
-          </button>
           <button
             onClick={() => {
               const message = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
@@ -398,7 +386,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           </button>
         </div>
       ),
-      width: '220px'
+      width: '170px'
     }
   ];
 
@@ -468,6 +456,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
 
             {/* Filters */}
             <InlineFilterPanel
+              searchPlaceholder={`Search ${documentTypeConfig[documentType].label.toLowerCase()} by number or supplier...`}
               filters={[
                 {
                   key: 'date_preset',

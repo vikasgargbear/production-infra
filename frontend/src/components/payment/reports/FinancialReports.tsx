@@ -173,8 +173,8 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({ onClose }) => {
               disabled: refreshing
             },
             {
-              label: 'Export PDF',
-              onClick: () => console.log('Export PDF'),
+              label: 'Print / Save PDF',
+              onClick: () => window.print(),
               variant: 'secondary'
             }
           ] as any}

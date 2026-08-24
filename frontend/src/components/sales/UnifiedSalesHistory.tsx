@@ -4,7 +4,6 @@ import {
     Package,
     ShoppingCart,
     Search,
-    Download,
     Eye,
     X,
     LucideIcon
@@ -472,15 +471,6 @@ const UnifiedSalesHistory: React.FC<UnifiedSalesHistoryProps> = ({ onClose, onSe
                                                         title="View"
                                                     >
                                                         <Eye className="h-4 w-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            toast.info('Download feature coming soon');
-                                                        }}
-                                                        className="text-gray-600 hover:text-gray-900"
-                                                        title="Download"
-                                                    >
-                                                        <Download className="h-4 w-4" />
                                                     </button>
                                                 </div>
                                             </td>

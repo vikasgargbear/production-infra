@@ -1,7 +1,7 @@
 import React, { useState, useEffect, ReactElement } from 'react';
 import {
     FileText, Truck, Search,
-    Eye, Download, Printer, Calendar, ChevronDown, MessageCircle, XCircle
+    Download, Printer, Calendar, ChevronDown, MessageCircle, XCircle
 } from 'lucide-react';
 import { ordersApi } from '../../../services/api';
 import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
@@ -416,15 +416,6 @@ const OrderList: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex gap-2">
-                                        {/* View Button */}
-                                        <button
-                                            onClick={() => {/* TODO: Navigate to order view */ }}
-                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                            title="View Order"
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </button>
-
                                         {/* Print Button */}
                                         <button
                                             onClick={() => {
@@ -457,17 +448,6 @@ const OrderList: React.FC = () => {
                                                 onSuccess={(invoiceData: InvoiceData) => handleInvoiceCreated(order.order_id, invoiceData)}
                                                 className="text-sm py-1 px-3"
                                             />
-                                        )}
-
-                                        {/* Convert to Challan Button */}
-                                        {!order.challan_created && (
-                                            <button
-                                                onClick={() => {/* TODO: Convert to challan */ }}
-                                                className="flex items-center gap-1 text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
-                                            >
-                                                <Truck className="w-3 h-3" />
-                                                Challan
-                                            </button>
                                         )}
 
                                         {/* Cancel Order Button */}

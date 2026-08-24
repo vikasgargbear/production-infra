@@ -49,6 +49,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const companyName = localStorage.getItem('companyName') || 'PharmaERP Pro';
   const companyLogo = localStorage.getItem('companyLogo');
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hasModuleAccess } = usePermissions();
@@ -72,9 +73,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     const interval = setInterval(loadData, 60000); // Poll every 60 seconds
     return () => clearInterval(interval);
   }, []);
-
-  // Mock unread count - in real app, this would come from API
-  const unreadNotifications = 3;
 
   const coreActions: ActionItem[] = [
     {
@@ -157,7 +155,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     },
     {
       id: 'warehouse',
-      tab: 'warehouse',
+      tab: 'master',
       title: 'Warehouse Management',
       subtitle: 'Manage multiple locations and inventory',
       icon: Warehouse,
@@ -215,7 +213,10 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             break;
           case 'w':
             e.preventDefault();
-            setActiveTab('warehouse');
+            setActiveTab('master');
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent('navigateToMaster', {
+              detail: { module: 'warehouse-master' }
+            })), 100);
             break;
           default:
             break;
@@ -245,51 +246,31 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setActiveTab]);
 
-  const renderActionCard = (action: ActionItem, colorScheme: 'blue' | 'green' | 'gray') => {
+  const renderActionCard = (action: ActionItem) => {
     const Icon = action.icon;
-
-    const colorClasses = {
-      blue: {
-        gradient: 'bg-gradient-to-br from-blue-100 to-blue-200 group-hover:from-blue-600 group-hover:to-blue-700',
-        icon: 'text-blue-700 group-hover:text-white',
-        text: 'text-blue-600 group-hover:text-blue-700'
-      },
-      green: {
-        gradient: 'bg-gradient-to-br from-green-100 to-green-200 group-hover:from-green-600 group-hover:to-green-700',
-        icon: 'text-green-700 group-hover:text-white',
-        text: 'text-green-600 group-hover:text-green-700'
-      },
-      gray: {
-        gradient: 'bg-gradient-to-br from-gray-200 to-gray-300 group-hover:from-gray-800 group-hover:to-gray-900',
-        icon: 'text-gray-700 group-hover:text-white',
-        text: 'text-gray-600 group-hover:text-gray-700'
-      }
-    };
-
-    const colors = colorClasses[colorScheme];
 
     return (
       <button
         key={action.id}
         onClick={() => {
-          if (action.id === 'master') {
-            // Navigate to Master with GST Configuration tab active
+          if (action.id === 'master' || action.id === 'warehouse') {
             setActiveTab(action.tab);
-            // Send event to TaxMaster to show GST config tab
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent('navigateToMaster', {
-                detail: { module: 'tax-master', tab: 'gst-config' }
+                detail: action.id === 'warehouse'
+                  ? { module: 'warehouse-master' }
+                  : { module: 'tax-master', tab: 'gst-config' }
               }));
             }, 100);
           } else {
             setActiveTab(action.tab);
           }
         }}
-        className="group bg-white rounded-xl p-6 text-left transition-all duration-200 hover:shadow-xl border border-gray-100 hover:border-gray-200 min-h-[140px]"
+        className="group min-h-[132px] rounded-xl border border-gray-200 bg-white p-4 text-left transition-all duration-200 hover:border-blue-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-[140px] sm:p-6"
       >
         {/* Icon with gradient */}
-        <div className={`w-14 h-14 ${colors.gradient} rounded-xl flex items-center justify-center mb-4 transition-all shadow-sm`}>
-          <Icon className={`w-7 h-7 ${colors.icon} transition-colors`} />
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 shadow-sm transition-all group-hover:from-blue-600 group-hover:to-blue-700">
+          <Icon className="h-7 w-7 text-blue-700 transition-colors group-hover:text-white" />
         </div>
 
         {/* Text */}
@@ -302,11 +283,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
 
         {/* Footer */}
         <div className="flex items-center justify-between mt-3">
-          <div className={`inline-flex items-center text-xs font-medium ${colors.text}`}>
+          <div className="inline-flex items-center text-xs font-medium text-blue-600 group-hover:text-blue-700">
             <span>Open</span>
             <ArrowRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
           </div>
-          <span className="text-[10px] text-gray-400 font-medium">
+          <span className="hidden text-[10px] font-medium text-gray-400 sm:inline">
             {action.shortcut}
           </span>
         </div>
@@ -333,11 +314,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Clean Header */}
-      <div className="px-6 pt-8 pb-8">
+      <div className="px-4 pb-5 pt-5 sm:px-6 sm:pb-8 sm:pt-8">
         <div className="max-w-7xl mx-auto text-center">
           {/* Logo and Brand with Notifications */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center justify-center space-x-3 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-center space-x-3 sm:justify-center">
               {companyLogo ? (
                 <img
                   src={companyLogo}
@@ -349,11 +330,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
                   <FileText className="w-5 h-5 text-white" />
                 </div>
               )}
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+              <div className="min-w-0 text-left sm:text-center">
+                <h1 className="truncate text-xl font-bold text-gray-900 sm:text-2xl">
                   {companyName}
                 </h1>
-                <p className="text-sm text-gray-600">
+                <p className="hidden text-sm text-gray-600 sm:block">
                   Enterprise Pharmaceutical Distribution Management
                 </p>
               </div>
@@ -380,7 +361,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 px-6 py-8 overflow-auto">
+      <div className="flex-1 overflow-auto px-4 py-5 sm:px-6 sm:py-8">
         <div className="max-w-7xl mx-auto">
 
           {/* Core Operations Section */}
@@ -389,10 +370,10 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
                 Core Operations
               </h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
                 {coreActions
                   .filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'sales'))
-                  .map((action) => renderActionCard(action, 'blue'))}
+                  .map(renderActionCard)}
               </div>
             </div>
           )}
@@ -403,10 +384,10 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
                 Financial Operations
               </h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
                 {financialActions
                   .filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'payment'))
-                  .map((action) => renderActionCard(action, 'green'))}
+                  .map(renderActionCard)}
               </div>
             </div>
           )}
@@ -417,33 +398,13 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
                 Analytics & Warehouse
               </h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
                 {analyticsActions
                   .filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'reports'))
-                  .map((action) => renderActionCard(action, 'gray'))}
+                  .map(renderActionCard)}
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Bottom Stats Bar */}
-      <div className="bg-gray-100 border-t border-gray-200 px-6 py-2">
-        <div className="max-w-7xl mx-auto flex items-center justify-center space-x-8 text-xs text-gray-600">
-          <div className="flex items-center space-x-1">
-            <span className="font-medium">99.9%</span>
-            <span>Uptime</span>
-          </div>
-          <div className="text-gray-400">•</div>
-          <div className="flex items-center space-x-1">
-            <span className="font-medium">24/7</span>
-            <span>Support</span>
-          </div>
-          <div className="text-gray-400">•</div>
-          <div className="flex items-center space-x-1">
-            <span className="font-medium">100+</span>
-            <span>Clients</span>
-          </div>
         </div>
       </div>
 
@@ -451,6 +412,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       <NotificationCenter
         isOpen={isNotificationOpen}
         onClose={() => setIsNotificationOpen(false)}
+        onUnreadCountChange={setUnreadNotifications}
       />
     </div>
   );

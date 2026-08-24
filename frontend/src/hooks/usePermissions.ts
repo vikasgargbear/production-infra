@@ -1,133 +1,78 @@
-/**
- * usePermissions Hook
- * Provides permission checking based on user's role from the database.
- * Fetches effective permissions on mount and caches them.
- */
-import { useState, useEffect, useCallback, useRef } from 'react';
+/** Authorization derived from the signed canonical ERP session claims. */
+import { useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { roleManagementApi } from '../services/api';
 
-interface PermissionState {
-  permissions: Record<string, Record<string, boolean>>;
-  modules: string[];
-  dataAccessLevel: string;
-  isAdmin: boolean;
-  isLoading: boolean;
-  error: string | null;
+const MODULE_DOMAINS: Record<string, string[]> = {
+  sales: ['sales'], invoices: ['sales'], challans: ['sales'],
+  purchase: ['procurement'], purchase_returns: ['procurement'],
+  inventory: ['inventory'], payment: ['finance'], finance: ['finance'],
+  ledger: ['finance'], notes: ['finance'], gst: ['tax'],
+  returns: ['sales', 'procurement'],
+  reports: ['sales', 'procurement', 'inventory', 'finance', 'tax'],
+  dashboard: ['sales', 'procurement', 'inventory', 'finance', 'tax'],
+  master: ['catalog', 'parties', 'hr', 'core'], settings: ['core'],
+};
+
+const ACTION_SUFFIXES: Record<string, string[]> = {
+  create: ['create', 'manage'], edit: ['edit', 'manage'], delete: ['manage'],
+  approve: ['approve', 'post', 'file', 'execute'],
+};
+
+export function canonicalModuleAccess(codes: string[], module: string): boolean {
+  const domains = MODULE_DOMAINS[module.toLowerCase()] || [module.toLowerCase()];
+  return codes.some(code => domains.includes(code.split('.', 1)[0]));
 }
 
-/**
- * Hook that fetches and caches the current user's effective permissions
- * from the backend role system.
- */
+export function canonicalPermissionAccess(
+  codes: string[], module: string, permission: string,
+): boolean {
+  if (!canonicalModuleAccess(codes, module)) return false;
+  const action = permission.toLowerCase();
+  if (action === 'view' || action === 'export') return true;
+  const domains = MODULE_DOMAINS[module.toLowerCase()] || [module.toLowerCase()];
+  const suffixes = ACTION_SUFFIXES[action] || [action];
+  return codes.some(code => (
+    domains.includes(code.split('.', 1)[0])
+    && suffixes.some(suffix => code.endsWith(`.${suffix}`))
+  ));
+}
+
 export const usePermissions = () => {
-  const { user, isAuthenticated } = useAuth();
-  const [state, setState] = useState<PermissionState>({
-    permissions: {},
-    modules: [],
-    dataAccessLevel: 'own',
-    isAdmin: false,
-    isLoading: true,
-    error: null,
-  });
-  const fetchedRef = useRef(false);
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const permissionCodes = useMemo(
+    () => Object.entries(user?.permissions || {})
+      .filter(([, enabled]) => enabled === true)
+      .map(([code]) => code.toLowerCase()),
+    [user?.permissions],
+  );
+  const isAdmin = user?.is_admin === true;
 
-  useEffect(() => {
-    if (!isAuthenticated || !user?.user_id || fetchedRef.current) {
-      if (!isAuthenticated) {
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
-      return;
-    }
-
-    const fetchPermissions = async () => {
-      try {
-        const response = await roleManagementApi.getUserPermissions(user.user_id);
-        const data: any = response?.data?.data || response?.data;
-
-        if (!data) {
-          // No role assigned — fall back to read-only
-          setState({
-            permissions: {},
-            modules: [],
-            dataAccessLevel: 'own',
-            isAdmin: false,
-            isLoading: false,
-            error: null,
-          });
-          return;
-        }
-
-        // Admin shortcut: backend returns { all: true }
-        if (data.all === true) {
-          setState({
-            permissions: { all: { all: true } },
-            modules: ['sales', 'purchase', 'inventory', 'payment', 'reports', 'master', 'gst', 'returns', 'ledger', 'notes'],
-            dataAccessLevel: 'organization',
-            isAdmin: true,
-            isLoading: false,
-            error: null,
-          });
-          fetchedRef.current = true;
-          return;
-        }
-
-        setState({
-          permissions: data.permissions || {},
-          modules: data.modules || [],
-          dataAccessLevel: data.data_access_level || 'own',
-          isAdmin: false,
-          isLoading: false,
-          error: null,
-        });
-        fetchedRef.current = true;
-      } catch (err: any) {
-        console.warn('[usePermissions] Failed to fetch permissions:', err.message);
-        // Don't block UI — fall back to permissive for now
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Failed to load permissions',
-        }));
-      }
-    };
-
-    fetchPermissions();
-  }, [isAuthenticated, user?.user_id]);
-
-  /**
-   * Check if the current user has a specific permission on a module.
-   */
   const hasPermission = useCallback(
-    (module: string, permission: string): boolean => {
-      if (state.isLoading || state.error) return true; // Permissive on loading or error
-      if (state.isAdmin) return true;
-      return state.permissions?.[module]?.[permission] === true;
-    },
-    [state.isAdmin, state.isLoading, state.error, state.permissions]
+    (module: string, permission: string): boolean => (
+      isAuthenticated
+      && (isAdmin || canonicalPermissionAccess(permissionCodes, module, permission))
+    ),
+    [isAdmin, isAuthenticated, permissionCodes],
   );
 
-  /**
-   * Check if the current user has access to a module at all.
-   */
   const hasModuleAccess = useCallback(
-    (module: string): boolean => {
-      if (state.isLoading || state.error) return true; // Permissive on loading or error
-      if (state.isAdmin) return true;
-      return state.modules.includes(module);
-    },
-    [state.isAdmin, state.isLoading, state.error, state.modules]
+    (module: string): boolean => (
+      isAuthenticated && (isAdmin || canonicalModuleAccess(permissionCodes, module))
+    ),
+    [isAdmin, isAuthenticated, permissionCodes],
+  );
+
+  const modules = useMemo(
+    () => Object.keys(MODULE_DOMAINS).filter(module => (
+      isAdmin || canonicalModuleAccess(permissionCodes, module)
+    )),
+    [isAdmin, permissionCodes],
   );
 
   return {
-    hasPermission,
-    hasModuleAccess,
-    permissions: state.permissions,
-    modules: state.modules,
-    dataAccessLevel: state.dataAccessLevel,
-    isAdmin: state.isAdmin,
-    isLoading: state.isLoading,
-    error: state.error,
+    hasPermission, hasModuleAccess, permissions: user?.permissions || {}, modules,
+    dataAccessLevel: user?.data_access_level || 'branch', isAdmin,
+    isLoading: authLoading, error: null,
   };
 };
 

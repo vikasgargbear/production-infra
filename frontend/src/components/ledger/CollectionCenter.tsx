@@ -14,7 +14,6 @@ import {
   Clock,
   Target,
   Search,
-  Bell,
   PhoneCall,
   Zap,
   ExternalLink,
@@ -77,9 +76,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     daysOverdue: 'all',
     searchQuery: ''
   });
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [showReminderModal, setShowReminderModal] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<CollectionItem | null>(null);
 
   // Fetch collection data using the collection aging-data endpoint
   const { data, isLoading, refetch } = useQuery({
@@ -201,7 +197,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     customers_count: 0,
     critical_accounts: 0,
     success_rate: 0,
-    collection_change: 15 // Mock positive change
+    collection_change: 0
   };
 
   // Filter collections
@@ -266,32 +262,10 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
       alert('No phone number available for this customer');
       return;
     }
-    // This would integrate with your SMS gateway
-    const message = `Payment reminder: ₹${customer.total_outstanding.toLocaleString('en-IN')} outstanding. Please pay soon.`;
-    alert(`SMS would be sent to ${customer.customer_phone}: "${message}"`);
-  };
-
-  const scheduleReminder = (customer: CollectionItem) => {
-    setSelectedCustomer(customer);
-    setShowReminderModal(true);
-  };
-
-  const handleBulkWhatsApp = () => {
-    if (selectedItems.length === 0) {
-      alert('Please select customers first');
-      return;
-    }
-    // In production, this would send bulk WhatsApp messages
-    alert(`Sending WhatsApp to ${selectedItems.length} customers`);
-  };
-
-  const handleBulkEmail = () => {
-    if (selectedItems.length === 0) {
-      alert('Please select customers first');
-      return;
-    }
-    // In production, this would send bulk emails
-    alert(`Sending emails to ${selectedItems.length} customers`);
+    const message = encodeURIComponent(
+      `Payment reminder: ₹${customer.total_outstanding.toLocaleString('en-IN')} outstanding. Please pay at your earliest convenience.`
+    );
+    window.location.href = `sms:${customer.customer_phone}?body=${message}`;
   };
 
   const handleExport = async () => {
@@ -306,7 +280,10 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
       const link = document.createElement('a');
       link.href = url;
       link.download = `collection-list-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
     }
   };
@@ -368,7 +345,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           />
 
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-6 py-6">
+            <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-6">
               {/* Summary Cards - Dark with stacked layout (matching Party Ledger) */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
                 <div className="bg-slate-800 rounded-lg px-4 py-3">
@@ -422,10 +399,10 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
               {/* Smart Filters and Actions */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4 flex-1">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:space-x-4">
                     {/* Quick Filters */}
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => setFilters({ ...filters, status: filters.status === 'overdue' ? 'all' : 'overdue' })}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.status === 'overdue'
@@ -471,23 +448,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                     </div>
                   </div>
 
-                  {/* Bulk Actions */}
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleBulkWhatsApp}
-                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center"
-                    >
-                      <WhatsAppIcon className="w-4 h-4 mr-1" />
-                      Bulk WhatsApp
-                    </button>
-                    <button
-                      onClick={handleBulkEmail}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center"
-                    >
-                      <Mail className="w-4 h-4 mr-1" />
-                      Bulk Email
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -497,19 +457,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-3 text-left">
-                          <input
-                            type="checkbox"
-                            checked={selectedItems.length === filteredCollections.length && filteredCollections.length > 0}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedItems(filteredCollections.map((c: CollectionItem) => c.customer_id));
-                              } else {
-                                setSelectedItems([]);
-                              }
-                            }}
-                          />
-                        </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outstanding</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age & Priority</th>
@@ -525,19 +472,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
                         return (
                           <tr key={item.customer_id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4">
-                              <input
-                                type="checkbox"
-                                checked={selectedItems.includes(item.customer_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedItems([...selectedItems, item.customer_id]);
-                                  } else {
-                                    setSelectedItems(selectedItems.filter(id => id !== item.customer_id));
-                                  }
-                                }}
-                              />
-                            </td>
                             <td className="px-6 py-4">
                               <div
                                 className={onCustomerClick ? 'cursor-pointer' : ''}
@@ -627,15 +561,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                   <MessageSquare className="w-4 h-4" />
                                 </button>
 
-                                {/* Schedule Reminder */}
-                                <button
-                                  onClick={() => scheduleReminder(item)}
-                                  className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                                  title="Schedule Reminder"
-                                >
-                                  <Bell className="w-4 h-4" />
-                                </button>
-
                                 {/* View Details */}
                                 <button
                                   onClick={() => onCustomerClick?.(item)}
@@ -673,34 +598,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         </div>
       )}
 
-      {/* Reminder Modal (placeholder) */}
-      {showReminderModal && selectedCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-4">Schedule Reminder</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Schedule reminder for {selectedCustomer.customer_name}
-            </p>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowReminderModal(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  alert('Reminder scheduled!');
-                  setShowReminderModal(false);
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Schedule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

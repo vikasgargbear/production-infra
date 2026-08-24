@@ -5,14 +5,12 @@
  */
 
 import React from 'react';
-import { Check, Send, Download, X } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 import { Button } from '../../../../global';
 import type { InvoiceBulkActionsProps } from '../types/invoicelist.types';
 
 export const InvoiceBulkActions = React.memo<InvoiceBulkActionsProps>(({
     selectedCount,
-    onMarkPaid,
-    onSendReminder,
     onExport,
     onClear
 }) => {
@@ -27,14 +25,6 @@ export const InvoiceBulkActions = React.memo<InvoiceBulkActionsProps>(({
                     </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm" onClick={onMarkPaid}>
-                        <Check className="w-4 h-4 mr-2" />
-                        Mark as Paid
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={onSendReminder}>
-                        <Send className="w-4 h-4 mr-2" />
-                        Send Reminder
-                    </Button>
                     <Button variant="outline" size="sm" onClick={onExport}>
                         <Download className="w-4 h-4 mr-2" />
                         Export

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ArrowDownToLine, Search, Filter, Download, Eye, Printer, MessageCircle,
+  ArrowDownToLine, Search, Filter, Download, Printer, MessageCircle,
   ArrowUpFromLine, ArrowRightLeft, Package,
   RefreshCw, Loader2
 } from 'lucide-react';
@@ -445,14 +445,6 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       sortable: false,
       render: (_, movement) => (
         <div className="flex items-center space-x-1">
-          <button
-            onClick={() => console.log('View movement:', movement.id)}
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="View Details"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-
           <button
             onClick={() => {
               setSelectedIds(new Set([movement.id]));

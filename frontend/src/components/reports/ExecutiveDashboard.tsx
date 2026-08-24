@@ -167,8 +167,26 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
   };
 
   const handleExport = () => {
-    // TODO: Implement export functionality
-    console.log('Exporting dashboard data...');
+    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows: unknown[][] = [
+      ['Executive Dashboard', dateRange],
+      [],
+      ['Metric', 'Value', 'Change %'],
+      ...metrics.map(metric => [metric.title, metric.value, metric.change]),
+      [],
+      ['Top Product', 'Revenue', 'Sales'],
+      ...topProducts.map(product => [product.name, product.revenue || 0, product.sales || 0]),
+      [],
+      ['Top Customer', 'Revenue', 'Orders'],
+      ...topCustomers.map(customer => [customer.name, customer.revenue || 0, customer.orders || 0])
+    ];
+    const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `executive-dashboard-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   if (loading && !refreshing) {

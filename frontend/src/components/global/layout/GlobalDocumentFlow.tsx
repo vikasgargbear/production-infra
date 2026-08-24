@@ -403,7 +403,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
                 {/* Keyboard Shortcuts Help */}
                 {currentShortcuts.length > 0 && (
-                    <div className={`bg-${finalColor}-50 px-4 py-2 text-xs text-${finalColor}-700 border-b border-${finalColor}-200`}>
+                    <div className={`hidden bg-${finalColor}-50 px-4 py-2 text-xs text-${finalColor}-700 border-b border-${finalColor}-200 sm:block`}>
                         Keyboard shortcuts: {currentShortcuts.map((shortcut, index) => (
                             <span key={index}>
                                 <strong>{shortcut.key}</strong> - {shortcut.action}
@@ -415,7 +415,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
                 {/* Content Area - Step-based */}
                 <div className={`flex-1 overflow-y-auto bg-${finalColor}-50`}>
-                    <div className={`${maxWidth} mx-auto px-6 py-6 ${className}`}>
+                    <div className={`${maxWidth} mx-auto px-3 py-4 sm:px-6 sm:py-6 ${className}`}>
                         {localStep === 1 ? createContent : reviewContent}
                     </div>
                 </div>
@@ -430,7 +430,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                         cancelLabel="Reset"
                         continueLabel="Continue"
                         continueDisabled={canProceedToReview?.() === false}
-                        continueButtonColor={finalColor as 'blue' | 'green' | 'purple' | 'orange' | 'red'}
+                        continueButtonColor="blue"
                     />
                 ) : (
                     <DocumentFooter

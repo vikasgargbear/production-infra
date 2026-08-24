@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Users, Package, IndianRupee,
   FileText, Clock, Calendar, Filter, Download, RefreshCw,
-  ChevronRight, Eye, Edit, Plus, Search, BarChart3, AlertCircle
+  ChevronRight, Plus, Search, BarChart3, AlertCircle
 } from 'lucide-react';
 import { Card, Button, StatusBadge, DataTable } from '../global';
 import { dashboardApi, reportsApi } from '../../services/api';
@@ -133,6 +133,10 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const navigate = (tab: string) => {
+    window.dispatchEvent(new CustomEvent('navigate', { detail: { tab } }));
+  };
 
   // Real data state
   const [dashboardData, setDashboardData] = useState<DashboardData>({
@@ -371,26 +375,19 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
               title="Create Invoice"
               description="Generate new sales invoice"
               icon={FileText}
-              onClick={() => {/* TODO: Navigate to invoice creation */ }}
+              onClick={() => navigate('sales')}
             />
             <ActionCard
               title="Record Payment"
               description="Update payment status"
               icon={IndianRupee}
-              onClick={() => {/* TODO: Navigate to payment recording */ }}
-            />
-            <ActionCard
-              title="Overdue Follow-up"
-              description="3 invoices overdue"
-              icon={Clock}
-              onClick={() => {/* TODO: Navigate to overdue management */ }}
-              urgent={true}
+              onClick={() => navigate('payment-entry')}
             />
             <ActionCard
               title="Sales Reports"
               description="View detailed analytics"
               icon={BarChart3}
-              onClick={() => {/* TODO: Navigate to analytics */ }}
+              onClick={() => navigate('reports')}
             />
           </div>
         </div>
@@ -401,7 +398,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
           <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-app-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-app-800">Recent Invoices</h2>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={() => navigate('sales')}>
                 View All
               </Button>
             </div>
@@ -423,14 +420,6 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
                       </span>
                       <span className="text-xs text-app-500">{invoice.date}</span>
                     </div>
-                  </div>
-                  <div className="ml-3 flex space-x-1">
-                    <Button variant="ghost" size="sm">
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      <Edit className="w-4 h-4" />
-                    </Button>
                   </div>
                 </div>
               ))}

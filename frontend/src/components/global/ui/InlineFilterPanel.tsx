@@ -18,6 +18,7 @@ interface InlineFilterPanelProps {
   showFilters?: boolean;
   onToggleFilters?: (show: boolean) => void;
   className?: string;
+  searchPlaceholder?: string;
 }
 
 const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
@@ -27,7 +28,8 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
   onSearchChange,
   showFilters = false,
   onToggleFilters,
-  className = ''
+  className = '',
+  searchPlaceholder = 'Search by customer name, invoice number, or order number...'
 }) => {
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
@@ -61,7 +63,7 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search by customer name, invoice number, or order number..."
+                placeholder={searchPlaceholder}
                 className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
@@ -167,4 +169,4 @@ const InlineFilterPanel: React.FC<InlineFilterPanelProps> = ({
   );
 };
 
-export default InlineFilterPanel; 
+export default InlineFilterPanel;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ChevronRight, Package, ArrowUpFromLine, ArrowDownToLine, ArrowRightLeft, RefreshCw } from 'lucide-react';
+import { Search, Filter, Package, ArrowUpFromLine, ArrowDownToLine, ArrowRightLeft, RefreshCw } from 'lucide-react';
 import { stockApi } from '../../services/api';
 import { DataTable, Column, ModuleHeader, InlineFilterPanel } from '../global';
 
@@ -121,6 +121,23 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExport = () => {
+    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Movement #', 'Date', 'Product', 'Type', 'Quantity', 'Batch', 'Reference', 'Status'],
+      ...filteredMovements.map(movement => [movement.movement_no, movement.movement_date,
+        movement.product_name, movement.movement_type, movement.quantity,
+        movement.batch_number || '', movement.reference_no || '', movement.status])
+    ];
+    const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `stock-movements-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Derive stock movements from purchases, sales, and adjustments
@@ -316,20 +333,6 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
         </span>
       ),
     },
-    {
-      key: 'actions',
-      header: 'Actions',
-      align: 'center' as const,
-      sortable: false,
-      render: (_, movement) => (
-        <button
-          onClick={() => console.log('View movement:', movement.id)}
-          className="text-primary-600 hover:text-primary-700 p-1 rounded transition-colors"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      ),
-    },
   ];
 
   return (
@@ -358,9 +361,9 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
             },
             {
               label: "Export All",
-              onClick: () => console.log('Export'),
-              variant: "default",
-              className: "bg-gray-900 hover:bg-gray-800 text-white"
+              onClick: handleExport,
+              variant: "outline",
+              className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
             }
           ] as any}
         />

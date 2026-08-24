@@ -15,7 +15,6 @@ import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
 import { invoicesApi, challansApi, ordersApi } from '../../../services/api';
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 import { useCompany } from '../../../contexts/CompanyContext';
-import { toast } from 'react-toastify';
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
 import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
 import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
@@ -424,19 +423,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     dispatch({ type: 'TOGGLE_SELECT_ALL', invoiceIds });
   };
 
-  const handleViewInvoice = (invoice: Invoice) => {
-    // Show invoice details in an alert for now
-    // TODO: Implement full invoice preview modal
-    toast.info(`Opening invoice ${invoice.invoice_number} - Full preview coming soon`);
-    console.log('Invoice details:', invoice);
-  };
-
-  const handlePrintInvoice = (invoice: Invoice) => {
-    // TODO: Implement print invoice flow
-    toast.info(`Print invoice ${invoice.invoice_number} - Feature coming soon`);
-    console.log('Print invoice:', invoice);
-  };
-
   const handleCancelInvoice = (invoice: Invoice) => {
     setInvoiceToCancel(invoice);
     setCancelModalOpen(true);
@@ -446,16 +432,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     setCancelModalOpen(false);
     setInvoiceToCancel(null);
     fetchDocuments(pagination.page, buildSearchParams(), documentType); // Refresh list
-  };
-
-  const handleMarkPaid = () => {
-    console.log('Mark selected as paid:', Array.from(selectedIds));
-    // TODO: Implement bulk mark as paid
-  };
-
-  const handleSendReminder = () => {
-    console.log('Send reminder for:', Array.from(selectedIds));
-    // TODO: Implement bulk send reminder
   };
 
   const handleExportSelected = () => {
@@ -631,8 +607,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <InvoiceBulkActions
               selectedCount={selectedCount}
-              onMarkPaid={handleMarkPaid}
-              onSendReminder={handleSendReminder}
               onExport={handleExportSelected}
               onClear={() => dispatch({ type: 'CLEAR_SELECTION' })}
             />
@@ -645,8 +619,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               loading={loading}
               onToggleSelect={handleToggleSelect}
               onToggleSelectAll={handleToggleSelectAll}
-              onViewInvoice={handleViewInvoice}
-              onPrintInvoice={handlePrintInvoice}
               onCancelInvoice={handleCancelInvoice}
             />
 

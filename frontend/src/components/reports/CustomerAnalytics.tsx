@@ -380,14 +380,14 @@ const CustomerAnalytics: React.FC = () => {
             <TrendingUp className="h-8 w-8 text-indigo-600 mb-2" />
             <p className="text-sm text-gray-600">Avg LTV</p>
             <p className="text-xl font-bold">
-              ₹{Math.round(customers.reduce((acc, c) => acc + c.lifetimeValue, 0) / customers.length / 1000)}K
+              ₹{customers.length > 0 ? Math.round(customers.reduce((acc, c) => acc + c.lifetimeValue, 0) / customers.length / 1000) : 0}K
             </p>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
             <ShoppingBag className="h-8 w-8 text-orange-600 mb-2" />
             <p className="text-sm text-gray-600">Avg Order</p>
             <p className="text-xl font-bold">
-              ₹{Math.round(customers.reduce((acc, c) => acc + c.avgOrderValue, 0) / customers.length / 1000)}K
+              ₹{customers.length > 0 ? Math.round(customers.reduce((acc, c) => acc + c.avgOrderValue, 0) / customers.length / 1000) : 0}K
             </p>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">

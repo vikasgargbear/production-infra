@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Eye, Printer, MoreVertical, MessageCircle, Mail, Edit2, XCircle } from 'lucide-react';
+import { MoreVertical, MessageCircle, Mail, XCircle } from 'lucide-react';
 import { DataTable, StatusBadge } from '../../../../global';
 import { useCompany } from '../../../../../contexts/CompanyContext';
 import type { InvoiceTableProps, Invoice } from '../types/invoicelist.types';
@@ -14,10 +14,11 @@ import type { InvoiceTableProps, Invoice } from '../types/invoicelist.types';
 const ActionDropdown: React.FC<{
     invoice: Invoice;
     onCancel?: (invoice: Invoice) => void;
-    onEdit?: (invoice: Invoice) => void;
-}> = ({ invoice, onCancel, onEdit }) => {
+}> = ({ invoice, onCancel }) => {
     const [isOpen, setIsOpen] = useState(false);
     const canCancel = invoice.payment_status !== 'cancelled' && invoice.paid_amount === 0;
+
+    if (!canCancel || !onCancel) return null;
 
     return (
         <div className="relative">
@@ -38,16 +39,6 @@ const ActionDropdown: React.FC<{
                     />
                     {/* Dropdown menu */}
                     <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
-                        <button
-                            onClick={() => {
-                                onEdit?.(invoice);
-                                setIsOpen(false);
-                            }}
-                            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                            Edit Invoice
-                        </button>
                         {canCancel && onCancel && (
                             <button
                                 onClick={() => {
@@ -74,8 +65,6 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     loading,
     onToggleSelect,
     onToggleSelectAll,
-    onViewInvoice,
-    onPrintInvoice,
     onCancelInvoice
 }) => {
     // Get company name for message templates
@@ -124,12 +113,6 @@ ${companyName}`;
         const body = createInvoiceMessage(invoice);
         const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.location.href = mailto;
-    };
-
-    // Handle Edit
-    const handleEdit = (invoice: Invoice) => {
-        // Trigger edit invoice event
-        window.dispatchEvent(new CustomEvent('editInvoice', { detail: { invoiceId: invoice.id } }));
     };
 
     const columns = useMemo(() => [
@@ -254,22 +237,6 @@ ${companyName}`;
             render: (_: any, invoice: Invoice) => {
                 return (
                     <div className="flex items-center justify-center gap-0.5">
-                        {/* View */}
-                        <button
-                            onClick={() => onViewInvoice(invoice)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="View Invoice"
-                        >
-                            <Eye className="w-4 h-4" />
-                        </button>
-                        {/* Print */}
-                        <button
-                            onClick={() => onPrintInvoice(invoice)}
-                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                            title="Print Invoice"
-                        >
-                            <Printer className="w-4 h-4" />
-                        </button>
                         {/* WhatsApp */}
                         <button
                             onClick={() => handleWhatsApp(invoice)}
@@ -290,14 +257,13 @@ ${companyName}`;
                         <ActionDropdown
                             invoice={invoice}
                             onCancel={onCancelInvoice}
-                            onEdit={handleEdit}
                         />
                     </div>
                 );
             },
             width: '180px'
         }
-    ], [selectedIds, isAllSelected, onToggleSelect, onToggleSelectAll, onViewInvoice, onPrintInvoice, onCancelInvoice]);
+    ], [selectedIds, isAllSelected, onToggleSelect, onToggleSelectAll, onCancelInvoice, companyName]);
 
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

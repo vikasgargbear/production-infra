@@ -17,6 +17,7 @@ import ItemProfitModal from '../../modals/ItemProfitModal';
 // Utils
 import { toast } from 'react-toastify';
 import { searchCache } from '../../../../utils/searchCache';
+import { ordersApi, challansApi } from '../../../../services/api';
 
 // Shared Types
 import { Customer, Invoice, InvoiceItem, InvoiceTotals, Employee, ProductForLastDeal } from '../types/invoiceTypes';
@@ -339,7 +340,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
             {showGSTCalculator && (
                 <GSTCalculator
                     orderData={invoice as any}
-                    onCalculationComplete={() => setShowGSTCalculator(false)}
+                    onClose={() => setShowGSTCalculator(false)}
                     showDetails={true}
                 />
             )}
@@ -350,7 +351,24 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     isOpen={showImportModal}
                     onClose={() => setShowImportModal(false)}
                     onImport={handleImport}
-                    documentTypes={[]}
+                    documentTypes={[
+                        {
+                            value: 'sales-order',
+                            label: 'Sales Orders',
+                            loadFunction: async (searchQuery?: string) => {
+                                const response = await ordersApi.getAll({ search: searchQuery, limit: 50 });
+                                return response?.data?.orders || response?.data?.data || response?.data || [];
+                            }
+                        },
+                        {
+                            value: 'challan',
+                            label: 'Delivery Challans',
+                            loadFunction: async (searchQuery?: string) => {
+                                const response = await challansApi.getAll({ search: searchQuery, limit: 50 });
+                                return response?.data?.challans || response?.data?.data || response?.data || [];
+                            }
+                        }
+                    ]}
                 />
             )}
 

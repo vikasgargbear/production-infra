@@ -921,7 +921,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       {showGSTCalculator && (
         <GSTCalculator
           orderData={undefined}
-          onCalculationComplete={() => setShowGSTCalculator(false)}
+          onClose={() => setShowGSTCalculator(false)}
           showDetails={true}
         />
       )}

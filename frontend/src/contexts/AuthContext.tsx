@@ -25,6 +25,8 @@ export interface User {
     role_id: number | string | null;
     branch_id?: number | string;
     permissions: Record<string, boolean>;
+    is_admin?: boolean;
+    data_access_level?: string;
     auth_provider?: string;
 }
 
@@ -59,6 +61,8 @@ interface JWTPayload {
     branch_id?: number | string;
     branch_ids?: Array<number | string>;
     permissions?: Record<string, boolean>;
+    is_admin?: boolean;
+    data_access_level?: string;
     auth_provider?: string;
     exp?: number;
 }
@@ -169,14 +173,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     role_id: payload.role_id,
                     branch_id: primaryBranch,
                     permissions: payload.permissions || {},
+                    is_admin: payload.is_admin === true,
+                    data_access_level: payload.data_access_level,
                     auth_provider: payload.auth_provider,
                 };
 
                 saveErpSession(data.access_token, user);
                 setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
-                Promise.resolve(salesSyncService.performInitialSync()).catch((error: Error) => {
-                    console.warn('[Auth] Initial sync failed:', error.message);
-                });
                 return { success: true, user };
             } catch {
                 return {

@@ -72,9 +72,9 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
 
     return (
         <div className={`bg-white border-b border-gray-200 ${className}`}>
-            <div className="flex items-center justify-between px-6 py-3">
+            <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                 {/* Left side - Back button, Title and info */}
-                <div className="flex items-center gap-3 min-h-[36px]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 min-h-[36px] sm:gap-3">
                     {onClose && (
                         <button
                             onClick={onClose}
@@ -90,10 +90,10 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                             <Icon className={`w-4 h-4 ${iconColor}`} />
                         </div>
                     )}
-                    <h1 className="text-lg font-semibold text-gray-900 leading-none">{title}</h1>
+                    <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 leading-none sm:text-lg">{title}</h1>
                     {documentNumber && (
-                        <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
-                            <span className="text-sm font-medium text-blue-700 leading-none">{documentNumber}</span>
+                        <div className="max-w-[10rem] px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center sm:max-w-none sm:px-3">
+                            <span className="truncate text-xs font-medium text-blue-700 leading-none sm:text-sm">{documentNumber}</span>
                         </div>
                     )}
                     {status && (
@@ -104,7 +104,7 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                 </div>
 
                 {/* Right side - Actions */}
-                <div className="flex items-center gap-2">
+                <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:pb-0">
                     {showSaveDraft && onSaveDraft && (
                         <button
                             onClick={onSaveDraft}
@@ -122,7 +122,7 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                                 key={index}
                                 onClick={action.onClick}
                                 disabled={action.disabled}
-                                className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center ${action.variant === 'primary'
+                                className={`min-h-10 shrink-0 px-4 py-2 text-sm rounded-lg transition-colors flex items-center ${action.variant === 'primary'
                                     ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400'
                                     : action.variant === 'success'
                                         ? 'bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-400'

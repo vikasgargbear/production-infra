@@ -32,11 +32,11 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import ModularPaymentEntry from './components/payment/entry/ModularPaymentEntry';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
+import MobileBottomNavigation from './components/global/navigation/MobileBottomNavigation';
 
 // NEW: Offline-first components for instant UX
 import { InitialSyncLoader, OfflineBanner } from './components/offline';
 
-import syncEngine from './services/offline/sync/syncEngine';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // OLD AUTH REMOVED - Now using AuthContext
@@ -47,6 +47,7 @@ import 'react-toastify/dist/ReactToastify.css';
 // Lazy load components for better performance and code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const CalculationSmokePage = lazy(() => import('./e2e/CalculationSmokePage'));
+const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
 const Products = lazy(() => import('./components/master/products/Products'));
 const Orders = lazy(() => import('./components/sales/order/Orders'));
 // BatchesInventory removed - use StockHub instead
@@ -175,55 +176,7 @@ const AppContent = (): JSX.Element => {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Authentication handled by AuthContext - no manual initialization needed
 
-  // NOTE: Product sync is handled by syncEngine.startAutoSync() which calls syncPullService internally
-  // No separate useEffect needed for product sync
-
   useEffect(() => {
-    // Only start auto-sync when authenticated
-    if (!isAuthenticated) {
-      console.log('[SyncEngine] Not authenticated, skipping auto-sync setup');
-      return;
-    }
-
-    // OFFLINE SYNC: Start auto-sync when authenticated AND online
-    if (navigator.onLine) {
-      console.log('🔄 [SyncEngine] Starting auto-sync (30s interval)');
-      syncEngine.startAutoSync(30000); // Every 30 seconds
-
-      // ALSO: Trigger immediate sync on login to populate cache
-      console.log('🔄 [SyncPull] Triggering immediate sync on login...');
-      import('./services/offline/sync/syncPullService').then(({ default: syncPullService }) => {
-        syncPullService.syncProducts({ fullSync: false }).then(result => {
-          if (result.success) {
-            console.log(`✅ [SyncPull] Initial sync complete: ${result.itemsSynced} products`);
-          }
-        });
-        syncPullService.syncCustomers().then(result => {
-          if (result.success) {
-            console.log(`✅ [SyncPull] Customer sync complete: ${result.itemsSynced} customers`);
-          }
-        });
-      });
-
-      // COMPANY PROFILE: Warm cache for instant access in previews
-      import('./services/offline/modules/company').then(({ CompanyDataService }) => {
-        CompanyDataService.warmCache().then(() => {
-          console.log('✅ [CompanyDataService] Company profile cache warmed');
-        });
-      });
-    }
-
-    // OFFLINE SYNC: Trigger sync when coming back online
-    const handleOnline = () => {
-      console.log('🌐 [SyncEngine] Back online - triggering sync');
-      syncEngine.forceSync();
-
-      // syncEngine.forceSync already triggers syncPullService via triggerPullSync()
-      // No need for duplicate call here
-    };
-
-    window.addEventListener('online', handleOnline);
-
     // Listen for navigation events from Settings buttons
     const handleNavigate = (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -235,11 +188,9 @@ const AppContent = (): JSX.Element => {
     window.addEventListener('navigate', handleNavigate as EventListener);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
       window.removeEventListener('navigate', handleNavigate as EventListener);
-      syncEngine.stopAutoSync();
     };
-  }, [isAuthenticated, setActiveTabGuarded]);
+  }, [setActiveTabGuarded]);
 
   // Component renderer - removed useCallback to reduce input lag
   const renderActiveComponent = (): JSX.Element => {
@@ -324,6 +275,17 @@ const AppContent = (): JSX.Element => {
     );
   }
 
+  if (
+    process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true' &&
+    window.location.pathname === '/e2e/mobile-navigation'
+  ) {
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <MobileNavigationSmokePage />
+      </Suspense>
+    );
+  }
+
   // Check if user wants to see auth diagnostic
   if (window.location.pathname === '/auth-diagnostic' || window.location.hash === '#auth-diagnostic') {
     // OLD AUTH DIAGNOSTIC REMOVED
@@ -366,10 +328,16 @@ const AppContent = (): JSX.Element => {
                     {/* Offline banner at top */}
                     <OfflineBanner />
 
-                    <Suspense fallback={<LoadingSpinner />}>
-                      {renderActiveComponent()}
-                    </Suspense>
-                    <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-40">
+                    <div className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+                      <Suspense fallback={<LoadingSpinner />}>
+                        {renderActiveComponent()}
+                      </Suspense>
+                    </div>
+                    <MobileBottomNavigation
+                      activeTab={activeTab}
+                      onNavigate={setActiveTabGuarded}
+                    />
+                    <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-40 md:bottom-4">
                       <SyncStatusIndicator />
                       <OfflineIndicator />
                     </div>

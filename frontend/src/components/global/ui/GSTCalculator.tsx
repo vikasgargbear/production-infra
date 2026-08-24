@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Info } from 'lucide-react';
+import { AlertCircle, Info, X } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -61,6 +61,7 @@ export interface GSTCalculatorComponentProps {
     orderData?: OrderData;
     onCalculationComplete?: (result: GSTResult) => void;
     showDetails?: boolean;
+    onClose?: () => void;
 }
 
 // ==================== STATE CODES ====================
@@ -328,16 +329,15 @@ class GSTCalculator {
 const GSTCalculatorComponent: React.FC<GSTCalculatorComponentProps> = ({
     orderData,
     onCalculationComplete,
-    showDetails = true
+    showDetails = true,
+    onClose,
 }) => {
     const [gstResult, setGstResult] = useState<GSTResult | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const calculator = new GSTCalculator();
 
     useEffect(() => {
-        if (orderData) {
-            calculateGST();
-        }
+        calculateGST();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderData]);
 
@@ -395,8 +395,16 @@ const GSTCalculatorComponent: React.FC<GSTCalculatorComponentProps> = ({
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-sm p-4">
-            <h3 className="text-lg font-semibold mb-4">GST Calculation</h3>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="GST Calculator">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">GST Calculation</h3>
+              {onClose && (
+                <button onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Close GST Calculator">
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
 
             {loading && (
                 <div className="flex items-center justify-center p-4">
@@ -514,6 +522,7 @@ const GSTCalculatorComponent: React.FC<GSTCalculatorComponentProps> = ({
                     ) : null}
                 </div>
             )}
+          </div>
         </div>
     );
 };
