@@ -178,6 +178,18 @@ class PortalCreditNoteEvidence(StrictRead):
     cess_amount: Decimal
     total_amount: Decimal
 
+    @model_validator(mode="after")
+    def reconcile_total(self):
+        if self.total_amount != (
+            self.taxable_amount
+            + self.cgst_amount
+            + self.sgst_amount
+            + self.igst_amount
+            + self.cess_amount
+        ):
+            raise ValueError("GSTR-2B credit-note evidence does not reconcile")
+        return self
+
 
 class PurchaseReturnableAllocation(StrictRead):
     supplier_invoice_line_id: UUID
@@ -395,7 +407,19 @@ def sales_return_context(
                invoice.invoice_date, invoice.branch_id,
                invoice.customer_account_id,
                party.legal_name AS customer_name,
-               invoice.customer_tax_registration_id IS NOT NULL AS customer_registered
+               EXISTS (
+                   SELECT 1
+                     FROM parties.tax_registrations registration
+                    WHERE registration.org_id=invoice.org_id
+                      AND registration.id=invoice.customer_tax_registration_id
+                      AND registration.party_id=customer.party_id
+                      AND registration.registration_type='GSTIN'
+                      AND registration.status='active'
+                      AND registration.verified_at IS NOT NULL
+                      AND registration.taxpayer_type IN ('regular','casual')
+                      AND (registration.valid_from IS NULL OR registration.valid_from<=:return_date)
+                      AND (registration.valid_until IS NULL OR registration.valid_until>=:return_date)
+               ) AS customer_registered
           FROM sales.invoices invoice
           JOIN parties.customer_accounts customer
             ON customer.org_id=invoice.org_id
@@ -403,6 +427,24 @@ def sales_return_context(
           JOIN parties.parties party
             ON party.org_id=customer.org_id AND party.id=customer.party_id
            AND party.status='active'
+          JOIN tax.documents original_tax
+            ON original_tax.org_id=invoice.org_id
+           AND original_tax.sales_invoice_id=invoice.id
+           AND original_tax.direction='outward'
+           AND original_tax.document_effect='original'
+          JOIN tax.registrations seller_registration
+            ON seller_registration.org_id=invoice.org_id
+           AND seller_registration.id=original_tax.registration_id
+           AND seller_registration.status='active'
+           AND seller_registration.effective_from<=:return_date
+           AND (seller_registration.effective_to IS NULL OR seller_registration.effective_to>=:return_date)
+          JOIN tax.registration_branches seller_branch
+            ON seller_branch.org_id=seller_registration.org_id
+           AND seller_branch.registration_id=seller_registration.id
+           AND seller_branch.branch_id=invoice.branch_id
+           AND seller_branch.status='active'
+           AND seller_branch.effective_from<=:return_date
+           AND (seller_branch.effective_to IS NULL OR seller_branch.effective_to>=:return_date)
          WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
            AND invoice.status='posted' AND invoice.invoice_type='tax_invoice'
            AND invoice.currency_code='INR' AND invoice.tax_charge_mechanism='normal'
@@ -456,6 +498,10 @@ def sales_return_context(
            AND issue_line.inventory_document_id=issue_document.id
            AND issue_line.sales_dispatch_line_id=dispatch_line.id
            AND issue_line.product_id=line.product_id
+           AND issue_line.base_quantity=(
+                allocation.allocated_base_billed_quantity
+                + allocation.allocated_base_free_quantity
+           )
           JOIN inventory.stock_ledger_entries issue_ledger
             ON issue_ledger.org_id=issue_line.org_id
            AND issue_ledger.inventory_document_line_id=issue_line.id
@@ -478,6 +524,14 @@ def sales_return_context(
           ) returned ON true
          WHERE line.org_id=:org_id AND line.invoice_id=:invoice_id
            AND line.line_kind='product'
+           AND 1=(
+                SELECT count(*)
+                  FROM inventory.inventory_document_lines exact_issue_line
+                 WHERE exact_issue_line.org_id=issue_document.org_id
+                   AND exact_issue_line.inventory_document_id=issue_document.id
+                   AND exact_issue_line.sales_dispatch_line_id=dispatch_line.id
+                   AND exact_issue_line.product_id=line.product_id
+           )
            AND (allocation.allocated_base_billed_quantity>returned.base_billed
                 OR allocation.allocated_base_free_quantity>returned.base_free)
          ORDER BY line.line_number, allocation.id
@@ -561,6 +615,19 @@ def purchase_return_context(
            AND original_tax.supplier_invoice_id=invoice.id
            AND original_tax.direction='inward'
            AND original_tax.document_effect='original'
+          JOIN tax.registrations buyer_registration
+            ON buyer_registration.org_id=invoice.org_id
+           AND buyer_registration.id=original_tax.registration_id
+           AND buyer_registration.status='active'
+           AND buyer_registration.effective_from<=:return_date
+           AND (buyer_registration.effective_to IS NULL OR buyer_registration.effective_to>=:return_date)
+          JOIN tax.registration_branches buyer_branch
+            ON buyer_branch.org_id=buyer_registration.org_id
+           AND buyer_branch.registration_id=buyer_registration.id
+           AND buyer_branch.branch_id=invoice.branch_id
+           AND buyer_branch.status='active'
+           AND buyer_branch.effective_from<=:return_date
+           AND (buyer_branch.effective_to IS NULL OR buyer_branch.effective_to>=:return_date)
           JOIN parties.tax_registrations supplier_registration
             ON supplier_registration.org_id=invoice.org_id
            AND supplier_registration.id=invoice.supplier_tax_registration_id
