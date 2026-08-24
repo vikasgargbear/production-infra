@@ -8,12 +8,12 @@ never impersonate the MCP service or accept tenant identity from headers.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from typing import Any, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -34,7 +34,8 @@ from ...domain.operator_actions import (
 
 
 router = APIRouter(prefix="/web/actions", tags=["Canonical ERP Commands"])
-WEB_CLIENT_ID = os.getenv("ERP_WEB_CLIENT_ID", "aasopharma-erp-web").strip()
+WEB_CLIENT_ID = "aasopharma-erp-web"
+WEB_BEARER = HTTPBearer(auto_error=False)
 PREVIEW_HASH_PATTERN = r"^sha256:[0-9a-f]{64}$"
 IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 
@@ -80,6 +81,17 @@ class ExecutionResponse(StrictDTO):
     approved_at: Optional[datetime] = None
     executed_at: Optional[datetime] = None
     idempotency_replayed: bool = False
+
+
+async def _web_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(WEB_BEARER),
+) -> dict[str, Any]:
+    """Expose the existing ERP bearer requirement in the public OpenAPI contract."""
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
+    return await PermissionChecker()(
+        authorization=f"{credentials.scheme} {credentials.credentials}"
+    )
 
 
 def _detail(code: ActionErrorCode, message: str, metadata: Optional[dict] = None):
@@ -241,7 +253,7 @@ def _ready(service: OperatorActionService, operation_key: str) -> None:
 def prepare_action(
     command_type: OperatorCommandType,
     raw_payload: dict[str, Any] = Body(...),
-    user: dict = Depends(PermissionChecker()),
+    user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
     service: OperatorActionService = Depends(get_operator_action_service),
 ) -> PreparedResponse:
@@ -300,7 +312,7 @@ def _command_context(db: Session, user: dict, operation: str, command_id: UUID):
 def approve_command(
     command_request_id: UUID,
     request: ApprovalRequest,
-    user: dict = Depends(PermissionChecker()),
+    user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
     service: OperatorActionService = Depends(get_operator_action_service),
 ) -> ExecutionResponse:
@@ -323,7 +335,7 @@ def approve_command(
 def execute_command(
     command_request_id: UUID,
     request: ExecutionRequest,
-    user: dict = Depends(PermissionChecker()),
+    user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
     service: OperatorActionService = Depends(get_operator_action_service),
 ) -> ExecutionResponse:
