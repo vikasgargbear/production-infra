@@ -23,6 +23,8 @@ import {
     X
 } from 'lucide-react';
 import { useCreditManagement, CustomerCredit } from './hooks';
+import useDialogFocus from '../../hooks/useDialogFocus';
+import useEscapeKey from '../../hooks/useEscapeKey';
 
 const CreditManagement: React.FC = () => {
     const {
@@ -291,13 +293,13 @@ const CustomerRow: React.FC<CustomerRowProps> = ({
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
             <div className="flex items-center space-x-2">
-                <button onClick={() => onSelect(customer)} className="text-blue-600 hover:text-blue-900" title="View Details">
+                <button type="button" onClick={() => onSelect(customer)} className="min-h-11 min-w-11 text-blue-600 hover:text-blue-900" title="View Details" aria-label={`View credit details for ${customer.name || 'customer'}`}>
                     <Eye className="h-4 w-4" />
                 </button>
-                <button className="text-gray-600 hover:text-gray-900" title="Edit">
+                <button type="button" disabled className="min-h-11 min-w-11 cursor-not-allowed text-gray-400" title="Editing is not available" aria-label={`Editing credit settings for ${customer.name || 'customer'} is unavailable`}>
                     <Edit className="h-4 w-4" />
                 </button>
-                <button className="text-red-600 hover:text-red-900" title="Delete">
+                <button type="button" disabled className="min-h-11 min-w-11 cursor-not-allowed text-gray-400" title="Deletion is not available" aria-label={`Deleting credit settings for ${customer.name || 'customer'} is unavailable`}>
                     <Trash2 className="h-4 w-4" />
                 </button>
             </div>
@@ -310,13 +312,16 @@ interface CustomerDetailsModalProps {
     onClose: () => void;
 }
 
-const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({ customer, onClose }) => (
+export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({ customer, onClose }) => {
+    const dialogRef = useDialogFocus<HTMLDivElement>(true);
+    useEscapeKey(onClose, true, 'CustomerCreditDetailsModal');
+    return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="customer-credit-title" tabIndex={-1} className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-gray-900">Customer Credit Details</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+                    <h2 id="customer-credit-title" className="text-xl font-bold text-gray-900">Customer Credit Details</h2>
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 p-2 hover:bg-gray-100 rounded-lg" aria-label="Close customer credit details">
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
                 </div>
@@ -368,7 +373,8 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({ customer, o
             </div>
         </div>
     </div>
-);
+    );
+};
 
 const InfoRow: React.FC<{ label: string; value: string; valueClass?: string }> = ({ label, value, valueClass = '' }) => (
     <div className="flex justify-between">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, FileText } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import useDialogFocus from '../../../hooks/useDialogFocus';
 
 interface InvoiceItem {
     gst_rate?: number;
@@ -50,6 +51,7 @@ interface TaxDetailModalProps {
 }
 
 const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoice }) => {
+    const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
     useEscapeKey(() => onClose(), isOpen, 'TaxDetailModal');
 
     if (!isOpen || !invoice) return null;
@@ -84,13 +86,13 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[80vh] overflow-y-auto">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="tax-detail-title" tabIndex={-1} className="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[80vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <h3 id="tax-detail-title" className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                         <FileText size={20} />
                         Tax Detail (F10)
                     </h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 text-gray-400 hover:text-gray-600" aria-label="Close tax detail">
                         <X size={20} />
                     </button>
                 </div>

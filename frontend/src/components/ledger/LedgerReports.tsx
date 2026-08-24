@@ -876,7 +876,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                   <div className="flex flex-col items-center justify-center h-[500px]">
                     <Loader2 className="h-10 w-10 text-blue-500 mb-4" />
                     <p className="text-gray-500">Loading report...</p>
-                    {refreshing && <RefreshCw className="h-6 w-6 text-blue-500 mt-4" onClick={handleRefresh} />}
+                    {refreshing && <RefreshCw aria-hidden="true" className="h-6 w-6 animate-spin text-blue-500 mt-4" />}
                   </div>
                 ) : (
                   renderReport()

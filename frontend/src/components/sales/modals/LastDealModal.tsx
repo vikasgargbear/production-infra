@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, TrendingUp, User, Calendar } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import useDialogFocus from '../../../hooks/useDialogFocus';
 import { invoicesApi } from '../../../services/api';
 
 interface Deal {
@@ -25,6 +26,7 @@ const LastDealModal: React.FC<LastDealModalProps> = ({ isOpen, onClose, productI
     const [loading, setLoading] = useState<boolean>(false);
     const [lastDeals, setLastDeals] = useState<Deal[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
 
     useEscapeKey(() => onClose(), isOpen, 'LastDealModal');
 
@@ -56,13 +58,13 @@ const LastDealModal: React.FC<LastDealModalProps> = ({ isOpen, onClose, productI
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-[600px] max-h-[80vh] overflow-y-auto">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="last-deal-title" tabIndex={-1} className="bg-white rounded-lg shadow-xl p-6 w-[600px] max-h-[80vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <h3 id="last-deal-title" className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                         <Clock size={20} />
                         Last Deal (Alt+L)
                     </h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 text-gray-400 hover:text-gray-600" aria-label="Close last deal">
                         <X size={20} />
                     </button>
                 </div>

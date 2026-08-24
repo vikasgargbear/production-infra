@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, FileText, ShoppingCart, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { invoicesApi, ordersApi } from '../../../../services/api';
+import useDialogFocus from '../../../../hooks/useDialogFocus';
+import useEscapeKey from '../../../../hooks/useEscapeKey';
 import {
     extractDocumentCollection,
     extractDocumentDetail,
@@ -81,6 +83,8 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [loading, setLoading] = useState(false);
     const [importing, setImporting] = useState(false);
+    const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
+    useEscapeKey(onClose, isOpen, 'ChallanImportFromInvoiceModal');
 
     const loadRecentDocuments = useCallback(async () => {
         setLoading(true);
@@ -216,11 +220,11 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-invoice-title" tabIndex={-1} className="bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b">
-                    <h3 className="text-lg font-semibold">Import from Invoice/Order</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+                    <h3 id="import-invoice-title" className="text-lg font-semibold">Import from Invoice/Order</h3>
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 p-2 hover:bg-gray-100 rounded-lg" aria-label="Close import from invoice or order">
                         <X className="w-5 h-5" />
                     </button>
                 </div>

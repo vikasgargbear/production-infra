@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, TrendingUp, DollarSign, Percent, Loader2 } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import useDialogFocus from '../../../hooks/useDialogFocus';
 import { apiClient } from '../../../services/api';
 
 // Shared Types
@@ -31,6 +32,7 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
     const [loading, setLoading] = useState<boolean>(false);
     const [itemsWithCost, setItemsWithCost] = useState<InvoiceItem[]>([]);
     const hasFetchedRef = useRef<boolean>(false);
+    const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
 
     useEscapeKey(() => onClose(), isOpen, 'ItemProfitModal');
 
@@ -151,13 +153,13 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-[900px] max-h-[80vh] overflow-y-auto">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="item-profit-title" tabIndex={-1} className="bg-white rounded-lg shadow-xl p-6 w-[900px] max-h-[80vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <h3 id="item-profit-title" className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                         <TrendingUp size={20} />
                         Item Cost & Profit Analysis (Shift+~)
                     </h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 text-gray-400 hover:text-gray-600" aria-label="Close profit analysis">
                         <X size={20} />
                     </button>
                 </div>

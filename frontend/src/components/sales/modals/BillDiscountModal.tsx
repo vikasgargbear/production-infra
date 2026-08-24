@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Percent, DollarSign } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import useDialogFocus from '../../../hooks/useDialogFocus';
 
 interface BillDiscountModalProps {
     isOpen: boolean;
@@ -21,6 +22,7 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
     const [discountValue, setDiscountValue] = useState<number>(currentDiscount);
     const [calculatedAmount, setCalculatedAmount] = useState<number>(0);
     const inputRef = useRef<HTMLInputElement>(null);
+    const dialogRef = useDialogFocus<HTMLDivElement>(isOpen, inputRef);
 
     useEscapeKey(() => onClose(), isOpen, 'BillDiscountModal');
 
@@ -58,10 +60,10 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="bill-discount-title" tabIndex={-1} className="bg-white rounded-lg shadow-xl p-6 w-96">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Bill Discount (F4)</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                    <h3 id="bill-discount-title" className="text-lg font-semibold text-gray-900">Bill Discount (F4)</h3>
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 text-gray-400 hover:text-gray-600" aria-label="Close bill discount">
                         <X size={20} />
                     </button>
                 </div>

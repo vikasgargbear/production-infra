@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calculator, ArrowRight } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import useDialogFocus from '../../../hooks/useDialogFocus';
 
 interface CashCalculatorModalProps {
     isOpen: boolean;
@@ -12,6 +13,7 @@ const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClo
     const [receivedAmount, setReceivedAmount] = useState<string>('');
     const [returnAmount, setReturnAmount] = useState<number>(0);
     const inputRef = useRef<HTMLInputElement>(null);
+    const dialogRef = useDialogFocus<HTMLDivElement>(isOpen, inputRef);
 
     useEscapeKey(() => onClose(), isOpen, 'CashCalculatorModal');
 
@@ -45,13 +47,13 @@ const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClo
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cash-calculator-title" tabIndex={-1} className="bg-white rounded-lg shadow-xl p-6 w-96">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <h3 id="cash-calculator-title" className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                         <Calculator size={20} />
                         Cash Calculator (F11)
                     </h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 text-gray-400 hover:text-gray-600" aria-label="Close cash calculator">
                         <X size={20} />
                     </button>
                 </div>

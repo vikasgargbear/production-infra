@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Truck, ShoppingCart, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ordersApi, challansApi } from '../../../services/api';
+import useDialogFocus from '../../../hooks/useDialogFocus';
+import useEscapeKey from '../../../hooks/useEscapeKey';
 import {
   extractDocumentCollection,
   extractDocumentDetail,
@@ -79,6 +81,8 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string>('');
+  const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
+  useEscapeKey(onClose, isOpen, 'ImportDocumentModal');
 
   useEffect(() => {
     if (isOpen) {
@@ -214,12 +218,12 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-document-title" tabIndex={-1} className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Import from Document</h2>
-            <button onClick={onClose} className="text-white hover:text-gray-200">
+            <h2 id="import-document-title" className="text-xl font-semibold">Import from Document</h2>
+            <button type="button" onClick={onClose} className="min-h-11 min-w-11 text-white hover:text-gray-200" aria-label="Close import document">
               <X className="w-5 h-5" />
             </button>
           </div>
