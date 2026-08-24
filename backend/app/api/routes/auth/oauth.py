@@ -144,7 +144,18 @@ async def exchange_supabase_session(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
 
-    user_data = UserRepository.find_by_auth_user_id(auth_user_id, db)
+    try:
+        organization_id = UUID(str(identity.get("app_metadata", {}).get("org_id")))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "erp_organization_assignment_required",
+                "message": "Your identity is not assigned to an ERP organization.",
+            },
+        ) from exc
+
+    user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
     if not user_data:
         raise HTTPException(
             status_code=403,
@@ -157,14 +168,12 @@ async def exchange_supabase_session(
         raise HTTPException(status_code=403, detail="Account is disabled")
     if not user_data["org_active"]:
         raise HTTPException(status_code=403, detail="Organization is disabled")
-    if str(user_data["email"]).lower() != str(identity["email"]).lower():
-        raise HTTPException(status_code=403, detail="ERP membership email does not match identity")
+    user_data["email"] = str(identity["email"])
 
     token_data = build_erp_token_claims(user_data)
     token_data["auth_user_id"] = str(auth_user_id)
     token_data["auth_provider"] = identity.get("app_metadata", {}).get("provider")
     access_token = create_access_token(token_data, expires_delta=timedelta(hours=1))
-    UserRepository.update_last_login(user_data["user_id"], db)
 
     logger.info("Supabase session exchanged for user_id=%s", user_data["user_id"])
     return {

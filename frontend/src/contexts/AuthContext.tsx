@@ -19,11 +19,11 @@ import { salesSyncService } from '../services/offline/modules/sales';
 
 
 export interface User {
-    user_id: number;
+    user_id: number | string;
     email: string;
     org_id: string;
-    role_id: number | null;
-    branch_id?: number;
+    role_id: number | string | null;
+    branch_id?: number | string;
     permissions: Record<string, boolean>;
     auth_provider?: string;
 }
@@ -52,11 +52,11 @@ export interface AuthContextValue extends AuthState {
 }
 
 interface JWTPayload {
-    user_id: number;
+    user_id: number | string;
     email: string;
     org_id: string;
-    role_id: number | null;
-    branch_id?: number;
+    role_id: number | string | null;
+    branch_id?: number | string;
     branch_ids?: Array<number | string>;
     permissions?: Record<string, boolean>;
     auth_provider?: string;
@@ -152,13 +152,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 if (!payload) {
                     return { success: false, error: 'The ERP session response was invalid' };
                 }
-                const primaryBranch = payload.branch_id ?? Number(payload.branch_ids?.[0]);
+                const primaryBranch = payload.branch_id ?? payload.branch_ids?.[0];
                 const user: User = {
                     user_id: payload.user_id,
                     email: payload.email,
                     org_id: payload.org_id,
                     role_id: payload.role_id,
-                    branch_id: Number.isFinite(primaryBranch) ? primaryBranch : undefined,
+                    branch_id: primaryBranch,
                     permissions: payload.permissions || {},
                     auth_provider: payload.auth_provider,
                 };

@@ -14,6 +14,7 @@ from app.main import app
 
 
 AUTH_USER_ID = "8d19f4e8-3e4b-46a8-b7d9-87f30ddaf41c"
+ORG_ID = "9e1b4f9e-2dcc-47f5-8dfa-938005806841"
 supabase_auth_module = importlib.import_module("app.core.auth.supabase_auth")
 
 
@@ -30,7 +31,7 @@ def _identity(**overrides):
         "id": AUTH_USER_ID,
         "email": "operator@example.com",
         "email_confirmed_at": "2026-08-19T08:00:00Z",
-        "app_metadata": {"provider": "google"},
+        "app_metadata": {"provider": "google", "org_id": ORG_ID},
     }
     identity.update(overrides)
     return identity
@@ -43,7 +44,7 @@ def _membership(**overrides):
         "username": "operator",
         "email": "operator@example.com",
         "full_name": "ERP Operator",
-        "org_id": UUID("9e1b4f9e-2dcc-47f5-8dfa-938005806841"),
+        "org_id": UUID(ORG_ID),
         "is_active": True,
         "role_id": 7,
         "branch_ids": [5, 9],
@@ -118,7 +119,9 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     monkeypatch.setattr(
         oauth.UserRepository,
         "find_by_auth_user_id",
-        lambda auth_user_id, _db: looked_up.append(auth_user_id),
+        lambda auth_user_id, organization_id, _db: looked_up.append(
+            (auth_user_id, organization_id)
+        ),
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -126,8 +129,25 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "erp_membership_required"
-    assert looked_up == [UUID(AUTH_USER_ID)]
+    assert looked_up == [(UUID(AUTH_USER_ID), UUID(ORG_ID))]
     assert not hasattr(oauth.UserRepository, "find_by_email")
+
+
+def test_exchange_requires_admin_assigned_organization(monkeypatch):
+    async def verified_identity(_token):
+        return _identity(app_metadata={"provider": "google"})
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["error"] == "erp_organization_assignment_required"
 
 
 @pytest.mark.parametrize(
@@ -135,13 +155,9 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     [
         ({"is_active": False}, "Account is disabled"),
         ({"org_active": False}, "Organization is disabled"),
-        (
-            {"email": "different-erp-user@example.com"},
-            "ERP membership email does not match identity",
-        ),
     ],
 )
-def test_exchange_rejects_inactive_or_cross_identity_membership(
+def test_exchange_rejects_inactive_membership(
     monkeypatch, membership_overrides, expected_detail
 ):
     async def verified_identity(_token):
@@ -185,9 +201,10 @@ def test_exchange_issues_tenant_scoped_token_from_verified_mapping(monkeypatch):
     monkeypatch.setattr(
         oauth.UserRepository,
         "find_by_auth_user_id",
-        lambda auth_user_id, _db: _membership(auth_user_id=auth_user_id),
+        lambda auth_user_id, _organization_id, _db: _membership(
+            auth_user_id=auth_user_id
+        ),
     )
-    monkeypatch.setattr(oauth.UserRepository, "update_last_login", lambda *_args: True)
     monkeypatch.setattr(oauth, "create_access_token", create_token)
 
     result = _run(oauth.exchange_supabase_session(_credentials(), db=object()))
