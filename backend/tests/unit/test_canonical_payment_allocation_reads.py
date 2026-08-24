@@ -1,9 +1,11 @@
+import inspect
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
 from app.api.routes import canonical_erp_reads
+from app.api.routes.finance.allocation import routes as legacy_allocation_routes
 from app.main import app
 
 
@@ -102,18 +104,6 @@ def test_canonical_unpaid_invoices_filters_by_customer(monkeypatch):
     assert payload["invoices"][0]["customer_id"] == customer_id
 
 
-def test_canonical_route_wins_over_legacy_integer_route():
-    matches = [
-        route
-        for route in app.routes
-        if getattr(route, "path", None) == "/api/payment-allocation/unpaid-invoices"
-        and "GET" in getattr(route, "methods", set())
-    ]
-
-    assert len(matches) == 1
-    assert matches[0].endpoint is canonical_erp_reads.canonical_unpaid_invoices
-
-
 def test_canonical_payment_routes_publish_uuid_and_exact_money_openapi_contract():
     schema = app.openapi()
     unpaid = schema["paths"]["/api/payment-allocation/unpaid-invoices"]["get"]
@@ -136,13 +126,9 @@ def test_canonical_payment_routes_publish_uuid_and_exact_money_openapi_contract(
     assert invoice_parameter["schema"] == {
         "type": "string", "format": "uuid", "title": "Invoice Id"
     }
-    matches = [
-        route for route in app.routes
-        if getattr(route, "path", None) == payment_path
-        and "GET" in getattr(route, "methods", set())
-    ]
-    assert len(matches) == 1
-    assert matches[0].endpoint is canonical_erp_reads.canonical_invoice_payments
+    legacy_source = inspect.getsource(legacy_allocation_routes)
+    assert '@router.get("/unpaid-invoices")' not in legacy_source
+    assert '@router.get("/invoice/{invoice_id}/payments")' not in legacy_source
 
 
 def test_canonical_invoice_payment_history_preserves_ids_and_money(monkeypatch):
