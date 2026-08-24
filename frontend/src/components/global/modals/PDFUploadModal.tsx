@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, FileText, Loader, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { purchasesApi } from '../../../services/api';
+import { validatePDFFile } from '../../../config/purchase.config';
 
 interface PDFUploadModalProps {
   isOpen: boolean;
@@ -61,24 +62,31 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState('');
   const [editedData, setEditedData] = useState<ExtractedData | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
 
   // Reset state only when modal is opened fresh (not when closing)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       // Don't reset if we have extracted data to show
       if (!extractedData && !file) {
         setError('');
       }
     }
-  }, [isOpen]);
+    wasOpenRef.current = isOpen;
+  }, [extractedData, file, isOpen]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.type === 'application/pdf') {
+    const selectedFile = e.target.files?.[0] || null;
+    const validation = validatePDFFile(selectedFile);
+    if (validation.valid && selectedFile) {
       setFile(selectedFile);
       setError('');
     } else {
-      setError('Please select a PDF file');
+      setFile(null);
+      setError(validation.error || 'Please select a PDF file');
+      e.target.value = '';
     }
   };
 
@@ -162,7 +170,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
     setError('');
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     // Don't reset extracted data when closing - keep it for review
     // Only reset if user hasn't extracted data yet
     if (!extractedData) {
@@ -170,7 +178,39 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
       setError('');
     }
     onClose();
-  };
+  }, [extractedData, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    closeButtonRef.current?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )).filter(element => element.getClientRects().length > 0 || element.classList.contains('sr-only'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleDialogKeyDown, true);
+  }, [handleClose, isOpen]);
 
   const handleReset = () => {
     setEditedData(JSON.parse(JSON.stringify(extractedData)));
@@ -180,13 +220,20 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">
-      <div className="bg-white rounded-lg p-6 max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purchase-pdf-upload-title"
+        className="bg-white rounded-lg p-6 max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col"
+      >
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
+          <h3 id="purchase-pdf-upload-title" className="text-xl font-semibold flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" />
             Upload Purchase Invoice
           </h3>
           <button
+            ref={closeButtonRef}
             onClick={handleClose}
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100"
             aria-label="Close PDF upload"
@@ -197,7 +244,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle className="w-5 h-5" />
             {error}
           </div>
@@ -209,14 +256,14 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               <FileText size={48} className="mx-auto text-gray-400 mb-4" />
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,application/pdf"
                 onChange={handleFileSelect}
-                className="hidden"
+                className="sr-only"
                 id="pdf-upload"
               />
               <label
                 htmlFor="pdf-upload"
-                className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="cursor-pointer inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 <Upload className="w-5 h-5" />
                 Select PDF Invoice
