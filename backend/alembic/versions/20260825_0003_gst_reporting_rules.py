@@ -20,7 +20,7 @@ branch_labels = None
 depends_on = None
 
 SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "20260825_0003_gst_reporting_rules.sql"
-EXPECTED_SQL_SHA256 = "2c0f3c31538f1853679473f648758b117e9fcfd8708b9fd8d62cbcd3aec01a21"
+EXPECTED_SQL_SHA256 = "0f26b2ea0b243081e12ee87d62aacee91105b3c8b7ce4ce6feba64610a254905"
 
 
 def _reviewed_sql() -> str:

@@ -62,3 +62,5 @@ GRANT SELECT ON TABLE tax.gstr1_reporting_rule_versions TO erp_app;
 
 COMMENT ON TABLE tax.gstr1_reporting_rule_versions IS
   'Reviewed, source-attested, date-effective GSTR-1 classification rules. No application default is permitted.';
+
+RESET ROLE;

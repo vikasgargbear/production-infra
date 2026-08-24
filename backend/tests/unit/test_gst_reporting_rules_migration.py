@@ -29,6 +29,8 @@ def test_gst_reporting_rule_migration_is_hash_bound_linear_and_unseeded() -> Non
     assert "gstr1_reporting_rule_versions_no_overlap_excl" in sql
     assert "daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&" in sql
     assert "gst_reporting_rules" in sql
+    assert sql.startswith("SET LOCAL ROLE erp_migration_owner;")
+    assert sql.rstrip().endswith("RESET ROLE;")
 
 
 def test_staging_gate_tracks_the_new_exact_head_and_table_count() -> None:
