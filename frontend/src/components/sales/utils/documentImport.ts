@@ -48,9 +48,169 @@ export interface CanonicalImportLine extends Record<string, unknown> {
     unit_price: number;
 }
 
+interface CanonicalExecutedBatchAllocation extends Record<string, unknown> {
+    source_kind: 'direct_issue' | 'dispatch_allocation';
+    allocation_id: string;
+    inventory_document_id: string;
+    inventory_document_line_id: string;
+    invoice_dispatch_allocation_id?: string | null;
+    batch_id: string | number;
+    batch_number: string;
+    expiry_date?: string | null;
+    billed_quantity?: number | string | null;
+    free_quantity?: number | string | null;
+    base_quantity?: number | string | null;
+    base_billed_quantity?: number | string | null;
+    base_free_quantity?: number | string | null;
+}
+
 const finiteNumber = (value: unknown): number | null => {
+    if (value === undefined || value === null
+        || (typeof value === 'string' && value.trim() === '')) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+};
+
+const quantitiesMatch = (left: number, right: number): boolean =>
+    Math.abs(left - right) <= 0.000001;
+
+const moneyFields = [
+    'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'cess_amount',
+    'tax_amount', 'total_tax_amount', 'line_total', 'total',
+] as const;
+
+const splitMoney = (
+    item: Record<string, unknown>,
+    quantities: number[],
+    sourceQuantity: number,
+): Array<Record<string, number>> => {
+    const splits = quantities.map(() => ({} as Record<string, number>));
+    for (const field of moneyFields) {
+        if (item[field] === undefined || item[field] === null) continue;
+        const total = finiteNumber(item[field]);
+        if (total === null) throw new Error(`The canonical ${field} is not numeric.`);
+        if (sourceQuantity === 0) {
+            if (!quantitiesMatch(total, 0)) {
+                throw new Error(`A free-only line cannot allocate a non-zero ${field}.`);
+            }
+            splits.forEach(split => { split[field] = 0; });
+            continue;
+        }
+
+        let allocated = 0;
+        quantities.forEach((quantity, index) => {
+            const amount = index === quantities.length - 1
+                ? Math.round((total - allocated) * 100) / 100
+                : Math.round((total * quantity / sourceQuantity) * 100) / 100;
+            splits[index][field] = amount;
+            allocated += amount;
+        });
+    }
+    return splits;
+};
+
+const projectExecutedAllocations = (
+    item: Record<string, unknown>,
+    allocations: CanonicalExecutedBatchAllocation[],
+    index: number,
+    sourceQuantity: number,
+    sourceFreeQuantity: number,
+    unitPrice: number,
+): CanonicalImportLine[] => {
+    if (allocations.length === 0) {
+        throw new Error(`Line ${index + 1} has no executed canonical batch allocations.`);
+    }
+
+    const seenInventoryLines = new Set<string>();
+    const quantities = allocations.map((allocation, allocationIndex) => {
+        const prefix = `Line ${index + 1} allocation ${allocationIndex + 1}`;
+        if (!['direct_issue', 'dispatch_allocation'].includes(allocation.source_kind)) {
+            throw new Error(`${prefix} has an unsupported execution source.`);
+        }
+        if (allocation.source_kind === 'dispatch_allocation'
+            && (!allocation.invoice_dispatch_allocation_id
+                || String(allocation.invoice_dispatch_allocation_id).trim() === '')) {
+            throw new Error(`${prefix} is missing its invoice dispatch allocation identity.`);
+        }
+        if (allocation.source_kind === 'direct_issue'
+            && allocation.invoice_dispatch_allocation_id !== undefined
+            && allocation.invoice_dispatch_allocation_id !== null) {
+            throw new Error(`${prefix} has contradictory dispatch allocation identity.`);
+        }
+        for (const [field, value] of [
+            ['allocation identity', allocation.allocation_id],
+            ['inventory document identity', allocation.inventory_document_id],
+            ['inventory document line identity', allocation.inventory_document_line_id],
+            ['batch identity', allocation.batch_id],
+        ] as const) {
+            if (value === undefined || value === null || String(value).trim() === '') {
+                throw new Error(`${prefix} is missing its ${field}.`);
+            }
+        }
+        if (!allocation.batch_number || String(allocation.batch_number).trim() === '') {
+            throw new Error(`${prefix} is missing its batch number.`);
+        }
+        const inventoryLineId = String(allocation.inventory_document_line_id);
+        if (seenInventoryLines.has(inventoryLineId)) {
+            throw new Error(`${prefix} duplicates an executed inventory line.`);
+        }
+        seenInventoryLines.add(inventoryLineId);
+
+        let billed = finiteNumber(allocation.billed_quantity);
+        let free = finiteNumber(allocation.free_quantity);
+        if (allocations.length === 1) {
+            billed ??= sourceQuantity;
+            free ??= sourceFreeQuantity;
+        }
+        if (billed === null || free === null) {
+            throw new Error(`${prefix} does not identify billed and free quantities separately.`);
+        }
+        if (billed < 0 || free < 0 || billed + free <= 0) {
+            throw new Error(`${prefix} has invalid executed quantities.`);
+        }
+
+        const baseQuantity = finiteNumber(allocation.base_quantity);
+        const baseBilled = finiteNumber(allocation.base_billed_quantity);
+        const baseFree = finiteNumber(allocation.base_free_quantity);
+        if (baseQuantity !== null && baseQuantity <= 0) {
+            throw new Error(`${prefix} has no positive executed base quantity.`);
+        }
+        if (baseQuantity !== null && baseBilled !== null && baseFree !== null
+            && !quantitiesMatch(baseQuantity, baseBilled + baseFree)) {
+            throw new Error(`${prefix} has contradictory executed base quantities.`);
+        }
+        return { billed, free };
+    });
+
+    const billedTotal = quantities.reduce((sum, allocation) => sum + allocation.billed, 0);
+    const freeTotal = quantities.reduce((sum, allocation) => sum + allocation.free, 0);
+    if (!quantitiesMatch(billedTotal, sourceQuantity)
+        || !quantitiesMatch(freeTotal, sourceFreeQuantity)) {
+        throw new Error(`Line ${index + 1} batch allocations do not reconcile to its billed and free quantities.`);
+    }
+
+    const monetarySplits = splitMoney(item, quantities.map(value => value.billed), sourceQuantity);
+    return allocations.map((allocation, allocationIndex) => ({
+        ...item,
+        ...monetarySplits[allocationIndex],
+        source_line_id: item.id,
+        source_allocation_kind: allocation.source_kind,
+        allocation_id: allocation.allocation_id,
+        inventory_document_id: allocation.inventory_document_id,
+        inventory_document_line_id: allocation.inventory_document_line_id,
+        invoice_dispatch_allocation_id: allocation.invoice_dispatch_allocation_id ?? null,
+        product_id: (item.product_id ?? item.id) as string | number,
+        product_name: String(item.product_name ?? item.name ?? '').trim(),
+        batch_id: allocation.batch_id,
+        batch_number: String(allocation.batch_number).trim(),
+        expiry_date: allocation.expiry_date ?? null,
+        quantity: quantities[allocationIndex].billed,
+        free_quantity: quantities[allocationIndex].free,
+        unit_price: unitPrice,
+        sale_price: unitPrice,
+        gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
+        discount_percent: finiteNumber(item.discount_percent) ?? 0,
+    }));
 };
 
 /**
@@ -66,7 +226,8 @@ export function projectCanonicalImportLines(
         throw new Error('The selected document has no importable line items.');
     }
 
-    return value.map((raw, index) => {
+    const projected: CanonicalImportLine[] = [];
+    value.forEach((raw, index) => {
         const item = (raw || {}) as Record<string, unknown>;
         const productId = item.product_id ?? item.id;
         const productName = String(item.product_name ?? item.name ?? '').trim();
@@ -75,6 +236,7 @@ export function projectCanonicalImportLines(
             item.batch_number ?? (item.best_batch as Record<string, unknown> | undefined)?.batch_number ?? '',
         ).trim();
         const quantity = finiteNumber(item.dispatched_quantity ?? item.quantity);
+        const freeQuantity = finiteNumber(item.free_quantity) ?? 0;
         const unitPrice = finiteNumber(
             item.unit_price ?? item.sale_price ?? item.selling_price ?? item.quoted_unit_rate,
         );
@@ -82,17 +244,33 @@ export function projectCanonicalImportLines(
         if (productId === undefined || productId === null || productName === '') {
             throw new Error(`Line ${index + 1} is missing its canonical product identity.`);
         }
-        if (options.requireBatch !== false && (batchId === undefined || batchId === null || batchNumber === '')) {
-            throw new Error(`Line ${index + 1} is missing its canonical batch allocation.`);
-        }
-        if (quantity === null || quantity <= 0) {
-            throw new Error(`Line ${index + 1} has no positive quantity.`);
+        if (quantity === null || quantity < 0 || freeQuantity < 0 || quantity + freeQuantity <= 0) {
+            throw new Error(`Line ${index + 1} has no positive billed or free quantity.`);
         }
         if (unitPrice === null || unitPrice < 0) {
             throw new Error(`Line ${index + 1} is missing its canonical rate.`);
         }
 
-        return {
+        if (Object.prototype.hasOwnProperty.call(item, 'batch_allocations')) {
+            if (!Array.isArray(item.batch_allocations)) {
+                throw new Error(`Line ${index + 1} has an invalid canonical batch allocation set.`);
+            }
+            projected.push(...projectExecutedAllocations(
+                item,
+                item.batch_allocations as CanonicalExecutedBatchAllocation[],
+                index,
+                quantity,
+                freeQuantity,
+                unitPrice,
+            ));
+            return;
+        }
+
+        if (options.requireBatch !== false && (batchId === undefined || batchId === null || batchNumber === '')) {
+            throw new Error(`Line ${index + 1} is missing its canonical batch allocation.`);
+        }
+
+        projected.push({
             ...item,
             product_id: productId as string | number,
             product_name: productName,
@@ -102,8 +280,9 @@ export function projectCanonicalImportLines(
             unit_price: unitPrice,
             sale_price: unitPrice,
             gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
-            free_quantity: finiteNumber(item.free_quantity) ?? 0,
+            free_quantity: freeQuantity,
             discount_percent: finiteNumber(item.discount_percent) ?? 0,
-        };
+        });
     });
+    return projected;
 }

@@ -1,8 +1,10 @@
 import inspect
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
@@ -546,6 +548,15 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert "inventory_document.sales_invoice_id=invoice.id" in source
     assert source.count("inventory_document.branch_id=invoice.branch_id") == 2
     assert "inventory_document.sales_dispatch_id=dispatch.id" in source
+    assert "'inventory_document_line_id', executed.inventory_document_line_id" in source
+    assert "executed.invoice_dispatch_allocation_id" in source
+    assert "invoice_allocation.id AS invoice_dispatch_allocation_id" in source
+    assert "inventory_line.id AS inventory_document_line_id" in source
+    assert "'base_billed_quantity', executed.base_billed_quantity" in source
+    assert "'base_free_quantity', executed.base_free_quantity" in source
+    assert "'billed_quantity', executed.billed_quantity" in source
+    assert "'free_quantity', executed.free_quantity" in source
+    assert "count(*) OVER ()=1" in source
     assert "inventory_document.document_type='sales_issue'" in source
     assert "inventory_document.status='posted'" in source
     assert "dispatch.status='posted'" in source
@@ -578,6 +589,85 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert allocation_schema["properties"]["source_kind"]["enum"] == [
         "direct_issue", "dispatch_allocation"
     ]
+
+
+def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations() -> None:
+    def allocation(source_kind: str, *, expires):
+        return {
+            "source_kind": source_kind,
+            "allocation_id": uuid4(),
+            "inventory_document_id": uuid4(),
+            "inventory_document_line_id": uuid4(),
+            "invoice_dispatch_allocation_id": (
+                uuid4() if source_kind == "dispatch_allocation" else None
+            ),
+            "dispatch_id": uuid4() if source_kind == "dispatch_allocation" else None,
+            "dispatch_line_id": uuid4() if source_kind == "dispatch_allocation" else None,
+            "batch_id": uuid4(),
+            "batch_number": f"BATCH-{source_kind}",
+            "expiry_date": expires,
+            "from_location_id": uuid4(),
+            "uom_code": "EA",
+            "base_quantity": 1,
+            "base_billed_quantity": 1,
+            "base_free_quantity": 0,
+            "billed_quantity": 1,
+            "free_quantity": 0,
+        }
+
+    def item(batch_allocations):
+        singular = batch_allocations[0] if len(batch_allocations) == 1 else None
+        return {
+            "id": uuid4(), "product_id": uuid4(), "product_name": "Product",
+            "product_code": "SKU", "hsn_code": "481910", "uom_code": "EA",
+            "unit": "EA", "quantity": len(batch_allocations) or 1,
+            "free_quantity": 0, "unit_price": 150, "discount_percent": 0,
+            "tax_rate": 12, "gst_percent": 12, "taxable_amount": 150,
+            "cgst_amount": 9, "sgst_amount": 9, "igst_amount": 0,
+            "cess_amount": 0, "line_total": 168,
+            "batch_id": singular["batch_id"] if singular else None,
+            "batch_number": singular["batch_number"] if singular else None,
+            "expiry_date": singular["expiry_date"] if singular else None,
+            "batch_allocations": batch_allocations,
+        }
+
+    direct = allocation("direct_issue", expires=None)
+    dispatch = allocation("dispatch_allocation", expires=date(2028, 9, 1))
+    payload = {
+        "invoice_id": uuid4(), "invoice_number": "INV-1",
+        "invoice_date": date(2026, 8, 24), "status": "posted",
+        "customer_id": uuid4(), "customer_name": "Customer",
+        "customer_phone": None, "customer_email": None,
+        "customer_gst_number": None, "billing_address": "Address",
+        "shipping_address": "Address", "due_date": None, "currency_code": "INR",
+        "taxable_amount": 300, "cgst_amount": 18, "sgst_amount": 18,
+        "igst_amount": 0, "cess_amount": 0, "total_amount": 336,
+        "items": [item([]), item([direct]), item([direct, dispatch])],
+        "created_at": datetime(2026, 8, 24, 17, 0),
+        "updated_at": datetime(2026, 8, 24, 17, 0),
+    }
+
+    response = canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(payload)
+    assert response.items[0].batch_allocations == []
+    assert response.items[1].batch_allocations[0].expiry_date is None
+    assert response.items[1].batch_id == direct["batch_id"]
+    assert len(response.items[2].batch_allocations) == 2
+    assert response.items[2].batch_id is None
+    assert response.items[2].batch_allocations[1].source_kind == "dispatch_allocation"
+
+    missing_line_identity = {**direct}
+    missing_line_identity.pop("inventory_document_line_id")
+    with pytest.raises(ValidationError):
+        canonical_erp_reads.CanonicalInvoiceExecutedBatchAllocation.model_validate(
+            missing_line_identity
+        )
+    dispatch_without_allocation_id = {
+        **dispatch, "invoice_dispatch_allocation_id": None
+    }
+    with pytest.raises(ValidationError, match="dispatch allocation requires"):
+        canonical_erp_reads.CanonicalInvoiceExecutedBatchAllocation.model_validate(
+            dispatch_without_allocation_id
+        )
 
 
 def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:

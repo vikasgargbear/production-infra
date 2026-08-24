@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Search, FileText, Calendar, CheckCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { projectCanonicalImportLines } from '../../sales/utils/documentImport';
 
 interface DocumentItem {
   item_id?: number;
@@ -117,22 +118,10 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
       const sourceDocument = typeConfig?.resolveDocument
         ? await typeConfig.resolveDocument(selectedDoc)
         : selectedDoc;
-      // Format items for import
-      const formattedItems = (sourceDocument.items || sourceDocument.line_items || []).map((item: any) => ({
-        product_id: item.product_id,
-        product_name: item.product_name || item.name,
-        product_code: item.product_code || item.code,
-        batch_id: item.batch_id,
-        batch_number: item.batch_number || item.batch_number,
-        hsn_code: item.hsn_code,
-        expiry_date: item.expiry_date,
-        quantity: parseFloat(item.quantity || item.dispatched_quantity || '0'),
-        mrp: parseFloat(item.mrp || '0'),
-        unit_price: parseFloat(item.unit_price || item.unit_price || item.sale_price || '0'),
-        discount_percent: parseFloat(item.discount_percent || '0'),
-        free_quantity: parseFloat(item.free_quantity || '0'),
-        tax_rate: parseFloat(item.tax_rate || item.gst_percent || '0')
-      }));
+      const formattedItems = projectCanonicalImportLines(
+        sourceDocument.items || sourceDocument.line_items,
+        { requireBatch: true },
+      ) as DocumentItem[];
 
       const customerDetails = sourceDocument.customer_details
         || sourceDocument.customer
@@ -162,7 +151,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
       toast.success(`Data imported from ${selectedType}`);
       onClose();
     } catch (error) {
-      toast.error('Failed to import document data');
+      toast.error(error instanceof Error ? error.message : 'Failed to import document data');
     } finally {
       setImporting(false);
     }

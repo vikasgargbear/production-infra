@@ -1453,6 +1453,8 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
     source_kind: Literal["direct_issue", "dispatch_allocation"]
     allocation_id: UUID
     inventory_document_id: UUID
+    inventory_document_line_id: UUID
+    invoice_dispatch_allocation_id: Optional[UUID]
     dispatch_id: Optional[UUID]
     dispatch_line_id: Optional[UUID]
     batch_id: UUID
@@ -1461,6 +1463,23 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
     from_location_id: Optional[UUID]
     uom_code: str
     base_quantity: float
+    base_billed_quantity: Optional[float]
+    base_free_quantity: Optional[float]
+    billed_quantity: Optional[float]
+    free_quantity: Optional[float]
+
+    @model_validator(mode="after")
+    def validate_source_identity(self):
+        if self.source_kind == "dispatch_allocation":
+            if (
+                not self.invoice_dispatch_allocation_id
+                or not self.dispatch_id
+                or not self.dispatch_line_id
+            ):
+                raise ValueError("dispatch allocation requires dispatch lineage identities")
+        elif self.invoice_dispatch_allocation_id or self.dispatch_id or self.dispatch_line_id:
+            raise ValueError("direct issue cannot claim dispatch allocation identities")
+        return self
 
 
 class CanonicalInvoiceDetailItem(BaseModel):
@@ -1483,6 +1502,7 @@ class CanonicalInvoiceDetailItem(BaseModel):
     cgst_amount: float
     sgst_amount: float
     igst_amount: float
+    cess_amount: float
     line_total: float
     batch_id: Optional[UUID]
     batch_number: Optional[str]
@@ -1563,7 +1583,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'gst_percent', line.cgst_rate + line.sgst_rate + line.igst_rate,
                          'taxable_amount', line.gst_taxable_value,
                          'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
-                         'igst_amount', line.igst_amount, 'line_total', line.line_total,
+                         'igst_amount', line.igst_amount, 'cess_amount', line.cess_amount,
+                         'line_total', line.line_total,
                          'batch_id', CASE WHEN allocation.allocation_count=1
                                           THEN allocation.batch_id END,
                          'batch_number', CASE WHEN allocation.allocation_count=1
@@ -1587,6 +1608,9 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                'source_kind', executed.source_kind,
                                'allocation_id', executed.allocation_id,
                                'inventory_document_id', executed.inventory_document_id,
+                               'inventory_document_line_id', executed.inventory_document_line_id,
+                               'invoice_dispatch_allocation_id',
+                                   executed.invoice_dispatch_allocation_id,
                                'dispatch_id', executed.dispatch_id,
                                'dispatch_line_id', executed.dispatch_line_id,
                                'batch_id', executed.batch_id,
@@ -1594,20 +1618,50 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                'expiry_date', executed.expiry_date,
                                'from_location_id', executed.from_location_id,
                                'uom_code', executed.uom_code,
-                               'base_quantity', executed.base_quantity
+                               'base_quantity', executed.base_quantity,
+                               'base_billed_quantity', executed.base_billed_quantity,
+                               'base_free_quantity', executed.base_free_quantity,
+                               'billed_quantity', executed.billed_quantity,
+                               'free_quantity', executed.free_quantity
                            ) ORDER BY executed.source_kind, executed.allocation_id)
                              AS batch_allocations
                       FROM (
                           SELECT 'direct_issue'::text AS source_kind,
                                  inventory_line.id AS allocation_id,
                                  inventory_line.inventory_document_id,
+                                 inventory_line.id AS inventory_document_line_id,
+                                 NULL::uuid AS invoice_dispatch_allocation_id,
                                  NULL::uuid AS dispatch_id,
                                  NULL::uuid AS dispatch_line_id,
                                  inventory_line.batch_id, batch.batch_number,
                                  batch.expires_on AS expiry_date,
                                  inventory_line.from_location_id,
                                  inventory_line.uom_code,
-                                 inventory_line.base_quantity
+                                 inventory_line.base_quantity,
+                                 CASE
+                                   WHEN count(*) OVER ()=1 THEN line.base_billed_quantity
+                                   WHEN COALESCE(line.base_free_quantity, 0)=0
+                                     THEN inventory_line.base_quantity
+                                   WHEN COALESCE(line.base_billed_quantity, 0)=0 THEN 0
+                                 END AS base_billed_quantity,
+                                 CASE
+                                   WHEN count(*) OVER ()=1 THEN line.base_free_quantity
+                                   WHEN COALESCE(line.base_free_quantity, 0)=0 THEN 0
+                                   WHEN COALESCE(line.base_billed_quantity, 0)=0
+                                     THEN inventory_line.base_quantity
+                                 END AS base_free_quantity,
+                                 CASE
+                                   WHEN count(*) OVER ()=1 THEN line.billed_quantity
+                                   WHEN COALESCE(line.base_free_quantity, 0)=0
+                                     THEN inventory_line.entered_quantity
+                                   WHEN COALESCE(line.base_billed_quantity, 0)=0 THEN 0
+                                 END AS billed_quantity,
+                                 CASE
+                                   WHEN count(*) OVER ()=1 THEN line.free_quantity
+                                   WHEN COALESCE(line.base_free_quantity, 0)=0 THEN 0
+                                   WHEN COALESCE(line.base_billed_quantity, 0)=0
+                                     THEN inventory_line.entered_quantity
+                                 END AS free_quantity
                             FROM inventory.inventory_document_lines inventory_line
                             JOIN inventory.inventory_documents inventory_document
                              ON inventory_document.org_id=inventory_line.org_id
@@ -1625,6 +1679,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                           SELECT 'dispatch_allocation'::text AS source_kind,
                                  invoice_allocation.id AS allocation_id,
                                  inventory_line.inventory_document_id,
+                                 inventory_line.id AS inventory_document_line_id,
+                                 invoice_allocation.id AS invoice_dispatch_allocation_id,
                                  dispatch.id AS dispatch_id,
                                  dispatch_line.id AS dispatch_line_id,
                                  dispatch_line.batch_id, batch.batch_number,
@@ -1632,7 +1688,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                  dispatch_line.from_location_id,
                                  dispatch_line.uom_code,
                                  invoice_allocation.allocated_base_billed_quantity
-                                   + invoice_allocation.allocated_base_free_quantity AS base_quantity
+                                   + invoice_allocation.allocated_base_free_quantity AS base_quantity,
+                                 invoice_allocation.allocated_base_billed_quantity
+                                   AS base_billed_quantity,
+                                 invoice_allocation.allocated_base_free_quantity
+                                   AS base_free_quantity,
+                                 invoice_allocation.allocated_base_billed_quantity
+                                   / NULLIF(line.uom_conversion_factor, 0) AS billed_quantity,
+                                 invoice_allocation.allocated_base_free_quantity
+                                   / NULLIF(line.uom_conversion_factor, 0) AS free_quantity
                             FROM sales.invoice_dispatch_allocations invoice_allocation
                             JOIN sales.dispatch_lines dispatch_line
                               ON dispatch_line.org_id=invoice_allocation.org_id
