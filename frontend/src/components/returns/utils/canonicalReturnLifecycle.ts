@@ -14,7 +14,6 @@ export interface AwaitingIndependentApproval {
   state: 'awaiting_independent_approval';
   message: string;
 }
-
 function waiting(preview: CanonicalCommandPreview): AwaitingIndependentApproval {
   return {
     preview,
@@ -44,4 +43,3 @@ export async function prepareCanonicalPurchaseReturn(
   );
   return waiting(response.data);
 }
-

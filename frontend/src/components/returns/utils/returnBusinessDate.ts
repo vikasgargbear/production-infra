@@ -8,4 +8,3 @@ export function indiaBusinessDate(now: Date = new Date()): string {
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
-
