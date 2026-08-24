@@ -36,8 +36,8 @@ export interface DashboardStats {
     net_position: number;
     overdue_receivables: number;
     overdue_payables: number;
-    collection_efficiency: number;
-    payment_efficiency: number;
+    collection_efficiency: number | null;
+    payment_efficiency: number | null;
     cash_flow_trend: 'positive' | 'negative' | 'neutral';
 }
 
@@ -89,8 +89,8 @@ const defaultStats: DashboardStats = {
     net_position: 0,
     overdue_receivables: 0,
     overdue_payables: 0,
-    collection_efficiency: 0,
-    payment_efficiency: 0,
+    collection_efficiency: null,
+    payment_efficiency: null,
     cash_flow_trend: 'neutral'
 };
 
@@ -115,7 +115,7 @@ export function useLedgerReports() {
             const stats = await ledgerApi.getDashboardStats({
                 as_of_date: filters.dateRange.to?.toISOString().split('T')[0]
             });
-            return stats as DashboardStats;
+            return stats;
         },
         staleTime: 5 * 60 * 1000,
         initialData: defaultStats

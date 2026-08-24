@@ -30,6 +30,8 @@ export interface LedgerParams {
 export interface AgingParams {
     party_type?: 'customer' | 'supplier';
     as_of_date?: string;
+    date_from?: string;
+    date_to?: string;
 }
 
 export interface ReportFilters {
@@ -178,6 +180,11 @@ export const ledgerApi = {
         total_receivables: number;
         total_payables: number;
         net_position: number;
+        overdue_receivables: number;
+        overdue_payables: number;
+        collection_efficiency: null;
+        payment_efficiency: null;
+        cash_flow_trend: 'neutral';
     }> => {
         const [customerAging, supplierAging] = await Promise.all([
             apiHelpers.get(ENDPOINTS.PARTY_AGING, { params: { ...params, party_type: 'customer' } }),
@@ -189,11 +196,18 @@ export const ledgerApi = {
 
         const totalReceivables = customerData.reduce((sum: number, c: any) => sum + (c.total_outstanding || 0), 0);
         const totalPayables = supplierData.reduce((sum: number, s: any) => sum + (s.total_outstanding || 0), 0);
+        const overdueReceivables = Number(customerAging.data?.summary?.overdue || 0);
+        const overduePayables = Number(supplierAging.data?.summary?.overdue || 0);
 
         return {
             total_receivables: totalReceivables,
             total_payables: totalPayables,
-            net_position: totalReceivables - totalPayables
+            net_position: totalReceivables - totalPayables,
+            overdue_receivables: overdueReceivables,
+            overdue_payables: overduePayables,
+            collection_efficiency: null,
+            payment_efficiency: null,
+            cash_flow_trend: 'neutral',
         };
     },
 

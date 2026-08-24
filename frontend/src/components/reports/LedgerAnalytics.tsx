@@ -63,8 +63,8 @@ interface DashboardStats {
   net_position: number;
   overdue_receivables: number;
   overdue_payables: number;
-  collection_efficiency: number;
-  payment_efficiency: number;
+  collection_efficiency: number | null;
+  payment_efficiency: number | null;
   cash_flow_trend: 'positive' | 'negative' | 'neutral';
 }
 
@@ -95,7 +95,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
       date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       party_type: filters.partyType !== 'all' ? filters.partyType : undefined
-    } as any),
+    }),
     refetchInterval: 300000
   });
 
@@ -146,19 +146,16 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     }
   });
 
-  const dashboardStats: DashboardStats = (stats ? {
-    ...(stats as any),
-    cash_flow_trend: ((stats as any).cash_flow_trend as 'positive' | 'negative' | 'neutral') || 'neutral'
-  } : {
+  const dashboardStats: DashboardStats = stats ?? {
     total_receivables: 0,
     total_payables: 0,
     net_position: 0,
     overdue_receivables: 0,
     overdue_payables: 0,
-    collection_efficiency: 0,
-    payment_efficiency: 0,
+    collection_efficiency: null,
+    payment_efficiency: null,
     cash_flow_trend: 'neutral' as const
-  }) as any;
+  };
 
   const handleExport = async (exportFormat: 'pdf' | 'excel') => {
     try {
@@ -734,10 +731,14 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                     <div>
                       <p className="text-sm text-gray-500">Collection Efficiency</p>
                       <p className="text-2xl font-bold text-blue-600">
-                        {dashboardStats.collection_efficiency.toFixed(1)}%
+                        {dashboardStats.collection_efficiency == null
+                          ? '—'
+                          : `${dashboardStats.collection_efficiency.toFixed(1)}%`}
                       </p>
                       <p className="text-sm text-gray-500">
-                        This month
+                        {dashboardStats.collection_efficiency == null
+                          ? 'Unavailable from canonical API'
+                          : 'This month'}
                       </p>
                     </div>
                     <Target className="h-10 w-10 text-blue-400" />
