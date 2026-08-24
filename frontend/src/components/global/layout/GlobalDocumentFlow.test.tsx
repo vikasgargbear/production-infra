@@ -9,7 +9,7 @@ jest.mock('../ui/display/DocumentFooter', () => (props: any) => (
         {props.onContinue && (
             <button onClick={props.onContinue} disabled={props.continueDisabled}>Continue</button>
         )}
-        {props.onSave && <button onClick={props.onSave}>Save</button>}
+        {props.onSave && <button onClick={props.onSave} disabled={props.saveDisabled}>{props.saveLabel || 'Save'}</button>}
     </div>
 ));
 jest.mock('../ui/feedback/Toast', () => ({ useToast: () => ({ error: jest.fn() }) }));
@@ -47,10 +47,45 @@ describe('GlobalDocumentFlow authoritative review gate', () => {
                 onProceedToReview={async () => false}
             />,
         );
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        });
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        await act(async () => Promise.resolve());
         expect(screen.getByText('Create content')).not.toBeNull();
         expect(screen.queryByText('Canonical review')).toBeNull();
+    });
+
+    it('uses the workflow-specific final CTA label over the generic document label', () => {
+        render(
+            <GlobalDocumentFlow
+                documentType="purchase-order"
+                currentStep={2}
+                createContent={<div>Create content</div>}
+                reviewContent={<div>Canonical review</div>}
+                onSave={jest.fn()}
+                saveLabel="Approve & Create PO"
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: 'Approve & Create PO' })).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create PO' })).toBeNull();
+    });
+
+    it('fails closed when the final write requires an independent approval', () => {
+        const save = jest.fn();
+        render(
+            <GlobalDocumentFlow
+                documentType="stock-adjustment"
+                currentStep={2}
+                createContent={<div>Create content</div>}
+                reviewContent={<div>Canonical review</div>}
+                onSave={save}
+                saveLabel="Execute Approved Count"
+                saveDisabled
+            />,
+        );
+
+        const action = screen.getByRole('button', { name: 'Execute Approved Count' }) as HTMLButtonElement;
+        expect(action.disabled).toBe(true);
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+        expect(save).not.toHaveBeenCalled();
     });
 });

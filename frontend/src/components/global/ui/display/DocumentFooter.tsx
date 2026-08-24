@@ -31,6 +31,7 @@ export interface DocumentFooterProps {
 
     // State
     isSaving?: boolean;
+    saveDisabled?: boolean;
     customerPhone?: string | null;
 
     // Labels
@@ -70,6 +71,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
     onThermalPrint,
     onWhatsApp,
     isSaving = false,
+    saveDisabled = false,
     customerPhone = null,
     cancelLabel = "Cancel",
     continueLabel = "Continue",
@@ -183,7 +185,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <button
                                 ref={saveButtonRef}
                                 onClick={onSave}
-                                disabled={isSaving}
+                                disabled={isSaving || saveDisabled}
                                 className="min-h-11 flex-1 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed font-medium sm:flex-none sm:px-8"
                             >
                                 <Save className="w-5 h-5" />

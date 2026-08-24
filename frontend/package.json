@@ -55,6 +55,7 @@
     "test:e2e:live": "PLAYWRIGHT_SKIP_WEB_SERVER=true playwright test --config playwright.config.ts e2e/live-production-smoke.spec.ts --workers=1",
     "test:e2e:live:writes": "PLAYWRIGHT_SKIP_WEB_SERVER=true PLAYWRIGHT_LIVE_WRITES=true playwright test --config playwright.config.ts e2e/live-production-smoke.spec.ts --workers=1",
     "test:e2e:live:headed": "PLAYWRIGHT_SKIP_WEB_SERVER=true playwright test --config playwright.config.ts e2e/live-production-smoke.spec.ts --headed --workers=1",
+    "test:e2e:live:core": "PLAYWRIGHT_SKIP_WEB_SERVER=true playwright test --config playwright.config.ts e2e/live-canonical-core-api.spec.ts e2e/live-canonical-core-ui.spec.ts --project=desktop-chrome --workers=1",
     "test:e2e:ui": "playwright test --config playwright.config.ts --ui",
     "test:all": "npm run test:ci && npm run test:e2e"
   },

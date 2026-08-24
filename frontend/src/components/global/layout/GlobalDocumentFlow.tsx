@@ -80,6 +80,7 @@ export interface GlobalDocumentFlowProps {
     onSave?: () => void;
     onPrint?: () => void;
     isSaving?: boolean;
+    saveDisabled?: boolean;
     saveLabel?: string;
 
     // Footer Configuration
@@ -134,6 +135,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     onSave,
     onPrint,
     isSaving = false,
+    saveDisabled = false,
     saveLabel,
 
     // Footer Configuration
@@ -261,7 +263,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
             { key: 'Esc', action: 'Close' }
         ],
         2: [
-            ...(onSave ? [{ key: 'Ctrl+S', action: `Save ${config.title}` }] : []),
+            ...(onSave && !saveDisabled ? [{ key: 'Ctrl+S', action: `Save ${config.title}` }] : []),
             { key: 'Esc', action: 'Back to Edit' }
         ]
     };
@@ -278,7 +280,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
             // Ctrl+S - Save
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
                 e.preventDefault();
-                if (localStep === 2 && onSave) {
+                if (localStep === 2 && onSave && !saveDisabled) {
                     onSave();
                 }
             }
@@ -295,7 +297,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleStepChange, localStep, onSave, onClose]);
+    }, [handleStepChange, localStep, onSave, onClose, saveDisabled]);
 
     // Handle proceed to review
     const handleProceedToReview = async (): Promise<void> => {
@@ -383,7 +385,8 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                         showPrintOptions={false}
                         onSave={onSave}
                         isSaving={isSaving}
-                        saveLabel={config.saveLabel || saveLabel || 'Save'}
+                        saveDisabled={saveDisabled}
+                        saveLabel={saveLabel || config.saveLabel || 'Save'}
                     />
                 )}
 

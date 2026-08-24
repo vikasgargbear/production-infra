@@ -1123,6 +1123,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
         ? () => setShowConfirmModal(true)
         : handlePrepare}
       isSaving={isPreparing || isCommitting}
+      saveDisabled={awaitingIndependentApproval}
       saveLabel={committedRef
         ? 'Adjustment Posted'
         : awaitingIndependentApproval ? 'Execute Approved Count' : 'Prepare Cycle Count'}
