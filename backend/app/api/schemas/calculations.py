@@ -1,16 +1,18 @@
 """Typed contracts for non-persistent financial calculation previews."""
 
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 
 GSTType = Literal["CGST/SGST", "IGST"]
+EntityId = Union[PositiveInt, UUID]
 
 
 class CalculationLine(BaseModel):
-    product_id: Optional[int] = Field(default=None, gt=0)
+    product_id: Optional[EntityId] = None
     product_name: Optional[str] = Field(default=None, max_length=255)
     quantity: Decimal = Field(ge=0)
     free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
@@ -24,7 +26,7 @@ class CalculationLine(BaseModel):
 
 
 class InvoiceCalculationRequest(BaseModel):
-    customer_id: Optional[int] = Field(default=None, gt=0)
+    customer_id: Optional[EntityId] = None
     gst_type: GSTType = "CGST/SGST"
     items: List[CalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
@@ -38,7 +40,7 @@ class InvoiceCalculationRequest(BaseModel):
 
 
 class PurchaseCalculationRequest(BaseModel):
-    supplier_id: Optional[int] = Field(default=None, gt=0)
+    supplier_id: Optional[EntityId] = None
     gst_type: GSTType = "CGST/SGST"
     items: List[CalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
@@ -49,7 +51,7 @@ class PurchaseCalculationRequest(BaseModel):
 
 
 class ChallanCalculationRequest(BaseModel):
-    customer_id: int = Field(gt=0)
+    customer_id: EntityId
     items: List[CalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
 
@@ -57,7 +59,7 @@ class ChallanCalculationRequest(BaseModel):
 
 
 class ReturnCalculationLine(BaseModel):
-    product_id: Optional[int] = Field(default=None, gt=0)
+    product_id: Optional[EntityId] = None
     return_quantity: Decimal = Field(gt=0)
     paid_quantity: Decimal = Field(default=Decimal("0"), ge=0)
     free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
@@ -70,8 +72,8 @@ class ReturnCalculationLine(BaseModel):
 
 class ReturnCalculationRequest(BaseModel):
     return_type: Literal["sales", "purchase"]
-    customer_id: Optional[int] = Field(default=None, gt=0)
-    supplier_id: Optional[int] = Field(default=None, gt=0)
+    customer_id: Optional[EntityId] = None
+    supplier_id: Optional[EntityId] = None
     gst_type: GSTType = "CGST/SGST"
     include_gst: bool = True
     items: List[ReturnCalculationLine] = Field(min_length=1, max_length=500)
@@ -82,7 +84,7 @@ class ReturnCalculationRequest(BaseModel):
 class NoteCalculationRequest(BaseModel):
     note_type: Literal["credit", "debit"]
     party_type: Literal["customer", "supplier"] = "customer"
-    party_id: Optional[int] = Field(default=None, gt=0)
+    party_id: Optional[EntityId] = None
     gst_type: GSTType = "CGST/SGST"
     include_gst: bool = True
     items: List[CalculationLine] = Field(min_length=1, max_length=500)

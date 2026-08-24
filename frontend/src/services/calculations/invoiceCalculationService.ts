@@ -13,7 +13,9 @@ function toRequest(invoice: any): InvoiceCalculationRequest {
     const customerId = customer?.customer_id ?? customer?.id;
 
     return {
-        customer_id: customerId == null ? undefined : Number(customerId),
+        // Canonical ERP entities use UUIDs. Preserve the identifier instead of
+        // coercing it to Number (which serializes a UUID as null via NaN).
+        customer_id: customerId == null ? undefined : customerId,
         gst_type: invoice?.gst_type,
         items: (invoice?.items || []).map((item: any) => ({
             product_id: item.product_id,

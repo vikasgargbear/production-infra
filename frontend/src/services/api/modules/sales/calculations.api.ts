@@ -15,7 +15,7 @@ export interface InvoiceCalculationLine {
 }
 
 export interface InvoiceCalculationRequest {
-    customer_id?: number;
+    customer_id?: number | string;
     gst_type?: string;
     items: InvoiceCalculationLine[];
     freight_charges?: number | string;
@@ -35,12 +35,12 @@ export interface InvoiceCalculationResponse {
 }
 
 export interface SalesOrderCalculationRequest {
-    customer_id: number;
+    customer_id: number | string;
     order_date?: string;
     delivery_date?: string;
     items: Array<{
-        product_id: number;
-        batch_id?: number;
+        product_id: number | string;
+        batch_id?: number | string;
         batch_number?: string;
         quantity: number;
         free_quantity?: number;
@@ -58,7 +58,7 @@ export interface SalesOrderCalculationRequest {
 }
 
 export interface ChallanCalculationRequest {
-    customer_id: number;
+    customer_id: number | string;
     items: InvoiceCalculationLine[];
     freight_charges?: number | string;
 }

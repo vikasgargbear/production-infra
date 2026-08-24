@@ -102,6 +102,55 @@ test.describe('live ERP pilot', () => {
     await failures.assertClean(testInfo);
   });
 
+  test('assembles a seeded invoice through customer, product, batch, and server totals', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Run the seeded transaction journey once.');
+    const failures = collectBrowserFailures(page);
+
+    await openHomeAction(page, 'Sales');
+    await chooseHubModule(page, 'Sales', 'Create Invoice');
+
+    const customerName = 'Demo Retail Customer Private Limited';
+    await page.getByRole('textbox', { name: 'Search customer by name, phone, or code...' })
+      .fill('Demo Retail');
+    await page.getByText(customerName, { exact: true }).click();
+
+    const productName = 'Synthetic Corrugated Pharmacy Packing Carton';
+    await page.getByRole('textbox', { name: 'Search products by name, code, or HSN...' })
+      .fill('Synthetic Corrugated');
+    await page.getByText(productName, { exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Select Batch' })).toBeVisible();
+
+    const calculationResponse = page.waitForResponse(response => (
+      /\/api\/calculations\/invoice(?:\?|$)/.test(response.url())
+      && response.request().method() === 'POST'
+    ));
+    await page.getByText(/^DEMO-BATCH-/).first().click();
+    const calculated = await calculationResponse;
+    const body = await calculated.text();
+    expect(calculated.status(), body.slice(0, 1500)).toBeGreaterThanOrEqual(200);
+    expect(calculated.status(), body.slice(0, 1500)).toBeLessThan(300);
+
+    const line = page.getByRole('row', { name: new RegExp(productName) });
+    await expect(line).toBeVisible();
+    await expect.poll(async () => {
+      const totalText = await line.getByRole('cell').nth(10).innerText();
+      return Number(totalText.replace(/[^0-9.-]/g, ''));
+    }, { message: 'server-calculated invoice line total should be visible' }).toBeGreaterThan(0);
+
+    const continueCalculation = page.waitForResponse(response => (
+      /\/api\/calculations\/invoice(?:\?|$)/.test(response.url())
+      && response.request().method() === 'POST'
+    ));
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    const continued = await continueCalculation;
+    expect(continued.status(), await continued.text()).toBeGreaterThanOrEqual(200);
+    expect(continued.status()).toBeLessThan(300);
+    await expect(page.getByText('Invoice Details', { exact: true })).toBeVisible();
+
+    await assertNoVisibleFailure(page);
+    await failures.assertClean(testInfo);
+  });
+
   test('writes and reads back uniquely labeled pilot master data', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-chrome', 'Business writes run once in the desktop project.');
     test.skip(!writesEnabled, 'Set PLAYWRIGHT_LIVE_WRITES=true for the approved disposable pilot org.');

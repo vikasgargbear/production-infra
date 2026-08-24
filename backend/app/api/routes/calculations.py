@@ -2,6 +2,7 @@
 
 import time
 from typing import Any, Dict
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -55,7 +56,7 @@ async def preview_invoice_totals(
     """Calculate an invoice without writing it; commit uses the same service method."""
     try:
         customer_id = invoice_data.customer_id
-        if customer_id is not None:
+        if customer_id is not None and not isinstance(customer_id, UUID):
             gst_type = GSTService.determine_gst_type(
                 db=db,
                 org_id=str(context.org_id),
@@ -116,7 +117,7 @@ async def preview_purchase_order_totals(
     """Calculate a purchase order without trusting browser-computed totals."""
     try:
         supplier_id = purchase_data.supplier_id
-        if supplier_id is not None:
+        if supplier_id is not None and not isinstance(supplier_id, UUID):
             gst_type = GSTService.determine_gst_type(
                 db=db,
                 org_id=str(context.org_id),
