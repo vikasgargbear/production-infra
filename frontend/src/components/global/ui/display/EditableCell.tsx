@@ -28,6 +28,8 @@ export interface EditableCellProps {
     selectOnFocus?: boolean;
     allowNegative?: boolean;
     decimalPlaces?: number;
+    maxDecimalPlaces?: number;
+    decimalPlacesErrorMessage?: string;
     onFocus?: (e: FocusEvent<HTMLInputElement>) => void;
     onBlur?: (e: FocusEvent<HTMLInputElement>) => void;
 }
@@ -51,17 +53,41 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     selectOnFocus = true,
     allowNegative = false,
     decimalPlaces = 2,
+    maxDecimalPlaces,
+    decimalPlacesErrorMessage,
     onFocus: onFocusProp,
     onBlur: onBlurProp
 }, ref) => {
     const [localValue, setLocalValue] = useState<string | number>(value);
     const [isEditing, setIsEditing] = useState(false);
     const [originalValue, setOriginalValue] = useState<string | number>(value);
+    const [validationError, setValidationError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const errorId = React.useId();
 
     useEffect(() => {
         setLocalValue(value);
+        setValidationError(null);
     }, [value]);
+
+    const decimalPrecisionError = (candidate: string | number): string | null => {
+        if (type !== 'number' || maxDecimalPlaces === undefined) return null;
+        const normalized = String(candidate).trim();
+        if (normalized === '') return null;
+        const plainDecimalPattern = allowNegative
+            ? /^-?(?:\d+|\d*\.\d*)$/
+            : /^(?:\d+|\d*\.\d*)$/;
+        if (!plainDecimalPattern.test(normalized)) {
+            return decimalPlacesErrorMessage
+                || `Enter a plain number with no more than ${maxDecimalPlaces} decimal places.`;
+        }
+        const unsigned = normalized.replace(/^[+-]/, '');
+        const decimalIndex = unsigned.indexOf('.');
+        if (decimalIndex < 0) return null;
+        if (unsigned.slice(decimalIndex + 1).length <= maxDecimalPlaces) return null;
+        return decimalPlacesErrorMessage
+            || `Enter no more than ${maxDecimalPlaces} decimal places.`;
+    };
 
     useImperativeHandle(ref, () => ({
         focus: () => {
@@ -90,7 +116,13 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
         return String(val);
     };
 
-    const handleSave = (val: string | number): void => {
+    const handleSave = (val: string | number): boolean => {
+        const precisionError = decimalPrecisionError(val);
+        if (precisionError) {
+            setValidationError(precisionError);
+            return false;
+        }
+
         let processedValue: string | number = val;
 
         if (type === 'number') {
@@ -109,6 +141,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
         }
 
         setLocalValue(processedValue);
+        setValidationError(null);
 
         if (onChange) {
             onChange(processedValue);
@@ -117,6 +150,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
             onSave(processedValue);
             setOriginalValue(processedValue);
         }
+        return true;
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
@@ -125,14 +159,14 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
         switch (e.key) {
             case 'Enter':
                 e.preventDefault();
-                handleSave(localValue);
+                if (!handleSave(localValue)) break;
                 setIsEditing(false);
                 onNavigate?.('next');
                 break;
 
             case 'Tab':
                 e.preventDefault();
-                handleSave(localValue);
+                if (!handleSave(localValue)) break;
                 setIsEditing(false);
                 onNavigate?.(e.shiftKey ? 'left' : 'right');
                 break;
@@ -140,7 +174,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
             case 'ArrowDown':
                 if (!e.shiftKey && !e.ctrlKey) {
                     e.preventDefault();
-                    handleSave(localValue);
+                    if (!handleSave(localValue)) break;
                     setIsEditing(false);
                     onNavigate?.('down');
                 }
@@ -149,7 +183,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
             case 'ArrowUp':
                 if (!e.shiftKey && !e.ctrlKey) {
                     e.preventDefault();
-                    handleSave(localValue);
+                    if (!handleSave(localValue)) break;
                     setIsEditing(false);
                     onNavigate?.('up');
                 }
@@ -158,6 +192,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
             case 'Escape':
                 e.preventDefault();
                 setLocalValue(originalValue);
+                setValidationError(null);
                 setIsEditing(false);
                 inputRef.current?.blur();
                 break;
@@ -178,8 +213,9 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     };
 
     const handleBlur = (e: FocusEvent<HTMLInputElement>): void => {
-        handleSave(localValue);
-        setIsEditing(false);
+        if (handleSave(localValue)) {
+            setIsEditing(false);
+        }
         onBlurProp?.(e);
     };
 
@@ -187,7 +223,13 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
         const val = e.target.value;
 
         if (type === 'number') {
+            const precisionError = decimalPrecisionError(val);
+            if (precisionError) {
+                setValidationError(precisionError);
+                return;
+            }
             const cleaned = val.replace(/[^0-9.-]/g, '');
+            setValidationError(null);
             setLocalValue(cleaned);
         } else {
             setLocalValue(val);
@@ -214,6 +256,8 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
                 placeholder={placeholder}
                 readOnly={readOnly}
                 step={step}
+                aria-invalid={validationError ? true : undefined}
+                aria-describedby={validationError ? errorId : undefined}
                 className={`
           w-full px-2 py-1.5 text-right border rounded
           transition-all duration-150
@@ -228,6 +272,16 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
         `}
                 disabled={readOnly}
             />
+
+            {validationError && (
+                <span
+                    id={errorId}
+                    role="alert"
+                    className="absolute left-0 top-full z-10 mt-1 min-w-max border border-red-200 bg-white px-2 py-1 text-left text-xs text-red-700 shadow-sm"
+                >
+                    {validationError}
+                </span>
+            )}
 
             {suffix && <span className="text-gray-600 ml-1 text-sm">{suffix}</span>}
         </div>
