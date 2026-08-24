@@ -92,8 +92,12 @@ from .api.routes import metadata
 from .api.routes import calculations
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
-from .api.routes import canonical_erp_reads, canonical_purchase_order_reads
-from .api.routes import canonical_goods_receipts
+from .api.routes import (
+    canonical_erp_reads,
+    canonical_goods_receipts,
+    canonical_purchase_order_reads,
+    canonical_supplier_invoice_reads,
+)
 from .api.routes import web_operator_actions
 from .api.routes.internal import (
     mcp_actions,
@@ -261,6 +265,7 @@ api.include_router(audit_router, tags=["Audit Trail"])
 api.include_router(canonical_erp_reads.router, tags=["Canonical ERP Reads"])
 api.include_router(canonical_purchase_order_reads.router)
 api.include_router(canonical_goods_receipts.router, tags=["Canonical Goods Receipts"])
+api.include_router(canonical_supplier_invoice_reads.router)
 
 # --- Master Data ---
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])

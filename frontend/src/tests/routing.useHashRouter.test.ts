@@ -137,7 +137,7 @@ describe('sub-page deep-links', () => {
   );
 
   // purchase sub-pages
-  const purchaseSubpages = ['purchase', 'purchase-order', 'grn', 'purchase-history'];
+  const purchaseSubpages = ['purchase', 'supplier-invoice', 'purchase-order', 'grn', 'purchase-history'];
 
   it.each(purchaseSubpages)(
     '#/purchase/%s is correctly parsed',

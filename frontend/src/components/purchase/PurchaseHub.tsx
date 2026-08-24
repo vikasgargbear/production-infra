@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { PurchaseEntryFlow } from './purchase-entry';
+import CanonicalSupplierInvoiceFlow from './purchase-entry/CanonicalSupplierInvoiceFlow';
 import { PurchaseOrderFlow } from './purchase-order';
 import { GRNFlow } from './grn';
 import PurchaseListHistory from './PurchaseListHistory';
@@ -39,7 +40,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
   const canCreate = hasPermission('purchase', 'create');
 
   /** All valid sub-module IDs for deep-linking into PurchaseHub. */
-  const PURCHASE_SUBPAGE_IDS = ['purchase', 'purchase-order', 'grn', 'purchase-history'] as const;
+  const PURCHASE_SUBPAGE_IDS = ['purchase', 'supplier-invoice', 'purchase-order', 'grn', 'purchase-history'] as const;
 
   // State for PO → canonical goods-receipt navigation.
   const [receiptContext, setReceiptContext] = useState<CanonicalReceiptContext | null>(null);
@@ -113,6 +114,15 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
           icon: FileText,
           color: 'indigo',
           component: PurchaseOrderFlow
+        },
+        {
+          id: 'supplier-invoice',
+          label: 'Invoice',
+          fullLabel: 'Supplier Invoice',
+          description: 'Match posted GRNs',
+          icon: FileText,
+          color: 'indigo',
+          component: CanonicalSupplierInvoiceFlow
         }
       );
     }
