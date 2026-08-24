@@ -15,6 +15,7 @@ import {
     type CanonicalCommandPreview,
 } from '../../canonicalOperatorActions';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
+import type { CanonicalInvoiceDetail } from './canonicalSalesDocuments.types';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -75,7 +76,7 @@ export const invoicesApi = {
 
     /** Get invoice by ID */
     getById: (id: number | string) => {
-        return apiHelpers.get(ENDPOINTS.DETAILS(id));
+        return apiHelpers.get<CanonicalInvoiceDetail>(`/canonical/invoices/${id}`);
     },
 
     /** Create new invoice */
@@ -95,7 +96,7 @@ export const invoicesApi = {
         const completed = canonicalExecutionCompleted(executed.data);
         const resourceId = executed?.data?.resource_id;
         const canonicalInvoice = completed && resourceId
-            ? await apiHelpers.get(`/canonical/invoices/${resourceId}`)
+            ? await apiHelpers.get<CanonicalInvoiceDetail>(`/canonical/invoices/${resourceId}`)
             : null;
         return {
             ...executed,

@@ -7,6 +7,7 @@ import {
     exactDecimalUnits,
     normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
+import type { CanonicalExecutedBatchAllocation } from '../../../services/api/modules/sales/canonicalSalesDocuments.types';
 
 export function extractDocumentCollection(
     response: unknown,
@@ -106,27 +107,6 @@ export interface CanonicalImportLine {
     dispatch_line_id?: string | null;
 }
 
-interface CanonicalExecutedBatchAllocation {
-    source_kind: CanonicalAllocationSourceKind;
-    allocation_id: string;
-    source_line_id?: string;
-    command_request_id?: string | null;
-    inventory_document_id: string;
-    inventory_document_line_id: string;
-    from_location_id?: string;
-    invoice_dispatch_allocation_id?: string | null;
-    dispatch_id?: string | null;
-    dispatch_line_id?: string | null;
-    batch_id: string | number;
-    batch_number: string;
-    expiry_date?: string | null;
-    billed_quantity?: number | string | null;
-    free_quantity?: number | string | null;
-    base_quantity?: number | string | null;
-    base_billed_quantity?: number | string | null;
-    base_free_quantity?: number | string | null;
-}
-
 const exactOptional = (
     value: unknown,
     label: string,
@@ -134,6 +114,9 @@ const exactOptional = (
 ): string | null => {
     if (value === undefined || value === null
         || (typeof value === 'string' && value.trim() === '')) return null;
+    if (typeof value !== 'string') {
+        throw new Error(`${label} must be an exact decimal string from the canonical API.`);
+    }
     return normalizeExactDecimal(value, label, { scale });
 };
 
@@ -354,7 +337,7 @@ const projectExecutedAllocations = (
         dispatch_id: allocation.dispatch_id ?? null,
         dispatch_line_id: allocation.dispatch_line_id ?? null,
         branch_id: typeof item.branch_id === 'string' ? item.branch_id : undefined,
-        location_id: allocation.from_location_id,
+        location_id: allocation.from_location_id ?? undefined,
         uom_conversion_id: typeof item.uom_conversion_id === 'string'
             ? item.uom_conversion_id
             : undefined,

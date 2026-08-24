@@ -178,15 +178,24 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     );
     expect(invoiceDetail.status).toBe('posted');
     expect(invoiceDetail.items).toHaveLength(1);
+    expect(invoiceDetail.items[0]).toEqual(expect.objectContaining({
+      quantity: '1.125000',
+      free_quantity: '0.250000',
+      base_billed_quantity: '1.125000',
+      base_free_quantity: '0.250000',
+      unit_price: '84.1250',
+    }));
     expect(invoiceDetail.items[0].batch_id).toBe(selectedBatchId);
     expect(invoiceDetail.items[0].batch_allocations).toHaveLength(1);
     expect(invoiceDetail.items[0].batch_allocations[0]).toEqual(expect.objectContaining({
       source_kind: 'direct_issue',
       batch_id: selectedBatchId,
-      billed_quantity: 1.125,
-      free_quantity: 0.25,
-      base_billed_quantity: 1.125,
-      base_free_quantity: 0.25,
+      base_quantity: '1.375000',
+      entered_quantity: '1.375000',
+      billed_quantity: '1.125000',
+      free_quantity: '0.250000',
+      base_billed_quantity: '1.125000',
+      base_free_quantity: '0.250000',
       inventory_document_id: postingReadback.invoice_inventory_document_id,
       inventory_document_line_id: postingReadback.inventory_evidence[0].inventory_document_line_id,
     }));

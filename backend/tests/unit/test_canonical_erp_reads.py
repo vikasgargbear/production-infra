@@ -1,4 +1,5 @@
 import inspect
+import json
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -208,8 +209,11 @@ def test_uuid_sales_document_detail_reads_include_importable_lines(monkeypatch) 
     assert "line.line_discount_kind='percent'" in captured[1][0]
     for sql, _params in captured:
         assert "'product_name', product.name" in sql
-        assert "'quantity', line.billed_quantity" in sql
-        assert "'unit_price', line.quoted_unit_rate" in sql
+        assert "to_char(line.billed_quantity" in sql
+        assert "to_char(line.quoted_unit_rate" in sql
+        assert "FM999999999999999990.000000" in sql
+        assert "FM999999999999999990.0000" in sql
+        assert "FM999999999999999990.00" in sql
 
 
 def test_order_and_challan_import_details_include_canonical_batch_allocations(monkeypatch) -> None:
@@ -291,14 +295,99 @@ def test_order_and_challan_import_routes_publish_strict_authoritative_contracts(
         "'inventory_document_id', inventory_document.id",
         "'inventory_document_line_id', inventory_line.id",
         "'dispatch_line_id', line.id",
-        "'base_billed_quantity', line.base_billed_quantity",
-        "'base_free_quantity', line.base_free_quantity",
+        "line.base_billed_quantity",
+        "line.base_free_quantity",
         "candidate_command.status='succeeded'",
         "candidate_document.status='posted'",
         "source_item_count",
         "importable_item_count",
     ):
         assert evidence in challan_source
+
+
+def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -> None:
+    schema = app.openapi()
+    components = schema["components"]["schemas"]
+    exact_fields = {
+        "CanonicalInvoiceExecutedBatchAllocation": {
+            "base_quantity": 6, "entered_quantity": 6,
+            "base_billed_quantity": 6, "base_free_quantity": 6,
+            "billed_quantity": 6, "free_quantity": 6,
+        },
+        "CanonicalInvoiceDetailItem": {
+            "quantity": 6, "free_quantity": 6,
+            "base_billed_quantity": 6, "base_free_quantity": 6,
+            "unit_price": 4, "discount_percent": 6, "tax_rate": 6,
+            "gst_percent": 6, "taxable_amount": 2, "cgst_amount": 2,
+            "sgst_amount": 2, "igst_amount": 2, "cess_amount": 2,
+            "line_total": 2,
+        },
+        "CanonicalSalesOrderImportItem": {
+            "quantity": 6, "free_quantity": 6, "unit_price": 4,
+            "discount_percent": 6, "tax_rate": 6, "gst_percent": 6,
+            "taxable_amount": 2, "cgst_amount": 2, "sgst_amount": 2,
+            "igst_amount": 2, "line_total": 2, "mrp": 4,
+            "available_quantity": 6,
+        },
+        "CanonicalDispatchImportAllocation": {
+            "base_quantity": 6, "base_billed_quantity": 6,
+            "base_free_quantity": 6, "billed_quantity": 6,
+            "free_quantity": 6,
+        },
+        "CanonicalChallanImportItem": {
+            "quantity": 6, "dispatched_quantity": 6, "free_quantity": 6,
+            "unit_price": 4, "discount_percent": 6, "tax_rate": 6,
+            "gst_percent": 6, "taxable_amount": 2, "cgst_amount": 2,
+            "sgst_amount": 2, "igst_amount": 2, "line_total": 2, "mrp": 4,
+        },
+        "CanonicalInvoiceDetailResponse": {
+            "taxable_amount": 2, "cgst_amount": 2, "sgst_amount": 2,
+            "igst_amount": 2, "cess_amount": 2, "total_amount": 2,
+        },
+        "CanonicalSalesOrderImportDetail": {"total_amount": 2},
+        "CanonicalChallanImportDetail": {"total_amount": 2},
+    }
+    for model, fields in exact_fields.items():
+        properties = components[model]["properties"]
+        for field, scale in fields.items():
+            assert field in components[model]["required"]
+            assert properties[field]["type"] == "string"
+            assert "anyOf" not in properties[field]
+            assert properties[field]["pattern"].endswith(rf"\.[0-9]{{{scale}}}$")
+
+    route_models = {
+        "/api/canonical/invoices/{invoice_id}": (
+            "CanonicalInvoiceDetailResponse", "canonical_invoice_exact_detail",
+        ),
+        "/api/canonical/sales-orders/{order_id}/import-detail": (
+            "CanonicalSalesOrderImportDetail", "canonical_sales_order_import_detail",
+        ),
+        "/api/canonical/challans/{challan_id}/import-detail": (
+            "CanonicalChallanImportDetail", "canonical_challan_import_detail",
+        ),
+    }
+    for path, (model, operation_id) in route_models.items():
+        operation = schema["paths"][path]["get"]
+        assert operation["operationId"] == operation_id
+        response_schema = operation["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        assert response_schema == {"$ref": f"#/components/schemas/{model}"}
+
+    compatibility_operation_ids = {
+        route.operation_id
+        for route in app.routes
+        if getattr(route, "endpoint", None) in {
+            canonical_erp_reads.canonical_invoice_compatibility_detail,
+            canonical_erp_reads.canonical_sales_order_compatibility_detail,
+            canonical_erp_reads.canonical_challan_compatibility_detail,
+        }
+    }
+    assert compatibility_operation_ids >= {
+        "canonical_invoice_uuid_compatibility_detail",
+        "canonical_sales_order_uuid_compatibility_detail",
+        "canonical_challan_uuid_compatibility_detail",
+    }
 
 
 def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fields() -> None:
@@ -314,13 +403,15 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
         "product_code": "BOX", "hsn_code": "481910",
         "branch_id": ids["branch"], "location_id": ids["location"],
         "uom_conversion_id": ids["uom"], "uom_code": "EA", "unit": "EA",
-        "quantity": 1.25, "free_quantity": 0.25,
+        "quantity": "1.250000", "free_quantity": "0.250000",
         "free_supply_tax_treatment": "included_at_unit_rate",
-        "unit_price": 100, "discount_percent": 0, "tax_rate": 12,
-        "gst_percent": 12, "taxable_amount": 150, "cgst_amount": 9,
-        "sgst_amount": 9, "igst_amount": 0, "line_total": 168,
+        "unit_price": "100.0000", "discount_percent": "0.000000",
+        "tax_rate": "12.000000", "gst_percent": "12.000000",
+        "taxable_amount": "150.00", "cgst_amount": "9.00",
+        "sgst_amount": "9.00", "igst_amount": "0.00",
+        "line_total": "168.00",
         "batch_id": ids["batch"], "batch_number": "B-1", "expiry_date": None,
-        "mrp": 150, "available_quantity": 1.5,
+        "mrp": "150.0000", "available_quantity": "1.500000",
     }
     order = {
         "order_id": ids["order"], "id": ids["order"], "order_number": "SO-1",
@@ -331,11 +422,15 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
         "billing_address": "A", "billing_city": "Pune", "billing_state": "27",
         "billing_pincode": "411001", "shipping_address": "A",
         "shipping_city": "Pune", "shipping_state": "27",
-        "shipping_pincode": "411001", "total_amount": 168,
+        "shipping_pincode": "411001", "total_amount": "168.00",
         "items": [order_item], "source_item_count": 1, "importable_item_count": 1,
         "created_at": now, "updated_at": now,
     }
-    canonical_erp_reads.CanonicalSalesOrderImportDetail.model_validate(order)
+    order_response = canonical_erp_reads.CanonicalSalesOrderImportDetail.model_validate(order)
+    order_wire = json.loads(order_response.model_dump_json())
+    assert order_wire["total_amount"] == "168.00"
+    assert order_wire["items"][0]["quantity"] == "1.250000"
+    assert order_wire["items"][0]["unit_price"] == "100.0000"
     with pytest.raises(ValidationError, match="cardinality"):
         canonical_erp_reads.CanonicalSalesOrderImportDetail.model_validate({
             **order, "source_item_count": 2,
@@ -355,9 +450,9 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
         "invoice_dispatch_allocation_id": None,
         "dispatch_id": ids["challan"], "dispatch_line_id": ids["dispatch_line"],
         "batch_id": ids["batch"], "batch_number": "B-1", "expiry_date": None,
-        "from_location_id": ids["location"], "base_quantity": 15,
-        "base_billed_quantity": 12.5, "base_free_quantity": 2.5,
-        "billed_quantity": 1.25, "free_quantity": 0.25,
+        "from_location_id": ids["location"], "base_quantity": "15.000000",
+        "base_billed_quantity": "12.500000", "base_free_quantity": "2.500000",
+        "billed_quantity": "1.250000", "free_quantity": "0.250000",
     }
     challan_item = {
         **{key: value for key, value in order_item.items() if key not in {
@@ -365,7 +460,7 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
         }},
         "id": ids["dispatch_line"],
         "source_document_kind": "delivery_challan",
-        "dispatched_quantity": 1.25,
+        "dispatched_quantity": "1.250000",
         "batch_allocations": [allocation],
     }
     challan = {
@@ -377,10 +472,16 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
         "delivery_state": "27", "delivery_pincode": "411001",
         "transport_company": None, "vehicle_number": None, "lr_number": None,
         "items": [challan_item], "source_item_count": 1,
-        "importable_item_count": 1, "total_amount": 168,
+        "importable_item_count": 1, "total_amount": "168.00",
         "created_at": now, "updated_at": now,
     }
-    canonical_erp_reads.CanonicalChallanImportDetail.model_validate(challan)
+    challan_response = canonical_erp_reads.CanonicalChallanImportDetail.model_validate(challan)
+    challan_wire = json.loads(challan_response.model_dump_json())
+    assert challan_wire["total_amount"] == "168.00"
+    assert challan_wire["items"][0]["dispatched_quantity"] == "1.250000"
+    assert challan_wire["items"][0]["batch_allocations"][0][
+        "base_quantity"
+    ] == "15.000000"
     with pytest.raises(ValidationError, match="quantities do not reconcile"):
         canonical_erp_reads.CanonicalChallanImportDetail.model_validate({
             **challan,
@@ -790,10 +891,11 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert "executed.invoice_dispatch_allocation_id" in source
     assert "invoice_allocation.id AS invoice_dispatch_allocation_id" in source
     assert "inventory_line.id AS inventory_document_line_id" in source
-    assert "'base_billed_quantity', executed.base_billed_quantity" in source
-    assert "'base_free_quantity', executed.base_free_quantity" in source
-    assert "'billed_quantity', executed.billed_quantity" in source
-    assert "'free_quantity', executed.free_quantity" in source
+    assert "executed.base_billed_quantity" in source
+    assert "executed.base_free_quantity" in source
+    assert "executed.billed_quantity" in source
+    assert "executed.free_quantity" in source
+    assert source.count("FM999999999999999990.000000") >= 10
     assert "command.status='succeeded'" in source
     assert "command.result_resource_id=invoice.id" in source
     assert "command.request_hash=extensions.digest(" not in source
@@ -804,7 +906,7 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert "HAVING count(*)=1" not in source
     assert "evidence_match_count" in source
     assert "candidate.value->>'inventory_line_id'" in source
-    assert "'entered_quantity', executed.entered_quantity" in source
+    assert "executed.entered_quantity" in source
     assert "inventory_document.document_type='sales_issue'" in source
     assert "inventory_document.status='posted'" in source
     assert "dispatch.status='posted'" in source
@@ -978,14 +1080,15 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         allocation("dispatch_allocation", expires=date(2028, 9, 1))
         for _ in range(3)
     ]
-    for value in three_way_dispatch:
+    thirds = ["0.333333", "0.333333", "0.333334"]
+    for value, exact_third in zip(three_way_dispatch, thirds):
         value.update({
-            "base_quantity": 1,
-            "entered_quantity": 1 / 3,
-            "base_billed_quantity": 1,
-            "base_free_quantity": 0,
-            "billed_quantity": 1 / 3,
-            "free_quantity": 0,
+            "base_quantity": "1.000000",
+            "entered_quantity": exact_third,
+            "base_billed_quantity": "1.000000",
+            "base_free_quantity": "0.000000",
+            "billed_quantity": exact_third,
+            "free_quantity": "0.000000",
         })
     apportioned = item(three_way_dispatch)
     apportioned["quantity"] = 1
@@ -994,6 +1097,15 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         apportioned
     )
     assert len(response_item.batch_allocations) == 3
+    wire_item = json.loads(response_item.model_dump_json())
+    assert wire_item["quantity"] == "1.000000"
+    assert wire_item["unit_price"] == "150.0000"
+    assert wire_item["discount_percent"] == "0.000000"
+    assert wire_item["line_total"] == "168.00"
+    assert [
+        allocation["billed_quantity"]
+        for allocation in wire_item["batch_allocations"]
+    ] == thirds
     base_drift = {**apportioned, "base_billed_quantity": 2.999999}
     with pytest.raises(ValidationError, match="do not reconcile"):
         canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(base_drift)

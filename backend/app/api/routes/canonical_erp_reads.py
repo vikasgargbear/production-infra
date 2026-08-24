@@ -10,13 +10,20 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, Literal, Optional
+from decimal import Decimal
+from typing import Annotated, Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    WithJsonSchema,
+    model_validator,
+)
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -31,21 +38,55 @@ from ..schemas.master.supplier import CanonicalSupplierCreate
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
 logger = logging.getLogger(__name__)
 
-_ALLOCATION_QUANTITY_QUANTUM = Decimal("0.000001")
+
+def _quantity_wire(value: Decimal) -> str:
+    return format(value, ".6f")
 
 
-def _allocation_quantity_units(value: Any) -> int:
-    """Normalize compatibility floats to canonical numeric(20,6) micro-units."""
-    normalized = Decimal(str(value)).quantize(
-        _ALLOCATION_QUANTITY_QUANTUM, rounding=ROUND_HALF_UP
-    )
-    return int(normalized / _ALLOCATION_QUANTITY_QUANTUM)
+def _rate_wire(value: Decimal) -> str:
+    return format(value, ".4f")
 
 
-def _allocation_quantities_match(left: Any, right: Any, *, tolerance_units: int) -> bool:
-    return abs(
-        _allocation_quantity_units(left) - _allocation_quantity_units(right)
-    ) <= tolerance_units
+def _percent_wire(value: Decimal) -> str:
+    return format(value, ".6f")
+
+
+def _money_wire(value: Decimal) -> str:
+    return format(value, ".2f")
+
+
+def _exact_string_schema(scale: int, label: str) -> dict[str, Any]:
+    return {
+        "type": "string",
+        "pattern": rf"^(?:0|[1-9][0-9]*)\.[0-9]{{{scale}}}$",
+        "description": f"Exact non-negative {label}; never a JSON number.",
+    }
+
+
+ExactQuantity = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_quantity_wire, return_type=str, when_used="json"),
+    WithJsonSchema(_exact_string_schema(6, "quantity"), mode="serialization"),
+]
+ExactRate = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=4),
+    PlainSerializer(_rate_wire, return_type=str, when_used="json"),
+    WithJsonSchema(_exact_string_schema(4, "rate"), mode="serialization"),
+]
+ExactPercent = Annotated[
+    Decimal,
+    Field(ge=0, le=100, max_digits=20, decimal_places=6),
+    PlainSerializer(_percent_wire, return_type=str, when_used="json"),
+    WithJsonSchema(_exact_string_schema(6, "percentage"), mode="serialization"),
+]
+ExactMoney = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=2),
+    PlainSerializer(_money_wire, return_type=str, when_used="json"),
+    WithJsonSchema(_exact_string_schema(2, "money amount"), mode="serialization"),
+]
 
 
 def _activate(db: Session, user: Dict[str, Any]) -> UUID:
@@ -2000,12 +2041,12 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
     expiry_date: Optional[date]
     from_location_id: Optional[UUID]
     uom_code: str
-    base_quantity: float
-    entered_quantity: float
-    base_billed_quantity: float
-    base_free_quantity: float
-    billed_quantity: float
-    free_quantity: float
+    base_quantity: ExactQuantity
+    entered_quantity: ExactQuantity
+    base_billed_quantity: ExactQuantity
+    base_free_quantity: ExactQuantity
+    billed_quantity: ExactQuantity
+    free_quantity: ExactQuantity
 
     @model_validator(mode="after")
     def validate_source_identity(self):
@@ -2033,11 +2074,7 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
             raise ValueError("direct issue requires exactly one matched succeeded command evidence")
         elif self.invoice_dispatch_allocation_id or self.dispatch_id or self.dispatch_line_id:
             raise ValueError("direct issue cannot claim dispatch allocation identities")
-        if not _allocation_quantities_match(
-            self.entered_quantity,
-            self.billed_quantity + self.free_quantity,
-            tolerance_units=1,
-        ):
+        if self.entered_quantity != self.billed_quantity + self.free_quantity:
             raise ValueError("executed allocation entered quantities do not reconcile")
         return self
 
@@ -2052,23 +2089,23 @@ class CanonicalInvoiceDetailItem(BaseModel):
     hsn_code: str
     uom_code: str
     unit: str
-    quantity: float
-    free_quantity: float
-    base_billed_quantity: float
-    base_free_quantity: float
+    quantity: ExactQuantity
+    free_quantity: ExactQuantity
+    base_billed_quantity: ExactQuantity
+    base_free_quantity: ExactQuantity
     free_supply_tax_treatment: Literal[
         "excluded_from_taxable_value", "included_at_unit_rate"
     ]
-    unit_price: float
-    discount_percent: float
-    tax_rate: float
-    gst_percent: float
-    taxable_amount: float
-    cgst_amount: float
-    sgst_amount: float
-    igst_amount: float
-    cess_amount: float
-    line_total: float
+    unit_price: ExactRate
+    discount_percent: ExactPercent
+    tax_rate: ExactPercent
+    gst_percent: ExactPercent
+    taxable_amount: ExactMoney
+    cgst_amount: ExactMoney
+    sgst_amount: ExactMoney
+    igst_amount: ExactMoney
+    cess_amount: ExactMoney
+    line_total: ExactMoney
     batch_id: Optional[UUID]
     batch_number: Optional[str]
     expiry_date: Optional[date]
@@ -2107,10 +2144,8 @@ class CanonicalInvoiceDetailItem(BaseModel):
                     "direct physical allocation count does not match command evidence"
                 )
         for allocation in self.batch_allocations:
-            if not _allocation_quantities_match(
-                allocation.base_quantity,
-                allocation.base_billed_quantity + allocation.base_free_quantity,
-                tolerance_units=0,
+            if allocation.base_quantity != (
+                allocation.base_billed_quantity + allocation.base_free_quantity
             ):
                 raise ValueError("executed allocation base quantities do not reconcile")
             if allocation.source_kind == "direct_issue" and (
@@ -2122,26 +2157,22 @@ class CanonicalInvoiceDetailItem(BaseModel):
             ):
                 raise ValueError("dispatch allocation identity must remain distinct")
         if (
-            not _allocation_quantities_match(
-                sum(value.billed_quantity for value in self.batch_allocations),
-                self.quantity,
-                tolerance_units=1,
-            )
-            or not _allocation_quantities_match(
-                sum(value.free_quantity for value in self.batch_allocations),
-                self.free_quantity,
-                tolerance_units=1,
-            )
-            or not _allocation_quantities_match(
-                sum(value.base_billed_quantity for value in self.batch_allocations),
-                self.base_billed_quantity,
-                tolerance_units=0,
-            )
-            or not _allocation_quantities_match(
-                sum(value.base_free_quantity for value in self.batch_allocations),
-                self.base_free_quantity,
-                tolerance_units=0,
-            )
+            sum(
+                (value.billed_quantity for value in self.batch_allocations),
+                Decimal("0"),
+            ) != self.quantity
+            or sum(
+                (value.free_quantity for value in self.batch_allocations),
+                Decimal("0"),
+            ) != self.free_quantity
+            or sum(
+                (value.base_billed_quantity for value in self.batch_allocations),
+                Decimal("0"),
+            ) != self.base_billed_quantity
+            or sum(
+                (value.base_free_quantity for value in self.batch_allocations),
+                Decimal("0"),
+            ) != self.base_free_quantity
         ):
             raise ValueError("executed allocations do not reconcile to invoice quantities")
         if len(self.batch_allocations) == 1:
@@ -2171,25 +2202,25 @@ class CanonicalSalesOrderImportItem(BaseModel):
     uom_conversion_id: UUID
     uom_code: str
     unit: str
-    quantity: float
-    free_quantity: float
+    quantity: ExactQuantity
+    free_quantity: ExactQuantity
     free_supply_tax_treatment: Literal[
         "excluded_from_taxable_value", "included_at_unit_rate"
     ]
-    unit_price: float
-    discount_percent: float
-    tax_rate: float
-    gst_percent: float
-    taxable_amount: float
-    cgst_amount: float
-    sgst_amount: float
-    igst_amount: float
-    line_total: float
+    unit_price: ExactRate
+    discount_percent: ExactPercent
+    tax_rate: ExactPercent
+    gst_percent: ExactPercent
+    taxable_amount: ExactMoney
+    cgst_amount: ExactMoney
+    sgst_amount: ExactMoney
+    igst_amount: ExactMoney
+    line_total: ExactMoney
     batch_id: UUID
     batch_number: str
     expiry_date: Optional[date]
-    mrp: float
-    available_quantity: float = Field(ge=0)
+    mrp: ExactRate
+    available_quantity: ExactQuantity
 
     @model_validator(mode="after")
     def validate_quantity(self):
@@ -2218,11 +2249,11 @@ class CanonicalDispatchImportAllocation(BaseModel):
     batch_number: str
     expiry_date: Optional[date]
     from_location_id: UUID
-    base_quantity: float
-    base_billed_quantity: float
-    base_free_quantity: float
-    billed_quantity: float
-    free_quantity: float
+    base_quantity: ExactQuantity
+    base_billed_quantity: ExactQuantity
+    base_free_quantity: ExactQuantity
+    billed_quantity: ExactQuantity
+    free_quantity: ExactQuantity
 
     @model_validator(mode="after")
     def validate_lineage(self):
@@ -2234,11 +2265,7 @@ class CanonicalDispatchImportAllocation(BaseModel):
             raise ValueError("dispatch import base quantities cannot be negative")
         if self.billed_quantity < 0 or self.free_quantity < 0:
             raise ValueError("dispatch import entered quantities cannot be negative")
-        if not _allocation_quantities_match(
-            self.base_quantity,
-            self.base_billed_quantity + self.base_free_quantity,
-            tolerance_units=0,
-        ):
+        if self.base_quantity != self.base_billed_quantity + self.base_free_quantity:
             raise ValueError("dispatch import base quantities do not reconcile")
         return self
 
@@ -2256,25 +2283,25 @@ class CanonicalChallanImportItem(BaseModel):
     uom_conversion_id: UUID
     uom_code: str
     unit: str
-    quantity: float
-    dispatched_quantity: float
-    free_quantity: float
+    quantity: ExactQuantity
+    dispatched_quantity: ExactQuantity
+    free_quantity: ExactQuantity
     free_supply_tax_treatment: Literal[
         "excluded_from_taxable_value", "included_at_unit_rate"
     ]
-    unit_price: float
-    discount_percent: float
-    tax_rate: float
-    gst_percent: float
-    taxable_amount: float
-    cgst_amount: float
-    sgst_amount: float
-    igst_amount: float
-    line_total: float
+    unit_price: ExactRate
+    discount_percent: ExactPercent
+    tax_rate: ExactPercent
+    gst_percent: ExactPercent
+    taxable_amount: ExactMoney
+    cgst_amount: ExactMoney
+    sgst_amount: ExactMoney
+    igst_amount: ExactMoney
+    line_total: ExactMoney
     batch_id: UUID
     batch_number: str
     expiry_date: Optional[date]
-    mrp: float
+    mrp: ExactRate
     batch_allocations: list[CanonicalDispatchImportAllocation]
 
     @model_validator(mode="after")
@@ -2285,12 +2312,8 @@ class CanonicalChallanImportItem(BaseModel):
         if allocation.dispatch_line_id != self.id:
             raise ValueError("challan allocation does not belong to its source line")
         if (
-            not _allocation_quantities_match(
-                allocation.billed_quantity, self.quantity, tolerance_units=0
-            )
-            or not _allocation_quantities_match(
-                allocation.free_quantity, self.free_quantity, tolerance_units=0
-            )
+            allocation.billed_quantity != self.quantity
+            or allocation.free_quantity != self.free_quantity
         ):
             raise ValueError("challan allocation quantities do not reconcile")
         return self
@@ -2319,7 +2342,7 @@ class CanonicalSalesOrderImportDetail(BaseModel):
     shipping_city: str
     shipping_state: str
     shipping_pincode: str
-    total_amount: float
+    total_amount: ExactMoney
     items: list[CanonicalSalesOrderImportItem]
     source_item_count: int = Field(exclude=True)
     importable_item_count: int = Field(exclude=True)
@@ -2359,7 +2382,7 @@ class CanonicalChallanImportDetail(BaseModel):
     items: list[CanonicalChallanImportItem]
     source_item_count: int = Field(exclude=True)
     importable_item_count: int = Field(exclude=True)
-    total_amount: float
+    total_amount: ExactMoney
     created_at: datetime
     updated_at: datetime
 
@@ -2390,12 +2413,12 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     shipping_address: str
     due_date: Optional[date]
     currency_code: str
-    taxable_amount: float
-    cgst_amount: float
-    sgst_amount: float
-    igst_amount: float
-    cess_amount: float
-    total_amount: float
+    taxable_amount: ExactMoney
+    cgst_amount: ExactMoney
+    sgst_amount: ExactMoney
+    igst_amount: ExactMoney
+    cess_amount: ExactMoney
+    total_amount: ExactMoney
     items: list[CanonicalInvoiceDetailItem]
     created_at: datetime
     updated_at: datetime
@@ -2422,12 +2445,12 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                invoice.buyer_address_snapshot AS billing_address,
                invoice.buyer_address_snapshot AS shipping_address,
                invoice.due_date, invoice.currency_code,
-               invoice.gst_taxable_total AS taxable_amount,
-               invoice.cgst_total AS cgst_amount,
-               invoice.sgst_total AS sgst_amount,
-               invoice.igst_total AS igst_amount,
-               invoice.cess_total AS cess_amount,
-               invoice.grand_total AS total_amount,
+               to_char(invoice.gst_taxable_total, 'FM999999999999999990.00') AS taxable_amount,
+               to_char(invoice.cgst_total, 'FM999999999999999990.00') AS cgst_amount,
+               to_char(invoice.sgst_total, 'FM999999999999999990.00') AS sgst_amount,
+               to_char(invoice.igst_total, 'FM999999999999999990.00') AS igst_amount,
+               to_char(invoice.cess_total, 'FM999999999999999990.00') AS cess_amount,
+               to_char(invoice.grand_total, 'FM999999999999999990.00') AS total_amount,
                COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
@@ -2448,21 +2471,39 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
                          'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
-                         'unit', line.uom_code, 'quantity', line.billed_quantity,
-                         'free_quantity', line.free_quantity,
-                         'base_billed_quantity', line.base_billed_quantity,
-                         'base_free_quantity', line.base_free_quantity,
+                         'unit', line.uom_code, 'quantity',
+                             to_char(line.billed_quantity, 'FM999999999999999990.000000'),
+                         'free_quantity',
+                             to_char(line.free_quantity, 'FM999999999999999990.000000'),
+                         'base_billed_quantity',
+                             to_char(line.base_billed_quantity, 'FM999999999999999990.000000'),
+                         'base_free_quantity',
+                             to_char(line.base_free_quantity, 'FM999999999999999990.000000'),
                          'free_supply_tax_treatment', line.free_supply_tax_treatment,
-                         'unit_price', line.quoted_unit_rate,
-                         'discount_percent', CASE
+                         'unit_price',
+                             to_char(line.quoted_unit_rate, 'FM999999999999999990.0000'),
+                         'discount_percent', to_char(CASE
                              WHEN line.line_discount_kind='percent'
                              THEN line.line_discount_value ELSE 0 END,
-                         'tax_rate', line.cgst_rate + line.sgst_rate + line.igst_rate,
-                         'gst_percent', line.cgst_rate + line.sgst_rate + line.igst_rate,
-                         'taxable_amount', line.gst_taxable_value,
-                         'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
-                         'igst_amount', line.igst_amount, 'cess_amount', line.cess_amount,
-                         'line_total', line.line_total,
+                             'FM999999999999999990.000000'),
+                         'tax_rate', to_char(
+                             line.cgst_rate + line.sgst_rate + line.igst_rate,
+                             'FM999999999999999990.000000'),
+                         'gst_percent', to_char(
+                             line.cgst_rate + line.sgst_rate + line.igst_rate,
+                             'FM999999999999999990.000000'),
+                         'taxable_amount',
+                             to_char(line.gst_taxable_value, 'FM999999999999999990.00'),
+                         'cgst_amount',
+                             to_char(line.cgst_amount, 'FM999999999999999990.00'),
+                         'sgst_amount',
+                             to_char(line.sgst_amount, 'FM999999999999999990.00'),
+                         'igst_amount',
+                             to_char(line.igst_amount, 'FM999999999999999990.00'),
+                         'cess_amount',
+                             to_char(line.cess_amount, 'FM999999999999999990.00'),
+                         'line_total',
+                             to_char(line.line_total, 'FM999999999999999990.00'),
                          'batch_id', CASE WHEN allocation.allocation_count=1
                                           THEN allocation.batch_id END,
                          'batch_number', CASE WHEN allocation.allocation_count=1
@@ -2504,12 +2545,24 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                'expiry_date', executed.expiry_date,
                                'from_location_id', executed.from_location_id,
                                'uom_code', executed.uom_code,
-                               'base_quantity', executed.base_quantity,
-                               'entered_quantity', executed.entered_quantity,
-                               'base_billed_quantity', executed.base_billed_quantity,
-                               'base_free_quantity', executed.base_free_quantity,
-                               'billed_quantity', executed.billed_quantity,
-                               'free_quantity', executed.free_quantity
+                               'base_quantity', to_char(
+                                   executed.base_quantity,
+                                   'FM999999999999999990.000000'),
+                               'entered_quantity', to_char(
+                                   executed.entered_quantity,
+                                   'FM999999999999999990.000000'),
+                               'base_billed_quantity', to_char(
+                                   executed.base_billed_quantity,
+                                   'FM999999999999999990.000000'),
+                               'base_free_quantity', to_char(
+                                   executed.base_free_quantity,
+                                   'FM999999999999999990.000000'),
+                               'billed_quantity', to_char(
+                                   executed.billed_quantity,
+                                   'FM999999999999999990.000000'),
+                               'free_quantity', to_char(
+                                   executed.free_quantity,
+                                   'FM999999999999999990.000000')
                            ) ORDER BY executed.source_kind, executed.allocation_id)
                              AS batch_allocations
                       FROM (
@@ -2638,18 +2691,23 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                  line.uom_code,
                                  invoice_allocation.allocated_base_billed_quantity
                                    + invoice_allocation.allocated_base_free_quantity AS base_quantity,
-                                 invoice_allocation.allocated_base_billed_quantity
-                                   / NULLIF(line.uom_conversion_factor, 0)
-                                   + invoice_allocation.allocated_base_free_quantity
-                                   / NULLIF(line.uom_conversion_factor, 0) AS entered_quantity,
+                                 pg_catalog.round(
+                                   (invoice_allocation.allocated_base_billed_quantity
+                                     + invoice_allocation.allocated_base_free_quantity)
+                                   / NULLIF(line.uom_conversion_factor, 0), 6
+                                 ) AS entered_quantity,
                                  invoice_allocation.allocated_base_billed_quantity
                                    AS base_billed_quantity,
                                  invoice_allocation.allocated_base_free_quantity
                                    AS base_free_quantity,
-                                 invoice_allocation.allocated_base_billed_quantity
-                                   / NULLIF(line.uom_conversion_factor, 0) AS billed_quantity,
-                                 invoice_allocation.allocated_base_free_quantity
-                                   / NULLIF(line.uom_conversion_factor, 0) AS free_quantity
+                                 pg_catalog.round(
+                                   invoice_allocation.allocated_base_billed_quantity
+                                   / NULLIF(line.uom_conversion_factor, 0), 6
+                                 ) AS billed_quantity,
+                                 pg_catalog.round(
+                                   invoice_allocation.allocated_base_free_quantity
+                                   / NULLIF(line.uom_conversion_factor, 0), 6
+                                 ) AS free_quantity
                             FROM sales.invoice_dispatch_allocations invoice_allocation
                             JOIN sales.dispatch_lines dispatch_line
                               ON dispatch_line.org_id=invoice_allocation.org_id
@@ -2688,6 +2746,7 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
 @router.get(
     "/canonical/invoices/{invoice_id}",
     response_model=CanonicalInvoiceDetailResponse,
+    operation_id="canonical_invoice_exact_detail",
 )
 def canonical_invoice(
     invoice_id: UUID,
@@ -2700,6 +2759,7 @@ def canonical_invoice(
 @router.get(
     "/invoices/{invoice_id:uuid}",
     response_model=CanonicalInvoiceDetailResponse,
+    operation_id="canonical_invoice_uuid_compatibility_detail",
 )
 def canonical_invoice_compatibility_detail(
     invoice_id: UUID,
@@ -2713,6 +2773,12 @@ def canonical_invoice_compatibility_detail(
 @router.get(
     "/sales-orders/{order_id:uuid}",
     response_model=CanonicalSalesOrderImportDetail,
+    operation_id="canonical_sales_order_uuid_compatibility_detail",
+)
+@router.get(
+    "/canonical/sales-orders/{order_id}/import-detail",
+    response_model=CanonicalSalesOrderImportDetail,
+    operation_id="canonical_sales_order_import_detail",
 )
 def canonical_sales_order_compatibility_detail(
     order_id: UUID,
@@ -2736,7 +2802,7 @@ def canonical_sales_order_compatibility_detail(
                shipping.line1 AS shipping_address,
                shipping.city AS shipping_city, shipping.state_code AS shipping_state,
                shipping.postal_code AS shipping_pincode,
-               document.grand_total AS total_amount,
+               to_char(document.grand_total, 'FM999999999999999990.00') AS total_amount,
                COALESCE(lines.items, '[]'::jsonb) AS items,
                (SELECT count(*)
                   FROM sales.order_lines source_line
@@ -2776,23 +2842,41 @@ def canonical_sales_order_compatibility_detail(
                          'location_id', reservation.location_id,
                          'uom_conversion_id', conversion.id,
                          'uom_code', line.uom_code,
-                         'unit', line.uom_code, 'quantity', line.billed_quantity,
-                         'free_quantity', line.free_quantity,
+                         'unit', line.uom_code, 'quantity',
+                             to_char(line.billed_quantity, 'FM999999999999999990.000000'),
+                         'free_quantity',
+                             to_char(line.free_quantity, 'FM999999999999999990.000000'),
                          'free_supply_tax_treatment', line.free_supply_tax_treatment,
-                         'unit_price', line.quoted_unit_rate,
-                         'discount_percent', CASE
+                         'unit_price',
+                             to_char(line.quoted_unit_rate, 'FM999999999999999990.0000'),
+                         'discount_percent', to_char(CASE
                              WHEN line.line_discount_kind='percent'
                              THEN line.line_discount_value ELSE 0 END,
-                         'tax_rate', line.cgst_rate + line.sgst_rate + line.igst_rate,
-                         'gst_percent', line.cgst_rate + line.sgst_rate + line.igst_rate,
-                         'taxable_amount', line.gst_taxable_value,
-                         'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
-                         'igst_amount', line.igst_amount, 'line_total', line.line_total,
+                             'FM999999999999999990.000000'),
+                         'tax_rate', to_char(
+                             line.cgst_rate + line.sgst_rate + line.igst_rate,
+                             'FM999999999999999990.000000'),
+                         'gst_percent', to_char(
+                             line.cgst_rate + line.sgst_rate + line.igst_rate,
+                             'FM999999999999999990.000000'),
+                         'taxable_amount',
+                             to_char(line.gst_taxable_value, 'FM999999999999999990.00'),
+                         'cgst_amount',
+                             to_char(line.cgst_amount, 'FM999999999999999990.00'),
+                         'sgst_amount',
+                             to_char(line.sgst_amount, 'FM999999999999999990.00'),
+                         'igst_amount',
+                             to_char(line.igst_amount, 'FM999999999999999990.00'),
+                         'line_total',
+                             to_char(line.line_total, 'FM999999999999999990.00'),
                          'batch_id', reservation.batch_id,
                          'batch_number', reservation.batch_number,
                          'expiry_date', reservation.expiry_date,
-                         'mrp', reservation.mrp,
-                         'available_quantity', reservation.available_quantity
+                         'mrp', to_char(
+                             reservation.mrp, 'FM999999999999999990.0000'),
+                         'available_quantity', to_char(
+                             reservation.available_quantity,
+                             'FM999999999999999990.000000')
                      ) ORDER BY line.line_number) AS items,
                      count(*)::integer AS importable_item_count
                 FROM sales.order_lines line
@@ -2820,7 +2904,10 @@ def canonical_sales_order_compatibility_detail(
                     SELECT candidate.batch_id, candidate.batch_number,
                            candidate.expiry_date, candidate.mrp,
                            candidate.location_id,
-                           candidate.quantity / NULLIF(line.uom_conversion_factor, 0)
+                           pg_catalog.round(
+                               candidate.quantity
+                               / NULLIF(line.uom_conversion_factor, 0), 6
+                           )
                                AS available_quantity
                       FROM (
                             SELECT held.batch_id, batch.batch_number,
@@ -2904,6 +2991,12 @@ def challans(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
 @router.get(
     "/challan/{challan_id:uuid}",
     response_model=CanonicalChallanImportDetail,
+    operation_id="canonical_challan_uuid_compatibility_detail",
+)
+@router.get(
+    "/canonical/challans/{challan_id}/import-detail",
+    response_model=CanonicalChallanImportDetail,
+    operation_id="canonical_challan_import_detail",
 )
 def canonical_challan_compatibility_detail(
     challan_id: UUID,
@@ -2927,7 +3020,10 @@ def canonical_challan_compatibility_detail(
                dispatch.vehicle_number,
                dispatch.transport_document_number AS lr_number,
                COALESCE(lines.items, '[]'::jsonb) AS items,
-               COALESCE(lines.total_amount, 0) AS total_amount,
+               to_char(
+                   COALESCE(lines.total_amount, 0),
+                   'FM999999999999999990.00'
+               ) AS total_amount,
                (SELECT count(*) FROM sales.dispatch_lines source_line
                  WHERE source_line.org_id=dispatch.org_id
                    AND source_line.dispatch_id=dispatch.id) AS source_item_count,
@@ -2951,25 +3047,46 @@ def canonical_challan_compatibility_detail(
                          'product_name', product.name, 'product_code', product.sku,
                          'hsn_code', product.hsn_code, 'branch_id', dispatch.branch_id,
                          'uom_conversion_id', conversion.id, 'uom_code', line.uom_code,
-                         'unit', line.uom_code, 'quantity', line.billed_quantity,
-                         'dispatched_quantity', line.billed_quantity,
-                         'free_quantity', line.free_quantity,
+                         'unit', line.uom_code, 'quantity',
+                             to_char(line.billed_quantity, 'FM999999999999999990.000000'),
+                         'dispatched_quantity',
+                             to_char(line.billed_quantity, 'FM999999999999999990.000000'),
+                         'free_quantity',
+                             to_char(line.free_quantity, 'FM999999999999999990.000000'),
                          'free_supply_tax_treatment', order_line.free_supply_tax_treatment,
-                         'unit_price', order_line.quoted_unit_rate,
-                         'discount_percent', CASE
+                         'unit_price', to_char(
+                             order_line.quoted_unit_rate,
+                             'FM999999999999999990.0000'),
+                         'discount_percent', to_char(CASE
                              WHEN order_line.line_discount_kind='percent'
                              THEN order_line.line_discount_value ELSE 0 END,
-                         'tax_rate', order_line.cgst_rate + order_line.sgst_rate
-                                     + order_line.igst_rate,
-                         'gst_percent', order_line.cgst_rate + order_line.sgst_rate
-                                        + order_line.igst_rate,
-                         'taxable_amount', order_line.gst_taxable_value,
-                         'cgst_amount', order_line.cgst_amount,
-                         'sgst_amount', order_line.sgst_amount,
-                         'igst_amount', order_line.igst_amount,
-                         'line_total', order_line.line_total,
+                             'FM999999999999999990.000000'),
+                         'tax_rate', to_char(
+                             order_line.cgst_rate + order_line.sgst_rate
+                                 + order_line.igst_rate,
+                             'FM999999999999999990.000000'),
+                         'gst_percent', to_char(
+                             order_line.cgst_rate + order_line.sgst_rate
+                                 + order_line.igst_rate,
+                             'FM999999999999999990.000000'),
+                         'taxable_amount', to_char(
+                             order_line.gst_taxable_value,
+                             'FM999999999999999990.00'),
+                         'cgst_amount', to_char(
+                             order_line.cgst_amount,
+                             'FM999999999999999990.00'),
+                         'sgst_amount', to_char(
+                             order_line.sgst_amount,
+                             'FM999999999999999990.00'),
+                         'igst_amount', to_char(
+                             order_line.igst_amount,
+                             'FM999999999999999990.00'),
+                         'line_total', to_char(
+                             order_line.line_total,
+                             'FM999999999999999990.00'),
                          'batch_id', line.batch_id, 'batch_number', batch.batch_number,
-                         'expiry_date', batch.expires_on, 'mrp', batch.mrp,
+                         'expiry_date', batch.expires_on, 'mrp', to_char(
+                             batch.mrp, 'FM999999999999999990.0000'),
                          'batch_allocations', jsonb_build_array(jsonb_build_object(
                              'source_kind', 'dispatch_allocation',
                              'allocation_id', line.id,
@@ -2984,11 +3101,21 @@ def canonical_challan_compatibility_detail(
                              'batch_number', batch.batch_number,
                              'expiry_date', batch.expires_on,
                              'from_location_id', line.from_location_id,
-                             'base_quantity', inventory_line.base_quantity,
-                             'base_billed_quantity', line.base_billed_quantity,
-                             'base_free_quantity', line.base_free_quantity,
-                             'billed_quantity', line.billed_quantity,
-                             'free_quantity', line.free_quantity
+                             'base_quantity', to_char(
+                                 inventory_line.base_quantity,
+                                 'FM999999999999999990.000000'),
+                             'base_billed_quantity', to_char(
+                                 line.base_billed_quantity,
+                                 'FM999999999999999990.000000'),
+                             'base_free_quantity', to_char(
+                                 line.base_free_quantity,
+                                 'FM999999999999999990.000000'),
+                             'billed_quantity', to_char(
+                                 line.billed_quantity,
+                                 'FM999999999999999990.000000'),
+                             'free_quantity', to_char(
+                                 line.free_quantity,
+                                 'FM999999999999999990.000000')
                          ))
                      ) ORDER BY line.line_number) AS items,
                      SUM(order_line.line_total) AS total_amount,

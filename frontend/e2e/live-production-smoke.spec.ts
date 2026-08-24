@@ -249,6 +249,10 @@ test.describe('live ERP pilot', () => {
       expect(authoritative.items[0].batch_allocations[0]).toEqual(expect.objectContaining({
         source_kind: 'direct_issue',
         batch_id: recommendedBatchId,
+        base_quantity: expect.stringMatching(/^\d+\.\d{6}$/),
+        entered_quantity: expect.stringMatching(/^\d+\.\d{6}$/),
+        billed_quantity: expect.stringMatching(/^\d+\.\d{6}$/),
+        free_quantity: expect.stringMatching(/^\d+\.\d{6}$/),
       }));
       await expect(page.getByText('Invoice Created!', { exact: true })).toBeVisible();
       await expect(page.getByText(authoritative.invoice_number, { exact: true })).toBeVisible();

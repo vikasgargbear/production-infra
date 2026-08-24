@@ -1,5 +1,7 @@
 import { apiHelpers } from '../../apiClient';
 import { invoicesApi } from './invoices.api';
+import { ordersApi } from './orders.api';
+import { challansApi } from './challans.api';
 
 jest.mock('../../apiClient', () => ({
     apiHelpers: {
@@ -24,7 +26,7 @@ describe('canonical invoice web transport', () => {
             } });
         get.mockResolvedValueOnce({ data: {
             invoice_number: 'INV-2026-0001',
-            total_amount: 118,
+            total_amount: '118.00',
         } });
 
         const response = await invoicesApi.createCanonical({
@@ -43,7 +45,22 @@ describe('canonical invoice web transport', () => {
             success: true,
             invoice_id: '10000000-0000-4000-8000-000000000002',
             invoice_number: 'INV-2026-0001',
-            total_amount: 118,
+            total_amount: '118.00',
         }));
+    });
+
+    it('uses unique canonical exact-detail aliases for all document imports', () => {
+        const get = apiHelpers.get as jest.Mock;
+        get.mockResolvedValue({ data: {} });
+
+        invoicesApi.getById('invoice-uuid');
+        ordersApi.getById('order-uuid');
+        challansApi.getById('challan-uuid');
+
+        expect(get.mock.calls.map(call => call[0])).toEqual([
+            '/canonical/invoices/invoice-uuid',
+            '/canonical/sales-orders/order-uuid/import-detail',
+            '/canonical/challans/challan-uuid/import-detail',
+        ]);
     });
 });

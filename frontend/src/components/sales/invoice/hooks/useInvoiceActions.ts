@@ -2,6 +2,34 @@ import { useState } from 'react';
 import { invoicesApi } from '../../../../services/api';
 import { toast } from 'react-toastify';
 import type { Invoice } from '../types/invoiceTypes';
+import type { CanonicalInvoiceDetail } from '../../../../services/api/modules/sales/canonicalSalesDocuments.types';
+import type { InvoiceData as PrintableInvoiceData } from '../../../../utils/invoicePdfGenerator';
+
+const printableInvoice = (detail: CanonicalInvoiceDetail): PrintableInvoiceData => ({
+    invoice_number: detail.invoice_number,
+    invoice_date: detail.invoice_date,
+    customer_name: detail.customer_name,
+    customer_phone: detail.customer_phone ?? undefined,
+    customer_gst_number: detail.customer_gst_number ?? undefined,
+    billing_address: detail.billing_address,
+    shipping_address: detail.shipping_address,
+    items: detail.items.map(item => ({
+        product_name: item.product_name,
+        batch_number: item.batch_number ?? undefined,
+        hsn_code: item.hsn_code,
+        sale_unit: item.unit,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+        gst_percent: Number(item.gst_percent),
+        line_total: Number(item.line_total),
+    })),
+    subtotal_amount: Number(detail.taxable_amount),
+    cgst_amount: detail.cgst_amount,
+    sgst_amount: detail.sgst_amount,
+    igst_amount: detail.igst_amount,
+    final_amount: detail.total_amount,
+    total_amount: detail.total_amount,
+});
 
 
 interface UseInvoiceActionsReturn {
@@ -198,7 +226,7 @@ export function useInvoiceActions(): UseInvoiceActionsReturn {
 
             if (responseData) {
                 const { printInvoice } = await import('../../../../utils/invoicePdfGenerator');
-                printInvoice(responseData);
+                printInvoice(printableInvoice(responseData));
             } else {
                 toast.error('Failed to load invoice details. Please try again.');
             }
@@ -214,7 +242,7 @@ export function useInvoiceActions(): UseInvoiceActionsReturn {
 
             if (responseData) {
                 const { downloadInvoicePDF } = await import('../../../../utils/invoicePdfGenerator');
-                downloadInvoicePDF(responseData);
+                downloadInvoicePDF(printableInvoice(responseData));
             } else {
                 toast.error('Failed to load invoice details. Please try again.');
             }

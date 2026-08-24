@@ -14,6 +14,7 @@ import {
     prepareCanonicalAction,
     type CanonicalCommandPreview,
 } from '../../canonicalOperatorActions';
+import type { CanonicalChallanImportDetail } from './canonicalSalesDocuments.types';
 
 // Type definitions
 type ChallanId = number | string;
@@ -32,6 +33,9 @@ const crud = createCrudApi({ basePath: '/challan/' });
 
 export const challansApi = {
     ...crud,
+    getById: (id: ChallanId) => apiHelpers.get<CanonicalChallanImportDetail>(
+        `/canonical/challans/${id}/import-detail`,
+    ),
     create: (_data: any) => rejectCanonicalWrite('Legacy delivery-challan creation'),
     update: (_id: ChallanId, _data: any) => rejectCanonicalWrite('Legacy delivery-challan editing'),
     delete: (_id: ChallanId) => rejectCanonicalWrite('Legacy delivery-challan deletion'),

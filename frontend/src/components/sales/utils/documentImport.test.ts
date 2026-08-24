@@ -1,8 +1,37 @@
 import {
     extractDocumentCollection,
     extractDocumentDetail,
-    projectCanonicalImportLines,
+    projectCanonicalImportLines as projectCanonicalImportLinesFromWire,
 } from './documentImport';
+
+const QUANTITY_FIELDS = new Set([
+    'quantity', 'free_quantity', 'base_quantity', 'entered_quantity',
+    'base_billed_quantity', 'base_free_quantity', 'billed_quantity',
+]);
+const RATE_FIELDS = new Set(['unit_price', 'mrp']);
+const PERCENT_FIELDS = new Set(['tax_rate', 'gst_percent', 'discount_percent']);
+const MONEY_FIELDS = new Set([
+    'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'cess_amount', 'line_total',
+]);
+
+const exactWireValue = (key: string, value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(entry => exactWireValue('', entry));
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => (
+            [childKey, exactWireValue(childKey, childValue)]
+        )));
+    }
+    if (typeof value !== 'number') return value;
+    if (QUANTITY_FIELDS.has(key)) return value.toFixed(6);
+    if (RATE_FIELDS.has(key)) return value.toFixed(4);
+    if (PERCENT_FIELDS.has(key)) return value.toFixed(6);
+    if (MONEY_FIELDS.has(key)) return value.toFixed(2);
+    return value;
+};
+
+const projectCanonicalImportLines = (lines: Array<Record<string, unknown>>) => (
+    projectCanonicalImportLinesFromWire(exactWireValue('', lines) as Array<Record<string, unknown>>)
+);
 
 describe('Sales document import envelope normalization', () => {
     const allocation = (overrides: Record<string, unknown> = {}) => ({
@@ -57,6 +86,15 @@ describe('Sales document import envelope normalization', () => {
             unit_price: '150.2500',
             gst_percent: '12.000000',
         })]);
+    });
+
+    it('rejects JSON numbers at the canonical decimal wire boundary', () => {
+        expect(() => projectCanonicalImportLinesFromWire([{
+            product_id: 'product-1', product_name: 'Product',
+            quantity: 1, free_quantity: '0.000000', unit_price: '10.0000',
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
+            batch_id: 'batch-1', batch_number: 'BATCH-1',
+        }])).toThrow('exact decimal string from the canonical API');
     });
 
     it('accepts one evidenced direct allocation, including null expiry, without scalar batch fields', () => {

@@ -16,6 +16,7 @@ import {
   prepareCanonicalAction,
   type CanonicalCommandPreview,
 } from '../../canonicalOperatorActions';
+import type { CanonicalSalesOrderImportDetail } from './canonicalSalesDocuments.types';
 
 // Type definitions
 type OrderId = number | string;
@@ -45,6 +46,9 @@ const crud = createCrudApi({ basePath: '/sales-orders/' });
 
 export const ordersApi = {
   ...crud,
+  getById: (id: OrderId) => apiHelpers.get<CanonicalSalesOrderImportDetail>(
+    `/canonical/sales-orders/${id}/import-detail`,
+  ),
   create: (_data: any) => rejectCanonicalWrite('Legacy sales-order creation'),
   update: (_id: OrderId, _data: any) => rejectCanonicalWrite('Legacy sales-order editing'),
   delete: (_id: OrderId) => rejectCanonicalWrite('Legacy sales-order deletion'),
