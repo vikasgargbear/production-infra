@@ -53,6 +53,17 @@ export interface ItemsTableProps {
 
 type NavigationDirection = 'right' | 'next' | 'left' | 'down' | 'up';
 
+// Canonical inventory and commercial quantities are numeric(20, 6). Keep the
+// editor precision aligned with that contract; quantity formatting must never
+// make a fractional value appear to be a whole unit.
+const QUANTITY_DECIMAL_PLACES = 6;
+const QUANTITY_INPUT_STEP = '0.000001';
+
+const visibleQuantityDecimalPlaces = (value: number | undefined): number => {
+    const fraction = String(value ?? 0).split('.')[1] || '';
+    return Math.min(fraction.length, QUANTITY_DECIMAL_PLACES);
+};
+
 // ==================== COMPONENT ====================
 
 const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTableProps> = ({
@@ -203,7 +214,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
                         <div className="mt-4 grid grid-cols-2 gap-3">
                             <label className="text-xs font-medium text-gray-600">Quantity
-                                <input type="number" min="0" step="1" inputMode="numeric" value={item.quantity || 0} onChange={(event) => onUpdateItem?.(index, 'quantity', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.quantity || 0} onChange={(event) => onUpdateItem?.(index, 'quantity', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
                                 <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
@@ -212,7 +223,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
-                                <input type="number" min="0" step="1" inputMode="numeric" value={item.free_quantity || item.free || 0} onChange={(event) => onUpdateItem?.(index, 'free_quantity', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => onUpdateItem?.(index, 'free_quantity', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
                             </label>
                         </div>
 
@@ -286,8 +297,8 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         value={item.quantity || 0}
                                         type="number"
                                         min={0}
-                                        step={1}
-                                        decimalPlaces={0}
+                                        step={Number(QUANTITY_INPUT_STEP)}
+                                        decimalPlaces={visibleQuantityDecimalPlaces(item.quantity)}
                                         onChange={(val) => onUpdateItem?.(index, 'quantity', val)}
                                         onSave={(val) => onUpdateItem?.(index, 'quantity', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'quantity', dir as NavigationDirection)}
@@ -342,7 +353,8 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         value={item.free_quantity || item.free || 0}
                                         type="number"
                                         min={0}
-                                        decimalPlaces={0}
+                                        step={Number(QUANTITY_INPUT_STEP)}
+                                        decimalPlaces={visibleQuantityDecimalPlaces(item.free_quantity ?? item.free)}
                                         onSave={(val) => onUpdateItem?.(index, 'free_quantity', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'free', dir as NavigationDirection)}
                                         readOnly={readOnly}
