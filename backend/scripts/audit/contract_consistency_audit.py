@@ -676,16 +676,6 @@ def collect_issues() -> List[ConsistencyIssue]:
             "backend/app/core/auth/org_context.py:167 grants ALL branch access to legacy tokens missing branch_scope",
         ))
 
-    company_route = _read("backend/app/api/routes/org/company.py")
-    org_id_method = company_route.split("async def get_organization_id", 1)[1].split(
-        "@router.get", 1
-    )[0]
-    if "context.org_id" in org_id_method:
-        issues.append(ConsistencyIssue(
-            "ORG_ID_ENDPOINT_UNDEFINED_CONTEXT",
-            "company.py get_organization_id reads context even though only org_id is injected",
-        ))
-
     frontend_types = _read("frontend/src/types/api.types.ts")
     if "organization_id: number" in frontend_types and "org_id: UUID" in _read(
         "backend/app/api/schemas/sales/billing.py"

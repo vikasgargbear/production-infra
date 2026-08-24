@@ -7,7 +7,6 @@ from uuid import UUID
 import pytest
 from fastapi import HTTPException
 
-from app.api.routes.org.company import get_organization_id
 from app.api.routes.documents import DOC_TYPE_MAPPING
 from app.api.services.document_number_service import (
     DOCUMENT_CONFIGS,
@@ -268,11 +267,6 @@ def test_branch_filter_binds_integer_keys_and_fails_closed_without_assignments()
         assert params["_tenant_branch_id"] == -1
     finally:
         TenantContext.clear_context()
-
-
-def test_org_id_endpoint_returns_injected_tenant_identifier():
-    org_id = "e78d6777-35f6-4b19-994f-caaede2f021a"
-    assert asyncio.run(get_organization_id(org_id=org_id)) == {"org_id": org_id}
 
 
 def test_number_reservations_are_post_mutations_not_cacheable_gets():

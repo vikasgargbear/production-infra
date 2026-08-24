@@ -82,7 +82,7 @@ from .api.routes.reports import collection as collection_center
 from .api.routes.reports import outstanding as customer_outstanding
 
 # Organization Module
-from .api.routes.org import company
+from .api.routes.org import company_assets
 
 # Settings (already in folder)
 from .api.routes.settings import router as settings_router
@@ -311,7 +311,10 @@ api.include_router(collection_center.router, prefix="/collection-center", tags=[
 api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
 
 # --- Organization ---
-api.include_router(company.router, prefix="/company", tags=["Company"])
+# Canonical company profile reads are mounted by canonical_erp_reads above.
+# This narrow router preserves the asset read boundary while all company
+# mutations remain fail-closed until reviewed core commands are available.
+api.include_router(company_assets.router, prefix="/company", tags=["Company"])
 
 # --- Settings ---
 api.include_router(settings_router, prefix="/settings", tags=["Settings"])

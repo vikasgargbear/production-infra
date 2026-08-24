@@ -1,9 +1,5 @@
-"""
-Organization API Routes Package
-Contains organization-scoped company settings.
-"""
-from .company import router as company_router
+"""Organization-scoped canonical API routes."""
 
-__all__ = [
-    "company_router",
-]
+from .company_assets import router as company_assets_router
+
+__all__ = ["company_assets_router"]
