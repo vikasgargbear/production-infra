@@ -4,6 +4,19 @@ import {
 } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
+import {
+  exactDecimalString,
+  exactDecimalUnits,
+  formatExactCurrency,
+} from '../../../utils/exactDecimal';
+
+const moneyOptions = { scale: 2, maximumWholeDigits: 18 } as const;
+
+const moneyUnits = (value: unknown, label: string): bigint => (
+  exactDecimalUnits(value, label, moneyOptions)
+);
+
+const moneyString = (units: bigint): string => exactDecimalString(units, 2);
 
 const PaymentSummaryCompact: React.FC = () => {
   const { payment, selectedCustomer } = usePayment();
@@ -35,12 +48,11 @@ const PaymentSummaryCompact: React.FC = () => {
   };
 
   // Calculate allocations correctly
-  const allocatedAmount = (selectedInvoices || []).reduce((sum: number, invoice) => {
-    return sum + Number(invoice.amount || 0);
-  }, 0);
-
-  const totalPayment = parseFloat(payment.amount || '0');
-  const unallocatedAmount = totalPayment - allocatedAmount;
+  const allocatedUnits = selectedInvoices.reduce<bigint>((sum, invoice, index) => (
+    sum + moneyUnits(invoice.amount, `Allocation ${index + 1}`)
+  ), 0n);
+  const totalUnits = moneyUnits(payment.amount || '0', 'Receipt amount');
+  const unallocatedUnits = totalUnits - allocatedUnits;
   return (
     <div className="space-y-4">
       {/* Payment Header Card */}
@@ -48,10 +60,10 @@ const PaymentSummaryCompact: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Payment Summary</h2>
-            <p className="text-sm text-gray-600 mt-1">Receipt: {payment.receipt_no || 'PMT-' + new Date().getTime()}</p>
+            <p className="text-sm text-gray-600 mt-1">Receipt: {payment.receipt_no || 'Assigned after posting'}</p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-blue-700">₹{totalPayment.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-blue-700">{formatExactCurrency(moneyString(totalUnits), 'Receipt amount')}</p>
             <p className="text-xs text-gray-600">{formatDate(payment.payment_date)}</p>
           </div>
         </div>
@@ -97,7 +109,7 @@ const PaymentSummaryCompact: React.FC = () => {
                     {paymentModes[split.type] || split.type}
                     {split.reference && <span className="text-xs ml-2">(Ref: {split.reference})</span>}
                   </span>
-                  <span className="font-medium">₹{parseFloat(split.amount || '0').toFixed(2)}</span>
+                  <span className="font-medium">{formatExactCurrency(split.amount || '0', `Split payment ${index + 1}`)}</span>
                 </div>
               ))}
             </div>
@@ -124,14 +136,14 @@ const PaymentSummaryCompact: React.FC = () => {
           {/* Allocation Breakdown */}
           <div className="space-y-2">
             {/* Allocated to Invoices */}
-            {allocatedAmount > 0 && (
+            {allocatedUnits > 0n && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-green-800">
                     Applied to Invoices ({selectedInvoices?.length || 0})
                   </span>
                   <span className="text-sm font-bold text-green-800">
-                    ₹{allocatedAmount.toFixed(2)}
+                    {formatExactCurrency(moneyString(allocatedUnits), 'Allocated amount')}
                   </span>
                 </div>
                 {selectedInvoices && selectedInvoices.length > 0 && (
@@ -139,7 +151,7 @@ const PaymentSummaryCompact: React.FC = () => {
                     {selectedInvoices.slice(0, 2).map((invoice: any, index: number) => (
                       <div key={index} className="flex items-center justify-between text-xs text-green-700">
                         <span>{invoice.invoice_number || invoice.invoice_number}</span>
-                        <span>₹{invoice.amount}</span>
+                        <span>{formatExactCurrency(invoice.amount, `Allocation ${index + 1}`)}</span>
                       </div>
                     ))}
                     {selectedInvoices.length > 2 && (
@@ -153,7 +165,7 @@ const PaymentSummaryCompact: React.FC = () => {
             )}
 
             {/* Advance Payment */}
-            {unallocatedAmount > 0 && (
+            {unallocatedUnits > 0n && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -165,14 +177,14 @@ const PaymentSummaryCompact: React.FC = () => {
                     </p>
                   </div>
                   <span className="text-sm font-bold text-amber-800">
-                    ₹{unallocatedAmount.toFixed(2)}
+                    {formatExactCurrency(moneyString(unallocatedUnits), 'Unallocated amount')}
                   </span>
                 </div>
               </div>
             )}
 
             {/* No Outstanding - Full Advance */}
-            {!allocatedAmount && totalPayment > 0 && (
+            {allocatedUnits === 0n && totalUnits > 0n && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -184,7 +196,7 @@ const PaymentSummaryCompact: React.FC = () => {
                     </p>
                   </div>
                   <span className="text-sm font-bold text-blue-800">
-                    ₹{totalPayment.toFixed(2)}
+                    {formatExactCurrency(moneyString(totalUnits), 'Receipt amount')}
                   </span>
                 </div>
               </div>
@@ -207,10 +219,7 @@ const PaymentSummaryCompact: React.FC = () => {
             <CheckCircle className="w-4 h-4 text-green-600" />
             <span className="text-sm text-green-600 font-medium">Ready to Save</span>
           </div>
-          <div className="flex items-center space-x-4 text-xs text-gray-500">
-            <span>Created by: {selectedCustomer?.created_by || 'System'}</span>
-            <span>{new Date().toLocaleTimeString('en-IN')}</span>
-          </div>
+          <span className="text-xs text-gray-500">Final receipt identity is assigned by the server.</span>
         </div>
       </Card>
     </div>

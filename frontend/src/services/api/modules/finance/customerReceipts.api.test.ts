@@ -1,5 +1,5 @@
-import { approveCustomerReceipt, reconcileCustomerReceipt } from './customerReceipts.api';
-import { approveAndExecuteCanonicalAction } from '../../canonicalOperatorActions';
+import { approveCustomerReceipt, prepareCustomerReceipt, reconcileCustomerReceipt } from './customerReceipts.api';
+import { approveAndExecuteCanonicalAction, prepareCanonicalAction } from '../../canonicalOperatorActions';
 import { paymentAllocationApi } from './paymentAllocation.api';
 
 jest.mock('../../canonicalOperatorActions', () => ({
@@ -17,6 +17,32 @@ const invoiceId = '0198ea37-2b32-7c8d-9123-123456789abc';
 
 describe('canonical receipt execution and reconciliation', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  const preparePayload = () => ({
+    idempotency_key: 'receipt:1', branch_id: invoiceId, payment_date: '2026-08-25',
+    customer_account_id: invoiceId, settlement_account_id: paymentId, bank_account_id: invoiceId,
+    payment_method: 'upi' as const, amount: '168.00',
+    allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
+  });
+
+  it('accepts only a server preview that exactly matches the requested receipt and allocations', async () => {
+    const preview = {
+      command_request_id: invoiceId, preview_hash: `sha256:${'a'.repeat(64)}`, branch_id: invoiceId,
+      financial_impact: [{
+        receipt_amount: '168.00', settlement_account_id: paymentId,
+        allocations: [{ open_item_id: openItemId, allocated_amount: '168.00', residual_after: '0.00' }],
+      }],
+    };
+    (prepareCanonicalAction as jest.Mock).mockResolvedValue({ data: preview });
+    await expect(prepareCustomerReceipt(preparePayload())).resolves.toEqual({ data: preview });
+
+    (prepareCanonicalAction as jest.Mock).mockResolvedValue({ data: {
+      ...preview,
+      financial_impact: [{ ...preview.financial_impact[0], receipt_amount: '167.99' }],
+    } });
+    await expect(prepareCustomerReceipt(preparePayload())).rejects.toThrow('does not match');
+    expect(approveAndExecuteCanonicalAction).not.toHaveBeenCalled();
+  });
 
   it('returns success only after exact canonical invoice allocation readback', async () => {
     (approveAndExecuteCanonicalAction as jest.Mock).mockResolvedValue({ executed: { data: { status: 'executed', resource_id: paymentId } } });

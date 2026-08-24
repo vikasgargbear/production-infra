@@ -289,7 +289,8 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     // ==================== SHARE ON WHATSAPP ====================
     const shareOnWhatsApp = useCallback(() => {
         if (!challan.customer_details?.phone) {
-            alert('Customer phone number not available');
+            setMessage('Customer phone number is unavailable. Nothing was opened or sent.');
+            setMessageType('error');
             return;
         }
 

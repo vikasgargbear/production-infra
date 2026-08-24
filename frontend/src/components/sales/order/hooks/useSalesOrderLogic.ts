@@ -528,7 +528,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     // Share on WhatsApp
     const shareOnWhatsApp = useCallback((): void => {
         if (!order.customer_details?.phone) {
-            alert('Customer phone number not available');
+            setMessage('Customer phone number is unavailable. Nothing was opened or sent.');
+            setMessageType('error');
             return;
         }
 

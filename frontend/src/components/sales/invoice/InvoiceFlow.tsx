@@ -295,7 +295,7 @@ ${companyInfo?.name || 'Your Company'}`;
             console.log('✅ [NAVIGATION] setCurrentStep completed');
         } catch (navError) {
             console.error('❌ [NAVIGATION ERROR] during setCurrentStep:', navError);
-            alert('Error navigating back: ' + (navError as Error).message);
+            toast.error('Unable to return to invoice items: ' + (navError as Error).message);
         }
     }, []);
 

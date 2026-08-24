@@ -14,6 +14,7 @@ import {
   centsToMoney,
   moneyToCents,
   receiptEscapeAction,
+  type CanonicalCustomerReceiptPreparePayload,
   type ReceiptAllocation,
 } from './customerReceiptCommand';
 import {
@@ -23,6 +24,7 @@ import {
 } from '../../../services/api/modules/finance/customerReceipts.api';
 import { clientUuid } from '../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
+import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
 
 
 // Import global components
@@ -84,6 +86,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
   } | null>(null);
   const [postedPaymentId, setPostedPaymentId] = React.useState('');
+  const [receiptConfirmation, setReceiptConfirmation] = React.useState<{
+    preview: CanonicalCommandPreview;
+    payload: CanonicalCustomerReceiptPreparePayload;
+    allocations: ReceiptAllocation[];
+    invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
+  } | null>(null);
 
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
@@ -130,7 +138,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       // Ctrl+S to save
       if (e.ctrlKey && e.key === 's' && currentStep === 2) {
         e.preventDefault();
-        void savePayment();
+        void requestPaymentReview();
       }
       // Ctrl+G for GST Calculator
       if (e.ctrlKey && e.key === 'g') {
@@ -139,6 +147,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       }
       // Esc to close/back
       if (e.key === 'Escape') {
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
         const action = receiptEscapeAction(currentStep, postedPaymentId);
         if (action === 'block') setMessage(`Receipt ${postedPaymentId} is already posted. Reconcile its readback before editing or leaving.`, 'error');
         if (action === 'back') setCurrentStep(1);
@@ -180,7 +189,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   };
 
-  const savePayment = async (): Promise<void> => {
+  const requestPaymentReview = async (): Promise<void> => {
     if (!selectedCustomer || saving) return;
     try {
       setSaving(true);
@@ -225,20 +234,40 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         preview = prepared.data;
         attempt.preview = preview;
       }
-      const allocationText = payment.allocations
-        .map(allocation => `${allocation.invoice_number}: ₹${allocation.amount}`)
-        .join('\n');
-      if (!window.confirm(`Post customer receipt ₹${payload.amount}?\n\n${allocationText}\n\nReference: ${payload.external_reference}`)) {
-        setMessage('Receipt was prepared but not approved. Nothing was posted.', 'info');
-        return;
-      }
       const invoiceByOpenItem = new Map(payload.allocations.map(allocation => {
         const invoice = outstandingInvoices.find(candidate => candidate.open_item_id === allocation.open_item_id)!;
         return [allocation.open_item_id, { invoice_id: invoice.invoice_id, due: invoice.amount_due }];
       }));
+      setReceiptConfirmation({
+        preview,
+        payload,
+        allocations: payment.allocations.map(allocation => ({ ...allocation })),
+        invoiceByOpenItem,
+      });
+      setMessage('Authoritative receipt preview prepared. Review it before posting.', 'info');
+    } catch (saveError: any) {
+      const detail = saveError?.response?.data?.detail;
+      const reason = typeof detail === 'string' ? detail : detail?.message;
+      setMessage(reason || saveError?.message || 'Receipt review failed. Nothing was posted.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmPayment = async (): Promise<void> => {
+    if (!receiptConfirmation || saving) return;
+    setSaving(true);
+    clearMessage();
+    try {
+      const attempt = receiptAttemptRef.current;
+      if (!attempt || attempt.preview?.command_request_id !== receiptConfirmation.preview.command_request_id) {
+        throw new Error('Receipt review identity was lost. Close this review and prepare it again.');
+      }
+      const { preview, payload, invoiceByOpenItem } = receiptConfirmation;
       const executed = await approveCustomerReceipt(preview, attempt.lifecycleId);
       postedReceiptRef.current = { paymentId: executed.payment_id, payload, invoiceByOpenItem };
       setPostedPaymentId(executed.payment_id);
+      setReceiptConfirmation(null);
       const readback = await reconcileCustomerReceipt(executed.payment_id, payload, invoiceByOpenItem);
       setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
       setMessage('Receipt posted and reconciled against the authoritative invoice balance.', 'success');
@@ -260,6 +289,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     receiptAttemptRef.current = null;
     postedReceiptRef.current = null;
     setPostedPaymentId('');
+    setReceiptConfirmation(null);
     resetPayment();
     setCurrentStep(1);
     clearMessage();
@@ -752,13 +782,13 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             if (currentStep === 1) {
               goToSummary();
             } else if (currentStep === 2) {
-              savePayment();
+              requestPaymentReview();
             }
           }}
           onReset={currentStep === 1 ? resetPayment : undefined}
           totalItems={payment.allocations ? payment.allocations.length : 0}
           totalAmount={payment.amount || '0.00'}
-          proceedText={currentStep === 2 ? (postedPaymentId ? 'Reconcile Receipt' : 'Post Receipt') : 'Continue'}
+          proceedText={currentStep === 2 ? (postedPaymentId ? 'Reconcile Receipt' : 'Review Posting') : 'Continue'}
           saving={saving}
           disabled={false}
         />
@@ -782,6 +812,21 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             setShowCustomerModal(false);
             // You can add toast notification here if needed
           }}
+        />
+      )}
+
+      {receiptConfirmation && selectedCustomer && (
+        <CustomerReceiptReviewDialog
+          preview={receiptConfirmation.preview}
+          payload={receiptConfirmation.payload}
+          allocations={receiptConfirmation.allocations}
+          customerName={selectedCustomer.customer_name}
+          busy={saving}
+          onCancel={() => {
+            setReceiptConfirmation(null);
+            setMessage('Receipt remains prepared but unapproved. Nothing was posted.', 'info');
+          }}
+          onConfirm={() => { void confirmPayment(); }}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 
 import ModularPaymentEntry from './ModularPaymentEntry';
 import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
@@ -51,7 +52,7 @@ const paymentId = '0198ea37-2b30-7c8d-9123-123456789abc';
 describe('ModularPaymentEntry canonical retry boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    jest.spyOn(window, 'confirm');
     (paymentAllocationApi.getUnpaidInvoices as jest.Mock).mockResolvedValue({ data: {
       invoice_count: 1,
       invoices: [{
@@ -65,6 +66,15 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
     (prepareCustomerReceipt as jest.Mock).mockResolvedValue({ data: {
       command_request_id: '0198ea37-2b33-7c8d-9123-123456789abc',
       preview_hash: `sha256:${'a'.repeat(64)}`,
+      branch_id: '0198ea37-2b1e-7c8d-9123-123456789abc',
+      financial_impact: [{
+        receipt_amount: '168.00',
+        settlement_account_id: '0198ea37-2b21-7c8d-9123-123456789abc',
+        allocations: [{
+          open_item_id: '0198ea37-2b23-7c8d-9123-123456789abc',
+          allocated_amount: '168.00',
+        }],
+      }],
     } });
     (approveCustomerReceipt as jest.Mock).mockResolvedValue({ payment_id: paymentId });
     (reconcileCustomerReceipt as jest.Mock)
@@ -81,7 +91,16 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 550)); });
     await screen.findByText(/FIFO Applied/);
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Post Receipt' }));
+    const reviewPosting = await screen.findByRole('button', { name: 'Review Posting' });
+    reviewPosting.focus();
+    fireEvent.click(reviewPosting);
+    const review = await screen.findByRole('dialog', { name: 'Approve customer receipt' });
+    expect(prepareCustomerReceipt).toHaveBeenCalledTimes(1);
+    expect(approveCustomerReceipt).not.toHaveBeenCalled();
+    expect(review.textContent).toContain('DEMO-SI-000004');
+    expect(review.textContent).toContain('₹168.00');
+    expect(review.textContent).toContain('UPI-RETRY-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Approve & Post Receipt' }));
     await screen.findByText(/readback temporarily unavailable/);
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     fireEvent.keyDown(window, { key: 'Escape' });
@@ -91,5 +110,35 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
     expect(prepareCustomerReceipt).toHaveBeenCalledTimes(1);
     expect(approveCustomerReceipt).toHaveBeenCalledTimes(1);
     expect(reconcileCustomerReceipt).toHaveBeenCalledTimes(2);
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('prepares first and lets Escape leave the server preview unapproved without transport writes', async () => {
+    render(<ModularPaymentEntry onClose={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Select fixture customer' }));
+    await waitFor(() => expect(paymentAllocationApi.getUnpaidInvoices).toHaveBeenCalled());
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 550)); });
+    await screen.findByText(/FIFO Applied/);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    const reviewPosting = await screen.findByRole('button', { name: 'Review Posting' });
+    reviewPosting.focus();
+    fireEvent.click(reviewPosting);
+    const dialog = await screen.findByRole('dialog', { name: 'Approve customer receipt' });
+    const closeReview = screen.getByRole('button', { name: 'Close receipt review without posting' });
+    const approve = screen.getByRole('button', { name: 'Approve & Post Receipt' });
+    expect(closeReview).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(approve).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(closeReview).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Approve customer receipt' })).toBeNull());
+    expect(reviewPosting).toHaveFocus();
+    expect(await screen.findByText(/prepared but unapproved/)).not.toBeNull();
+    expect(prepareCustomerReceipt).toHaveBeenCalledTimes(1);
+    expect(approveCustomerReceipt).not.toHaveBeenCalled();
+    expect(reconcileCustomerReceipt).not.toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 });

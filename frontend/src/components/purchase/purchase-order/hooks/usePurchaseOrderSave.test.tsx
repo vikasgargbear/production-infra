@@ -39,7 +39,7 @@ const purchaseOrder: PurchaseOrderData = {
 describe('usePurchaseOrderSave terminal retry boundary', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        jest.spyOn(window, 'confirm').mockReturnValue(true);
+        jest.spyOn(window, 'confirm');
         (canonicalPurchaseOrdersApi.prepare as jest.Mock).mockResolvedValue({ data: {
             command_request_id: COMMAND_ID,
             command_type: 'procurement.purchase_order.approve',
@@ -87,7 +87,7 @@ describe('usePurchaseOrderSave terminal retry boundary', () => {
 
         expect(canonicalPurchaseOrdersApi.executePrepared).toHaveBeenCalledTimes(1);
         expect(canonicalPurchaseOrdersApi.readback).toHaveBeenCalledTimes(2);
-        expect(window.confirm).toHaveBeenCalledTimes(1);
+        expect(window.confirm).not.toHaveBeenCalled();
         expect(setters.setCreatedPOData).toHaveBeenCalledWith(expect.objectContaining({
             totalAmount: '112.00',
         }));

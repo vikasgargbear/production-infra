@@ -14,12 +14,6 @@ import type { Order } from '../../../types/models';
 
 // Use canonical Order type from types/models - DO NOT define duplicate Order interface
 
-interface InvoiceData {
-    invoice_number: string;
-    invoice_id?: number | string;
-    [key: string]: unknown;
-}
-
 // ==================== MAIN COMPONENT ====================
 
 const OrderList: React.FC = () => {
@@ -65,14 +59,6 @@ const OrderList: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleInvoiceCreated = (orderId: number | string, invoiceData: InvoiceData): void => {
-        setOrders(prev => prev.map(order =>
-            order.order_id === orderId
-                ? { ...order, invoice_number: invoiceData.invoice_number, invoice_created: true }
-                : order
-        ));
     };
 
     const getStatusBadge = (order: Order): ReactElement[] => {
@@ -443,9 +429,8 @@ const OrderList: React.FC = () => {
                                         {/* Convert to Invoice Button */}
                                         {!order.invoice_created && order.order_status === 'approved' && (
                                             <ConvertToInvoiceButton
-                                                orderId={typeof order.order_id === 'number' ? order.order_id : parseInt(String(order.order_id), 10)}
+                                                orderId={order.order_id}
                                                 orderNumber={order.order_number}
-                                                onSuccess={(invoiceData: InvoiceData) => handleInvoiceCreated(order.order_id, invoiceData)}
                                                 className="text-sm py-1 px-3"
                                             />
                                         )}

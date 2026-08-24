@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { invoicesApi } from '../../../../services/api';
+import { toast } from 'react-toastify';
 import type { Invoice } from '../types/invoiceTypes';
 
 
@@ -14,11 +15,8 @@ interface UseInvoiceActionsReturn {
     exportSelectedPDF: (invoices: Invoice[]) => Promise<void>;
     printSelected: (invoices: Invoice[]) => void;
     whatsappSelected: (invoices: Invoice[]) => void;
-    handleViewInvoice: (invoice: Invoice) => void;
-    handleEditInvoice: (invoice: Invoice) => void;
     handlePrintInvoice: (invoice: Invoice) => Promise<void>;
     handleDownloadInvoice: (invoice: Invoice) => Promise<void>;
-    handleMoreOptions: (invoice: Invoice) => void;
 }
 
 export function useInvoiceActions(): UseInvoiceActionsReturn {
@@ -193,14 +191,6 @@ export function useInvoiceActions(): UseInvoiceActionsReturn {
         window.open(`https://wa.me/?text=${message}`, '_blank');
     };
 
-    const handleViewInvoice = (invoice: Invoice) => {
-        alert(`Viewing invoice: ${invoice.invoice_number}`);
-    };
-
-    const handleEditInvoice = (invoice: Invoice) => {
-        alert(`Editing invoice: ${invoice.invoice_number}`);
-    };
-
     const handlePrintInvoice = async (invoice: Invoice) => {
         try {
             const response = await invoicesApi.getById((invoice.invoice_id || invoice.id) as string | number);
@@ -210,10 +200,10 @@ export function useInvoiceActions(): UseInvoiceActionsReturn {
                 const { printInvoice } = await import('../../../../utils/invoicePdfGenerator');
                 printInvoice(responseData);
             } else {
-                alert('Failed to load invoice details. Please try again.');
+                toast.error('Failed to load invoice details. Please try again.');
             }
         } catch (error) {
-            alert('Failed to print invoice. Please try again.');
+            toast.error('Failed to print invoice. Please try again.');
         }
     };
 
@@ -226,15 +216,11 @@ export function useInvoiceActions(): UseInvoiceActionsReturn {
                 const { downloadInvoicePDF } = await import('../../../../utils/invoicePdfGenerator');
                 downloadInvoicePDF(responseData);
             } else {
-                alert('Failed to load invoice details. Please try again.');
+                toast.error('Failed to load invoice details. Please try again.');
             }
         } catch (error) {
-            alert('Failed to download invoice. Please try again.');
+            toast.error('Failed to download invoice. Please try again.');
         }
-    };
-
-    const handleMoreOptions = (invoice: Invoice) => {
-        alert(`More options for invoice: ${invoice.invoice_number}`);
     };
 
     return {
@@ -248,10 +234,7 @@ export function useInvoiceActions(): UseInvoiceActionsReturn {
         exportSelectedPDF,
         printSelected,
         whatsappSelected,
-        handleViewInvoice,
-        handleEditInvoice,
         handlePrintInvoice,
         handleDownloadInvoice,
-        handleMoreOptions
     };
 }

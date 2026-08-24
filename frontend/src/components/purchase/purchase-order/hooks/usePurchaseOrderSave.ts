@@ -67,24 +67,6 @@ const submissionError = (error: unknown): string => {
     return apiError.message || 'Purchase-order submission failed. No approval was executed.';
 };
 
-export const formatCanonicalPurchaseOrderConfirmation = (
-    review: CanonicalPurchaseOrderReview,
-): string => [
-    'Authoritative backend purchase-order preview',
-    `Supplier commitment: ₹${review.supplierCommitment}`,
-    `CGST: ₹${review.cgstTotal}`,
-    `SGST: ₹${review.sgstTotal}`,
-    `IGST: ₹${review.igstTotal}`,
-    `Cess: ₹${review.cessTotal}`,
-    ...(review.warnings.length ? [
-        'Warnings:',
-        ...review.warnings.map(warning => `- ${warning}`),
-    ] : []),
-    '',
-    'Approve and create this purchase order now?',
-    'Choose Cancel to leave it unapproved; nothing is queued on this device.',
-].join('\n');
-
 export function usePurchaseOrderSave(
     props: UsePurchaseOrderSaveProps,
 ): UsePurchaseOrderSaveReturn {
@@ -190,7 +172,6 @@ export function usePurchaseOrderSave(
         purchaseOrder,
         selectedSupplier,
         setErrors,
-        setPurchaseOrder,
     ]);
 
     const handleSavePurchaseOrder = useCallback(async (): Promise<void> => {
@@ -209,7 +190,6 @@ export function usePurchaseOrderSave(
             }
             let purchaseOrderId = attempt.executedResourceId;
             if (!purchaseOrderId) {
-                if (!window.confirm(formatCanonicalPurchaseOrderConfirmation(canonicalReview))) return;
                 const { execution } = await canonicalPurchaseOrdersApi.executePrepared(
                     preparedPreview,
                     attempt.lifecycleId,

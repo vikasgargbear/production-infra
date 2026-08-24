@@ -1,67 +1,32 @@
-import React, { useState } from 'react';
-import { FileText, Loader } from 'lucide-react';
-import { ordersApi } from '../../../services/api';
-import { toast } from 'react-toastify';
+import React from 'react';
+import { FileText } from 'lucide-react';
 
 interface ConvertToInvoiceButtonProps {
-  orderId: number;
+  orderId: number | string;
   orderNumber?: string;
-  onSuccess?: (invoiceData: any) => void;
   className?: string;
 }
 
 const ConvertToInvoiceButton: React.FC<ConvertToInvoiceButtonProps> = ({
   orderId,
   orderNumber,
-  onSuccess,
   className = ''
 }) => {
-  const [converting, setConverting] = useState<boolean>(false);
-
-  const handleConvert = async () => {
-    if (!orderId) return;
-
-    const confirmed = window.confirm(
-      `Convert Sales Order ${orderNumber || orderId} to Invoice?\n\nThis will create an invoice and deduct inventory.`
-    );
-
-    if (!confirmed) return;
-
-    setConverting(true);
-    try {
-      const response = await ordersApi.convertToInvoice(orderId);
-
-      if (response.data) {
-        toast.success(`Invoice ${response.data.invoice_number} created successfully!`);
-        if (onSuccess) {
-          onSuccess(response.data);
-        }
-      }
-    } catch (error: any) {
-      toast.error(`Failed to convert to invoice: ${error.response?.data?.detail || error.message}`);
-    } finally {
-      setConverting(false);
-    }
-  };
-
   return (
-    <button
-      onClick={handleConvert}
-      disabled={converting || !orderId}
-      className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 ${className}`}
+    <span
+      className="inline-flex"
+      title={`Open Create Invoice and import dispatched order ${orderNumber || orderId}. Direct order conversion is unavailable because it bypasses canonical batch and dispatch review.`}
     >
-      {converting ? (
-        <>
-          <Loader className="w-4 h-4 animate-spin" />
-          Converting...
-        </>
-      ) : (
-        <>
-          <FileText className="w-4 h-4" />
-          Convert to Invoice
-        </>
-      )}
-    </button>
+      <button
+        type="button"
+        disabled
+        aria-label={`Create invoice for sales order ${orderNumber || orderId} from the canonical invoice workflow`}
+        className={`flex min-h-11 cursor-not-allowed items-center gap-2 rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-gray-500 ${className}`}
+      >
+        <FileText className="h-4 w-4" />
+        Use Create Invoice
+      </button>
+    </span>
   );
 };
 

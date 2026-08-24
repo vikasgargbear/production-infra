@@ -10,7 +10,29 @@ import type { CanonicalCustomerReceiptPreparePayload } from '../../../../compone
 import { moneyToCents } from '../../../../components/payment/entry/customerReceiptCommand';
 
 export async function prepareCustomerReceipt(payload: CanonicalCustomerReceiptPreparePayload) {
-  return prepareCanonicalAction('finance.customer_receipt.prepare', payload as unknown as Record<string, unknown>);
+  const prepared = await prepareCanonicalAction(
+    'finance.customer_receipt.prepare', payload as unknown as Record<string, unknown>,
+  );
+  const preview = prepared.data;
+  const impacts = Array.isArray(preview.financial_impact) ? preview.financial_impact : [];
+  const impact = impacts.length === 1 && impacts[0] && typeof impacts[0] === 'object'
+    ? impacts[0] as Record<string, any>
+    : null;
+  const previewAllocations = impact && Array.isArray(impact.allocations) ? impact.allocations : [];
+  const expectedAllocations = new Map(payload.allocations.map(row => [row.open_item_id, moneyToCents(row.amount)]));
+  const actualAllocations = new Map(previewAllocations.map((row: any) => [
+    String(row?.open_item_id || ''), moneyToCents(row?.allocated_amount),
+  ]));
+  const allocationsMatch = expectedAllocations.size === actualAllocations.size
+    && [...expectedAllocations].every(([openItemId, amount]) => actualAllocations.get(openItemId) === amount);
+  if (String(preview.branch_id || '') !== payload.branch_id
+    || !impact
+    || moneyToCents(impact.receipt_amount) !== moneyToCents(payload.amount)
+    || String(impact.settlement_account_id || '') !== payload.settlement_account_id
+    || !allocationsMatch) {
+    throw new Error('Authoritative receipt preview does not match the requested amount, branch, settlement account, or allocations. Nothing was approved.');
+  }
+  return prepared;
 }
 
 export async function approveCustomerReceipt(
