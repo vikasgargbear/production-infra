@@ -160,6 +160,70 @@ test('Supabase token refresh silently renews the ERP session', async () => {
 });
 
 
+test('identical concurrent ERP session exchanges share one backend request', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    let resolveExchange;
+    fetch.mockImplementationOnce(() => new Promise((resolve) => {
+        resolveExchange = resolve;
+    }));
+
+    let firstExchange;
+    let secondExchange;
+    act(() => {
+        firstExchange = currentAuth.handleOAuthCallback('shared-supabase-access');
+        secondExchange = currentAuth.handleOAuthCallback('shared-supabase-access');
+    });
+
+    expect(secondExchange).toBe(firstExchange);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+        resolveExchange({
+            ok: true,
+            json: async () => ({ access_token: token() }),
+        });
+        await firstExchange;
+    });
+
+    expect(currentAuth.isAuthenticated).toBe(true);
+});
+
+
+test('ERP session exchange retries a transient network failure', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    jest.useFakeTimers();
+
+    fetch
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ access_token: token() }),
+        });
+
+    let resultPromise;
+    act(() => {
+        resultPromise = currentAuth.handleOAuthCallback('retry-supabase-access');
+    });
+    await act(async () => Promise.resolve());
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+        jest.advanceTimersByTime(1500);
+        await Promise.resolve();
+    });
+    let result;
+    await act(async () => {
+        result = await resultPromise;
+    });
+    expect(result).toEqual(expect.objectContaining({ success: true }));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
+});
+
+
 test('offline browsers cannot authenticate from cached credentials', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     render(<AuthProvider><Probe /></AuthProvider>);

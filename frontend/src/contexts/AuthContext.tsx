@@ -4,6 +4,7 @@ import React, {
     useCallback,
     useContext,
     useEffect,
+    useRef,
     useState,
 } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
@@ -63,6 +64,30 @@ interface JWTPayload {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const SESSION_EXCHANGE_RETRY_DELAYS_MS = [0, 1500, 3000, 6000, 12000] as const;
+
+const wait = (delayMs: number): Promise<void> => (
+    new Promise((resolve) => window.setTimeout(resolve, delayMs))
+);
+
+async function requestErpSession(accessToken: string): Promise<Response> {
+    let networkError: unknown;
+
+    for (const delayMs of SESSION_EXCHANGE_RETRY_DELAYS_MS) {
+        if (delayMs > 0) await wait(delayMs);
+        try {
+            return await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+            });
+        } catch (error) {
+            networkError = error;
+        }
+    }
+
+    throw networkError;
+}
+
 function decodeToken(token: string): JWTPayload | null {
     try {
         const encodedPayload = token.replace(/^Bearer\s+/i, '').split('.')[1];
@@ -99,6 +124,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: true,
     });
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const pendingExchange = useRef<{
+        accessToken: string;
+        promise: Promise<LoginResult>;
+    } | null>(null);
 
     const clearErpSession = useCallback(() => {
         salesSyncService.stop();
@@ -106,37 +135,53 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setState({ user: null, token: null, isAuthenticated: false, isLoading: false });
     }, []);
 
-    const exchangeSupabaseSession = useCallback(async (accessToken: string): Promise<LoginResult> => {
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            return { success: false, error: errorMessage(data, 'ERP access is not authorized') };
+    const exchangeSupabaseSession = useCallback((accessToken: string): Promise<LoginResult> => {
+        if (pendingExchange.current?.accessToken === accessToken) {
+            return pendingExchange.current.promise;
         }
 
-        const payload = decodeToken(data.access_token);
-        if (!payload) {
-            return { success: false, error: 'The ERP session response was invalid' };
-        }
-        const primaryBranch = payload.branch_id ?? Number(payload.branch_ids?.[0]);
-        const user: User = {
-            user_id: payload.user_id,
-            email: payload.email,
-            org_id: payload.org_id,
-            role_id: payload.role_id,
-            branch_id: Number.isFinite(primaryBranch) ? primaryBranch : undefined,
-            permissions: payload.permissions || {},
-            auth_provider: payload.auth_provider,
-        };
+        const promise = (async (): Promise<LoginResult> => {
+            try {
+                const response = await requestErpSession(accessToken);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    return { success: false, error: errorMessage(data, 'ERP access is not authorized') };
+                }
 
-        saveErpSession(data.access_token, user);
-        setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
-        Promise.resolve(salesSyncService.performInitialSync()).catch((error: Error) => {
-            console.warn('[Auth] Initial sync failed:', error.message);
+                const payload = decodeToken(data.access_token);
+                if (!payload) {
+                    return { success: false, error: 'The ERP session response was invalid' };
+                }
+                const primaryBranch = payload.branch_id ?? Number(payload.branch_ids?.[0]);
+                const user: User = {
+                    user_id: payload.user_id,
+                    email: payload.email,
+                    org_id: payload.org_id,
+                    role_id: payload.role_id,
+                    branch_id: Number.isFinite(primaryBranch) ? primaryBranch : undefined,
+                    permissions: payload.permissions || {},
+                    auth_provider: payload.auth_provider,
+                };
+
+                saveErpSession(data.access_token, user);
+                setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
+                Promise.resolve(salesSyncService.performInitialSync()).catch((error: Error) => {
+                    console.warn('[Auth] Initial sync failed:', error.message);
+                });
+                return { success: true, user };
+            } catch {
+                return {
+                    success: false,
+                    error: 'The ERP service is starting. Please try signing in again in a moment.',
+                };
+            }
+        })();
+
+        pendingExchange.current = { accessToken, promise };
+        void promise.then(() => {
+            if (pendingExchange.current?.promise === promise) pendingExchange.current = null;
         });
-        return { success: true, user };
+        return promise;
     }, []);
 
     const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
