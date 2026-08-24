@@ -1452,6 +1452,7 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
 
     source_kind: Literal["direct_issue", "dispatch_allocation"]
     allocation_id: UUID
+    command_request_id: Optional[UUID]
     inventory_document_id: UUID
     inventory_document_line_id: UUID
     invoice_dispatch_allocation_id: Optional[UUID]
@@ -1463,20 +1464,23 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
     from_location_id: Optional[UUID]
     uom_code: str
     base_quantity: float
-    base_billed_quantity: Optional[float]
-    base_free_quantity: Optional[float]
-    billed_quantity: Optional[float]
-    free_quantity: Optional[float]
+    base_billed_quantity: float
+    base_free_quantity: float
+    billed_quantity: float
+    free_quantity: float
 
     @model_validator(mode="after")
     def validate_source_identity(self):
         if self.source_kind == "dispatch_allocation":
             if (
-                not self.invoice_dispatch_allocation_id
+                self.command_request_id is not None
+                or not self.invoice_dispatch_allocation_id
                 or not self.dispatch_id
                 or not self.dispatch_line_id
             ):
                 raise ValueError("dispatch allocation requires dispatch lineage identities")
+        elif not self.command_request_id:
+            raise ValueError("direct issue requires succeeded command evidence")
         elif self.invoice_dispatch_allocation_id or self.dispatch_id or self.dispatch_line_id:
             raise ValueError("direct issue cannot claim dispatch allocation identities")
         return self
@@ -1494,6 +1498,9 @@ class CanonicalInvoiceDetailItem(BaseModel):
     unit: str
     quantity: float
     free_quantity: float
+    free_supply_tax_treatment: Literal[
+        "excluded_from_taxable_value", "included_at_unit_rate"
+    ]
     unit_price: float
     discount_percent: float
     tax_rate: float
@@ -1508,6 +1515,59 @@ class CanonicalInvoiceDetailItem(BaseModel):
     batch_number: Optional[str]
     expiry_date: Optional[date]
     batch_allocations: list[CanonicalInvoiceExecutedBatchAllocation]
+
+    @model_validator(mode="after")
+    def validate_allocation_set(self):
+        if not self.batch_allocations:
+            if self.batch_id or self.batch_number or self.expiry_date:
+                raise ValueError("scalar batch identity requires an executed allocation")
+            return self
+        if len({value.source_kind for value in self.batch_allocations}) != 1:
+            raise ValueError("invoice line cannot mix direct and dispatch allocations")
+        if len({value.allocation_id for value in self.batch_allocations}) != len(
+            self.batch_allocations
+        ):
+            raise ValueError("invoice allocation identities must be unique")
+        if len({value.inventory_document_line_id for value in self.batch_allocations}) != len(
+            self.batch_allocations
+        ):
+            raise ValueError("executed inventory line identities must be unique")
+        if self.batch_allocations[0].source_kind == "direct_issue" and len({
+            value.command_request_id for value in self.batch_allocations
+        }) != 1:
+            raise ValueError("direct allocations must share one succeeded command")
+        for allocation in self.batch_allocations:
+            if abs(
+                allocation.base_quantity
+                - allocation.base_billed_quantity
+                - allocation.base_free_quantity
+            ) > 0.000001:
+                raise ValueError("executed allocation base quantities do not reconcile")
+            if allocation.source_kind == "direct_issue" and (
+                allocation.allocation_id != allocation.inventory_document_line_id
+            ):
+                raise ValueError("direct allocation identity must be its inventory line")
+            if allocation.source_kind == "dispatch_allocation" and (
+                allocation.allocation_id != allocation.invoice_dispatch_allocation_id
+            ):
+                raise ValueError("dispatch allocation identity must remain distinct")
+        if abs(
+            sum(value.billed_quantity for value in self.batch_allocations) - self.quantity
+        ) > 0.000001 or abs(
+            sum(value.free_quantity for value in self.batch_allocations) - self.free_quantity
+        ) > 0.000001:
+            raise ValueError("executed allocations do not reconcile to invoice quantities")
+        if len(self.batch_allocations) == 1:
+            allocation = self.batch_allocations[0]
+            if (
+                self.batch_id != allocation.batch_id
+                or self.batch_number != allocation.batch_number
+                or self.expiry_date != allocation.expiry_date
+            ):
+                raise ValueError("scalar batch compatibility fields do not match allocation")
+        elif self.batch_id or self.batch_number or self.expiry_date:
+            raise ValueError("multi-allocation line cannot expose lossy scalar batch identity")
+        return self
 
 
 class CanonicalInvoiceDetailResponse(BaseModel):
@@ -1575,6 +1635,7 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity', line.billed_quantity,
                          'free_quantity', line.free_quantity,
+                         'free_supply_tax_treatment', line.free_supply_tax_treatment,
                          'unit_price', line.quoted_unit_rate,
                          'discount_percent', CASE
                              WHEN line.line_discount_kind='percent'
@@ -1607,6 +1668,7 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                            jsonb_agg(jsonb_build_object(
                                'source_kind', executed.source_kind,
                                'allocation_id', executed.allocation_id,
+                               'command_request_id', executed.command_request_id,
                                'inventory_document_id', executed.inventory_document_id,
                                'inventory_document_line_id', executed.inventory_document_line_id,
                                'invoice_dispatch_allocation_id',
@@ -1628,6 +1690,7 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                       FROM (
                           SELECT 'direct_issue'::text AS source_kind,
                                  inventory_line.id AS allocation_id,
+                                 command_evidence.command_request_id,
                                  inventory_line.inventory_document_id,
                                  inventory_line.id AS inventory_document_line_id,
                                  NULL::uuid AS invoice_dispatch_allocation_id,
@@ -1638,30 +1701,18 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                  inventory_line.from_location_id,
                                  inventory_line.uom_code,
                                  inventory_line.base_quantity,
-                                 CASE
-                                   WHEN count(*) OVER ()=1 THEN line.base_billed_quantity
-                                   WHEN COALESCE(line.base_free_quantity, 0)=0
-                                     THEN inventory_line.base_quantity
-                                   WHEN COALESCE(line.base_billed_quantity, 0)=0 THEN 0
-                                 END AS base_billed_quantity,
-                                 CASE
-                                   WHEN count(*) OVER ()=1 THEN line.base_free_quantity
-                                   WHEN COALESCE(line.base_free_quantity, 0)=0 THEN 0
-                                   WHEN COALESCE(line.base_billed_quantity, 0)=0
-                                     THEN inventory_line.base_quantity
-                                 END AS base_free_quantity,
-                                 CASE
-                                   WHEN count(*) OVER ()=1 THEN line.billed_quantity
-                                   WHEN COALESCE(line.base_free_quantity, 0)=0
-                                     THEN inventory_line.entered_quantity
-                                   WHEN COALESCE(line.base_billed_quantity, 0)=0 THEN 0
-                                 END AS billed_quantity,
-                                 CASE
-                                   WHEN count(*) OVER ()=1 THEN line.free_quantity
-                                   WHEN COALESCE(line.base_free_quantity, 0)=0 THEN 0
-                                   WHEN COALESCE(line.base_billed_quantity, 0)=0
-                                     THEN inventory_line.entered_quantity
-                                 END AS free_quantity
+                                 pg_catalog.round(
+                                   (requested_allocation.value->>'billed_quantity')::numeric
+                                     * line.uom_conversion_factor, 6
+                                 ) AS base_billed_quantity,
+                                 pg_catalog.round(
+                                   (requested_allocation.value->>'free_quantity')::numeric
+                                     * line.uom_conversion_factor, 6
+                                 ) AS base_free_quantity,
+                                 (requested_allocation.value->>'billed_quantity')::numeric
+                                   AS billed_quantity,
+                                 (requested_allocation.value->>'free_quantity')::numeric
+                                   AS free_quantity
                             FROM inventory.inventory_document_lines inventory_line
                             JOIN inventory.inventory_documents inventory_document
                              ON inventory_document.org_id=inventory_line.org_id
@@ -1673,11 +1724,55 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                             JOIN inventory.batches batch
                               ON batch.org_id=inventory_line.org_id
                              AND batch.id=inventory_line.batch_id
+                            JOIN LATERAL (
+                                SELECT (array_agg(command.id ORDER BY command.id))[1]
+                                         AS command_request_id,
+                                       (array_agg(
+                                          pg_catalog.convert_from(command.request_bytes, 'UTF8')::jsonb
+                                          ORDER BY command.id
+                                        ))[1] AS request_document
+                                  FROM automation.command_requests command
+                                 WHERE command.org_id=invoice.org_id
+                                   AND command.branch_id=invoice.branch_id
+                                   AND command.capability_code='sales.invoice.prepare'
+                                   AND command.operation='sales.invoice.post'
+                                   AND command.target_resource_type='sales_invoice'
+                                   AND command.target_resource_id=invoice.id
+                                   AND command.status='succeeded'
+                                   AND command.result_resource_type='sales_invoice'
+                                   AND command.result_resource_id=invoice.id
+                                   AND command.response_status=200
+                                   AND command.request_hash=extensions.digest(
+                                       command.request_bytes, 'sha256'
+                                   )
+                                HAVING count(*)=1
+                            ) command_evidence ON true
+                            JOIN LATERAL pg_catalog.jsonb_array_elements(
+                                command_evidence.request_document->'lines'
+                            ) requested_line(value)
+                              ON requested_line.value->>'line_id'=line.id::text
+                             AND requested_line.value->>'fulfillment_source'='direct_issue'
+                            JOIN LATERAL pg_catalog.jsonb_array_elements(
+                                requested_line.value->'batch_allocations'
+                            ) requested_allocation(value)
+                              ON requested_allocation.value->>'inventory_line_id'
+                                   =inventory_line.id::text
+                             AND requested_allocation.value->>'batch_id'
+                                   =inventory_line.batch_id::text
                            WHERE inventory_line.org_id=line.org_id
                              AND inventory_line.sales_invoice_line_id=line.id
+                             AND inventory_line.entered_quantity=
+                                 (requested_allocation.value->>'billed_quantity')::numeric
+                                 +(requested_allocation.value->>'free_quantity')::numeric
+                             AND inventory_line.base_quantity=pg_catalog.round(
+                                 ((requested_allocation.value->>'billed_quantity')::numeric
+                                  +(requested_allocation.value->>'free_quantity')::numeric)
+                                 *line.uom_conversion_factor, 6
+                             )
                           UNION ALL
                           SELECT 'dispatch_allocation'::text AS source_kind,
                                  invoice_allocation.id AS allocation_id,
+                                 NULL::uuid AS command_request_id,
                                  inventory_line.inventory_document_id,
                                  inventory_line.id AS inventory_document_line_id,
                                  invoice_allocation.id AS invoice_dispatch_allocation_id,

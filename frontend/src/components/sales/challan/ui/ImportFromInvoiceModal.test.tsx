@@ -28,9 +28,13 @@ describe('ImportFromInvoiceModal executed allocation mapping', () => {
             items: [{
                 id: 'line-1', product_id: 'product-1', product_name: 'Carton',
                 quantity: 3, free_quantity: 1, unit_price: 100,
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
                 batch_allocations: [
                     {
-                        source_kind: 'direct_issue', allocation_id: 'allocation-1',
+                        source_kind: 'dispatch_allocation', command_request_id: null,
+                        allocation_id: 'invoice-dispatch-allocation-1',
+                        invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
+                        dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
                         inventory_document_id: 'document-1',
                         inventory_document_line_id: 'inventory-line-1',
                         batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
@@ -38,8 +42,10 @@ describe('ImportFromInvoiceModal executed allocation mapping', () => {
                         billed_quantity: 1, free_quantity: 1,
                     },
                     {
-                        source_kind: 'dispatch_allocation', allocation_id: 'allocation-2',
+                        source_kind: 'dispatch_allocation', command_request_id: null,
+                        allocation_id: 'invoice-dispatch-allocation-2',
                         invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
+                        dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-2',
                         inventory_document_id: 'document-2',
                         inventory_document_line_id: 'inventory-line-2',
                         batch_id: 'batch-2', batch_number: 'BATCH-2', expiry_date: '2028-09-01',
@@ -64,12 +70,15 @@ describe('ImportFromInvoiceModal executed allocation mapping', () => {
                 batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
                 quantity: 1, free_quantity: 1,
                 inventory_document_line_id: 'inventory-line-1',
+                invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
+                dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
             }),
             expect.objectContaining({
                 batch_id: 'batch-2', batch_number: 'BATCH-2', expiry_date: '2028-09-01',
                 quantity: 2, free_quantity: 0,
                 inventory_document_line_id: 'inventory-line-2',
                 invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
+                dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-2',
             }),
         ]);
     });

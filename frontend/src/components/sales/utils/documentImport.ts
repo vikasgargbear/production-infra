@@ -51,9 +51,12 @@ export interface CanonicalImportLine extends Record<string, unknown> {
 interface CanonicalExecutedBatchAllocation extends Record<string, unknown> {
     source_kind: 'direct_issue' | 'dispatch_allocation';
     allocation_id: string;
+    command_request_id?: string | null;
     inventory_document_id: string;
     inventory_document_line_id: string;
     invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
     batch_id: string | number;
     batch_number: string;
     expiry_date?: string | null;
@@ -79,31 +82,49 @@ const moneyFields = [
     'tax_amount', 'total_tax_amount', 'line_total', 'total',
 ] as const;
 
+const apportionMinorUnits = (total: number, weights: number[], field: string): number[] => {
+    if (total < 0) throw new Error(`The canonical ${field} cannot be negative.`);
+    const totalMinor = Math.round(total * 100);
+    if (!quantitiesMatch(total, totalMinor / 100)) {
+        throw new Error(`The canonical ${field} exceeds minor-unit precision.`);
+    }
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    if (weights.some(weight => !Number.isFinite(weight) || weight < 0)) {
+        throw new Error(`The canonical ${field} allocation basis is invalid.`);
+    }
+    if (totalWeight === 0) {
+        if (totalMinor !== 0) {
+            throw new Error(`A zero-value allocation basis cannot carry ${field}.`);
+        }
+        return weights.map(() => 0);
+    }
+
+    const exactShares = weights.map(weight => totalMinor * weight / totalWeight);
+    const minorShares = exactShares.map(Math.floor);
+    const residual = totalMinor - minorShares.reduce((sum, value) => sum + value, 0);
+    if (residual < 0 || residual > weights.length) {
+        throw new Error(`The canonical ${field} minor-unit apportionment is inconsistent.`);
+    }
+    const remainderOrder = exactShares
+        .map((exact, index) => ({ index, remainder: exact - Math.floor(exact) }))
+        .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
+    for (let index = 0; index < residual; index += 1) {
+        minorShares[remainderOrder[index].index] += 1;
+    }
+    return minorShares.map(value => value / 100);
+};
+
 const splitMoney = (
     item: Record<string, unknown>,
-    quantities: number[],
-    sourceQuantity: number,
+    weights: number[],
 ): Array<Record<string, number>> => {
-    const splits = quantities.map(() => ({} as Record<string, number>));
+    const splits = weights.map(() => ({} as Record<string, number>));
     for (const field of moneyFields) {
         if (item[field] === undefined || item[field] === null) continue;
         const total = finiteNumber(item[field]);
         if (total === null) throw new Error(`The canonical ${field} is not numeric.`);
-        if (sourceQuantity === 0) {
-            if (!quantitiesMatch(total, 0)) {
-                throw new Error(`A free-only line cannot allocate a non-zero ${field}.`);
-            }
-            splits.forEach(split => { split[field] = 0; });
-            continue;
-        }
-
-        let allocated = 0;
-        quantities.forEach((quantity, index) => {
-            const amount = index === quantities.length - 1
-                ? Math.round((total - allocated) * 100) / 100
-                : Math.round((total * quantity / sourceQuantity) * 100) / 100;
+        apportionMinorUnits(total, weights, field).forEach((amount, index) => {
             splits[index][field] = amount;
-            allocated += amount;
         });
     }
     return splits;
@@ -121,16 +142,40 @@ const projectExecutedAllocations = (
         throw new Error(`Line ${index + 1} has no executed canonical batch allocations.`);
     }
 
+    const seenAllocationIds = new Set<string>();
     const seenInventoryLines = new Set<string>();
+    const seenDispatchLines = new Set<string>();
+    const seenDirectCommandIds = new Set<string>();
+    const lineSourceKind = allocations[0]?.source_kind;
     const quantities = allocations.map((allocation, allocationIndex) => {
         const prefix = `Line ${index + 1} allocation ${allocationIndex + 1}`;
         if (!['direct_issue', 'dispatch_allocation'].includes(allocation.source_kind)) {
             throw new Error(`${prefix} has an unsupported execution source.`);
         }
+        if (allocation.source_kind !== lineSourceKind) {
+            throw new Error(`Line ${index + 1} mixes incompatible execution sources.`);
+        }
+        const allocationId = String(allocation.allocation_id || '');
+        if (seenAllocationIds.has(allocationId)) {
+            throw new Error(`${prefix} duplicates a canonical allocation identity.`);
+        }
+        seenAllocationIds.add(allocationId);
         if (allocation.source_kind === 'dispatch_allocation'
             && (!allocation.invoice_dispatch_allocation_id
                 || String(allocation.invoice_dispatch_allocation_id).trim() === '')) {
             throw new Error(`${prefix} is missing its invoice dispatch allocation identity.`);
+        }
+        if (allocation.source_kind === 'dispatch_allocation'
+            && (allocationId !== String(allocation.invoice_dispatch_allocation_id)
+                || !allocation.dispatch_id || !allocation.dispatch_line_id)) {
+            throw new Error(`${prefix} has contradictory dispatch lineage identities.`);
+        }
+        if (allocation.source_kind === 'dispatch_allocation') {
+            const dispatchLineId = String(allocation.dispatch_line_id);
+            if (seenDispatchLines.has(dispatchLineId)) {
+                throw new Error(`${prefix} duplicates a dispatch line allocation.`);
+            }
+            seenDispatchLines.add(dispatchLineId);
         }
         if (allocation.source_kind === 'direct_issue'
             && allocation.invoice_dispatch_allocation_id !== undefined
@@ -151,17 +196,23 @@ const projectExecutedAllocations = (
             throw new Error(`${prefix} is missing its batch number.`);
         }
         const inventoryLineId = String(allocation.inventory_document_line_id);
+        if (allocation.source_kind === 'direct_issue'
+            && (!allocation.command_request_id
+                || allocationId !== inventoryLineId
+                || (allocation.dispatch_id !== undefined && allocation.dispatch_id !== null)
+                || (allocation.dispatch_line_id !== undefined && allocation.dispatch_line_id !== null))) {
+            throw new Error(`${prefix} has contradictory direct-issue lineage identities.`);
+        }
+        if (allocation.source_kind === 'direct_issue') {
+            seenDirectCommandIds.add(String(allocation.command_request_id));
+        }
         if (seenInventoryLines.has(inventoryLineId)) {
             throw new Error(`${prefix} duplicates an executed inventory line.`);
         }
         seenInventoryLines.add(inventoryLineId);
 
-        let billed = finiteNumber(allocation.billed_quantity);
-        let free = finiteNumber(allocation.free_quantity);
-        if (allocations.length === 1) {
-            billed ??= sourceQuantity;
-            free ??= sourceFreeQuantity;
-        }
+        const billed = finiteNumber(allocation.billed_quantity);
+        const free = finiteNumber(allocation.free_quantity);
         if (billed === null || free === null) {
             throw new Error(`${prefix} does not identify billed and free quantities separately.`);
         }
@@ -182,6 +233,10 @@ const projectExecutedAllocations = (
         return { billed, free };
     });
 
+    if (lineSourceKind === 'direct_issue' && seenDirectCommandIds.size !== 1) {
+        throw new Error(`Line ${index + 1} mixes allocations from different canonical commands.`);
+    }
+
     const billedTotal = quantities.reduce((sum, allocation) => sum + allocation.billed, 0);
     const freeTotal = quantities.reduce((sum, allocation) => sum + allocation.free, 0);
     if (!quantitiesMatch(billedTotal, sourceQuantity)
@@ -189,16 +244,28 @@ const projectExecutedAllocations = (
         throw new Error(`Line ${index + 1} batch allocations do not reconcile to its billed and free quantities.`);
     }
 
-    const monetarySplits = splitMoney(item, quantities.map(value => value.billed), sourceQuantity);
+    const freeTreatment = item.free_supply_tax_treatment;
+    if (!['excluded_from_taxable_value', 'included_at_unit_rate'].includes(
+        String(freeTreatment),
+    )) {
+        throw new Error(`Line ${index + 1} is missing its canonical free-supply tax treatment.`);
+    }
+    const monetaryWeights = quantities.map(value => value.billed + (
+        freeTreatment === 'included_at_unit_rate' ? value.free : 0
+    ));
+    const monetarySplits = splitMoney(item, monetaryWeights);
     return allocations.map((allocation, allocationIndex) => ({
         ...item,
         ...monetarySplits[allocationIndex],
         source_line_id: item.id,
         source_allocation_kind: allocation.source_kind,
         allocation_id: allocation.allocation_id,
+        command_request_id: allocation.command_request_id ?? null,
         inventory_document_id: allocation.inventory_document_id,
         inventory_document_line_id: allocation.inventory_document_line_id,
         invoice_dispatch_allocation_id: allocation.invoice_dispatch_allocation_id ?? null,
+        dispatch_id: allocation.dispatch_id ?? null,
+        dispatch_line_id: allocation.dispatch_line_id ?? null,
         product_id: (item.product_id ?? item.id) as string | number,
         product_name: String(item.product_name ?? item.name ?? '').trim(),
         batch_id: allocation.batch_id,

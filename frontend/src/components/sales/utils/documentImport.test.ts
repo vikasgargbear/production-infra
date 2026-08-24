@@ -7,7 +7,8 @@ import {
 describe('Sales document import envelope normalization', () => {
     const allocation = (overrides: Record<string, unknown> = {}) => ({
         source_kind: 'direct_issue',
-        allocation_id: 'allocation-1',
+        allocation_id: 'inventory-line-1',
+        command_request_id: 'command-1',
         inventory_document_id: 'inventory-document-1',
         inventory_document_line_id: 'inventory-line-1',
         batch_id: 'batch-1',
@@ -56,31 +57,30 @@ describe('Sales document import envelope normalization', () => {
         })]);
     });
 
-    it('accepts one direct executed allocation, including null expiry, without scalar batch fields', () => {
+    it('accepts one evidenced direct allocation, including null expiry, without scalar batch fields', () => {
         const result = projectCanonicalImportLines([{
             id: 'invoice-line-1', product_id: 'product-1', product_name: 'Product',
             quantity: 1, free_quantity: 0, unit_price: 150, tax_rate: 12,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
             batch_id: null, batch_number: null,
-            batch_allocations: [allocation({
-                billed_quantity: null, free_quantity: null,
-                base_billed_quantity: null, base_free_quantity: null,
-            })],
+            batch_allocations: [allocation()],
         }]);
 
         expect(result).toEqual([expect.objectContaining({
             source_line_id: 'invoice-line-1',
             source_allocation_kind: 'direct_issue',
-            allocation_id: 'allocation-1',
+            allocation_id: 'inventory-line-1',
             inventory_document_line_id: 'inventory-line-1',
             batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
             quantity: 1, free_quantity: 0, unit_price: 150, gst_percent: 12,
         })]);
     });
 
-    it('expands many direct/dispatch allocations and preserves quantities, free stock, and money', () => {
+    it('expands evidenced multi-batch direct allocations and preserves quantities and money', () => {
         const result = projectCanonicalImportLines([{
             id: 'invoice-line-1', product_id: 'product-1', product_name: 'Product',
             quantity: 3, free_quantity: 1, unit_price: 100, tax_rate: 12,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
             taxable_amount: 100, cgst_amount: 6, sgst_amount: 6, cess_amount: 1,
             line_total: 113,
             batch_allocations: [
@@ -89,8 +89,7 @@ describe('Sales document import envelope normalization', () => {
                     billed_quantity: 1, free_quantity: 1,
                 }),
                 allocation({
-                    source_kind: 'dispatch_allocation', allocation_id: 'allocation-2',
-                    invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
+                    allocation_id: 'inventory-line-2',
                     inventory_document_id: 'inventory-document-2',
                     inventory_document_line_id: 'inventory-line-2',
                     batch_id: 'batch-2', batch_number: 'BATCH-2',
@@ -104,7 +103,6 @@ describe('Sales document import envelope normalization', () => {
         expect(result).toHaveLength(2);
         expect(result.map(item => [item.batch_id, item.quantity, item.free_quantity]))
             .toEqual([['batch-1', 1, 1], ['batch-2', 2, 0]]);
-        expect(result[1].invoice_dispatch_allocation_id).toBe('invoice-dispatch-allocation-2');
         expect(result.map(item => item.line_total)).toEqual([37.67, 75.33]);
         expect(result.reduce((sum, item) => sum + Number(item.taxable_amount), 0)).toBe(100);
         expect(result.reduce((sum, item) => sum + Number(item.cgst_amount), 0)).toBe(6);
@@ -113,21 +111,133 @@ describe('Sales document import envelope normalization', () => {
         expect(result.reduce((sum, item) => sum + Number(item.line_total), 0)).toBe(113);
     });
 
+    it('preserves distinct dispatch allocation and custody identities', () => {
+        const result = projectCanonicalImportLines([{
+            product_id: 'product-1', product_name: 'Product', quantity: 1,
+            free_quantity: 0, unit_price: 10,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
+            batch_allocations: [allocation({
+                source_kind: 'dispatch_allocation', command_request_id: null,
+                allocation_id: 'invoice-dispatch-allocation-1',
+                invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
+                dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
+            })],
+        }]);
+
+        expect(result[0]).toEqual(expect.objectContaining({
+            allocation_id: 'invoice-dispatch-allocation-1',
+            invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
+            dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
+        }));
+    });
+
+    it.each([
+        ['excluded_from_taxable_value', [1, 1], [0.01, 0.01, 0, 0]],
+        ['included_at_unit_rate', [1, 1], [0.01, 0.01, 0, 0]],
+    ])('apportions ₹0.02 across four %s allocations without negative residuals', (
+        freeSupplyTaxTreatment, billedAndFree, expected,
+    ) => {
+        const [billed, free] = billedAndFree;
+        const allocations = Array.from({ length: 4 }, (_, index) => allocation({
+            allocation_id: `inventory-line-${index + 1}`,
+            inventory_document_line_id: `inventory-line-${index + 1}`,
+            batch_id: `batch-${index + 1}`, batch_number: `BATCH-${index + 1}`,
+            base_quantity: billed + free, base_billed_quantity: billed,
+            base_free_quantity: free, billed_quantity: billed, free_quantity: free,
+        }));
+        const result = projectCanonicalImportLines([{
+            product_id: 'product-1', product_name: 'Product', quantity: billed * 4,
+            free_quantity: free * 4, unit_price: 1,
+            free_supply_tax_treatment: freeSupplyTaxTreatment,
+            taxable_amount: 0.02, line_total: 0.02, batch_allocations: allocations,
+        }]);
+
+        expect(result.map(item => item.line_total)).toEqual(expected);
+        expect(result.every(item => Number(item.line_total) >= 0)).toBe(true);
+        expect(result.reduce((sum, item) => sum + Number(item.line_total), 0)).toBe(0.02);
+    });
+
+    it('uses free quantity in the valuation basis only when canonical treatment includes it', () => {
+        const shared = {
+            product_id: 'product-1', product_name: 'Product', quantity: 2,
+            free_quantity: 2, unit_price: 10, taxable_amount: 40, line_total: 40,
+            batch_allocations: [
+                allocation({ billed_quantity: 2, free_quantity: 0, base_quantity: 2,
+                    base_billed_quantity: 2, base_free_quantity: 0 }),
+                allocation({ allocation_id: 'inventory-line-2',
+                    inventory_document_line_id: 'inventory-line-2',
+                    batch_id: 'batch-2', batch_number: 'BATCH-2', billed_quantity: 0,
+                    free_quantity: 2, base_quantity: 2, base_billed_quantity: 0,
+                    base_free_quantity: 2 }),
+            ],
+        };
+
+        expect(projectCanonicalImportLines([{
+            ...shared, free_supply_tax_treatment: 'included_at_unit_rate',
+        }]).map(item => item.line_total)).toEqual([20, 20]);
+        expect(projectCanonicalImportLines([{
+            ...shared, free_supply_tax_treatment: 'excluded_from_taxable_value',
+            taxable_amount: 20, line_total: 20,
+        }]).map(item => item.line_total)).toEqual([20, 0]);
+    });
+
+    it('supports a free-only included-at-unit-rate line with exact allocation evidence', () => {
+        const freeOnlyLine = {
+            product_id: 'product-1', product_name: 'Product', quantity: 0,
+            free_quantity: 2, unit_price: 10,
+            batch_allocations: [
+                allocation({ billed_quantity: 0, free_quantity: 1, base_billed_quantity: 0,
+                    base_free_quantity: 1 }),
+                allocation({ allocation_id: 'inventory-line-2',
+                    inventory_document_line_id: 'inventory-line-2',
+                    batch_id: 'batch-2', batch_number: 'BATCH-2', billed_quantity: 0,
+                    free_quantity: 1, base_billed_quantity: 0, base_free_quantity: 1 }),
+            ],
+        };
+        const result = projectCanonicalImportLines([{
+            ...freeOnlyLine,
+            free_supply_tax_treatment: 'included_at_unit_rate', line_total: 20,
+        }]);
+
+        expect(result.map(item => [item.quantity, item.free_quantity, item.line_total]))
+            .toEqual([[0, 1, 10], [0, 1, 10]]);
+        expect(projectCanonicalImportLines([{
+            ...freeOnlyLine,
+            free_supply_tax_treatment: 'excluded_from_taxable_value', line_total: 0,
+        }]).map(item => item.line_total)).toEqual([0, 0]);
+    });
+
     it.each([
         [[], 'no executed canonical batch allocations'],
         [[allocation({ inventory_document_line_id: undefined })], 'inventory document line identity'],
         [[allocation({ source_kind: 'dispatch_allocation' })], 'invoice dispatch allocation identity'],
-        [[allocation(), allocation({ allocation_id: 'allocation-2' })], 'duplicates an executed inventory line'],
         [[allocation(), allocation({
-            allocation_id: 'allocation-2', inventory_document_line_id: 'inventory-line-2',
+            source_kind: 'dispatch_allocation', command_request_id: null,
+            allocation_id: 'invoice-dispatch-allocation-2',
+            invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
+            dispatch_id: 'dispatch-2', dispatch_line_id: 'dispatch-line-2',
+            inventory_document_line_id: 'inventory-line-2',
+        })], 'mixes incompatible execution sources'],
+        [[allocation(), allocation()], 'duplicates a canonical allocation identity'],
+        [[allocation(), allocation({
+            allocation_id: 'inventory-line-2', inventory_document_line_id: 'inventory-line-2',
             batch_id: 'batch-2', batch_number: 'BATCH-2', billed_quantity: null,
         })], 'does not identify billed and free quantities separately'],
+        [[allocation({ billed_quantity: 0.5, base_quantity: 0.5,
+            base_billed_quantity: 0.5 }), allocation({
+            allocation_id: 'inventory-line-2', inventory_document_line_id: 'inventory-line-2',
+            command_request_id: 'command-2', batch_id: 'batch-2', batch_number: 'BATCH-2',
+            billed_quantity: 0.5, base_quantity: 0.5, base_billed_quantity: 0.5,
+        })], 'different canonical commands'],
+        [[allocation({ allocation_id: 'wrong-direct-id' })], 'direct-issue lineage identities'],
         [[allocation({ billed_quantity: 2 })], 'do not reconcile'],
         [[allocation({ base_quantity: 2 })], 'contradictory executed base quantities'],
     ])('fails closed for invalid executed allocation set %#', (batchAllocations, message) => {
         expect(() => projectCanonicalImportLines([{
             product_id: 'product-1', product_name: 'Product', quantity: 1,
-            free_quantity: 0, unit_price: 10, batch_allocations: batchAllocations,
+            free_quantity: 0, unit_price: 10,
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
+            batch_allocations: batchAllocations,
         }])).toThrow(message);
     });
 

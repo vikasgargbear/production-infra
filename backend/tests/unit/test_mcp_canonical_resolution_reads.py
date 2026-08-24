@@ -292,6 +292,7 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
         invoice_line_id=line_id, line_number=1, line_kind="product",
         order_line_id=uuid4(), product_id=uuid4(), charge_code=None, uom_code="BOX",
         base_billed_quantity=Decimal("10"), base_free_quantity=Decimal("2"),
+        free_supply_tax_treatment="included_at_unit_rate",
         returned_base_billed_quantity=Decimal("3"), returned_base_free_quantity=Decimal("1"),
         returnable_base_billed_quantity=Decimal("7"), returnable_base_free_quantity=Decimal("1"),
         tax_code_version_id=uuid4(), taxability_snapshot="taxable",
@@ -343,6 +344,7 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
         invoice_line_id=line_id, line_number=1, line_kind="product",
         order_line_id=None, product_id=uuid4(), charge_code=None, uom_code="EA",
         base_billed_quantity=Decimal("1"), base_free_quantity=Decimal("0"),
+        free_supply_tax_treatment="excluded_from_taxable_value",
         returned_base_billed_quantity=Decimal("0"),
         returned_base_free_quantity=Decimal("0"),
         returnable_base_billed_quantity=Decimal("1"),
@@ -352,10 +354,14 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     )
     inventory_document_id, inventory_line_id, batch_id = uuid4(), uuid4(), uuid4()
     direct_issue = _row(
-        invoice_line_id=line_id, inventory_document_id=inventory_document_id,
+        invoice_line_id=line_id, command_request_id=uuid4(),
+        inventory_document_id=inventory_document_id,
         inventory_document_line_id=inventory_line_id, batch_id=batch_id,
         batch_number="DEMO-BATCH-1", expires_on=date(2028, 9, 1),
         from_location_id=uuid4(), uom_code="EA", base_quantity=Decimal("1.000000"),
+        base_billed_quantity=Decimal("1.000000"),
+        base_free_quantity=Decimal("0.000000"),
+        billed_quantity=Decimal("1.000000"), free_quantity=Decimal("0.000000"),
         unit_cost=Decimal("95.2382"), extended_cost=Decimal("95.24"),
     )
     database = _Database([header], [line], [], [direct_issue])
@@ -373,6 +379,8 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     assert allocation.batch_number == "DEMO-BATCH-1"
     assert allocation.expires_on == date(2028, 9, 1)
     assert allocation.base_quantity == Decimal("1.000000")
+    assert allocation.base_billed_quantity == Decimal("1.000000")
+    assert allocation.base_free_quantity == Decimal("0.000000")
     assert allocation.extended_cost == Decimal("95.24")
 
     sql = database.calls[3][0]
@@ -380,6 +388,10 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     assert "inventory_document.sales_invoice_id=invoice_line.invoice_id" in sql
     assert "inventory_document.document_type='sales_issue'" in sql
     assert "inventory_document.status='posted'" in sql
+    assert "command.status='succeeded'" in sql
+    assert "command.request_hash=extensions.digest(" in sql
+    assert "HAVING count(*)=1" in sql
+    assert "requested_allocation.value->>'inventory_line_id'" in sql
 
 
 def test_supplier_receipt_allocation_dto_preserves_ids_and_exact_balances():

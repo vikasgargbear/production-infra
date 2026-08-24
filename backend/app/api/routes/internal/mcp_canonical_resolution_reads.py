@@ -441,6 +441,7 @@ class SalesInvoiceDispatchAllocation(StrictDTO):
 
 
 class SalesInvoiceDirectIssueAllocation(StrictDTO):
+    command_request_id: UUID
     inventory_document_id: UUID
     inventory_document_line_id: UUID
     batch_id: UUID
@@ -449,6 +450,10 @@ class SalesInvoiceDirectIssueAllocation(StrictDTO):
     from_location_id: Optional[UUID]
     uom_code: str
     base_quantity: Decimal
+    base_billed_quantity: Decimal
+    base_free_quantity: Decimal
+    billed_quantity: Decimal
+    free_quantity: Decimal
     unit_cost: Decimal
     extended_cost: Decimal
 
@@ -463,6 +468,7 @@ class SalesInvoiceLine(StrictDTO):
     uom_code: Optional[str]
     base_billed_quantity: Optional[Decimal]
     base_free_quantity: Optional[Decimal]
+    free_supply_tax_treatment: Optional[str]
     returned_base_billed_quantity: Decimal
     returned_base_free_quantity: Decimal
     returnable_base_billed_quantity: Optional[Decimal]
@@ -634,6 +640,7 @@ def canonical_sales_invoice_get(
             SELECT line.id AS invoice_line_id, line.line_number, line.line_kind,
                    line.order_line_id, line.product_id, line.charge_code, line.uom_code,
                    line.base_billed_quantity, line.base_free_quantity,
+                   line.free_supply_tax_treatment,
                    COALESCE(returned.base_billed_quantity,0) AS returned_base_billed_quantity,
                    COALESCE(returned.base_free_quantity,0) AS returned_base_free_quantity,
                    CASE WHEN line.base_billed_quantity IS NULL THEN NULL ELSE
@@ -743,11 +750,21 @@ def canonical_sales_invoice_get(
         text(
             """
             SELECT invoice_line.id AS invoice_line_id,
+                   command_evidence.command_request_id,
                    inventory_document.id AS inventory_document_id,
                    inventory_line.id AS inventory_document_line_id,
                    inventory_line.batch_id, batch.batch_number, batch.expires_on,
                    inventory_line.from_location_id, inventory_line.uom_code,
-                   inventory_line.base_quantity, inventory_line.unit_cost,
+                   inventory_line.base_quantity,
+                   pg_catalog.round((requested_allocation.value->>'billed_quantity')::numeric
+                         *invoice_line.uom_conversion_factor, 6) AS base_billed_quantity,
+                   pg_catalog.round((requested_allocation.value->>'free_quantity')::numeric
+                         *invoice_line.uom_conversion_factor, 6) AS base_free_quantity,
+                   (requested_allocation.value->>'billed_quantity')::numeric
+                     AS billed_quantity,
+                   (requested_allocation.value->>'free_quantity')::numeric
+                     AS free_quantity,
+                   inventory_line.unit_cost,
                    inventory_line.extended_cost
               FROM sales.invoice_lines AS invoice_line
               JOIN inventory.inventory_document_lines AS inventory_line
@@ -763,8 +780,49 @@ def canonical_sales_invoice_get(
               JOIN inventory.batches AS batch
                 ON batch.org_id=inventory_line.org_id
                AND batch.id=inventory_line.batch_id
+              JOIN LATERAL (
+                  SELECT (array_agg(command.id ORDER BY command.id))[1]
+                           AS command_request_id,
+                         (array_agg(
+                            pg_catalog.convert_from(command.request_bytes, 'UTF8')::jsonb
+                            ORDER BY command.id
+                          ))[1] AS request_document
+                    FROM automation.command_requests AS command
+                   WHERE command.org_id=invoice_line.org_id
+                     AND command.branch_id=:branch_id
+                     AND command.capability_code='sales.invoice.prepare'
+                     AND command.operation='sales.invoice.post'
+                     AND command.target_resource_type='sales_invoice'
+                     AND command.target_resource_id=invoice_line.invoice_id
+                     AND command.status='succeeded'
+                     AND command.result_resource_type='sales_invoice'
+                     AND command.result_resource_id=invoice_line.invoice_id
+                     AND command.response_status=200
+                     AND command.request_hash=extensions.digest(
+                         command.request_bytes, 'sha256'
+                     )
+                  HAVING count(*)=1
+              ) AS command_evidence ON true
+              JOIN LATERAL pg_catalog.jsonb_array_elements(
+                  command_evidence.request_document->'lines'
+              ) AS requested_line(value)
+                ON requested_line.value->>'line_id'=invoice_line.id::text
+               AND requested_line.value->>'fulfillment_source'='direct_issue'
+              JOIN LATERAL pg_catalog.jsonb_array_elements(
+                  requested_line.value->'batch_allocations'
+              ) AS requested_allocation(value)
+                ON requested_allocation.value->>'inventory_line_id'=inventory_line.id::text
+               AND requested_allocation.value->>'batch_id'=inventory_line.batch_id::text
              WHERE invoice_line.org_id=:org_id
                AND invoice_line.invoice_id=:document_id
+               AND inventory_line.entered_quantity=
+                   (requested_allocation.value->>'billed_quantity')::numeric
+                   +(requested_allocation.value->>'free_quantity')::numeric
+               AND inventory_line.base_quantity=pg_catalog.round(
+                   ((requested_allocation.value->>'billed_quantity')::numeric
+                    +(requested_allocation.value->>'free_quantity')::numeric)
+                   *invoice_line.uom_conversion_factor, 6
+               )
              ORDER BY invoice_line.line_number, inventory_line.line_number,
                       inventory_line.id
             """
