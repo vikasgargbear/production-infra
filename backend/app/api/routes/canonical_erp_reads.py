@@ -1188,7 +1188,7 @@ def tax_codes(user: dict = MASTER_USER, db: Session = Depends(get_db)):
     return _rows(db, """
         SELECT id AS tax_id, code AS tax_code, description AS tax_name,
                cgst_rate, sgst_rate, igst_rate, cess_rate,
-               cgst_rate+sgst_rate+igst_rate+cess_rate AS total_rate,
+               GREATEST(cgst_rate+sgst_rate, igst_rate)+cess_rate AS total_rate,
                taxability, effective_from, effective_to,
                status='active' AS is_active, status
           FROM tax.tax_code_versions

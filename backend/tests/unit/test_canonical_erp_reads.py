@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -390,3 +391,9 @@ def test_delete_product_draft_is_bounded_to_draft_lifecycle() -> None:
     sql = "\n".join(database.statements)
     assert "DELETE FROM catalog.products" in sql
     assert "status='draft'" in sql
+
+
+def test_tax_master_does_not_double_count_intra_and_interstate_rates() -> None:
+    source = inspect.getsource(canonical_erp_reads.tax_codes)
+    assert "GREATEST(cgst_rate+sgst_rate, igst_rate)+cess_rate AS total_rate" in source
+    assert "cgst_rate+sgst_rate+igst_rate+cess_rate AS total_rate" not in source
