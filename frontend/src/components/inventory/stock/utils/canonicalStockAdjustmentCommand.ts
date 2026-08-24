@@ -169,7 +169,9 @@ export const loadCycleCountEligibility = async (params: {
   ]) {
     if (!isCanonicalUuid(value)) throw new Error(`Cycle-count eligibility returned invalid ${field}.`);
   }
-  quantityUnits(eligibility.system_base_quantity, 'System base quantity');
+  if (quantityUnits(eligibility.system_base_quantity, 'System base quantity') <= 0n) {
+    throw new Error('System base quantity must be positive.');
+  }
   if (!Array.isArray(eligibility.uom_conversions) || eligibility.uom_conversions.length === 0) {
     throw new Error('No eligible cycle-count UOM is configured for this product.');
   }

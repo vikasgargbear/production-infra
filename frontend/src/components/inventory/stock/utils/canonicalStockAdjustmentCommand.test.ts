@@ -188,56 +188,13 @@ describe('canonical cycle-count gain command', () => {
     })).resolves.toMatchObject({ counted_by_membership_id: ids.membership });
   });
 
-  it('accepts an exact zero system balance when the physical count is a positive gain', async () => {
-    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
+  it('rejects zero system stock and numeric JSON decimal facts from eligibility', async () => {
+    const eligibility = {
       branch_id: ids.branch,
       location_id: ids.location,
       counted_by_membership_id: ids.membership,
       product_id: ids.product,
       batch_id: ids.batch,
-      system_base_quantity: '0.000000',
-      uom_conversions: [{
-        uom_conversion_id: ids.uom,
-        from_uom_code: 'EA',
-        to_uom_code: 'EA-BASE',
-        multiplier: '1.000000',
-      }],
-      evidence: [{
-        evidence_attachment_id: ids.evidence,
-        status: 'verified',
-        document_date: '2026-08-25',
-        verified_at: instant.toISOString(),
-        retention_until: '2027-08-25',
-      }],
-    } });
-    await expect(loadCycleCountEligibility({
-      branchId: ids.branch,
-      locationId: ids.location,
-      batchId: ids.batch,
-      adjustmentDate: '2026-08-25',
-    })).resolves.toMatchObject({ system_base_quantity: '0.000000' });
-
-    expect(buildCycleCountGainPayload({
-      ...validInput,
-      items: [{
-        ...validInput.items[0],
-        systemBaseQuantity: '0.000000',
-        countedQuantity: '0.000001',
-        uomMultiplier: '1.000000',
-      }],
-    })).toMatchObject({
-      lines: [{ batch_counts: [{ counted_quantity: '0.000001' }] }],
-    });
-  });
-
-  it('rejects numeric JSON decimal facts from eligibility instead of accepting rounded values', async () => {
-    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
-      branch_id: ids.branch,
-      location_id: ids.location,
-      counted_by_membership_id: ids.membership,
-      product_id: ids.product,
-      batch_id: ids.batch,
-      system_base_quantity: 9007199254740992,
       uom_conversions: [{
         uom_conversion_id: ids.uom,
         from_uom_code: 'PK',
@@ -251,6 +208,10 @@ describe('canonical cycle-count gain command', () => {
         verified_at: instant.toISOString(),
         retention_until: '2027-08-25',
       }],
+    };
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
+      ...eligibility,
+      system_base_quantity: 9007199254740992,
     } });
     await expect(loadCycleCountEligibility({
       branchId: ids.branch,
@@ -258,6 +219,17 @@ describe('canonical cycle-count gain command', () => {
       batchId: ids.batch,
       adjustmentDate: '2026-08-25',
     })).rejects.toThrow('exact decimal string');
+
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: {
+      ...eligibility,
+      system_base_quantity: '0.000000',
+    } });
+    await expect(loadCycleCountEligibility({
+      branchId: ids.branch,
+      locationId: ids.location,
+      batchId: ids.batch,
+      adjustmentDate: '2026-08-25',
+    })).rejects.toThrow('System base quantity must be positive');
   });
 
   it('requires exact stock and journal readback after execution', async () => {
