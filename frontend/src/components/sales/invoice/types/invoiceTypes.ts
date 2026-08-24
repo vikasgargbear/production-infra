@@ -499,6 +499,9 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string | null;
     batch_number?: string;  // Alias used by some search results
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
     expiry_date?: string;
     manufacturing_date?: string;
     // Pricing - batch level uses _per_unit suffix

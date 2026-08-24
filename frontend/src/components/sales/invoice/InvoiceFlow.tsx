@@ -8,7 +8,12 @@ import { calculateInvoicePreview } from '../../../services/calculations/invoiceC
 import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
 import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
-import { useInvoiceLogic, Invoice, CreatedInvoiceData } from './hooks/useInvoiceLogic';
+import {
+    useInvoiceLogic,
+    Invoice,
+    CreatedInvoiceData,
+    PrefilledData,
+} from './hooks/useInvoiceLogic';
 import { GenericSuccessModal } from '../../global';
 import InvoicePreview from './ui/InvoicePreviewEnterprise';
 import {
@@ -21,10 +26,7 @@ import {
 interface InvoiceFlowProps {
     open?: boolean;  // For modal/panel usage
     onClose?: () => void;
-    prefilledData?: {
-        customer?: unknown;
-        items?: unknown[];
-    } | null;
+    prefilledData?: PrefilledData | null;
 }
 
 interface CompanyInfo {
@@ -107,7 +109,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         resetInvoice,
         handleSaveInvoice,
 
-    } = useInvoiceLogic(onClose, prefilledData as any);
+    } = useInvoiceLogic(onClose, prefilledData);
 
     // Enable Enter-as-Tab navigation (Marg ERP style)
     useEnterAsTab({

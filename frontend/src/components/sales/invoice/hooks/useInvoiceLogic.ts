@@ -472,9 +472,14 @@ export const useInvoiceLogic = (
 
             if (existingItemIndex >= 0) {
                 const updatedItems = [...prev.items];
+                // Selecting the same product/batch is additive. The selection's
+                // explicit billed/free split is the user's intent; do not turn a
+                // free-only or fractional selection into one billed unit.
                 updatedItems[existingItemIndex] = {
                     ...updatedItems[existingItemIndex],
-                    quantity: parseFloat(String(updatedItems[existingItemIndex].quantity || 0)) + 1
+                    quantity: updatedItems[existingItemIndex].quantity + invoiceItem.quantity,
+                    free_quantity: updatedItems[existingItemIndex].free_quantity
+                        + invoiceItem.free_quantity,
                 };
                 // Note: Toast removed - visual feedback in table is sufficient
                 return { ...prev, items: updatedItems };
@@ -484,11 +489,9 @@ export const useInvoiceLogic = (
 
                 const newItem = {
                     ...sanitizedItem,
-                    mrp: sanitizedItem.mrp || 0,
-                    quantity: 1,
+                    mrp: sanitizedItem.mrp ?? 0,
                     // PRESERVE user's discount - don't reset!
-                    discount_percent: sanitizedItem.discount_percent || 0,
-                    free_quantity: 0
+                    discount_percent: sanitizedItem.discount_percent ?? 0,
                 } as any;
 
                 // Note: Toast removed - visual feedback (item appearing in table) is sufficient
