@@ -14,18 +14,13 @@ import {
   type CanonicalPostedSupplierInvoice,
   type CanonicalSupplierInvoiceContext,
 } from '../../../services/api/modules/purchase/canonicalSupplierInvoices.api';
+import { canonicalBusinessContextApi } from '../../../services/api/modules/org/canonicalBusinessContext.api';
 import { clientUuid } from '../../../utils/clientUuid';
 import {
   buildCanonicalSupplierInvoicePreparePayload,
   validateCanonicalSupplierInvoicePreview,
 } from './utils/canonicalSupplierInvoiceCommand';
 import { reconcileCanonicalSupplierInvoice } from './utils/canonicalSupplierInvoiceLifecycle';
-
-const localDate = () => {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
-};
 
 const errorMessage = (error: any): string => (
   error?.response?.data?.detail?.message
@@ -38,8 +33,10 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   const [receipts, setReceipts] = useState<CanonicalEligibleReceipt[]>([]);
   const [selectedReceiptId, setSelectedReceiptId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(localDate);
-  const [receivedDate, setReceivedDate] = useState(localDate);
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [receivedDate, setReceivedDate] = useState('');
+  const [businessDateLoading, setBusinessDateLoading] = useState(true);
+  const [businessDateError, setBusinessDateError] = useState('');
   const [context, setContext] = useState<CanonicalSupplierInvoiceContext | null>(null);
   const [rates, setRates] = useState<Record<string, string>>({});
   const [itcAttested, setItcAttested] = useState(false);
@@ -71,6 +68,25 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
 
   useEffect(() => { void loadReceipts(); }, [loadReceipts]);
 
+  useEffect(() => {
+    let active = true;
+    setBusinessDateLoading(true);
+    void canonicalBusinessContextApi.get().then((businessContext) => {
+      if (!active) return;
+      setInvoiceDate((current) => current || businessContext.business_date);
+      setReceivedDate((current) => current || businessContext.business_date);
+      setBusinessDateError('');
+    }).catch((error) => {
+      if (!active) return;
+      const message = errorMessage(error) || 'Unable to load the organization business date.';
+      setBusinessDateError(message);
+      toast.error(message);
+    }).finally(() => {
+      if (active) setBusinessDateLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
   const resetReview = () => {
     setPrepared(null);
     setPosted(null);
@@ -80,8 +96,8 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   };
 
   const loadContext = async () => {
-    if (!selectedReceiptId || !invoiceNumber.trim() || !invoiceDate) {
-      toast.error('Select a posted GRN and enter the exact supplier invoice number and date.');
+    if (!selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate) {
+      toast.error('Select a posted GRN and enter the exact supplier invoice and received dates.');
       return;
     }
     setLoading(true);
@@ -207,14 +223,16 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
                   <input value={invoiceNumber} onChange={(event) => { setInvoiceNumber(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" maxLength={64} />
                 </label>
                 <label className="text-sm">Invoice date
-                  <input type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
+                  <input aria-label="Supplier invoice date" type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
                 </label>
                 <label className="text-sm">Received date
-                  <input type="date" value={receivedDate} min={invoiceDate} onChange={(event) => { setReceivedDate(event.target.value); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
+                  <input aria-label="Supplier invoice received date" type="date" value={receivedDate} min={invoiceDate} onChange={(event) => { setReceivedDate(event.target.value); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
                 </label>
               </div>
+              {businessDateLoading && <p className="mt-3 text-sm text-slate-600">Loading organization business date…</p>}
+              {businessDateError && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{businessDateError} Enter both dates explicitly before continuing.</p>}
               {selectedReceipt && <p className="mt-3 text-xs text-slate-500">PO {selectedReceipt.purchase_order_number}; {selectedReceipt.remaining_line_count} unallocated line(s). The backend requires one exact parsed GSTR-2B match.</p>}
-              <button type="button" onClick={loadContext} disabled={loading} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Load canonical evidence</button>
+              <button type="button" onClick={loadContext} disabled={loading || businessDateLoading || !selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Load canonical evidence</button>
             </section>
 
             {context && (
