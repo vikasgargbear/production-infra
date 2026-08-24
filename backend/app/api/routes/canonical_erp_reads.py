@@ -357,7 +357,7 @@ def products_with_batches(
                      WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
                 ) stock ON true
                WHERE batch.org_id=product.org_id AND batch.product_id=product.id
-                 AND batch.status IN ('active','blocked')
+                 AND batch.status IN ('released','blocked')
           ) batch_data ON true
          WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
            AND (:search='' OR product.name ILIKE :pattern OR product.sku ILIKE :pattern)
@@ -395,7 +395,7 @@ def product_batches(
                WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
           ) stock ON true
          WHERE batch.org_id=:org_id AND batch.product_id=:product_id
-           AND batch.status IN ('active','blocked')
+           AND batch.status IN ('released','blocked')
          ORDER BY batch.expires_on NULLS LAST, batch.batch_number
     """, {"org_id": org_id, "product_id": product_id})
     return {"batches": rows}

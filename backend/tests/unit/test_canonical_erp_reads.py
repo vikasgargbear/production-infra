@@ -100,6 +100,13 @@ def test_canonical_read_sql_matches_checked_in_domain_catalogs() -> None:
     assert result["errors"] == []
 
 
+def test_batch_reads_use_canonical_inventory_lifecycle_states() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+
+    assert "batch.status IN ('released','blocked')" in source
+    assert "batch.status IN ('active','blocked')" not in source
+
+
 class ProductDraftDatabase:
     def __init__(self) -> None:
         self.statements = []
