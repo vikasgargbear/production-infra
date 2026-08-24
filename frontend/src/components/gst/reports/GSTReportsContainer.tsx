@@ -259,7 +259,7 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                         <option value="year">Financial year</option>
                         <option value="custom">Custom dates</option>
                     </select>
-                    <div role="group" aria-label="GST period toggle buttons" className="hidden space-x-2 sm:flex">
+                    <div role="group" aria-label="GST report period" className="hidden space-x-2 sm:flex">
                         {['current', 'previous', 'quarter', 'year', 'custom'].map((period) => (
                             <button
                                 key={period}
