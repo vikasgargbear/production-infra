@@ -4,18 +4,20 @@ Complete product management with search and CRUD operations
 
 PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File
 from sqlalchemy import text
 from typing import List, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
 import logging
+import io
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.money import money_json
 from .....core.utils.api_utils import handle_error
 from .....core.security.permissions import PermissionChecker  # RBAC
+from .....core.utils.file_validation import validate_upload, sanitize_filename
 from ....services.master.product.service import ProductService  # Service layer
 from ....schemas.master.product_schema import (
     Product,
@@ -569,6 +571,151 @@ async def update_product_batches(
     except Exception as e:
         db.rollback()
         raise handle_error(e, "update product batches", product_id)
+
+@router.post("/batch-upload")
+@with_tenant_context
+async def batch_upload_products(
+    file: UploadFile = File(...),
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """
+    Batch upload products from an Excel (.xlsx/.xls) or CSV file.
+
+    Accepts files up to 10 MB.  Returns per-row success/failure so the
+    frontend can surface individual validation errors to the user.
+
+    Response shape:
+        {
+            "imported": <int>,
+            "failed": <int>,
+            "errors": [{"row": <int>, "product_name": <str>, "error": <str>}, ...],
+            "message": <str>
+        }
+    """
+    # Validate extension and size
+    allowed_types = ["xlsx", "xls", "csv"]
+    content = await validate_upload(file, allowed_types=allowed_types, max_size_mb=10)
+    safe_name = sanitize_filename(file.filename or "upload")
+
+    try:
+        import openpyxl
+        OPENPYXL_AVAILABLE = True
+    except ImportError:
+        OPENPYXL_AVAILABLE = False
+
+    try:
+        import csv as csv_module
+        CSV_AVAILABLE = True
+    except ImportError:
+        CSV_AVAILABLE = False
+
+    ext = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
+    rows: list[dict] = []
+
+    try:
+        if ext in ("xlsx", "xls"):
+            if not OPENPYXL_AVAILABLE:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Server cannot process Excel files (openpyxl not installed)"
+                )
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            ws = wb.active
+            headers: list[str] = []
+            for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
+                if row_idx == 0:
+                    headers = [str(c).strip() if c is not None else "" for c in row]
+                    continue
+                if all(c is None for c in row):
+                    continue
+                rows.append({headers[i]: row[i] for i in range(len(headers))})
+        elif ext == "csv":
+            text_content = content.decode("utf-8-sig", errors="replace")
+            reader = csv_module.DictReader(io.StringIO(text_content))
+            rows = [dict(r) for r in reader]
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: .{ext}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Failed to parse upload file %s: %s", safe_name, exc)
+        raise HTTPException(status_code=422, detail=f"Could not parse file: {exc}")
+
+    if not rows:
+        raise HTTPException(status_code=422, detail="No data rows found in uploaded file")
+
+    imported = 0
+    failed = 0
+    errors: list[dict] = []
+    org_id = str(context.org_id)
+
+    for row_idx, row in enumerate(rows, start=2):  # row 1 = headers
+        product_name = str(row.get("Product Name*") or row.get("product_name") or "").strip()
+        if not product_name:
+            # Skip blank rows silently
+            continue
+
+        try:
+            # Check for duplicate
+            dup = ProductService.check_duplicate_product(db, org_id, product_name=product_name)
+            if dup.get("has_duplicates"):
+                raise ValueError(f"Product '{product_name}' already exists")
+
+            product_code = ProductService.generate_product_code(db, org_id)
+            product_data = {
+                "product_code": product_code,
+                "product_name": product_name,
+                "generic_name": str(row.get("Generic Name") or row.get("generic_name") or "").strip() or None,
+                "manufacturer": str(row.get("Manufacturer") or row.get("manufacturer") or "").strip() or None,
+                "hsn_code": str(row.get("HSN Code") or row.get("hsn_code") or "").strip() or None,
+                "gst_percent": None,
+                "composition": "{}",
+                "product_type": "medicine",
+                "maintain_batch": True,
+                "maintain_expiry": True,
+                "is_active": False,
+                "is_saleable": False,
+                "is_purchasable": False,
+            }
+
+            raw_gst = row.get("GST %") or row.get("gst_percent")
+            if raw_gst is not None:
+                try:
+                    product_data["gst_percent"] = float(raw_gst)
+                except (TypeError, ValueError):
+                    pass
+
+            ProductService.insert_product(db=db, org_id=org_id, product_data=product_data)
+            imported += 1
+        except Exception as exc:
+            failed += 1
+            errors.append({
+                "row": row_idx,
+                "product_name": product_name,
+                "error": str(exc),
+            })
+
+    if imported > 0:
+        try:
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to commit uploaded products: {exc}")
+
+    total = imported + failed
+    message = f"Imported {imported} of {total} product(s)."
+    if failed:
+        message += f" {failed} row(s) had errors."
+
+    return {
+        "imported": imported,
+        "failed": failed,
+        "errors": errors,
+        "message": message,
+    }
+
 
 @router.get("/master/categories")
 @with_tenant_context

@@ -291,8 +291,12 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                     toast.success(`Loaded ${processedProducts.length} products. Review and save.`);
                 }
 
-            } catch (error) {
-                toast.error('Failed to parse file. Please check the format.');
+            } catch (error: any) {
+                toast.error(
+                    error?.message
+                        ? `Failed to parse file: ${error.message}`
+                        : 'Failed to parse file. Please check the format.'
+                );
             } finally {
                 setUploading(false);
                 if (fileInputRef.current) {
@@ -367,10 +371,16 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                         const response = await (productsApi as any).create(product);
                         return { success: true, product: response.data };
                     } catch (error: any) {
+                        // Surface FastAPI detail, Django message, or generic message
+                        const serverMsg =
+                            error.response?.data?.detail ||
+                            error.response?.data?.message ||
+                            error.message ||
+                            'Failed to create';
                         return {
                             success: false,
                             product,
-                            error: error.response?.data?.message || 'Failed to create'
+                            error: serverMsg
                         };
                     }
                 });
@@ -394,7 +404,11 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
             }
 
             if (results.failed.length > 0) {
-                toast.error(`Failed to create ${results.failed.length} products`);
+                const firstErr = results.failed[0]?.error;
+                const errDetail = firstErr
+                    ? `Failed to create ${results.failed.length} product(s). First error: ${firstErr}`
+                    : `Failed to create ${results.failed.length} product(s)`;
+                toast.error(errDetail);
             }
 
             if (results.failed.length > 0) {
@@ -406,8 +420,13 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                 }
             }
 
-        } catch (error) {
-            toast.error('Failed to save products');
+        } catch (error: any) {
+            const serverMsg =
+                error.response?.data?.detail ||
+                error.response?.data?.message ||
+                error.message ||
+                'Failed to save products';
+            toast.error(serverMsg);
         } finally {
             setSaving(false);
         }
