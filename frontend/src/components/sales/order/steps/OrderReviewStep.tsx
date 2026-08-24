@@ -206,7 +206,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                         value={order.expected_delivery_date}
                                         onChange={(e) => setOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
                                         className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors print:hidden"
-                                        min={new Date().toISOString().split('T')[0]}
+                                        min={order.order_date}
                                     />
                                 </div>
                             </div>

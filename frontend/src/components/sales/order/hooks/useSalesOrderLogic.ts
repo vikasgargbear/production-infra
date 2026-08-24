@@ -3,7 +3,7 @@
  * Manages state and logic for sales order creation flow
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { apiClient } from '../../../../services/api';
 import { calculateSalesOrderPreview } from '../../../../services/calculations/salesOrderCalculationService';
@@ -15,6 +15,8 @@ import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product 
 import type { ImportData } from '../../../global/modals/DocumentImportModal';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
+import { addCalendarDays } from '../../../../utils/calendarDate';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -114,8 +116,8 @@ export interface UseSalesOrderLogicReturn {
 const createInitialOrder = (): Order => ({
     order_id: 0,  // Will be set when order is saved
     order_number: '',
-    order_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    order_date: '',
+    expected_delivery_date: '',
     customer_id: 0,  // Will be set when customer is selected
     customer_name: '',
     customer_details: null,
@@ -149,6 +151,7 @@ const createInitialOrder = (): Order => ({
 
 export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const { companyInfo } = useCompany() as { companyInfo: CompanyInfo };
+    const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
     // Core state
     const [order, setOrder] = useState<Order>(createInitialOrder());
@@ -189,6 +192,21 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [newProductName, setNewProductName] = useState('');
     const calculationRequestRef = useRef(0);
+
+    useEffect(() => {
+        if (businessDate) {
+            setOrder(previous => ({
+                ...previous,
+                order_date: previous.order_date || businessDate,
+                expected_delivery_date: previous.expected_delivery_date || addCalendarDays(businessDate, 7),
+            }));
+            return;
+        }
+        if (!businessDateLoading && businessDateError) {
+            setMessage(businessDateError);
+            setMessageType('error');
+        }
+    }, [businessDate, businessDateError, businessDateLoading]);
 
     // Recalculate totals
     const recalculateTotals = useCallback(async (
@@ -567,13 +585,17 @@ Expected Delivery: ${order.expected_delivery_date}
 
     // Reset order
     const resetOrder = useCallback((): void => {
-        setOrder(createInitialOrder());
+        setOrder({
+            ...createInitialOrder(),
+            order_date: businessDate,
+            expected_delivery_date: businessDate ? addCalendarDays(businessDate, 7) : '',
+        });
         setSelectedCustomer(null);
         setCreatedOrderData(null);
         setShowSuccessModal(false);
         setMessage('');
         setMessageType('');
-    }, []);
+    }, [businessDate]);
 
     return {
         order,

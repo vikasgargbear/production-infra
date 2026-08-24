@@ -28,6 +28,10 @@ jest.mock('../gst/hooks/useGSTExport', () => ({
   useGSTExport: () => ({ exportToCSV: jest.fn() }),
 }));
 
+jest.mock('../../hooks/useCanonicalBusinessDate', () => ({
+  useCanonicalBusinessDate: () => ({ businessDate: '2026-08-25', organizationTimezone: 'Asia/Kolkata', loading: false, error: '' }),
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockGstr1.mockResolvedValue({ data: {
@@ -102,4 +106,8 @@ test('GST reports expose labeled mobile report and period selectors', async () =
   expect(screen.getByLabelText('Choose GST report')).toBeTruthy();
   expect(screen.getByLabelText('GST report period')).toBeTruthy();
   expect(await screen.findByText('B2B Invoices')).toBeTruthy();
+  await waitFor(() => expect(mockGstr1).toHaveBeenCalledWith(expect.objectContaining({
+    date_from: '2026-08-01',
+    date_to: '2026-08-25',
+  })));
 });

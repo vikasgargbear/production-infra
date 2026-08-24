@@ -185,7 +185,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             onContinue={() => setCurrentStep(2)}
                             cancelLabel="Cancel"
                             continueLabel="Continue"
-                            continueDisabled={!order.customer_id || order.items.length === 0}
+                            continueDisabled={!order.customer_id || order.items.length === 0 || !order.order_date || !order.expected_delivery_date}
                             continueButtonColor="blue"
                         />
                     </div>

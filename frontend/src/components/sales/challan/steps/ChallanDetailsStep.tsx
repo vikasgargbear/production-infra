@@ -238,7 +238,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                     onContinue={onContinue}
                     cancelLabel="Cancel"
                     continueLabel="Continue"
-                    continueDisabled={!challan.customer_id || challan.items.length === 0}
+                    continueDisabled={!challan.customer_id || challan.items.length === 0 || !challan.challan_date || !challan.expected_delivery_date}
                     continueButtonColor="blue"
                 />
 

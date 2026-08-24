@@ -12,8 +12,15 @@ import {
 import { DatePicker } from '../../global';
 import ModuleHeader from '../../global/ui/ModuleHeader';
 import type { DateRange, GSTReportType, ReportTypeConfig } from '../types';
-import { getFinancialYearRange } from '../utils';
 import { useGSTExport } from '../hooks/useGSTExport';
+import { useCanonicalBusinessDate } from '../../../hooks/useCanonicalBusinessDate';
+import {
+    calendarDateToPickerDate,
+    organizationPeriodRange,
+    requireCalendarDate,
+    serializeCalendarDateInput,
+    type OrganizationPeriod,
+} from '../../../utils/calendarDate';
 
 // Import individual reports
 import GSTR1Report from './GSTR1Report';
@@ -29,17 +36,13 @@ interface GSTReportsContainerProps {
 const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) => {
     const [selectedReport, setSelectedReport] = useState<GSTReportType>('gstr-1');
     const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
-    const [dateRange, setDateRange] = useState<DateRange>(() => {
-        const now = new Date();
-        return {
-            from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
-            to: now.toISOString().split('T')[0]
-        };
-    });
+    const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
+    const [dateSelectionError, setDateSelectionError] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
     const [reportData, setReportData] = useState<any>(null);
     const { exportToCSV } = useGSTExport();
+    const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
     // Static Tailwind class maps (dynamic classes like `bg-${color}-100` are purged by Tailwind)
     const activeStyles: Record<string, string> = {
@@ -91,52 +94,47 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
     ];
 
     // Calculate date range based on period
-    const calculateDateRange = (period: string): DateRange => {
-        const now = new Date();
-        let from: string, to: string;
-
-        switch (period) {
-            case 'current':
-                from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                to = now.toISOString().split('T')[0];
-                break;
-            case 'previous':
-                from = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-                to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-                break;
-            case 'quarter':
-                const currentMonth = now.getMonth();
-                const fyStartYear = currentMonth >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-                const fyMonth = currentMonth >= 3 ? currentMonth - 3 : currentMonth + 9;
-                const quarter = Math.floor(fyMonth / 3);
-                const quarterStartMonth = quarter * 3 + 3;
-                const quarterStartYear = quarterStartMonth >= 12 ? fyStartYear + 1 : fyStartYear;
-                const adjustedMonth = quarterStartMonth >= 12 ? quarterStartMonth - 12 : quarterStartMonth;
-                from = new Date(quarterStartYear, adjustedMonth, 1).toISOString().split('T')[0];
-                to = now.toISOString().split('T')[0];
-                break;
-            case 'year':
-                const fyRange = getFinancialYearRange();
-                from = fyRange.from;
-                to = now.toISOString().split('T')[0];
-                break;
-            default:
-                from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                to = now.toISOString().split('T')[0];
-        }
-
-        return { from, to };
-    };
-
     // Update date range when period changes
     useEffect(() => {
-        if (selectedPeriod !== 'custom') {
-            setDateRange(calculateDateRange(selectedPeriod));
+        if (selectedPeriod !== 'custom' && businessDate) {
+            setDateRange(organizationPeriodRange(businessDate, selectedPeriod as OrganizationPeriod));
+            setDateSelectionError('');
         }
-    }, [selectedPeriod]);
+    }, [businessDate, selectedPeriod]);
+
+    useEffect(() => {
+        if (!businessDateLoading && businessDateError && !businessDate) {
+            setSelectedPeriod('custom');
+            setDateSelectionError(`${businessDateError} Select an explicit valid date range to continue.`);
+        }
+    }, [businessDate, businessDateError, businessDateLoading]);
+
+    const updateCustomDate = (field: keyof DateRange, value: Date | string): void => {
+        try {
+            const serialized = serializeCalendarDateInput(value, `GST ${field} date`);
+            setDateRange(previous => ({ ...previous, [field]: serialized }));
+            setDateSelectionError('');
+        } catch (error) {
+            setDateSelectionError(error instanceof Error ? error.message : 'Select a valid GST date.');
+        }
+    };
+
+    const hasValidRange = (() => {
+        try {
+            const from = requireCalendarDate(dateRange.from, 'GST from date');
+            const to = requireCalendarDate(dateRange.to, 'GST to date');
+            return from <= to;
+        } catch {
+            return false;
+        }
+    })();
 
     // Handle refresh
     const handleRefresh = () => {
+        if (!hasValidRange) {
+            setDateSelectionError('Select a valid GST date range before loading the report.');
+            return;
+        }
         setRefreshTrigger(prev => prev + 1);
     };
 
@@ -281,15 +279,17 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                     {selectedPeriod === 'custom' && (
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                             <DatePicker
-                                value={new Date(dateRange.from)}
-                                onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, from: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
+                                value={dateRange.from ? calendarDateToPickerDate(dateRange.from) : null}
+                                onChange={(value: Date) => updateCustomDate('from', value)}
                                 placeholder="From"
+                                showToday={false}
                             />
                             <span className="text-gray-400">to</span>
                             <DatePicker
-                                value={new Date(dateRange.to)}
-                                onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, to: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
+                                value={dateRange.to ? calendarDateToPickerDate(dateRange.to) : null}
+                                onChange={(value: Date) => updateCustomDate('to', value)}
                                 placeholder="To"
+                                showToday={false}
                             />
                         </div>
                     )}
@@ -322,7 +322,11 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
 
             {/* Report Content */}
             <div>
-                {renderReport()}
+                {businessDateLoading && !hasValidRange ? (
+                    <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Loading the organization business date…</div>
+                ) : !hasValidRange ? (
+                    <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{dateSelectionError || 'Select a valid GST date range to load the report.'}</div>
+                ) : renderReport()}
             </div>
             </div>
         </div>

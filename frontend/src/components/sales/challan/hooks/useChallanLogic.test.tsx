@@ -14,6 +14,9 @@ jest.mock('../../../../contexts/CompanyContext', () => ({
 jest.mock('../../../../hooks/useNetworkStatus', () => ({
     useNetworkStatus: () => ({ isOnline: true }),
 }));
+jest.mock('../../../../hooks/useCanonicalBusinessDate', () => ({
+    useCanonicalBusinessDate: () => ({ businessDate: '2026-08-25', organizationTimezone: 'Asia/Kolkata', loading: false, error: '' }),
+}));
 jest.mock('../../../../services/api', () => ({
     employeesApi: {
         getAll: jest.fn().mockResolvedValue({ data: [] }),
@@ -67,6 +70,12 @@ describe('useChallanLogic GST place-of-supply state', () => {
             },
             gst_type: challan.gst_type,
         }));
+    });
+
+    it('initializes dispatch dates from the organization business date', async () => {
+        const { result } = renderHook(() => useChallanLogic());
+        await waitFor(() => expect(result.current.challan.challan_date).toBe('2026-08-25'));
+        expect(result.current.challan.expected_delivery_date).toBe('2026-08-26');
     });
 
     it('derives IGST for an inter-state UUID customer and resets on clear', async () => {

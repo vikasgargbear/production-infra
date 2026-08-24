@@ -284,8 +284,8 @@ export interface UseChallanLogicReturn {
 export const getInitialChallan = (): Challan => ({
     challan_id: 0,  // Will be set when saved
     challan_number: '',
-    challan_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    challan_date: '',
+    expected_delivery_date: '',
     customer_id: 0,  // Will be set when customer is selected
     customer_name: '',
     customer_details: null,

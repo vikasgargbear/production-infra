@@ -29,6 +29,8 @@ import {
     compareExactDecimals,
     formatExactDecimal,
 } from '../../../../utils/exactDecimal';
+import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
+import { addCalendarDays } from '../../../../utils/calendarDate';
 
 // ==================== PROPS ====================
 
@@ -42,6 +44,7 @@ export interface UseChallanLogicProps {
 export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseChallanLogicProps = {}) {
 
     const { companyInfo } = useCompany();
+    const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
     // ==================== COMPOSE SHARED TRANSACTION LOGIC ====================
     const {
@@ -88,6 +91,21 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     const customerSearchRef = useRef<HTMLInputElement>(null);
     const challanFormRef = useRef<HTMLFormElement>(null);
     const calculationRequestRef = useRef(0);
+
+    useEffect(() => {
+        if (businessDate) {
+            setChallan(previous => ({
+                ...previous,
+                challan_date: previous.challan_date || businessDate,
+                expected_delivery_date: previous.expected_delivery_date || addCalendarDays(businessDate, 1),
+            }));
+            return;
+        }
+        if (!businessDateLoading && businessDateError) {
+            setMessage(businessDateError);
+            setMessageType('error');
+        }
+    }, [businessDate, businessDateError, businessDateLoading, setChallan]);
 
     useEffect(() => {
         const requestId = ++calculationRequestRef.current;
