@@ -10,10 +10,12 @@ import {
   BarChart3,
   Warehouse,
   Calculator,
-  Settings2
+  Settings2,
+  LogOut
 } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
 import { useCompany } from '../contexts/CompanyContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface HomeProps {
   setActiveTab: (tab: string) => void;
@@ -48,6 +50,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const companyName = companyInfo?.name || 'Company profile not configured';
   const companyLogo = companyInfo?.logo || null;
   const { hasModuleAccess } = usePermissions();
+  const { logout, user } = useAuth();
 
   const coreActions: ActionItem[] = [
     {
@@ -272,7 +275,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       {/* Clean Header */}
       <div className="px-4 pb-5 pt-5 sm:px-6 sm:pb-8 sm:pt-8">
         <div className="max-w-7xl mx-auto text-center">
-          {/* Logo and Brand with Notifications */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center space-x-3 sm:justify-center">
               {companyLogo ? (
@@ -296,6 +298,16 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               </div>
             </div>
 
+            <button
+              type="button"
+              onClick={logout}
+              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              aria-label={`Sign out${user?.email ? ` ${user.email}` : ''}`}
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
           </div>
         </div>
       </div>
