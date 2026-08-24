@@ -16,3 +16,13 @@ export const indianStateName = (value?: string | null): string => {
     if (!value) return '';
     return INDIAN_STATES.find(([code]) => code === value)?.[1] || value;
 };
+
+/** Resolve either a GST state code or a displayed Indian state name to its code. */
+export const indianStateCode = (value?: string | null): string => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return '';
+    if (/^\d{2}$/.test(normalized)) return normalized;
+    return INDIAN_STATES.find(([, name]) =>
+        name.localeCompare(normalized, undefined, { sensitivity: 'base' }) === 0
+    )?.[0] || '';
+};

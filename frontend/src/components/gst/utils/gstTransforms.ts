@@ -14,11 +14,14 @@ export function transformInvoicesToGSTR1(
     invoices: any[],
     customerData: Record<string, any> = {}
 ): GSTR1Data {
+    const reportableInvoices = invoices.filter(
+        invoice => String(invoice.status || '').toLowerCase() === 'posted'
+    );
     // Separate B2B (with GSTIN) and B2C (without GSTIN) invoices
     const b2bInvoices: any[] = [];
     const b2cInvoices: any[] = [];
 
-    invoices.forEach(invoice => {
+    reportableInvoices.forEach(invoice => {
         const customerId = invoice.customer_id;
         const customer = customerData[customerId];
 
@@ -47,7 +50,7 @@ export function transformInvoicesToGSTR1(
     const b2c = calculateB2CSummary(b2cInvoices);
 
     // Calculate overall summary
-    const summary = calculateGSTSummary(invoices);
+    const summary = calculateGSTSummary(reportableInvoices);
 
     return {
         b2b: b2bGrouped,

@@ -260,6 +260,10 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handleDocumentTypeChange = (type: DocumentType) => {
     setDocumentType(type);
     dispatch({ type: 'CLEAR_SELECTION' });
+    dispatch({
+      type: 'SET_FILTERS',
+      filters: { searchQuery: '', statusFilter: 'all', dateFilter: 'all' }
+    });
   };
 
   // Keyboard shortcuts
@@ -582,10 +586,14 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             {/* Global Inline Filter Panel */}
             <div className="mb-6">
               <InlineFilterPanel
-                filters={filterOptions}
+                key={documentType}
+                filters={documentType === 'invoice'
+                  ? filterOptions
+                  : filterOptions.filter(filter => filter.key !== 'payment_status')}
                 onFilterChange={handleFilterChange}
                 searchQuery={filters.searchQuery}
-                onSearchChange={handleSearchChange}
+                onSearchChange={documentType === 'invoice' ? handleSearchChange : undefined}
+                searchPlaceholder="Search invoice number or customer name..."
                 showFilters={ui.showFilters}
                 onToggleFilters={(show: boolean) => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
               />

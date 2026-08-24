@@ -1259,7 +1259,74 @@ def gst_returns_status(user: dict = Depends(PermissionChecker("gst", "view")),
 def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                 date_column: str, line_table: str, foreign_key: str,
                 limit: int, offset: int, date_from: Optional[str] = None,
-                date_to: Optional[str] = None) -> list[dict]:
+                date_to: Optional[str] = None, search: str = "",
+                payment_status: Optional[str] = None,
+                include_invoice_payments: bool = False) -> list[dict]:
+    payment_status_expression = """
+        CASE
+          WHEN document.status IN ('cancelled','reversed') THEN 'cancelled'
+          WHEN document.status <> 'posted' THEN 'pending'
+          WHEN COALESCE(payment.paid_amount, 0) >= COALESCE(document.grand_total, 0)
+            THEN 'paid'
+          WHEN COALESCE(payment.paid_amount, 0) > 0 THEN 'partial'
+          WHEN payment.due_date IS NOT NULL AND payment.due_date < CURRENT_DATE
+            THEN 'overdue'
+          ELSE 'pending'
+        END
+    """
+    payment_columns = f"""
+               , payment.due_date,
+               COALESCE(payment.paid_amount, 0) AS paid_amount,
+               GREATEST(COALESCE(document.grand_total, 0)
+                        - COALESCE(payment.paid_amount, 0), 0) AS pending_amount,
+               {payment_status_expression} AS payment_status,
+               COUNT(*) OVER() AS filtered_total
+    """ if include_invoice_payments else ""
+    invoice_tax_columns = """
+               document.buyer_gstin_snapshot AS customer_gst_number,
+               COALESCE(document.gst_taxable_total, 0) AS taxable_amount,
+               COALESCE(document.cgst_total, 0) AS cgst_amount,
+               COALESCE(document.sgst_total, 0) AS sgst_amount,
+               COALESCE(document.igst_total, 0) AS igst_amount,
+               COALESCE(document.cess_total, 0) AS cess_amount
+    """ if include_invoice_payments else ""
+    payment_join = """
+          LEFT JOIN LATERAL (
+              SELECT item.due_date, COALESCE(effective.paid_amount, 0) AS paid_amount
+                FROM finance.accounting_events event
+                JOIN finance.open_items item
+                  ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+                 AND item.item_side='receivable' AND item.status<>'reversed'
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(allocation.amount), 0) AS paid_amount
+                      FROM finance.allocations allocation
+                     WHERE allocation.org_id=item.org_id
+                       AND allocation.open_item_id=item.id
+                       AND allocation.status='posted'
+                       AND allocation.reversal_of_allocation_id IS NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM finance.allocations reversal
+                            WHERE reversal.org_id=allocation.org_id
+                              AND reversal.reversal_of_allocation_id=allocation.id
+                       )
+                ) effective ON true
+               WHERE event.org_id=document.org_id
+                 AND event.sales_invoice_id=document.id
+               ORDER BY item.created_at DESC, item.id DESC LIMIT 1
+          ) payment ON true
+    """ if include_invoice_payments else ""
+    invoice_filters = f"""
+           AND (:search='' OR document.{number_column} ILIKE :search_pattern
+                OR party.legal_name ILIKE :search_pattern)
+           AND (CAST(:payment_status AS text) IS NULL
+                OR {payment_status_expression}=CAST(:payment_status AS text))
+    """ if include_invoice_payments else ""
+    params = {"org_id": org_id, "date_from": date_from, "date_to": date_to,
+              "limit": limit, "offset": offset}
+    if include_invoice_payments:
+        params.update({"search": search.strip(),
+                       "search_pattern": f"%{search.strip()}%",
+                       "payment_status": payment_status})
     return _rows(db, f"""
         SELECT document.id, document.id AS document_id,
                document.{number_column} AS document_number,
@@ -1267,10 +1334,12 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                document.customer_account_id AS customer_id,
                party.legal_name AS customer_name,
                contact.phone AS customer_phone, contact.email AS customer_email,
+               {invoice_tax_columns}
                COALESCE(document.grand_total, 0) AS total_amount,
                COALESCE(lines.items_count, 0) AS items_count,
                COALESCE(lines.items, '[]'::jsonb) AS items,
                document.created_at, document.updated_at
+               {payment_columns}
           FROM sales.{table_name} document
           JOIN parties.customer_accounts account
             ON account.org_id=document.org_id AND account.id=document.customer_account_id
@@ -1298,26 +1367,35 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                 JOIN catalog.products product ON product.org_id=line.org_id AND product.id=line.product_id
                WHERE line.org_id=document.org_id AND line.{foreign_key}=document.id
           ) lines ON true
+          {payment_join}
          WHERE document.org_id=:org_id
            AND (:date_from IS NULL OR document.{date_column} >= CAST(:date_from AS date))
            AND (:date_to IS NULL OR document.{date_column} <= CAST(:date_to AS date))
+           {invoice_filters}
          ORDER BY document.{date_column} DESC, document.id DESC
          LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "date_from": date_from, "date_to": date_to,
-            "limit": limit, "offset": offset})
+    """, params)
 
 
 @router.get("/invoices/")
 def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
              date_from: Optional[str] = None, date_to: Optional[str] = None,
+             search: str = Query("", max_length=200),
+             payment_status: Optional[str] = Query(
+                 None, pattern="^(paid|partial|pending|overdue)$"
+             ),
              user: dict = SALES_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _sales_rows(db, org_id, "invoices", "invoice_number", "invoice_date",
-                       "invoice_lines", "invoice_id", limit, offset, date_from, date_to)
+                       "invoice_lines", "invoice_id", limit, offset, date_from, date_to,
+                       search, payment_status, include_invoice_payments=True)
     for row in rows:
         row.update(invoice_id=row["id"], invoice_number=row["document_number"],
                    invoice_date=row["document_date"])
-    return {"invoices": rows, "total": len(rows)}
+    total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
+    for row in rows:
+        row.pop("filtered_total", None)
+    return {"invoices": rows, "total": total}
 
 
 @router.get("/canonical/invoices/{invoice_id}")
@@ -1332,6 +1410,12 @@ def canonical_invoice(
                invoice.invoice_date, invoice.status,
                invoice.customer_account_id AS customer_id,
                party.legal_name AS customer_name,
+               invoice.buyer_gstin_snapshot AS customer_gst_number,
+               invoice.gst_taxable_total AS taxable_amount,
+               invoice.cgst_total AS cgst_amount,
+               invoice.sgst_total AS sgst_amount,
+               invoice.igst_total AS igst_amount,
+               invoice.cess_total AS cess_amount,
                invoice.grand_total AS total_amount,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
@@ -1405,6 +1489,7 @@ def purchase_orders(limit: int = Query(100, ge=1, le=500), offset: int = Query(0
 
 @router.get("/supplier-invoices/")
 def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
+                      from_date: Optional[str] = None, to_date: Optional[str] = None,
                       user: dict = PURCHASE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
@@ -1413,12 +1498,22 @@ def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0
                invoice.supplier_invoice_date AS invoice_date, invoice.due_date,
                invoice.status, invoice.supplier_account_id AS supplier_id,
                invoice.supplier_legal_name_snapshot AS supplier_name,
+               invoice.supplier_gstin_snapshot AS supplier_gst_number,
+               invoice.gst_taxable_total AS taxable_amount,
+               invoice.cgst_total AS cgst_amount,
+               invoice.sgst_total AS sgst_amount,
+               invoice.igst_total AS igst_amount,
+               invoice.cess_total AS cess_amount,
                invoice.grand_total AS invoice_total, invoice.grand_total AS total_amount,
                invoice.created_at, invoice.updated_at
           FROM procurement.supplier_invoices invoice
-         WHERE invoice.org_id=:org_id ORDER BY invoice.supplier_invoice_date DESC, invoice.id DESC
+         WHERE invoice.org_id=:org_id
+           AND (:from_date IS NULL OR invoice.supplier_invoice_date >= CAST(:from_date AS date))
+           AND (:to_date IS NULL OR invoice.supplier_invoice_date <= CAST(:to_date AS date))
+         ORDER BY invoice.supplier_invoice_date DESC, invoice.id DESC
          LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "limit": limit, "skip": skip})
+    """, {"org_id": org_id, "from_date": from_date, "to_date": to_date,
+            "limit": limit, "skip": skip})
     return {"invoices": rows, "total": len(rows)}
 
 

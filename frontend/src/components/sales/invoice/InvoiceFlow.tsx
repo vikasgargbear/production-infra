@@ -11,6 +11,7 @@ import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
 import { useInvoiceLogic, Invoice, CreatedInvoiceData } from './hooks/useInvoiceLogic';
 import { GenericSuccessModal } from '../../global';
 import InvoicePreview from './ui/InvoicePreviewEnterprise';
+import { invoicePreviewValidationError } from './utils/canonicalInvoiceCommand';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -241,6 +242,16 @@ ${companyInfo?.name || 'Your Company'}`;
     }, [selectedCustomer, invoice, isOnline, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
+        const validationError = invoicePreviewValidationError(
+            companyInfo as any,
+            invoice,
+            selectedCustomer,
+        );
+        if (validationError) {
+            setError(validationError);
+            toast.error(validationError);
+            return;
+        }
         try {
             const result = await calculateInvoicePreview(invoice, isOnline);
 
@@ -255,7 +266,7 @@ ${companyInfo?.name || 'Your Company'}`;
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
         }
-    }, [invoice, isOnline, setInvoice]);
+    }, [companyInfo, invoice, isOnline, selectedCustomer, setError, setInvoice]);
 
     const handleBackFromStep3 = useCallback((targetStep: number | React.MouseEvent = 2) => {
         // CRITICAL FIX: Handle if event object passed instead of number

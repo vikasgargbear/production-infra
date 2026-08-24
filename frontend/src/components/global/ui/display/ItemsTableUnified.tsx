@@ -145,11 +145,22 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     };
 
     const calculateItemTotal = (item: ItemsTableItem): number => {
-        return Number(item.line_total ?? item.total ?? 0);
+        const suppliedTotal = Number(item.line_total ?? item.total ?? 0);
+        if (suppliedTotal > 0) return suppliedTotal;
+
+        const quantity = Number(item.quantity || 0);
+        const rate = Number(item.unit_price || 0);
+        const discount = Math.min(100, Math.max(0, Number(item.discount_percent ?? item.discount ?? 0)));
+        const taxRate = Math.max(0, Number(item.gst_percent ?? item.tax_rate ?? 0));
+        const taxable = quantity * rate * (1 - discount / 100);
+        return Math.round(taxable * (1 + taxRate / 100) * 100) / 100;
     };
 
     useEffect(() => {
-        if (items.length > 0 && !readOnly) {
+        const desktopLayout = typeof window === 'undefined'
+            || typeof window.matchMedia !== 'function'
+            || window.matchMedia('(min-width: 768px)').matches;
+        if (desktopLayout && items.length > 0 && !readOnly) {
             const lastItem = items[items.length - 1];
             if (lastItem.quantity === 1 || lastItem.quantity === 0) {
                 const key = `${items.length - 1}-quantity`;
@@ -163,7 +174,57 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     }, [items, readOnly]);
 
     return (
-        <div className={`overflow-x-auto ${className}`}>
+        <div className={className}>
+            <div className="space-y-3 md:hidden">
+                {items.length === 0 ? (
+                    <div className="border border-gray-200 bg-white px-4 py-8 text-center">
+                        <p className="text-sm text-gray-600">No items added yet</p>
+                        <p className="mt-1 text-xs text-gray-400">Search and select products to add</p>
+                    </div>
+                ) : items.map((item, index) => (
+                    <article key={`mobile-${item.product_id}-${item.batch_id || 'nb'}-${index}`} className="border border-gray-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <h4 className="break-words font-medium text-gray-900">{item.product_name || item.name}</h4>
+                                <p className="mt-1 break-all text-xs text-gray-500">Batch: {item.batch_number || 'No batch'}</p>
+                            </div>
+                            {!readOnly && (
+                                <button type="button" onClick={() => onRemoveItem?.(index)} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center border border-red-200 text-red-700" aria-label={`Remove ${item.product_name || item.name || 'item'}`}>
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            )}
+                        </div>
+
+                        <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 text-sm">
+                            <div><dt className="text-xs text-gray-500">Pack</dt><dd className="mt-1 text-gray-800">{item.packages_per_box || 1}×{item.units_per_pack || 1}</dd></div>
+                            <div><dt className="text-xs text-gray-500">Expiry</dt><dd className="mt-1 text-gray-800">{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) : '-'}</dd></div>
+                            <div><dt className="text-xs text-gray-500">GST</dt><dd className="mt-1 text-gray-800">{item.gst_percent || item.tax_rate || 0}%</dd></div>
+                        </dl>
+
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                            <label className="text-xs font-medium text-gray-600">Quantity
+                                <input type="number" min="0" step="1" inputMode="numeric" value={item.quantity || 0} onChange={(event) => onUpdateItem?.(index, 'quantity', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                            </label>
+                            <label className="text-xs font-medium text-gray-600">Rate
+                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                            </label>
+                            <label className="text-xs font-medium text-gray-600">Discount %
+                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                            </label>
+                            <label className="text-xs font-medium text-gray-600">Free quantity
+                                <input type="number" min="0" step="1" inputMode="numeric" value={item.free_quantity || item.free || 0} onChange={(event) => onUpdateItem?.(index, 'free_quantity', Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                            </label>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
+                            <span className="text-gray-500">MRP {formatCurrency(item.mrp || 0)}</span>
+                            <span className="font-semibold text-gray-900">Line total {formatCurrency(calculateItemTotal(item))}</span>
+                        </div>
+                    </article>
+                ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full border-collapse">
                 <thead>
                     <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
@@ -315,9 +376,10 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                     )}
                 </tbody>
             </table>
+            </div>
 
             {!readOnly && enableKeyboardNav && items.length > 0 && (
-                <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-xs text-gray-600">
+                <div className="mt-2 hidden border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-gray-600 md:block">
                     <strong className="text-blue-700">Keyboard Navigation:</strong>
                     <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Tab</kbd> Next field •
                     <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Save & next •

@@ -51,4 +51,19 @@ describe('deferred production surfaces', () => {
     expect(apiIndex).toContain('employeesApi');
     expect(apiIndex).toContain('departmentsApi');
   });
+
+  test('legacy cache-first workers are retired and their caches are purged', () => {
+    const appEntry = read('index.tsx');
+    const workerTombstone = fs.readFileSync(
+      path.resolve(srcRoot, '../public/service-worker.js'),
+      'utf8',
+    );
+
+    expect(appEntry).toContain('registration.unregister()');
+    expect(appEntry).toContain('window.caches.delete');
+    expect(workerTombstone).toContain('self.registration.unregister()');
+    expect(workerTombstone).toContain('caches.delete');
+    expect(workerTombstone).not.toContain("addEventListener('fetch'");
+    expect(workerTombstone).not.toContain('respondWith');
+  });
 });

@@ -1,36 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
 
-interface SyncStats {
-    pending: number;
-    syncing: number;
-    synced: number;
-    failed: number;
-    conflict: number;
-}
-
-interface SyncResult {
-    success: boolean;
-    message?: string;
-}
-
 interface UseNetworkStatusReturn {
     isOnline: boolean;
-    syncStats: SyncStats;
-    pendingCount: number;
-    forceSync: () => Promise<SyncResult>;
-    updateSyncStats: () => Promise<void>;
 }
 
+/** Reports whether the browser can currently reach the authoritative ERP API. */
 export function useNetworkStatus(): UseNetworkStatusReturn {
     const [isOnline, setIsOnline] = useState<boolean>(false);
-    const syncStats: SyncStats = {
-        pending: 0,
-        syncing: 0,
-        synced: 0,
-        failed: 0,
-        conflict: 0
-    };
 
     const checkApi = useCallback(async (): Promise<void> => {
         if (!navigator.onLine) {
@@ -64,23 +41,7 @@ export function useNetworkStatus(): UseNetworkStatusReturn {
         };
     }, [checkApi]);
 
-    const forceSync = async (): Promise<SyncResult> => {
-        await checkApi();
-        return {
-            success: false,
-            message: 'Background sync is disabled. Refresh the page to load current API data.'
-        };
-    };
-
-    const updateSyncStats = async (): Promise<void> => checkApi();
-
-    return {
-        isOnline,
-        syncStats,
-        pendingCount: syncStats.pending,
-        forceSync,
-        updateSyncStats
-    };
+    return { isOnline };
 }
 
 export default useNetworkStatus;

@@ -269,7 +269,6 @@ export const INVOICE_CONFIG: InvoiceConfigType = {
             LOADING: 'Loading...',
             SEARCHING: 'Searching...',
             NO_RESULTS: 'No results found',
-            SYNCING: 'Syncing offline data...',
             UPLOADING: 'Uploading...',
             PROCESSING: 'Processing...'
         }

@@ -9,7 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown, IndianRupee, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import type { DateRange } from '../types';
 import { formatCurrency, calculateNetPayable } from '../utils';
-import { invoicesApi, purchasesApi } from '../../../services/api';
+import { invoicesApi, supplierInvoicesApi } from '../../../services/api';
 
 interface GSTR3BReportProps {
     dateRange?: DateRange;
@@ -28,6 +28,36 @@ const currentMonthRange = (): DateRange => {
     };
 };
 
+type TaxSummary = {
+    cgst: number;
+    sgst: number;
+    igst: number;
+    cess: number;
+    total: number;
+};
+
+const amount = (value: unknown): number => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export const summarizeCanonicalTax = (documents: any[]): TaxSummary => {
+    const reportable = documents.filter(
+        (document) => String(document.status || '').toLowerCase() === 'posted'
+    );
+    const totals = reportable.reduce((summary, document) => ({
+        cgst: summary.cgst + amount(document.cgst_amount),
+        sgst: summary.sgst + amount(document.sgst_amount),
+        igst: summary.igst + amount(document.igst_amount),
+        cess: summary.cess + amount(document.cess_amount),
+    }), { cgst: 0, sgst: 0, igst: 0, cess: 0 });
+
+    return {
+        ...totals,
+        total: totals.cgst + totals.sgst + totals.igst + totals.cess,
+    };
+};
+
 const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
     dateRange = currentMonthRange(),
     refreshTrigger = 0,
@@ -37,8 +67,8 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
 }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [outputTax, setOutputTax] = useState({ cgst: 0, sgst: 0, igst: 0, total: 0 });
-    const [inputCredit, setInputCredit] = useState({ cgst: 0, sgst: 0, igst: 0, total: 0 });
+    const [outputTax, setOutputTax] = useState<TaxSummary>({ cgst: 0, sgst: 0, igst: 0, cess: 0, total: 0 });
+    const [inputCredit, setInputCredit] = useState<TaxSummary>({ cgst: 0, sgst: 0, igst: 0, cess: 0, total: 0 });
     const [netPayable, setNetPayable] = useState(0);
     const [showPayableBreakdown, setShowPayableBreakdown] = useState(false);
 
@@ -56,38 +86,25 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                 const invoiceData = invoiceRes?.data || invoiceRes;
                 const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
 
-                let outCgst = 0, outSgst = 0, outIgst = 0;
-                invoices.forEach((inv: any) => {
-                    outCgst += inv.cgst_amount || 0;
-                    outSgst += inv.sgst_amount || 0;
-                    outIgst += inv.igst_amount || 0;
-                });
-                const outTotal = outCgst + outSgst + outIgst;
-                setOutputTax({ cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal });
+                const output = summarizeCanonicalTax(invoices);
+                setOutputTax(output);
 
-                const purchaseRes = await purchasesApi.getOrders({
-                    date_from: dateRange.from,
-                    date_to: dateRange.to,
+                const purchaseRes = await supplierInvoicesApi.getAll({
+                    from_date: dateRange.from,
+                    to_date: dateRange.to,
                     limit: 500
                 });
                 const purchaseData = purchaseRes?.data || purchaseRes;
-                const purchases = Array.isArray(purchaseData) ? purchaseData : purchaseData?.purchases || purchaseData?.orders || [];
+                const supplierInvoices = Array.isArray(purchaseData) ? purchaseData : purchaseData?.invoices || [];
+                const input = summarizeCanonicalTax(supplierInvoices);
+                setInputCredit(input);
 
-                let inCgst = 0, inSgst = 0, inIgst = 0;
-                purchases.forEach((p: any) => {
-                    inCgst += p.cgst_amount || 0;
-                    inSgst += p.sgst_amount || 0;
-                    inIgst += p.igst_amount || 0;
-                });
-                const inTotal = inCgst + inSgst + inIgst;
-                setInputCredit({ cgst: inCgst, sgst: inSgst, igst: inIgst, total: inTotal });
-
-                const net = calculateNetPayable(outTotal, inTotal);
+                const net = calculateNetPayable(output.total, input.total);
                 setNetPayable(net);
 
                 onDataReady?.({
-                    outputTax: { cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal },
-                    inputCredit: { cgst: inCgst, sgst: inSgst, igst: inIgst, total: inTotal },
+                    outputTax: output,
+                    inputCredit: input,
                     netPayable: net
                 });
 
@@ -122,6 +139,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
     const cgstPayable = Math.max(0, outputTax.cgst - inputCredit.cgst);
     const sgstPayable = Math.max(0, outputTax.sgst - inputCredit.sgst);
     const igstPayable = Math.max(0, outputTax.igst - inputCredit.igst);
+    const cessPayable = Math.max(0, outputTax.cess - inputCredit.cess);
 
     return (
         <div className="space-y-6">
@@ -196,7 +214,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                             <TrendingUp className="h-5 w-5 text-red-600 mr-2" />
                             <h3 className="text-lg font-semibold">Output Tax (Sales)</h3>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
                                 <div className="text-sm text-gray-600">CGST</div>
                                 <div className="text-xl font-bold">{formatCurrency(outputTax.cgst)}</div>
@@ -208,6 +226,10 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                             <div>
                                 <div className="text-sm text-gray-600">IGST</div>
                                 <div className="text-xl font-bold">{formatCurrency(outputTax.igst)}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-gray-600">Cess</div>
+                                <div className="text-xl font-bold">{formatCurrency(outputTax.cess)}</div>
                             </div>
                             <div className="bg-red-50 p-2 rounded">
                                 <div className="text-sm text-gray-600">Total Output</div>
@@ -222,7 +244,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                             <TrendingDown className="h-5 w-5 text-green-600 mr-2" />
                             <h3 className="text-lg font-semibold">Input Credit (Purchases)</h3>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
                                 <div className="text-sm text-gray-600">CGST</div>
                                 <div className="text-xl font-bold">{formatCurrency(inputCredit.cgst)}</div>
@@ -234,6 +256,10 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                             <div>
                                 <div className="text-sm text-gray-600">IGST</div>
                                 <div className="text-xl font-bold">{formatCurrency(inputCredit.igst)}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-gray-600">Cess</div>
+                                <div className="text-xl font-bold">{formatCurrency(inputCredit.cess)}</div>
                             </div>
                             <div className="bg-green-50 p-2 rounded">
                                 <div className="text-sm text-gray-600">Total Input</div>
@@ -283,7 +309,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                 </button>
                 {showPayableBreakdown && (
                     <div className="p-4 border-t">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                             <div className="bg-gray-50 rounded-lg p-4">
                                 <h4 className="font-semibold text-sm text-blue-600 mb-3">CGST</h4>
                                 <div className="space-y-2 text-sm">
@@ -332,6 +358,23 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                                     <div className="border-t pt-2 flex justify-between font-bold">
                                         <span>Payable:</span>
                                         <span className="text-red-600">{formatCurrency(igstPayable)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="font-semibold text-sm text-amber-700 mb-3">Cess</h4>
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span>Output:</span>
+                                        <span>{formatCurrency(outputTax.cess)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-green-600">
+                                        <span>Input Credit:</span>
+                                        <span>- {formatCurrency(inputCredit.cess)}</span>
+                                    </div>
+                                    <div className="border-t pt-2 flex justify-between font-bold">
+                                        <span>Payable:</span>
+                                        <span className="text-red-600">{formatCurrency(cessPayable)}</span>
                                     </div>
                                 </div>
                             </div>

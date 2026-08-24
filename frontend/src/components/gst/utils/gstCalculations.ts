@@ -6,6 +6,11 @@
 
 import type { GSTSummary, B2BInvoice, B2CData, InputTaxCredit } from '../types';
 
+const toAmount = (value: unknown): number => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
 // =============================================================================
 // GST TYPE DETERMINATION
 // =============================================================================
@@ -159,10 +164,10 @@ export function groupByGSTIN(invoices: any[]): Map<string, B2BInvoice> {
 
         const group = grouped.get(gst_number)!;
         group.invoices += 1;
-        group.taxableValue += invoice.taxable_amount || 0;
-        group.cgst += invoice.cgst_amount || 0;
-        group.sgst += invoice.sgst_amount || 0;
-        group.igst += invoice.igst_amount || 0;
+        group.taxableValue += toAmount(invoice.taxable_amount);
+        group.cgst += toAmount(invoice.cgst_amount);
+        group.sgst += toAmount(invoice.sgst_amount);
+        group.igst += toAmount(invoice.igst_amount);
     });
 
     return grouped;
@@ -194,15 +199,15 @@ export function calculateB2CSummary(invoices: any[]): { small: B2CData; large: B
         const hasGSTIN = invoice.customer_gst_number || invoice.gst_number;
         if (hasGSTIN) return; // Skip B2B invoices
 
-        const taxableValue = invoice.taxable_amount || 0;
+        const taxableValue = toAmount(invoice.taxable_amount);
         const isLarge = taxableValue >= B2C_THRESHOLD;
 
         const target = isLarge ? large : small;
         target.count += 1;
         target.taxableValue += taxableValue;
-        target.cgst += invoice.cgst_amount || 0;
-        target.sgst += invoice.sgst_amount || 0;
-        target.igst += invoice.igst_amount || 0;
+        target.cgst += toAmount(invoice.cgst_amount);
+        target.sgst += toAmount(invoice.sgst_amount);
+        target.igst += toAmount(invoice.igst_amount);
     });
 
     return { small, large };
@@ -220,10 +225,10 @@ export function calculateGSTSummary(invoices: any[]): GSTSummary {
 
     invoices.forEach(invoice => {
         totalInvoices += 1;
-        totalTaxableValue += invoice.taxable_amount || 0;
-        totalCGST += invoice.cgst_amount || 0;
-        totalSGST += invoice.sgst_amount || 0;
-        totalIGST += invoice.igst_amount || 0;
+        totalTaxableValue += toAmount(invoice.taxable_amount);
+        totalCGST += toAmount(invoice.cgst_amount);
+        totalSGST += toAmount(invoice.sgst_amount);
+        totalIGST += toAmount(invoice.igst_amount);
     });
 
     const totalTax = calculateTotalTax(totalCGST, totalSGST, totalIGST);
@@ -247,9 +252,9 @@ export function calculateInputCredit(purchases: any[]): InputTaxCredit {
     let igst = 0;
 
     purchases.forEach(purchase => {
-        cgst += purchase.cgst_amount || 0;
-        sgst += purchase.sgst_amount || 0;
-        igst += purchase.igst_amount || 0;
+        cgst += toAmount(purchase.cgst_amount);
+        sgst += toAmount(purchase.sgst_amount);
+        igst += toAmount(purchase.igst_amount);
     });
 
     return {

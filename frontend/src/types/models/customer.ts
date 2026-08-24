@@ -115,6 +115,10 @@ export interface Customer {
     billing_city?: string;
     billing_state?: string;
     billing_pincode?: string;
+    shipping_address?: string;
+    shipping_city?: string;
+    shipping_state?: string;
+    shipping_pincode?: string;
   };
 }
 

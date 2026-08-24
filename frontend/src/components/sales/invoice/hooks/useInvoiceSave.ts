@@ -18,8 +18,7 @@ import type { CreatedInvoiceData } from '../types/invoiceTypes';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import {
     buildCanonicalInvoicePreparePayload,
-    canonicalInvoiceValidationError,
-    companyInvoiceValidationError,
+    invoicePreviewValidationError,
 } from '../utils/canonicalInvoiceCommand';
 
 export interface UseInvoiceSaveProps {
@@ -62,16 +61,49 @@ const firstImpact = (value: unknown): Record<string, unknown> =>
         ? value[0] as Record<string, unknown>
         : {};
 
+const numericMoney = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatTaxImpact = (value: unknown): string => {
+    const impacts = Array.isArray(value)
+        ? value.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+        : [];
+    if (impacts.length === 0) return 'server calculated';
+
+    const explicitTotals = impacts.map(impact =>
+        numericMoney(impact.total_tax ?? impact.amount),
+    );
+    if (explicitTotals.every(total => total !== null)) {
+        const total = explicitTotals.reduce<number>((sum, amount) => sum + Number(amount), 0);
+        return total.toFixed(2);
+    }
+
+    const components = ['cgst_total', 'sgst_total', 'igst_total', 'cess_total'] as const;
+    const amounts = impacts.flatMap(impact => components.map(component => numericMoney(impact[component])));
+    if (!amounts.some(amount => amount !== null)) return 'server calculated';
+    return amounts.reduce<number>((sum, amount) => sum + Number(amount || 0), 0).toFixed(2);
+};
+
+const formatPolicyWarning = (warning: unknown): string => {
+    if (typeof warning === 'string') return warning;
+    if (!warning || typeof warning !== 'object') return String(warning ?? 'Unspecified policy warning');
+    const structured = warning as Record<string, unknown>;
+    const code = String(structured.code || structured.type || '').trim();
+    const message = String(structured.message || structured.detail || structured.warning || '').trim();
+    if (code && message) return `${code}: ${message}`;
+    return message || code || 'Unspecified policy warning';
+};
+
 export const formatCanonicalInvoiceConfirmation = (preview: CanonicalCommandPreview): string => {
     const finance = firstImpact(preview.financial_impact);
-    const tax = firstImpact(preview.tax_impact);
     const inventory = Array.isArray(preview.inventory_impact) ? preview.inventory_impact : [];
     const total = finance.receivable || finance.grand_total || finance.amount || 'server calculated';
-    const taxTotal = tax.igst_total || tax.total_tax || tax.amount
-        || [tax.cgst_total, tax.sgst_total].filter(Boolean).join(' + ')
-        || 'server calculated';
+    const taxTotal = formatTaxImpact(preview.tax_impact);
     const warnings = Array.isArray(preview.policy_warnings) && preview.policy_warnings.length > 0
-        ? `\nWarnings: ${preview.policy_warnings.join('; ')}`
+        ? `Warnings:\n${preview.policy_warnings.map(warning => `- ${formatPolicyWarning(warning)}`).join('\n')}`
         : '';
 
     return [
@@ -101,8 +133,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
 
     const handleSaveInvoice = useCallback(async () => {
         setError(null);
-        const validationError = companyInvoiceValidationError(companyInfo, invoice)
-            || canonicalInvoiceValidationError(invoice, selectedCustomer);
+        const validationError = invoicePreviewValidationError(companyInfo, invoice, selectedCustomer);
         if (validationError) {
             setError(validationError);
             toast.error(validationError);

@@ -2,6 +2,8 @@ import {
     buildCanonicalInvoicePreparePayload,
     canonicalInvoiceValidationError,
     companyInvoiceValidationError,
+    invoicePlaceOfSupplyStateCode,
+    invoicePreviewValidationError,
 } from './canonicalInvoiceCommand';
 import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { Customer } from '../../../../types/models/customer';
@@ -32,6 +34,7 @@ const invoice = {
     discount_amount: 0,
     freight_charges: 12.5,
     billing_address: '1 Canonical Customer Road',
+    shipping_address: '1 Canonical Customer Road',
     items: [{
         product_id: ids.product,
         batch_id: ids.batch,
@@ -112,6 +115,21 @@ describe('canonical invoice command', () => {
         );
     });
 
+    it('uses the selected delivery-address state as canonical place of supply', () => {
+        const alternateDelivery = {
+            ...invoice,
+            shipping_address: '2 Alternate Road, Bengaluru, Karnataka, 560001',
+            shipping_address_data: { state: 'Karnataka' },
+        } as Invoice;
+
+        expect(invoicePlaceOfSupplyStateCode(alternateDelivery, customer)).toBe('29');
+        expect(buildCanonicalInvoicePreparePayload(
+            alternateDelivery,
+            customer,
+            'erp-web-invoice:alternate-delivery',
+        )).toEqual(expect.objectContaining({ place_of_supply_state_code: '29' }));
+    });
+
     it.each([
         [{ ...company, name: '' }, /legal name/i],
         [{ ...company, address: '' }, /registered address/i],
@@ -131,8 +149,25 @@ describe('canonical invoice command', () => {
 
     it.each([
         [{ ...invoice, billing_address: '' }, /billing address/i],
+        [{ ...invoice, shipping_address: '' }, /delivery address/i],
+        [{ ...invoice, shipping_address: 'Unsaved alternate delivery text' }, /delivery address state/i],
+        [{ ...invoice, shipping_address_data: { state: 'Unknown state' } }, /delivery address state/i],
         [{ ...invoice, items: [{ ...invoice.items[0], hsn_code: '' }] }, /HSN code/i],
     ])('blocks a canonical invoice when a mandatory document field is missing', (invalid, message) => {
         expect(canonicalInvoiceValidationError(invalid as Invoice, customer)).toMatch(message);
+    });
+
+    it('uses the same mandatory-field guard before preview and submission', () => {
+        expect(invoicePreviewValidationError(
+            { ...company, address: '' },
+            invoice,
+            customer,
+        )).toMatch(/registered address/i);
+        expect(invoicePreviewValidationError(
+            company,
+            { ...invoice, shipping_address: '' } as Invoice,
+            customer,
+        )).toMatch(/delivery address/i);
+        expect(invoicePreviewValidationError(company, invoice, customer)).toBeNull();
     });
 });

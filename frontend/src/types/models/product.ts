@@ -52,6 +52,7 @@ export interface Product {
   critical_stock_level?: number;
 
   // Product lifecycle (nullable)
+  status?: 'draft' | 'active' | 'blocked';
   product_status?: string;
   launch_date?: string;
   discontinuation_date?: string;

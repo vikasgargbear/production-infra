@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { toast } from 'react-toastify';
 import { invoicesApi } from '../../../../services/api';
 import { showFinancialEntryNotification } from '../../../../utils/financialEntryNotifier';
-import { useInvoiceSave } from './useInvoiceSave';
+import { formatCanonicalInvoiceConfirmation, useInvoiceSave } from './useInvoiceSave';
 
 jest.mock('react-toastify', () => ({ toast: { error: jest.fn() } }));
 jest.mock('../../../../services/api', () => ({
@@ -16,8 +16,7 @@ jest.mock('../../../../utils/financialEntryNotifier', () => ({
 }));
 jest.mock('../../../../utils/clientUuid', () => ({ clientUuid: () => 'client-uuid' }));
 jest.mock('../utils/canonicalInvoiceCommand', () => ({
-    companyInvoiceValidationError: jest.fn(() => null),
-    canonicalInvoiceValidationError: jest.fn(() => null),
+    invoicePreviewValidationError: jest.fn(() => null),
     buildCanonicalInvoicePreparePayload: jest.fn(() => ({ idempotency_key: 'erp-web-invoice:client-uuid' })),
 }));
 
@@ -119,5 +118,28 @@ describe('useInvoiceSave API-only policy', () => {
         expect(invoicesApi.prepareCanonical).toHaveBeenCalledTimes(1);
         expect(invoicesApi.executePreparedCanonical).not.toHaveBeenCalled();
         expect(props.setError).toHaveBeenLastCalledWith(expect.stringContaining('No invoice was created'));
+    });
+
+    it('adds CGST and SGST numerically and renders structured warnings', () => {
+        const confirmation = formatCanonicalInvoiceConfirmation({
+            command_request_id: '10000000-0000-4000-8000-000000000001',
+            preview_hash: `sha256:${'a'.repeat(64)}`,
+            financial_impact: [{ receivable: '113.50' }],
+            tax_impact: [{
+                cgst_total: '6.75',
+                sgst_total: '6.75',
+                igst_total: '0.00',
+                cess_total: '0.00',
+            }],
+            inventory_impact: [{}],
+            policy_warnings: [{
+                code: 'REVIEW_CREDIT',
+                message: 'Customer credit should be reviewed.',
+            }],
+        });
+
+        expect(confirmation).toContain('GST impact: ₹13.50');
+        expect(confirmation).toContain('- REVIEW_CREDIT: Customer credit should be reviewed.');
+        expect(confirmation).not.toContain('[object Object]');
     });
 });

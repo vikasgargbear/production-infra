@@ -17,9 +17,14 @@ root.render(
 );
 
 // The ERP is cloud-authoritative. Remove service workers left by earlier
-// offline builds so API/UI deploys cannot be shadowed by stale cached bundles.
+// cache-first builds so API/UI deploys cannot be shadowed by stale bundles.
 if ('serviceWorker' in navigator) {
-    void navigator.serviceWorker.getRegistrations().then(registrations => (
-        Promise.all(registrations.map(registration => registration.unregister()))
-    ));
+    void navigator.serviceWorker.getRegistrations().then(async registrations => {
+        await Promise.all(registrations.map(registration => registration.unregister()));
+
+        if ('caches' in window) {
+            const cacheNames = await window.caches.keys();
+            await Promise.all(cacheNames.map(cacheName => window.caches.delete(cacheName)));
+        }
+    });
 }

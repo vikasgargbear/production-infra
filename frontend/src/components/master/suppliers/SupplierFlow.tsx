@@ -16,6 +16,7 @@ import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
 import { AddressInput, AddressInputData } from '../../global';
+import { validateSupplierMandatoryFields } from './supplierValidation';
 
 // ==================== TYPES ====================
 
@@ -163,29 +164,13 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         });
     };
 
-    // Validation helpers
-    const validateGSTIN = (gst: string): boolean => {
-        if (!gst) return true;
-        return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst);
-    };
-
-    const validatePAN = (pan: string): boolean => {
-        if (!pan) return true;
-        return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan);
-    };
-
     // Save supplier
     const handleSave = async () => {
         setSaving(true);
         setErrors([]);
 
         // Validation
-        const validationErrors: string[] = [];
-        if (!formData.supplier_name.trim()) validationErrors.push('Supplier name is required');
-        if (!formData.phone.trim()) validationErrors.push('Phone number is required');
-        if (!formData.city.trim()) validationErrors.push('City is required');
-        if (formData.gst_number && !validateGSTIN(formData.gst_number)) validationErrors.push('Invalid GSTIN format');
-        if (formData.pan_number && !validatePAN(formData.pan_number)) validationErrors.push('Invalid PAN format');
+        const validationErrors = validateSupplierMandatoryFields(formData);
 
         if (validationErrors.length > 0) {
             setErrors(validationErrors);
@@ -299,6 +284,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                 </label>
                                 <input
                                     type="text"
+                                    required
                                     value={formData.supplier_name}
                                     onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
                                     className={inputClass}
@@ -333,6 +319,8 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                 </label>
                                 <input
                                     type="tel"
+                                    required
+                                    inputMode="tel"
                                     value={formData.phone}
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                     className={inputClass}

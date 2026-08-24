@@ -233,52 +233,52 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
         <div className={embedded ? '' : 'flex-1 overflow-y-auto'}>
           <div className="max-w-7xl mx-auto px-6 py-6">
             {/* Date Range Selector */}
-            <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="grid grid-cols-4 gap-2 sm:flex sm:items-center">
                 <button
                   onClick={() => setDateRange('7days')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  className={`min-h-11 border px-2 py-2 text-sm font-medium sm:px-4 ${
                     dateRange === '7days'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   7 Days
                 </button>
                 <button
                   onClick={() => setDateRange('30days')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  className={`min-h-11 border px-2 py-2 text-sm font-medium sm:px-4 ${
                     dateRange === '30days'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   30 Days
                 </button>
                 <button
                   onClick={() => setDateRange('month')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  className={`min-h-11 border px-2 py-2 text-sm font-medium sm:px-4 ${
                     dateRange === 'month'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   This Month
                 </button>
                 <button
                   onClick={() => setDateRange('90days')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  className={`min-h-11 border px-2 py-2 text-sm font-medium sm:px-4 ${
                     dateRange === '90days'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   90 Days
                 </button>
               </div>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Calendar className="w-4 h-4" />
-                <span>Last updated: {new Date().toLocaleString()}</span>
+              <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500">
+                <Calendar className="h-4 w-4 shrink-0" />
+                <span className="break-words">Last updated: {new Date().toLocaleString()}</span>
               </div>
             </div>
 

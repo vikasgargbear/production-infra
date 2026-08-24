@@ -2,6 +2,7 @@ import type { Customer } from '../../../../types/models/customer';
 import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { CompanyInfo } from '../../../../types/common/company.types';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import { indianStateCode } from '../../../../utils/indianStates';
 
 type CanonicalDiscountKind = 'none' | 'percent' | 'amount';
 
@@ -28,6 +29,26 @@ const requiredUuid = (value: unknown, label: string): string => {
 };
 
 const nonEmpty = (value: unknown): boolean => String(value ?? '').trim().length > 0;
+
+export function invoicePlaceOfSupplyStateCode(
+    invoice: Invoice,
+    customer: Customer,
+): string {
+    const deliveryAddress = invoice.shipping_address_data as {
+        state_code?: string;
+        state_name?: string;
+        state?: string;
+    } | undefined;
+    if (deliveryAddress) {
+        return indianStateCode(
+            deliveryAddress.state_code || deliveryAddress.state_name || deliveryAddress.state,
+        );
+    }
+    if (String(invoice.shipping_address || '').trim() !== String(invoice.billing_address || '').trim()) {
+        return '';
+    }
+    return String(customer.place_of_supply_state_code || '').trim();
+}
 
 export function companyInvoiceValidationError(
     company: CompanyInfo | null,
@@ -85,8 +106,11 @@ export function canonicalInvoiceValidationError(
     if (!nonEmpty(invoice.billing_address)) {
         return 'Customer billing address is missing. Add an address and re-select the customer.';
     }
-    if (!/^[0-9]{2}$/.test(customer.place_of_supply_state_code || '')) {
-        return 'Customer place of supply is missing. Add a valid GST state/address and re-select the customer.';
+    if (!nonEmpty(invoice.shipping_address)) {
+        return 'Customer delivery address is missing. Select a saved delivery address before previewing the invoice.';
+    }
+    if (!/^[0-9]{2}$/.test(invoicePlaceOfSupplyStateCode(invoice, customer))) {
+        return 'Delivery address state is missing. Select a valid delivery address before previewing the invoice.';
     }
     if (invoice.delivery_type !== 'PICKUP') {
         return 'Delivery and courier invoices need an exact transport distance. Use Pickup until distance capture is available.';
@@ -122,6 +146,16 @@ export function canonicalInvoiceValidationError(
     return null;
 }
 
+/** One fail-closed boundary shared by preview navigation and final submission. */
+export function invoicePreviewValidationError(
+    company: CompanyInfo | null,
+    invoice: Invoice,
+    customer: Customer | null,
+): string | null {
+    return companyInvoiceValidationError(company, invoice)
+        || canonicalInvoiceValidationError(invoice, customer);
+}
+
 export function buildCanonicalInvoicePreparePayload(
     invoice: Invoice,
     customer: Customer,
@@ -149,7 +183,7 @@ export function buildCanonicalInvoicePreparePayload(
         } : {}),
         customer_account_id: requiredUuid(customer.customer_id, 'Customer'),
         tax_charge_mechanism: 'normal',
-        place_of_supply_state_code: customer.place_of_supply_state_code,
+        place_of_supply_state_code: invoicePlaceOfSupplyStateCode(invoice, customer),
         from_location_id: requiredUuid(firstItem.location_id, 'Stock location'),
         logistics: {
             transport_mode: 'in_person',

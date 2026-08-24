@@ -46,6 +46,8 @@ export interface CustomerAddress {
     street?: string;
     city?: string;
     state?: string;
+    state_code?: string;
+    state_name?: string;
     pincode?: string;
     country?: string;
 }

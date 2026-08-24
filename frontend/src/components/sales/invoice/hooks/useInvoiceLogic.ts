@@ -19,7 +19,8 @@ import {
     ImportData,
     DiscountData,
     CreatedInvoiceData,
-    GstType
+    GstType,
+    CustomerAddress,
 } from '../types/invoiceTypes';
 import { prepareItemForInvoice } from '../utils/invoiceItemUtils';
 import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
@@ -71,6 +72,8 @@ export interface Invoice {
     customer_details: Customer | null;
     billing_address: string;
     shipping_address: string;
+    billing_address_data?: CustomerAddress;
+    shipping_address_data?: CustomerAddress;
     gst_type: GstType;
     delivery_type: 'PICKUP' | 'DELIVERY' | 'COURIER';
     transport_company: string;
@@ -379,6 +382,8 @@ export const useInvoiceLogic = (
                 customer_details: null,
                 billing_address: '',
                 shipping_address: '',
+                billing_address_data: undefined,
+                shipping_address_data: undefined,
                 gst_type: 'CGST/SGST' // Reset to default when no customer
             }));
             return;
@@ -399,16 +404,36 @@ export const useInvoiceLogic = (
             customer.gst_number
         );
 
-        const billingAddress =
-            (customer.address_info?.billing_address ||
-                customer.billing_address?.street ||
-                '') as string;
+        const billingAddressData: CustomerAddress = {
+            address_line1: customer.address_info?.billing_address || customer.billing_address?.street || '',
+            city: customer.address_info?.billing_city || customer.billing_address?.city || '',
+            state: customer.address_info?.billing_state || customer.billing_address?.state || '',
+            pincode: customer.address_info?.billing_pincode || customer.billing_address?.pincode || '',
+            country: 'India',
+        };
+        const shippingAddressData: CustomerAddress = {
+            address_line1: customer.address_info?.shipping_address || customer.shipping_address?.street || billingAddressData.address_line1,
+            city: customer.address_info?.shipping_city || customer.shipping_address?.city || billingAddressData.city,
+            state: customer.address_info?.shipping_state || customer.shipping_address?.state || billingAddressData.state,
+            pincode: customer.address_info?.shipping_pincode || customer.shipping_address?.pincode || billingAddressData.pincode,
+            country: 'India',
+        };
+        const addressString = (address: CustomerAddress): string => [
+            address.address_line1,
+            address.city,
+            address.state,
+            address.pincode,
+        ].filter(Boolean).join(', ');
+        const billingAddress = addressString(billingAddressData);
+        const shippingAddress = addressString(shippingAddressData);
 
         setInvoice(prev => ({
             ...prev,
             customer_details: customer,
             billing_address: billingAddress,
-            shipping_address: sameAsShipping ? billingAddress : prev.shipping_address,
+            billing_address_data: billingAddressData,
+            shipping_address: sameAsShipping ? (shippingAddress || billingAddress) : prev.shipping_address,
+            shipping_address_data: sameAsShipping ? shippingAddressData : prev.shipping_address_data,
             gst_type: gstType // CRITICAL: Set GST type based on state comparison
         }));
 

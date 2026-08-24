@@ -1,17 +1,17 @@
 # Sales Module
 
-**Status:** ✅ Optimized (Jan 2026)
+**Status:** Cloud-authoritative
 
-Production-ready sales module with shared infrastructure and clean architecture.
+Sales reads and supported writes use the canonical API boundary. Unsupported
+writes fail closed; there is no local persistence or background synchronization.
 
 ---
 
 ## 📋 Quick Links
 
-- **[Module Optimization Playbook](./MODULE_OPTIMIZATION_PLAYBOOK.md)** - Complete guide for optimizing other modules
 - **[Shared Types](./types/salesSharedTypes.ts)** - Base types for all sales modules
-- **[Shared Hooks](./hooks/)** - Reusable hooks (useSalesTransaction, useEmployees, useDraftAutoSave)
-- **[Shared Utils](./utils/)** - Reusable utilities (product transform, offline helpers)
+- **[Shared Hooks](./hooks/)** - API-backed reusable hooks
+- **[Shared Utils](./utils/)** - Product and document transformations
 
 ---
 
@@ -19,20 +19,13 @@ Production-ready sales module with shared infrastructure and clean architecture.
 
 ```
 sales/
-├── hooks/              # Shared hooks (3 files)
-│   ├── useSalesTransaction.ts
-│   ├── useEmployees.ts
-│   └── useDraftAutoSave.ts
-├── utils/              # Shared utilities (3 files)
-│   ├── offlineSaveHelpers.ts
-│   ├── productItemTransform.ts
-│   └── index.ts
+├── hooks/              # Shared API-backed hooks
+├── utils/              # Shared document transformations
 ├── types/              # Shared types
 │   └── salesSharedTypes.ts
 ├── invoice/            # Invoice module
 │   ├── hooks/
-│   │   ├── useInvoiceLogic.ts (700 lines)
-│   │   ├── useInvoiceDraft.ts
+│   │   ├── useInvoiceLogic.ts
 │   │   └── useInvoiceSave.ts
 │   └── utils/
 │       └── invoiceItemUtils.ts
@@ -61,43 +54,13 @@ sales/
 
 ---
 
-## 🚀 Usage
+## Runtime boundary
 
-### Using Shared Product Transform
-```typescript
-import { prepareItemForInvoice } from './utils';
-
-const invoiceItem = prepareItemForInvoice(product);
-```
-
-### Using Draft Auto-Save
-```typescript
-import { useDraftAutoSave } from '../../hooks';
-
-useDraftAutoSave({
-  data: invoice,
-  storageKey: STORAGE_KEYS.INVOICE_DRAFT,
-  shouldSave: (inv) => inv.items.length > 0
-});
-```
-
-### Using Offline Helpers
-```typescript
-import { generateTempId, deductStockLocally } from '../../utils';
-
-const tempId = generateTempId();
-await deductStockLocally(invoice.items); // ⚠️ Invoice only!
-```
-
----
-
-## ⚠️ Important Notes
-
-### Stock Deduction - Invoice Only
-`deductStockLocally()` should **only** be used for invoices:
-- ✅ **Invoice** = Actual sale, deduct stock
-- ❌ **Challan** = Delivery note, no stock deduction
-- ❌ **Order** = Sales order, no stock deduction
+- The API is the source of truth for customers, products, batches, stock, tax,
+  numbering, and persistence.
+- The browser may hold form state only for the currently open flow.
+- A successful UI message requires a successful server response.
+- Invoice mutations use the reviewed canonical operator-command endpoint.
 
 ---
 
@@ -115,13 +78,6 @@ npx tsc --noEmit src/components/sales/**/*.ts
 
 ---
 
-## 📖 Learn More
-
-See **[MODULE_OPTIMIZATION_PLAYBOOK.md](./MODULE_OPTIMIZATION_PLAYBOOK.md)** for:
-- Complete optimization methodology
-- Step-by-step guide for other modules
-- Reusable patterns and templates
-- Common pitfalls and solutions
 
 ---
 

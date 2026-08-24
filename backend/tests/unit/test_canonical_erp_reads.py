@@ -21,6 +21,7 @@ CRITICAL_UI_READS = {
     "/api/sales-orders/",
     "/api/challan/",
     "/api/purchases/",
+    "/api/supplier-invoices/",
     "/api/grn/",
     "/api/sale-returns/",
     "/api/purchase-returns/",
@@ -278,6 +279,49 @@ def test_batch_reads_project_branch_from_authoritative_stock_balance() -> None:
     assert "COUNT(DISTINCT location.branch_id)=1" not in source
 
 
+def test_invoice_history_filters_and_payment_projection_use_canonical_finance(monkeypatch) -> None:
+    captured = {}
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+
+    def fake_rows(_db, sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{
+            "id": uuid4(),
+            "document_number": "INV-E2E-001",
+            "document_date": "2026-08-24",
+            "payment_status": "partial",
+            "paid_amount": 25,
+            "pending_amount": 75,
+            "filtered_total": 31,
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.invoices(
+        limit=25,
+        offset=0,
+        date_from=None,
+        date_to=None,
+        search="Acme",
+        payment_status="partial",
+        user={},
+        db=object(),
+    )
+
+    assert result["total"] == 31
+    assert result["invoices"][0]["payment_status"] == "partial"
+    assert "filtered_total" not in result["invoices"][0]
+    sql = captured["sql"]
+    assert "finance.accounting_events" in sql
+    assert "finance.open_items" in sql
+    assert "finance.allocations" in sql
+    assert "reversal.reversal_of_allocation_id=allocation.id" in sql
+    assert "document.invoice_number ILIKE :search_pattern" in sql
+    assert "CAST(:payment_status AS text) IS NULL" in sql
+    assert captured["params"]["search_pattern"] == "%Acme%"
+    assert captured["params"]["payment_status"] == "partial"
+
+
 def test_product_and_batch_reads_project_effective_canonical_gst_rate() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 
@@ -305,6 +349,33 @@ def test_hsn_report_projects_complete_numeric_contract_for_selected_period() -> 
     assert "AS tax_rate" in source
     assert ":date_from IS NULL OR invoice.invoice_date" in source
     assert ":date_to IS NULL OR invoice.invoice_date" in source
+
+
+def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
+    list_source = inspect.getsource(canonical_erp_reads._sales_rows)
+    detail_source = inspect.getsource(canonical_erp_reads.canonical_invoice)
+
+    for source in (list_source, detail_source):
+        assert "buyer_gstin_snapshot AS customer_gst_number" in source
+        assert "gst_taxable_total" in source and "AS taxable_amount" in source
+        assert "cgst_total" in source and "AS cgst_amount" in source
+        assert "sgst_total" in source and "AS sgst_amount" in source
+        assert "igst_total" in source and "AS igst_amount" in source
+        assert "cess_total" in source and "AS cess_amount" in source
+
+
+def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:
+    source = inspect.getsource(canonical_erp_reads.supplier_invoices)
+
+    assert "FROM procurement.supplier_invoices" in source
+    assert "supplier_gstin_snapshot AS supplier_gst_number" in source
+    assert "gst_taxable_total AS taxable_amount" in source
+    assert "cgst_total AS cgst_amount" in source
+    assert "sgst_total AS sgst_amount" in source
+    assert "igst_total AS igst_amount" in source
+    assert "cess_total AS cess_amount" in source
+    assert ":from_date IS NULL OR invoice.supplier_invoice_date" in source
+    assert ":to_date IS NULL OR invoice.supplier_invoice_date" in source
 
 
 def test_current_stock_projects_one_canonical_row_per_product() -> None:

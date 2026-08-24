@@ -6,6 +6,7 @@ import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.c
 import { mergeProductAndBatch } from '../../../utils/productMapper';
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Product as CanonicalProduct } from '../../../types/models';
+import { batchDisabledReason } from './batchEligibility';
 
 // ==================== HELPERS ====================
 
@@ -61,6 +62,7 @@ interface Batch {
     uom_conversion_id?: string;
     location_name?: string;
     branch_name?: string;
+    batch_status: string;
     // Pack info
     units_per_pack?: number;
     packages_per_box?: number;
@@ -220,6 +222,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 uom_conversion_id: batch.uom_conversion_id,
                 location_name: typeof batch.location_name === 'string' ? batch.location_name : undefined,
                 branch_name: typeof batch.branch_name === 'string' ? batch.branch_name : undefined,
+                batch_status: typeof batch.batch_status === 'string' ? batch.batch_status : '',
             };
 
             return processed;
@@ -261,18 +264,23 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         setBatches(processedBatches);
         batchRefs.current = processedBatches.map(() => null);
 
-        // Auto-focus first batch for keyboard navigation (FEFO priority)
-        if (processedBatches.length > 0) {
-            setFocusedIndex(0);
+        // Auto-focus the first saleable batch; blocked stock is informational.
+        const firstSaleableIndex = processedBatches.findIndex(batch => !batchDisabledReason(batch));
+        if (firstSaleableIndex >= 0) {
+            setFocusedIndex(firstSaleableIndex);
         } else {
             setFocusedIndex(-1);
-            setError('No batches available for this product (may be expired or out of stock)');
+            // Keep lifecycle-blocked rows visible so the reason is actionable.
+            setError(processedBatches.length === 0
+                ? 'No batches available for this product (may be expired or out of stock)'
+                : null);
         }
     };
 
     const handleBatchSelect = (batch: Batch): void => {
-        if (batch.quantity_available <= 0) {
-            setError('This batch has no saleable stock. Refresh and select another batch.');
+        const disabledReason = batchDisabledReason(batch);
+        if (disabledReason) {
+            setError(`${disabledReason}. Refresh or select another batch.`);
             return;
         }
         setSelectedBatch(batch);
@@ -319,6 +327,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const expiryInfo = showExpiryStatus ? getExpiryInfo(batch.expiry_date) : null;
         const isSelected = selectedBatch?.batch_id === batch.batch_id;
         const isFocused = typeof index === 'number' && index === focusedIndex;
+        const disabledReason = batchDisabledReason(batch);
 
         return (
             <button
@@ -326,16 +335,23 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 key={String(batch.batch_id)}
                 ref={(el) => { if (typeof index === 'number') batchRefs.current[index] = el; }}
                 onClick={() => handleBatchSelect(batch)}
+                disabled={Boolean(disabledReason)}
                 role="option"
                 aria-selected={isSelected}
-                aria-label={`Select batch ${batch.batch_number} from ${batch.location_name || 'saleable stock'}`}
+                aria-disabled={Boolean(disabledReason)}
+                aria-label={disabledReason
+                    ? `Batch ${batch.batch_number} unavailable: ${disabledReason}`
+                    : `Select batch ${batch.batch_number} from ${batch.location_name || 'saleable stock'}`}
                 className={cx(
-                    'relative group block w-full cursor-pointer rounded-lg border text-left transition-colors bg-white mb-2',
-                    isSelected
+                    'relative group block w-full rounded-lg border text-left transition-colors bg-white mb-2',
+                    disabledReason
+                        ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-75'
+                        : 'cursor-pointer',
+                    !disabledReason && isSelected
                         ? 'border-blue-500 bg-blue-50'
-                        : isFocused
+                        : !disabledReason && isFocused
                             ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-50'
-                            : 'border-gray-200 hover:border-blue-300'
+                            : !disabledReason ? 'border-gray-200 hover:border-blue-300' : ''
                 )}
             >
                 {isSelected && (
@@ -344,7 +360,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     </div>
                 )}
 
-                <div className="grid gap-4 p-3 items-center"
+                <div className="hidden gap-4 p-3 items-center md:grid"
                     style={{ gridTemplateColumns: '2fr 1.3fr 1.3fr 0.7fr 0.8fr 0.8fr 0.6fr' }}>
                     <div>
                         <div className="flex items-center gap-1.5">
@@ -415,12 +431,78 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     <div className="flex justify-end">
                         <div className={cx(
                             'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                            isSelected
+                            disabledReason
+                                ? 'bg-gray-200 text-gray-600'
+                                : isSelected
                                 ? 'bg-blue-500 text-white'
                                 : 'bg-gray-100 text-gray-700 group-hover:bg-blue-100 group-hover:text-blue-700'
                         )}>
-                            {isSelected ? '✓' : 'Select'}
+                            {disabledReason ? 'Unavailable' : isSelected ? '✓' : 'Select'}
                         </div>
+                    </div>
+                </div>
+
+                <div className="p-3 md:hidden">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                                <Package size={16} className="shrink-0 text-gray-400" />
+                                <span className={cx(
+                                    'truncate text-sm font-semibold',
+                                    isSelected ? 'text-blue-700' : 'text-gray-900'
+                                )}>
+                                    {batch.batch_number}
+                                </span>
+                            </div>
+                            {batch.location_name && (
+                                <div className="mt-1 text-xs text-gray-500">
+                                    {batch.location_name}{batch.branch_name ? ` · ${batch.branch_name}` : ''}
+                                </div>
+                            )}
+                        </div>
+                        <div className="shrink-0 rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800">
+                            Stock {batch.quantity_available}
+                        </div>
+                    </div>
+
+                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-3">
+                        <div>
+                            <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Expiry</dt>
+                            <dd className="mt-0.5 text-sm text-gray-800">
+                                {DateFormatter.formatDate(batch.expiry_date, 'short')}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Mfg date</dt>
+                            <dd className="mt-0.5 text-sm text-gray-800">
+                                {batch.manufacturing_date
+                                    ? DateFormatter.formatDate(batch.manufacturing_date, 'short')
+                                    : '—'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Rate</dt>
+                            <dd className="mt-0.5 text-sm font-medium text-gray-900">
+                                ₹{parseFloat(String(batch.sale_price_per_unit || 0)).toFixed(2)}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">MRP</dt>
+                            <dd className="mt-0.5 text-sm text-gray-800">
+                                ₹{parseFloat(String(batch.mrp_per_unit || 0)).toFixed(2)}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <div className={cx(
+                        'mt-3 flex min-h-11 w-full items-center justify-center rounded-md px-4 text-sm font-semibold',
+                        disabledReason
+                            ? 'bg-gray-200 text-gray-600'
+                            : isSelected
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-blue-600 text-white group-hover:bg-blue-700'
+                    )}>
+                        {disabledReason ? 'Unavailable' : isSelected ? '✓ Selected' : 'Select this batch'}
                     </div>
                 </div>
 
@@ -436,6 +518,14 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                                     ? 'Expired - Cannot be sold'
                                     : 'Expiring soon - Prioritize (FEFO)'}
                             </span>
+                        </div>
+                    </div>
+                )}
+                {disabledReason && (
+                    <div className="border-t border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700">
+                        <div className="flex items-center gap-1">
+                            <AlertCircle size={12} />
+                            <span>{disabledReason}</span>
                         </div>
                     </div>
                 )}
@@ -474,7 +564,12 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 </div>
             ) : (
                 <>
-                    <div className="grid gap-4 px-3 py-2 bg-gray-50 border-b border-gray-200 mb-3 rounded-t-lg sticky top-0 z-10"
+                    {!batches.some(batch => !batchDisabledReason(batch)) && (
+                        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                            No saleable batch is currently released. See each batch for the blocking reason.
+                        </div>
+                    )}
+                    <div className="hidden gap-4 px-3 py-2 bg-gray-50 border-b border-gray-200 mb-3 rounded-t-lg sticky top-0 z-10 md:grid"
                         style={{ gridTemplateColumns: '2fr 1.3fr 1.3fr 0.7fr 0.8fr 0.8fr 0.6fr' }}>
                         <div className="text-xs font-semibold text-gray-700 uppercase">Batch #</div>
                         <div className="text-xs font-semibold text-gray-700 uppercase">Expiry</div>
@@ -537,12 +632,16 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             return;
         }
 
-        if (batches.length === 0) return;
+        const saleableIndexes = batches
+            .map((batch, index) => batchDisabledReason(batch) ? -1 : index)
+            .filter(index => index >= 0);
+        if (saleableIndexes.length === 0) return;
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             setFocusedIndex(prev => {
-                const next = (prev + 1) % batches.length;
+                const current = saleableIndexes.indexOf(prev);
+                const next = saleableIndexes[(current + 1) % saleableIndexes.length];
                 batchRefs.current[next]?.scrollIntoView({ block: 'nearest' });
                 return next;
             });
@@ -552,7 +651,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         if (e.key === 'ArrowUp') {
             e.preventDefault();
             setFocusedIndex(prev => {
-                const next = (prev - 1 + batches.length) % batches.length;
+                const current = saleableIndexes.indexOf(prev);
+                const next = saleableIndexes[(current - 1 + saleableIndexes.length) % saleableIndexes.length];
                 batchRefs.current[next]?.scrollIntoView({ block: 'nearest' });
                 return next;
             });

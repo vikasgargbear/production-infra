@@ -7,9 +7,10 @@ import { ModuleHeader, AddressForm, DocumentFooter } from '../../../global';
 // GST Type Determination
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import { useCompany } from '../../../../contexts/CompanyContext';
+import { indianStateName } from '../../../../utils/indianStates';
 
 // Shared Types
-import { Customer, Invoice, InvoiceTotals, Payment } from '../types/invoiceTypes';
+import { Customer, Invoice, Payment } from '../types/invoiceTypes';
 
 interface InvoiceDetailsStepProps {
     invoice: Invoice;
@@ -100,13 +101,19 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address: address,
-                                                billing_address: address
+                                                // The canonical place of supply must come from a saved,
+                                                // structured address, never partially edited display text.
+                                                shipping_address_data: undefined,
                                             }));
                                         }}
                                         onSave={(addressData: unknown) => {
                                             setAddAddressMode(false);
                                             // Uses global GST utility — delivery address state = Place of Supply (IGST Act Section 10)
-                                            const addrState = (addressData as any)?.state || (addressData as any)?.state_name;
+                                            const addrState = indianStateName(
+                                                (addressData as any)?.state_code ||
+                                                (addressData as any)?.state ||
+                                                (addressData as any)?.state_name,
+                                            );
                                             const gstType = determineGstTypeForSupply(
                                                 companyInfo?.state, addrState,
                                                 companyInfo?.gst_number, selectedCustomer?.gst_number
@@ -114,7 +121,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address_data: addressData,
-                                                billing_address_data: addressData,
                                                 gst_type: gstType
                                             } as Invoice));
                                         }}
