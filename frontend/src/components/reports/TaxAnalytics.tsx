@@ -118,8 +118,7 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         </p>
         <p className="text-sm text-gray-600 mt-1">Output Tax Collected</p>
         <div className="mt-4 text-xs">
-          <span className="text-green-600 font-semibold">↑ 8.3%</span>
-          <span className="text-gray-500 ml-1">vs last month</span>
+          <span className="text-gray-500">Comparison unavailable</span>
         </div>
       </div>
 
@@ -136,8 +135,7 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         </p>
         <p className="text-sm text-gray-600 mt-1">Input Tax Credit</p>
         <div className="mt-4 text-xs">
-          <span className="text-green-600 font-semibold">↑ 5.2%</span>
-          <span className="text-gray-500 ml-1">vs last month</span>
+          <span className="text-gray-500">Comparison unavailable</span>
         </div>
       </div>
 
@@ -155,7 +153,7 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         <p className="text-sm text-gray-600 mt-1">Net Tax Liability</p>
         <div className="mt-4 text-xs">
           <Clock className="w-3 h-3 inline text-amber-500 mr-1" />
-          <span className="text-gray-500">Due in 15 days</span>
+          <span className="text-gray-500">Filing deadline unavailable</span>
         </div>
       </div>
 

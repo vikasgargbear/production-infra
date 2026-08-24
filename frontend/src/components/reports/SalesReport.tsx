@@ -6,6 +6,7 @@ import { Line } from 'react-chartjs-2';
 import { format, subDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
+import { isValidReportDateRange } from './utils/reportDateRange';
 
 interface SalesMetric {
   label: string;
@@ -40,10 +41,20 @@ const SalesReport: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (dateRange.start && dateRange.end) {
+    if (dateRange.start && dateRange.end && isValidReportDateRange(dateRange.start, dateRange.end)) {
       loadSalesData();
+    } else if (dateRange.start && dateRange.end) {
+      setMetrics([]);
+      setChartData(null);
+      setTableData([]);
     }
   }, [dateRange, reportType, groupBy, filters]);
+
+  const dateRangeInvalid = Boolean(
+    dateRange.start &&
+    dateRange.end &&
+    !isValidReportDateRange(dateRange.start, dateRange.end)
+  );
 
   const loadSalesData = async () => {
     setLoading(true);
@@ -255,8 +266,9 @@ const SalesReport: React.FC = () => {
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <label htmlFor="sales-report-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
             <input
+              id="sales-report-start-date"
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
@@ -264,8 +276,9 @@ const SalesReport: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <label htmlFor="sales-report-end-date" className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
             <input
+              id="sales-report-end-date"
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
@@ -298,6 +311,11 @@ const SalesReport: React.FC = () => {
             </select>
           </div>
         </div>
+        {dateRangeInvalid && (
+          <p role="alert" className="mt-3 text-sm font-medium text-red-700">
+            Start date must be on or before end date.
+          </p>
+        )}
       </div>
 
       {/* Metrics Cards */}

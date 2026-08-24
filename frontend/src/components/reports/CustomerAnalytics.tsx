@@ -365,7 +365,13 @@ const CustomerAnalytics: React.FC = () => {
           <div className="p-4 border border-gray-200 rounded-lg">
             <UserPlus className="h-8 w-8 text-green-600 mb-2" />
             <p className="text-sm text-gray-600">New (30d)</p>
-            <p className="text-xl font-bold">31</p>
+            <p className="text-xl font-bold">
+              {customers.filter(customer => {
+                if (!customer.joinDate) return false;
+                const joinedAt = new Date(customer.joinDate).getTime();
+                return Number.isFinite(joinedAt) && Date.now() - joinedAt <= 30 * 24 * 60 * 60 * 1000;
+              }).length}
+            </p>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
             <UserCheck className="h-8 w-8 text-purple-600 mb-2" />

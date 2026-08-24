@@ -70,9 +70,10 @@ interface PLData {
 }
 
 const ProfitLossStatement: React.FC = () => {
+  const currentDate = new Date();
   const [period, setPeriod] = useState('month');
-  const [year, setYear] = useState('2024');
-  const [month, setMonth] = useState('01');
+  const [year, setYear] = useState(String(currentDate.getFullYear()));
+  const [month, setMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
   const [comparisonMode, setComparisonMode] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showChart, setShowChart] = useState(true);
@@ -385,9 +386,9 @@ const ProfitLossStatement: React.FC = () => {
                 onChange={(e) => setYear(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
-                <option value="2024">2024</option>
-                <option value="2023">2023</option>
-                <option value="2022">2022</option>
+                {Array.from({ length: 5 }, (_, offset) => currentDate.getFullYear() - offset).map(optionYear => (
+                  <option key={optionYear} value={String(optionYear)}>{optionYear}</option>
+                ))}
               </select>
             </div>
             {period === 'month' && (
