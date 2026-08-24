@@ -1,10 +1,13 @@
 import type { ReturnFormItem } from '../types/return.types';
-import { addExactDecimals, normalizeExactDecimal } from '../../../utils/exactDecimal';
+import {
+    addExactDecimals,
+    normalizeAuthoritativeDecimal,
+} from '../../../utils/exactDecimal';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const rateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const exact = (value: unknown, label: string, fallback = '0'): string => (
-    normalizeExactDecimal(value ?? fallback, label, quantityOptions)
+    normalizeAuthoritativeDecimal(value ?? fallback, label, quantityOptions)
 );
 const sum = (values: readonly unknown[], label: string): string => (
     addExactDecimals(values, label, quantityOptions)
@@ -20,7 +23,7 @@ export function projectInvoiceLineToSalesReturn(item: Record<string, unknown>): 
         'Component tax rate',
         rateOptions,
     );
-    const taxPercent = normalizeExactDecimal(
+    const taxPercent = normalizeAuthoritativeDecimal(
         item.tax_percent ?? item.gst_percent ?? item.tax_rate ?? componentTax,
         'Tax rate',
         rateOptions,

@@ -1,5 +1,9 @@
 import type { ItemsTableItem } from '../../global/ui/display/ItemsTableUnified';
-import { exactDecimalUnits, normalizeExactDecimal } from '../../../utils/exactDecimal';
+import {
+  addExactDecimals,
+  exactDecimalUnits,
+  normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 
@@ -65,6 +69,21 @@ export function updatePurchaseReturnItem(items: any[], index: number, field: str
       : ['return_quantity', 'unit_price'].includes(stateField)
         ? String(value ?? '').trim()
         : value;
+    if (stateField === 'return_paid_qty' || stateField === 'return_free_qty') {
+      const billed = stateField === 'return_paid_qty'
+        ? nextValue
+        : item.return_paid_qty ?? '0';
+      const free = stateField === 'return_free_qty'
+        ? nextValue
+        : item.return_free_qty ?? '0';
+      let total = String(nextValue ?? '');
+      try {
+        total = addExactDecimals([billed, free], 'Purchase return quantity', quantityOptions);
+      } catch {
+        // Retain the invalid edit so the reviewed prepare boundary fails closed.
+      }
+      return { ...item, [stateField]: nextValue, return_quantity: total };
+    }
     return { ...item, [stateField]: nextValue };
   });
 }

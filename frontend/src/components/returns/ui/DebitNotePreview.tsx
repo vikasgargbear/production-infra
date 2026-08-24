@@ -1,14 +1,23 @@
 import React from 'react';
 import { FileText, Building2, Phone, Mail, Truck } from 'lucide-react';
-import { formatCurrency } from '../../../utils/formatters';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { determineGstType } from '../../gst/utils/gstCalculations';
-import { exactDecimalUnits } from '../../../utils/exactDecimal';
+import { addExactDecimals, exactDecimalUnits } from '../../../utils/exactDecimal';
+import {
+  authoritativeReturnMoney,
+  authoritativeReturnQuantity,
+  authoritativeReturnRate,
+  formatReturnMoney,
+  positiveReturnQuantity,
+  RETURN_MONEY_OPTIONS,
+} from '../utils/returnDecimal';
 
 interface ReturnItem {
   id?: string | number;
   selected?: boolean;
   return_quantity: number | string;
+  return_paid_qty?: number | string;
+  return_free_qty?: number | string;
   product_name: string;
   hsn_code?: string;
   batch_number?: string;
@@ -17,13 +26,13 @@ interface ReturnItem {
   unit_price: number | string;
   discount_percent?: number | string;
   tax_percent?: number | string;
-  discount_amount?: number;
-  taxable_amount?: number;
-  cgst_amount?: number;
-  sgst_amount?: number;
-  igst_amount?: number;
-  tax_amount?: number;
-  total_amount?: number;
+  discount_amount?: number | string;
+  taxable_amount?: number | string;
+  cgst_amount?: number | string;
+  sgst_amount?: number | string;
+  igst_amount?: number | string;
+  tax_amount?: number | string;
+  total_amount?: number | string;
 }
 
 interface Supplier {
@@ -54,9 +63,9 @@ interface ReturnData {
   return_reason_notes?: string;
   items: ReturnItem[];
   transport_details: TransportDetails;
-  subtotal_amount: number;
-  tax_amount: number;
-  total_amount: number;
+  subtotal_amount: string;
+  tax_amount: string;
+  total_amount: string;
 }
 
 interface DebitNotePreviewProps {
@@ -117,29 +126,50 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
 
   // Calculate GST breakup
   const calculateGSTBreakup = () => {
-    const gstBreakup: Record<number, { taxableAmount: number; cgst: number; sgst: number; igst: number; totalTax: number }> = {};
+    const gstBreakup: Record<string, { taxableAmount: string; cgst: string; sgst: string; igst: string; totalTax: string }> = {};
 
-    returnItems.forEach(item => {
-      const taxPercent = Number(item.tax_percent || 0);
+    returnItems.forEach((item, index) => {
+      const label = `Purchase return review lines[${index}]`;
+      const taxPercent = authoritativeReturnRate(item.tax_percent, `${label}.tax_percent`);
 
       if (!gstBreakup[taxPercent]) {
         gstBreakup[taxPercent] = {
-          taxableAmount: 0,
-          cgst: 0,
-          sgst: 0,
-          igst: 0,
-          totalTax: 0
+          taxableAmount: '0.00',
+          cgst: '0.00',
+          sgst: '0.00',
+          igst: '0.00',
+          totalTax: '0.00',
         };
       }
 
-      gstBreakup[taxPercent].taxableAmount += Number(item.taxable_amount || 0);
+      gstBreakup[taxPercent].taxableAmount = addExactDecimals(
+        [gstBreakup[taxPercent].taxableAmount, authoritativeReturnMoney(item.taxable_amount, `${label}.taxable_amount`)],
+        `${label}.taxable aggregate`,
+        RETURN_MONEY_OPTIONS,
+      );
       if (isIGST) {
-        gstBreakup[taxPercent].igst += Number(item.igst_amount || item.tax_amount || 0);
+        gstBreakup[taxPercent].igst = addExactDecimals(
+          [gstBreakup[taxPercent].igst, authoritativeReturnMoney(item.igst_amount ?? item.tax_amount, `${label}.igst_amount`)],
+          `${label}.igst aggregate`,
+          RETURN_MONEY_OPTIONS,
+        );
       } else {
-        gstBreakup[taxPercent].cgst += Number(item.cgst_amount || 0);
-        gstBreakup[taxPercent].sgst += Number(item.sgst_amount || 0);
+        gstBreakup[taxPercent].cgst = addExactDecimals(
+          [gstBreakup[taxPercent].cgst, authoritativeReturnMoney(item.cgst_amount, `${label}.cgst_amount`)],
+          `${label}.cgst aggregate`,
+          RETURN_MONEY_OPTIONS,
+        );
+        gstBreakup[taxPercent].sgst = addExactDecimals(
+          [gstBreakup[taxPercent].sgst, authoritativeReturnMoney(item.sgst_amount, `${label}.sgst_amount`)],
+          `${label}.sgst aggregate`,
+          RETURN_MONEY_OPTIONS,
+        );
       }
-      gstBreakup[taxPercent].totalTax += Number(item.tax_amount || 0);
+      gstBreakup[taxPercent].totalTax = addExactDecimals(
+        [gstBreakup[taxPercent].totalTax, authoritativeReturnMoney(item.tax_amount, `${label}.tax_amount`)],
+        `${label}.tax aggregate`,
+        RETURN_MONEY_OPTIONS,
+      );
     });
 
     return gstBreakup;
@@ -329,7 +359,8 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">HSN</th>
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">Batch</th>
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">Expiry</th>
-                  <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">Qty</th>
+                  <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">Billed</th>
+                  <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">Free</th>
                   <th className="text-right py-3 px-2 text-sm font-semibold text-gray-700">Cost</th>
                   <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">GST%</th>
                   <th className="text-right py-3 px-2 text-sm font-semibold text-gray-700">Amount</th>
@@ -337,8 +368,18 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const price = item.unit_price || item.unit_price || item.unit_price || 0;
-                  const totalAmount = Number(item.total_amount || 0);
+                  const label = `Purchase return review lines[${index}]`;
+                  const price = authoritativeReturnRate(item.unit_price, `${label}.unit_price`);
+                  const billed = authoritativeReturnQuantity(
+                    item.return_paid_qty,
+                    `${label}.billed_quantity`,
+                  );
+                  const free = authoritativeReturnQuantity(
+                    item.return_free_qty,
+                    `${label}.free_quantity`,
+                  );
+                  const taxPercent = authoritativeReturnRate(item.tax_percent, `${label}.tax_percent`);
+                  const totalAmount = authoritativeReturnMoney(item.total_amount, `${label}.total_amount`);
 
                   return (
                     <tr key={item.id} className="border-b border-gray-200">
@@ -349,10 +390,11 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
                       <td className="py-3 px-2 text-sm">
                         {item.expiry_date || item.expiry ? formatDate(item.expiry_date || item.expiry) : '-'}
                       </td>
-                      <td className="py-3 px-2 text-sm text-center">{item.return_quantity}</td>
-                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(price)}</td>
-                      <td className="py-3 px-2 text-sm text-center">{Number(item.tax_percent || 0)}%</td>
-                      <td className="py-3 px-2 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
+                      <td className="py-3 px-2 text-sm text-center">{billed}</td>
+                      <td className="py-3 px-2 text-sm text-center">{positiveReturnQuantity(free, `${label}.free_quantity`) ? free : '-'}</td>
+                      <td className="py-3 px-2 text-sm text-right">₹{price}</td>
+                      <td className="py-3 px-2 text-sm text-center">{taxPercent}%</td>
+                      <td className="py-3 px-2 text-sm text-right font-medium">{formatReturnMoney(totalAmount, `${label}.total_amount`)}</td>
                     </tr>
                   );
                 })}
@@ -385,16 +427,16 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
                   {Object.entries(gstBreakup).map(([rate, values]) => (
                     <tr key={rate} className="border-b border-gray-100">
                       <td className="py-2">{rate}%</td>
-                      <td className="text-right py-2">{formatCurrency(values.taxableAmount)}</td>
+                      <td className="text-right py-2">{formatReturnMoney(values.taxableAmount, `Taxable amount at ${rate}%`)}</td>
                       {isIGST ? (
-                        <td className="text-right py-2">{formatCurrency(values.igst)}</td>
+                        <td className="text-right py-2">{formatReturnMoney(values.igst, `IGST at ${rate}%`)}</td>
                       ) : (
                         <>
-                          <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
-                          <td className="text-right py-2">{formatCurrency(values.sgst)}</td>
+                          <td className="text-right py-2">{formatReturnMoney(values.cgst, `CGST at ${rate}%`)}</td>
+                          <td className="text-right py-2">{formatReturnMoney(values.sgst, `SGST at ${rate}%`)}</td>
                         </>
                       )}
-                      <td className="text-right py-2 font-medium">{formatCurrency(values.totalTax)}</td>
+                      <td className="text-right py-2 font-medium">{formatReturnMoney(values.totalTax, `Tax at ${rate}%`)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -407,15 +449,15 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
               <div className="space-y-2">
                 <div className="flex justify-between py-2 border-b border-gray-200">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">{formatCurrency(returnData.subtotal_amount)}</span>
+                  <span className="font-medium">{formatReturnMoney(returnData.subtotal_amount, 'Purchase return subtotal')}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-gray-600">Tax Amount</span>
-                  <span className="font-medium">{formatCurrency(returnData.tax_amount)}</span>
+                  <span className="font-medium">{formatReturnMoney(returnData.tax_amount, 'Purchase return tax')}</span>
                 </div>
                 <div className="flex justify-between py-3 border-t-2 border-gray-300">
                   <span className="font-semibold text-lg">Total Debit Amount</span>
-                  <span className="font-bold text-lg text-orange-600">{formatCurrency(returnData.total_amount)}</span>
+                  <span className="font-bold text-lg text-orange-600">{formatReturnMoney(returnData.total_amount, 'Purchase return total')}</span>
                 </div>
               </div>
             </div>

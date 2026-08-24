@@ -32,6 +32,23 @@ describe('purchase return UI projection', () => {
     expect(purchaseReturnItemsForTable(updated)[0].quantity).toBe('3.123456');
   });
 
+  it('keeps six-place billed and free edits separate while reconciling their total', () => {
+    const item = {
+      ...manualPurchaseReturnItem(canonicalBatch),
+      return_paid_qty: '0.000000',
+      return_free_qty: '0.000000',
+      return_quantity: '0.000000',
+    };
+    const billed = updatePurchaseReturnItem([item], 0, 'return_paid_qty', '0.123456');
+    const free = updatePurchaseReturnItem(billed, 0, 'return_free_qty', '0.876544');
+
+    expect(free[0]).toEqual(expect.objectContaining({
+      return_paid_qty: '0.123456',
+      return_free_qty: '0.876544',
+      return_quantity: '1.000000',
+    }));
+  });
+
   it('rejects unresolved and empty batches', () => {
     expect(() => manualPurchaseReturnItem({ product_id: canonicalBatch.product_id })).toThrow(/available batch/);
     expect(() => manualPurchaseReturnItem({ ...canonicalBatch, quantity_available: '0' })).toThrow(/no available quantity/);

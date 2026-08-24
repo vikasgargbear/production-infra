@@ -5,10 +5,25 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { exactDecimalUnits } from '../../../utils/exactDecimal';
+import {
+    addExactDecimals,
+    compareExactDecimals,
+    exactDecimalUnits,
+} from '../../../utils/exactDecimal';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
+import {
+    authoritativeReturnMoney,
+    authoritativeReturnQuantity,
+    authoritativeReturnRate,
+    formatReturnMoney,
+    positiveReturnMoney,
+    positiveReturnQuantity,
+    positiveReturnRate,
+    RETURN_MONEY_OPTIONS,
+    RETURN_RATE_OPTIONS,
+} from '../utils/returnDecimal';
 
 // Return reason value to label mapping
 const RETURN_REASON_LABELS: Record<string, string> = {
@@ -58,8 +73,9 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
         [returnData.items]
     );
 
-    const formatCurrency = (amount: number) => {
-        return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatCurrency = (amount: unknown, label = 'Return amount') => {
+        try { return formatReturnMoney(amount, label); }
+        catch { return 'Invalid amount'; }
     };
 
     const formatDate = (date: string) => {
@@ -99,22 +115,49 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
     // Build dynamic tax breakup grouped by rate
     const taxBreakup = useMemo(() => {
-        const rateMap: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }> = {};
-        selectedItems.forEach(item => {
-            const taxPercent = Number(item.tax_percent || 0);
-            if (taxPercent <= 0 || Number((item as any).taxable_quantity || 0) <= 0) return;
+        const rateMap: Record<string, { taxable: string; cgst: string; sgst: string; igst: string }> = {};
+        selectedItems.forEach((item, index) => {
+            const label = `Sales return review lines[${index}]`;
+            const taxPercent = authoritativeReturnRate(item.tax_percent, `${label}.tax_percent`);
+            if (
+                !positiveReturnRate(taxPercent, `${label}.tax_percent`)
+                || !positiveReturnQuantity((item as any).taxable_quantity, `${label}.taxable_quantity`)
+            ) return;
 
-            if (!rateMap[taxPercent]) {
-                rateMap[taxPercent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
-            }
-            rateMap[taxPercent].taxable += Number((item as any).taxable_amount || 0);
-            rateMap[taxPercent].cgst += Number((item as any).cgst_amount || 0);
-            rateMap[taxPercent].sgst += Number((item as any).sgst_amount || 0);
-            rateMap[taxPercent].igst += Number((item as any).igst_amount || 0);
+            const current = rateMap[taxPercent] || {
+                taxable: '0.00', cgst: '0.00', sgst: '0.00', igst: '0.00',
+            };
+            rateMap[taxPercent] = {
+                taxable: addExactDecimals(
+                    [current.taxable, authoritativeReturnMoney((item as any).taxable_amount, `${label}.taxable_amount`)],
+                    `${label}.taxable aggregate`,
+                    RETURN_MONEY_OPTIONS,
+                ),
+                cgst: addExactDecimals(
+                    [current.cgst, authoritativeReturnMoney((item as any).cgst_amount, `${label}.cgst_amount`)],
+                    `${label}.cgst aggregate`,
+                    RETURN_MONEY_OPTIONS,
+                ),
+                sgst: addExactDecimals(
+                    [current.sgst, authoritativeReturnMoney((item as any).sgst_amount, `${label}.sgst_amount`)],
+                    `${label}.sgst aggregate`,
+                    RETURN_MONEY_OPTIONS,
+                ),
+                igst: addExactDecimals(
+                    [current.igst, authoritativeReturnMoney((item as any).igst_amount, `${label}.igst_amount`)],
+                    `${label}.igst aggregate`,
+                    RETURN_MONEY_OPTIONS,
+                ),
+            };
         });
         return Object.entries(rateMap)
-            .sort(([a], [b]) => Number(a) - Number(b))
-            .map(([rate, vals]) => ({ rate: Number(rate), ...vals }));
+            .sort(([left], [right]) => compareExactDecimals(
+                left,
+                right,
+                'Sales return tax-rate order',
+                RETURN_RATE_OPTIONS,
+            ))
+            .map(([rate, values]) => ({ rate, ...values }));
     }, [selectedItems]);
 
     // Handle save with notes
@@ -313,10 +356,23 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                     </thead>
                                     <tbody>
                                         {selectedItems.map((item, index) => {
-                                            const freeQty = parseFloat(String(item.return_free_qty || 0));
-                                            const rate = Number(item.unit_price || 0);
-                                            const taxPercent = parseFloat(String(item.tax_percent || 0));
-                                            const lineTotal = Number((item as any).total_amount || 0);
+                                            const label = `Sales return review lines[${index}]`;
+                                            const freeQty = authoritativeReturnQuantity(
+                                                item.return_free_qty ?? '0',
+                                                `${label}.free_quantity`,
+                                            );
+                                            const rate = authoritativeReturnRate(
+                                                item.unit_price,
+                                                `${label}.unit_price`,
+                                            );
+                                            const taxPercent = authoritativeReturnRate(
+                                                item.tax_percent,
+                                                `${label}.tax_percent`,
+                                            );
+                                            const lineTotal = authoritativeReturnMoney(
+                                                (item as any).total_amount,
+                                                `${label}.total_amount`,
+                                            );
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">
@@ -337,16 +393,16 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                         {item.return_paid_qty ?? item.return_quantity}
                                                     </td>
                                                     <td className="py-1.5 px-1.5 text-center border-r border-gray-200 text-green-600 font-medium">
-                                                        {freeQty > 0 ? freeQty : '-'}
+                                                        {positiveReturnQuantity(freeQty, `${label}.free_quantity`) ? freeQty : '-'}
                                                     </td>
                                                     <td className="py-1.5 px-1.5 text-right border-r border-gray-200">
-                                                        {formatCurrency(rate)}
+                                                        ₹{rate}
                                                     </td>
                                                     <td className="py-1.5 px-1.5 text-center border-r border-gray-200">
-                                                        {taxPercent > 0 ? `${taxPercent}%` : '-'}
+                                                        {positiveReturnRate(taxPercent, `${label}.tax_percent`) ? `${taxPercent}%` : '-'}
                                                     </td>
                                                     <td className="py-1.5 px-2 text-right font-semibold">
-                                                        {formatCurrency(lineTotal)}
+                                                        {formatCurrency(lineTotal, `${label}.total_amount`)}
                                                     </td>
                                                 </tr>
                                             );
@@ -377,10 +433,10 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                     {taxBreakup.map((row, idx) => (
                                                         <tr key={idx}>
                                                             <td className="pt-1 text-gray-700">{row.rate}%</td>
-                                                            <td className="pt-1 text-right text-gray-700">{formatCurrency(row.taxable)}</td>
-                                                            <td className="pt-1 text-right text-gray-700">{row.cgst > 0 ? formatCurrency(row.cgst) : '-'}</td>
-                                                            <td className="pt-1 text-right text-gray-700">{row.sgst > 0 ? formatCurrency(row.sgst) : '-'}</td>
-                                                            <td className="pt-1 text-right text-gray-700">{row.igst > 0 ? formatCurrency(row.igst) : '-'}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{formatCurrency(row.taxable, `Taxable amount at ${row.rate}%`)}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{positiveReturnMoney(row.cgst, 'CGST amount') ? formatCurrency(row.cgst, 'CGST amount') : '-'}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{positiveReturnMoney(row.sgst, 'SGST amount') ? formatCurrency(row.sgst, 'SGST amount') : '-'}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{positiveReturnMoney(row.igst, 'IGST amount') ? formatCurrency(row.igst, 'IGST amount') : '-'}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -406,7 +462,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                 <span className="text-gray-600">Subtotal:</span>
                                                 <span className="font-medium">{formatCurrency(returnData.subtotal_amount)}</span>
                                             </div>
-                                            {returnData.tax_amount > 0 && (
+                                            {positiveReturnMoney(returnData.tax_amount, 'Sales return tax amount') && (
                                                 <div className="flex justify-between text-xs">
                                                     <span className="text-gray-600">Tax Amount:</span>
                                                     <span className="font-medium">{formatCurrency(returnData.tax_amount)}</span>
@@ -418,7 +474,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                     {formatCurrency(returnData.total_amount)}
                                                 </span>
                                             </div>
-                                            {customerDues > 0 && (
+                                            {positiveReturnMoney(customerDues, 'Customer outstanding balance') && (
                                                 <div className="text-xs text-gray-500 pt-1 border-t border-gray-100">
                                                     Outstanding Balance: {formatCurrency(customerDues)}
                                                 </div>
@@ -481,9 +537,13 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
             )}
             <DocumentFooter
                 totalItems={selectedItems.length}
-                grandTotal={returnData.total_amount}
-                subtotalAmount={returnData.subtotal_amount}
-                taxAmount={returnData.tax_amount}
+                additionalInfo={(
+                    <>
+                        Sub Total: <strong>{formatCurrency(returnData.subtotal_amount, 'Sales return subtotal')}</strong>
+                        {' · '}Tax: <strong>{formatCurrency(returnData.tax_amount, 'Sales return tax')}</strong>
+                        {' · '}Total: <strong>{formatCurrency(returnData.total_amount, 'Sales return total')}</strong>
+                    </>
+                )}
                 onSave={onSave ? handleSave : undefined}
                 isSaving={saving}
                 saveLabel="Confirm Return"

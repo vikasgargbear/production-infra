@@ -32,7 +32,7 @@ export interface ReturnFormItem {
     uom?: string;
     manufacturer?: string;
     is_manual?: boolean;
-    available_stock?: number;
+    available_stock?: number | string;
     return_reason?: string;
     disposition?: string;
     invoice_item_id?: number | string;
@@ -54,9 +54,9 @@ export interface ReturnFormData {
     return_reason: string;
     return_reason_notes: string;
     return_method: string;
-    subtotal_amount: number;
-    tax_amount: number;
-    total_amount: number;
+    subtotal_amount: string;
+    tax_amount: string;
+    total_amount: string;
     credit_note_no: string;
     status: string;
     include_gst: boolean;

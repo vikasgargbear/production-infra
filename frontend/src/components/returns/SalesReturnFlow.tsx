@@ -38,6 +38,14 @@ import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { CANONICAL_SALES_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
+import {
+  authoritativeReturnQuantity,
+  authoritativeReturnRate,
+  editableReturnQuantity,
+  editableReturnRate,
+  hasExactReturnPreview,
+  sameReturnMoney,
+} from './utils/returnDecimal';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const rateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -188,28 +196,46 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         const onlyQuarantine = context.quarantine_locations.length === 1
           ? context.quarantine_locations[0].id
           : '';
-        const mappedItems = items.map((item: any) => ({
-          ...item,
-          id: item.invoice_dispatch_allocation_id,
-          invoice_item_id: item.original_invoice_line_id,
-          paid_quantity: item.returnable_billed_quantity,
-          free_quantity: item.returnable_free_quantity,
-          return_paid_qty: item.returnable_billed_quantity,
-          return_free_qty: item.returnable_free_quantity,
-          return_quantity: addExactDecimals([item.returnable_billed_quantity, item.returnable_free_quantity], 'Return quantity', quantityOptions),
-          max_returnable_qty: addExactDecimals([item.returnable_billed_quantity, item.returnable_free_quantity], 'Maximum return quantity', quantityOptions),
-          max_paid_qty: item.returnable_billed_quantity,
-          max_free_qty: item.returnable_free_quantity,
-          unit_price: item.quoted_unit_rate,
-          tax_percent: addExactDecimals([item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate], 'Return tax rate', rateOptions),
-          batch_number: item.batch_number,
-          expiry_date: item.expires_on,
-          selected: true,
-          is_manual: false,
-          return_condition: '',
-          to_location_id: onlyQuarantine,
-          quarantine_locations: context.quarantine_locations,
-        }));
+        const mappedItems = items.map((item: any, index: number) => {
+          const label = `Sales return context lines[${index}]`;
+          const billed = authoritativeReturnQuantity(
+            item.returnable_billed_quantity,
+            `${label}.returnable_billed_quantity`,
+          );
+          const free = authoritativeReturnQuantity(
+            item.returnable_free_quantity,
+            `${label}.returnable_free_quantity`,
+          );
+          const rate = authoritativeReturnRate(item.quoted_unit_rate, `${label}.quoted_unit_rate`);
+          const taxRates = [item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate]
+            .map((value, componentIndex) => authoritativeReturnRate(
+              value,
+              `${label}.tax_component[${componentIndex}]`,
+            ));
+          const total = addExactDecimals([billed, free], `${label}.return_quantity`, quantityOptions);
+          return {
+            ...item,
+            id: item.invoice_dispatch_allocation_id,
+            invoice_item_id: item.original_invoice_line_id,
+            paid_quantity: billed,
+            free_quantity: free,
+            return_paid_qty: billed,
+            return_free_qty: free,
+            return_quantity: total,
+            max_returnable_qty: total,
+            max_paid_qty: billed,
+            max_free_qty: free,
+            unit_price: rate,
+            tax_percent: addExactDecimals(taxRates, `${label}.tax_rate`, rateOptions),
+            batch_number: item.batch_number,
+            expiry_date: item.expires_on,
+            selected: true,
+            is_manual: false,
+            return_condition: '',
+            to_location_id: onlyQuarantine,
+            quarantine_locations: context.quarantine_locations,
+          };
+        });
         dispatch({
           type: 'SET_SELECTED_INVOICE',
           invoice: { ...(invoice as any), ...context } as Invoice,
@@ -321,8 +347,18 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     // Batch is already selected in ProductSearch's BatchSelector modal
     // No need for async fetch - batch data is embedded in product
 
-    const sellingPrice = parseFloat(String(product.sale_price || product.selling_price || product.unit_price || product.mrp || 0));
-    const gstPercent = parseFloat(String(product.gst_percent || product.tax_rate || 0));
+    const sellingPrice = editableReturnRate(
+      String(product.sale_price || product.selling_price || product.unit_price || product.mrp || '0'),
+      'Manual return unit price',
+    );
+    const gstPercent = editableReturnRate(
+      String(product.gst_percent || product.tax_rate || '0'),
+      'Manual return tax rate',
+    );
+    const available = editableReturnQuantity(
+      String(product.quantity || product.stock || '0'),
+      'Manual return available quantity',
+    );
 
 
 
@@ -339,19 +375,24 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       units_per_pack: product.units_per_pack || product.selectedBatch?.units_per_pack,
       unit_price: sellingPrice,
       tax_percent: gstPercent,
-      quantity: parseFloat(String(product.quantity || product.stock || 0)),
-      paid_quantity: parseFloat(String(product.quantity || product.stock || 0)),
-      free_quantity: 0,
-      return_quantity: 1,
-      max_returnable_qty: 999999,
+      quantity: available,
+      paid_quantity: available,
+      free_quantity: '0.000000',
+      return_paid_qty: '1.000000',
+      return_free_qty: '0.000000',
+      return_quantity: '1.000000',
+      max_returnable_qty: available,
       return_reason: '',
       selected: true,
       hsn_code: product.hsn_code || product.hsn || '',
       unit: product.unit || product.uom || 'PCS',
       manufacturer: product.manufacturer || '',
       is_manual: true,
-      available_stock: parseFloat(String(product.total_quantity_available || product.stock || 0)),
-      discount_percent: 0,
+      available_stock: editableReturnQuantity(
+        String(product.total_quantity_available || product.stock || '0'),
+        'Manual return stock quantity',
+      ),
+      discount_percent: '0.000000',
       requires_approval: true,
       verification_status: 'pending',
       disposition: 'QUARANTINE'
@@ -405,13 +446,13 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         const items = returnDataRef.current.items.map(item => {
           if (!item.selected || !positiveExactQuantity(item.return_quantity)) return item;
           const calculated = calculation.items[calculatedIndex++] || {};
-          const totalAmount = Number(calculated.total_amount || 0);
-          const taxableAmount = Number(calculated.taxable_amount || 0);
-          const taxAmount = Number(calculated.tax_amount || 0);
+          const totalAmount = calculated.total_amount;
+          const taxableAmount = calculated.taxable_amount;
+          const taxAmount = calculated.tax_amount;
           if (
-            Number((item as any).total_amount || 0) === totalAmount &&
-            Number((item as any).taxable_amount || 0) === taxableAmount &&
-            Number((item as any).tax_amount || 0) === taxAmount
+            sameReturnMoney((item as any).total_amount, totalAmount, 'Sales return line total') &&
+            sameReturnMoney((item as any).taxable_amount, taxableAmount, 'Sales return taxable amount') &&
+            sameReturnMoney((item as any).tax_amount, taxAmount, 'Sales return tax amount')
           ) return item;
           itemValuesChanged = true;
           return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
@@ -420,9 +461,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           type: 'SET_RETURN_DATA',
           data: {
             ...(itemValuesChanged ? { items } : {}),
-            subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
-            tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
-            total_amount: totals.total_amount || totals.final_amount || 0
+            subtotal_amount: totals.subtotal_amount,
+            tax_amount: totals.tax_amount,
+            total_amount: totals.total_amount,
           }
         });
       } catch (error) {
@@ -449,6 +490,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     const hasSelectedItems = returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity));
     if (!hasSelectedItems) {
       toast.error('Please add items to return');
+      return false;
+    }
+
+    if (!hasExactReturnPreview(returnData.items, returnData)) {
+      toast.error('Wait for the authoritative return calculation before reviewing this return.');
       return false;
     }
 

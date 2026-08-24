@@ -23,6 +23,13 @@ import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { CANONICAL_PURCHASE_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
+import {
+  authoritativeReturnQuantity,
+  authoritativeReturnRate,
+  formatReturnMoney,
+  hasExactReturnPreview,
+  sameReturnMoney,
+} from './utils/returnDecimal';
 
 const purchaseQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const purchaseRateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -59,9 +66,9 @@ interface PurchaseReturnData {
   return_reason: string;
   return_reason_notes: string;
   return_method: string;
-  subtotal_amount: number;
-  tax_amount: number;
-  total_amount: number;
+  subtotal_amount: string;
+  tax_amount: string;
+  total_amount: string;
   debit_note_no: string;
   status: string;
   include_gst: boolean;
@@ -107,9 +114,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     return_reason: '',
     return_reason_notes: '',
     return_method: 'debit_note', // Default to debit note
-    subtotal_amount: 0,
-    tax_amount: 0,
-    total_amount: 0,
+    subtotal_amount: '0.00',
+    tax_amount: '0.00',
+    total_amount: '0.00',
     debit_note_no: '',
     status: 'PENDING',
     include_gst: true,
@@ -244,20 +251,35 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       const context = response.data;
 
       if (context.lines.length) {
-        const mappedItems: PurchaseReturnItem[] = context.lines.map(item => {
+        const mappedItems: PurchaseReturnItem[] = context.lines.map((item, index) => {
+          const label = `Purchase return context lines[${index}]`;
+          const billed = authoritativeReturnQuantity(
+            item.returnable_billed_quantity,
+            `${label}.returnable_billed_quantity`,
+          );
+          const free = authoritativeReturnQuantity(
+            item.returnable_free_quantity,
+            `${label}.returnable_free_quantity`,
+          );
+          const total = addExactDecimals([billed, free], `${label}.return_quantity`, purchaseQuantityOptions);
+          const taxRates = [item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate]
+            .map((value, componentIndex) => authoritativeReturnRate(
+              value,
+              `${label}.tax_component[${componentIndex}]`,
+            ));
           return {
             ...item,
             id: item.supplier_invoice_receipt_allocation_id,
             invoice_item_id: item.supplier_invoice_line_id,
-            return_paid_qty: item.returnable_billed_quantity,
-            return_free_qty: item.returnable_free_quantity,
-            return_quantity: item.returnable_billed_quantity,
-            original_quantity: item.returnable_billed_quantity,
+            return_paid_qty: billed,
+            return_free_qty: free,
+            return_quantity: total,
+            original_quantity: total,
             selected: true,
-            unit_price: item.quoted_unit_rate,
-            tax_percent: addExactDecimals([item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate], 'Purchase return tax rate', purchaseRateOptions),
-            discount_percent: 0,
-            max_returnable_qty: item.returnable_billed_quantity,
+            unit_price: authoritativeReturnRate(item.quoted_unit_rate, `${label}.quoted_unit_rate`),
+            tax_percent: addExactDecimals(taxRates, `${label}.tax_rate`, purchaseRateOptions),
+            discount_percent: '0.000000',
+            max_returnable_qty: total,
             disposition: 'RESTOCK',
             restock: true
           } as any;
@@ -351,9 +373,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   React.useEffect(() => {
     const requestId = ++calculationRequestRef.current;
     if (!hasPositiveReturnLine) {
-      setReturnData(prev => prev.subtotal_amount === 0 && prev.tax_amount === 0 && prev.total_amount === 0
+      setReturnData(prev => prev.subtotal_amount === '0.00' && prev.tax_amount === '0.00' && prev.total_amount === '0.00'
         ? prev
-        : { ...prev, subtotal_amount: 0, tax_amount: 0, total_amount: 0 });
+        : { ...prev, subtotal_amount: '0.00', tax_amount: '0.00', total_amount: '0.00' });
       return;
     }
 
@@ -368,13 +390,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           const items = prev.items.map(item => {
             if (!item.selected || !isPositiveDecimalText(item.return_quantity)) return item;
             const calculated = calculation.items[calculatedIndex++] || {};
-            const totalAmount = Number(calculated.total_amount || 0);
-            const taxableAmount = Number(calculated.taxable_amount || 0);
-            const taxAmount = Number(calculated.tax_amount || 0);
+            const totalAmount = calculated.total_amount as string;
+            const taxableAmount = calculated.taxable_amount as string;
+            const taxAmount = calculated.tax_amount as string;
             if (
-              Number(item.total_amount || 0) === totalAmount &&
-              Number(item.taxable_amount || 0) === taxableAmount &&
-              Number(item.tax_amount || 0) === taxAmount
+              sameReturnMoney(item.total_amount, totalAmount, 'Purchase return line total') &&
+              sameReturnMoney(item.taxable_amount, taxableAmount, 'Purchase return taxable amount') &&
+              sameReturnMoney(item.tax_amount, taxAmount, 'Purchase return tax amount')
             ) return item;
             itemValuesChanged = true;
             return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
@@ -382,9 +404,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           return {
             ...prev,
             items: itemValuesChanged ? items : prev.items,
-            subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
-            tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
-            total_amount: totals.total_amount || totals.final_amount || 0
+            subtotal_amount: totals.subtotal_amount,
+            tax_amount: totals.tax_amount,
+            total_amount: totals.total_amount,
           };
         });
       } catch (error) {
@@ -405,6 +427,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     if (!hasPositiveReturnLine) {
       toast.error('Please select items to return');
+      return false;
+    }
+
+    if (!hasExactReturnPreview(returnData.items, returnData)) {
+      toast.error('Wait for the authoritative return calculation before reviewing this return.');
       return false;
     }
 
@@ -680,7 +707,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   {returnData.items.filter(item => item.selected).length} items selected
                 </span>
                 <span className="text-lg font-semibold">
-                  Total: ₹{returnData.total_amount.toLocaleString()}
+                  Total: {formatReturnMoney(returnData.total_amount, 'Purchase return total')}
                 </span>
               </div>
               <div className="flex gap-3">

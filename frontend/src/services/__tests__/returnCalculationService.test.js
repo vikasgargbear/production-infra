@@ -7,16 +7,16 @@ import { calculateReturnPreview } from '../calculations/returnCalculationService
 
 
 const salesReturn = {
-  customer_id: 5,
+  customer_id: 'd3000000-0000-7000-8000-000000000021',
   withhold_gst: true,
   items: [{
-    product_id: 11,
+    product_id: 'd3000000-0000-7000-8000-000000000015',
     selected: true,
-    return_quantity: 3,
-    paid_quantity: 2,
-    free_quantity: 1,
-    unit_price: 100,
-    tax_percent: 18
+    return_quantity: '3.000000',
+    return_paid_qty: '2.000000',
+    return_free_qty: '1.000000',
+    unit_price: '100.000000',
+    tax_percent: '18.000000'
   }]
 };
 
@@ -26,8 +26,17 @@ test('uses backend return preview and maps GST withholding when online', async (
       success: true,
       gst_type: 'IGST',
       calculation_timestamp: 1,
-      line_items: [{ taxable_amount: 200, tax_amount: 0, total_amount: 200 }],
-      totals: { subtotal: 200, tax_amount: 0, total_amount: 200 }
+      line_items: [{
+        return_quantity: '3.000000', taxable_quantity: '2.000000',
+        unit_price: '100.000000', discount_percent: '0.000000', discount_amount: '0.00',
+        tax_percent: '0.000000', taxable_amount: '200.00', cgst_amount: '0.00',
+        sgst_amount: '0.00', igst_amount: '0.00', tax_amount: '0.00', total_amount: '200.00'
+      }],
+      totals: {
+        subtotal: '200.00', tax_amount: '0.00', cgst_amount: '0.00', sgst_amount: '0.00',
+        igst_amount: '0.00', round_off_amount: '0.00', total_amount: '200.00',
+        total_return_quantity: '3.000000'
+      }
     }
   });
 
@@ -35,17 +44,17 @@ test('uses backend return preview and maps GST withholding when online', async (
 
   expect(returnCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
     return_type: 'sales',
-    customer_id: 5,
+    customer_id: 'd3000000-0000-7000-8000-000000000021',
     include_gst: false,
-    items: [expect.objectContaining({ return_quantity: 3, free_quantity: 1 })]
+    items: [expect.objectContaining({ return_quantity: '3.000000', free_quantity: '1.000000' })]
   }));
-  expect(result.totals).toEqual(expect.objectContaining({ final_amount: 200 }));
+  expect(result.totals).toEqual(expect.objectContaining({ final_amount: '200.00' }));
 });
 
 test('fails closed when the authoritative return preview is unavailable', async () => {
   returnCalculationsApi.preview.mockRejectedValueOnce(new Error('API unavailable'));
 
-  await expect(calculateReturnPreview({ items: [] }, 'purchase')).rejects.toThrow(
+  await expect(calculateReturnPreview(salesReturn, 'purchase')).rejects.toThrow(
     'API unavailable'
   );
 });

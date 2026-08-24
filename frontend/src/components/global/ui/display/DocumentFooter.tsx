@@ -101,6 +101,9 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                                 Items: <strong>{totalItems}</strong>
                             </span>
                         )}
+                        {additionalInfo && (
+                            <span className="text-gray-600">{additionalInfo}</span>
+                        )}
                         {subtotalAmount > 0 && (
                             <span className="text-gray-600">
                                 Sub Total: <strong>₹{subtotalAmount.toFixed(2)}</strong>

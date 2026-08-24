@@ -9,6 +9,7 @@ import { Trash2, Package } from 'lucide-react';
 import { ProductSearch, EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
 import { exactDecimalUnits } from '../../../utils/exactDecimal';
+import { formatReturnMoney } from '../utils/returnDecimal';
 
 const isPositiveQuantity = (value: unknown): boolean => {
     try {
@@ -82,9 +83,15 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
         }
     }, [items.length]);
 
-    // Calculate totals for an item
-    const calculateItemTotal = (item: any): number => {
-        return Number(item.total_amount || item.line_total || 0);
+    const displayItemTotal = (item: any): string => {
+        try {
+            return formatReturnMoney(
+                item.total_amount ?? item.line_total ?? '0.00',
+                `Return total for ${item.product_name || 'item'}`,
+            );
+        } catch {
+            return 'Invalid amount';
+        }
     };
 
     const formatExpiry = (dateStr: string | undefined): string => {
@@ -157,7 +164,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                 const originalPaidQty = String(row.paid_quantity || '0');
                                 const originalFreeQty = String(row.free_quantity || '0');
                                 const isFromInvoice = !row.is_manual && !!selectedInvoice;
-                                const total = calculateItemTotal(row);
+                                const total = displayItemTotal(row);
 
                                 return (
                                     <tr
@@ -231,8 +238,10 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
-                                                    value={row.return_paid_qty ?? row.return_quantity ?? 0}
-                                                    type="text"
+                                                    value={row.return_paid_qty ?? row.return_quantity ?? '0'}
+                                                    type="number"
+                                                    maxDecimalPlaces={6}
+                                                    preserveDecimalString
                                                     onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
                                                     selectOnFocus={true}
@@ -246,8 +255,10 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
-                                                    value={row.return_free_qty ?? 0}
-                                                    type="text"
+                                                    value={row.return_free_qty ?? '0'}
+                                                    type="number"
+                                                    maxDecimalPlaces={6}
+                                                    preserveDecimalString
                                                     onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
                                                     selectOnFocus={true}
@@ -261,12 +272,13 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'unit_price', el)}
-                                                    value={row.unit_price || 0}
+                                                    value={row.unit_price || '0'}
                                                     type="number"
                                                     min={0}
-                                                    decimalPlaces={2}
+                                                    maxDecimalPlaces={6}
+                                                    preserveDecimalString
                                                     prefix="₹"
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'unit_price', Number(val))}
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'unit_price', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
                                                     selectOnFocus={true}
                                                     className="w-20"
@@ -285,7 +297,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
 
                                         {/* Total */}
                                         <td className="px-3 py-2 text-right">
-                                            <div className="text-sm font-semibold text-gray-900">₹{total.toFixed(2)}</div>
+                                            <div className="text-sm font-semibold text-gray-900">{total}</div>
                                         </td>
 
                                         {/* Actions */}

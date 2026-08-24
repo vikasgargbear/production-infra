@@ -53,7 +53,7 @@ export interface BaseReturnItem {
 
     // Pricing
     unit_price: number | string;
-    discount_amount?: number;
+    discount_amount?: number | string;
     discount_percent?: number | string;
 
     // Tax
@@ -66,9 +66,9 @@ export interface BaseReturnItem {
     selected?: boolean;
 
     // Calculated values
-    taxable_amount?: number;
-    tax_amount?: number;
-    total_amount?: number;
+    taxable_amount?: number | string;
+    tax_amount?: number | string;
+    total_amount?: number | string;
 
     // Reason
     return_reason?: ReturnReason | string;
