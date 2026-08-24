@@ -11,6 +11,11 @@ on:
         required: true
         default: false
         type: boolean
+      run_live_erp_two_user_approvals:
+        description: Run destructive disposable-org maker/checker browser approval tests
+        required: true
+        default: false
+        type: boolean
       deploy_canonical_staging:
         description: Apply and verify the canonical baseline on the pinned free staging project
         required: true
@@ -754,6 +759,65 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: live-erp-browser-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  live-browser-erp-two-user-approvals:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
+      PLAYWRIGHT_LIVE_REQUESTER_EMAIL: ${{ secrets.PLAYWRIGHT_LIVE_REQUESTER_EMAIL }}
+      PLAYWRIGHT_LIVE_REQUESTER_PASSWORD: ${{ secrets.PLAYWRIGHT_LIVE_REQUESTER_PASSWORD }}
+      PLAYWRIGHT_LIVE_REVIEWER_EMAIL: ${{ secrets.PLAYWRIGHT_LIVE_REVIEWER_EMAIL }}
+      PLAYWRIGHT_LIVE_REVIEWER_PASSWORD: ${{ secrets.PLAYWRIGHT_LIVE_REVIEWER_PASSWORD }}
+      PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
+      PLAYWRIGHT_LIVE_RETURN_INVOICE_PATTERN: "DEMO-SI-"
+      PLAYWRIGHT_LIVE_RETURN_SUPPLIER_QUERY: "Synthetic Packaging"
+      PLAYWRIGHT_LIVE_SUPPLIER_INVOICE_PATTERN: "DEMO-SUP-"
+      PLAYWRIGHT_LIVE_CYCLE_PRODUCT_QUERY: "Synthetic Corrugated"
+      PLAYWRIGHT_LIVE_CYCLE_BATCH_PATTERN: "DEMO-BATCH-"
+      PLAYWRIGHT_LIVE_WRITES: "true"
+      PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Refuse unsafe or incomplete maker/checker configuration
+        run: |
+          set -euo pipefail
+          test -n "$PLAYWRIGHT_LIVE_BASE_URL"
+          if [ -z "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" ] || \
+             [ -z "$PLAYWRIGHT_LIVE_REQUESTER_PASSWORD" ] || \
+             [ -z "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL" ] || \
+             [ -z "$PLAYWRIGHT_LIVE_REVIEWER_PASSWORD" ]; then
+            echo "::error title=Two-user staging prerequisite missing::Provision two disposable confirmed browser users, bind each to a distinct active demo membership, and issue exactly one active aasopharma-erp-web grant per membership before this job can run."
+            exit 2
+          fi
+          test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
+          case "$PLAYWRIGHT_LIVE_BASE_URL" in
+            https://*) ;;
+            *) echo "Two-user browser target must use HTTPS" >&2; exit 2 ;;
+          esac
+      - run: npm ci
+      - name: Install Playwright video support
+        run: npx playwright install ffmpeg
+      - run: npm run test:e2e:live:approvals
+      - name: Upload maker/checker traces, screenshots, videos, and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-erp-two-user-approval-evidence
           path: |
             frontend/playwright-report
             frontend/test-results

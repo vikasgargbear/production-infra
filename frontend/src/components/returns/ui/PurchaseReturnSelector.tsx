@@ -98,13 +98,15 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
             const hasGrn = invoice.grn_ids && invoice.grn_ids.length > 0;
 
             return (
-              <div
+              <button
+                type="button"
                 key={invoiceId}
                 onClick={() => handleSelect(invoice)}
+                aria-label={`Select supplier invoice ${invoiceNumber}`}
                 className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedInvoiceId === invoiceId
                   ? 'border-orange-500 bg-orange-50'
                   : 'border-gray-200 hover:border-orange-300 hover:bg-gray-50'
-                  }`}
+                  } text-left`}
               >
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2">
@@ -152,7 +154,7 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
                     </div>
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

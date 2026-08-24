@@ -43,7 +43,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-chrome',
-      testMatch: /(?:calculation-smoke|live-production-smoke|live-canonical-core-api|live-canonical-core-ui)\.spec\.ts/,
+      testMatch: /(?:calculation-smoke|live-production-smoke|live-canonical-core-api|live-canonical-core-ui|live-two-user-approval)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         ...(browserChannel ? { channel: browserChannel } : {})

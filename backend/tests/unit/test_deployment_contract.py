@@ -10,6 +10,60 @@ def _read(relative_path: str) -> str:
     return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    package = json.loads(_read("frontend/package.json"))
+    spec = _read("frontend/e2e/live-two-user-approval.spec.ts")
+
+    assert "run_live_erp_two_user_approvals:" in workflow
+    assert "inputs.run_live_erp_two_user_approvals" in workflow
+    two_user_job = workflow.split("live-browser-erp-two-user-approvals:", 1)[1]
+    assert "environment: canonical-staging" in two_user_job
+    assert 'PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"' in two_user_job
+    assert "environment: live-erp-test" not in two_user_job
+    for secret in (
+        "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
+        "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
+        "PLAYWRIGHT_LIVE_REVIEWER_EMAIL",
+        "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD",
+    ):
+        assert f"${{{{ secrets.{secret} }}}}" in workflow
+        assert f'${secret}' in two_user_job
+    assert 'test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"' in workflow
+    assert "https://*)" in workflow
+    assert "npm run test:e2e:live:approvals" in workflow
+    assert "live-erp-two-user-approval-evidence" in workflow
+    assert "Two-user staging prerequisite missing" in two_user_job
+    assert "exactly one active aasopharma-erp-web grant per membership" in two_user_job
+
+    command = package["scripts"]["test:e2e:live:approvals"]
+    assert "PLAYWRIGHT_LIVE_WRITES=true" in command
+    assert "live-two-user-approval.spec.ts" in command
+    assert "--project=desktop-chrome" in command
+    assert "--workers=1" in command
+
+    assert spec.count("browser.newContext") == 2
+    assert "requesterEmail === configuration.reviewerEmail" in spec
+    assert "Approve — requester posts later" in spec
+    assert "Post Approved Return" in spec
+    assert "Load immutable preview" in spec
+    assert "Approve exact preview" in spec
+    assert "Execute Approved Count" in spec
+    assert "executeCounts" in spec
+    assert "decimalUnits" in spec and "BigInt" in spec
+    assert "requester-maker-trace.zip" in spec
+    assert "reviewer-checker-trace.zip" in spec
+    assert "Purchase Return" in spec
+    assert "supplier_invoice_receipt_allocation_id" in spec
+    purchase_selector = _read(
+        "frontend/src/components/returns/ui/PurchaseReturnSelector.tsx"
+    )
+    assert '<button' in purchase_selector
+    assert 'aria-label={`Select supplier invoice ${invoiceNumber}`}' in purchase_selector
+    for forbidden in ("request.newContext", ".request.get(", ".request.post(", "fetch(", "page.evaluate("):
+        assert forbidden not in spec
+
+
 def test_backend_image_is_cloud_run_compatible_and_non_root():
     dockerfile = _read("backend/Dockerfile")
     dockerignore = _read("backend/.dockerignore")
