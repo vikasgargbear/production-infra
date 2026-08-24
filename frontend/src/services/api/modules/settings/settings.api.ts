@@ -193,9 +193,8 @@ const settingsApi = {
         return apiHelpers.get(ENDPOINTS.STOCK);
     },
 
-    updateStock: (data: StockSettings): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.STOCK, data);
-    },
+    updateStock: (_data: StockSettings): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Updating stock settings'),
 
     getTax: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.TAX);
@@ -215,9 +214,8 @@ const settingsApi = {
         return apiHelpers.get(ENDPOINTS.COMPANY);
     },
 
-    updateCompanyInfo: (data: Record<string, any>): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.COMPANY, data);
-    },
+    updateCompanyInfo: (_data: Record<string, any>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Updating company settings'),
 
     createBackup: (): Promise<AxiosResponse> => rejectCanonicalWrite('Creating a system backup'),
 

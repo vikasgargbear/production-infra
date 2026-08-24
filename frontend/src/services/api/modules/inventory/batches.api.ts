@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -62,17 +63,14 @@ export const batchesApi = {
         return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), { params });
     },
 
-    create: (data: BatchData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: BatchData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy inventory-batch creation'),
 
-    update: (batchId: string, data: Partial<BatchData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}${batchId}`, data);
-    },
+    update: (_batchId: string, _data: Partial<BatchData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy inventory-batch editing'),
 
-    delete: (batchId: string): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}${batchId}`);
-    },
+    delete: (_batchId: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy inventory-batch deletion'),
 
     getExpiring: (days: number = 90): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.EXPIRING, { params: { days } });

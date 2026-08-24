@@ -3,6 +3,7 @@
  */
 
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -30,6 +31,10 @@ const crud = createCrudApi({ basePath: '/departments', useCleanData: false });
 
 export const departmentsApi = {
     ...crud,
+    create: (_data: DepartmentData) => rejectCanonicalWrite('Legacy department creation'),
+    update: (_departmentId: number | string, _data: Partial<DepartmentData>) =>
+        rejectCanonicalWrite('Legacy department editing'),
+    delete: (_departmentId: number | string) => rejectCanonicalWrite('Legacy department deletion'),
 } as {
     getAll: (params?: DepartmentParams) => Promise<AxiosResponse>;
     getById: (departmentId: number | string) => Promise<AxiosResponse>;

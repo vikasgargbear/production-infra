@@ -2,11 +2,7 @@
  * Documents API Module
  * Handles generic document operations like number reservation
  */
-import { apiHelpers } from '../../apiClient';
-
-const ENDPOINTS = {
-    GENERATE_NUMBER: '/documents/generate-number'
-};
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 export const documentsApi = {
     /**
@@ -14,6 +10,7 @@ export const documentsApi = {
      * @param type Document type code (INV, PO, DC, etc.)
      */
     reserveNumber: (type: string) => {
-        return apiHelpers.post(`${ENDPOINTS.GENERATE_NUMBER}?type=${encodeURIComponent(type)}`, {});
+        void type;
+        return rejectCanonicalWrite('Legacy document-number reservation');
     }
 };

@@ -6,7 +6,9 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import type { AxiosResponse } from 'axios';
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { OrderStatus, PriorityLevel } from '../../../../constants';
 import {
   approveAndExecuteCanonicalAction,
@@ -43,6 +45,9 @@ const crud = createCrudApi({ basePath: '/sales-orders/' });
 
 export const ordersApi = {
   ...crud,
+  create: (_data: any) => rejectCanonicalWrite('Legacy sales-order creation'),
+  update: (_id: OrderId, _data: any) => rejectCanonicalWrite('Legacy sales-order editing'),
+  delete: (_id: OrderId) => rejectCanonicalWrite('Legacy sales-order deletion'),
 
   prepareCanonical: (payload: Record<string, unknown>) =>
     prepareCanonicalAction('sales.order.prepare', payload),
@@ -57,74 +62,50 @@ export const ordersApi = {
   getCanonical: (id: string) => apiHelpers.get(`/canonical/sales-orders/${id}/acceptance-readback`),
 
   /** Create multiple orders in bulk */
-  createBulk: (ordersData: any[]) => {
-    return apiHelpers.post('/sales-orders/bulk', { orders: ordersData });
-  },
+  createBulk: (_ordersData: any[]) => rejectCanonicalWrite('Bulk sales-order creation'),
 
   // Search & Validation
   search: (query: string, params: OrderParams = {}) => {
     return apiHelpers.get('/sales-orders/', { params: { search: query, ...params } });
   },
 
-  validate: (data: any) => {
-    return apiHelpers.post('/sales-orders/validate', data);
-  },
+  validate: (_data: any) => rejectCanonicalWrite('Legacy sales-order validation'),
 
   // Status Actions
-  updateStatus: (id: OrderId, status: string, reason: string = '') => {
-    return apiHelpers.patch(`/sales-orders/${id}/status`, { status, reason });
-  },
+  updateStatus: (_id: OrderId, _status: string, _reason: string = '') =>
+    rejectCanonicalWrite('Legacy sales-order status changes'),
 
-  approve: (id: OrderId) => {
-    return apiHelpers.post(`/sales-orders/${id}/approve`);
-  },
+  approve: (_id: OrderId) => rejectCanonicalWrite('Legacy sales-order approval'),
 
-  reject: (id: OrderId, reason: string = '') => {
-    return apiHelpers.post(`/sales-orders/${id}/reject`, { reason });
-  },
+  reject: (_id: OrderId, _reason: string = '') => rejectCanonicalWrite('Legacy sales-order rejection'),
 
-  cancel: (id: OrderId, reason: string = '') => {
-    return apiHelpers.post(`/sales-orders/${id}/cancel`, { reason });
-  },
+  cancel: (_id: OrderId, _reason: string = '') => rejectCanonicalWrite('Legacy sales-order cancellation'),
 
   // Conversions
-  duplicate: (id: OrderId, modifications: any = {}) => {
-    return apiHelpers.post(`/sales-orders/${id}/duplicate`, modifications);
-  },
+  duplicate: (_id: OrderId, _modifications: any = {}) => rejectCanonicalWrite('Legacy sales-order duplication'),
 
-  convertToInvoice: (id: OrderId, options: any = {}) => {
-    return apiHelpers.post(`/sales-orders/${id}/convert-to-invoice`, options);
-  },
+  convertToInvoice: (_id: OrderId, _options: any = {}): Promise<AxiosResponse> =>
+    rejectCanonicalWrite('Legacy order-to-invoice conversion'),
 
-  convertToChallan: (id: OrderId, options: any = {}) => {
-    return apiHelpers.post(`/sales-orders/${id}/convert-to-challan`, options);
-  },
+  convertToChallan: (_id: OrderId, _options: any = {}) => rejectCanonicalWrite('Legacy order-to-challan conversion'),
 
   // Inventory
-  reserveInventory: (id: OrderId) => {
-    return apiHelpers.post(`/sales-orders/${id}/reserve-inventory`);
-  },
+  reserveInventory: (_id: OrderId) => rejectCanonicalWrite('Legacy sales-order inventory reservation'),
 
-  releaseInventory: (id: OrderId) => {
-    return apiHelpers.post(`/sales-orders/${id}/release-inventory`);
-  },
+  releaseInventory: (_id: OrderId) => rejectCanonicalWrite('Legacy sales-order inventory release'),
 
   // Order Details
   getItems: (id: OrderId) => {
     return apiHelpers.get(`/sales-orders/${id}/items`);
   },
 
-  updateDeliverySchedule: (id: OrderId, schedule: any) => {
-    return apiHelpers.put(`/sales-orders/${id}/delivery-schedule`, schedule);
-  },
+  updateDeliverySchedule: (_id: OrderId, _schedule: any) => rejectCanonicalWrite('Legacy delivery-schedule editing'),
 
   getDeliverySchedule: (id: OrderId) => {
     return apiHelpers.get(`/sales-orders/${id}/delivery-schedule`);
   },
 
-  updatePaymentTerms: (id: OrderId, terms: any) => {
-    return apiHelpers.put(`/sales-orders/${id}/payment-terms`, terms);
-  },
+  updatePaymentTerms: (_id: OrderId, _terms: any) => rejectCanonicalWrite('Legacy payment-term editing'),
 
   // History & Audit
   getHistory: (id: OrderId) => {
@@ -140,13 +121,9 @@ export const ordersApi = {
     return apiHelpers.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' });
   },
 
-  sendEmail: (id: OrderId, recipients: string[]) => {
-    return apiHelpers.post(`/sales-orders/${id}/email`, { recipients });
-  },
+  sendEmail: (_id: OrderId, _recipients: string[]) => rejectCanonicalWrite('Sending a sales order by email'),
 
-  sendWhatsApp: (id: OrderId, phoneNumber: string) => {
-    return apiHelpers.post(`/sales-orders/${id}/whatsapp`, { phone: phoneNumber });
-  },
+  sendWhatsApp: (_id: OrderId, _phoneNumber: string) => rejectCanonicalWrite('Sending a sales order by WhatsApp'),
 
   // Analytics & Reports
   getAnalytics: (params: OrderParams = {}) => {

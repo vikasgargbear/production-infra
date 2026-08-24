@@ -15,6 +15,7 @@ import {
   ProductUpdateInput,
 } from '../../../../types/models/product';
 import type { AxiosResponse } from 'axios';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // ============================================================================
 // TYPES
@@ -104,24 +105,14 @@ export const productsApi = {
     return apiHelpers.get('/products/master/types');
   },
 
-  createCategory: (categoryName: string) => {
-    return apiHelpers.post('/products/master/categories', { category_name: categoryName });
-  },
+  createCategory: (_categoryName: string) => rejectCanonicalWrite('Legacy product-category creation'),
 
-  createProductType: (typeName: string, defaultBaseUom: string = 'Unit') => {
-    return apiHelpers.post('/products/master/types', {
-      type_name: typeName,
-      default_base_uom: defaultBaseUom
-    });
-  },
+  createProductType: (_typeName: string, _defaultBaseUom: string = 'Unit') =>
+    rejectCanonicalWrite('Legacy product-type creation'),
 
   // Stock
-  updateStock: (productId: number | string, data: any) => {
-    return apiHelpers.post('/products/stock-update', {
-      product_id: productId,
-      ...data
-    });
-  },
+  updateStock: (_productId: number | string, _data: any) =>
+    rejectCanonicalWrite('Legacy product stock editing'),
 
   getLowStock: (threshold: number = 10) => {
     return apiHelpers.get('/products', {
@@ -142,11 +133,5 @@ export const productsApi = {
   },
 
   // Batch Upload
-  batchUpload: (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return apiHelpers.post('/products/batch-upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  }
+  batchUpload: (_file: File) => rejectCanonicalWrite('Legacy product batch upload')
 };

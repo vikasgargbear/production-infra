@@ -7,6 +7,7 @@
 
 import { apiHelpers } from '../../apiClient';
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // ============================================================================
 // TYPES
@@ -56,6 +57,9 @@ const crud = createCrudApi({ basePath: '/employees' });
 
 export const employeesApi = {
   ...crud,
+  create: (_data: any) => rejectCanonicalWrite('Legacy employee creation'),
+  update: (_employeeId: number | string, _data: any) => rejectCanonicalWrite('Legacy employee editing'),
+  delete: (_employeeId: number | string) => rejectCanonicalWrite('Legacy employee deletion'),
 
   // Search employees
   search: (query: string, params: EmployeeParams = {}) => {

@@ -3,6 +3,7 @@
  */
 
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -36,6 +37,10 @@ const crud = createCrudApi({ basePath: '/branches', createPath: '/branches/', us
 
 export const branchesApi = {
     ...crud,
+    create: (_data: BranchData) => rejectCanonicalWrite('Legacy branch creation'),
+    update: (_branchId: number | string, _data: Partial<BranchData>) =>
+        rejectCanonicalWrite('Legacy branch editing'),
+    delete: (_branchId: number | string) => rejectCanonicalWrite('Legacy branch deletion'),
 } as {
     getAll: (params?: BranchParams) => Promise<AxiosResponse>;
     getById: (branchId: number | string) => Promise<AxiosResponse>;

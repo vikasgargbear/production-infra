@@ -6,8 +6,8 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { cleanData } from '../../utils/dataUtils';
 import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import {
     approveAndExecuteCanonicalAction,
     canonicalExecutionCompleted,
@@ -32,6 +32,9 @@ const crud = createCrudApi({ basePath: '/challan/' });
 
 export const challansApi = {
     ...crud,
+    create: (_data: any) => rejectCanonicalWrite('Legacy delivery-challan creation'),
+    update: (_id: ChallanId, _data: any) => rejectCanonicalWrite('Legacy delivery-challan editing'),
+    delete: (_id: ChallanId) => rejectCanonicalWrite('Legacy delivery-challan deletion'),
 
     prepareCanonical: (payload: Record<string, unknown>) =>
         prepareCanonicalAction('sales.dispatch.prepare', payload),
@@ -51,10 +54,8 @@ export const challansApi = {
     },
 
     /** Create challan from order */
-    createFromOrder: (orderId: number | string, data: any) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.post('/challan/', { order_id: orderId, ...cleanedData });
-    },
+    createFromOrder: (_orderId: number | string, _data: any) =>
+        rejectCanonicalWrite('Legacy order-to-challan creation'),
 
     // Queries
     getByOrder: (orderId: number | string) => {
@@ -66,13 +67,11 @@ export const challansApi = {
     },
 
     // Actions
-    convertToInvoice: (id: ChallanId, data: any = {}) => {
-        return apiHelpers.post(`/challan/${id}/convert-to-invoice`, data);
-    },
+    convertToInvoice: (_id: ChallanId, _data: any = {}) =>
+        rejectCanonicalWrite('Legacy challan-to-invoice conversion'),
 
-    updateStatus: (id: ChallanId, status: string) => {
-        return apiHelpers.patch(`/challan/${id}/status`, { status });
-    }
+    updateStatus: (_id: ChallanId, _status: string) =>
+        rejectCanonicalWrite('Legacy delivery-challan status changes')
 };
 
 export default challansApi;

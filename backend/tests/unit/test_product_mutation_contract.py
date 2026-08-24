@@ -99,24 +99,18 @@ def test_new_product_is_an_inactive_non_transactional_draft():
     assert data["gst_percent"] is None
 
 
-def test_openapi_publishes_strict_named_product_mutations():
+def test_openapi_publishes_bounded_canonical_product_draft_mutations():
     schema = app.openapi()
     create = schema["paths"]["/api/products/"]["post"]
     update = schema["paths"]["/api/products/{product_id}"]["put"]
 
     assert create["requestBody"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/ProductCreate"
+        "$ref": "#/components/schemas/CanonicalProductDraftCreate"
     }
     assert update["requestBody"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/ProductUpdate"
+        "$ref": "#/components/schemas/CanonicalProductDraftUpdate"
     }
-    assert create["responses"]["201"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/ProductMutationResponse"
-    }
-    assert update["responses"]["200"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/ProductMutationResponse"
-    }
-    for component in ("ProductCreate", "ProductUpdate", "ProductMutationResponse"):
+    for component in ("CanonicalProductDraftCreate", "CanonicalProductDraftUpdate"):
         assert schema["components"]["schemas"][component]["additionalProperties"] is False
 
 

@@ -51,16 +51,10 @@ def test_mutation_decorators_do_not_publish_generic_dict_responses():
     assert violations == []
 
 
-def test_high_risk_mutations_publish_strict_named_openapi_responses():
+def test_retired_high_risk_legacy_mutations_are_absent_from_openapi():
     from app.main import app
 
     schema = app.openapi()
-    components = schema["components"]["schemas"]
-
     assert len(EXPECTED_MUTATION_RESPONSES) == 14
-    for (method, path), component_name in EXPECTED_MUTATION_RESPONSES.items():
-        response_schema = schema["paths"][path][method]["responses"]["200"]["content"][
-            "application/json"
-        ]["schema"]
-        assert response_schema == {"$ref": f"#/components/schemas/{component_name}"}
-        assert components[component_name]["additionalProperties"] is False
+    for method, path in EXPECTED_MUTATION_RESPONSES:
+        assert method not in schema["paths"].get(path, {})

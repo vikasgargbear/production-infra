@@ -6,7 +6,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { cleanData } from '../../utils/dataUtils';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // Type definitions
 type TaxEntryId = number | string;
@@ -44,21 +44,13 @@ export const taxEntriesApi = {
     },
 
     /** Create tax entry */
-    create: (data: any) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
-    },
+    create: (_data: any) => rejectCanonicalWrite('Legacy tax-entry creation'),
 
     /** Update tax entry */
-    update: (id: TaxEntryId, data: any) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.put(ENDPOINTS.DETAILS(id), cleanedData);
-    },
+    update: (_id: TaxEntryId, _data: any) => rejectCanonicalWrite('Legacy tax-entry editing'),
 
     /** Delete tax entry */
-    delete: (id: TaxEntryId) => {
-        return apiHelpers.delete(ENDPOINTS.DETAILS(id));
-    },
+    delete: (_id: TaxEntryId) => rejectCanonicalWrite('Legacy tax-entry deletion'),
 
     // =========================================================================
     // REPORTS

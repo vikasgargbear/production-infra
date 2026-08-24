@@ -269,9 +269,9 @@ def test_branch_filter_binds_integer_keys_and_fails_closed_without_assignments()
         TenantContext.clear_context()
 
 
-def test_number_reservations_are_post_mutations_not_cacheable_gets():
+def test_legacy_document_number_reservations_are_not_mounted():
     schema = app.openapi()
-    paths = (
+    retired_paths = (
         "/api/documents/generate-number",
         "/api/invoices/generate-number",
         "/api/sales-orders/generate-number",
@@ -281,17 +281,7 @@ def test_number_reservations_are_post_mutations_not_cacheable_gets():
         "/api/expense-claims/generate-claim-number",
         "/api/sale-returns/generate-number",
     )
-    for path in paths:
-        path_item = schema["paths"][path]
-        assert "post" in path_item
-        assert "get" not in path_item
-        operation = path_item["post"]
-        assert operation["x-erp-risk"] == "consequential_write"
-        assert operation["x-erp-side-effects"] == "reserves_document_number"
-        assert operation["x-erp-tenant-scope"] == "organization"
-        assert operation["x-erp-idempotency"] == "requires_durable_reservation_key_store"
-        assert operation["x-erp-mcp-export"] is False
-        assert {next(iter(item)) for item in operation["security"]} == {"HTTPBearer"}
+    assert all(path not in schema["paths"] for path in retired_paths)
 
 
 def test_lifecycle_schemas_share_canonical_enum_authority():

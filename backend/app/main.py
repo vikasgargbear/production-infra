@@ -14,6 +14,10 @@ from .core.database import engine
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
+from .core.read_only_router import (
+    include_explicit_safe_post_utilities,
+    include_legacy_read_only_router,
+)
 from .middleware.error_handler import global_exception_handler
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.request_logger import RequestLoggerMiddleware
@@ -276,53 +280,75 @@ api.include_router(canonical_supplier_payment_reads.router)
 api.include_router(canonical_payment_history_reads.router)
 
 # --- Master Data ---
-api.include_router(customers.router, prefix="/customers", tags=["Customers"])
-api.include_router(suppliers.router, prefix="/suppliers", tags=["Suppliers"])
-api.include_router(products.router, prefix="/products", tags=["Products"])
-api.include_router(branches.router, prefix="/branches", tags=["Branches"])
-api.include_router(departments.router, prefix="/departments", tags=["Departments"])
-api.include_router(employees.router, prefix="/employees", tags=["Employees"])
-api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
+# Bounded canonical product/customer/supplier/address mutations were registered
+# above by canonical_erp_reads.  Only the later legacy master reads survive.
+include_legacy_read_only_router(api, customers.router, prefix="/customers", tags=["Customers"])
+include_legacy_read_only_router(api, suppliers.router, prefix="/suppliers", tags=["Suppliers"])
+include_legacy_read_only_router(api, products.router, prefix="/products", tags=["Products"])
+include_legacy_read_only_router(api, branches.router, prefix="/branches", tags=["Branches"])
+include_legacy_read_only_router(api, departments.router, prefix="/departments", tags=["Departments"])
+include_legacy_read_only_router(api, employees.router, prefix="/employees", tags=["Employees"])
+include_legacy_read_only_router(api, bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
+
+# --- Retired legacy business routers: reads only ---
+# Canonical business writes are available only through /web/actions.  Keeping
+# this fence at registration time prevents an unused legacy frontend method or
+# a direct API caller from bypassing reviewed prepare/approve/execute commands.
 
 # --- Sales ---
-api.include_router(orders_router, tags=["Sales Orders"])
-api.include_router(invoices_router, tags=["Invoices"])
-api.include_router(challan_router, prefix="/challan", tags=["Challan"])
-api.include_router(conversions_router, prefix="/conversions", tags=["Conversions"])
+include_legacy_read_only_router(api, orders_router, tags=["Sales Orders"])
+include_legacy_read_only_router(api, invoices_router, tags=["Invoices"])
+include_legacy_read_only_router(api, challan_router, prefix="/challan", tags=["Challan"])
+include_legacy_read_only_router(api, conversions_router, prefix="/conversions", tags=["Conversions"])
 
 # --- Returns (Sales & Purchase) ---
-api.include_router(sales_returns_router, prefix="/sale-returns", tags=["Sale Returns"])
-api.include_router(purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
+include_legacy_read_only_router(api, sales_returns_router, prefix="/sale-returns", tags=["Sale Returns"])
+include_legacy_read_only_router(api, purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
 
 # --- Purchase ---
-api.include_router(purchases.router, prefix="/purchases", tags=["Purchases"])
-api.include_router(supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
-api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
-api.include_router(purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
+include_legacy_read_only_router(api, purchases.router, prefix="/purchases", tags=["Purchases"])
+include_legacy_read_only_router(api, supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
+include_legacy_read_only_router(api, grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
+include_legacy_read_only_router(api, purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
+include_explicit_safe_post_utilities(
+    api,
+    purchase_upload.router,
+    prefix="/purchase-upload",
+    tags=["Purchase Upload"],
+    paths={"/parse-invoice-safe", "/validate-invoice"},
+)
 
 # --- Inventory ---
-api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
-api.include_router(stock_adjustments.router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
-api.include_router(stock_movements.router, prefix="/stock-movements", tags=["Stock Movements"])
-api.include_router(stock_writeoff.router, tags=["Stock Write-off"])
+include_legacy_read_only_router(api, inventory.router, prefix="/inventory", tags=["Inventory"])
+include_legacy_read_only_router(api, stock_adjustments.router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
+include_legacy_read_only_router(api, stock_movements.router, prefix="/stock-movements", tags=["Stock Movements"])
+include_legacy_read_only_router(api, stock_writeoff.router, tags=["Stock Write-off"])
 
 # --- Finance ---
-api.include_router(payments.router, prefix="/payments", tags=["Payments"])
-api.include_router(payment_allocation.router, tags=["Payment Allocation"])
+include_legacy_read_only_router(api, payments.router, prefix="/payments", tags=["Payments"])
+include_legacy_read_only_router(api, payment_allocation.router, tags=["Payment Allocation"])
 api.include_router(ledger.router, tags=["Ledger"])
-api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
-api.include_router(tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
-api.include_router(credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
-api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
+include_legacy_read_only_router(api, journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
+include_legacy_read_only_router(api, tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
+include_explicit_safe_post_utilities(
+    api, tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"], paths={"/calculate"}
+)
+include_legacy_read_only_router(api, credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
+include_legacy_read_only_router(api, expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
 
 # --- Compliance ---
-api.include_router(gst.router, prefix="/gst", tags=["GST"])
-api.include_router(gstr2b.router, prefix="/gst", tags=["GST"])
-api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
+include_legacy_read_only_router(api, gst.router, prefix="/gst", tags=["GST"])
+include_explicit_safe_post_utilities(
+    api, gst.router, prefix="/gst", tags=["GST"], paths={"/calculate"}
+)
+include_legacy_read_only_router(api, gstr2b.router, prefix="/gst", tags=["GST"])
+include_legacy_read_only_router(api, compliance.router, prefix="/compliance", tags=["Compliance"])
 
 # --- Analytics ---
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
-api.include_router(collection_center.router, prefix="/collection-center", tags=["Collection Center"])
+# Aging and collection dashboards remain readable. Communication, campaign,
+# and payment-recording side effects require reviewed operator commands.
+include_legacy_read_only_router(api, collection_center.router, prefix="/collection-center", tags=["Collection Center"])
 api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
 
 # --- Organization ---
@@ -332,10 +358,11 @@ api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
 api.include_router(company_assets.router, prefix="/company", tags=["Company"])
 
 # --- Settings ---
-api.include_router(settings_router, prefix="/settings", tags=["Settings"])
+# Preserve settings projections without allowing direct state changes.
+include_legacy_read_only_router(api, settings_router, prefix="/settings", tags=["Settings"])
 
 # --- Utilities ---
-api.include_router(documents.router, tags=["Documents"])
+include_legacy_read_only_router(api, documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
 api.include_router(calculations.router)
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed

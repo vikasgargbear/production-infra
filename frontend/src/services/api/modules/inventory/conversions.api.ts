@@ -4,6 +4,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -47,23 +48,18 @@ export const conversionsApi = {
     },
 
     create: (data: ConversionData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
+        return rejectCanonicalWrite('Legacy unit-conversion creation');
     },
 
     update: (conversionId: number, data: Partial<ConversionData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${conversionId}`, data);
+        return rejectCanonicalWrite('Legacy unit-conversion update');
     },
 
     delete: (conversionId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${conversionId}`);
+        return rejectCanonicalWrite('Legacy unit-conversion deletion');
     },
 
     calculate: (productId: number, fromUnit: string, toUnit: string, quantity: number): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.CALCULATE, {
-            product_id: productId,
-            from_unit: fromUnit,
-            to_unit: toUnit,
-            quantity
-        });
+        return rejectCanonicalWrite('Legacy unit-conversion calculation');
     }
 };

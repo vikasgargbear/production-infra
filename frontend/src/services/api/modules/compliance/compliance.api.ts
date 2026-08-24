@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -36,9 +37,8 @@ export const complianceApi = {
         return apiHelpers.get(ENDPOINTS.DRUG_LICENSE);
     },
 
-    updateDrugLicense: (data: Record<string, any>): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.DRUG_LICENSE, data);
-    },
+    updateDrugLicense: (_data: Record<string, any>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy drug-license editing'),
 
     // Audit Log
     getAuditLog: (params: ComplianceParams = {}): Promise<AxiosResponse> => {

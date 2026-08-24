@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -72,30 +73,24 @@ export const purchasesApi = {
         return apiHelpers.get(ENDPOINTS.BY_SUPPLIER(supplierId), { params });
     },
 
-    create: (data: PurchaseOrderData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: PurchaseOrderData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order creation'),
 
     // Create purchase entry (supplier invoice + batches + auto-GRN)
-    createEntry: (data: any): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.PURCHASE_ENTRY, data);
-    },
+    createEntry: (_data: any): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-entry creation'),
 
-    update: (poId: number, data: Partial<PurchaseOrderData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${poId}`, data);
-    },
+    update: (_poId: number, _data: Partial<PurchaseOrderData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order editing'),
 
-    delete: (poId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${poId}`);
-    },
+    delete: (_poId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order deletion'),
 
-    approve: (poId: number): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.APPROVE(poId));
-    },
+    approve: (_poId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order approval'),
 
-    receive: (poId: number, receivedItems: any[]): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.RECEIVE(poId), { items: receivedItems });
-    },
+    receive: (_poId: number, _receivedItems: any[]): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order receipt'),
 
     print: (poId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${poId}/print`, { responseType: 'blob' });

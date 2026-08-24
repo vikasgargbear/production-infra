@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -65,15 +66,12 @@ export const supplierInvoicesApi = {
         return apiHelpers.get(ENDPOINTS.UNPAID, { params });
     },
 
-    create: (data: SupplierInvoiceData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: SupplierInvoiceData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy supplier-invoice creation'),
 
-    update: (invoiceId: number, data: Partial<SupplierInvoiceData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${invoiceId}`, data);
-    },
+    update: (_invoiceId: number, _data: Partial<SupplierInvoiceData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy supplier-invoice editing'),
 
-    delete: (invoiceId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${invoiceId}`);
-    }
+    delete: (_invoiceId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy supplier-invoice deletion')
 };

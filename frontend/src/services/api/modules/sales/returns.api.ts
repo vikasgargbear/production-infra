@@ -9,7 +9,7 @@
 
 import { apiHelpers } from '../../apiClient';
 import { API_CONFIG } from '../../../../config/api.config';
-import { cleanData } from '../../utils/dataUtils';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // Type definitions
 type ReturnId = number | string;
@@ -38,10 +38,7 @@ export const returnsApi = {
     },
 
     /** Create sale return */
-    createSaleReturn: (data: any) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.SALES, cleanedData);
-    },
+    createSaleReturn: (_data: any) => rejectCanonicalWrite('Legacy sales-return creation'),
 
     /** Get returnable invoices (for sale returns) */
     getReturnableInvoices: (params: ReturnParams = {}) => {
@@ -63,10 +60,7 @@ export const returnsApi = {
     },
 
     /** Create purchase return */
-    createPurchaseReturn: (data: any) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.PURCHASE, cleanedData);
-    },
+    createPurchaseReturn: (_data: any) => rejectCanonicalWrite('Legacy purchase-return creation'),
 
     /** Get returnable purchases */
     getReturnablePurchases: (params: ReturnParams = {}) => {
@@ -98,25 +92,16 @@ export const returnsApi = {
     },
 
     /** Update return */
-    update: (id: ReturnId, data: any) => {
-        const cleanedData = cleanData(data);
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${id}`, cleanedData);
-    },
+    update: (_id: ReturnId, _data: any) => rejectCanonicalWrite('Legacy return editing'),
 
     /** Delete return */
-    delete: (id: ReturnId) => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${id}`);
-    },
+    delete: (_id: ReturnId) => rejectCanonicalWrite('Legacy return deletion'),
 
     /** Approve return */
-    approve: (id: ReturnId) => {
-        return apiHelpers.post(ENDPOINTS.APPROVE(id));
-    },
+    approve: (_id: ReturnId) => rejectCanonicalWrite('Legacy return approval'),
 
     /** Reject return */
-    reject: (id: ReturnId, reason: string) => {
-        return apiHelpers.post(ENDPOINTS.REJECT(id), { reason });
-    },
+    reject: (_id: ReturnId, _reason: string) => rejectCanonicalWrite('Legacy return rejection'),
 
 };
 

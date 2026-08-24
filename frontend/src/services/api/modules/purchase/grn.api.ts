@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -73,17 +74,14 @@ export const grnApi = {
         return apiHelpers.get(ENDPOINTS.BY_SUPPLIER(supplierId), { params });
     },
 
-    create: (data: GRNData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: GRNData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy goods-receipt creation'),
 
-    update: (grnId: number, data: Partial<GRNData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${grnId}`, data);
-    },
+    update: (_grnId: number, _data: Partial<GRNData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy goods-receipt editing'),
 
-    delete: (grnId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${grnId}`);
-    },
+    delete: (_grnId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy goods-receipt deletion'),
 
     print: (grnId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${grnId}/print`, { responseType: 'blob' });

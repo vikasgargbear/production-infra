@@ -182,7 +182,7 @@ def test_payment_mutation_routes_fail_before_database_access():
         assert exc_info.value.status_code == 503
 
 
-def test_payment_creation_openapi_requires_idempotency_header():
+def test_legacy_payment_creation_is_absent_from_openapi():
     from app.main import app
 
     schema = app.openapi()
@@ -191,18 +191,10 @@ def test_payment_creation_openapi_requires_idempotency_header():
         "/api/payments/record",
         "/api/payments/customer-receipt",
     ):
-        headers = {
-            parameter["name"]: parameter
-            for parameter in schema["paths"][path]["post"].get("parameters", [])
-            if parameter.get("in") == "header"
-        }
-        idempotency = headers["X-Idempotency-Key"]
-        assert idempotency["required"] is True
-        assert idempotency["schema"]["minLength"] == 8
-        assert idempotency["schema"]["maxLength"] == 255
+        assert "post" not in schema["paths"].get(path, {})
 
 
-def test_all_consequential_payment_mutations_require_idempotency_header():
+def test_all_legacy_consequential_payment_mutations_are_absent_from_openapi():
     from app.main import app
 
     schema = app.openapi()
@@ -216,12 +208,4 @@ def test_all_consequential_payment_mutations_require_idempotency_header():
         ("/api/payment-allocation/allocation/{allocation_id}", "delete"),
     )
     for path, method in operations:
-        headers = {
-            parameter["name"]: parameter
-            for parameter in schema["paths"][path][method].get("parameters", [])
-            if parameter.get("in") == "header"
-        }
-        idempotency = headers["X-Idempotency-Key"]
-        assert idempotency["required"] is True
-        assert idempotency["schema"]["minLength"] == 8
-        assert idempotency["schema"]["maxLength"] == 255
+        assert method not in schema["paths"].get(path, {})

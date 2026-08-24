@@ -127,12 +127,12 @@ def test_bank_account_mutations_fail_closed_without_database_access(handler, kwa
         ("put", "/api/bank-accounts/not-our-bank/set-default"),
     ],
 )
-def test_bank_account_mutations_require_bearer_authority_before_handler(method, path):
+def test_bank_account_mutations_are_not_mounted_until_a_canonical_command_exists(method, path):
     response = TestClient(app, raise_server_exceptions=False).request(
         method.upper(), path, json={"unexpected": "legacy payload"}
     )
 
-    assert response.status_code == 401
+    assert response.status_code in {404, 405}
 
 
 def test_bank_account_write_surface_contains_no_legacy_table_mutations():

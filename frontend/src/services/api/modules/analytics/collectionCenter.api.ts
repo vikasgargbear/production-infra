@@ -4,6 +4,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -75,22 +76,18 @@ export const collectionCenterApi = {
     },
 
     // Set reminder
-    setReminder: (customerId: number, data: ReminderData): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/${customerId}/reminder`, data);
-    },
+    setReminder: (_customerId: number, _data: ReminderData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Creating a collection reminder'),
 
     // Update collection status
-    updateStatus: (customerId: number, status: string): Promise<AxiosResponse> => {
-        return apiHelpers.patch(`${ENDPOINTS.BASE}/${customerId}/status`, { status });
-    },
+    updateStatus: (_customerId: number, _status: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Changing collection status'),
 
     // Mark as collected
-    markCollected: (customerId: number, amount: number, notes?: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/${customerId}/collect`, { amount, notes });
-    },
+    markCollected: (_customerId: number, _amount: number, _notes?: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Recording a collection'),
 
     // Dismiss reminder
-    dismissReminder: (reminderId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.REMINDERS}/${reminderId}`);
-    }
+    dismissReminder: (_reminderId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Dismissing a collection reminder')
 };
