@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -28,9 +28,14 @@ import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
 import { SidebarProvider } from './contexts/SidebarContext';
 import { usePermissions } from './hooks/usePermissions';
+import { useHashRouter } from './hooks/useHashRouter';
 
 const CalculationSmokePage = lazy(() => import('./e2e/CalculationSmokePage'));
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
+
+// ---------------------------------------------------------------------------
+// Tab / module definitions
+// ---------------------------------------------------------------------------
 
 type TabName =
   | 'home'
@@ -46,6 +51,22 @@ type TabName =
   | 'reports'
   | 'master';
 
+/** All valid tab names in insertion order — used by the hash router. */
+const ALL_TABS: readonly TabName[] = [
+  'home',
+  'sales',
+  'purchase',
+  'payment',
+  'payment-entry',
+  'returns',
+  'stock-management',
+  'party-ledger',
+  'credit-debit-note',
+  'gst',
+  'reports',
+  'master',
+];
+
 const TAB_MODULE_MAP: Partial<Record<TabName, string>> = {
   sales: 'sales',
   purchase: 'purchase',
@@ -60,20 +81,37 @@ const TAB_MODULE_MAP: Partial<Record<TabName, string>> = {
   master: 'master',
 };
 
-const isTabName = (value: string): value is TabName =>
-  value === 'home' || Object.prototype.hasOwnProperty.call(TAB_MODULE_MAP, value);
+// ---------------------------------------------------------------------------
+// AppContent
+// ---------------------------------------------------------------------------
 
 const AppContent = (): JSX.Element => {
   const { isAuthenticated, isLoading } = useAuth();
   const { hasModuleAccess } = usePermissions();
-  const [activeTab, setActiveTab] = useState<TabName>('home');
 
-  const navigate = useCallback((requestedTab: string) => {
-    if (!isTabName(requestedTab)) return;
-    const requiredModule = TAB_MODULE_MAP[requestedTab];
-    if (requiredModule && !hasModuleAccess(requiredModule)) return;
-    setActiveTab(requestedTab);
-  }, [hasModuleAccess]);
+  /**
+   * hasAccess is called by useHashRouter to gate tab transitions.
+   * Home is always accessible; every other tab is gated by its module permission.
+   */
+  const hasAccess = useCallback(
+    (tab: string): boolean => {
+      if (tab === 'home') return true;
+      const requiredModule = TAB_MODULE_MAP[tab as TabName];
+      return !requiredModule || hasModuleAccess(requiredModule);
+    },
+    [hasModuleAccess]
+  );
+
+  const { tab: activeTab, subpage, navigateTo, setSubpage } = useHashRouter(ALL_TABS, hasAccess);
+
+  // Cast is safe because useHashRouter only allows values from ALL_TABS
+  const activeTabName = activeTab as TabName;
+
+  // Legacy custom-event bridge — keeps old callers (keyboard shortcuts, Home buttons) working
+  const navigate = useCallback(
+    (requestedTab: string) => navigateTo(requestedTab),
+    [navigateTo]
+  );
 
   useEffect(() => {
     const handleNavigate = (event: Event) => {
@@ -106,34 +144,43 @@ const AppContent = (): JSX.Element => {
   if (!isAuthenticated) return <LoginPage />;
   if (window.location.pathname === '/oauth/consent') return <OAuthConsentPage />;
 
+  const goHome = () => navigateTo('home');
+
   const renderActiveComponent = (): JSX.Element => {
-    switch (activeTab) {
+    switch (activeTabName) {
       case 'sales':
-        return <SalesHub open onClose={() => setActiveTab('home')} />;
+        return <SalesHub open onClose={goHome} />;
       case 'purchase':
-        return <PurchaseHub open onClose={() => setActiveTab('home')} />;
+        return <PurchaseHub open onClose={goHome} />;
       case 'payment':
-        return <FinancialHub open onClose={() => setActiveTab('home')} />;
+        return <FinancialHub open onClose={goHome} />;
       case 'payment-entry':
         return (
           <PaymentProvider>
-            <ModularPaymentEntry onClose={() => setActiveTab('home')} />
+            <ModularPaymentEntry onClose={goHome} />
           </PaymentProvider>
         );
       case 'returns':
-        return <ReturnsHub open onClose={() => setActiveTab('home')} />;
+        return <ReturnsHub open onClose={goHome} />;
       case 'stock-management':
-        return <StockHub open onClose={() => setActiveTab('home')} />;
+        return (
+          <StockHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'party-ledger':
-        return <LedgerHub onClose={() => setActiveTab('home')} />;
+        return <LedgerHub onClose={goHome} />;
       case 'credit-debit-note':
-        return <CreditDebitFlow open onClose={() => setActiveTab('home')} />;
+        return <CreditDebitFlow open onClose={goHome} />;
       case 'gst':
-        return <GSTHub open onClose={() => setActiveTab('home')} />;
+        return <GSTHub open onClose={goHome} />;
       case 'reports':
-        return <ReportsHub open onClose={() => setActiveTab('home')} />;
+        return <ReportsHub open onClose={goHome} />;
       case 'master':
-        return <MasterHub open onClose={() => setActiveTab('home')} />;
+        return <MasterHub open onClose={goHome} />;
       case 'home':
       default:
         return <Home setActiveTab={navigate} />;
@@ -151,7 +198,7 @@ const AppContent = (): JSX.Element => {
                   <div className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
                     <Suspense fallback={<LoadingSpinner />}>{renderActiveComponent()}</Suspense>
                   </div>
-                  <MobileBottomNavigation activeTab={activeTab} onNavigate={navigate} />
+                  <MobileBottomNavigation activeTab={activeTabName} onNavigate={navigate} />
                   <ToastContainer position="top-right" />
                 </div>
               </ErrorBoundary>

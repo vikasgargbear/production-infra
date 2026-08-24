@@ -24,6 +24,12 @@ interface ModuleHubProps {
   modules?: Module[];
   defaultModule?: string | null;
   layout?: 'sidebar' | 'centered';
+  /**
+   * Called whenever the user switches to a different sub-module.
+   * Used by parent hubs (e.g. StockHub) to propagate sub-module state to the
+   * URL hash for stable deep-linking.
+   */
+  onActiveModuleChange?: (moduleId: string | null) => void;
 }
 
 /**
@@ -37,7 +43,8 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
   icon: HubIcon,
   modules = [] as Module[],
   defaultModule = null,
-  layout = 'sidebar'
+  layout = 'sidebar',
+  onActiveModuleChange,
 }) => {
   const availableModules = useMemo(
     () => modules.filter(module => Boolean(module.component)),
@@ -51,6 +58,12 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
   // Sidebar collapse/expand state (must be called before any conditional returns)
   const { settings: sidebarSettings, setIsHovering, toggleLockExpanded } = useSidebar();
   const { isExpanded, lockExpanded } = sidebarSettings;
+
+  /** Switch sub-module and notify parent (for URL sync). */
+  const handleSetActiveModule = (id: string) => {
+    setActiveModule(id);
+    onActiveModuleChange?.(id || null);
+  };
 
   useEffect(() => {
     const moduleIds = availableModuleIds ? availableModuleIds.split('\u0000') : [];
@@ -138,7 +151,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         e.preventDefault();
         const index = parseInt(e.key) - 1;
         if (availableModules[index]) {
-          setActiveModule(availableModules[index].id);
+          handleSetActiveModule(availableModules[index].id);
         }
       }
     };
@@ -193,7 +206,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         {/* Back Button when a module is active */}
         {!isGrid && (
           <button
-            onClick={() => setActiveModule('')}
+            onClick={() => handleSetActiveModule('')}
             className="absolute top-4 left-4 z-10 px-3 py-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow text-sm text-gray-700"
             title="Back to modules"
           >
@@ -210,7 +223,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                 return (
                   <button
                     key={module.id}
-                    onClick={() => setActiveModule(module.id)}
+                    onClick={() => handleSetActiveModule(module.id)}
                     className="group relative bg-white/80 backdrop-blur border border-gray-200 rounded-2xl p-6 text-left shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
                   >
                     <div className="flex items-center">
@@ -268,7 +281,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
               <button
                 key={module.id}
                 type="button"
-                onClick={() => setActiveModule(module.id)}
+                onClick={() => handleSetActiveModule(module.id)}
                 aria-current={isActive ? 'page' : undefined}
                 className={`flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   isActive
@@ -318,7 +331,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         </div>
 
         {/* Module Navigation */}
-        <nav className={`flex-1 overflow-y-auto px-1.5 pt-2`}>
+        <nav aria-label={`${title} module navigation`} className={`flex-1 overflow-y-auto px-1.5 pt-2`}>
           {availableModules.map((module, index) => {
             const Icon = module.icon;
             const isActive = activeModule === module.id;
@@ -336,7 +349,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                   <div className="mx-2 my-2 border-t border-gray-100" />
                 )}
                 <button
-                  onClick={() => setActiveModule(module.id)}
+                  onClick={() => handleSetActiveModule(module.id)}
                   className={`
                     w-full mb-1 rounded-lg flex items-center transition-all duration-150
                     ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}
