@@ -59,10 +59,16 @@ test('renders exact money and authoritative total, then loads UUID detail', asyn
   expect(await screen.findByText('-₹9,00,71,99,25,47,40,993.01')).not.toBeNull();
   expect(screen.getByText('Authoritative total 41')).not.toBeNull();
   expect(screen.getByText('Payment Made')).not.toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'View payment SP-EXACT' }));
+  const trigger = screen.getByRole('button', { name: 'View payment SP-EXACT' });
+  trigger.focus();
+  fireEvent.click(trigger);
   await waitFor(() => expect(paymentsApi.getCanonicalDetail).toHaveBeenCalledWith(history.payment_id));
   expect(await screen.findByRole('dialog')).not.toBeNull();
   expect(screen.getByText('SUP-1')).not.toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close payment details' }));
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(document.activeElement).toBe(trigger);
 });
 
 test('sends backend direction/date/search filters rather than filtering page rows', async () => {

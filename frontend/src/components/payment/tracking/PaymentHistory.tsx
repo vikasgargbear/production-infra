@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, CreditCard, Eye, X } from 'lucide-react';
 import { ModuleHeader, InlineFilterPanel, DataTable, Pagination, StatusBadge } from '../../global';
 import { paymentsApi } from '../../../services/api';
@@ -10,6 +10,7 @@ import type {
   CanonicalPaymentHistoryParams,
 } from '../../../services/api/modules/finance/payments.api';
 import { formatExactCurrency } from '../../../utils/exactDecimal';
+import { useDialogFocus } from '../../../hooks/useDialogFocus';
 
 interface PaymentHistoryProps {
   onClose?: () => void;
@@ -22,6 +23,8 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
   const [activeFilters, setActiveFilters] = useState<CanonicalPaymentHistoryParams>({});
   const [detail, setDetail] = useState<CanonicalPaymentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const closeDetailRef = useRef<HTMLButtonElement>(null);
+  const detailDialogRef = useDialogFocus<HTMLElement>(Boolean(detail), closeDetailRef);
   const [pagination, setPagination] = useState({
     page: 1,
     per_page: 25,
@@ -320,9 +323,11 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6" role="presentation">
           <section
+            ref={detailDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="payment-detail-title"
+            tabIndex={-1}
             className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"
           >
             <header className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
@@ -332,7 +337,7 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
                 </h2>
                 <p className="text-sm text-gray-600">{detail.party_name} · {detail.direction === 'received' ? 'Customer receipt' : 'Supplier payment'}</p>
               </div>
-              <button type="button" onClick={() => setDetail(null)} aria-label="Close payment details" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100">
+              <button ref={closeDetailRef} type="button" onClick={() => setDetail(null)} aria-label="Close payment details" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100">
                 <X className="h-5 w-5" />
               </button>
             </header>
