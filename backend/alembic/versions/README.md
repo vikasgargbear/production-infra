@@ -30,7 +30,9 @@ The existing isolated import pattern is `erp_regulatory_commands.stage_release`
 → typed dataset validation/insertion → `erp_regulatory_commands.finish_release`,
 called only as `erp_regulatory_importer` with retained source/dataset bytes,
 SHA-256 attestations, an active typed reviewer, and a request id. Before this
-dataset can be activated, that command boundary must be extended with a typed
-`import_gstr1_reporting_release` operation and official GSTN/GST Portal URI
-validation. Direct SQL, demo provisioning, and application startup must not
-activate this global reference dataset.
+dataset can be activated, `20260825_0004_gst_reporting_rules_importer.py`
+extends that boundary with a typed `import_gstr1_reporting_release` operation,
+official GST authority URI validation, and a distinct active activator. The
+operator supplies every effective range and threshold through a hash-attested
+canonical dataset; direct SQL, demo provisioning, application startup, and the
+migration itself do not activate this global reference dataset.

@@ -45,3 +45,12 @@ pytest -q backend/tests/unit/test_canonical_regulatory_commands.py
 
 `test_regulatory_commands_rollback.sql` is for the complete PostgreSQL 15
 baseline and always rolls back.
+
+At Alembic head `20260825_0004`, global GSTR-1 reporting thresholds use the
+same governed release lifecycle. Operators must invoke
+`backend/scripts/import_gst_reporting_rules.py` explicitly with the dedicated
+`ERP_REGULATORY_IMPORTER_DATABASE_URL`. Run the command with `--help` for the
+required source artifact, canonical dataset, independent reviewer/activator,
+effective-range, storage-coordinate, SHA-256, request-id, and confirmation
+arguments. The command has no statutory defaults, does not fetch artifacts,
+and is never called by application startup or demo provisioning.

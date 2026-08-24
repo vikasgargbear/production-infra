@@ -483,7 +483,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "statement_timeout=120000" in workflow
     assert "lock_timeout=15000" in workflow
     assert "-name 'test_*.sql' -o -name 'head_test_*.sql'" in workflow
-    assert "test \"$fixture_count\" = 15" in workflow
+    assert "test \"$fixture_count\" = 16" in workflow
     assert (
         "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE"
         in workflow

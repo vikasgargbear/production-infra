@@ -106,7 +106,7 @@ def test_fefo_postgres_fixture_is_explicitly_head_only() -> None:
     assert "-name 'test_*.sql'" in baseline_gate
     assert "-name 'test_*.sql' -o -name 'head_test_*.sql'" in alembic_gate
     assert "-name 'test_*.sql' -o -name 'head_test_*.sql'" in staging_workflow
-    assert 'test "$fixture_count" = 15' in staging_workflow
+    assert 'test "$fixture_count" = 16' in staging_workflow
 
 
 def test_schema_authority_includes_incremental_fefo_package() -> None:

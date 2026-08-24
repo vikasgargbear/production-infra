@@ -22,6 +22,9 @@
     "backend/alembic/versions/20260825_0003_gst_reporting_rules.py",
     "backend/alembic/sql/20260825_0003_gst_reporting_rules.sql",
     "backend/alembic/sql/20260825_0003_gst_reporting_rules.manifest.json",
+    "backend/alembic/versions/20260825_0004_gst_reporting_rules_importer.py",
+    "backend/alembic/sql/20260825_0004_gst_reporting_rules_importer.sql",
+    "backend/alembic/sql/20260825_0004_gst_reporting_rules_importer.manifest.json",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

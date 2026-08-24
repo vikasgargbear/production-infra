@@ -39,9 +39,11 @@ CANONICAL_BASELINE_APPROVED_SHA256=$(
   alembic -c alembic.ini upgrade head
 )
 
-test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260825_0003"
+test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260825_0004"
 test "$(psql -X -Atqc "SELECT to_regclass('tax.gstr1_reporting_rule_versions') IS NOT NULL")" = "t"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gstr1_reporting_rule_versions', 'SELECT')")" = "t"
+test "$(psql -X -Atqc "SELECT has_function_privilege('erp_regulatory_importer', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "t"
+test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "f"
 test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass")" = "true|true"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
 
