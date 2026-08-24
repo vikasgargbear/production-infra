@@ -26,8 +26,6 @@ from .middleware.request_logger import RequestLoggerMiddleware
 # Auth Module
 from .api.routes.auth import enterprise as auth_enterprise
 from .api.routes.auth import oauth as auth_oauth
-from .api.routes.auth import users
-from .api.routes.auth import roles as role_management
 
 # Audit Module
 from .api.routes.audit import audit_router
@@ -249,8 +247,6 @@ api = APIRouter(prefix="/api")
 # --- Auth ---
 api.include_router(auth_enterprise.router, tags=["Authentication"])
 api.include_router(auth_oauth.router, tags=["OAuth"])
-api.include_router(users.router, tags=["Users"])
-api.include_router(role_management.router, tags=["Role Management"])
 api.include_router(mcp_agent_grants.router)
 api.include_router(mcp_canonical_reads.router)
 api.include_router(mcp_canonical_resolution_reads.router)
