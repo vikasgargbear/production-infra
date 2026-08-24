@@ -1,5 +1,6 @@
 import inspect
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -1017,11 +1018,16 @@ def test_gst_dashboard_applies_the_selected_period_to_both_tax_sides(monkeypatch
     assert result["period"] == {
         "key": "previous", "start": "2026-07-01", "end": "2026-07-31",
     }
-    assert result["outputTax"] == 12
+    assert result["outputTax"] == "12.00"
+    assert result["inputCredit"] == "5.00"
+    assert result["netPayable"] == "7.00"
     assert captured["params"]["period"] == "previous"
-    assert "invoice_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
-    assert "supplier_invoice_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
-    assert captured["sql"].count("status='posted'") == 2
+    assert "tax_document.document_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
+    assert "return_period.period_start>=period.date_from" in captured["sql"]
+    assert "return_period.period_end<=period.date_to" in captured["sql"]
+    assert "line.itc_eligibility='eligible'" in captured["sql"]
+    assert "portal_document.portal_document_type='gstr2b'" in captured["sql"]
+    assert "portal_document.status='parsed'" in captured["sql"]
 
 
 def test_gstr1_adjustment_notes_are_posted_date_bounded_and_side_aware(monkeypatch) -> None:
@@ -1116,8 +1122,8 @@ def test_ledger_aging_returns_ui_compatible_canonical_summary(monkeypatch) -> No
     )
 
     assert result["summary"] == {
-        "total": 100, "current": 40, "overdue": 60, "party_count": 1,
-        "1_30": 20, "31_60": 40, "61_90": 0, "over_90": 0,
+        "total": "100.00", "current": "40.00", "overdue": "60.00", "party_count": 1,
+        "1_30": "20.00", "31_60": "40.00", "61_90": "0.00", "over_90": "0.00",
         "current_count": 1, "1_30_count": 1, "31_60_count": 1,
         "61_90_count": 0, "over_90_count": 0,
     }
@@ -1141,23 +1147,149 @@ def test_collection_aging_exposes_real_contact_and_collection_metrics(monkeypatc
 
     result = canonical_erp_reads.canonical_collection_aging(user={}, db=object())
 
-    assert result["summary"]["currentDayCollections"] == 10
-    assert result["summary"]["currentMonthCollections"] == 25
-    assert result["summary"]["collectionEfficiency"] == 20.0
+    assert result["summary"]["currentDayCollections"] == "10.00"
+    assert result["summary"]["currentMonthCollections"] == "25.00"
+    assert result["summary"]["collectionEfficiency"] is None
     assert result["parties"][0] == {
         "id": customer_id, "partyId": party_id, "name": "Test Buyer",
         "phone": "9876543210", "email": "buyer@example.com", "location": "Mumbai",
-        "outstandingAmount": 100, "overdueAmount": 60, "daysOverdue": 45,
-        "creditLimit": 200, "creditUtilization": 50.0,
+        "outstandingAmount": "100.00", "overdueAmount": "60.00", "daysOverdue": 45,
+        "creditLimit": "200.00",
         "oldestInvoiceDate": "2026-06-01", "lastPayment": "2026-08-20",
-        "lastFollowUp": None, "promiseDate": None, "assignedAgent": None,
-        "riskScore": 20, "paymentHistory": "Average", "collectionSuccess": 80,
+        "agingStatus": "overdue", "agingBand": "31-60",
         "agingBreakdown": [
-            {"range": "Current", "amount": 40}, {"range": "1-30", "amount": 0},
-            {"range": "31-60", "amount": 60}, {"range": "61-90", "amount": 0},
-            {"range": "90+", "amount": 0},
+            {"range": "Current", "amount": "40.00"}, {"range": "1-30", "amount": "0.00"},
+            {"range": "31-60", "amount": "60.00"}, {"range": "61-90", "amount": "0.00"},
+            {"range": "90+", "amount": "0.00"},
         ],
     }
+
+
+def test_gst_dashboard_current_and_previous_are_distinct_exact_projections(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+
+    def fake_rows(_db, _sql, params):
+        if params["period"] == "current":
+            return [{"date_from": "2026-08-01", "date_to": "2026-08-25", "output_tax": Decimal("9007199254740993.01"), "input_credit": 0, "net_payable": Decimal("9007199254740993.01")}]
+        return [{"date_from": "2026-07-01", "date_to": "2026-07-31", "output_tax": Decimal("1.00"), "input_credit": 0, "net_payable": Decimal("1.00")}]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    current = canonical_erp_reads.gst_dashboard(period="current", user={}, db=object())
+    previous = canonical_erp_reads.gst_dashboard(period="previous", user={}, db=object())
+
+    assert current["period"] != previous["period"]
+    assert current["outputTax"] == "9007199254740993.01"
+    assert previous["outputTax"] == "1.00"
+
+
+def test_gstr3b_returns_exact_money_and_rejects_an_inverted_period(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args: [{
+        "output_cgst": Decimal("9007199254740993.01"), "output_sgst": Decimal("2.00"),
+        "output_igst": 0, "output_cess": 0, "input_cgst": Decimal("0.01"),
+        "input_sgst": 0, "input_igst": 0, "input_cess": 0,
+    }])
+
+    result = canonical_erp_reads.canonical_gstr3b_report(
+        date_from=date(2026, 8, 1), date_to=date(2026, 8, 31), user={}, db=object(),
+    )
+    assert result["outputTax"]["cgst"] == "9007199254740993.01"
+    assert result["netPayable"] == "9007199254740995.00"
+    with pytest.raises(HTTPException) as exc:
+        canonical_erp_reads.canonical_gstr3b_report(
+            date_from=date(2026, 9, 1), date_to=date(2026, 8, 31), user={}, db=object(),
+        )
+    assert exc.value.status_code == 422
+
+
+def test_gstr1_threshold_is_date_effective_reviewed_data_and_has_no_application_default() -> None:
+    source = inspect.getsource(canonical_erp_reads.canonical_gstr1_report)
+    coverage = inspect.getsource(canonical_erp_reads._ensure_gstr1_rule_coverage)
+
+    assert "250000" not in source
+    assert "100000" not in source
+    assert "reporting_rule.b2cl_threshold_amount" in source
+    assert "invoice.grand_total>reporting_rule.b2cl_threshold_amount" in source
+    assert "invoice.supply_type='inter_state'" in source
+    assert "invoice.buyer_gstin_snapshot" in source
+    assert "rule.effective_from<=invoice.invoice_date" in source
+    assert "rule.effective_to>=invoice.invoice_date" in source
+    assert "COUNT(release.id) AS rule_count" in coverage
+    assert "candidate.rule_count<>1" in coverage
+
+
+def test_gstr1_fails_closed_when_reviewed_rules_are_not_installed(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    monkeypatch.setattr(canonical_erp_reads, "_rows", lambda *_args: [{"relation": None}])
+
+    with pytest.raises(HTTPException) as exc:
+        canonical_erp_reads.canonical_gstr1_report(
+            date_from=date(2024, 7, 31), date_to=date(2024, 8, 1), user={}, db=object(),
+        )
+    assert exc.value.status_code == 503
+    assert "not installed" in exc.value.detail
+
+
+def test_gstr1_rule_coverage_rejects_a_gap_or_overlap_at_the_effective_date_boundary(monkeypatch) -> None:
+    calls = []
+
+    def fake_rows(_db, sql, params):
+        calls.append((sql, params))
+        if "to_regclass" in sql:
+            return [{"relation": "tax.gstr1_reporting_rule_versions"}]
+        return [{"invalid_dates": 1}]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    with pytest.raises(HTTPException) as exc:
+        canonical_erp_reads._ensure_gstr1_rule_coverage(
+            object(), uuid4(), date(2024, 7, 31), date(2024, 8, 1),
+        )
+
+    assert exc.value.status_code == 503
+    assert "Exactly one reviewed" in exc.value.detail
+    coverage_sql, coverage_params = calls[1]
+    assert "COUNT(release.id) AS rule_count" in coverage_sql
+    assert "candidate.rule_count<>1" in coverage_sql
+    assert coverage_params["date_from"] == date(2024, 7, 31)
+    assert coverage_params["date_to"] == date(2024, 8, 1)
+
+
+def test_gstr3b_and_dashboard_itc_require_eligible_lines_and_parsed_gstr2b() -> None:
+    gstr3b = inspect.getsource(canonical_erp_reads.canonical_gstr3b_report)
+    dashboard = inspect.getsource(canonical_erp_reads.gst_dashboard)
+    for source in (gstr3b, dashboard):
+        assert "line.itc_eligibility='eligible'" in source
+        assert "portal_document.portal_document_type='gstr2b'" in source
+        assert "portal_document.status='parsed'" in source
+        assert "portal_document.parsed_at IS NOT NULL" in source
+        assert "command.status='succeeded'" in source
+        assert "AND EXISTS (" in source
+    assert "return_period.period_start>=:date_from" in gstr3b
+    assert "return_period.period_end<=:date_to" in gstr3b
+    assert "supplier_invoice_date BETWEEN :date_from AND :date_to" not in gstr3b
+
+
+@pytest.mark.parametrize("itc_eligibility", ["ineligible", "blocked", "pending", None])
+def test_gstr3b_query_excludes_ineligible_or_unattested_supplier_tax(
+    itc_eligibility,
+) -> None:
+    """The SQL predicate admits only eligible lines; inner EXISTS excludes unmatched 2B facts."""
+    source = inspect.getsource(canonical_erp_reads.canonical_gstr3b_report)
+
+    assert itc_eligibility != "eligible"
+    assert "line.itc_eligibility='eligible'" in source
+    assert "command.status='succeeded'" in source
+    assert "portal_document.portal_document_type='gstr2b'" in source
+    assert "portal_document.status='parsed'" in source
+
+
+def test_supplier_aging_fails_closed_instead_of_returning_a_fake_empty_success(monkeypatch) -> None:
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
+    with pytest.raises(HTTPException) as exc:
+        canonical_erp_reads.canonical_ledger_aging(
+            party_type="supplier", user={}, db=object(),
+        )
+    assert exc.value.status_code == 503
 
 
 def test_current_stock_projects_one_canonical_row_per_product() -> None:

@@ -19,6 +19,9 @@
     "backend/alembic/versions/20260824_0002_sales_invoice_fefo_expiry_equivalence.py",
     "backend/alembic/sql/20260824_0002_sales_invoice_fefo_expiry_equivalence.sql",
     "backend/alembic/sql/20260824_0002_sales_invoice_fefo_expiry_equivalence.manifest.json",
+    "backend/alembic/versions/20260825_0003_gst_reporting_rules.py",
+    "backend/alembic/sql/20260825_0003_gst_reporting_rules.sql",
+    "backend/alembic/sql/20260825_0003_gst_reporting_rules.manifest.json",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

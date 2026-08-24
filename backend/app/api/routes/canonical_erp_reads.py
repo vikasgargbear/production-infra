@@ -72,6 +72,23 @@ def _range_params(org_id: UUID, date_from: Optional[str], date_to: Optional[str]
     return {"org_id": org_id, "date_from": date_from, "date_to": date_to}
 
 
+def _money_fields(row: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, Any]:
+    """Project canonical NUMERIC money as exact two-decimal JSON strings."""
+    result = dict(row)
+    for field in fields:
+        result[field] = money_json(result.get(field) or 0)
+    return result
+
+
+def _validated_report_range(date_from: date, date_to: date) -> dict[str, date]:
+    if date_to < date_from:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="date_to must be on or after date_from",
+        )
+    return {"date_from": date_from, "date_to": date_to}
+
+
 _INVOICE_RANGE = """
     invoice.org_id=:org_id AND invoice.status NOT IN ('cancelled','reversed')
     AND (:date_from IS NULL OR invoice.invoice_date >= CAST(:date_from AS date))
@@ -1236,6 +1253,106 @@ def tax_codes(user: dict = MASTER_USER, db: Session = Depends(get_db)):
     """, {})
 
 
+class CanonicalReportPeriod(BaseModel):
+    start: date
+    end: date
+
+
+class CanonicalTaxAmounts(BaseModel):
+    cgst: MoneyJSON
+    sgst: MoneyJSON
+    igst: MoneyJSON
+    cess: MoneyJSON
+    total: MoneyJSON
+
+
+class CanonicalGSTR1B2BRow(BaseModel):
+    supply_class: str
+    gst_number: str
+    name: str
+    invoices: int
+    taxableValue: MoneyJSON
+    cgst: MoneyJSON
+    sgst: MoneyJSON
+    igst: MoneyJSON
+    cess: MoneyJSON
+    totalTax: MoneyJSON
+
+
+class CanonicalGSTR1B2CBucket(BaseModel):
+    count: int
+    taxableValue: MoneyJSON
+    cgst: MoneyJSON
+    sgst: MoneyJSON
+    igst: MoneyJSON
+    cess: MoneyJSON
+    totalTax: MoneyJSON
+
+
+class CanonicalGSTR1Summary(BaseModel):
+    totalInvoices: int
+    totalTaxableValue: MoneyJSON
+    totalCGST: MoneyJSON
+    totalSGST: MoneyJSON
+    totalIGST: MoneyJSON
+    totalCess: MoneyJSON
+    totalTax: MoneyJSON
+    creditAdjustment: MoneyJSON
+    debitAdjustment: MoneyJSON
+    netAdjustment: MoneyJSON
+
+
+class CanonicalGSTR1Response(BaseModel):
+    period: CanonicalReportPeriod
+    b2b: list[CanonicalGSTR1B2BRow]
+    b2c: dict[str, CanonicalGSTR1B2CBucket]
+    notes: list[dict[str, Any]]
+    summary: CanonicalGSTR1Summary
+
+
+class CanonicalGSTR3BResponse(BaseModel):
+    period: CanonicalReportPeriod
+    outputTax: CanonicalTaxAmounts
+    inputCredit: CanonicalTaxAmounts
+    payable: CanonicalTaxAmounts
+    netPayable: MoneyJSON
+
+
+def _ensure_gstr1_rule_coverage(
+    db: Session, org_id: UUID, date_from: date, date_to: date,
+) -> None:
+    """Require one reviewed B2CL rule for every posted invoice date."""
+    registry = _rows(db, "SELECT to_regclass('tax.gstr1_reporting_rule_versions') AS relation", {})
+    if not registry or registry[0].get("relation") is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Versioned GSTR-1 reporting rules are not installed",
+        )
+    coverage = _rows(db, """
+        SELECT COUNT(*) FILTER (WHERE candidate.rule_count<>1) AS invalid_dates
+          FROM (
+              SELECT invoice.invoice_date, COUNT(release.id) AS rule_count
+                FROM sales.invoices invoice
+                LEFT JOIN tax.gstr1_reporting_rule_versions rule
+                  ON rule.effective_from<=invoice.invoice_date
+                 AND (rule.effective_to IS NULL OR rule.effective_to>=invoice.invoice_date)
+                 AND rule.status='active'
+                LEFT JOIN core.reference_data_releases release
+                  ON release.id=rule.release_id
+                 AND release.dataset_kind='gst_reporting_rules'
+                 AND release.status='active'
+               WHERE invoice.org_id=:org_id AND invoice.status='posted'
+                 AND invoice.invoice_date BETWEEN :date_from AND :date_to
+               GROUP BY invoice.invoice_date
+          ) candidate
+    """, {"org_id": org_id, "date_from": date_from, "date_to": date_to})
+    if coverage and int(coverage[0].get("invalid_dates") or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Exactly one reviewed GSTR-1 reporting rule must cover every invoice date",
+        )
+
+
 @router.get("/gst/dashboard")
 def gst_dashboard(
     period: Literal["current", "previous", "quarter", "year"] = Query("current"),
@@ -1271,28 +1388,315 @@ def gst_dashboard(
                COALESCE(purchases.igst,0) AS purchase_igst_amount
           FROM period_bounds period
           CROSS JOIN LATERAL (
-                SELECT SUM(cgst_total+sgst_total+igst_total+cess_total) total,
-                       SUM(cgst_total) cgst, SUM(sgst_total) sgst, SUM(igst_total) igst,
-                       count(*) invoice_count
-                  FROM sales.invoices
-                 WHERE org_id=:org_id AND status='posted'
-                   AND invoice_date BETWEEN period.date_from AND period.date_to
+                SELECT SUM(CASE WHEN tax_document.document_effect='decrease' THEN -1 ELSE 1 END *
+                           (tax_document.cgst_amount+tax_document.sgst_amount+
+                            tax_document.igst_amount+tax_document.cess_amount)) total,
+                       SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.cgst_amount ELSE tax_document.cgst_amount END) cgst,
+                       SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.sgst_amount ELSE tax_document.sgst_amount END) sgst,
+                       SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.igst_amount ELSE tax_document.igst_amount END) igst,
+                       count(DISTINCT tax_document.sales_invoice_id)
+                         FILTER (WHERE tax_document.document_class='sales_invoice') invoice_count
+                  FROM tax.documents tax_document
+                 WHERE tax_document.org_id=:org_id
+                   AND tax_document.direction='outward'
+                   AND tax_document.document_class IN ('sales_invoice','adjustment_note')
+                   AND tax_document.document_effect IN ('original','increase','decrease')
+                   AND tax_document.document_date BETWEEN period.date_from AND period.date_to
           ) sales
           CROSS JOIN LATERAL (
-                SELECT SUM(cgst_total+sgst_total+igst_total+cess_total) total,
-                             SUM(cgst_total) cgst, SUM(sgst_total) sgst, SUM(igst_total) igst,
-                             count(*) invoice_count, count(DISTINCT supplier_account_id) supplier_count
-                        FROM procurement.supplier_invoices
-                       WHERE org_id=:org_id AND status='posted'
-                         AND supplier_invoice_date BETWEEN period.date_from AND period.date_to
+                SELECT SUM(line.cgst_amount+line.sgst_amount+line.igst_amount+line.cess_amount) total,
+                       SUM(line.cgst_amount) cgst, SUM(line.sgst_amount) sgst,
+                       SUM(line.igst_amount) igst,
+                       count(DISTINCT invoice.id) invoice_count,
+                       count(DISTINCT invoice.supplier_account_id) supplier_count
+                  FROM procurement.supplier_invoices invoice
+                  JOIN procurement.supplier_invoice_lines line
+                    ON line.org_id=invoice.org_id
+                   AND line.supplier_invoice_id=invoice.id
+                   AND line.itc_eligibility='eligible'
+                 WHERE invoice.org_id=:org_id AND invoice.status='posted'
+                   AND EXISTS (
+                       SELECT 1 FROM tax.documents tax_document
+                        WHERE tax_document.org_id=invoice.org_id
+                          AND tax_document.supplier_invoice_id=invoice.id
+                          AND tax_document.document_class='supplier_invoice'
+                          AND tax_document.document_effect='original'
+                   )
+                   AND EXISTS (
+                       SELECT 1
+                         FROM automation.command_requests command
+                         JOIN tax.portal_document_lines portal_line
+                           ON portal_line.org_id=command.org_id
+                          AND portal_line.id=NULLIF(
+                              pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
+                              ->>'portal_document_line_id',''
+                          )::uuid
+                          AND portal_line.document_type='invoice'
+                         JOIN tax.portal_documents portal_document
+                           ON portal_document.org_id=portal_line.org_id
+                          AND portal_document.id=portal_line.portal_document_id
+                          AND portal_document.portal_document_type='gstr2b'
+                          AND portal_document.status='parsed'
+                          AND portal_document.parsed_at IS NOT NULL
+                         JOIN tax.return_periods return_period
+                           ON return_period.org_id=portal_document.org_id
+                          AND return_period.id=portal_document.return_period_id
+                          AND return_period.registration_id=portal_document.registration_id
+                        WHERE command.org_id=invoice.org_id
+                          AND command.target_resource_type='supplier_invoice'
+                          AND command.target_resource_id=invoice.id
+                          AND command.result_resource_type='supplier_invoice'
+                          AND command.result_resource_id=invoice.id
+                          AND command.capability_code='procurement.supplier_invoice.prepare'
+                          AND command.operation='procurement.supplier_invoice.post'
+                          AND command.status='succeeded'
+                          AND return_period.period_start>=period.date_from
+                          AND return_period.period_end<=period.date_to
+                   )
           ) purchases
     """, {"org_id": org_id, "period": period})
     summary = rows[0] if rows else {}
-    return {"period": {"key": period, "start": summary.pop("date_from", None),
-                       "end": summary.pop("date_to", None)},
-            "outputTax": summary.pop("output_tax", 0),
-            "inputCredit": summary.pop("input_credit", 0),
-            "netPayable": summary.pop("net_payable", 0), "summary": summary}
+    period_start = summary.pop("date_from", None)
+    period_end = summary.pop("date_to", None)
+    output_tax = money_json(summary.pop("output_tax", 0))
+    input_credit = money_json(summary.pop("input_credit", 0))
+    net_payable = money_json(summary.pop("net_payable", 0))
+    summary = _money_fields(summary, (
+        "cgst_amount", "sgst_amount", "igst_amount",
+        "purchase_cgst_amount", "purchase_sgst_amount", "purchase_igst_amount",
+    ))
+    return {
+        "period": {"key": period, "start": period_start, "end": period_end},
+        "outputTax": output_tax,
+        "inputCredit": input_credit,
+        "netPayable": net_payable,
+        "summary": summary,
+    }
+
+
+@router.get("/gst/reports/gstr1", response_model=CanonicalGSTR1Response)
+def canonical_gstr1_report(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    user: dict = Depends(PermissionChecker("gst", "view")),
+    db: Session = Depends(get_db),
+):
+    """Authoritative outward-supply projection; the browser performs no tax math."""
+    org_id = _activate(db, user)
+    params = {"org_id": org_id, **_validated_report_range(date_from, date_to)}
+    _ensure_gstr1_rule_coverage(db, org_id, date_from, date_to)
+    invoice_rows = _rows(db, """
+        SELECT CASE WHEN COALESCE(invoice.buyer_gstin_snapshot,'')<>''
+                    THEN 'b2b'
+                    WHEN invoice.supply_type='inter_state'
+                     AND invoice.grand_total>reporting_rule.b2cl_threshold_amount
+                    THEN 'b2c_large'
+                    ELSE 'b2c_small' END AS supply_class,
+               COALESCE(invoice.buyer_gstin_snapshot,'') AS gst_number,
+               invoice.buyer_legal_name_snapshot AS name,
+               COUNT(DISTINCT invoice.id) AS invoices,
+               COALESCE(SUM(tax_document.gst_taxable_value),0) AS taxable_value,
+               COALESCE(SUM(tax_document.cgst_amount),0) AS cgst,
+               COALESCE(SUM(tax_document.sgst_amount),0) AS sgst,
+               COALESCE(SUM(tax_document.igst_amount),0) AS igst,
+               COALESCE(SUM(tax_document.cess_amount),0) AS cess
+          FROM tax.documents tax_document
+          JOIN sales.invoices invoice
+            ON invoice.org_id=tax_document.org_id
+           AND invoice.id=tax_document.sales_invoice_id
+           AND invoice.status='posted'
+          JOIN LATERAL (
+              SELECT rule.b2cl_threshold_amount
+                FROM tax.gstr1_reporting_rule_versions rule
+                JOIN core.reference_data_releases release ON release.id=rule.release_id
+               WHERE release.dataset_kind='gst_reporting_rules'
+                 AND release.status='active'
+                 AND rule.status='active'
+                 AND rule.effective_from<=invoice.invoice_date
+                 AND (rule.effective_to IS NULL OR rule.effective_to>=invoice.invoice_date)
+          ) reporting_rule ON true
+         WHERE invoice.org_id=:org_id AND invoice.status='posted'
+           AND tax_document.document_class='sales_invoice'
+           AND tax_document.document_effect='original'
+           AND invoice.invoice_date BETWEEN :date_from AND :date_to
+         GROUP BY supply_class, invoice.buyer_gstin_snapshot,
+                  invoice.buyer_legal_name_snapshot
+         ORDER BY supply_class, gst_number, name
+    """, params)
+    note_rows = _rows(db, """
+        SELECT note.id AS note_id, note.note_number, note.note_date,
+               note.direction, note.party_id, party.legal_name AS party_name,
+               note.gst_taxable_value AS taxable_amount,
+               note.cgst_amount, note.sgst_amount, note.igst_amount,
+               COALESCE(note.cess_amount,0) AS cess_amount
+          FROM finance.adjustment_notes note
+          JOIN parties.parties party
+            ON party.org_id=note.org_id AND party.id=note.party_id
+         WHERE note.org_id=:org_id AND note.status='posted' AND note.side='sales'
+           AND note.note_date BETWEEN :date_from AND :date_to
+         ORDER BY note.note_date, note.id
+    """, params)
+
+    def report_row(row: Dict[str, Any]) -> Dict[str, Any]:
+        projected = _money_fields(row, ("taxable_value", "cgst", "sgst", "igst", "cess"))
+        projected["taxableValue"] = projected.pop("taxable_value")
+        projected["totalTax"] = money_json(sum(
+            (Decimal(str(row.get(field) or 0)) for field in ("cgst", "sgst", "igst", "cess")),
+            Decimal("0"),
+        ))
+        return projected
+
+    b2b = [report_row(row) for row in invoice_rows if row["supply_class"] == "b2b"]
+    b2c_source = {
+        "small": [row for row in invoice_rows if row["supply_class"] == "b2c_small"],
+        "large": [row for row in invoice_rows if row["supply_class"] == "b2c_large"],
+    }
+
+    def b2c_bucket(rows: list[dict]) -> Dict[str, Any]:
+        return {
+            "count": sum(int(row.get("invoices") or 0) for row in rows),
+            "taxableValue": money_json(sum((Decimal(str(row.get("taxable_value") or 0)) for row in rows), Decimal("0"))),
+            "cgst": money_json(sum((Decimal(str(row.get("cgst") or 0)) for row in rows), Decimal("0"))),
+            "sgst": money_json(sum((Decimal(str(row.get("sgst") or 0)) for row in rows), Decimal("0"))),
+            "igst": money_json(sum((Decimal(str(row.get("igst") or 0)) for row in rows), Decimal("0"))),
+            "cess": money_json(sum((Decimal(str(row.get("cess") or 0)) for row in rows), Decimal("0"))),
+            "totalTax": money_json(sum((
+                Decimal(str(row.get(field) or 0))
+                for row in rows for field in ("cgst", "sgst", "igst", "cess")
+            ), Decimal("0"))),
+        }
+
+    invoice_count = sum(int(row.get("invoices") or 0) for row in invoice_rows)
+    invoice_taxable = sum((Decimal(str(row.get("taxable_value") or 0)) for row in invoice_rows), Decimal("0"))
+    tax_components = {
+        field: sum((Decimal(str(row.get(field) or 0)) for row in invoice_rows), Decimal("0"))
+        for field in ("cgst", "sgst", "igst", "cess")
+    }
+    credit_tax = sum((
+        sum((Decimal(str(row.get(field) or 0)) for field in ("cgst_amount", "sgst_amount", "igst_amount", "cess_amount")), Decimal("0"))
+        for row in note_rows if row["direction"] == "credit"
+    ), Decimal("0"))
+    debit_tax = sum((
+        sum((Decimal(str(row.get(field) or 0)) for field in ("cgst_amount", "sgst_amount", "igst_amount", "cess_amount")), Decimal("0"))
+        for row in note_rows if row["direction"] == "debit"
+    ), Decimal("0"))
+    notes = [_money_fields(row, (
+        "taxable_amount", "cgst_amount", "sgst_amount", "igst_amount", "cess_amount",
+    )) for row in note_rows]
+    total_tax = sum(tax_components.values(), Decimal("0")) + debit_tax - credit_tax
+    return {
+        "period": {"start": date_from, "end": date_to},
+        "b2b": b2b,
+        "b2c": {key: b2c_bucket(rows) for key, rows in b2c_source.items()},
+        "notes": notes,
+        "summary": {
+            "totalInvoices": invoice_count,
+            "totalTaxableValue": money_json(invoice_taxable),
+            "totalCGST": money_json(tax_components["cgst"]),
+            "totalSGST": money_json(tax_components["sgst"]),
+            "totalIGST": money_json(tax_components["igst"]),
+            "totalCess": money_json(tax_components["cess"]),
+            "totalTax": money_json(total_tax),
+            "creditAdjustment": money_json(credit_tax),
+            "debitAdjustment": money_json(debit_tax),
+            "netAdjustment": money_json(debit_tax-credit_tax),
+        },
+    }
+
+
+@router.get("/gst/reports/gstr3b", response_model=CanonicalGSTR3BResponse)
+def canonical_gstr3b_report(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    user: dict = Depends(PermissionChecker("gst", "view")),
+    db: Session = Depends(get_db),
+):
+    """Authoritative GSTR-3B header projection from posted document tax totals."""
+    org_id = _activate(db, user)
+    params = {"org_id": org_id, **_validated_report_range(date_from, date_to)}
+    rows = _rows(db, """
+        SELECT COALESCE(output.cgst,0) AS output_cgst,
+               COALESCE(output.sgst,0) AS output_sgst,
+               COALESCE(output.igst,0) AS output_igst,
+               COALESCE(output.cess,0) AS output_cess,
+               COALESCE(input.cgst,0) AS input_cgst,
+               COALESCE(input.sgst,0) AS input_sgst,
+               COALESCE(input.igst,0) AS input_igst,
+               COALESCE(input.cess,0) AS input_cess
+          FROM (
+              SELECT SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.cgst_amount ELSE tax_document.cgst_amount END) cgst,
+                     SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.sgst_amount ELSE tax_document.sgst_amount END) sgst,
+                     SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.igst_amount ELSE tax_document.igst_amount END) igst,
+                     SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.cess_amount ELSE tax_document.cess_amount END) cess
+                FROM tax.documents tax_document
+               WHERE tax_document.org_id=:org_id
+                 AND tax_document.direction='outward'
+                 AND tax_document.document_class IN ('sales_invoice','adjustment_note')
+                 AND tax_document.document_effect IN ('original','increase','decrease')
+                 AND tax_document.document_date BETWEEN :date_from AND :date_to
+          ) output
+          CROSS JOIN (
+              SELECT SUM(line.cgst_amount) cgst, SUM(line.sgst_amount) sgst,
+                     SUM(line.igst_amount) igst, SUM(line.cess_amount) cess
+                FROM procurement.supplier_invoices invoice
+                JOIN procurement.supplier_invoice_lines line
+                  ON line.org_id=invoice.org_id
+                 AND line.supplier_invoice_id=invoice.id
+                 AND line.itc_eligibility='eligible'
+               WHERE invoice.org_id=:org_id AND invoice.status='posted'
+                 AND EXISTS (
+                     SELECT 1 FROM tax.documents tax_document
+                      WHERE tax_document.org_id=invoice.org_id
+                        AND tax_document.supplier_invoice_id=invoice.id
+                        AND tax_document.document_class='supplier_invoice'
+                        AND tax_document.document_effect='original'
+                 )
+                 AND EXISTS (
+                     SELECT 1
+                       FROM automation.command_requests command
+                       JOIN tax.portal_document_lines portal_line
+                         ON portal_line.org_id=command.org_id
+                        AND portal_line.id=NULLIF(
+                            pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
+                            ->>'portal_document_line_id',''
+                        )::uuid
+                        AND portal_line.document_type='invoice'
+                       JOIN tax.portal_documents portal_document
+                         ON portal_document.org_id=portal_line.org_id
+                        AND portal_document.id=portal_line.portal_document_id
+                        AND portal_document.portal_document_type='gstr2b'
+                        AND portal_document.status='parsed'
+                        AND portal_document.parsed_at IS NOT NULL
+                       JOIN tax.return_periods return_period
+                         ON return_period.org_id=portal_document.org_id
+                        AND return_period.id=portal_document.return_period_id
+                        AND return_period.registration_id=portal_document.registration_id
+                      WHERE command.org_id=invoice.org_id
+                        AND command.target_resource_type='supplier_invoice'
+                        AND command.target_resource_id=invoice.id
+                        AND command.result_resource_type='supplier_invoice'
+                        AND command.result_resource_id=invoice.id
+                        AND command.capability_code='procurement.supplier_invoice.prepare'
+                        AND command.operation='procurement.supplier_invoice.post'
+                        AND command.status='succeeded'
+                        AND return_period.period_start>=:date_from
+                        AND return_period.period_end<=:date_to
+                 )
+          ) input
+    """, params)
+    row = rows[0] if rows else {}
+    output = {component: Decimal(str(row.get(f"output_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
+    input_credit = {component: Decimal(str(row.get(f"input_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
+    payable = {component: max(Decimal("0"), output[component]-input_credit[component]) for component in output}
+    output_total = sum(output.values(), Decimal("0"))
+    input_total = sum(input_credit.values(), Decimal("0"))
+    return {
+        "period": {"start": date_from, "end": date_to},
+        "outputTax": {**{key: money_json(value) for key, value in output.items()}, "total": money_json(output_total)},
+        "inputCredit": {**{key: money_json(value) for key, value in input_credit.items()}, "total": money_json(input_total)},
+        "payable": {**{key: money_json(value) for key, value in payable.items()}, "total": money_json(sum(payable.values(), Decimal("0")))},
+        "netPayable": money_json(output_total-input_total),
+    }
 
 
 @router.get("/gst/returns/status")
@@ -3721,21 +4125,33 @@ def canonical_ledger_aging(
 ):
     org_id = _activate(db, user)
     if party_type == "supplier":
-        return {"party_type": party_type, "aging_data": [], "summary": {
-            "total": 0, "current": 0, "overdue": 0, "party_count": 0,
-            "1_30": 0, "31_60": 0, "61_90": 0, "over_90": 0,
-        }}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Canonical supplier payable aging is not available",
+        )
 
     rows = _canonical_receivable_rows(db, org_id, user)
-    return {"party_type": party_type, "aging_data": rows, "summary": {
-        "total": _amount(rows, "total_outstanding"),
-        "current": _amount(rows, "current"),
-        "overdue": _amount(rows, "overdue_amount"),
+    money_fields = (
+        "total_outstanding", "current", "overdue_amount", "days_1_30",
+        "days_31_60", "days_61_90", "over_90", "credit_limit",
+    )
+    projected_rows = []
+    for source in rows:
+        row = _money_fields(source, money_fields)
+        row["invoices"] = [
+            _money_fields(invoice, ("original_amount", "paid_amount", "current_outstanding"))
+            for invoice in (source.get("invoices") or [])
+        ]
+        projected_rows.append(row)
+    return {"party_type": party_type, "aging_data": projected_rows, "summary": {
+        "total": money_json(_amount(rows, "total_outstanding")),
+        "current": money_json(_amount(rows, "current")),
+        "overdue": money_json(_amount(rows, "overdue_amount")),
         "party_count": len(rows),
-        "1_30": _amount(rows, "days_1_30"),
-        "31_60": _amount(rows, "days_31_60"),
-        "61_90": _amount(rows, "days_61_90"),
-        "over_90": _amount(rows, "over_90"),
+        "1_30": money_json(_amount(rows, "days_1_30")),
+        "31_60": money_json(_amount(rows, "days_31_60")),
+        "61_90": money_json(_amount(rows, "days_61_90")),
+        "over_90": money_json(_amount(rows, "over_90")),
         "current_count": _count(rows, "current_count"),
         "1_30_count": _count(rows, "days_1_30_count"),
         "31_60_count": _count(rows, "days_31_60_count"),
@@ -3771,49 +4187,41 @@ def canonical_collection_aging(
     collections = collection_rows[0] if collection_rows else {}
     total_outstanding = _amount(rows, "total_outstanding")
     month_collections = collections.get("month_collections") or 0
-    denominator = total_outstanding + month_collections
-    efficiency = round(float(month_collections / denominator * 100), 1) if denominator else 0
 
     parties = []
     for row in rows:
         outstanding = row.get("total_outstanding") or 0
         overdue_days = int(row.get("max_overdue_days") or 0)
-        credit_limit = row.get("credit_limit") or 0
-        utilization = round(float(outstanding / credit_limit * 100), 1) if credit_limit else 0
-        risk_score = min(100, (40 if overdue_days > 90 else 30 if overdue_days > 60
-                               else 20 if overdue_days > 30 else 10 if overdue_days > 0 else 0)
-                         + (25 if utilization > 90 else 20 if utilization > 75
-                            else 10 if utilization > 50 else 0))
         parties.append({
             "id": row["customer_id"], "partyId": row["party_id"],
             "name": row["customer_name"], "phone": row.get("phone") or "",
             "email": row.get("email") or "", "location": row.get("location") or "",
-            "outstandingAmount": outstanding,
-            "overdueAmount": row.get("overdue_amount") or 0,
-            "daysOverdue": overdue_days, "creditLimit": credit_limit,
-            "creditUtilization": utilization,
+            "outstandingAmount": money_json(outstanding),
+            "overdueAmount": money_json(row.get("overdue_amount") or 0),
+            "daysOverdue": overdue_days,
+            "creditLimit": money_json(row.get("credit_limit") or 0),
             "oldestInvoiceDate": row.get("oldest_invoice_date"),
             "lastPayment": row.get("last_payment_date"),
-            "lastFollowUp": None, "promiseDate": None, "assignedAgent": None,
-            "riskScore": risk_score,
-            "paymentHistory": "Poor" if overdue_days > 90 else "Average" if overdue_days > 30 else "Good",
-            "collectionSuccess": max(0, 100-risk_score),
+            "agingStatus": "overdue" if overdue_days > 0 else "current",
+            "agingBand": ("90+" if overdue_days > 90 else "61-90" if overdue_days > 60
+                          else "31-60" if overdue_days > 30 else "1-30" if overdue_days > 0
+                          else "current"),
             "agingBreakdown": [
-                {"range": "Current", "amount": row.get("current") or 0},
-                {"range": "1-30", "amount": row.get("days_1_30") or 0},
-                {"range": "31-60", "amount": row.get("days_31_60") or 0},
-                {"range": "61-90", "amount": row.get("days_61_90") or 0},
-                {"range": "90+", "amount": row.get("over_90") or 0},
+                {"range": "Current", "amount": money_json(row.get("current") or 0)},
+                {"range": "1-30", "amount": money_json(row.get("days_1_30") or 0)},
+                {"range": "31-60", "amount": money_json(row.get("days_31_60") or 0)},
+                {"range": "61-90", "amount": money_json(row.get("days_61_90") or 0)},
+                {"range": "90+", "amount": money_json(row.get("over_90") or 0)},
             ],
         })
 
     return {"summary": {
-        "totalOutstanding": total_outstanding,
-        "overdueAmount": _amount(rows, "overdue_amount"),
-        "currentDayCollections": collections.get("today_collections") or 0,
-        "currentWeekCollections": collections.get("week_collections") or 0,
-        "currentMonthCollections": month_collections,
-        "collectionEfficiency": efficiency,
+        "totalOutstanding": money_json(total_outstanding),
+        "overdueAmount": money_json(_amount(rows, "overdue_amount")),
+        "currentDayCollections": money_json(collections.get("today_collections") or 0),
+        "currentWeekCollections": money_json(collections.get("week_collections") or 0),
+        "currentMonthCollections": money_json(month_collections),
+        "collectionEfficiency": None,
     }, "parties": parties}
 
 
