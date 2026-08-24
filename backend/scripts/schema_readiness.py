@@ -216,7 +216,13 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
     offenders: list[tuple[Path, int]] = []
     create_pattern = re.compile(r"(?im)^\s*CREATE\s+TABLE\b")
 
+    def is_agent_worktree(path: Path) -> bool:
+        relative_parts = path.relative_to(root).parts
+        return relative_parts[:2] == (".claude", "worktrees")
+
     for path in root.rglob("*.sql"):
+        if is_agent_worktree(path):
+            continue
         resolved = path.resolve()
         if resolved.is_relative_to(bootstrap_root) or resolved.is_relative_to(migration_root):
             continue
@@ -241,6 +247,8 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
     revision_pattern = re.compile(r"(?m)^\s*revision\s*(?::[^=]+)?=")
     alembic_import_pattern = re.compile(r"(?m)^\s*from\s+alembic\s+import\s+op\b")
     for path in root.rglob("*.py"):
+        if is_agent_worktree(path):
+            continue
         resolved = path.resolve()
         if resolved.is_relative_to(migration_root):
             continue

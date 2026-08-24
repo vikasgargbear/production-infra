@@ -149,6 +149,21 @@ def test_competing_ddl_outside_authority_is_reported(tmp_path: Path):
     assert issues[0].path == "database/MASTER_FIX.sql"
 
 
+def test_agent_worktrees_are_not_scanned_as_repository_authority(tmp_path: Path):
+    bootstrap = tmp_path / "database/02-tables"
+    bootstrap.mkdir(parents=True)
+    (bootstrap / "tables.sql").write_text(
+        "CREATE TABLE sales.invoices (invoice_id integer);\n", encoding="utf-8"
+    )
+    agent_copy = tmp_path / ".claude/worktrees/agent/database/schema.sql"
+    agent_copy.parent.mkdir(parents=True)
+    agent_copy.write_text(
+        "CREATE TABLE sales.agent_copy (agent_copy_id integer);\n", encoding="utf-8"
+    )
+
+    assert not schema_readiness.check_competing_ddl(_authority(), tmp_path)
+
+
 def test_alembic_revision_outside_authority_is_reported(tmp_path: Path):
     legacy = tmp_path / "backend/migrations/versions/legacy.py"
     legacy.parent.mkdir(parents=True)
