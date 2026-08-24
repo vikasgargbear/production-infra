@@ -45,6 +45,7 @@ MCP_SHARED_REQUIRED = (
     "MCP_INTERNAL_SERVICE_TOKEN",
     "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
 )
+MCP_OPTIONAL_KEYS = ("MCP_ALLOWED_ORIGINS",)
 OPERATOR_REQUIRED = tuple(dict.fromkeys((*BACKEND_REQUIRED, *MCP_SHARED_REQUIRED)))
 MCP_ALLOWED_ENV_KEYS = frozenset(
     {
@@ -53,6 +54,7 @@ MCP_ALLOWED_ENV_KEYS = frozenset(
         "ERP_API_BASE_URL",
         "MCP_INTERNAL_SERVICE_TOKEN",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+        "MCP_ALLOWED_ORIGINS",
         "MCP_BIND_HOST",
         "MCP_REQUEST_TIMEOUT_SECONDS",
     }
@@ -96,7 +98,7 @@ def load_env_file(path: Optional[Path]) -> Dict[str, str]:
 
 def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
     values = load_env_file(env_file)
-    for key in (*OPERATOR_REQUIRED, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS):
+    for key in (*OPERATOR_REQUIRED, *MCP_OPTIONAL_KEYS, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS):
         if os.getenv(key):
             values[key] = os.environ[key]
     missing = [key for key in OPERATOR_REQUIRED if not values.get(key, "").strip()]
@@ -154,6 +156,9 @@ def mcp_env(
     }
     if mcp_url:
         result["MCP_RESOURCE_SERVER_URL"] = mcp_url.rstrip("/") + "/mcp"
+    for key in MCP_OPTIONAL_KEYS:
+        if values.get(key):
+            result[key] = values[key]
     return result
 
 
@@ -558,7 +563,7 @@ class RenderClient:
 def dry_run_plan(owner_id: str, repo: str, branch: str) -> Dict[str, object]:
     placeholders = {
         key: "${" + key + "}"
-        for key in (*OPERATOR_REQUIRED, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS)
+        for key in (*OPERATOR_REQUIRED, *MCP_OPTIONAL_KEYS, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS)
     }
     return {
         "mode": "dry_run",

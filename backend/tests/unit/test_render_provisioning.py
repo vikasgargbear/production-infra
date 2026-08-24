@@ -76,6 +76,7 @@ def test_dry_run_payloads_match_reviewed_render_contract(capsys):
         "ERP_API_BASE_URL",
         "MCP_INTERNAL_SERVICE_TOKEN",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+        "MCP_ALLOWED_ORIGINS",
     }
     assert all(item["value"].startswith("${") for item in mcp["envVars"])
 
