@@ -98,6 +98,7 @@ from .api.routes import (
     canonical_purchase_order_reads,
     canonical_return_reads,
     canonical_supplier_invoice_reads,
+    canonical_supplier_payment_reads,
 )
 from .api.routes import web_operator_actions
 from .api.routes.internal import (
@@ -268,6 +269,7 @@ api.include_router(canonical_purchase_order_reads.router)
 api.include_router(canonical_goods_receipts.router, tags=["Canonical Goods Receipts"])
 api.include_router(canonical_supplier_invoice_reads.router)
 api.include_router(canonical_return_reads.router)
+api.include_router(canonical_supplier_payment_reads.router)
 
 # --- Master Data ---
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])

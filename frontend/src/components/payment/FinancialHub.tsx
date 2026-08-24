@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './entry/ModularPaymentEntry';
+import PaymentMade from './entry/PaymentMade';
 import FinancialJournalFlow from './flows/FinancialJournalFlow';
 import ExpenseClaimsFlow from './flows/ExpenseClaimsFlow';
 import BankReconciliationFlow from './flows/BankReconciliationFlow';
@@ -37,7 +38,7 @@ interface FinancialModule {
 
 const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   /** All valid sub-module IDs for deep-linking into FinancialHub. */
-  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
+  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
 
   const resolvedDefault =
     initialSubpage && PAYMENT_SUBPAGE_IDS.includes(initialSubpage as any)
@@ -47,12 +48,21 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initi
   const financialModules: FinancialModule[] = [
     {
       id: 'payment-entry',
-      label: 'New Payment',
-      fullLabel: 'Payment Entry',
-      description: 'Record customer & supplier payments',
+      label: 'Customer Receipt',
+      fullLabel: 'Customer Receipt',
+      description: 'Receive and allocate customer payments',
       icon: CreditCard,
       color: 'green',
       component: ModularPaymentEntry
+    },
+    {
+      id: 'supplier-payment',
+      label: 'Supplier Payment',
+      fullLabel: 'Supplier Payment',
+      description: 'Pay posted supplier invoice balances',
+      icon: CreditCard,
+      color: 'green',
+      component: PaymentMade
     },
     {
       id: 'journal-entry',
