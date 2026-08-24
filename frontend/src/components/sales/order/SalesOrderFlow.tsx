@@ -4,7 +4,7 @@
  * Refactored to use useSalesOrderLogic hook and step components
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ShoppingCart, AlertTriangle } from 'lucide-react';
 import {
     ModuleHeader,
@@ -34,6 +34,7 @@ interface SalesOrderFlowProps {
 const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose }) => {
     const [currentStep, setCurrentStep] = useState(1);
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+    const cancelBackButtonRef = useRef<HTMLButtonElement>(null);
 
     // Use the extracted hook for all state and logic
     const {
@@ -71,6 +72,20 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         companyInfo
     } = useSalesOrderLogic();
 
+    /** Ask for confirmation before discarding a partially-filled order. */
+    const handleCancelRequest = useCallback(() => {
+        const hasUnsavedData = Boolean(order.customer_id) || order.items.length > 0;
+        if (hasUnsavedData) {
+            setShowCancelConfirm(true);
+        } else {
+            onClose();
+        }
+    }, [onClose, order.customer_id, order.items.length]);
+
+    useEffect(() => {
+        if (showCancelConfirm) cancelBackButtonRef.current?.focus();
+    }, [showCancelConfirm]);
+
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
@@ -103,27 +118,18 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
             }
 
             if (e.key === 'Escape') {
-                if (showCustomerModal) setShowCustomerModal(false);
+                if (showCancelConfirm) setShowCancelConfirm(false);
+                else if (showCustomerModal) setShowCustomerModal(false);
                 else if (showProductModal) setShowProductModal(false);
                 else if (showImportModal) setShowImportModal(false);
                 else if (currentStep === 2) setCurrentStep(1);
-                else onClose();
+                else handleCancelRequest();
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentStep, showCustomerModal, showProductModal, showImportModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal, onClose]);
-
-    /** Ask for confirmation before discarding a partially-filled order. */
-    const handleCancelRequest = () => {
-        const hasUnsavedData = Boolean(order.customer_id) || order.items.length > 0;
-        if (hasUnsavedData) {
-            setShowCancelConfirm(true);
-        } else {
-            onClose();
-        }
-    };
+    }, [currentStep, handleCancelRequest, showCancelConfirm, showCustomerModal, showProductModal, showImportModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal]);
 
     if (!open) return null;
 
@@ -139,7 +145,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             status={order.status}
                             icon={ShoppingCart}
                             iconColor="text-blue-600"
-                            onClose={onClose}
+                            onClose={handleCancelRequest}
                         />
 
                         <div className="bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
@@ -228,7 +234,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             status={order.status}
                             icon={ShoppingCart}
                             iconColor="text-blue-600"
-                            onClose={onClose}
+                            onClose={handleCancelRequest}
                             additionalActions={[
                                 {
                                     label: "Edit",
@@ -351,6 +357,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         </p>
                         <div className="flex justify-end gap-2 border-t border-gray-200 p-4">
                             <button
+                                ref={cancelBackButtonRef}
                                 type="button"
                                 onClick={() => setShowCancelConfirm(false)}
                                 className="min-h-11 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
