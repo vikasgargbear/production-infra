@@ -15,6 +15,7 @@ import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
 import SupplierEditModal from '../modals/SupplierEditModal';
+import SupplierFlow from '../suppliers/SupplierFlow';
 import { useEntityMaster } from '../hooks';
 
 // ============================================================================
@@ -22,7 +23,7 @@ import { useEntityMaster } from '../hooks';
 // ============================================================================
 
 interface Supplier {
-  supplier_id: number;
+  supplier_id: number | string;
   supplier_code?: string;
   supplier_name: string;
   supplier_type?: string;
@@ -371,8 +372,15 @@ const SupplierMaster: React.FC = () => {
         )}
       </ContentCard>
 
-      {/* Supplier Edit/Add Modal */}
-      {(showAddModal || editingEntity) && (
+      {/* Canonical online create flow; legacy modal remains edit-only. */}
+      {showAddModal && !editingEntity && (
+        <SupplierFlow
+          open={true}
+          onSupplierCreated={handleSaved}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+      {editingEntity && (
         <SupplierEditModal
           isOpen={true}
           onSave={(updatedSupplier) => {

@@ -8,6 +8,7 @@ only a non-transactional draft.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -25,13 +26,21 @@ from ..schemas.master.customer import CustomerCreate
 from ..schemas.master.supplier import SupplierCreate
 
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
+logger = logging.getLogger(__name__)
 
 
 def _activate(db: Session, user: Dict[str, Any]) -> UUID:
     org_id = UUID(str(user["org_id"]))
     db.execute(
-        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
-        {"auth_user_id": UUID(str(user["auth_user_id"])), "org_id": org_id},
+        text("""
+            SELECT erp_security.activate_context(:auth_user_id, :org_id),
+                   pg_catalog.set_config('app.request_id', :request_id, true)
+        """),
+        {
+            "auth_user_id": UUID(str(user["auth_user_id"])),
+            "org_id": org_id,
+            "request_id": str(uuid4()),
+        },
     )
     return org_id
 
@@ -244,7 +253,18 @@ def create_product_draft(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Product code already exists") from exc
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        logger.warning(
+            "Canonical product draft insert rejected by constraint=%s",
+            constraint_name or "unknown",
+            exc_info=True,
+        )
+        detail = (
+            "Product code already exists"
+            if constraint_name == "products_sku_uq"
+            else "Product draft does not satisfy the canonical catalog rules"
+        )
+        raise HTTPException(status_code=409, detail=detail) from exc
 
     return {
         "product_id": created.id,

@@ -14,6 +14,7 @@ import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
 import CustomerEditModal from '../modals/CustomerEditModal';
+import CustomerFlow from '../customers/CustomerFlow';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
 
@@ -335,8 +336,15 @@ const CustomerMaster: React.FC = () => {
         )}
       </ContentCard>
 
-      {/* Customer Edit/Add Modal */}
-      {(showAddModal || editingEntity) && (
+      {/* Canonical online create flow; legacy modal remains edit-only. */}
+      {showAddModal && !editingEntity && (
+        <CustomerFlow
+          open={true}
+          onClose={() => setShowAddModal(false)}
+          onCustomerCreated={handleSaved}
+        />
+      )}
+      {editingEntity && (
         <CustomerEditModal
           isOpen={true}
           onClose={() => {
