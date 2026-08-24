@@ -1,0 +1,28 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const source = readFileSync(join(__dirname, 'StockAdjustmentFlow.tsx'), 'utf8');
+
+describe('StockAdjustmentFlow canonical lifecycle contract', () => {
+  it('uses server-resolved cycle-count authority and exact command payloads', () => {
+    expect(source).toContain('loadCycleCountEligibility');
+    expect(source).toContain('buildCycleCountGainPayload');
+    expect(source).toContain("reason: 'cycle_count'");
+    expect(source).not.toContain('parseInt(');
+    expect(source).not.toContain('adjustment_type: adjustmentData.adjustment_type');
+  });
+
+  it('preserves separate approval, requester execution, and authoritative readback', () => {
+    expect(source).toContain('loadCycleCountReview');
+    expect(source).toContain('approveCycleCountReview');
+    expect(source).toContain('executeApprovedCycleCount');
+    expect(source).toContain('loadAndVerifyCycleCountReadback');
+    expect(source).not.toContain('approveAndExecuteCanonicalAction');
+  });
+
+  it('does not let preview-only CSV rows masquerade as resolved stock', () => {
+    expect(source).toContain('Server resolution required');
+    expect(source).not.toContain('Use validated rows');
+    expect(source).not.toContain('Validated CSV rows loaded for review');
+  });
+});
