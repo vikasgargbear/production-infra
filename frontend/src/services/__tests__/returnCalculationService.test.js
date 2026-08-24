@@ -2,15 +2,6 @@
 jest.mock('../api/modules/sales/returnCalculations.api', () => ({
   returnCalculationsApi: { preview: jest.fn() }
 }));
-jest.mock('../enterpriseCalculator', () => ({
-  __esModule: true,
-  default: {
-    calculateSalesReturn: jest.fn(),
-    calculatePurchaseReturn: jest.fn()
-  }
-}));
-
-import EnterpriseCalculator from '../enterpriseCalculator';
 import { returnCalculationsApi } from '../api/modules/sales/returnCalculations.api';
 import { calculateReturnPreview } from '../calculations/returnCalculationService';
 
@@ -40,7 +31,7 @@ test('uses backend return preview and maps GST withholding when online', async (
     }
   });
 
-  const result = await calculateReturnPreview(salesReturn, 'sales', true);
+  const result = await calculateReturnPreview(salesReturn, 'sales');
 
   expect(returnCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
     return_type: 'sales',
@@ -48,18 +39,13 @@ test('uses backend return preview and maps GST withholding when online', async (
     include_gst: false,
     items: [expect.objectContaining({ return_quantity: 3, free_quantity: 1 })]
   }));
-  expect(EnterpriseCalculator.calculateSalesReturn).not.toHaveBeenCalled();
   expect(result.totals).toEqual(expect.objectContaining({ final_amount: 200 }));
 });
 
-test('uses explicit offline return calculator without an online error fallback', async () => {
-  EnterpriseCalculator.calculatePurchaseReturn.mockReturnValue({
-    items: [],
-    totals: { total_amount: 100 }
-  });
+test('fails closed when the authoritative return preview is unavailable', async () => {
+  returnCalculationsApi.preview.mockRejectedValueOnce(new Error('API unavailable'));
 
-  await calculateReturnPreview({ items: [] }, 'purchase', false);
-
-  expect(EnterpriseCalculator.calculatePurchaseReturn).toHaveBeenCalled();
-  expect(returnCalculationsApi.preview).not.toHaveBeenCalled();
+  await expect(calculateReturnPreview({ items: [] }, 'purchase')).rejects.toThrow(
+    'API unavailable'
+  );
 });
