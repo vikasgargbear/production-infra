@@ -8,26 +8,19 @@ import {
     extractDocumentCollection,
     extractDocumentDetail,
     projectCanonicalImportLines,
+    type CanonicalImportLine,
 } from '../../utils/documentImport';
+import type {
+    ChallanItem,
+    CustomerDetails,
+    ImportData,
+} from '../types/challanTypes';
 
-interface DocumentItem {
-    product_id: string;
+interface DocumentItem extends Partial<CanonicalImportLine> {
+    product_id: string | number;
     product_name: string;
-    hsn_code?: string;
     quantity: number;
-    unit?: string;
-    mrp?: number;
-    unit_price?: number;
-    selling_price?: number;
-    tax_percent?: number;
-    gst_percent?: number;
-    manufacturer?: string;
-    category?: string;
-    batch_id?: string;
-    batch_number?: string;
-    expiry_date?: string;
-    free_quantity?: number;
-    discount_percent?: number;
+    batch_allocations?: unknown[];
 }
 
 interface Document {
@@ -35,9 +28,9 @@ interface Document {
     order_id?: string;
     invoice_number?: string;
     order_number?: string;
-    customer_id: string;
+    customer_id: string | number;
     customer_name: string;
-    customer_details?: any;
+    customer_details?: CustomerDetails;
     billing_address?: string;
     billing_city?: string;
     billing_state?: string;
@@ -54,20 +47,6 @@ interface Document {
     order_date?: string;
     total_amount?: number;
     payment_status?: string;
-}
-
-interface ImportData {
-    customer_id: string;
-    customer_name: string;
-    customer_details: any;
-    billing_address?: string;
-    delivery_address?: string;
-    delivery_city?: string;
-    delivery_state?: string;
-    delivery_pincode?: string;
-    items: any[];
-    reference_doc: string;
-    notes: string;
 }
 
 interface ImportFromInvoiceModalProps {
@@ -165,6 +144,10 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 sourceDoc.items || sourceDoc.invoice_items,
                 { requireBatch: true },
             );
+            const challanItems: ChallanItem[] = importableItems.map((item, index) => ({
+                ...item,
+                id: `imported-${Date.now()}-${index}`,
+            }));
 
             const importData: ImportData = {
                 customer_id: sourceDoc.customer_id,
@@ -184,32 +167,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 delivery_city: sourceDoc.shipping_city || sourceDoc.billing_city,
                 delivery_state: sourceDoc.shipping_state || sourceDoc.billing_state,
                 delivery_pincode: sourceDoc.shipping_pincode || sourceDoc.billing_pincode,
-                items: importableItems.map(item => ({
-                    id: Date.now() + Math.random(),
-                    product_id: item.product_id,
-                    product_name: item.product_name,
-                    hsn_code: item.hsn_code,
-                    quantity: item.quantity,
-                    unit: item.unit || 'NOS',
-                    mrp: item.mrp,
-                    unit_price: item.unit_price,
-                    gst_percent: item.gst_percent,
-                    manufacturer: item.manufacturer,
-                    category: item.category,
-                    batch_id: item.batch_id,
-                    batch_number: item.batch_number,
-                    expiry_date: item.expiry_date,
-                    source_line_id: item.source_line_id,
-                    source_allocation_kind: item.source_allocation_kind,
-                    allocation_id: item.allocation_id,
-                    inventory_document_id: item.inventory_document_id,
-                    inventory_document_line_id: item.inventory_document_line_id,
-                    invoice_dispatch_allocation_id: item.invoice_dispatch_allocation_id,
-                    dispatch_id: item.dispatch_id,
-                    dispatch_line_id: item.dispatch_line_id,
-                    free_quantity: item.free_quantity,
-                    discount_percent: item.discount_percent,
-                })),
+                items: challanItems,
                 reference_doc: searchType === 'invoice' ?
                     `Invoice: ${sourceNumber}` :
                     `Order: ${sourceNumber}`,

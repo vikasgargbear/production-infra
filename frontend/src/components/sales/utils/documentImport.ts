@@ -39,17 +39,54 @@ export function extractDocumentDetail(
     return normalized;
 }
 
-export interface CanonicalImportLine extends Record<string, unknown> {
+export type CanonicalAllocationSourceKind = 'direct_issue' | 'dispatch_allocation';
+export type FreeSupplyTaxTreatment =
+    | 'excluded_from_taxable_value'
+    | 'included_at_unit_rate';
+
+export interface CanonicalImportLine {
     product_id: string | number;
     product_name: string;
-    batch_id: string | number;
+    product_code?: string;
+    hsn_code?: string;
+    batch_id: string | number | null;
     batch_number: string;
+    expiry_date: string | null;
     quantity: number;
+    free_quantity: number;
     unit_price: number;
+    sale_price: number;
+    mrp?: number;
+    unit?: string;
+    uom_code?: string;
+    manufacturer?: string;
+    category?: string;
+    gst_percent: number;
+    tax_percent?: number;
+    discount_percent: number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    taxable_amount?: number;
+    cgst_amount?: number;
+    sgst_amount?: number;
+    igst_amount?: number;
+    cess_amount?: number;
+    tax_amount?: number;
+    total_tax_amount?: number;
+    line_total?: number;
+    total?: number;
+    source_line_id?: string | number;
+    source_allocation_kind?: CanonicalAllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
 }
 
-interface CanonicalExecutedBatchAllocation extends Record<string, unknown> {
-    source_kind: 'direct_issue' | 'dispatch_allocation';
+interface CanonicalExecutedBatchAllocation {
+    source_kind: CanonicalAllocationSourceKind;
     allocation_id: string;
     command_request_id?: string | null;
     inventory_document_id: string;
@@ -76,6 +113,17 @@ const finiteNumber = (value: unknown): number | null => {
 
 const quantitiesMatch = (left: number, right: number): boolean =>
     Math.abs(left - right) <= 0.000001;
+
+const optionalFreeSupplyTaxTreatment = (
+    value: unknown,
+    lineIndex: number,
+): FreeSupplyTaxTreatment | undefined => {
+    if (value === undefined || value === null) return undefined;
+    if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') {
+        return value;
+    }
+    throw new Error(`Line ${lineIndex + 1} has an invalid free-supply tax treatment.`);
+};
 
 const moneyFields = [
     'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'cess_amount',
@@ -255,9 +303,8 @@ const projectExecutedAllocations = (
     ));
     const monetarySplits = splitMoney(item, monetaryWeights);
     return allocations.map((allocation, allocationIndex) => ({
-        ...item,
         ...monetarySplits[allocationIndex],
-        source_line_id: item.id,
+        source_line_id: item.id as string | number | undefined,
         source_allocation_kind: allocation.source_kind,
         allocation_id: allocation.allocation_id,
         command_request_id: allocation.command_request_id ?? null,
@@ -268,6 +315,8 @@ const projectExecutedAllocations = (
         dispatch_line_id: allocation.dispatch_line_id ?? null,
         product_id: (item.product_id ?? item.id) as string | number,
         product_name: String(item.product_name ?? item.name ?? '').trim(),
+        product_code: typeof item.product_code === 'string' ? item.product_code : undefined,
+        hsn_code: typeof item.hsn_code === 'string' ? item.hsn_code : undefined,
         batch_id: allocation.batch_id,
         batch_number: String(allocation.batch_number).trim(),
         expiry_date: allocation.expiry_date ?? null,
@@ -275,8 +324,15 @@ const projectExecutedAllocations = (
         free_quantity: quantities[allocationIndex].free,
         unit_price: unitPrice,
         sale_price: unitPrice,
+        mrp: finiteNumber(item.mrp) ?? undefined,
+        unit: typeof item.unit === 'string' ? item.unit : undefined,
+        uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
+        manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
+        category: typeof item.category === 'string' ? item.category : undefined,
         gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
+        tax_percent: finiteNumber(item.tax_percent ?? item.tax_rate) ?? undefined,
         discount_percent: finiteNumber(item.discount_percent) ?? 0,
+        free_supply_tax_treatment: freeTreatment as FreeSupplyTaxTreatment,
     }));
 };
 
@@ -338,17 +394,29 @@ export function projectCanonicalImportLines(
         }
 
         projected.push({
-            ...item,
             product_id: productId as string | number,
             product_name: productName,
-            batch_id: batchId as string | number,
+            product_code: typeof item.product_code === 'string' ? item.product_code : undefined,
+            hsn_code: typeof item.hsn_code === 'string' ? item.hsn_code : undefined,
+            batch_id: (batchId ?? null) as string | number | null,
             batch_number: batchNumber,
+            expiry_date: typeof item.expiry_date === 'string' ? item.expiry_date : null,
             quantity,
             unit_price: unitPrice,
             sale_price: unitPrice,
+            mrp: finiteNumber(item.mrp) ?? undefined,
+            unit: typeof item.unit === 'string' ? item.unit : undefined,
+            uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
+            manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
+            category: typeof item.category === 'string' ? item.category : undefined,
             gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
+            tax_percent: finiteNumber(item.tax_percent ?? item.tax_rate) ?? undefined,
             free_quantity: freeQuantity,
             discount_percent: finiteNumber(item.discount_percent) ?? 0,
+            free_supply_tax_treatment: optionalFreeSupplyTaxTreatment(
+                item.free_supply_tax_treatment,
+                index,
+            ),
         });
     });
     return projected;

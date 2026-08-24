@@ -14,13 +14,16 @@ export interface OrderItem {
     product_name: string;
     product_code?: string;
     hsn_code?: string;
-    batch_id?: number | string;
+    batch_id?: number | string | null;
     batch_number?: string;
-    expiry_date?: string;
+    expiry_date?: string | null;
 
     // Quantities
     quantity: number;
     free_quantity?: number;
+    free_supply_tax_treatment?:
+        | 'excluded_from_taxable_value'
+        | 'included_at_unit_rate';
 
     // Pricing
     unit_price: number;

@@ -12,6 +12,10 @@ export type ChallanStatus = 'draft' | 'pending' | 'dispatched' | 'delivered' | '
 
 /** Delivery type values */
 export type DeliveryType = 'PICKUP' | 'SAME_DAY' | 'NEXT_DAY' | 'EXPRESS' | 'STANDARD';
+export type FreeSupplyTaxTreatment =
+    | 'excluded_from_taxable_value'
+    | 'included_at_unit_rate';
+export type AllocationSourceKind = 'direct_issue' | 'dispatch_allocation';
 
 // ==================== CUSTOMER ====================
 
@@ -42,10 +46,11 @@ export interface ChallanItem {
     product_name: string;
     product_code?: string;
     hsn_code?: string;
-    batch_id?: string | number;
+    batch_id?: string | number | null;
     batch_number?: string;
-    expiry_date?: string;
+    expiry_date?: string | null;
     quantity: number;
+    free_quantity?: number;
     unit?: string;
     base_uom?: string;
     uom_code?: string;
@@ -54,13 +59,28 @@ export interface ChallanItem {
     sale_price?: number;
     gst_percent?: number;
     tax_percent?: number;
+    discount_percent?: number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     taxable_amount?: number;
+    cgst_amount?: number;
+    sgst_amount?: number;
+    igst_amount?: number;
+    cess_amount?: number;
     tax_amount?: number;
     total_tax_amount?: number;
     total?: number;
     line_total?: number;
     manufacturer?: string;
     category?: string;
+    source_line_id?: string | number;
+    source_allocation_kind?: AllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
 }
 
 // ==================== TRANSPORT DETAILS ====================
@@ -100,7 +120,7 @@ export interface Challan {
     delivery_status?: string;  // DB field
 
     // Customer - DB: customer_id (integer NOT NULL)
-    customer_id: number;  // REQUIRED - DB: integer NOT NULL (changed from string | number)
+    customer_id: string | number;
     customer_name: string;
     customer_details: CustomerDetails | null;
 
@@ -171,6 +191,7 @@ export interface ImportData {
     delivery_state?: string;
     delivery_pincode?: string;
     items?: ChallanItem[];
+    reference_doc?: string;
     notes?: string;
 }
 

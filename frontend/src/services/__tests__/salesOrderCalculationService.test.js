@@ -80,18 +80,28 @@ test('preserves canonical UUID identities in the server request', async () => {
     items: [{
       ...order.items[0],
       product_id: '10000000-0000-4000-8000-000000000002',
-      batch_id: '10000000-0000-4000-8000-000000000003'
+      batch_id: '10000000-0000-4000-8000-000000000003',
+      free_quantity: 1,
+      free_supply_tax_treatment: 'included_at_unit_rate'
     }]
   };
 
-  await calculateSalesOrderPreview(canonicalOrder, true);
+  const result = await calculateSalesOrderPreview(canonicalOrder, true);
 
   expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
     customer_id: canonicalOrder.customer_id,
     gst_type: 'CGST/SGST',
     items: [expect.objectContaining({
       product_id: canonicalOrder.items[0].product_id,
-      batch_id: canonicalOrder.items[0].batch_id
+      batch_id: canonicalOrder.items[0].batch_id,
+      free_quantity: 1,
+      free_supply_tax_treatment: 'included_at_unit_rate'
     })]
+  }));
+  expect(result.items[0]).toEqual(expect.objectContaining({
+    product_id: canonicalOrder.items[0].product_id,
+    batch_id: canonicalOrder.items[0].batch_id,
+    free_quantity: 1,
+    free_supply_tax_treatment: 'included_at_unit_rate'
   }));
 });

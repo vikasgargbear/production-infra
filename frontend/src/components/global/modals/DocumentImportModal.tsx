@@ -1,28 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Search, FileText, Calendar, CheckCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { projectCanonicalImportLines } from '../../sales/utils/documentImport';
-
-interface DocumentItem {
-  item_id?: number;
-  product_id: string | number;
-  product_name: string;
-  product_code?: string;
-  batch_id?: string;
-  batch_number?: string;
-  hsn_code?: string;
-  expiry_date?: string;
-  quantity: number;
-  dispatched_quantity?: number;
-  mrp?: number;
-  unit_price?: number;
-  sale_price?: number;
-  discount_percent?: number;
-  free_quantity?: number;
-  gst_percent?: number;
-  tax_rate?: number;
-  available_quantity?: number;
-}
+import {
+  projectCanonicalImportLines,
+  type CanonicalImportLine,
+} from '../../sales/utils/documentImport';
 
 export interface ImportData {
   source_type: string;
@@ -33,7 +15,7 @@ export interface ImportData {
   customer?: any;
   billing_address?: string;
   shipping_address?: string;
-  items: DocumentItem[];
+  items: CanonicalImportLine[];
   transport_details?: any;
   delivery_details?: any;
   payment_details?: any;
@@ -121,7 +103,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
       const formattedItems = projectCanonicalImportLines(
         sourceDocument.items || sourceDocument.line_items,
         { requireBatch: true },
-      ) as DocumentItem[];
+      );
 
       const customerDetails = sourceDocument.customer_details
         || sourceDocument.customer

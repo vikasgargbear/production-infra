@@ -28,7 +28,9 @@ describe('ImportFromInvoiceModal executed allocation mapping', () => {
             items: [{
                 id: 'line-1', product_id: 'product-1', product_name: 'Carton',
                 quantity: 3, free_quantity: 1, unit_price: 100,
-                free_supply_tax_treatment: 'excluded_from_taxable_value',
+                free_supply_tax_treatment: 'included_at_unit_rate',
+                taxable_amount: 300, cgst_amount: 18, sgst_amount: 18,
+                cess_amount: 2, line_total: 338,
                 batch_allocations: [
                     {
                         source_kind: 'dispatch_allocation', command_request_id: null,
@@ -69,6 +71,9 @@ describe('ImportFromInvoiceModal executed allocation mapping', () => {
             expect.objectContaining({
                 batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
                 quantity: 1, free_quantity: 1,
+                free_supply_tax_treatment: 'included_at_unit_rate',
+                taxable_amount: 150, cgst_amount: 9, sgst_amount: 9,
+                cess_amount: 1, line_total: 169,
                 inventory_document_line_id: 'inventory-line-1',
                 invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
                 dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
@@ -76,6 +81,9 @@ describe('ImportFromInvoiceModal executed allocation mapping', () => {
             expect.objectContaining({
                 batch_id: 'batch-2', batch_number: 'BATCH-2', expiry_date: '2028-09-01',
                 quantity: 2, free_quantity: 0,
+                free_supply_tax_treatment: 'included_at_unit_rate',
+                taxable_amount: 150, cgst_amount: 9, sgst_amount: 9,
+                cess_amount: 1, line_total: 169,
                 inventory_document_line_id: 'inventory-line-2',
                 invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
                 dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-2',

@@ -62,6 +62,8 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
             batch_number: item.batch_number,
             quantity: numeric(item.quantity),
             free_quantity: numeric(item.free_quantity),
+            free_supply_tax_treatment: item.free_supply_tax_treatment
+                ?? 'excluded_from_taxable_value',
             unit_price: numeric(item.unit_price),
             mrp: numeric(item.mrp, numeric(item.unit_price)),
             discount_percent: numeric(item.discount_percent),
@@ -83,6 +85,12 @@ export function normalizeSalesOrderPreview(
     const items = data.line_items.map((line, index) => ({
         ...(order.items[index] || {}),
         ...line,
+        product_id: order.items[index]?.product_id,
+        batch_id: order.items[index]?.batch_id,
+        free_quantity: numeric(order.items[index]?.free_quantity),
+        free_supply_tax_treatment:
+            order.items[index]?.free_supply_tax_treatment
+            ?? 'excluded_from_taxable_value',
         gst_amount: line.total_tax_amount,
         tax_amount: line.total_tax_amount,
         total_amount: line.line_total,

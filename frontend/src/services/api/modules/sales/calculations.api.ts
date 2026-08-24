@@ -8,6 +8,9 @@ export interface InvoiceCalculationLine {
     product_id?: number | string;
     quantity: number | string;
     free_quantity?: number | string;
+    free_supply_tax_treatment?:
+        | 'excluded_from_taxable_value'
+        | 'included_at_unit_rate';
     unit_price: number | string;
     discount_percent?: number | string;
     gst_percent?: number | string;
@@ -26,9 +29,19 @@ export interface InvoiceCalculationRequest {
     discount_amount?: number | string;
 }
 
+export interface InvoiceCalculationPreviewLine extends Record<string, unknown> {
+    free_supply_tax_treatment?:
+        | 'excluded_from_taxable_value'
+        | 'included_at_unit_rate';
+    line_total?: number;
+    total_tax_amount?: number;
+    total_tax?: number;
+    taxable_amount?: number;
+}
+
 export interface InvoiceCalculationResponse {
     success: true;
-    line_items: Array<Record<string, number>>;
+    line_items: InvoiceCalculationPreviewLine[];
     totals: Record<string, number>;
     calculation_timestamp: number;
     gst_type: 'CGST/SGST' | 'IGST';
@@ -45,6 +58,9 @@ export interface SalesOrderCalculationRequest {
         batch_number?: string;
         quantity: number;
         free_quantity?: number;
+        free_supply_tax_treatment?:
+            | 'excluded_from_taxable_value'
+            | 'included_at_unit_rate';
         unit_price: number;
         mrp?: number;
         discount_percent?: number;

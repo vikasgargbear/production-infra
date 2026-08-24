@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Search, Truck, ShoppingCart, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ordersApi, challansApi } from '../../../services/api';
@@ -8,9 +8,10 @@ import {
   extractDocumentCollection,
   extractDocumentDetail,
   projectCanonicalImportLines,
+  type CanonicalImportLine,
 } from '../utils/documentImport';
 
-interface DocumentItem {
+interface DocumentItem extends Partial<CanonicalImportLine> {
   item_id?: number;
   product_id: string;
   product_name: string;
@@ -18,7 +19,7 @@ interface DocumentItem {
   batch_id?: string;
   batch_number?: string;
   hsn_code?: string;
-  expiry_date?: string;
+  expiry_date?: string | null;
   quantity: number;
   dispatched_quantity?: number;
   mrp?: number;
@@ -60,7 +61,7 @@ interface Document {
 
 interface ImportData {
   customer: Record<string, unknown>;
-  items: DocumentItem[];
+  items: CanonicalImportLine[];
   delivery_details: {
     delivery_type: 'DELIVERY';
     delivery_charges: number;
@@ -84,13 +85,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
   const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
   useEscapeKey(onClose, isOpen, 'ImportDocumentModal');
 
-  useEffect(() => {
-    if (isOpen) {
-      loadDocuments();
-    }
-  }, [isOpen, documentType]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     setSelectedDoc(null);
@@ -127,11 +122,17 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentType]);
+
+  useEffect(() => {
+    if (isOpen) {
+      void loadDocuments();
+    }
+  }, [isOpen, loadDocuments]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      loadDocuments();
+      void loadDocuments();
       return;
     }
 
@@ -196,7 +197,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
         items: projectCanonicalImportLines(
           sourceDoc.items || sourceDoc.order_items,
           { requireBatch: true },
-        ) as DocumentItem[],
+        ),
         delivery_details: {
           delivery_type: 'DELIVERY',
           delivery_charges: 0,

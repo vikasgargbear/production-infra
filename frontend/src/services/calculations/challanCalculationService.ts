@@ -1,7 +1,7 @@
 /** Boundary between delivery-challan UI state and backend-owned calculations. */
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import { challanCalculationsApi } from '../api/modules/sales/calculations.api';
+import type { Challan } from '../../components/sales/challan/types/challanTypes';
 
 
 function numeric(value: unknown): number {
@@ -9,23 +9,24 @@ function numeric(value: unknown): number {
     return Number.isFinite(result) ? result : 0;
 }
 
-export async function calculateChallanPreview(challan: any, isOnline: boolean) {
+function canonicalIdentity(value: string | number, label: string): string | number {
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+    throw new Error(`Select a valid ${label} before calculating a delivery challan.`);
+}
+
+export async function calculateChallanPreview(challan: Challan, isOnline: boolean) {
     if (!isOnline) {
-        const local = EnterpriseCalculator.calculateChallan(challan);
-        return {
-            items: local.items || [],
-            totals: local.totals || {},
-            gst_type: challan.gst_type || 'CGST/SGST'
-        };
+        throw new Error('Delivery challan preview requires the live API');
     }
 
-    const customerId = numeric(challan.customer_id);
-    if (customerId <= 0) {
-        throw new Error('Select a customer before calculating a delivery challan.');
-    }
-    const items = (challan.items || []).map((item: any) => ({
-        product_id: numeric(item.product_id) || undefined,
+    const customerId = canonicalIdentity(challan.customer_id, 'customer');
+    const items = challan.items.map(item => ({
+        product_id: canonicalIdentity(item.product_id, 'product'),
         quantity: numeric(item.quantity),
+        free_quantity: numeric(item.free_quantity),
+        free_supply_tax_treatment: item.free_supply_tax_treatment
+            ?? 'excluded_from_taxable_value',
         unit_price: numeric(item.unit_price ?? item.sale_price),
         discount_percent: numeric(item.discount_percent),
         gst_percent: numeric(item.gst_percent ?? item.tax_percent)
@@ -40,6 +41,12 @@ export async function calculateChallanPreview(challan: any, isOnline: boolean) {
         items: data.line_items.map((line, index) => ({
             ...(challan.items[index] || {}),
             ...line,
+            product_id: challan.items[index]?.product_id,
+            batch_id: challan.items[index]?.batch_id,
+            free_quantity: numeric(challan.items[index]?.free_quantity),
+            free_supply_tax_treatment:
+                challan.items[index]?.free_supply_tax_treatment
+                ?? 'excluded_from_taxable_value',
             total: numeric(line.line_total),
             line_total: numeric(line.line_total)
         })),

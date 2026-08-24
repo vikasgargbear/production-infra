@@ -245,6 +245,9 @@ describe('Sales document import envelope normalization', () => {
         [{ product_id: 'p', product_name: 'Product', quantity: 1, unit_price: 10 }, 'batch allocation'],
         [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B', quantity: 0, unit_price: 10 }, 'positive billed or free quantity'],
         [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B', quantity: 1 }, 'canonical rate'],
+        [{ product_id: 'p', product_name: 'Product', batch_id: 'b', batch_number: 'B',
+            quantity: 1, unit_price: 10, free_supply_tax_treatment: 'unknown' },
+        'invalid free-supply tax treatment'],
     ])('fails closed for incomplete canonical line %#', (line, message) => {
         expect(() => projectCanonicalImportLines([line])).toThrow(message);
     });

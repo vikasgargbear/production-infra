@@ -67,9 +67,9 @@ export interface BaseLineItem {
     product_name: string;
 
     // Batch - backend uses batch_number
-    batch_id?: string | number;
+    batch_id?: string | number | null;
     batch_number?: string;
-    expiry_date?: string;
+    expiry_date?: string | null;
 
     // Quantity
     quantity: number;
@@ -124,8 +124,7 @@ export type OnItemRemove = (indexOrId: number | string) => void;
 /** Common state and handlers returned by all sales logic hooks */
 export interface BaseSalesHookReturn<
     TDocument,
-    TCustomer extends BaseCustomer = BaseCustomer,
-    TItem extends BaseLineItem = BaseLineItem
+    TCustomer extends BaseCustomer = BaseCustomer
 > {
     // Document state
     document: TDocument;
