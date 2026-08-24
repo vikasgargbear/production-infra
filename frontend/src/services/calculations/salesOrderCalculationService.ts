@@ -76,7 +76,6 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
             mrp: numeric(item.mrp, numeric(item.unit_price)),
             discount_percent: numeric(item.discount_percent),
             tax_percent: numeric(item.gst_percent),
-            gst_type: order.gst_type || 'CGST/SGST',
             uom: item.uom || item.unit,
             pack_type: item.pack_type
         })),

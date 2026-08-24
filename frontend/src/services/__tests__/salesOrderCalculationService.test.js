@@ -95,20 +95,42 @@ test('preserves canonical UUID identities in the server request', async () => {
 
   const result = await calculateSalesOrderPreview(canonicalOrder, true);
 
-  expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
+  expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith({
     customer_id: canonicalOrder.customer_id,
     gst_type: 'CGST/SGST',
-    items: [expect.objectContaining({
+    order_date: '2026-08-19',
+    delivery_date: undefined,
+    items: [{
       product_id: canonicalOrder.items[0].product_id,
       batch_id: canonicalOrder.items[0].batch_id,
+      batch_number: undefined,
+      quantity: 2,
       free_quantity: 1,
-      free_supply_tax_treatment: 'included_at_unit_rate'
-    })]
-  }));
+      free_supply_tax_treatment: 'included_at_unit_rate',
+      unit_price: 100,
+      mrp: 100,
+      discount_percent: 5,
+      tax_percent: 18,
+      uom: undefined,
+      pack_type: undefined
+    }],
+    delivery_charges: 12,
+    other_charges: 0
+  });
+  expect(salesOrderCalculationsApi.preview.mock.calls[0][0].items[0]).not.toHaveProperty(
+    'gst_type'
+  );
   expect(result.items[0]).toEqual(expect.objectContaining({
     product_id: canonicalOrder.items[0].product_id,
     batch_id: canonicalOrder.items[0].batch_id,
     free_quantity: 1,
     free_supply_tax_treatment: 'included_at_unit_rate'
   }));
+  expect(result.totals).toEqual({
+    total_tax_amount: 12,
+    final_amount: 112,
+    tax_amount: 12,
+    total_amount: 112,
+    round_off: undefined
+  });
 });

@@ -3,6 +3,9 @@
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+import pytest
+from pydantic import ValidationError
+
 from app.api.schemas.calculations import SalesOrderCalculationRequest
 from app.api.services.sales.order.order_service import OrderService
 
@@ -191,3 +194,25 @@ def test_sales_order_uuid_lines_preserve_free_supply_treatment():
     )
     assert response.line_items[0].product_id == product_id
     assert response.line_items[0].batch_id == batch_id
+
+
+def test_sales_order_gst_type_is_document_level_only():
+    customer_id, product_id = uuid4(), uuid4()
+    payload = {
+        "customer_id": str(customer_id),
+        "gst_type": "IGST",
+        "items": [{
+            "product_id": str(product_id),
+            "quantity": "2",
+            "unit_price": "100",
+            "tax_percent": "18",
+        }],
+    }
+
+    request = SalesOrderCalculationRequest.model_validate(payload)
+    assert request.gst_type == "IGST"
+    assert request.items[0].product_id == product_id
+
+    payload["items"][0]["gst_type"] = "IGST"
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        SalesOrderCalculationRequest.model_validate(payload)

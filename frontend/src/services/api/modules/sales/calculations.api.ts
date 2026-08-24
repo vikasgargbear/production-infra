@@ -65,7 +65,6 @@ export interface SalesOrderCalculationRequest {
         mrp?: number;
         discount_percent?: number;
         tax_percent?: number;
-        gst_type?: string;
         uom?: string;
         pack_type?: string;
     }>;
