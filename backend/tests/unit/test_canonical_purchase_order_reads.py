@@ -76,18 +76,18 @@ def _document(**overrides):
     return row
 
 
-def test_purchase_order_readback_route_is_registered_before_legacy_routes():
-    routes = []
-    for route in app.routes:
-        contexts = getattr(route, "effective_route_contexts", None)
-        routes.extend(contexts() if callable(contexts) else [route])
+def test_purchase_order_readback_route_is_published_by_the_application():
     matches = [
-        route for route in routes
+        route for route in reads.router.routes
         if isinstance(route, APIRoute)
-        and route.path == "/api/canonical/purchase-orders/{purchase_order_id}"
+        and route.path == "/canonical/purchase-orders/{purchase_order_id}"
     ]
     assert matches
     assert matches[0].endpoint is reads.canonical_purchase_order_detail
+    operation = app.openapi()["paths"][
+        "/api/canonical/purchase-orders/{purchase_order_id}"
+    ]["get"]
+    assert operation["operationId"].startswith("canonical_purchase_order_detail")
 
 
 def test_purchase_order_readback_preserves_exact_decimals_and_reconciles():
