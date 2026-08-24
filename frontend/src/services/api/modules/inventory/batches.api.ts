@@ -10,7 +10,7 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface BatchParams {
-    product_id?: number;
+    product_id?: number | string;
     expiring_soon?: boolean;
     expired?: boolean;
     days?: number;
@@ -19,7 +19,7 @@ export interface BatchParams {
 }
 
 export interface BatchData {
-    product_id: number;
+    product_id: number | string;
     batch_number: string;
     manufacturing_date?: string;
     expiry_date: string;
@@ -36,7 +36,7 @@ export interface BatchData {
 
 const ENDPOINTS = {
     BASE: '/inventory/batches/',
-    BY_PRODUCT: (id: number) => `/products/${id}/batches`,
+    BY_PRODUCT: (id: number | string) => `/products/${id}/batches`,
     EXPIRING: '/inventory/batches/expiring',
     EXPIRED: '/inventory/batches/expired'
 } as const;
@@ -54,7 +54,7 @@ export const batchesApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${batchId}`);
     },
 
-    getByProduct: (productId: number, params: BatchParams = {}): Promise<AxiosResponse> => {
+    getByProduct: (productId: number | string, params: BatchParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), { params });
     },
 

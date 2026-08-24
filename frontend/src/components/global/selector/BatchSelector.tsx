@@ -207,7 +207,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
     const fetchAndStoreBatches = async (productId: string | number, showLoadingSpinner: boolean = true): Promise<Batch[]> => {
         try {
-            const response = await batchesApi.getByProduct(Number(productId));
+            const response = await batchesApi.getByProduct(productId);
             const batchesData = response.data?.batches || response.data || [];
 
             // Update caches
