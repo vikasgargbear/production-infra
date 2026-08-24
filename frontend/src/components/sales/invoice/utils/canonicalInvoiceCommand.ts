@@ -1,5 +1,6 @@
 import type { Customer } from '../../../../types/models/customer';
 import type { Invoice } from '../hooks/useInvoiceLogic';
+import type { FreeSupplyTaxTreatment } from '../types/invoiceTypes';
 import type { CompanyInfo } from '../../../../types/common/company.types';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { indianStateCode } from '../../../../utils/indianStates';
@@ -29,6 +30,14 @@ const requiredUuid = (value: unknown, label: string): string => {
 };
 
 const nonEmpty = (value: unknown): boolean => String(value ?? '').trim().length > 0;
+
+const freeSupplyTaxTreatment = (value: unknown): FreeSupplyTaxTreatment => {
+    if (value == null || value === '') return 'excluded_from_taxable_value';
+    if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') {
+        return value;
+    }
+    throw new Error('Invoice free-supply tax treatment is invalid');
+};
 
 export function invoicePlaceOfSupplyStateCode(
     invoice: Invoice,
@@ -149,12 +158,13 @@ export function canonicalInvoiceValidationError(
             requiredUuid(item.product_id, `Item ${index + 1} product`);
             requiredUuid(item.batch_id, `Item ${index + 1} batch`);
             requiredUuid(item.uom_conversion_id, `Item ${index + 1} UOM`);
-            decimal(item.quantity);
-            decimal(item.free_quantity);
+            const billedQuantity = Number(decimal(item.quantity));
+            const freeQuantity = Number(decimal(item.free_quantity));
             decimal(item.unit_price);
             decimal(item.discount_percent);
-            if (Number(item.quantity || 0) <= 0) {
-                return `Item ${index + 1} billed quantity must be greater than zero`;
+            freeSupplyTaxTreatment(item.free_supply_tax_treatment);
+            if (billedQuantity <= 0 && freeQuantity <= 0) {
+                return `Item ${index + 1} billed or free quantity must be greater than zero`;
             }
             branchId ??= itemBranch;
             locationId ??= itemLocation;
@@ -219,7 +229,9 @@ export function buildCanonicalInvoicePreparePayload(
                 uom_conversion_id: requiredUuid(item.uom_conversion_id, `Item ${index + 1} UOM`),
                 billed_quantity: billedQuantity,
                 free_quantity: freeQuantity,
-                free_supply_tax_treatment: 'excluded_from_taxable_value',
+                free_supply_tax_treatment: freeSupplyTaxTreatment(
+                    item.free_supply_tax_treatment,
+                ),
                 quoted_unit_rate: decimal(item.unit_price),
                 price_basis: 'tax_exclusive',
                 line_discount: discountPercent > 0 ? {

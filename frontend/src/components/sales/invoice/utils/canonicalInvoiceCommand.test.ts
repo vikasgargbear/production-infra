@@ -130,6 +130,117 @@ describe('canonical invoice command', () => {
         )).toThrow(/multi-batch allocation is not available/i);
     });
 
+    it.each([
+        {
+            label: 'free-only supply included at the quoted unit rate',
+            billed: 0,
+            free: 2,
+            treatment: 'included_at_unit_rate' as const,
+        },
+        {
+            label: 'free-only supply excluded from taxable value',
+            billed: 0,
+            free: 3,
+            treatment: 'excluded_from_taxable_value' as const,
+        },
+        {
+            label: 'mixed billed and free supply',
+            billed: 4,
+            free: 1,
+            treatment: 'included_at_unit_rate' as const,
+        },
+        {
+            label: 'fractional billed and free supply',
+            billed: 1.25,
+            free: 0.375,
+            treatment: 'excluded_from_taxable_value' as const,
+        },
+    ])('builds the exact canonical prepare payload for $label', ({
+        billed,
+        free,
+        treatment,
+    }) => {
+        const testInvoice = {
+            ...invoice,
+            discount_percent: 0,
+            freight_charges: 0,
+            items: [{
+                ...invoice.items[0],
+                quantity: billed,
+                free_quantity: free,
+                free_supply_tax_treatment: treatment,
+            }],
+        } as Invoice;
+        const idempotencyKey = `erp-web-invoice:${treatment}:${billed}:${free}`;
+
+        expect(canonicalInvoiceValidationError(testInvoice, customer)).toBeNull();
+        expect(buildCanonicalInvoicePreparePayload(
+            testInvoice,
+            customer,
+            idempotencyKey,
+        )).toEqual({
+            idempotency_key: idempotencyKey,
+            branch_id: ids.branch,
+            invoice_date: '2026-08-24',
+            document_discount: {
+                document_discount_kind: 'none',
+                document_discount_basis: 'price_value',
+                document_discount_value: '0',
+            },
+            rounding_policy: 'none',
+            zero_rated_payment_mode: 'not_applicable',
+            customer_account_id: ids.customer,
+            tax_charge_mechanism: 'normal',
+            place_of_supply_state_code: '27',
+            from_location_id: ids.location,
+            logistics: {
+                transport_mode: 'in_person',
+                distance_km: '0',
+            },
+            lines: [{
+                product_id: ids.product,
+                uom_conversion_id: ids.uom,
+                billed_quantity: String(billed),
+                free_quantity: String(free),
+                free_supply_tax_treatment: treatment,
+                quoted_unit_rate: '100',
+                price_basis: 'tax_exclusive',
+                line_discount: {
+                    line_discount_kind: 'percent',
+                    line_discount_basis: 'price_value',
+                    line_discount_value: '10',
+                },
+                document_discount_eligible: true,
+                fulfillment_source: 'direct_issue',
+                batch_allocations: [{
+                    batch_id: ids.batch,
+                    billed_quantity: String(billed),
+                    free_quantity: String(free),
+                }],
+            }],
+        });
+    });
+
+    it.each([
+        { quantity: 0, free_quantity: 0 },
+        { quantity: -1, free_quantity: 1 },
+        { quantity: 1, free_quantity: Number.NaN },
+    ])('rejects zero or invalid physical quantities: %p', quantities => {
+        const invalid = {
+            ...invoice,
+            items: [{ ...invoice.items[0], ...quantities }],
+        } as Invoice;
+
+        expect(canonicalInvoiceValidationError(invalid, customer)).toMatch(
+            /quantity|non-negative numbers/i,
+        );
+        expect(() => buildCanonicalInvoicePreparePayload(
+            invalid,
+            customer,
+            'erp-web-invoice:invalid-quantity',
+        )).toThrow(/quantity|non-negative numbers/i);
+    });
+
     it('fails closed for delivery until exact distance is captured', () => {
         const delivery = { ...invoice, delivery_type: 'DELIVERY' } as Invoice;
         expect(canonicalInvoiceValidationError(delivery, customer)).toMatch(
