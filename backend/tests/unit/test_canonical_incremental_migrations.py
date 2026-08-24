@@ -17,9 +17,11 @@ REVISION_PATH = (
 )
 POSTGRES_CONTRACT_PATH = (
     REPO_ROOT
-    / "database/canonical/commands_automation/test_sales_invoice_fefo_equivalence.sql"
+    / "database/canonical/commands_automation/head_test_sales_invoice_fefo_equivalence.sql"
 )
 STAGING_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/canonical-staging.yml"
+BASELINE_GATE_PATH = REPO_ROOT / "database/canonical/ci/run_postgres15_gate.sh"
+ALEMBIC_GATE_PATH = REPO_ROOT / "database/canonical/ci/run_alembic_postgres15_gate.sh"
 
 
 def test_fefo_incremental_migration_is_hash_bound_and_linear() -> None:
@@ -87,6 +89,24 @@ def test_fefo_definition_checks_use_regular_strpos_calls() -> None:
         "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')"
         in staging_workflow
     )
+
+
+def test_fefo_postgres_fixture_is_explicitly_head_only() -> None:
+    fixture = POSTGRES_CONTRACT_PATH.read_text(encoding="utf-8")
+    baseline_gate = BASELINE_GATE_PATH.read_text(encoding="utf-8")
+    alembic_gate = ALEMBIC_GATE_PATH.read_text(encoding="utf-8")
+    staging_workflow = STAGING_WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert POSTGRES_CONTRACT_PATH.name.startswith("head_test_")
+    assert "revision 20260824_0002" in fixture
+    assert fixture.startswith("\\set ON_ERROR_STOP on")
+    assert "BEGIN;" in fixture
+    assert fixture.rstrip().endswith("ROLLBACK;")
+    assert "-name 'head_test_*.sql'" not in baseline_gate
+    assert "-name 'test_*.sql'" in baseline_gate
+    assert "-name 'test_*.sql' -o -name 'head_test_*.sql'" in alembic_gate
+    assert "-name 'test_*.sql' -o -name 'head_test_*.sql'" in staging_workflow
+    assert 'test "$fixture_count" = 15' in staging_workflow
 
 
 def test_schema_authority_includes_incremental_fefo_package() -> None:

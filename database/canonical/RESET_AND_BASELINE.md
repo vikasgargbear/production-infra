@@ -20,17 +20,20 @@ Production gates compose mappings with
 `--enforcement-root database/canonical`. The generator recursively discovers
 every checked-in `baseline-*-enforcements.json` fragment, sorts the paths, and
 rejects empty roots, malformed fragments, duplicate authorities, stale hashes,
-and unresolved requirements. The PostgreSQL 15 gate likewise runs every
-checked-in `test_*.sql` fixture in sorted order; fixtures that mutate state must
-end in `ROLLBACK` so the next authority is tested against the clean baseline.
+and unresolved requirements. The direct PostgreSQL 15 baseline gate runs every
+checked-in `test_*.sql` fixture in sorted order. The Alembic-head gate runs
+those baseline fixtures plus every `head_test_*.sql` fixture introduced by an
+incremental revision. Fixtures that mutate state must end in `ROLLBACK` so the
+next authority is tested against the clean schema phase.
 
 This directory describes the deterministic DDL source and must not be applied
 directly in production. The first reviewed authority is
 `backend/alembic/versions/20260820_0001_canonical_v1.py`, with the exact
 generator output and SHA-256 manifest under `backend/alembic/sql`. The direct
-generated-SQL and Alembic paths both run every rollback fixture in isolated
-PostgreSQL 15 CI jobs. A disposable Supabase deployment rehearsal is still
-required before any live reset.
+generated-SQL path runs baseline fixtures, while the Alembic path runs both
+baseline and head-only rollback fixtures in isolated PostgreSQL 15 CI jobs. A
+disposable Supabase deployment rehearsal is still required before any live
+reset.
 
 Regenerate the package only after all catalog-bound artifacts are current, then
 review and verify the checked output:

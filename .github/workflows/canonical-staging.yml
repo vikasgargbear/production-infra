@@ -1074,8 +1074,12 @@ jobs:
             fi
             cat "$fixture_log"
             fixture_count=$((fixture_count + 1))
-          done < <(find database/canonical -type f -name 'test_*.sql' | LC_ALL=C sort)
-          test "$fixture_count" = 14
+          done < <(
+            find database/canonical -type f \
+              \( -name 'test_*.sql' -o -name 'head_test_*.sql' \) \
+              | LC_ALL=C sort
+          )
+          test "$fixture_count" = 15
 
           cleanup_role_membership
           trap - EXIT

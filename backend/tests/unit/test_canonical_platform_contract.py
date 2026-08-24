@@ -213,7 +213,7 @@ def test_postgres15_gate_is_hard_bounded_to_disposable_local_database() -> None:
 def test_postgres15_gate_auto_includes_all_fixtures_and_mutations_roll_back() -> None:
     fixtures = tuple(
         sorted(
-            (REPO_ROOT / "database" / "canonical").glob("**/test_*.sql")
+            (REPO_ROOT / "database" / "canonical").glob("**/*test_*.sql")
         )
     )
     assert fixtures

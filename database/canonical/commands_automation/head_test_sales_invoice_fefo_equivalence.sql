@@ -1,5 +1,8 @@
 \set ON_ERROR_STOP on
 
+-- Alembic-head fixture: this contract is introduced by revision 20260824_0002
+-- and must not be evaluated against the immutable 20260820_0001 baseline.
+
 BEGIN;
 
 DO $installed_contract$

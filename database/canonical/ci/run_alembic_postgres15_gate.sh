@@ -47,7 +47,11 @@ fixture_count=0
 while IFS= read -r fixture; do
   psql -X -v ON_ERROR_STOP=1 -f "$fixture"
   fixture_count=$((fixture_count + 1))
-done < <(find database/canonical -type f -name 'test_*.sql' | LC_ALL=C sort)
+done < <(
+  find database/canonical -type f \
+    \( -name 'test_*.sql' -o -name 'head_test_*.sql' \) \
+    | LC_ALL=C sort
+)
 test "$fixture_count" -gt 0 || {
   echo "no canonical PostgreSQL fixtures were discovered" >&2
   exit 2
