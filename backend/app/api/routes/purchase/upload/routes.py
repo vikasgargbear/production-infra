@@ -8,7 +8,6 @@ import logging
 from datetime import datetime, date
 import os
 import tempfile
-import shutil
 from ....services.document_number_service import DocumentNumberService
 from ....services.purchase.upload.service import UploadService
 from ....services.master.product.service import ProductService
@@ -18,7 +17,7 @@ from .....core.utils.constants import ProductDefaults, PackDefaults
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-from .....core.utils.file_validation import validate_upload, sanitize_filename
+from .....core.utils.file_validation import validate_upload
 from .....core.money import money_json
 
 try:
@@ -127,19 +126,18 @@ async def check_supplier(
         raise HTTPException(status_code=500, detail="Failed to check supplier")
 
 
-@router.post("/parse-pdf")
 @router.post("/parse-invoice-safe")
 @with_tenant_context
 async def parse_purchase_invoice_safe(
     file: UploadFile = File(...),
+    _: dict = Depends(PermissionChecker("purchase", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Parse a purchase invoice PDF with better error handling"""
+    """Parse a validated purchase-invoice PDF without persisting a document."""
     try:
         # Validate file size (10MB) and type (magic number check)
         content = await validate_upload(file, allowed_types=["pdf"], max_size_mb=10)
-        safe_name = sanitize_filename(file.filename)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
             tmp_file.write(content)
@@ -241,86 +239,6 @@ async def parse_purchase_invoice_safe(
     except Exception as e:
         logger.error(f"Error in parse_invoice_safe: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to process invoice")
-
-
-@router.post("/parse-invoice")
-@with_tenant_context
-async def parse_purchase_invoice(
-    file: UploadFile = File(...),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Upload and parse a purchase invoice (PDF/image)"""
-    try:
-        allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/jpg"]
-        if file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail=f"File type {file.content_type} not allowed")
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
-            shutil.copyfileobj(file.file, tmp_file)
-            tmp_path = tmp_file.name
-        
-        try:
-            invoice_data = parse_pdf(tmp_path)
-            if not invoice_data:
-                raise HTTPException(status_code=422, detail="Could not extract data")
-            
-            response_data = {
-                "status": "success", "confidence_score": getattr(invoice_data, 'confidence_score', 0.0),
-                "extracted_data": {
-                    "invoice_number": invoice_data.invoice_number,
-                    "invoice_date": invoice_data.invoice_date.isoformat() if invoice_data.invoice_date else None,
-                    "supplier_name": invoice_data.supplier_name, "supplier_gstin": invoice_data.supplier_gstin,
-                    "supplier_address": invoice_data.supplier_address, "drug_license": invoice_data.drug_license_number,
-                    "subtotal": money_json(invoice_data.subtotal or 0), "tax_amount": money_json(invoice_data.tax_amount or 0),
-                    "discount_amount": money_json(invoice_data.discount_amount or 0), "grand_total": money_json(invoice_data.grand_total or 0),
-                    "items": []
-                }, "manual_review_required": False
-            }
-            
-            for item in invoice_data.items:
-                response_data["extracted_data"]["items"].append({
-                    "description": item.description, "hsn_code": item.hsn_code, "batch_number": item.batch_number,
-                    "expiry_date": item.expiry_date, "quantity": item.quantity, "unit": item.unit,
-                    "rate": money_json(item.rate or 0), "mrp": money_json(item.mrp or 0),
-                    "discount_percent": float(item.discount_percent or 0), "tax_percent": float(item.tax_percent or 0),
-                    "amount": money_json(item.amount or 0)
-                })
-            
-            if getattr(invoice_data, 'confidence_score', 0) < 0.8:
-                response_data["manual_review_required"] = True
-                response_data["review_reason"] = "Low confidence score"
-            
-            if invoice_data.supplier_gstin:
-                supplier = UploadService.get_supplier_by_gstin(db, invoice_data.supplier_gstin)
-                if supplier:
-                    response_data["extracted_data"]["supplier_id"] = supplier["supplier_id"]
-                    response_data["extracted_data"]["supplier_matched"] = True
-                else:
-                    response_data["extracted_data"]["supplier_matched"] = False
-            
-            for item in response_data["extracted_data"]["items"]:
-                if item["description"]:
-                    product = UploadService.get_product_by_name(db, item["description"])
-                    if not product and item.get("hsn_code"):
-                        product = UploadService.get_product_by_hsn(db, item["hsn_code"])
-                    if product:
-                        item["product_id"] = product["product_id"]
-                        item["product_matched"] = True
-                        item["matched_product_name"] = product["product_name"]
-                    else:
-                        item["product_matched"] = False
-            
-            _check_supplier_in_result(response_data["extracted_data"], db)
-            return response_data
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error parsing invoice: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to parse invoice")
 
 
 @router.post("/create-from-parsed")

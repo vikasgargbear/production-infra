@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException, UploadFile
 
+from app.main import app
+
 
 MODULE_PATH = Path(__file__).parents[2] / "app/core/utils/file_validation.py"
 SPEC = spec_from_file_location("upload_file_validation", MODULE_PATH)
@@ -52,3 +54,20 @@ def test_validate_upload_rejects_oversized_pdf() -> None:
 
 def test_sanitize_filename_removes_path_and_control_characters() -> None:
     assert sanitize_filename("../unsafe/invoice\x00?.pdf") == "invoice_.pdf"
+
+
+def test_purchase_invoice_parser_exposes_one_validated_authenticated_endpoint() -> None:
+    paths = app.openapi()["paths"]
+    operation = paths["/api/purchase-upload/parse-invoice-safe"]["post"]
+
+    assert operation["security"]
+    assert "/api/purchase-upload/parse-invoice" not in paths
+    assert "/api/purchase-upload/parse-pdf" not in paths
+
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "app/api/routes/purchase/upload/routes.py"
+    ).read_text()
+    assert 'validate_upload(file, allowed_types=["pdf"], max_size_mb=10)' in source
+    assert 'PermissionChecker("purchase", "view")' in source
+    assert "shutil.copyfileobj" not in source

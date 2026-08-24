@@ -50,8 +50,6 @@ function mockAxiosError(status: number, detail: string) {
 
 describe('upload endpoints: auth-gate (401 without bearer token)', () => {
   const UPLOAD_ENDPOINTS = [
-    '/purchase-upload/parse-pdf',
-    '/purchase-upload/parse-invoice',
     '/purchase-upload/parse-invoice-safe',
     '/gst/gstr2b/upload',
   ];
@@ -103,8 +101,8 @@ describe('export/GET endpoints: auth-gate (401 without bearer token)', () => {
 //    (tested at the HTTP layer via mocked responses that mirror real server)
 // ---------------------------------------------------------------------------
 
-describe('parse-pdf: file validation contract', () => {
-  const ENDPOINT = '/purchase-upload/parse-pdf';
+describe('parse-invoice-safe: file validation contract', () => {
+  const ENDPOINT = '/purchase-upload/parse-invoice-safe';
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -343,7 +341,7 @@ describe('PDFUploadModal: error surfacing contract', () => {
 
     // Simulate what the modal's handleUpload catch block does
     try {
-      await apiHelpers.post('/purchase-upload/parse-invoice', new FormData());
+      await apiHelpers.post('/purchase-upload/parse-invoice-safe', new FormData());
     } catch (err: any) {
       caughtError = err?.response?.data?.detail || 'Failed to upload PDF';
     }
@@ -355,7 +353,7 @@ describe('PDFUploadModal: error surfacing contract', () => {
   it('response without extracted_data → error message is set', async () => {
     mockedPost.mockResolvedValueOnce({ data: {} });
 
-    const response = await apiHelpers.post('/purchase-upload/parse-invoice', new FormData());
+    const response = await apiHelpers.post('/purchase-upload/parse-invoice-safe', new FormData());
     const error =
       response.data?.extracted_data == null
         ? 'Failed to extract data from PDF - no data returned'
