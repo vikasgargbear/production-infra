@@ -26,7 +26,7 @@ describe('useNetworkStatus', () => {
         expect(Object.keys(result.current)).toEqual(['isOnline']);
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringMatching(/\/health$/),
-            expect.objectContaining({ method: 'GET', cache: 'no-store' }),
+            { method: 'GET', cache: 'no-store' },
         );
     });
 

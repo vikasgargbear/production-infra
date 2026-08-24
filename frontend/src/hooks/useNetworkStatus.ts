@@ -19,7 +19,6 @@ export function useNetworkStatus(): UseNetworkStatusReturn {
             const response = await fetch(`${getApiBaseUrl()}/health`, {
                 method: 'GET',
                 cache: 'no-store',
-                headers: { 'X-Connection-Check': 'true' }
             });
             setIsOnline(response.ok);
         } catch {
