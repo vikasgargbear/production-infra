@@ -23,7 +23,7 @@ export interface SupplierParams {
 // API
 // ============================================================================
 
-const crud = createCrudApi({ basePath: '/suppliers' });
+const crud = createCrudApi({ basePath: '/suppliers', createPath: '/suppliers/' });
 
 export const suppliersApi = {
   ...crud,

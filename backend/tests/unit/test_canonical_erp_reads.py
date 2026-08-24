@@ -35,7 +35,16 @@ def test_canonical_router_is_read_only_and_covers_critical_ui_reads() -> None:
 
 
 def test_canonical_routes_precede_legacy_compatibility_routes() -> None:
-    routes = [route for route in app.routes if isinstance(route, APIRoute)]
+    # FastAPI 0.137+ preserves included routers instead of flattening copies of
+    # their APIRoutes.  Its effective route contexts expose the fully-prefixed
+    # request path while older supported versions still expose APIRoute objects.
+    routes = []
+    for route in app.routes:
+        effective_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_contexts):
+            routes.extend(effective_contexts())
+        elif isinstance(route, APIRoute):
+            routes.append(route)
     for path in CRITICAL_UI_READS:
         matches = [route for route in routes if route.path == path]
         assert matches, path

@@ -373,6 +373,16 @@ jobs:
       - run: npm run test:e2e
         env:
           PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+      - name: Upload browser traces, screenshots, videos, and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-browser-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 14
 
   frontend-dependency-audit:
     runs-on: ubuntu-latest
@@ -685,3 +695,45 @@ jobs:
           test -n "$PHARMA_LIVE_TEST_ORG_ID"
           test -n "$PHARMA_LIVE_TEST_BRANCH_ID"
       - run: PYTHONPATH=backend pytest -q backend/tests/live_erp
+
+  live-browser-erp:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
+    runs-on: ubuntu-latest
+    environment: live-erp-test
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      PLAYWRIGHT_LIVE_BASE_URL: ${{ secrets.PLAYWRIGHT_LIVE_BASE_URL }}
+      PLAYWRIGHT_LIVE_EMAIL: ${{ secrets.PLAYWRIGHT_LIVE_EMAIL }}
+      PLAYWRIGHT_LIVE_PASSWORD: ${{ secrets.PLAYWRIGHT_LIVE_PASSWORD }}
+      PLAYWRIGHT_LIVE_WRITES: "true"
+      PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Refuse an incompletely configured live browser run
+        run: |
+          test -n "$PLAYWRIGHT_LIVE_BASE_URL"
+          test -n "$PLAYWRIGHT_LIVE_EMAIL"
+          test -n "$PLAYWRIGHT_LIVE_PASSWORD"
+          case "$PLAYWRIGHT_LIVE_BASE_URL" in
+            https://*) ;;
+            *) echo "Live browser target must use HTTPS" >&2; exit 2 ;;
+          esac
+      - run: npm ci
+      - run: npm run test:e2e:live:writes
+      - name: Upload live browser traces, screenshots, videos, and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-erp-browser-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 30

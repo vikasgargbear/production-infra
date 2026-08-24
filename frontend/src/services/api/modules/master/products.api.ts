@@ -45,13 +45,13 @@ export interface ProductSyncParams {
 // API
 // ============================================================================
 
-const crud = createCrudApi({ basePath: '/products' });
+const crud = createCrudApi({ basePath: '/products', createPath: '/products/' });
 
 export const productsApi = {
   ...crud,
 
   create: (data: ProductCreateInput): Promise<AxiosResponse<ProductMutationResponse>> => {
-    return apiHelpers.post('/products', productCreateSchema.parse(data));
+    return apiHelpers.post('/products/', productCreateSchema.parse(data));
   },
 
   update: (

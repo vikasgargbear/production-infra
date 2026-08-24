@@ -666,8 +666,9 @@ def test_frontend_builds_use_the_reviewed_node_runtime():
     blueprint = _read("render.yaml")
     package = _read("frontend/package.json")
 
-    assert 'node-version: "20"' not in workflow
-    assert workflow.count('node-version: "22"') == 3
+    node_versions = re.findall(r'node-version: "([^"]+)"', workflow)
+    assert len(node_versions) >= 3
+    assert set(node_versions) == {"22"}
     assert 'key: NODE_VERSION\n        value: "22"' in blueprint
     assert '"node": ">=22 <25"' in package
 

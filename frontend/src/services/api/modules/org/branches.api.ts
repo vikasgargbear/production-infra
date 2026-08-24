@@ -32,7 +32,7 @@ export interface BranchData {
 // API Module
 // ============================================
 
-const crud = createCrudApi({ basePath: '/branches', useCleanData: false });
+const crud = createCrudApi({ basePath: '/branches', createPath: '/branches/', useCleanData: false });
 
 export const branchesApi = {
     ...crud,
