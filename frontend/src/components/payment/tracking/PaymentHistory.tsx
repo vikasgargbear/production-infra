@@ -1,32 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { History, Search, Filter, Download, X, RefreshCw, CreditCard, MessageCircle, Mail } from 'lucide-react';
+import { RefreshCw, CreditCard, Eye, X } from 'lucide-react';
 import { ModuleHeader, InlineFilterPanel, DataTable, Pagination, StatusBadge } from '../../global';
 import { paymentsApi } from '../../../services/api';
-import { useCompany } from '../../../contexts/CompanyContext';
 import { toast } from 'react-toastify';
+import type {
+  CanonicalPaymentDetail,
+  CanonicalPaymentDirection,
+  CanonicalPaymentHistoryItem,
+  CanonicalPaymentHistoryParams,
+} from '../../../services/api/modules/finance/payments.api';
+import { formatExactCurrency } from '../../../utils/exactDecimal';
 
 interface PaymentHistoryProps {
   onClose?: () => void;
 }
 
-interface Payment {
-  id: string;
-  payment_id: string;
-  payment_date: string;
-  party_name: string;
-  payment_type: 'received' | 'made';
-  amount: number;
-  payment_mode: string;
-  payment_status: string;
-  reference_no?: string;
-  notes?: string;
-}
-
 const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
-  const { companyInfo } = useCompany();
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [payments, setPayments] = useState<CanonicalPaymentHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<CanonicalPaymentHistoryParams>({});
+  const [detail, setDetail] = useState<CanonicalPaymentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     per_page: 25,
@@ -37,57 +32,46 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
   // ESC key handler
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && onClose) {
-        onClose();
+      if (event.key === 'Escape') {
+        if (detail) setDetail(null);
+        else onClose?.();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [detail, onClose]);
 
   // Fetch payments
-  const fetchPayments = useCallback(async (page = 1, filters: any = {}) => {
+  const fetchPayments = useCallback(async (
+    page = 1,
+    filters: CanonicalPaymentHistoryParams = activeFilters,
+    pageSize = pagination.per_page,
+  ) => {
     setLoading(true);
     try {
-      const searchParams: any = {
-        limit: pagination.per_page,
-        offset: (page - 1) * pagination.per_page,
+      const searchParams: CanonicalPaymentHistoryParams = {
+        page,
+        page_size: pageSize,
         ...filters
       };
 
-      const response = await paymentsApi.getAll(searchParams);
-      const paymentsData = response.data?.payments || response.data || [];
-
-      const transformedPayments: Payment[] = paymentsData.map((p: any) => ({
-        id: p.payment_id || p.id,
-        payment_id: p.payment_id || p.payment_number || `PAY-${p.id}`,
-        payment_date: p.payment_date || p.transaction_date,
-        party_name: p.party_name || p.customer_name || p.supplier_name || 'Unknown',
-        payment_type: p.payment_type || 'received',
-        amount: p.amount || p.total_amount || 0,
-        payment_mode: p.payment_mode || p.method || 'Cash',
-        payment_status: p.payment_status || p.status || 'completed',
-        reference_no: p.reference_no || p.transaction_id,
-        notes: p.notes || p.description
-      }));
-
-      setPayments(transformedPayments);
-
-      const total = response.data?.total || 0;
-      setPagination({
-        ...pagination,
+      const response = await paymentsApi.getCanonicalHistory(searchParams);
+      setPayments(response.data.items);
+      setPagination((current) => ({
+        ...current,
         page,
-        total,
-        total_pages: Math.ceil(total / pagination.per_page)
-      });
+        per_page: response.data.page_size,
+        total: response.data.total,
+        total_pages: Math.ceil(response.data.total / response.data.page_size)
+      }));
     } catch (error) {
       console.error('Failed to fetch payments:', error);
       toast.error('Failed to load payment history');
     } finally {
       setLoading(false);
     }
-  }, [pagination.per_page]);
+  }, [activeFilters, pagination.per_page]);
 
   useEffect(() => {
     fetchPayments();
@@ -97,13 +81,26 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
     fetchPayments(pagination.page);
   };
 
+  const loadDetail = async (paymentId: string) => {
+    setDetailLoading(true);
+    try {
+      const response = await paymentsApi.getCanonicalDetail(paymentId);
+      setDetail(response.data);
+    } catch (error) {
+      console.error('Failed to fetch payment detail:', error);
+      toast.error('Failed to load authoritative payment detail');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const handleExport = () => {
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const rows = [
       ['Payment #', 'Date', 'Party', 'Type', 'Amount', 'Mode', 'Status', 'Reference'],
-      ...payments.map(payment => [payment.payment_id, payment.payment_date, payment.party_name,
-        payment.payment_type, payment.amount, payment.payment_mode, payment.payment_status,
-        payment.reference_no || ''])
+      ...payments.map(payment => [payment.payment_number, payment.payment_date, payment.party_name,
+        payment.direction, payment.amount, payment.payment_method, payment.status,
+        payment.external_reference || ''])
     ];
     const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -118,7 +115,7 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
     {
       key: 'payment_date',
       header: 'Date',
-      render: (_: any, payment: Payment) => (
+      render: (_: any, payment: CanonicalPaymentHistoryItem) => (
         <div className="text-gray-700">
           {new Date(payment.payment_date).toLocaleDateString('en-IN', {
             day: '2-digit',
@@ -132,19 +129,19 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
     {
       key: 'payment_id',
       header: 'Payment #',
-      render: (_: any, payment: Payment) => (
-        <div className="text-sm text-gray-600">{payment.payment_id}</div>
+      render: (_: any, payment: CanonicalPaymentHistoryItem) => (
+        <div className="text-sm text-gray-600">{payment.payment_number}</div>
       ),
       width: '140px'
     },
     {
       key: 'party_name',
       header: 'Party',
-      render: (_: any, payment: Payment) => (
+      render: (_: any, payment: CanonicalPaymentHistoryItem) => (
         <div>
           <div className="font-medium text-gray-900">{payment.party_name}</div>
           <div className="text-xs text-gray-500">
-            {payment.payment_type === 'received' ? 'Payment Received' : 'Payment Made'}
+            {payment.direction === 'received' ? 'Payment Received' : 'Payment Made'}
           </div>
         </div>
       )
@@ -153,38 +150,48 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
       key: 'amount',
       header: 'Amount',
       align: 'right' as const,
-      render: (_: any, payment: Payment) => (
+      render: (_: any, payment: CanonicalPaymentHistoryItem) => (
         <div className="text-right">
-          <div className={`font-semibold ${payment.payment_type === 'received' ? 'text-green-600' : 'text-red-600'}`}>
-            {payment.payment_type === 'received' ? '+' : '-'}₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          <div className={`font-semibold ${payment.direction === 'received' ? 'text-green-700' : 'text-red-700'}`}>
+            {payment.direction === 'received' ? '+' : '-'}{formatExactCurrency(payment.amount, 'Payment amount')}
           </div>
         </div>
       ),
       width: '150px'
     },
     {
-      key: 'payment_mode',
+      key: 'payment_method',
       header: 'Mode',
-      render: (_: any, payment: Payment) => (
-        <div className="text-sm text-gray-700">{payment.payment_mode}</div>
+      render: (_: any, payment: CanonicalPaymentHistoryItem) => (
+        <div className="text-sm text-gray-700">{payment.payment_method.replace('_', ' ')}</div>
       ),
       width: '100px'
     },
     {
-      key: 'payment_status',
+      key: 'status',
       header: 'Status',
       align: 'center' as const,
-      render: (_: any, payment: Payment) => {
-        const statusMap: Record<string, any> = {
-          completed: { status: 'success', label: 'Completed' },
-          pending: { status: 'warning', label: 'Pending' },
-          failed: { status: 'error', label: 'Failed' },
-          cancelled: { status: 'error', label: 'Cancelled' }
-        };
-        const config = statusMap[payment.payment_status] || { status: 'default', label: payment.payment_status };
-        return <StatusBadge status={config.status} label={config.label} />;
+      render: () => {
+        return <StatusBadge status="success" label="Posted" />;
       },
       width: '100px'
+    },
+    {
+      key: 'actions',
+      header: 'Details',
+      align: 'center' as const,
+      render: (_: any, payment: CanonicalPaymentHistoryItem) => (
+        <button
+          type="button"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+          aria-label={`View payment ${payment.payment_number}`}
+          onClick={() => loadDetail(payment.payment_id)}
+          disabled={detailLoading}
+        >
+          <Eye className="h-4 w-4" />
+        </button>
+      ),
+      width: '80px'
     }
   ];
 
@@ -212,7 +219,7 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
               className: loading ? "animate-spin" : ""
             },
             {
-              label: "Export All",
+              label: "Export Page",
               onClick: handleExport,
               variant: "outline",
               className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -228,58 +235,56 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
             <InlineFilterPanel
               filters={[
                 {
-                  key: 'date_preset',
-                  label: 'Period',
-                  type: 'select',
-                  options: [
-                    { value: 'all', label: 'All Time' },
-                    { value: 'today', label: 'Today' },
-                    { value: 'yesterday', label: 'Yesterday' },
-                    { value: 'last7days', label: 'Last 7 Days' },
-                    { value: 'last30days', label: 'Last 30 Days' },
-                    { value: 'thisMonth', label: 'This Month' },
-                    { value: 'lastMonth', label: 'Last Month' },
-                    { value: 'thisQuarter', label: 'This Quarter' }
-                  ],
-                },
-                {
-                  key: 'payment_type',
+                  key: 'direction',
                   label: 'Type',
                   type: 'select',
                   options: [
                     { value: 'all', label: 'All Types' },
-                    { value: 'received', label: 'Payment Received' },
-                    { value: 'made', label: 'Payment Made' }
+                    { value: 'received', label: 'Customer Receipts' },
+                    { value: 'made', label: 'Supplier Payments' }
                   ],
                 },
                 {
-                  key: 'payment_status',
-                  label: 'Status',
-                  type: 'select',
-                  options: [
-                    { value: 'all', label: 'All Status' },
-                    { value: 'completed', label: 'Completed' },
-                    { value: 'pending', label: 'Pending' },
-                    { value: 'failed', label: 'Failed' },
-                    { value: 'cancelled', label: 'Cancelled' }
-                  ],
-                },
-                {
-                  key: 'dateFrom',
+                  key: 'date_from',
                   label: 'From Date',
                   type: 'date'
                 },
                 {
-                  key: 'dateTo',
+                  key: 'date_to',
                   label: 'To Date',
                   type: 'date'
                 }
               ]}
-              onFilterChange={(filters) => {
-                console.log('Filters changed:', filters);
-                // TODO: Implement filter logic
+              searchQuery={searchQuery}
+              searchPlaceholder="Search payment number, party, or reference..."
+              onFilterChange={(filters: Record<string, string>) => {
+                const next: CanonicalPaymentHistoryParams = 'search' in filters
+                  ? { ...activeFilters, search: filters.search || undefined }
+                  : {
+                    direction: filters.direction && filters.direction !== 'all'
+                      ? filters.direction as CanonicalPaymentDirection
+                      : undefined,
+                    date_from: filters.date_from || undefined,
+                    date_to: filters.date_to || undefined,
+                    search: searchQuery.trim() || undefined,
+                  };
+                setActiveFilters(next);
+                fetchPayments(1, next);
               }}
-              onSearchChange={setSearchQuery}
+              onSearchChange={(query) => {
+                setSearchQuery(query);
+                if (!query) {
+                  const next = { ...activeFilters, search: undefined };
+                  setActiveFilters(next);
+                  fetchPayments(1, next);
+                }
+              }}
+              showFilters
+              onClearFilters={() => {
+                setSearchQuery('');
+                setActiveFilters({});
+                fetchPayments(1, {});
+              }}
             />
 
             {/* Table */}
@@ -287,7 +292,7 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
               <DataTable
                 columns={columns}
                 data={payments}
-                keyField="id"
+                keyField="payment_id"
                 loading={loading}
                 emptyMessage="No payments found"
               />
@@ -303,8 +308,8 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
                   itemsPerPage={pagination.per_page}
                   totalItems={pagination.total}
                   onItemsPerPageChange={(perPage) => {
-                    setPagination({ ...pagination, per_page: perPage, page: 1 });
-                    fetchPayments(1);
+                    setPagination((current) => ({ ...current, per_page: perPage, page: 1 }));
+                    fetchPayments(1, activeFilters, perPage);
                   }}
                 />
               </div>
@@ -312,6 +317,54 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
           </div>
         </div>
       </div>
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-detail-title"
+            className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"
+          >
+            <header className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+              <div>
+                <h2 id="payment-detail-title" className="text-lg font-semibold text-gray-900">
+                  {detail.payment_number}
+                </h2>
+                <p className="text-sm text-gray-600">{detail.party_name} · {detail.direction === 'received' ? 'Customer receipt' : 'Supplier payment'}</p>
+              </div>
+              <button type="button" onClick={() => setDetail(null)} aria-label="Close payment details" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+            <div className="space-y-6 p-6">
+              <div className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 p-4 md:grid-cols-4">
+                <div><div className="text-xs text-gray-500">Amount</div><div className="font-semibold">{formatExactCurrency(detail.amount)}</div></div>
+                <div><div className="text-xs text-gray-500">Allocated</div><div className="font-semibold">{formatExactCurrency(detail.allocated_amount)}</div></div>
+                <div><div className="text-xs text-gray-500">Journal</div><div className="font-medium">{detail.journal_number}</div></div>
+                <div><div className="text-xs text-gray-500">Reference</div><div className="font-medium">{detail.external_reference || '—'}</div></div>
+              </div>
+              <div>
+                <h3 className="mb-2 font-semibold text-gray-900">Allocations</h3>
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="p-3">Document</th><th className="p-3 text-right">Applied</th><th className="p-3 text-right">Residual</th></tr></thead>
+                    <tbody>{detail.allocations.map((row) => <tr key={row.allocation_id} className="border-t border-gray-200"><td className="p-3">{row.source_document_number}</td><td className="p-3 text-right">{formatExactCurrency(row.amount)}</td><td className="p-3 text-right">{formatExactCurrency(row.residual_amount)}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 font-semibold text-gray-900">Balanced journal</h3>
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="p-3">Line</th><th className="p-3">Account</th><th className="p-3 text-right">Debit</th><th className="p-3 text-right">Credit</th></tr></thead>
+                    <tbody>{detail.journal_lines.map((row) => <tr key={row.journal_line_id} className="border-t border-gray-200"><td className="p-3">{row.line_number}</td><td className="p-3 font-mono text-xs">{row.account_id}</td><td className="p-3 text-right">{formatExactCurrency(row.debit)}</td><td className="p-3 text-right">{formatExactCurrency(row.credit)}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 };
