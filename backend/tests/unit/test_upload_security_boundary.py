@@ -1,7 +1,7 @@
 """
 Static and unit tests for the parse-invoice security boundary.
 
-Verifies that the /parse-invoice endpoint:
+Verifies that the authoritative /parse-invoice-safe endpoint:
 - Uses validate_upload() (magic number + size check), not a content_type string check
 - Does not read files unbounded via shutil.copyfileobj
 - Rejects files whose bytes do not match the declared extension
@@ -39,12 +39,10 @@ def test_parse_invoice_does_not_use_shutil_copyfileobj() -> None:
     assert "shutil.copyfileobj" not in ROUTE_SOURCE
 
 
-def test_parse_invoice_handler_allows_pdf_jpeg_jpg_png() -> None:
-    # Confirm allowed_types list includes all four expected extensions.
-    assert '"pdf"' in ROUTE_SOURCE
-    assert '"jpeg"' in ROUTE_SOURCE
-    assert '"jpg"' in ROUTE_SOURCE
-    assert '"png"' in ROUTE_SOURCE
+def test_purchase_invoice_handler_is_pdf_only() -> None:
+    assert '@router.post("/parse-invoice-safe")' in ROUTE_SOURCE
+    assert 'allowed_types=["pdf"]' in ROUTE_SOURCE
+    assert '@router.post("/parse-invoice")' not in ROUTE_SOURCE
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +61,7 @@ def _make_upload(content: bytes, filename: str, content_type: str = "application
 async def test_valid_pdf_magic_bytes_pass_validation() -> None:
     content = b"%PDF-1.4 fake pdf content"
     upload = _make_upload(content, "invoice.pdf", "application/pdf")
-    result = await validate_upload(upload, allowed_types=["pdf", "jpeg", "jpg", "png"], max_size_mb=10)
+    result = await validate_upload(upload, allowed_types=["pdf"], max_size_mb=10)
     assert result == content
 
 
@@ -74,7 +72,7 @@ async def test_spoofed_pdf_extension_with_wrong_magic_is_rejected() -> None:
     content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
     upload = _make_upload(content, "invoice.pdf", "application/pdf")
     with pytest.raises(HTTPException) as exc_info:
-        await validate_upload(upload, allowed_types=["pdf", "jpeg", "jpg", "png"], max_size_mb=10)
+        await validate_upload(upload, allowed_types=["pdf"], max_size_mb=10)
     assert exc_info.value.status_code == 400
 
 
@@ -96,21 +94,16 @@ async def test_disallowed_extension_is_rejected() -> None:
     content = b"MZ" + b"\x00" * 100
     upload = _make_upload(content, "malware.exe", "application/octet-stream")
     with pytest.raises(HTTPException) as exc_info:
-        await validate_upload(upload, allowed_types=["pdf", "jpeg", "jpg", "png"], max_size_mb=10)
+        await validate_upload(upload, allowed_types=["pdf"], max_size_mb=10)
     assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_valid_jpeg_magic_bytes_pass_validation() -> None:
+async def test_purchase_parser_rejects_jpeg_even_with_valid_magic_bytes() -> None:
+    from fastapi import HTTPException
+
     content = b"\xff\xd8\xff" + b"\x00" * 200
     upload = _make_upload(content, "scan.jpg", "image/jpeg")
-    result = await validate_upload(upload, allowed_types=["pdf", "jpeg", "jpg", "png"], max_size_mb=10)
-    assert result == content
-
-
-@pytest.mark.asyncio
-async def test_valid_png_magic_bytes_pass_validation() -> None:
-    content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 200
-    upload = _make_upload(content, "scan.png", "image/png")
-    result = await validate_upload(upload, allowed_types=["pdf", "jpeg", "jpg", "png"], max_size_mb=10)
-    assert result == content
+    with pytest.raises(HTTPException) as exc_info:
+        await validate_upload(upload, allowed_types=["pdf"], max_size_mb=10)
+    assert exc_info.value.status_code == 400
