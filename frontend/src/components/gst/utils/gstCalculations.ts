@@ -275,12 +275,12 @@ export function applyNoteAdjustments(
     let creditAdjustment = 0;
     let debitAdjustment = 0;
 
-    notes.forEach(note => {
-        const taxAmount = (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0);
+    classifyGSTR1Notes(notes).forEach(note => {
+        const taxAmount = toAmount(note.cgst_amount) + toAmount(note.sgst_amount) + toAmount(note.igst_amount);
 
-        if (note.note_type === 'credit') {
+        if (note.gstr1Direction === 'credit') {
             creditAdjustment += taxAmount;
-        } else if (note.note_type === 'debit') {
+        } else if (note.gstr1Direction === 'debit') {
             debitAdjustment += taxAmount;
         }
     });
@@ -294,6 +294,21 @@ export function applyNoteAdjustments(
         netAdjustment,
         totalTax: Math.round((summary.totalTax + netAdjustment) * 100) / 100
     };
+}
+
+export type ClassifiedGSTR1Note = Record<string, any> & {
+    gstr1Direction: 'credit' | 'debit';
+};
+
+/** GSTR-1 contains outward/sales notes only; canonical note_type is sales_credit/sales_debit. */
+export function classifyGSTR1Notes(notes: any[]): ClassifiedGSTR1Note[] {
+    return notes.flatMap(note => {
+        const compositeType = String(note?.note_type || '').toLowerCase();
+        const side = String(note?.side || compositeType.split('_')[0] || '').toLowerCase();
+        const direction = String(note?.direction || compositeType.split('_')[1] || compositeType).toLowerCase();
+        if (side !== 'sales' || (direction !== 'credit' && direction !== 'debit')) return [];
+        return [{ ...note, gstr1Direction: direction } as ClassifiedGSTR1Note];
+    });
 }
 
 /**

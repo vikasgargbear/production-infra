@@ -11,6 +11,7 @@ import type { DateRange, GSTR1Data } from '../types';
 import {
     transformInvoicesToGSTR1,
     applyNoteAdjustments,
+    classifyGSTR1Notes,
     formatCurrency
 } from '../utils';
 import { gstApi, invoicesApi } from '../../../services/api';
@@ -60,7 +61,8 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
             const response = await gstApi.reports.creditDebitNotes({
                 from_date: dateRange.from,
                 to_date: dateRange.to,
-                note_type: 'all'
+                note_type: 'all',
+                side: 'sales'
             });
             const responseData = response?.data || response;
             return responseData?.notes || [];
@@ -81,10 +83,11 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                     loadCreditDebitNotes()
                 ]);
 
-                setCreditDebitNotes(notes);
+                const salesNotes = classifyGSTR1Notes(notes);
+                setCreditDebitNotes(salesNotes);
 
                 const baseData = transformInvoicesToGSTR1(invoices);
-                const adjustedSummary = applyNoteAdjustments(baseData.summary, notes);
+                const adjustedSummary = applyNoteAdjustments(baseData.summary, salesNotes);
 
                 const result = {
                     ...baseData,
@@ -214,11 +217,11 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                     <div className="text-sm space-y-1">
                         <div className="flex justify-between">
                             <span>Credit Notes:</span>
-                            <span>{creditDebitNotes.filter(n => n.note_type === 'credit').length}</span>
+                            <span>{creditDebitNotes.filter(n => n.gstr1Direction === 'credit').length}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Debit Notes:</span>
-                            <span>{creditDebitNotes.filter(n => n.note_type === 'debit').length}</span>
+                            <span>{creditDebitNotes.filter(n => n.gstr1Direction === 'debit').length}</span>
                         </div>
                     </div>
                 </div>

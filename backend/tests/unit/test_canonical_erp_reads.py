@@ -119,6 +119,7 @@ def test_uuid_sales_document_detail_routes_precede_legacy_integer_routes() -> No
     expected = {
         "/api/invoices/{invoice_id:uuid}": canonical_erp_reads.canonical_invoice_compatibility_detail,
         "/api/sales-orders/{order_id:uuid}": canonical_erp_reads.canonical_sales_order_compatibility_detail,
+        "/api/challan/{challan_id:uuid}": canonical_erp_reads.canonical_challan_compatibility_detail,
     }
     for path, endpoint in expected.items():
         matches = [route for route in routes if route.path == path and "GET" in route.methods]
@@ -161,6 +162,68 @@ def test_uuid_sales_document_detail_reads_include_importable_lines(monkeypatch) 
         assert "'product_name', product.name" in sql
         assert "'quantity', line.billed_quantity" in sql
         assert "'unit_price', line.quoted_unit_rate" in sql
+
+
+def test_order_and_challan_import_details_include_canonical_batch_allocations(monkeypatch) -> None:
+    captured = []
+    org_id = uuid4()
+    order_id = uuid4()
+    challan_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured.append((sql, params))
+        if "FROM sales.dispatches dispatch" in sql:
+            return [{"challan_id": challan_id, "items": [{"batch_id": uuid4()}]}]
+        return [{"order_id": order_id, "items": [{"batch_id": uuid4()}]}]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    canonical_erp_reads.canonical_sales_order_compatibility_detail(
+        order_id=order_id, user={}, db=object(),
+    )
+    canonical_erp_reads.canonical_challan_compatibility_detail(
+        challan_id=challan_id, user={}, db=object(),
+    )
+
+    order_sql, order_params = captured[0]
+    challan_sql, challan_params = captured[1]
+    assert "inventory.reservations held" in order_sql
+    assert "held.status='active'" in order_sql
+    assert "'batch_number', reservation.batch_number" in order_sql
+    assert order_params == {"org_id": org_id, "order_id": order_id}
+    assert "FROM sales.dispatch_lines line" in challan_sql
+    assert "JOIN inventory.batches batch" in challan_sql
+    assert "'batch_number', batch.batch_number" in challan_sql
+    assert challan_params == {"org_id": org_id, "challan_id": challan_id}
+
+
+def test_return_history_reads_filter_and_project_original_documents(monkeypatch) -> None:
+    captured = []
+    org_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured.append((sql, params))
+        return [{"return_id": uuid4(), "filtered_total": 3}]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    sales = canonical_erp_reads.sales_returns(
+        limit=25, skip=0, offset=25, search="DEMO", status="posted",
+        from_date="2026-08-01", to_date="2026-08-31", user={}, db=object(),
+    )
+    purchases = canonical_erp_reads.purchase_returns(
+        limit=25, skip=0, offset=0, search="SUPPLIER", status="approved",
+        from_date=None, to_date=None, user={}, db=object(),
+    )
+
+    assert sales["total"] == 3
+    assert purchases["total"] == 3
+    assert "invoice.invoice_number AS original_document_no" in captured[0][0]
+    assert "FROM sales.return_lines line" in captured[0][0]
+    assert captured[0][1]["offset"] == 25
+    assert captured[0][1]["status"] == "posted"
+    assert "invoice.supplier_invoice_number AS original_document_no" in captured[1][0]
+    assert "FROM procurement.purchase_return_lines line" in captured[1][0]
 
 
 def test_sales_order_search_uses_canonical_number_and_customer_fields(monkeypatch) -> None:
@@ -502,6 +565,33 @@ def test_gst_dashboard_applies_the_selected_period_to_both_tax_sides(monkeypatch
     assert "invoice_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
     assert "supplier_invoice_date BETWEEN period.date_from AND period.date_to" in captured["sql"]
     assert captured["sql"].count("status='posted'") == 2
+
+
+def test_gstr1_adjustment_notes_are_posted_date_bounded_and_side_aware(monkeypatch) -> None:
+    captured = {}
+    org_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured.update(sql=sql, params=params)
+        return [{"note_type": "sales_credit", "side": "sales", "direction": "credit"}]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.gst_adjustment_notes(
+        from_date="2026-08-01", to_date="2026-08-31", note_type="all",
+        side="sales", user={}, db=object(),
+    )
+
+    assert result["total"] == 1
+    assert captured["params"] == {
+        "org_id": org_id, "from_date": "2026-08-01", "to_date": "2026-08-31",
+        "side": "sales", "note_type": "all",
+    }
+    assert "note.status='posted'" in captured["sql"]
+    assert "note.note_date >= CAST(:from_date AS date)" in captured["sql"]
+    assert "note.note_date <= CAST(:to_date AS date)" in captured["sql"]
+    assert "note.side=:side" in captured["sql"]
+    assert "note.side, note.direction, note.document_effect" in captured["sql"]
 
 
 def test_canonical_receivables_use_effective_allocations_and_tenant_scope() -> None:

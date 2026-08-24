@@ -20,13 +20,11 @@ interface ExecutiveDashboardProps {
 interface MetricCard {
   title: string;
   value: string | number;
-  change: number;
-  changeType: 'increase' | 'decrease';
+  change: number | null;
+  changeType: 'increase' | 'decrease' | 'neutral';
   icon: React.ComponentType<any>;
   subtitle: string;
 }
-
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = false, onClose }) => {
   const [dateRange, setDateRange] = useState('30days');
@@ -38,6 +36,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
   const [inventoryData, setInventoryData] = useState<any>(null);
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [topCustomers, setTopCustomers] = useState<any[]>([]);
+  const [unavailableSections, setUnavailableSections] = useState<string[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -73,6 +72,19 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
       };
 
       // Fetch real data from multiple endpoints in parallel
+      const results = await Promise.allSettled([
+        apiClient.get('/dashboard/stats', { params: dateParams }),
+        apiClient.get('/dashboard/sales-analytics', { params: dateParams }),
+        apiClient.get('/dashboard/inventory-summary'),
+        apiClient.get('/dashboard/financial-summary', { params: dateParams }),
+        apiClient.get('/dashboard/top-products', { params: { ...dateParams, limit: 5 } }),
+        apiClient.get('/dashboard/top-customers', { params: { ...dateParams, limit: 5 } })
+      ]);
+      const labels = ['summary', 'sales trend', 'inventory', 'financial summary', 'top products', 'top customers'];
+      setUnavailableSections(
+        results.flatMap((result, index) => result.status === 'rejected' ? [labels[index]] : [])
+      );
+
       const [
         dashboardStats,
         salesAnalytics,
@@ -80,50 +92,45 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
         financialSummary,
         topProductsData,
         topCustomersData
-      ] = await Promise.all([
-        apiClient.get('/dashboard/stats', { params: dateParams }),
-        apiClient.get('/dashboard/sales-analytics', { params: dateParams }),
-        apiClient.get('/dashboard/inventory-summary', { params: dateParams }),
-        apiClient.get('/dashboard/financial-summary', { params: dateParams }),
-        apiClient.get('/dashboard/top-products', { params: { ...dateParams, limit: 5 } }),
-        apiClient.get('/dashboard/top-customers', { params: { ...dateParams, limit: 5 } })
-      ]);
+      ] = results.map(result => result.status === 'fulfilled' ? result.value : null);
 
       // Process dashboard stats for metric cards
-      const stats = dashboardStats.data || {};
-      const financial = financialSummary.data || {};
-      const inventory = inventorySummary.data || {};
+      const stats = dashboardStats?.data || {};
+      const financial = financialSummary?.data || {};
+      const inventory = inventorySummary?.data || {};
+      const hasStats = Boolean(dashboardStats || financialSummary);
+      const hasInventory = Boolean(inventorySummary);
 
       const metricsData: MetricCard[] = [
         {
           title: 'Total Revenue',
-          value: formatCurrency(stats.total_revenue || financial.total_revenue || 0),
-          change: stats.revenue_change || 0,
-          changeType: stats.revenue_change >= 0 ? 'increase' : 'decrease',
+          value: hasStats ? formatCurrency(stats.total_revenue ?? financial.total_revenue ?? 0) : 'Unavailable',
+          change: typeof stats.revenue_change === 'number' ? stats.revenue_change : null,
+          changeType: stats.revenue_change > 0 ? 'increase' : stats.revenue_change < 0 ? 'decrease' : 'neutral',
           icon: DollarSign,
           subtitle: 'This period'
         },
         {
           title: 'Total Orders',
-          value: stats.total_orders || stats.total_invoices || 0,
-          change: stats.orders_change || 0,
-          changeType: stats.orders_change >= 0 ? 'increase' : 'decrease',
+          value: dashboardStats ? (stats.total_orders ?? stats.total_invoices ?? 0) : 'Unavailable',
+          change: typeof stats.orders_change === 'number' ? stats.orders_change : null,
+          changeType: stats.orders_change > 0 ? 'increase' : stats.orders_change < 0 ? 'decrease' : 'neutral',
           icon: ShoppingCart,
           subtitle: 'Orders placed'
         },
         {
           title: 'Active Products',
-          value: inventory.total_products || inventory.active_products || 0,
-          change: inventory.products_change || 0,
-          changeType: 'increase',
+          value: hasInventory ? (inventory.total_products ?? inventory.active_products ?? 0) : 'Unavailable',
+          change: typeof inventory.products_change === 'number' ? inventory.products_change : null,
+          changeType: inventory.products_change > 0 ? 'increase' : inventory.products_change < 0 ? 'decrease' : 'neutral',
           icon: Package,
           subtitle: 'In inventory'
         },
         {
           title: 'Total Customers',
-          value: stats.total_customers || 0,
-          change: stats.customers_change || 0,
-          changeType: stats.customers_change >= 0 ? 'increase' : 'decrease',
+          value: dashboardStats ? (stats.total_customers ?? 0) : 'Unavailable',
+          change: typeof stats.customers_change === 'number' ? stats.customers_change : null,
+          changeType: stats.customers_change > 0 ? 'increase' : stats.customers_change < 0 ? 'decrease' : 'neutral',
           icon: Users,
           subtitle: 'Registered'
         }
@@ -133,20 +140,20 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
       setDashboardData(stats);
 
       // Process sales analytics for charts
-      const salesChartData = (salesAnalytics.data || []).map((item: any) => ({
+      const salesChartData = (salesAnalytics?.data || []).map((item: any) => ({
         date: item.date || item.period,
-        revenue: item.revenue || item.total_sales || 0,
-        orders: item.orders || item.invoice_count || 0,
-        profit: item.profit || (item.revenue * 0.2) || 0
+        revenue: item.revenue ?? item.total_sales ?? 0,
+        orders: item.orders ?? item.invoice_count ?? 0,
+        profit: item.profit ?? 0
       }));
       setSalesData(salesChartData);
 
       // Set inventory data
-      setInventoryData(inventory);
+      setInventoryData(inventorySummary ? inventory : null);
 
       // Set top products and customers
-      setTopProducts(topProductsData.data || []);
-      setTopCustomers(topCustomersData.data || []);
+      setTopProducts(topProductsData?.data || []);
+      setTopCustomers(topCustomersData?.data || []);
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -155,6 +162,8 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
       setSalesData([]);
       setTopProducts([]);
       setTopCustomers([]);
+      setInventoryData(null);
+      setUnavailableSections(['summary', 'sales trend', 'inventory', 'financial summary', 'top products', 'top customers']);
     } finally {
       setLoading(false);
     }
@@ -282,6 +291,13 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
               </div>
             </div>
 
+            {unavailableSections.length > 0 && (
+              <div className="mb-6 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Some live sections are unavailable: {unavailableSections.join(', ')}. Available sections remain current.</span>
+              </div>
+            )}
+
             {/* Metric Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
               {metrics.map((metric, index) => {
@@ -292,13 +308,11 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
                       <div className="p-2 bg-gray-50 rounded-lg">
                         <Icon className="w-5 h-5 text-gray-600" />
                       </div>
-                      <span
-                        className={`text-sm font-medium ${
-                          metric.changeType === 'increase' ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        {metric.changeType === 'increase' ? '↑' : '↓'} {Math.abs(metric.change)}%
-                      </span>
+                      {metric.change !== null && metric.change !== 0 ? (
+                        <span className={`text-sm font-medium ${metric.changeType === 'increase' ? 'text-green-600' : 'text-red-600'}`}>
+                          {metric.changeType === 'increase' ? '↑' : '↓'} {Math.abs(metric.change)}%
+                        </span>
+                      ) : <span className="text-sm text-gray-400">Change unavailable</span>}
                     </div>
                     <p className="text-2xl font-bold text-gray-900">{metric.value}</p>
                     <p className="text-sm text-gray-600 mt-1">{metric.title}</p>
@@ -354,25 +368,19 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Total Stock Value</span>
                     <span className="text-sm font-semibold">
-                      {formatCurrency(inventoryData?.total_stock_value || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Low Stock Items</span>
-                    <span className="text-sm font-semibold text-amber-600">
-                      {inventoryData?.low_stock_count || 0}
+                      {inventoryData ? formatCurrency(inventoryData.stock_value ?? inventoryData.total_stock_value ?? 0) : 'Unavailable'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Out of Stock</span>
                     <span className="text-sm font-semibold text-red-600">
-                      {inventoryData?.out_of_stock_count || 0}
+                      {inventoryData ? (inventoryData.low_stock ?? inventoryData.low_stock_count ?? 'Unavailable') : 'Unavailable'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Expiring Soon</span>
                     <span className="text-sm font-semibold text-orange-600">
-                      {inventoryData?.expiring_soon_count || 0}
+                      {inventoryData ? (inventoryData.expiring_soon_count ?? 'Unavailable') : 'Unavailable'}
                     </span>
                   </div>
                 </div>

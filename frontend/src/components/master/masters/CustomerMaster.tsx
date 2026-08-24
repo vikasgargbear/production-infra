@@ -7,7 +7,7 @@
 import React from 'react';
 import {
   Users, Search, Plus, Edit2, Trash2,
-  AlertCircle, Check, Phone
+  AlertCircle, Check
 } from 'lucide-react';
 import { customersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
@@ -17,6 +17,7 @@ import CustomerEditModal from '../modals/CustomerEditModal';
 import CustomerFlow from '../customers/CustomerFlow';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
+import ContactActions from './ContactActions';
 
 // ============================================================================
 // Types
@@ -89,14 +90,14 @@ const getColumns = (
       key: 'contact',
       header: 'Contact',
       render: (_, customer) => customer ? (
-        <div>
-          <div className="flex items-center text-gray-900">
-            <Phone className="w-3 h-3 mr-1" />
-            {customer.primary_phone || 'N/A'}
-          </div>
-          {customer.primary_email && (
-            <div className="text-sm text-gray-500 truncate">{customer.primary_email}</div>
-          )}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-700">{customer.primary_phone || customer.primary_email || 'No contact details'}</div>
+          <ContactActions
+            name={customer.customer_name || 'customer'}
+            phone={customer.primary_phone}
+            email={customer.primary_email}
+            whatsapp={customer.whatsapp_number}
+          />
         </div>
       ) : <div>N/A</div>
     },
@@ -281,17 +282,18 @@ const CustomerMaster: React.FC = () => {
             <input
               ref={searchInputRef}
               type="text"
+              aria-label="Search customers"
               placeholder="Search customers... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
+              className="min-h-11 pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
             />
           </div>
           <select
             aria-label="Filter customers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-11 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {CUSTOMER_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>

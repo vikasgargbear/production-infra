@@ -67,6 +67,30 @@ interface ProductAnalyticsData {
   };
 }
 
+const finiteNumber = (value: unknown): number => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export const formatAnalyticsPercent = (value: unknown): string => `${finiteNumber(value).toFixed(1)}%`;
+export const formatAnalyticsMultiplier = (value: unknown): string => `${finiteNumber(value).toFixed(2)}x`;
+
+export const projectAnalyticsProducts = (rows: unknown): AnalyticsProduct[] => (
+  Array.isArray(rows) ? rows : []
+).map((row: any) => ({
+  id: String(row.id ?? row.product_id ?? ''),
+  name: String(row.name ?? row.product_name ?? 'Unnamed product'),
+  category: String(row.category ?? 'Uncategorized'),
+  sales: finiteNumber(row.sales),
+  revenue: finiteNumber(row.revenue),
+  profit: finiteNumber(row.profit),
+  margin: finiteNumber(row.margin),
+  stock: finiteNumber(row.stock),
+  turnover: finiteNumber(row.turnover),
+  trend: row.trend === 'up' || row.trend === 'down' ? row.trend : 'stable',
+  trendValue: finiteNumber(row.trendValue ?? row.trend_value)
+}));
+
 const ProductAnalytics: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +99,7 @@ const ProductAnalytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [partialWarning, setPartialWarning] = useState<string | null>(null);
   const [data, setData] = useState<ProductAnalyticsData>({
     products: [],
     categories: ['all'],
@@ -90,26 +115,35 @@ const ProductAnalytics: React.FC = () => {
   const loadProductData = async () => {
     setLoading(true);
     setError(null);
+    setPartialWarning(null);
     try {
-      const [productsResponse, categoriesResponse, analyticsResponse] = await Promise.all([
+      const [productsResult, categoriesResult, analyticsResult] = await Promise.allSettled([
         apiClient.get('/products/analytics/performance'),
         apiClient.get('/products/categories'),
         apiClient.get('/products/analytics/summary')
       ]);
+      if (productsResult.status === 'rejected') throw productsResult.reason;
+      const unavailable = [
+        categoriesResult.status === 'rejected' ? 'category filters' : null,
+        analyticsResult.status === 'rejected' ? 'summary metrics' : null,
+      ].filter(Boolean);
+      if (unavailable.length > 0) {
+        setPartialWarning(`Live ${unavailable.join(' and ')} are unavailable; product detail metrics remain current.`);
+      }
 
-      const products = productsResponse.data?.products || [];
-      const categories = ['all', ...(categoriesResponse.data?.categories || [])];
-      const analytics = analyticsResponse.data || {};
+      const products = projectAnalyticsProducts(productsResult.value.data?.products || []);
+      const categories = ['all', ...(categoriesResult.status === 'fulfilled' ? categoriesResult.value.data?.categories || [] : [])];
+      const analytics = analyticsResult.status === 'fulfilled' ? analyticsResult.value.data || {} : {};
 
       setData({
         products,
         categories,
         summary: {
-          totalProducts: analytics.total_products || products.length,
-          highMarginProducts: analytics.high_margin_products || products.filter(p => p.margin > 25).length,
-          fastMovingProducts: analytics.fast_moving_products || products.filter(p => p.turnover > 10).length,
-          lowStockProducts: analytics.low_stock_products || products.filter(p => p.stock < 1000).length,
-          avgMargin: analytics.avg_margin || (products.reduce((acc, p) => acc + p.margin, 0) / products.length || 0)
+          totalProducts: finiteNumber(analytics.total_products ?? products.length),
+          highMarginProducts: finiteNumber(analytics.high_margin_products ?? products.filter(p => p.margin > 25).length),
+          fastMovingProducts: finiteNumber(analytics.fast_moving_products ?? products.filter(p => p.turnover > 10).length),
+          lowStockProducts: finiteNumber(analytics.low_stock_products ?? products.filter(p => p.stock <= 0).length),
+          avgMargin: finiteNumber(analytics.avg_margin ?? (products.length ? products.reduce((acc, p) => acc + p.margin, 0) / products.length : 0))
         },
         categoryPerformance: analytics.category_performance || {},
         trends: analytics.trends || { labels: [], revenue: [], margin: [] }
@@ -150,7 +184,7 @@ const ProductAnalytics: React.FC = () => {
       );
     }
 
-    return filtered.sort((a, b) => b[sortBy] - a[sortBy]);
+    return [...filtered].sort((a, b) => b[sortBy] - a[sortBy]);
   }, [data.products, selectedCategory, searchQuery, sortBy]);
 
   const categoryPerformance = useMemo(() => {
@@ -185,29 +219,13 @@ const ProductAnalytics: React.FC = () => {
     };
   }, [data.categoryPerformance, data.products]);
 
-  const marginAnalysis = useMemo(() => {
-    return {
-      datasets: [{
-        label: 'Products',
-        data: data.products.map(p => ({ x: p.revenue / 1000, y: p.margin, label: p.name })),
-        backgroundColor: data.products.map(p =>
-          p.margin >= 25 ? 'rgba(34, 197, 94, 0.6)' :
-            p.margin >= 20 ? 'rgba(251, 146, 60, 0.6)' :
-              'rgba(239, 68, 68, 0.6)'
-        ),
-        pointRadius: 8,
-        pointHoverRadius: 10
-      }]
-    };
-  }, [data.products]);
-
   const trendData = useMemo(() => {
     return {
-      labels: data.trends.labels.length > 0 ? data.trends.labels : ['No Data'],
+      labels: data.trends.labels,
       datasets: [
         {
           label: 'Top Products Revenue',
-          data: data.trends.revenue.length > 0 ? data.trends.revenue : [0],
+          data: data.trends.revenue,
           borderColor: 'rgb(59, 130, 246)',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
           tension: 0.3,
@@ -215,7 +233,7 @@ const ProductAnalytics: React.FC = () => {
         },
         {
           label: 'Average Margin %',
-          data: data.trends.margin.length > 0 ? data.trends.margin : [0],
+          data: data.trends.margin,
           borderColor: 'rgb(34, 197, 94)',
           backgroundColor: 'rgba(34, 197, 94, 0.1)',
           tension: 0.3,
@@ -227,12 +245,15 @@ const ProductAnalytics: React.FC = () => {
   }, [data.trends]);
 
   const getTrendIcon = (trend: 'up' | 'down' | 'stable', value: number) => {
-    if (trend === 'up') {
-      return <span className="text-green-600 text-sm flex items-center"><TrendingUp className="h-3 w-3 mr-1" />+{value}%</span>;
-    } else if (trend === 'down') {
-      return <span className="text-red-600 text-sm flex items-center"><TrendingUp className="h-3 w-3 mr-1 rotate-180" />{value}%</span>;
+    if (!Number.isFinite(value) || value === 0) {
+      return <span className="text-gray-500 text-sm" title="No comparison period from canonical API">Trend unavailable</span>;
     }
-    return <span className="text-gray-500 text-sm">→ {value}%</span>;
+    if (trend === 'up') {
+      return <span className="text-green-600 text-sm flex items-center"><TrendingUp className="h-3 w-3 mr-1" />+{formatAnalyticsPercent(Math.abs(value))}</span>;
+    } else if (trend === 'down') {
+      return <span className="text-red-600 text-sm flex items-center"><TrendingUp className="h-3 w-3 mr-1 rotate-180" />−{formatAnalyticsPercent(Math.abs(value))}</span>;
+    }
+    return <span className="text-gray-500 text-sm">{formatAnalyticsPercent(value)}</span>;
   };
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -248,7 +269,7 @@ const ProductAnalytics: React.FC = () => {
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                className="min-h-11 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
               >
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
@@ -263,17 +284,19 @@ const ProductAnalytics: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
+                  aria-label="Search product analytics"
                   placeholder="Search products..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="min-h-11 w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
             <select
+              aria-label="Filter product analytics by category"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="min-h-11 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               {data.categories.map(cat => (
                 <option key={cat} value={cat}>
@@ -282,9 +305,10 @@ const ProductAnalytics: React.FC = () => {
               ))}
             </select>
             <select
+              aria-label="Sort product analytics"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="min-h-11 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="revenue">Sort by Revenue</option>
               <option value="margin">Sort by Margin</option>
@@ -293,13 +317,15 @@ const ProductAnalytics: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => setView('grid')}
-                className={`px-3 py-2 rounded-lg ${view === 'grid' ? 'bg-gray-200' : 'bg-white'} border border-gray-300`}
+                aria-pressed={view === 'grid'}
+                className={`min-h-11 px-3 py-2 rounded-lg ${view === 'grid' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white border-gray-300'} border`}
               >
                 Grid
               </button>
               <button
                 onClick={() => setView('table')}
-                className={`px-3 py-2 rounded-lg ${view === 'table' ? 'bg-gray-200' : 'bg-white'} border border-gray-300`}
+                aria-pressed={view === 'table'}
+                className={`min-h-11 px-3 py-2 rounded-lg ${view === 'table' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white border-gray-300'} border`}
               >
                 Table
               </button>
@@ -324,11 +350,20 @@ const ProductAnalytics: React.FC = () => {
                 <span className="text-red-700">{error}</span>
                 <button
                   onClick={() => setError(null)}
-                  className="ml-auto text-red-500 hover:text-red-700"
+                  aria-label="Dismiss product analytics error"
+                  className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center text-red-500 hover:text-red-700"
                 >
                   ×
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {partialWarning && !loading && (
+          <div className="px-6 pt-6" role="status">
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <AlertTriangle className="h-5 w-5 shrink-0" />{partialWarning}
             </div>
           </div>
         )}
@@ -353,14 +388,14 @@ const ProductAnalytics: React.FC = () => {
             </div>
             <div className="p-4 border border-gray-200 rounded-lg">
               <AlertTriangle className="h-8 w-8 text-orange-600 mb-2" />
-              <p className="text-sm text-gray-600">Low Stock (&lt;1000)</p>
+              <p className="text-sm text-gray-600">Out of Stock</p>
               <p className="text-xl font-bold">{data.summary.lowStockProducts}</p>
             </div>
             <div className="p-4 border border-gray-200 rounded-lg">
               <BarChart3 className="h-8 w-8 text-purple-600 mb-2" />
               <p className="text-sm text-gray-600">Avg Margin</p>
               <p className="text-xl font-bold">
-                {data.summary.avgMargin.toFixed(1)}%
+                {formatAnalyticsPercent(data.summary.avgMargin)}
               </p>
             </div>
           </div>
@@ -401,9 +436,10 @@ const ProductAnalytics: React.FC = () => {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue & Margin Trend</h3>
-              <Line
-                data={trendData}
-                options={{
+              {data.trends.labels.length > 0 ? (
+                <Line
+                  data={trendData}
+                  options={{
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: {
@@ -432,9 +468,14 @@ const ProductAnalytics: React.FC = () => {
                       }
                     }
                   }
-                }}
-                height={250}
-              />
+                  }}
+                  height={250}
+                />
+              ) : (
+                <div className="flex h-[250px] items-center justify-center rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
+                  Trend history is unavailable from the canonical API.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -447,7 +488,7 @@ const ProductAnalytics: React.FC = () => {
             <p className="text-gray-600 mb-4">There are no products to analyze at the moment.</p>
             <button
               onClick={handleRefresh}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="min-h-11 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Refresh Data
             </button>
@@ -477,7 +518,7 @@ const ProductAnalytics: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Margin</p>
-                        <p className="font-semibold">{product.margin}%</p>
+                        <p className="font-semibold">{formatAnalyticsPercent(product.margin)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Sales</p>
@@ -485,15 +526,14 @@ const ProductAnalytics: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Turnover</p>
-                        <p className="font-semibold">{product.turnover}x</p>
+                        <p className="font-semibold">{formatAnalyticsMultiplier(product.turnover)}</p>
                       </div>
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-gray-500">Stock Level</span>
-                        <span className={`text-sm font-medium ${product.stock < 1000 ? 'text-red-600' :
-                            product.stock < 3000 ? 'text-yellow-600' :
-                              'text-green-600'
+                        <span className={`text-sm font-medium ${product.stock <= 0 ? 'text-red-600' :
+                              'text-gray-900'
                           }`}>
                           {product.stock.toLocaleString()} units
                         </span>
@@ -529,18 +569,17 @@ const ProductAnalytics: React.FC = () => {
                               product.margin >= 20 ? 'text-yellow-600' :
                                 'text-red-600'
                             }`}>
-                            {product.margin}%
+                            {formatAnalyticsPercent(product.margin)}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <span className={`${product.stock < 1000 ? 'text-red-600' :
-                              product.stock < 3000 ? 'text-yellow-600' :
+                          <span className={`${product.stock <= 0 ? 'text-red-600' :
                                 'text-gray-900'
                             }`}>
                             {product.stock.toLocaleString()}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right">{product.turnover}x</td>
+                        <td className="py-3 px-4 text-right">{formatAnalyticsMultiplier(product.turnover)}</td>
                         <td className="py-3 px-4 text-center">
                           {getTrendIcon(product.trend, product.trendValue)}
                         </td>

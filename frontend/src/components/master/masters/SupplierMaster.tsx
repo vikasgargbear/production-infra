@@ -8,7 +8,7 @@ import React from 'react';
 import {
   Truck, Search, Plus, Edit2, Trash2,
   AlertCircle, Check,
-  Phone, AlertTriangle
+  AlertTriangle
 } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
@@ -17,6 +17,7 @@ import Button from '../../global/ui/Button';
 import SupplierEditModal from '../modals/SupplierEditModal';
 import SupplierFlow from '../suppliers/SupplierFlow';
 import { useEntityMaster } from '../hooks';
+import ContactActions from './ContactActions';
 
 // ============================================================================
 // Types
@@ -121,14 +122,14 @@ const getColumns = (
       key: 'contact',
       header: 'Contact',
       render: (_, supplier) => supplier ? (
-        <div>
-          <div className="flex items-center text-gray-900">
-            <Phone className="w-3 h-3 mr-1" />
-            {supplier.primary_phone || 'N/A'}
-          </div>
-          {supplier.primary_email && (
-            <div className="text-sm text-gray-500 truncate">{supplier.primary_email}</div>
-          )}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-700">{supplier.primary_phone || supplier.primary_email || 'No contact details'}</div>
+          <ContactActions
+            name={supplier.supplier_name || 'supplier'}
+            phone={supplier.primary_phone}
+            email={supplier.primary_email}
+            whatsapp={supplier.whatsapp_number}
+          />
         </div>
       ) : <div>N/A</div>
     },
@@ -317,17 +318,18 @@ const SupplierMaster: React.FC = () => {
             <input
               ref={searchInputRef}
               type="text"
+              aria-label="Search suppliers"
               placeholder="Search suppliers... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-56"
+              className="min-h-11 pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-56"
             />
           </div>
           <select
             aria-label="Filter suppliers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-11 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {SUPPLIER_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>

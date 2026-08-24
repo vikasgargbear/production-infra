@@ -1588,11 +1588,28 @@ def canonical_sales_order_compatibility_detail(
                          'gst_percent', line.cgst_rate + line.sgst_rate + line.igst_rate,
                          'taxable_amount', line.gst_taxable_value,
                          'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
-                         'igst_amount', line.igst_amount, 'line_total', line.line_total
+                         'igst_amount', line.igst_amount, 'line_total', line.line_total,
+                         'batch_id', reservation.batch_id,
+                         'batch_number', reservation.batch_number,
+                         'expiry_date', reservation.expiry_date,
+                         'mrp', reservation.mrp,
+                         'available_quantity', reservation.quantity
                      ) ORDER BY line.line_number) AS items
                 FROM sales.order_lines line
                 LEFT JOIN catalog.products product
                   ON product.org_id=line.org_id AND product.id=line.product_id
+                LEFT JOIN LATERAL (
+                    SELECT held.batch_id, batch.batch_number,
+                           batch.expires_on AS expiry_date, batch.mrp,
+                           held.quantity
+                      FROM inventory.reservations held
+                      JOIN inventory.batches batch
+                        ON batch.org_id=held.org_id AND batch.id=held.batch_id
+                     WHERE held.org_id=line.org_id AND held.order_line_id=line.id
+                       AND held.status='active'
+                       AND held.expires_at>transaction_timestamp()
+                     ORDER BY held.created_at, held.id LIMIT 1
+                ) reservation ON true
                WHERE line.org_id=document.org_id AND line.order_id=document.id
                  AND line.product_id IS NOT NULL
           ) lines ON true
@@ -1636,6 +1653,84 @@ def challans(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
          WHERE dispatch.org_id=:org_id ORDER BY dispatch.dispatch_date DESC, dispatch.id DESC
          LIMIT :limit OFFSET :skip
     """, {"org_id": org_id, "limit": limit, "skip": skip})
+
+
+@router.get("/challan/{challan_id:uuid}")
+def canonical_challan_compatibility_detail(
+    challan_id: UUID,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    """Return the canonical dispatch lines required by invoice import flows."""
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT dispatch.id AS challan_id, dispatch.id,
+               dispatch.dispatch_number AS challan_number,
+               dispatch.dispatch_date AS challan_date, dispatch.status,
+               dispatch.customer_account_id AS customer_id,
+               party.legal_name AS customer_name,
+               contact.phone AS customer_phone, contact.email AS customer_email,
+               dispatch.destination_address_line1 AS delivery_address,
+               dispatch.destination_city AS delivery_city,
+               dispatch.destination_state_code AS delivery_state,
+               dispatch.destination_pincode AS delivery_pincode,
+               dispatch.transporter_name AS transport_company,
+               dispatch.vehicle_number,
+               dispatch.transport_document_number AS lr_number,
+               COALESCE(lines.items, '[]'::jsonb) AS items,
+               COALESCE(lines.total_amount, 0) AS total_amount,
+               dispatch.created_at, dispatch.updated_at
+          FROM sales.dispatches dispatch
+          JOIN parties.customer_accounts account
+            ON account.org_id=dispatch.org_id
+           AND account.id=dispatch.customer_account_id
+          JOIN parties.parties party
+            ON party.org_id=account.org_id AND party.id=account.party_id
+          LEFT JOIN LATERAL (
+              SELECT phone, email
+                FROM parties.contacts
+               WHERE org_id=party.org_id AND party_id=party.id AND status='active'
+               ORDER BY is_primary DESC, id LIMIT 1
+          ) contact ON true
+          LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                         'id', line.id, 'product_id', line.product_id,
+                         'product_name', product.name, 'product_code', product.sku,
+                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'unit', line.uom_code, 'quantity', line.billed_quantity,
+                         'dispatched_quantity', line.billed_quantity,
+                         'free_quantity', line.free_quantity,
+                         'unit_price', order_line.quoted_unit_rate,
+                         'discount_percent', CASE
+                             WHEN order_line.line_discount_kind='percent'
+                             THEN order_line.line_discount_value ELSE 0 END,
+                         'tax_rate', order_line.cgst_rate + order_line.sgst_rate
+                                     + order_line.igst_rate,
+                         'gst_percent', order_line.cgst_rate + order_line.sgst_rate
+                                        + order_line.igst_rate,
+                         'taxable_amount', order_line.gst_taxable_value,
+                         'cgst_amount', order_line.cgst_amount,
+                         'sgst_amount', order_line.sgst_amount,
+                         'igst_amount', order_line.igst_amount,
+                         'line_total', order_line.line_total,
+                         'batch_id', line.batch_id, 'batch_number', batch.batch_number,
+                         'expiry_date', batch.expires_on, 'mrp', batch.mrp
+                     ) ORDER BY line.line_number) AS items,
+                     SUM(order_line.line_total) AS total_amount
+                FROM sales.dispatch_lines line
+                JOIN sales.order_lines order_line
+                  ON order_line.org_id=line.org_id AND order_line.id=line.order_line_id
+                JOIN catalog.products product
+                  ON product.org_id=line.org_id AND product.id=line.product_id
+                JOIN inventory.batches batch
+                  ON batch.org_id=line.org_id AND batch.id=line.batch_id
+               WHERE line.org_id=dispatch.org_id AND line.dispatch_id=dispatch.id
+          ) lines ON true
+         WHERE dispatch.org_id=:org_id AND dispatch.id=:challan_id
+    """, {"org_id": org_id, "challan_id": challan_id})
+    if len(rows) != 1:
+        raise HTTPException(status_code=404, detail="Delivery challan not found")
+    return rows[0]
 
 
 @router.get("/purchases/")
@@ -1957,45 +2052,101 @@ def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, g
 
 @router.get("/sale-returns/")
 def sales_returns(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
+                  offset: Optional[int] = Query(None, ge=0),
+                  search: str = Query("", max_length=200),
+                  status: Optional[str] = None, from_date: Optional[str] = None,
+                  to_date: Optional[str] = None,
                   user: dict = Depends(PermissionChecker("returns", "view")),
                   db: Session = Depends(get_db)):
     org_id = _activate(db, user)
+    effective_offset = offset if offset is not None else skip
     rows = _rows(db, """
         SELECT return_row.id AS return_id, return_row.return_number,
                return_row.return_date, return_row.status,
                return_row.customer_account_id AS customer_id,
                party.legal_name AS customer_name, return_row.grand_total AS total_amount,
+               return_row.reason_code AS reason,
+               invoice.invoice_number AS original_document_no,
+               invoice.invoice_number AS original_invoice_number,
+               COALESCE(lines.items_count, 0) AS items_count,
+               COUNT(*) OVER() AS filtered_total,
                return_row.created_at, return_row.updated_at
           FROM sales.returns return_row
           JOIN parties.customer_accounts account
             ON account.org_id=return_row.org_id AND account.id=return_row.customer_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-         WHERE return_row.org_id=:org_id ORDER BY return_row.return_date DESC, return_row.id DESC
-         LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "limit": limit, "skip": skip})
-    return {"returns": rows, "sales_returns": rows, "total": len(rows)}
+          JOIN sales.invoices invoice
+            ON invoice.org_id=return_row.org_id AND invoice.id=return_row.invoice_id
+          LEFT JOIN LATERAL (
+              SELECT count(*) AS items_count FROM sales.return_lines line
+               WHERE line.org_id=return_row.org_id AND line.return_id=return_row.id
+          ) lines ON true
+         WHERE return_row.org_id=:org_id
+           AND (:status IS NULL OR return_row.status=:status)
+           AND (:from_date IS NULL OR return_row.return_date>=CAST(:from_date AS date))
+           AND (:to_date IS NULL OR return_row.return_date<=CAST(:to_date AS date))
+           AND (:search='' OR return_row.return_number ILIKE :search_pattern
+                OR invoice.invoice_number ILIKE :search_pattern
+                OR party.legal_name ILIKE :search_pattern)
+         ORDER BY return_row.return_date DESC, return_row.id DESC
+         LIMIT :limit OFFSET :offset
+    """, {"org_id": org_id, "limit": limit, "offset": effective_offset,
+            "search": search.strip(), "search_pattern": f"%{search.strip()}%",
+            "status": status, "from_date": from_date, "to_date": to_date})
+    total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
+    for row in rows:
+        row.pop("filtered_total", None)
+    return {"returns": rows, "sales_returns": rows, "total": total}
 
 
 @router.get("/purchase-returns/")
 def purchase_returns(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
+                     offset: Optional[int] = Query(None, ge=0),
+                     search: str = Query("", max_length=200),
+                     status: Optional[str] = None, from_date: Optional[str] = None,
+                     to_date: Optional[str] = None,
                      user: dict = Depends(PermissionChecker("returns", "view")),
                      db: Session = Depends(get_db)):
     org_id = _activate(db, user)
+    effective_offset = offset if offset is not None else skip
     rows = _rows(db, """
         SELECT return_row.id AS return_id,
                return_row.purchase_return_number AS return_number,
                return_row.return_date, return_row.status,
                return_row.supplier_account_id AS supplier_id,
                party.legal_name AS supplier_name, return_row.grand_total AS total_amount,
+               return_row.reason_code AS reason,
+               invoice.supplier_invoice_number AS original_document_no,
+               invoice.supplier_invoice_number AS original_invoice_number,
+               COALESCE(lines.items_count, 0) AS items_count,
+               COUNT(*) OVER() AS filtered_total,
                return_row.created_at, return_row.updated_at
           FROM procurement.purchase_returns return_row
           JOIN parties.supplier_accounts account
             ON account.org_id=return_row.org_id AND account.id=return_row.supplier_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-         WHERE return_row.org_id=:org_id ORDER BY return_row.return_date DESC, return_row.id DESC
-         LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "limit": limit, "skip": skip})
-    return {"returns": rows, "purchase_returns": rows, "total": len(rows)}
+          LEFT JOIN procurement.supplier_invoices invoice
+            ON invoice.org_id=return_row.org_id AND invoice.id=return_row.supplier_invoice_id
+          LEFT JOIN LATERAL (
+              SELECT count(*) AS items_count FROM procurement.purchase_return_lines line
+               WHERE line.org_id=return_row.org_id AND line.purchase_return_id=return_row.id
+          ) lines ON true
+         WHERE return_row.org_id=:org_id
+           AND (:status IS NULL OR return_row.status=:status)
+           AND (:from_date IS NULL OR return_row.return_date>=CAST(:from_date AS date))
+           AND (:to_date IS NULL OR return_row.return_date<=CAST(:to_date AS date))
+           AND (:search='' OR return_row.purchase_return_number ILIKE :search_pattern
+                OR COALESCE(invoice.supplier_invoice_number, '') ILIKE :search_pattern
+                OR party.legal_name ILIKE :search_pattern)
+         ORDER BY return_row.return_date DESC, return_row.id DESC
+         LIMIT :limit OFFSET :offset
+    """, {"org_id": org_id, "limit": limit, "offset": effective_offset,
+            "search": search.strip(), "search_pattern": f"%{search.strip()}%",
+            "status": status, "from_date": from_date, "to_date": to_date})
+    total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
+    for row in rows:
+        row.pop("filtered_total", None)
+    return {"returns": rows, "purchase_returns": rows, "total": total}
 
 
 @router.get("/gst/reports/tax/gstr2a")
@@ -2023,12 +2174,19 @@ def gstr2a(user: dict = Depends(PermissionChecker("gst", "view")),
 
 
 @router.get("/gst/reports/credit-debit-notes")
-def gst_adjustment_notes(user: dict = Depends(PermissionChecker("gst", "view")),
-                         db: Session = Depends(get_db)):
+def gst_adjustment_notes(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    note_type: str = "all",
+    side: Optional[str] = None,
+    user: dict = Depends(PermissionChecker("gst", "view")),
+    db: Session = Depends(get_db),
+):
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT note.id AS note_id, note.note_number, note.note_date,
                CONCAT(note.side, '_', note.direction) AS note_type,
+               note.side, note.direction, note.document_effect,
                note.party_id, party.legal_name AS party_name,
                note.gst_taxable_value AS taxable_amount,
                note.cgst_amount, note.sgst_amount, note.igst_amount,
@@ -2036,8 +2194,15 @@ def gst_adjustment_notes(user: dict = Depends(PermissionChecker("gst", "view")),
                note.status
           FROM finance.adjustment_notes note
           JOIN parties.parties party ON party.org_id=note.org_id AND party.id=note.party_id
-         WHERE note.org_id=:org_id ORDER BY note.note_date DESC, note.id DESC
-    """, {"org_id": org_id})
+         WHERE note.org_id=:org_id AND note.status='posted'
+           AND (:from_date IS NULL OR note.note_date >= CAST(:from_date AS date))
+           AND (:to_date IS NULL OR note.note_date <= CAST(:to_date AS date))
+           AND (:side IS NULL OR note.side=:side)
+           AND (:note_type='all' OR note.direction=:note_type
+                OR CONCAT(note.side, '_', note.direction)=:note_type)
+         ORDER BY note.note_date DESC, note.id DESC
+    """, {"org_id": org_id, "from_date": from_date, "to_date": to_date,
+            "side": side, "note_type": note_type})
     return {"notes": rows, "total": len(rows)}
 
 
