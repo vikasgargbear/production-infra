@@ -728,7 +728,6 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
                     <Package className="w-12 h-12 mx-auto" />
                   </div>
                   <p className="text-red-600 mb-4">{error}</p>
-                  <p className="text-sm text-gray-500 mb-4">Showing sample data for development</p>
                   <button
                     onClick={loadStockMovements}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

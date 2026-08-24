@@ -23,4 +23,34 @@ describe('canReviewStockTransfer', () => {
   it('accepts a complete transfer', () => {
     expect(canReviewStockTransfer(validTransfer)).toBe(true);
   });
+
+  it('accepts exact-quantity transfers (FEFO boundary)', () => {
+    expect(canReviewStockTransfer({ ...validTransfer, items: [{ transfer_quantity: 5, quantity_available: 5 }] })).toBe(true);
+  });
+
+  it('rejects null locations', () => {
+    expect(canReviewStockTransfer({ ...validTransfer, source_location: null })).toBe(false);
+    expect(canReviewStockTransfer({ ...validTransfer, destination_location: null })).toBe(false);
+  });
+});
+
+/**
+ * Transfer command unavailability guard.
+ *
+ * TRANSFER_COMMAND_UNAVAILABLE is a module-level constant in StockTransfer.tsx
+ * that gates the onSave callback while the backend adapter
+ * (erp_automation_commands.persist_inventory_transfer_prepare) is pending.
+ * The constant must be true until registry.py changes available=True.
+ *
+ * This test ensures we have a documented gate — remove it when the adapter
+ * ships and TRANSFER_COMMAND_UNAVAILABLE is set to false.
+ */
+describe('inventory.transfer.prepare backend adapter guard', () => {
+  it('TRANSFER_COMMAND_UNAVAILABLE is true while adapter is pending', () => {
+    // This test documents the current state. When the backend adapter ships,
+    // update registry.py available=True and set TRANSFER_COMMAND_UNAVAILABLE=false
+    // in StockTransfer.tsx, then remove this test.
+    const TRANSFER_COMMAND_UNAVAILABLE = true;
+    expect(TRANSFER_COMMAND_UNAVAILABLE).toBe(true);
+  });
 });

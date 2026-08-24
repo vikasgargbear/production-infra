@@ -7,6 +7,7 @@ import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
   NotesSection, useToast
 } from '../../global';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 import { branchesApi, settingsApi } from '../../../services/api';
 import {
   prepareCanonicalAction,
@@ -15,6 +16,17 @@ import {
 } from '../../../services/api/canonicalOperatorActions';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import { canReviewStockTransfer } from './utils/canReviewStockTransfer';
+
+/**
+ * The backend adapter for inventory.transfer.prepare is not yet available
+ * (registry.py marks it _missing_action_resolver). Attempting to call prepare
+ * returns HTTP 503 "Canonical command adapter is unavailable". We gate the
+ * write path here so the UI is honest about the limitation.
+ *
+ * When the backend ships erp_automation_commands.persist_inventory_transfer_prepare
+ * and the registry binding is updated to available=True, remove this constant.
+ */
+const TRANSFER_COMMAND_UNAVAILABLE = true;
 
 const StockTransfer = ({ open = true, onClose }) => {
   const toast = useToast();
@@ -498,6 +510,16 @@ const StockTransfer = ({ open = true, onClose }) => {
   // Step 2: Review content
   const reviewContent = (
     <div className="space-y-6">
+      {/* Transfer command unavailable notice — remove once backend adapter is ready */}
+      {TRANSFER_COMMAND_UNAVAILABLE && (
+        <CanonicalWriteNotice
+          action="Stock transfer posting"
+          title="Stock transfer posting is not yet available"
+          description="The canonical inventory.transfer.prepare command is pending backend completion. You can build and review the transfer, but posting is disabled until the adapter ships."
+          className="rounded-lg"
+        />
+      )}
+
       {/* Error State */}
       {transferError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -528,12 +550,17 @@ const StockTransfer = ({ open = true, onClose }) => {
 
       {/* Canonical Confirm Modal */}
       {showConfirmModal && preparedPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="transfer-confirm-title"
+        >
           <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => !isCommitting && setShowConfirmModal(false)} />
           <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-lg p-6">
             <div className="flex items-center space-x-3 mb-4">
               <AlertCircle className="w-6 h-6 text-amber-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Confirm Stock Transfer</h3>
+              <h3 id="transfer-confirm-title" className="text-lg font-semibold text-gray-900">Confirm Stock Transfer</h3>
             </div>
             <p className="text-sm text-gray-700 mb-2">
               You are about to transfer <strong>{transferData.items.length}</strong> product(s)
@@ -667,9 +694,9 @@ const StockTransfer = ({ open = true, onClose }) => {
       createContent={createContent}
       reviewContent={reviewContent}
       canProceedToReview={() => canReviewStockTransfer(transferData)}
-      onSave={committedRef ? undefined : handlePrepare}
+      onSave={committedRef || TRANSFER_COMMAND_UNAVAILABLE ? undefined : handlePrepare}
       isSaving={isPreparing || isCommitting}
-      saveLabel={committedRef ? 'Transfer Posted' : 'Post Transfer'}
+      saveLabel={committedRef ? 'Transfer Posted' : TRANSFER_COMMAND_UNAVAILABLE ? 'Posting Unavailable' : 'Post Transfer'}
       onClose={onClose}
     />
   );

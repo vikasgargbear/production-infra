@@ -149,11 +149,32 @@ const AppContent = (): JSX.Element => {
   const renderActiveComponent = (): JSX.Element => {
     switch (activeTabName) {
       case 'sales':
-        return <SalesHub open onClose={goHome} />;
+        return (
+          <SalesHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'purchase':
-        return <PurchaseHub open onClose={goHome} />;
+        return (
+          <PurchaseHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'payment':
-        return <FinancialHub open onClose={goHome} />;
+        return (
+          <FinancialHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'payment-entry':
         return (
           <PaymentProvider>
@@ -178,7 +199,14 @@ const AppContent = (): JSX.Element => {
       case 'gst':
         return <GSTHub open onClose={goHome} />;
       case 'reports':
-        return <ReportsHub open onClose={goHome} />;
+        return (
+          <ReportsHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'master':
         return <MasterHub open onClose={goHome} />;
       case 'home':

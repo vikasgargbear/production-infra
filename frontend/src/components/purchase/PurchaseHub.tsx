@@ -22,11 +22,24 @@ import { usePermissions } from '../../hooks/usePermissions';
 interface PurchaseHubProps {
   open?: boolean;
   onClose?: () => void;
+  /**
+   * Deep-link sub-module to open on mount (e.g. "purchase-order").
+   * Comes from the URL hash (#/purchase/<subpage>).
+   */
+  initialSubpage?: string | null;
+  /**
+   * Called when the user switches sub-modules inside the hub.
+   * The parent (App) uses this to keep the URL hash in sync.
+   */
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
-const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
+const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('purchase', 'create');
+
+  /** All valid sub-module IDs for deep-linking into PurchaseHub. */
+  const PURCHASE_SUBPAGE_IDS = ['purchase', 'purchase-order', 'grn', 'purchase-history'] as const;
 
   // State for PO → Purchase Entry navigation
   const [prefilledData, setPrefilledData] = useState<Partial<PurchaseData> | null>(null);
@@ -150,8 +163,12 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
     return modules;
   }, [canCreate, PurchaseEntryWrapper, HistoryWrapper]);
 
-  // Use forceModule to switch tab when navigating from PO
-  const defaultModule = forceModule || (canCreate ? 'purchase' : 'grn');
+  // Use forceModule to switch tab when navigating from PO; fall back to deep-link or permission-based default
+  const resolvedInitialSubpage =
+    initialSubpage && PURCHASE_SUBPAGE_IDS.includes(initialSubpage as any)
+      ? initialSubpage
+      : null;
+  const defaultModule = forceModule || resolvedInitialSubpage || (canCreate ? 'purchase' : 'grn');
 
   // Reset forceModule after it's been consumed
   if (forceModule) {
@@ -168,6 +185,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       icon={ShoppingCart}
       modules={purchaseModules}
       defaultModule={defaultModule}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

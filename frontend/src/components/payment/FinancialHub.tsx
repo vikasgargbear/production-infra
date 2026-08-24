@@ -13,6 +13,16 @@ import BankReconciliationFlow from './flows/BankReconciliationFlow';
 interface FinancialHubProps {
   open?: boolean;
   onClose?: () => void;
+  /**
+   * Deep-link sub-module to open on mount (e.g. "journal-entry").
+   * Comes from the URL hash (#/payment/<subpage>).
+   */
+  initialSubpage?: string | null;
+  /**
+   * Called when the user switches sub-modules inside the hub.
+   * The parent (App) uses this to keep the URL hash in sync.
+   */
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface FinancialModule {
@@ -25,7 +35,15 @@ interface FinancialModule {
   component: React.ComponentType<any>;
 }
 
-const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => {
+const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
+  /** All valid sub-module IDs for deep-linking into FinancialHub. */
+  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
+
+  const resolvedDefault =
+    initialSubpage && PAYMENT_SUBPAGE_IDS.includes(initialSubpage as any)
+      ? initialSubpage
+      : 'payment-entry';
+
   const financialModules: FinancialModule[] = [
     {
       id: 'payment-entry',
@@ -73,7 +91,8 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
       subtitle="Payments, journals, and expense management"
       icon={Calculator}
       modules={financialModules}
-      defaultModule="payment-entry"
+      defaultModule={resolvedDefault}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };
