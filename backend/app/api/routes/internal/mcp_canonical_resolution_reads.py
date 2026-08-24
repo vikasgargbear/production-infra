@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Optional
 from uuid import UUID
 
@@ -25,6 +25,23 @@ router = APIRouter(
     tags=["Internal MCP"],
     include_in_schema=False,
 )
+
+_ALLOCATION_QUANTITY_QUANTUM = Decimal("0.000001")
+
+
+def _allocation_quantity_units(value: Decimal) -> int:
+    normalized = value.quantize(
+        _ALLOCATION_QUANTITY_QUANTUM, rounding=ROUND_HALF_UP
+    )
+    return int(normalized / _ALLOCATION_QUANTITY_QUANTUM)
+
+
+def _allocation_quantities_match(
+    left: Decimal, right: Decimal, *, tolerance_units: int
+) -> bool:
+    return abs(
+        _allocation_quantity_units(left) - _allocation_quantity_units(right)
+    ) <= tolerance_units
 
 
 class StrictDTO(BaseModel):
@@ -449,11 +466,17 @@ class SalesInvoiceDispatchAllocation(StrictDTO):
     def validate_lineage_and_quantities(self):
         if self.source_line_id != self.dispatch_line_id:
             raise ValueError("dispatch source line identity does not match")
-        if self.base_quantity != (
-            self.allocated_base_billed_quantity + self.allocated_base_free_quantity
+        if not _allocation_quantities_match(
+            self.base_quantity,
+            self.allocated_base_billed_quantity + self.allocated_base_free_quantity,
+            tolerance_units=0,
         ):
             raise ValueError("dispatch base quantities do not reconcile")
-        if self.entered_quantity != self.billed_quantity + self.free_quantity:
+        if not _allocation_quantities_match(
+            self.entered_quantity,
+            self.billed_quantity + self.free_quantity,
+            tolerance_units=1,
+        ):
             raise ValueError("dispatch entered quantities do not reconcile")
         return self
 
@@ -492,9 +515,17 @@ class SalesInvoiceDirectIssueAllocation(StrictDTO):
             or self.evidenced_allocation_count < 1
         ):
             raise ValueError("direct issue requires exactly one matched command evidence")
-        if self.base_quantity != self.base_billed_quantity + self.base_free_quantity:
+        if not _allocation_quantities_match(
+            self.base_quantity,
+            self.base_billed_quantity + self.base_free_quantity,
+            tolerance_units=0,
+        ):
             raise ValueError("direct issue base quantities do not reconcile")
-        if self.entered_quantity != self.billed_quantity + self.free_quantity:
+        if not _allocation_quantities_match(
+            self.entered_quantity,
+            self.billed_quantity + self.free_quantity,
+            tolerance_units=1,
+        ):
             raise ValueError("direct issue entered quantities do not reconcile")
         return self
 
@@ -559,19 +590,35 @@ class SalesInvoiceLine(StrictDTO):
                 raise ValueError(
                     "direct physical allocation count does not match command evidence"
                 )
+        allocated_base_billed = sum(
+            value.allocated_base_billed_quantity
+            if isinstance(value, SalesInvoiceDispatchAllocation)
+            else value.base_billed_quantity
+            for value in allocations
+        )
+        allocated_base_free = sum(
+            value.allocated_base_free_quantity
+            if isinstance(value, SalesInvoiceDispatchAllocation)
+            else value.base_free_quantity
+            for value in allocations
+        )
         if allocations and (
-            sum(value.allocated_base_billed_quantity
-                if isinstance(value, SalesInvoiceDispatchAllocation)
-                else value.base_billed_quantity for value in allocations)
-            != self.base_billed_quantity
-            or sum(value.allocated_base_free_quantity
-                   if isinstance(value, SalesInvoiceDispatchAllocation)
-                   else value.base_free_quantity for value in allocations)
-            != self.base_free_quantity
-            or sum(value.billed_quantity for value in allocations)
-            != self.billed_quantity
-            or sum(value.free_quantity for value in allocations)
-            != self.free_quantity
+            not _allocation_quantities_match(
+                allocated_base_billed, self.base_billed_quantity, tolerance_units=0
+            )
+            or not _allocation_quantities_match(
+                allocated_base_free, self.base_free_quantity, tolerance_units=0
+            )
+            or not _allocation_quantities_match(
+                sum(value.billed_quantity for value in allocations),
+                self.billed_quantity,
+                tolerance_units=1,
+            )
+            or not _allocation_quantities_match(
+                sum(value.free_quantity for value in allocations),
+                self.free_quantity,
+                tolerance_units=1,
+            )
         ):
             raise ValueError("allocation totals do not reconcile to invoice line")
         return self

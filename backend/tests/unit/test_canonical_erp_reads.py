@@ -718,6 +718,29 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     quantity_mismatch["quantity"] = 2
     with pytest.raises(ValidationError, match="do not reconcile"):
         canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(quantity_mismatch)
+    three_way_dispatch = [
+        allocation("dispatch_allocation", expires=date(2028, 9, 1))
+        for _ in range(3)
+    ]
+    for value in three_way_dispatch:
+        value.update({
+            "base_quantity": 1,
+            "entered_quantity": 1 / 3,
+            "base_billed_quantity": 1,
+            "base_free_quantity": 0,
+            "billed_quantity": 1 / 3,
+            "free_quantity": 0,
+        })
+    apportioned = item(three_way_dispatch)
+    apportioned["quantity"] = 1
+    apportioned["base_billed_quantity"] = 3
+    response_item = canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(
+        apportioned
+    )
+    assert len(response_item.batch_allocations) == 3
+    base_drift = {**apportioned, "base_billed_quantity": 2.999999}
+    with pytest.raises(ValidationError, match="do not reconcile"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(base_drift)
     posted_without_allocations = {**payload, "status": "posted", "items": [item([])]}
     with pytest.raises(ValidationError, match="posted product invoice lines require"):
         canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
@@ -29,6 +30,22 @@ from ..schemas.master.supplier import CanonicalSupplierCreate
 
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
 logger = logging.getLogger(__name__)
+
+_ALLOCATION_QUANTITY_QUANTUM = Decimal("0.000001")
+
+
+def _allocation_quantity_units(value: Any) -> int:
+    """Normalize compatibility floats to canonical numeric(20,6) micro-units."""
+    normalized = Decimal(str(value)).quantize(
+        _ALLOCATION_QUANTITY_QUANTUM, rounding=ROUND_HALF_UP
+    )
+    return int(normalized / _ALLOCATION_QUANTITY_QUANTUM)
+
+
+def _allocation_quantities_match(left: Any, right: Any, *, tolerance_units: int) -> bool:
+    return abs(
+        _allocation_quantity_units(left) - _allocation_quantity_units(right)
+    ) <= tolerance_units
 
 
 def _activate(db: Session, user: Dict[str, Any]) -> UUID:
@@ -1502,7 +1519,11 @@ class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
             raise ValueError("direct issue requires exactly one matched succeeded command evidence")
         elif self.invoice_dispatch_allocation_id or self.dispatch_id or self.dispatch_line_id:
             raise ValueError("direct issue cannot claim dispatch allocation identities")
-        if abs(self.entered_quantity - self.billed_quantity - self.free_quantity) > 0.000001:
+        if not _allocation_quantities_match(
+            self.entered_quantity,
+            self.billed_quantity + self.free_quantity,
+            tolerance_units=1,
+        ):
             raise ValueError("executed allocation entered quantities do not reconcile")
         return self
 
@@ -1572,11 +1593,11 @@ class CanonicalInvoiceDetailItem(BaseModel):
                     "direct physical allocation count does not match command evidence"
                 )
         for allocation in self.batch_allocations:
-            if abs(
-                allocation.base_quantity
-                - allocation.base_billed_quantity
-                - allocation.base_free_quantity
-            ) > 0.000001:
+            if not _allocation_quantities_match(
+                allocation.base_quantity,
+                allocation.base_billed_quantity + allocation.base_free_quantity,
+                tolerance_units=0,
+            ):
                 raise ValueError("executed allocation base quantities do not reconcile")
             if allocation.source_kind == "direct_issue" and (
                 allocation.allocation_id != allocation.inventory_document_line_id
@@ -1586,17 +1607,28 @@ class CanonicalInvoiceDetailItem(BaseModel):
                 allocation.allocation_id != allocation.invoice_dispatch_allocation_id
             ):
                 raise ValueError("dispatch allocation identity must remain distinct")
-        if abs(
-            sum(value.billed_quantity for value in self.batch_allocations) - self.quantity
-        ) > 0.000001 or abs(
-            sum(value.free_quantity for value in self.batch_allocations) - self.free_quantity
-        ) > 0.000001 or abs(
-            sum(value.base_billed_quantity for value in self.batch_allocations)
-            - self.base_billed_quantity
-        ) > 0.000001 or abs(
-            sum(value.base_free_quantity for value in self.batch_allocations)
-            - self.base_free_quantity
-        ) > 0.000001:
+        if (
+            not _allocation_quantities_match(
+                sum(value.billed_quantity for value in self.batch_allocations),
+                self.quantity,
+                tolerance_units=1,
+            )
+            or not _allocation_quantities_match(
+                sum(value.free_quantity for value in self.batch_allocations),
+                self.free_quantity,
+                tolerance_units=1,
+            )
+            or not _allocation_quantities_match(
+                sum(value.base_billed_quantity for value in self.batch_allocations),
+                self.base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(value.base_free_quantity for value in self.batch_allocations),
+                self.base_free_quantity,
+                tolerance_units=0,
+            )
+        ):
             raise ValueError("executed allocations do not reconcile to invoice quantities")
         if len(self.batch_allocations) == 1:
             allocation = self.batch_allocations[0]
