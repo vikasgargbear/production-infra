@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -9,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SQL = REPO_ROOT / "backend/alembic/sql/20260825_0003_gst_reporting_rules.sql"
 REVISION = REPO_ROOT / "backend/alembic/versions/20260825_0003_gst_reporting_rules.py"
 MANIFEST = SQL.with_suffix(".manifest.json")
+ALEMBIC_GATE = REPO_ROOT / "database/canonical/ci/run_alembic_postgres15_gate.sh"
 
 
 def test_gst_reporting_rule_migration_is_hash_bound_linear_and_unseeded() -> None:
@@ -44,3 +46,7 @@ def test_staging_gate_tracks_the_new_exact_head_and_table_count() -> None:
     assert REVISION.relative_to(REPO_ROOT).as_posix() in required
     assert SQL.relative_to(REPO_ROOT).as_posix() in required
     assert MANIFEST.relative_to(REPO_ROOT).as_posix() in required
+
+
+def test_alembic_postgres_gate_is_valid_shell() -> None:
+    subprocess.run(["bash", "-n", str(ALEMBIC_GATE)], check=True)
