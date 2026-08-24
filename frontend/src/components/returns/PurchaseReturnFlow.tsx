@@ -20,6 +20,7 @@ import { updatePurchaseReturnItem } from './utils/purchaseReturnProjection';
 import { prepareCanonicalPurchaseReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
 import { indiaBusinessDate } from './utils/returnBusinessDate';
+import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 
 interface TransportDetails {
   transport_mode: string;
@@ -187,7 +188,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         }
       }
 
-      if (e.key === 'Escape') {
+      if (returnFlowOwnsEscape(e)) {
         if (preparedApproval) return;
         if (currentStep === 2) setCurrentStep(1);
         else onClose();

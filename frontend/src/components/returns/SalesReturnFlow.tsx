@@ -34,6 +34,7 @@ import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBounda
 import { updateSalesReturnItem } from './utils/salesReturnProjection';
 import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
+import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -117,7 +118,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         }
       }
 
-      if (e.key === 'Escape') {
+      if (returnFlowOwnsEscape(e)) {
         if (preparedApproval) return;
         if (ui.showCustomerModal) dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' });
         else if (ui.currentStep === 2) dispatch({ type: 'SET_STEP', step: 1 });
