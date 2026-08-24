@@ -680,14 +680,10 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
         // Keyboard shortcuts
         keyboardShortcuts={{
           1: [
-            { key: 'Ctrl+N', action: 'Add Supplier' },
-            { key: 'Ctrl+F', action: 'Search Products' },
-            { key: 'Ctrl+S', action: 'Proceed to Review' },
             { key: 'Esc', action: 'Close' }
           ],
           2: [
             { key: 'Ctrl+S', action: 'Save Purchase' },
-            { key: 'Ctrl+P', action: 'Print' },
             { key: 'Esc', action: 'Back to Edit' }
           ]
         }}

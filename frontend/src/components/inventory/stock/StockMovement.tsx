@@ -525,7 +525,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
 
         {/* Keyboard Shortcuts Help */}
         <div className="bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
-          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
+          Keyboard shortcut: <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}

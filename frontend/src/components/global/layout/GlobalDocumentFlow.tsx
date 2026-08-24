@@ -263,14 +263,11 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     // Default keyboard shortcuts per step
     const defaultShortcuts: Record<number, Shortcut[]> = {
         1: [
-            { key: 'Ctrl+N', action: 'Add Customer' },
-            { key: 'Ctrl+F', action: 'Search Products' },
             { key: 'Esc', action: 'Close' }
         ],
         2: [
             ...(onSave ? [{ key: 'Ctrl+S', action: `Save ${config.title}` }] : []),
-            ...(onPrint ? [{ key: 'Ctrl+P', action: 'Print' }] : []),
-            { key: 'Esc', action: 'Close' }
+            { key: 'Esc', action: 'Back to Edit' }
         ]
     };
 
@@ -281,17 +278,14 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     // Handle keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
+            if (e.defaultPrevented) return;
+            if (e.key === 'Escape' && document.querySelector('[role="dialog"][aria-modal="true"]')) return;
             // Ctrl+S - Save
-            if (e.ctrlKey && e.key === 's') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
                 e.preventDefault();
                 if (localStep === 2 && onSave) {
                     onSave();
                 }
-            }
-
-            // Ctrl+P - Prevent browser print dialog (print only available after generation)
-            if (e.ctrlKey && e.key === 'p') {
-                e.preventDefault();
             }
 
             // Escape - Close or go back
@@ -306,7 +300,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [localStep, onSave, onPrint, onClose]);
+    }, [localStep, onSave, onClose]);
 
     // Handle proceed to review
     const handleProceedToReview = (): void => {

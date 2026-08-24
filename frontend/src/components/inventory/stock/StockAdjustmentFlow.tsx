@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, AlertCircle, TrendingUp, TrendingDown, Settings,
-  Plus, X, Trash2, Upload, Download, Loader2, RefreshCw, CheckCircle
+  Plus, X, Trash2, Upload, Download, Loader2, CheckCircle
 } from 'lucide-react';
 import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
   NotesSection, useToast
 } from '../../global';
-import { stockApi } from '../../../services/api';
 import {
   prepareCanonicalAction,
   approveAndExecuteCanonicalAction,
@@ -15,12 +14,12 @@ import {
 } from '../../../services/api/canonicalOperatorActions';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../../constants/stockAdjustment';
+import { parseStockAdjustmentCsv, type StockAdjustmentCsvResult } from './utils/stockAdjustmentCsv';
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast();
 
   // Refs
@@ -48,6 +47,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [adjustmentReasons, setAdjustmentReasons] = useState<Record<string, any[]>>({ increase: [], decrease: [] });
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<StockAdjustmentCsvResult | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [showBatchSelector, setShowBatchSelector] = useState(false);
 
@@ -113,7 +113,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       // ESC key handling with stopPropagation
       if (e.key === 'Escape') {
         e.stopPropagation();
-        if (showProductSearch) {
+        if (showConfirmModal) {
+          setShowConfirmModal(false);
+        } else if (showBatchSelector) {
+          setShowBatchSelector(false);
+          setSelectedProduct(null);
+        } else if (showProductSearch) {
           setShowProductSearch(false);
         } else if (showBulkUpload) {
           setShowBulkUpload(false);
@@ -127,7 +132,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, showProductSearch, showBulkUpload, adjustmentData.adjustment_type, adjustmentData.reason, onClose]);
+  }, [currentStep, showProductSearch, showBulkUpload, showBatchSelector, showConfirmModal, adjustmentData.adjustment_type, adjustmentData.reason, onClose]);
 
   // Step 1: Product selection - just store the product and show batch selector
   const handleProductSelect = (product) => {
@@ -176,30 +181,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     toast.success(`Added ${selectedProduct.product_name} - edit quantity in table`);
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      // Just fetch fresh data - it will overwrite the stored data
-      const [increaseResponse, decreaseResponse] = await Promise.all([
-        (stockApi as any).getMovementReasons('increase'),
-        (stockApi as any).getMovementReasons('decrease')
-      ]);
-
-      const reasons = {
-        increase: Array.isArray(increaseResponse?.data) ? increaseResponse.data : increaseResponse?.data?.reasons || [],
-        decrease: Array.isArray(decreaseResponse?.data) ? decreaseResponse.data : decreaseResponse?.data?.reasons || []
-      };
-
-      setAdjustmentReasons(reasons);
-
-      toast.success('Adjustment reasons refreshed');
-    } catch (error) {
-      toast.error('Failed to refresh reasons');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   const updateItemQuantity = (itemId: any, quantity: any) => {
     // Don't allow empty string or deletion to make it 0
     if (quantity === '' || quantity === null || quantity === undefined) {
@@ -220,9 +201,11 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
           return {
             ...item,
             adjustment_quantity: qty,
-            after_adjustment: adjustmentData.adjustment_type === 'increase'
-              ? item.quantity_available + qty
-              : Math.max(0, item.quantity_available - qty)
+            after_adjustment: item.quantity_available === null
+              ? null
+              : adjustmentData.adjustment_type === 'increase'
+                ? item.quantity_available + qty
+                : Math.max(0, item.quantity_available - qty)
           };
         }
         return item;
@@ -238,12 +221,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   };
 
   const downloadTemplate = () => {
-    const csvContent = `Product Code,Product Name,Adjustment Quantity,Reason,Notes
-PARA500,Paracetamol 500mg,50,physical_count,Found extra stock during count
-AMOX250,Amoxicillin 250mg,-10,damage,Water damage in storage
-VITC100,Vitamin C Tablets,100,physical_count,Stock correction
-COUGH100,Cough Syrup 100ml,-25,expiry,Expired products removed
-Note: Use positive numbers for increase and negative for decrease. Reason codes: physical_count, found_stock, return_from_customer, damage, expiry, theft, sample, other_decrease`;
+    const csvContent = `product_id,batch_id,product_name,adjustment_quantity,reason,product_code,current_stock,notes
+018f1e5a-7b2c-7abc-8def-0123456789ab,018f1e5a-7b2c-7abc-9def-0123456789ac,Example Product,5,physical_count,EXAMPLE-1,,Replace example UUIDs with canonical product and batch UUIDs`;
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -256,90 +235,54 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     window.URL.revokeObjectURL(url);
   };
 
-  const handleBulkUpload = async (e: any) => {
-    const file = e.target.files[0];
+  const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        if (!text) return;
-        const lines = text.split('\n');
-        const headers = lines[0].split(',').map((h: any) => h.trim());
-
-        const newItems: any[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          if (!lines[i].trim()) continue;
-
-          const values = lines[i].split(',').map((v: any) => v.trim());
-          const productCode = values[0];
-          const productName = values[1];
-          const adjustmentQty = parseInt(values[2]) || 0;
-          const reason = values[3] || 'physical_count';
-          const itemNotes = values[4] || '';
-
-          if (!productCode || adjustmentQty === 0) continue;
-
-          let currentStock = 0;
-          try {
-            const stockResponse = await (stockApi as any).getCurrentStock({
-              product_code: productCode,
-              include_batches: false
-            });
-            currentStock = stockResponse.data?.[0]?.quantity_available || 0;
-          } catch (stockError) {
-            currentStock = 0;
-          }
-
-          const isIncrease = adjustmentQty > 0;
-          newItems.push({
-            id: Date.now() + i,
-            product_code: productCode,
-            product_name: productName,
-            product_id: i,
-            quantity_available: currentStock,
-            adjustment_quantity: Math.abs(adjustmentQty),
-            adjustment_type: isIncrease ? 'increase' : 'decrease',
-            reason: reason,
-            unit: 'Units',
-            after_adjustment: isIncrease
-              ? currentStock + Math.abs(adjustmentQty)
-              : Math.max(0, currentStock - Math.abs(adjustmentQty)),
-            notes: itemNotes
-          });
-        }
-
-        const increaseItems = newItems.filter(item => item.adjustment_type === 'increase');
-        const decreaseItems = newItems.filter(item => item.adjustment_type === 'decrease');
-
-        if (increaseItems.length > 0 && decreaseItems.length > 0) {
-          toast.info(`Loaded ${newItems.length} items: ${increaseItems.length} increases and ${decreaseItems.length} decreases. Please process them separately.`);
-          const firstType = newItems[0].adjustment_type;
-          setAdjustmentData(prev => ({
-            ...prev,
-            adjustment_type: firstType,
-            reason: newItems[0].reason || '',
-            items: newItems.filter(item => item.adjustment_type === firstType)
-          }));
-        } else {
-          const itemType = newItems[0].adjustment_type;
-          setAdjustmentData(prev => ({
-            ...prev,
-            adjustment_type: itemType,
-            reason: newItems[0].reason || '',
-            items: newItems
-          }));
-          toast.success(`Successfully loaded ${newItems.length} ${itemType} adjustments from CSV`);
-        }
-
-        setShowBulkUpload(false);
-      } catch (error) {
-        toast.error('Failed to parse CSV file. Please check the format.');
-      }
+    reader.onload = (event) => {
+      const text = typeof event.target?.result === 'string' ? event.target.result : '';
+      setCsvPreview(parseStockAdjustmentCsv(text));
     };
+    reader.onerror = () => setCsvPreview({
+      rows: [],
+      errors: ['The selected CSV could not be read.'],
+      adjustmentType: null,
+      reason: null,
+    });
 
     reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const applyCsvPreview = () => {
+    if (!csvPreview || csvPreview.errors.length > 0 || !csvPreview.adjustmentType || !csvPreview.reason) return;
+
+    setAdjustmentData(prev => ({
+      ...prev,
+      adjustment_type: csvPreview.adjustmentType || '',
+      reason: csvPreview.reason || '',
+      items: csvPreview.rows.map((row, index) => ({
+        id: `csv-${row.productId}-${row.batchId}-${index}`,
+        product_id: row.productId,
+        batch_id: row.batchId,
+        product_name: row.productName,
+        product_code: row.productCode,
+        batch_number: row.batchId,
+        quantity_available: row.currentStock,
+        adjustment_quantity: Math.abs(row.adjustmentQuantity),
+        unit: '',
+        after_adjustment: row.currentStock === null
+          ? null
+          : csvPreview.adjustmentType === 'increase'
+            ? row.currentStock + Math.abs(row.adjustmentQuantity)
+            : Math.max(0, row.currentStock - Math.abs(row.adjustmentQuantity)),
+        notes: row.notes,
+      })),
+    }));
+    setShowBulkUpload(false);
+    setCsvPreview(null);
+    toast.info('Validated CSV rows loaded for review. No stock was changed.');
   };
 
   const validateAdjustment = () => {
@@ -513,14 +456,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Reason for Adjustment
-                  <button
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className="ml-2 text-blue-600 hover:text-blue-700"
-                    title="Refresh reasons"
-                  >
-                    {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  </button>
                 </label>
                 <Select
                   data-reason-select
@@ -605,7 +540,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   Drop CSV file here or <span className="text-blue-600 font-medium">browse</span>
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Supports both positive and negative adjustments
+                  Validates canonical product and batch UUIDs before rows can be loaded
                 </p>
               </label>
             </div>
@@ -620,9 +555,67 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               </button>
 
               <div className="text-xs text-gray-500">
-                <span className="font-medium">Format:</span> Product Code, Name, Quantity (+/-), Reason, Notes
+                <span className="font-medium">Required:</span> product_id, batch_id, product_name, adjustment_quantity, reason
               </div>
             </div>
+
+            {csvPreview && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900">CSV validation preview</p>
+                    <p className="text-sm text-gray-600">
+                      {csvPreview.rows.length} valid row{csvPreview.rows.length === 1 ? '' : 's'}; no inventory data has been changed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={applyCsvPreview}
+                    disabled={csvPreview.errors.length > 0 || csvPreview.rows.length === 0}
+                    className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    Use validated rows
+                  </button>
+                </div>
+
+                {csvPreview.errors.length > 0 && (
+                  <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3" role="alert">
+                    <p className="text-sm font-medium text-red-800">Fix these CSV errors</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-red-700">
+                      {csvPreview.errors.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {csvPreview.rows.length > 0 && (
+                  <div className="mt-3 overflow-x-auto rounded-md border border-gray-200 bg-white">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                        <tr>
+                          <th className="px-3 py-2">Product</th>
+                          <th className="px-3 py-2">Batch UUID</th>
+                          <th className="px-3 py-2 text-right">Quantity</th>
+                          <th className="px-3 py-2">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {csvPreview.rows.map((row, index) => (
+                          <tr key={`${row.productId}-${row.batchId}-${index}`}>
+                            <td className="px-3 py-2">
+                              <div className="font-medium text-gray-900">{row.productName}</div>
+                              <div className="font-mono text-xs text-gray-500">{row.productId}</div>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{row.batchId}</td>
+                            <td className="px-3 py-2 text-right font-medium">{row.adjustmentQuantity}</td>
+                            <td className="px-3 py-2">{row.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -776,7 +769,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center">{item.quantity_available}</td>
+                          <td className="px-4 py-3 text-center">{item.quantity_available === null ? '—' : item.quantity_available}</td>
                           <td className="px-4 py-3 text-center">
                             <input
                               type="number"
@@ -789,7 +782,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                           <td className="px-4 py-3 text-center">
                             <span className={`font-medium ${adjustmentData.adjustment_type === 'increase' ? 'text-green-600' : 'text-red-600'
                               }`}>
-                              {item.after_adjustment}
+                              {item.after_adjustment === null ? 'Server validates' : item.after_adjustment}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -966,14 +959,14 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                       <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">{item.quantity_available}</td>
+                  <td className="px-4 py-3 text-center">{item.quantity_available === null ? '—' : item.quantity_available}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`font-medium ${adjustmentData.adjustment_type === 'increase' ? 'text-green-600' : 'text-red-600'
                       }`}>
                       {adjustmentData.adjustment_type === 'increase' ? '+' : '-'}{item.adjustment_quantity}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center font-medium">{item.after_adjustment}</td>
+                  <td className="px-4 py-3 text-center font-medium">{item.after_adjustment === null ? 'Server validates' : item.after_adjustment}</td>
                 </tr>
               ))}
             </tbody>
@@ -1021,12 +1014,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       saveLabel={committedRef ? 'Adjustment Posted' : 'Post Adjustment'}
       footerTotals={{ itemCount: adjustmentData.items.length }}
       additionalActions={[
-        {
-          label: "Refresh",
-          onClick: handleRefresh,
-          icon: refreshing ? Loader2 : RefreshCw,
-          disabled: refreshing
-        },
         {
           label: "Bulk Adjust",
           icon: Upload,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp, FileText, BarChart3, Loader2, RefreshCw, AlertCircle
+  TrendingUp, FileText, BarChart3, Loader2, AlertCircle
 } from 'lucide-react';
 import { ModuleHeader } from '../../global';
 import { reportsApi } from '../../../services/api';
@@ -31,8 +31,17 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({ onClose }) => {
   // API data states
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
+        onClose?.();
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
 
   const reports = [
     {
@@ -62,19 +71,6 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({ onClose }) => {
     // Load initial data
     // No initial API call required; data loads on report generation
   }, []);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setError(null);
-
-    try {
-      // For now, nothing to refresh globally; keep UX consistent
-    } catch (error) {
-      setError('Failed to refresh data. Please try again.');
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const generateReport = async (reportId: string) => {
     setSelectedReport(reportId);
@@ -139,13 +135,6 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({ onClose }) => {
           onSaveDraft={() => { }}
           additionalActions={[
             {
-              label: "Refresh",
-              onClick: handleRefresh,
-              variant: "default",
-              icon: refreshing ? Loader2 : RefreshCw,
-              disabled: refreshing
-            },
-            {
               label: 'Print / Save PDF',
               onClick: () => window.print(),
               variant: 'secondary'
@@ -155,7 +144,7 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({ onClose }) => {
 
         {/* Keyboard Shortcuts Help */}
         <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+G</strong> - Generate Report | <strong>Ctrl+D</strong> - Download | <strong>Esc</strong> - Close
+          Keyboard shortcut: <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}

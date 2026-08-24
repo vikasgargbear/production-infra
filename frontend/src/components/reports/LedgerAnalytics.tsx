@@ -17,8 +17,7 @@ import {
   Clock,
   Target,
   Activity,
-  Loader2,
-  RefreshCw
+  Loader2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ledgerApi } from '../../services/api';
@@ -86,7 +85,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
   // API data states
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch dashboard stats
   const { data: stats } = useQuery({
@@ -119,11 +117,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadInitialData();
-    setRefreshing(false);
-  };
 
   // Fetch report data based on selected report
   const { data: reportData, isLoading: reportLoading } = useQuery({
@@ -652,18 +645,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                 onClick: () => handleExport('excel'),
                 variant: "secondary"
               },
-              {
-                label: "Refresh",
-                onClick: handleRefresh,
-                variant: "primary",
-                icon: refreshing ? Loader2 : RefreshCw,
-                disabled: refreshing
-              }
             ] as any}
           />
-          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-            Keyboard shortcuts: <strong>Ctrl+R</strong> - Refresh | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
-          </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
 
@@ -870,7 +853,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                   <div className="flex flex-col items-center justify-center h-[500px]">
                     <Loader2 className="h-10 w-10 text-blue-500 mb-4" />
                     <p className="text-gray-500">Loading report...</p>
-                    {refreshing && <RefreshCw className="h-6 w-6 text-blue-500 mt-4" onClick={handleRefresh} />}
                   </div>
                 ) : (
                   renderReport()

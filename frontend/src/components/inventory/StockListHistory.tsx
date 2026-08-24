@@ -370,7 +370,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
 
         {/* Keyboard Shortcuts Help */}
         <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
+          Keyboard shortcut: <strong>Esc</strong> - Close
         </div>
 
         {/* Info Notice - Only show when using derived data */}

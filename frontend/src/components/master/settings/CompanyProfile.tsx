@@ -80,7 +80,6 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState('');
     const [refreshing, setRefreshing] = useState(false);
 
     const [companyData, setCompanyData] = useState<CompanyData>({
@@ -252,10 +251,6 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     };
 
     const handleInputChange = (field: keyof CompanyData, value: any) => {
-        // DEBUG: Log every input change
-        if (field === 'defaultTerms' || field === 'fssaiNo' || field === 'msmeNo') {
-            console.log(`[CompanyProfile] Field "${field}" changed to:`, value);
-        }
         setCompanyData(prev => ({
             ...prev,
             [field]: value
@@ -298,10 +293,10 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-gray-50">
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gray-50">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-                <div className="flex items-center justify-between">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-3 py-4 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center space-x-3">
                         <Building className="w-6 h-6 text-gray-700" />
                         <h1 className="text-2xl font-bold text-gray-900">Company Profile</h1>
@@ -310,7 +305,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                         <button
                             onClick={handleRefresh}
                             disabled={refreshing}
-                            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                            className="flex min-h-11 items-center space-x-2 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                             <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
@@ -330,14 +325,6 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 </div>
             )}
 
-            {/* Success/Error Messages */}
-            {successMessage && (
-                <div className="mx-6 mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
-                    <AlertCircle className="w-5 h-5 text-green-600 mr-3" />
-                    <p className="text-green-800">{successMessage}</p>
-                </div>
-            )}
-
             {error && (
                 <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
                     <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
@@ -346,23 +333,23 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             )}
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto">
-                <fieldset disabled className="max-w-6xl mx-auto p-6 space-y-6 disabled:opacity-100">
+            <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+                <fieldset disabled className="mx-auto max-w-6xl min-w-0 space-y-6 p-3 disabled:opacity-100 sm:p-6">
                     <div className="rounded-md border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800">
                         Profile changes are disabled until the canonical cloud update workflow is available.
                     </div>
 
                     {/* Business Identity */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Building className="w-5 h-5 mr-2" />
                             Business Identity
                         </h2>
 
-                        <div className="grid grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
                             {/* Logo Upload */}
-                            <div className="col-span-1">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <div className="sm:col-span-1">
+                                <label htmlFor="company-logo" className="block text-sm font-medium text-gray-700 mb-2">
                                     Company Logo
                                 </label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
@@ -392,6 +379,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                         </div>
                                     )}
                                     <input
+                                        id="company-logo"
                                         ref={fileInputRef}
                                         type="file"
                                         accept="image/*"
@@ -402,12 +390,13 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             {/* Business Name & Tagline */}
-                            <div className="col-span-2 space-y-4">
+                            <div className="space-y-4 sm:col-span-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-business-name" className="block text-sm font-medium text-gray-700 mb-1">
                                         Business Name
                                     </label>
                                     <input
+                                        id="company-business-name"
                                         type="text"
                                         value={companyData.businessName}
                                         onChange={(e) => handleInputChange('businessName', e.target.value)}
@@ -417,10 +406,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-tagline" className="block text-sm font-medium text-gray-700 mb-1">
                                         Tagline
                                     </label>
                                     <input
+                                        id="company-tagline"
                                         type="text"
                                         value={companyData.tagline}
                                         onChange={(e) => handleInputChange('tagline', e.target.value)}
@@ -433,18 +423,19 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     </div>
 
                     {/* Registration Details */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <FileText className="w-5 h-5 mr-2" />
                             Registration Details
                         </h2>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-pan" className="block text-sm font-medium text-gray-700 mb-1">
                                     PAN Number
                                 </label>
                                 <input
+                                    id="company-pan"
                                     type="text"
                                     value={companyData.pan_number}
                                     onChange={(e) => handleInputChange('pan_number', e.target.value)}
@@ -454,10 +445,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-gstin" className="block text-sm font-medium text-gray-700 mb-1">
                                     GSTIN
                                 </label>
                                 <input
+                                    id="company-gstin"
                                     type="text"
                                     value={companyData.gst_number}
                                     onChange={(e) => handleInputChange('gst_number', e.target.value)}
@@ -467,10 +459,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-drug-license" className="block text-sm font-medium text-gray-700 mb-1">
                                     Drug License No.
                                 </label>
                                 <input
+                                    id="company-drug-license"
                                     type="text"
                                     value={companyData.drugLicenseNo}
                                     onChange={(e) => handleInputChange('drugLicenseNo', e.target.value)}
@@ -480,10 +473,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-fssai" className="block text-sm font-medium text-gray-700 mb-1">
                                     FSSAI No.
                                 </label>
                                 <input
+                                    id="company-fssai"
                                     type="text"
                                     value={companyData.fssaiNo}
                                     onChange={(e) => handleInputChange('fssaiNo', e.target.value)}
@@ -493,10 +487,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-msme" className="block text-sm font-medium text-gray-700 mb-1">
                                     MSME/Udyam No.
                                 </label>
                                 <input
+                                    id="company-msme"
                                     type="text"
                                     value={companyData.msmeNo}
                                     onChange={(e) => handleInputChange('msmeNo', e.target.value)}
@@ -508,7 +503,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     </div>
 
                     {/* Contact Details */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <MapPin className="w-5 h-5 mr-2" />
                             Contact Details
@@ -516,10 +511,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-address" className="block text-sm font-medium text-gray-700 mb-1">
                                     Address
                                 </label>
                                 <input
+                                    id="company-address"
                                     type="text"
                                     value={companyData.address}
                                     onChange={(e) => handleInputChange('address', e.target.value)}
@@ -528,12 +524,13 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-city" className="block text-sm font-medium text-gray-700 mb-1">
                                         City
                                     </label>
                                     <input
+                                        id="company-city"
                                         type="text"
                                         value={companyData.city}
                                         onChange={(e) => handleInputChange('city', e.target.value)}
@@ -542,10 +539,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-state" className="block text-sm font-medium text-gray-700 mb-1">
                                         State
                                     </label>
                                     <input
+                                        id="company-state"
                                         type="text"
                                         value={companyData.state}
                                         onChange={(e) => handleInputChange('state', e.target.value)}
@@ -554,10 +552,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-state-code" className="block text-sm font-medium text-gray-700 mb-1">
                                         State Code
                                     </label>
                                     <input
+                                        id="company-state-code"
                                         type="text"
                                         value={companyData.stateCode}
                                         onChange={(e) => handleInputChange('stateCode', e.target.value)}
@@ -567,10 +566,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-pincode" className="block text-sm font-medium text-gray-700 mb-1">
                                         Pincode
                                     </label>
                                     <input
+                                        id="company-pincode"
                                         type="text"
                                         value={companyData.pincode}
                                         onChange={(e) => handleInputChange('pincode', e.target.value)}
@@ -579,13 +579,14 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-phone" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Phone className="w-4 h-4 inline mr-1" />
                                         Primary Phone
                                     </label>
                                     <input
+                                        id="company-phone"
                                         type="tel"
                                         value={companyData.phone}
                                         onChange={(e) => handleInputChange('phone', e.target.value)}
@@ -594,11 +595,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-alt-phone" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Phone className="w-4 h-4 inline mr-1" />
                                         Alternate Phone
                                     </label>
                                     <input
+                                        id="company-alt-phone"
                                         type="tel"
                                         value={companyData.altPhone}
                                         onChange={(e) => handleInputChange('altPhone', e.target.value)}
@@ -607,11 +609,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-email" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Mail className="w-4 h-4 inline mr-1" />
                                         Email
                                     </label>
                                     <input
+                                        id="company-email"
                                         type="email"
                                         value={companyData.email}
                                         onChange={(e) => handleInputChange('email', e.target.value)}
@@ -620,11 +623,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-website" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Globe className="w-4 h-4 inline mr-1" />
                                         Website
                                     </label>
                                     <input
+                                        id="company-website"
                                         type="url"
                                         value={companyData.website}
                                         onChange={(e) => handleInputChange('website', e.target.value)}
@@ -636,19 +640,20 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     </div>
 
                     {/* Regional Settings - NEW */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Globe className="w-5 h-5 mr-2" />
                             Regional Settings
                         </h2>
 
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             {/* Timezone */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-timezone" className="block text-sm font-medium text-gray-700 mb-1">
                                     Business Timezone
                                 </label>
                                 <select
+                                    id="company-timezone"
                                     value={companyData.timezone}
                                     onChange={(e) => handleInputChange('timezone', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -666,10 +671,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                             {/* Date Format */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-date-format" className="block text-sm font-medium text-gray-700 mb-1">
                                     Date Format
                                 </label>
                                 <select
+                                    id="company-date-format"
                                     value={companyData.dateFormat}
                                     onChange={(e) => handleInputChange('dateFormat', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -685,10 +691,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                             {/* Time Format */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-time-format" className="block text-sm font-medium text-gray-700 mb-1">
                                     Time Format
                                 </label>
                                 <select
+                                    id="company-time-format"
                                     value={companyData.timeFormat}
                                     onChange={(e) => handleInputChange('timeFormat', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -733,18 +740,19 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     />
 
                     {/* Invoice Settings */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Printer className="w-5 h-5 mr-2" />
                             Document Prefixes
                         </h2>
 
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-invoice-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Invoice Prefix
                                 </label>
                                 <input
+                                    id="company-invoice-prefix"
                                     type="text"
                                     value={companyData.invoicePrefix}
                                     onChange={(e) => handleInputChange('invoicePrefix', e.target.value)}
@@ -753,10 +761,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-challan-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Challan Prefix
                                 </label>
                                 <input
+                                    id="company-challan-prefix"
                                     type="text"
                                     value={companyData.challanPrefix}
                                     onChange={(e) => handleInputChange('challanPrefix', e.target.value)}
@@ -765,10 +774,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-po-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     PO Prefix
                                 </label>
                                 <input
+                                    id="company-po-prefix"
                                     type="text"
                                     value={companyData.poPrefix}
                                     onChange={(e) => handleInputChange('poPrefix', e.target.value)}
@@ -777,10 +787,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-return-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Return Prefix
                                 </label>
                                 <input
+                                    id="company-return-prefix"
                                     type="text"
                                     value={companyData.returnPrefix}
                                     onChange={(e) => handleInputChange('returnPrefix', e.target.value)}
@@ -789,10 +800,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-credit-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Credit Note Prefix
                                 </label>
                                 <input
+                                    id="company-credit-prefix"
                                     type="text"
                                     value={companyData.creditNotePrefix}
                                     onChange={(e) => handleInputChange('creditNotePrefix', e.target.value)}
@@ -801,10 +813,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-debit-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Debit Note Prefix
                                 </label>
                                 <input
+                                    id="company-debit-prefix"
                                     type="text"
                                     value={companyData.debitNotePrefix}
                                     onChange={(e) => handleInputChange('debitNotePrefix', e.target.value)}
@@ -815,19 +828,20 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     </div>
 
                     {/* Print Settings */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Printer className="w-5 h-5 mr-2" />
                             Print Settings
                         </h2>
 
                         <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-print-format" className="block text-sm font-medium text-gray-700 mb-1">
                                         Print Format
                                     </label>
                                     <select
+                                        id="company-print-format"
                                         value={companyData.printFormat}
                                         onChange={(e) => handleInputChange('printFormat', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -839,7 +853,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     </select>
                                 </div>
 
-                                <div className="col-span-2 space-y-3">
+                                <div className="space-y-3 md:col-span-2">
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
@@ -873,10 +887,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-default-terms" className="block text-sm font-medium text-gray-700 mb-1">
                                     Default Terms & Conditions
                                 </label>
                                 <textarea
+                                    id="company-default-terms"
                                     value={companyData.defaultTerms}
                                     onChange={(e) => handleInputChange('defaultTerms', e.target.value)}
                                     rows={3}
@@ -886,10 +901,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-default-footer" className="block text-sm font-medium text-gray-700 mb-1">
                                     Default Footer Text
                                 </label>
                                 <input
+                                    id="company-default-footer"
                                     type="text"
                                     value={companyData.defaultFooter}
                                     onChange={(e) => handleInputChange('defaultFooter', e.target.value)}
