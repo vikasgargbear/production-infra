@@ -218,6 +218,99 @@ test('ERP session exchange retries a transient network failure', async () => {
 });
 
 
+test('ERP session exchange retries transient HTTP failures', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    jest.useFakeTimers();
+
+    fetch
+        .mockResolvedValueOnce({
+            ok: false,
+            status: 503,
+            json: async () => ({ detail: 'Service starting' }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: token() }),
+        });
+
+    let resultPromise;
+    act(() => {
+        resultPromise = currentAuth.handleOAuthCallback('retry-http-access');
+    });
+    await act(async () => Promise.resolve());
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+        jest.advanceTimersByTime(1500);
+        await Promise.resolve();
+    });
+    await expect(resultPromise).resolves.toEqual(expect.objectContaining({ success: true }));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
+});
+
+
+test('a transient token-refresh failure preserves the last valid ERP session', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    await act(async () => {
+        mockAuthStateCallback('SIGNED_IN', { access_token: 'initial-access' });
+    });
+    await waitFor(() => expect(currentAuth.isAuthenticated).toBe(true));
+
+    jest.useFakeTimers();
+    fetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ detail: 'Service starting' }),
+    });
+
+    act(() => {
+        mockAuthStateCallback('TOKEN_REFRESHED', { access_token: 'rotated-access' });
+    });
+    await act(async () => Promise.resolve());
+    await act(async () => {
+        jest.advanceTimersByTime(1500);
+        await Promise.resolve();
+    });
+    await act(async () => {
+        jest.advanceTimersByTime(3000);
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(currentAuth.isAuthenticated).toBe(true);
+    expect(mockSignOut).not.toHaveBeenCalled();
+    jest.useRealTimers();
+});
+
+
+test('an authorization failure on token refresh clears the ERP session', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    await act(async () => {
+        mockAuthStateCallback('SIGNED_IN', { access_token: 'initial-access' });
+    });
+    await waitFor(() => expect(currentAuth.isAuthenticated).toBe(true));
+
+    fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ detail: 'ERP access revoked' }),
+    });
+    await act(async () => {
+        mockAuthStateCallback('TOKEN_REFRESHED', { access_token: 'revoked-access' });
+    });
+
+    await waitFor(() => expect(currentAuth.isAuthenticated).toBe(false));
+});
+
+
 test('offline browsers cannot authenticate from cached credentials', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     render(<AuthProvider><Probe /></AuthProvider>);

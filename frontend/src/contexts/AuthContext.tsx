@@ -40,6 +40,7 @@ export interface LoginResult {
     success: boolean;
     user?: User;
     error?: string;
+    authorizationFailure?: boolean;
 }
 
 export interface AuthContextValue extends AuthState {
@@ -69,6 +70,7 @@ interface JWTPayload {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const SESSION_EXCHANGE_RETRY_DELAYS_MS = [0, 1500, 3000] as const;
 const SESSION_EXCHANGE_TIMEOUT_MS = 12000;
+const TRANSIENT_SESSION_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 const wait = (delayMs: number): Promise<void> => (
     new Promise((resolve) => window.setTimeout(resolve, delayMs))
@@ -77,7 +79,7 @@ const wait = (delayMs: number): Promise<void> => (
 async function requestErpSession(accessToken: string): Promise<Response> {
     let networkError: unknown;
 
-    for (const delayMs of SESSION_EXCHANGE_RETRY_DELAYS_MS) {
+    for (const [attempt, delayMs] of SESSION_EXCHANGE_RETRY_DELAYS_MS.entries()) {
         if (delayMs > 0) await wait(delayMs);
         const controller = new AbortController();
         const timeoutId = window.setTimeout(
@@ -85,11 +87,15 @@ async function requestErpSession(accessToken: string): Promise<Response> {
             SESSION_EXCHANGE_TIMEOUT_MS,
         );
         try {
-            return await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
+            const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${accessToken}` },
                 signal: controller.signal,
             });
+            const finalAttempt = attempt === SESSION_EXCHANGE_RETRY_DELAYS_MS.length - 1;
+            if (!TRANSIENT_SESSION_STATUSES.has(response.status) || finalAttempt) {
+                return response;
+            }
         } catch (error) {
             networkError = error;
         } finally {
@@ -156,7 +162,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 const response = await requestErpSession(accessToken);
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    return { success: false, error: errorMessage(data, 'ERP access is not authorized') };
+                    return {
+                        success: false,
+                        error: errorMessage(data, 'ERP access is not authorized'),
+                        authorizationFailure: response.status === 401 || response.status === 403,
+                    };
                 }
 
                 const payload = decodeToken(data.access_token);
@@ -206,7 +216,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (error) return { success: false, error: error.message };
             if (!data.session) return { success: false, error: 'Email verification is required' };
             const result = await exchangeSupabaseSession(data.session.access_token);
-            if (!result.success) await getSupabaseClient().auth.signOut();
+            if (!result.success && result.authorizationFailure) {
+                await getSupabaseClient().auth.signOut();
+            }
             return result;
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
@@ -271,7 +283,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 void exchangeSupabaseSession(session.access_token).then((result) => {
-                    if (active && !result.success) clearErpSession();
+                    if (active && !result.success && result.authorizationFailure) {
+                        clearErpSession();
+                    }
                 });
             }
         });
