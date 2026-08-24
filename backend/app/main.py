@@ -185,6 +185,7 @@ app.add_middleware(
         "Content-Type",
         "X-Request-ID",
         "X-Idempotency-Key",
+        "X-Connection-Check",
     ],
     expose_headers=[
         "X-Request-ID",

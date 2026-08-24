@@ -70,6 +70,23 @@ def test_preflight_from_allowed_origin_returns_200_with_cors_headers() -> None:
     assert "authorization" in acao_headers.lower()
 
 
+def test_health_connection_check_preflight_is_allowed() -> None:
+    client = _make_client(ALLOWED_ORIGIN)
+    resp = client.options(
+        "/health",
+        headers={
+            "Origin": ALLOWED_ORIGIN,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Connection-Check",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+    assert "x-connection-check" in resp.headers.get(
+        "access-control-allow-headers", ""
+    ).lower()
+
+
 # ---------------------------------------------------------------------------
 # Preflight from a disallowed origin must NOT echo ACAO header
 # ---------------------------------------------------------------------------
