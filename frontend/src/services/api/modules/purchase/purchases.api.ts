@@ -102,9 +102,7 @@ export const purchasesApi = {
     },
 
     parseInvoice: (formData: FormData): Promise<AxiosResponse> => {
-        return apiHelpers.post('/purchase-upload/parse-invoice', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        return apiHelpers.post('/purchase-upload/parse-invoice-safe', formData);
     },
     getReturnableInvoices: (params: { supplier_id: number | string }): Promise<AxiosResponse> => {
         return apiHelpers.get('/supplier-invoices/returnable/', { params });

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, FileText, Loader, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { purchasesApi } from '../../../services/api';
+import { validatePDFFile } from '../../../config/purchase.config';
 
 interface PDFUploadModalProps {
   isOpen: boolean;
@@ -73,12 +74,15 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
   }, [isOpen]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.type === 'application/pdf') {
+    const selectedFile = e.target.files?.[0] || null;
+    const validation = validatePDFFile(selectedFile);
+    if (validation.valid && selectedFile) {
       setFile(selectedFile);
       setError('');
     } else {
-      setError('Please select a PDF file');
+      setFile(null);
+      setError(validation.error || 'Please select a PDF file');
+      e.target.value = '';
     }
   };
 
@@ -197,7 +201,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle className="w-5 h-5" />
             {error}
           </div>
@@ -209,7 +213,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               <FileText size={48} className="mx-auto text-gray-400 mb-4" />
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,application/pdf"
                 onChange={handleFileSelect}
                 className="hidden"
                 id="pdf-upload"
