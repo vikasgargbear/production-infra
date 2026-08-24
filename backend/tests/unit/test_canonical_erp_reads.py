@@ -9,6 +9,7 @@ from app.main import app
 
 CRITICAL_UI_READS = {
     "/api/products",
+    "/api/products/{product_id}/batches",
     "/api/customers",
     "/api/suppliers",
     "/api/employees",

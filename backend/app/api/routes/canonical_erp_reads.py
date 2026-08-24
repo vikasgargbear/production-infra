@@ -125,6 +125,39 @@ def products_with_batches(
             "total_pages": 1, "has_more": len(rows) == page_size}}
 
 
+@router.get("/products/{product_id}/batches")
+def product_batches(
+    product_id: UUID,
+    user: dict = INVENTORY_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT batch.id AS batch_id, batch.product_id, product.name AS product_name,
+               batch.batch_number, batch.manufactured_on AS manufacturing_date,
+               batch.expires_on AS expiry_date, batch.mrp AS mrp_per_unit,
+               batch.mrp AS sale_price_per_unit,
+               COALESCE(stock.average_unit_cost, 0) AS cost_per_unit,
+               COALESCE(stock.quantity_available, 0) AS quantity_available,
+               batch.expires_on - CURRENT_DATE AS days_to_expiry,
+               false AS has_pending_sync, 0::numeric AS gst_percent,
+               batch.status AS batch_status
+          FROM inventory.batches batch
+          JOIN catalog.products product
+            ON product.org_id=batch.org_id AND product.id=batch.product_id
+          LEFT JOIN LATERAL (
+              SELECT SUM(balance.on_hand_quantity) AS quantity_available,
+                     MAX(balance.average_unit_cost) AS average_unit_cost
+                FROM inventory.stock_balances balance
+               WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
+          ) stock ON true
+         WHERE batch.org_id=:org_id AND batch.product_id=:product_id
+           AND batch.status IN ('active','blocked')
+         ORDER BY batch.expires_on NULLS LAST, batch.batch_number
+    """, {"org_id": org_id, "product_id": product_id})
+    return {"batches": rows}
+
+
 _PARTY_CONTACTS = """
     LEFT JOIN LATERAL (
         SELECT phone, email FROM parties.contacts c
