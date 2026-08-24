@@ -60,4 +60,8 @@ test "$fixture_count" -gt 0 || {
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_invoice_detail_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_purchase_order_detail_runtime_role.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_goods_receipt_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_adjustment_web_runtime_role.py
