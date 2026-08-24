@@ -6,16 +6,30 @@ import { ModuleHub } from '../global';
 import { GSTDashboard } from './dashboard';
 import { GSTReports } from './reports';
 
+export const GST_SUBPAGE_IDS = ['gst-dashboard', 'gst-reports'] as const;
+type GSTSubpage = typeof GST_SUBPAGE_IDS[number];
+
 interface GSTHubProps {
   open?: boolean;
   onClose?: () => void;
+  initialSubpage?: string | null;
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
-const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
-  const [activeModule, setActiveModule] = useState('gst-dashboard');
+const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
+  const resolvedDefault: GSTSubpage = initialSubpage
+    && (GST_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
+    ? initialSubpage as GSTSubpage
+    : 'gst-dashboard';
+  const [activeModule, setActiveModule] = useState<GSTSubpage>(resolvedDefault);
+
+  React.useEffect(() => {
+    setActiveModule(resolvedDefault);
+  }, [resolvedDefault]);
 
   const navigateToReports = () => {
     setActiveModule('gst-reports');
+    onSubpageChange?.('gst-reports');
   };
 
   const gstModules = [
@@ -53,6 +67,7 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       icon={Receipt}
       modules={gstModules}
       defaultModule={activeModule}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

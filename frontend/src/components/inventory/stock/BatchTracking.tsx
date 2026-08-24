@@ -9,6 +9,8 @@ import { batchesApi, inventoryMovementsApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
+import { projectMovementType, signedMovementQuantity } from './utils/movementProjection';
+import { calculateCompleteBatchValuation } from './utils/batchValuation';
 
 const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () => void }) => {
   const [batches, setBatches] = useState<any[]>([]);
@@ -34,7 +36,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     expired: 0,
     outOfStock: 0,
     totalBatches: 0,
-    totalValue: 0
+    totalValue: null as number | null
   });
 
   // Load canonical batch data from the API.
@@ -60,13 +62,11 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         quantity_available: Number(batch.quantity_available ?? batch.quantity ?? 0),
         // Keep cost_per_unit as null/undefined when not authoritative — never
         // default to 0. The display layer must show "—" for missing cost.
-        cost_per_unit: (batch.cost_per_unit != null && batch.average_unit_cost != null)
-          ? Number(batch.cost_per_unit ?? batch.average_unit_cost)
-          : (batch.cost_per_unit != null
-              ? Number(batch.cost_per_unit)
-              : (batch.average_unit_cost != null
-                  ? Number(batch.average_unit_cost)
-                  : null))
+        cost_per_unit: batch.cost_per_unit != null
+          ? Number(batch.cost_per_unit)
+          : batch.average_unit_cost != null
+            ? Number(batch.average_unit_cost)
+            : null
       }));
 
       if (batchesData.length > 0) {
@@ -84,7 +84,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       setError('Unable to load batch data. Please check your connection.');
       setBatches([]);
       setStats({
-        expiringSoon: 0, nearExpiry: 0, expired: 0, outOfStock: 0, totalBatches: 0, totalValue: 0
+        expiringSoon: 0, nearExpiry: 0, expired: 0, outOfStock: 0, totalBatches: 0, totalValue: null
       });
     } finally {
       setLoading(false);
@@ -128,12 +128,9 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       (batch.quantity_available || 0) === 0
     );
 
-    // Only include batches with authoritative cost in the total — null cost means
-    // the value is unknown, not zero.
-    const totalValue = batchesData.reduce((sum, batch) => {
-      if (batch.cost_per_unit == null) return sum;
-      return sum + ((batch.quantity_available || 0) * batch.cost_per_unit);
-    }, 0);
+    // A partial sum is not an authoritative valuation. If any canonical batch
+    // omits cost, report the aggregate as unavailable rather than inventing ₹0.
+    const totalValue = calculateCompleteBatchValuation(batchesData);
 
     setStats({
       expiringSoon: expiringSoonBatches.length,
@@ -196,6 +193,18 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     await loadBatchMovements(String(batch.batch_id));
   };
 
+  useEffect(() => {
+    if (!showMovements) return;
+    const closeMovementsOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setShowMovements(false);
+    };
+    document.addEventListener('keydown', closeMovementsOnEscape, true);
+    return () => document.removeEventListener('keydown', closeMovementsOnEscape, true);
+  }, [showMovements]);
+
   // Filter batches
   const filteredBatches = batches.filter(batch => {
     // Search filter
@@ -226,6 +235,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
 
     return true;
   });
+  const filteredBatchValue = calculateCompleteBatchValuation(filteredBatches);
 
   // Multi-select functionality
   const isAllSelected = filteredBatches.length > 0 && filteredBatches.every(item => selectedIds.has(item.batch_id || item.id));
@@ -645,10 +655,9 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                 <div>
                   <span className="text-gray-500">Total Value:</span>
                   <span className="ml-1 font-semibold">
-                    {formatCurrency(filteredBatches.reduce((sum, item) =>
-                      item.cost_per_unit != null
-                        ? sum + ((item.quantity_available || 0) * item.cost_per_unit)
-                        : sum, 0))}
+                    {filteredBatchValue == null
+                      ? 'Unavailable'
+                      : formatCurrency(filteredBatchValue)}
                   </span>
                 </div>
                 <div>
@@ -749,28 +758,31 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {batchMovements.map((movement, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
+                    {batchMovements.map((movement, index) => {
+                      const movementType = projectMovementType(movement);
+                      const signedQuantity = signedMovementQuantity(movementType, movement.quantity);
+                      return (
+                      <tr key={movement.id || index} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {new Date(movement.movement_date).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                            movement.movement_type === 'in'
+                            movementType === 'receive'
                               ? 'bg-green-100 text-green-700'
-                              : movement.movement_type === 'out'
+                              : movementType === 'issue'
                                 ? 'bg-red-100 text-red-700'
                                 : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {movement.movement_type === 'in'
+                            {movementType === 'receive'
                               ? 'Stock In'
-                              : movement.movement_type === 'out'
+                              : movementType === 'issue'
                                 ? 'Stock Out'
-                                : 'Adjustment'}
+                                : movementType === 'transfer' ? 'Transfer' : 'Adjustment'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {movement.quantity}
+                          {signedQuantity > 0 ? '+' : ''}{signedQuantity}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {movement.reference_number || 'N/A'}
@@ -779,7 +791,8 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                           {movement.user_name || 'System'}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

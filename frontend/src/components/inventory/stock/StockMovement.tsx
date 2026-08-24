@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../utils/formatters';
 import { DataTable, ModuleHeader } from '../../global';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
+import { projectMovementType } from './utils/movementProjection';
 
 // TypeScript interfaces
 interface StockMovementProps {
@@ -76,31 +77,34 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       });
 
       // Transform data to match interface
-      const movementsData = (response.data?.movements || response.data || []).map((movement) => ({
-        id: movement.id || Math.random().toString(36).substr(2, 9),
-        movement_no: movement.movement_no || movement.transaction_id || `STK-${movement.id}`,
-        product_name: movement.product_name || movement.product?.product_name || 'Unknown Product',
-        movement_type: movement.movement_type || movement.type || 'adjustment',
-        quantity: Math.abs(parseFloat(movement.quantity) || 0),
-        reference_no: movement.reference_no || movement.reference_document || movement.invoice_number,
-        movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
-        reason: movement.reason || movement.notes,
-        batch_number: movement.batch_number || movement.batch_number,
-        location_from: movement.location_from || movement.from_location,
-        location_to: movement.location_to || movement.to_location,
-        created_by: movement.created_by || movement.user_name,
-        status: movement.status || 'completed',
-        // Never default cost to 0 — null cost must stay null so the display
-        // layer can show "—" instead of a misleading ₹0.
-        unit_cost: (movement.unit_cost != null && movement.unit_cost !== '')
-          ? parseFloat(movement.unit_cost)
-          : null,
-        total_value: (movement.total_value != null && movement.total_value !== '')
-          ? parseFloat(movement.total_value)
-          : ((movement.unit_cost != null && movement.unit_cost !== '')
-              ? (Math.abs(parseFloat(movement.quantity) || 0)) * parseFloat(movement.unit_cost)
-              : null)
-      }));
+      const movementsData = (response.data?.movements || response.data || []).map((movement) => {
+        const movementType = projectMovementType(movement);
+        return {
+          id: movement.id || `unidentified-${movement.movement_date || 'movement'}`,
+          movement_no: movement.movement_no || movement.transaction_id || `STK-${movement.id}`,
+          product_name: movement.product_name || movement.product?.product_name || 'Unknown Product',
+          movement_type: movementType,
+          quantity: Math.abs(parseFloat(movement.quantity) || 0),
+          reference_no: movement.reference_no || movement.reference_document || movement.invoice_number,
+          movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
+          reason: movement.reason || movement.notes,
+          batch_number: movement.batch_number,
+          location_from: movement.location_from || movement.from_location,
+          location_to: movement.location_to || movement.to_location,
+          created_by: movement.created_by || movement.user_name,
+          status: movement.status || 'completed',
+          // Never default cost to 0 — null cost must stay null so the display
+          // layer can show "—" instead of a misleading ₹0.
+          unit_cost: (movement.unit_cost != null && movement.unit_cost !== '')
+            ? parseFloat(movement.unit_cost)
+            : null,
+          total_value: (movement.total_value != null && movement.total_value !== '')
+            ? parseFloat(movement.total_value)
+            : ((movement.unit_cost != null && movement.unit_cost !== '')
+                ? (Math.abs(parseFloat(movement.quantity) || 0)) * parseFloat(movement.unit_cost)
+                : null)
+        };
+      });
 
       setMovements(movementsData);
     } catch (err) {

@@ -12,15 +12,23 @@ test('renders explicit, accessible contact destinations without invoking them', 
     />
   );
 
-  expect(screen.getByRole('link', { name: 'Call Canonical Buyer' }).getAttribute('href')).toBe(
+  const call = screen.getByRole('link', { name: 'Call Canonical Buyer' });
+  const email = screen.getByRole('link', { name: 'Email Canonical Buyer' });
+  const whatsapp = screen.getByRole('link', { name: 'Open WhatsApp for Canonical Buyer' });
+
+  expect(call.getAttribute('href')).toBe(
     'tel:+919876543210'
   );
-  expect(screen.getByRole('link', { name: 'Email Canonical Buyer' }).getAttribute('href')).toBe(
+  expect(email.getAttribute('href')).toBe(
     'mailto:buyer%40example.com'
   );
-  expect(screen.getByRole('link', { name: 'Open WhatsApp for Canonical Buyer' }).getAttribute('href')).toBe(
+  expect(whatsapp.getAttribute('href')).toBe(
     'https://wa.me/919876543210'
   );
+  [call, email, whatsapp].forEach(link => {
+    expect(link.className).toContain('min-h-[44px]');
+    expect(link.className).toContain('min-w-[44px]');
+  });
 });
 
 test('does not render dead controls when contact data is absent', () => {

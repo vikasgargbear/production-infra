@@ -19,9 +19,24 @@ import WarehouseMaster from './masters/WarehouseMaster';
 import DataValidationEngine from './utils/DataValidationEngine';
 import BulkOperations from './utils/BulkOperations';
 
+export const MASTER_SUBPAGE_IDS = [
+  'product-master',
+  'customer-master',
+  'supplier-master',
+  'company-profile',
+  'tax-master',
+  'unit-master',
+  'warehouse-master',
+  'user-management',
+  'role-management',
+] as const;
+type MasterSubpage = typeof MASTER_SUBPAGE_IDS[number];
+
 interface MasterHubProps {
   open?: boolean;
   onClose?: () => void;
+  initialSubpage?: string | null;
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface MasterModule {
@@ -88,25 +103,35 @@ const MASTER_MODULES: MasterModule[] = [
   },
 ];
 
-const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
+const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('master', 'edit');
   const [showValidationEngine, setShowValidationEngine] = useState(false);
   const [showBulkOperations, setShowBulkOperations] = useState(false);
-  const [defaultModule, setDefaultModule] = useState('product-master');
+  const resolvedDefault: MasterSubpage = initialSubpage
+    && (MASTER_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
+    ? initialSubpage as MasterSubpage
+    : 'product-master';
+  const [defaultModule, setDefaultModule] = useState<MasterSubpage>(resolvedDefault);
+
+  React.useEffect(() => {
+    setDefaultModule(resolvedDefault);
+  }, [resolvedDefault]);
 
   // Listen for navigation events
   React.useEffect(() => {
     const handleNavigateToMaster = (event: Event) => {
       const customEvent = event as CustomEvent;
-      if (customEvent.detail?.module) {
-        setDefaultModule(customEvent.detail.module);
+      const requestedModule = customEvent.detail?.module;
+      if ((MASTER_SUBPAGE_IDS as readonly string[]).includes(requestedModule)) {
+        setDefaultModule(requestedModule as MasterSubpage);
+        onSubpageChange?.(requestedModule);
       }
     };
 
     window.addEventListener('navigateToMaster', handleNavigateToMaster);
     return () => window.removeEventListener('navigateToMaster', handleNavigateToMaster);
-  }, []);
+  }, [onSubpageChange]);
 
   // Filter out admin-only modules for non-admin users
   const visibleModules = useMemo(
@@ -124,6 +149,7 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
         icon={Settings}
         modules={visibleModules}
         defaultModule={defaultModule}
+        onActiveModuleChange={onSubpageChange}
       />
 
       {/* Enterprise Components */}

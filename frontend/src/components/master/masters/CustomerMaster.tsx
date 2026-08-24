@@ -9,7 +9,7 @@ import {
   Users, Search, Plus, Edit2, Trash2,
   AlertCircle, Check
 } from 'lucide-react';
-import { customersApi } from '../../../services/api';
+import { customersApi, ledgerApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
@@ -18,6 +18,7 @@ import CustomerFlow from '../customers/CustomerFlow';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
 import ContactActions from './ContactActions';
+import { mergeCustomersWithCanonicalAging } from './customerAgingProjection';
 
 // ============================================================================
 // Types
@@ -30,12 +31,32 @@ type Customer = BaseCustomer & {
   credit_limit?: number;
   credit_days?: number;
   credit_rating?: string;
-  current_outstanding?: number;
+  current_outstanding?: number | null;
+  outstanding_available?: boolean;
   customer_category?: string;
   business_type?: string;
   last_transaction_date?: string;
   total_business_amount?: number;
   address_line_1?: string;
+};
+
+export const loadCustomersWithCanonicalAging = async () => {
+  const customersResponse = await customersApi.getAll();
+  const responseData = customersResponse.data as any;
+  const customerRows: Customer[] = (Array.isArray(responseData)
+    ? responseData
+    : Array.isArray(responseData?.customers) ? responseData.customers : []) as Customer[];
+  let agingRows: Record<string, unknown>[] | null = null;
+  try {
+    const agingResponse = await ledgerApi.getAgingReport({ party_type: 'customer' });
+    agingRows = Array.isArray(agingResponse.data?.aging_data) ? agingResponse.data.aging_data : [];
+  } catch {
+    agingRows = null;
+  }
+  return {
+    ...customersResponse,
+    data: mergeCustomersWithCanonicalAging(customerRows, agingRows),
+  };
 };
 
 // ============================================================================
@@ -57,6 +78,9 @@ const CUSTOMER_TYPES = [
 
 const getCreditStatus = (customer: Customer) => {
   if (!customer.credit_limit) return null;
+  if (customer.outstanding_available === false || customer.current_outstanding == null) {
+    return <span className="text-xs text-gray-500">Balance unavailable</span>;
+  }
   const utilization = (customer.current_outstanding || 0) / customer.credit_limit * 100;
 
   if (utilization >= 100) {
@@ -154,9 +178,11 @@ const getColumns = (
       key: 'current_outstanding',
       header: 'Outstanding',
       align: 'right' as const,
-      render: (value) => {
-        const amount = parseFloat(value || 0);
-        if (!amount) return <span className="text-gray-400">-</span>;
+      render: (value, customer) => {
+        if (customer.outstanding_available === false || value == null) {
+          return <span className="text-gray-500">Unavailable</span>;
+        }
+        const amount = Number(value);
         return <span className={`font-medium ${amount > 0 ? 'text-red-600' : 'text-green-600'}`}>₹{amount.toLocaleString()}</span>;
       }
     },
@@ -234,7 +260,7 @@ const CustomerMaster: React.FC = () => {
     idField: 'customer_id',
     nameField: 'customer_name',
     api: {
-      getAll: customersApi.getAll,
+      getAll: loadCustomersWithCanonicalAging,
       update: customersApi.update
     },
     searchFields: ['customer_name', 'customer_code', 'primary_phone', 'gst_number'],
@@ -248,7 +274,11 @@ const CustomerMaster: React.FC = () => {
   const total = customers.length;
   const active = customers.filter(c => c.is_active !== false).length;
   const inactive = total - active;
-  const totalOutstanding = customers.reduce((sum, c) => sum + (c.current_outstanding || 0), 0);
+  const outstandingAvailable = !isLoading && !error
+    && customers.every(customer => customer.outstanding_available !== false);
+  const totalOutstanding = outstandingAvailable
+    ? customers.reduce((sum, customer) => sum + Number(customer.current_outstanding ?? 0), 0)
+    : null;
 
   const headerActions = (
     <Button variant="primary" onClick={() => setShowAddModal(true)}>
@@ -269,7 +299,7 @@ const CustomerMaster: React.FC = () => {
           <span className="text-gray-600">Total: <strong className="text-gray-900">{total}</strong></span>
           <span className="text-green-600">Active: <strong>{active}</strong></span>
           <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
-          <span className="text-gray-600">Outstanding: <strong className="text-gray-900">₹{totalOutstanding.toLocaleString()}</strong></span>
+          <span className="text-gray-600">Outstanding: <strong className="text-gray-900">{totalOutstanding == null ? 'Unavailable' : `₹${totalOutstanding.toLocaleString()}`}</strong></span>
           {selectedIds.length > 0 && (
             <Button variant="danger" size="sm" onClick={handleBulkDelete}>
               <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})

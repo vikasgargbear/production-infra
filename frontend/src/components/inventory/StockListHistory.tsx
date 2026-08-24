@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, Package, ArrowUpFromLine, ArrowDownToLine, ArrowRightLeft, RefreshCw } from 'lucide-react';
 import { stockApi } from '../../services/api';
 import { DataTable, Column, ModuleHeader, InlineFilterPanel } from '../global';
+import { projectMovementType } from './stock/utils/movementProjection';
 
 interface StockListHistoryProps {
   open?: boolean;
@@ -95,7 +96,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
           id: movement.id,
           movement_no: movement.movement_no || movement.transaction_id || `STK-${movement.id}`,
           product_name: movement.product_name || movement.product?.product_name || 'Unknown Product',
-          movement_type: movement.movement_type || movement.type || 'adjustment',
+          movement_type: projectMovementType(movement),
           quantity: Math.abs(parseFloat(movement.quantity) || 0),
           reference_no: movement.reference_no || movement.reference_document || movement.invoice_number,
           movement_date: movement.movement_date || movement.transaction_date || movement.created_at,

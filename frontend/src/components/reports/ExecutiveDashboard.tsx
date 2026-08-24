@@ -11,6 +11,7 @@ import {
 import { ModuleHeader } from '../global';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
+import { projectTopCustomer } from './utils/topCustomerProjection';
 
 interface ExecutiveDashboardProps {
   embedded?: boolean;
@@ -153,7 +154,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
 
       // Set top products and customers
       setTopProducts(topProductsData?.data || []);
-      setTopCustomers(topCustomersData?.data || []);
+      setTopCustomers((topCustomersData?.data || []).map(projectTopCustomer));
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -396,7 +397,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
                         {customer.customer_name || customer.name}
                       </span>
                       <span className="text-sm font-semibold">
-                        {formatCurrency(customer.total_revenue || customer.total_purchase || 0)}
+                        {customer.revenue == null ? 'Unavailable' : formatCurrency(customer.revenue)}
                       </span>
                     </div>
                   ))}

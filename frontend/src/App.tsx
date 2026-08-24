@@ -197,7 +197,14 @@ const AppContent = (): JSX.Element => {
       case 'credit-debit-note':
         return <CreditDebitFlow open onClose={goHome} />;
       case 'gst':
-        return <GSTHub open onClose={goHome} />;
+        return (
+          <GSTHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'reports':
         return (
           <ReportsHub
@@ -208,7 +215,14 @@ const AppContent = (): JSX.Element => {
           />
         );
       case 'master':
-        return <MasterHub open onClose={goHome} />;
+        return (
+          <MasterHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'home':
       default:
         return <Home setActiveTab={navigate} />;
