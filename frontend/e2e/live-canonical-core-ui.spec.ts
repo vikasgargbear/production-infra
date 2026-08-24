@@ -364,8 +364,8 @@ test.describe('live canonical desktop UI journeys', () => {
     await page.screenshot({ path: testInfo.outputPath('supplier-invoice-posted-readback.png'), fullPage: true });
   });
 
-  test('UI: customer receipt selection -> exact allocation review -> confirmation -> canonical readback', async ({ page }, testInfo) => {
-    test.setTimeout(150_000);
+  test('UI: customer receipt FIFO and manual selections each post with exact canonical readback', async ({ page }, testInfo) => {
+    test.setTimeout(240_000);
     await openHomeAction(page, 'Financial Hub');
     await chooseHubModule(page, 'Financial Hub', 'Customer Receipt');
     await selectSearchResult(page, /Search customer/i, 'Demo Retail', /Demo Retail Customer/i);
@@ -420,10 +420,79 @@ test.describe('live canonical desktop UI journeys', () => {
       }],
     });
     await page.screenshot({ path: testInfo.outputPath('customer-receipt-posted-readback.png'), fullPage: true });
+
+    await page.getByRole('button', { name: 'New Payment', exact: true }).click();
+    const manualOutstandingPromise = canonicalResponse(
+      page,
+      'GET',
+      /\/api\/payment-allocation\/unpaid-invoices$/,
+    );
+    await selectSearchResult(page, /Search customer/i, 'Demo Retail', /Demo Retail Customer/i);
+    const manualOutstandingPayload = await responseJson(await manualOutstandingPromise);
+    const manualSource = (
+      manualOutstandingPayload.invoices
+      || manualOutstandingPayload.items
+      || manualOutstandingPayload
+    )[0];
+    expect(manualSource, 'manual receipt needs an outstanding canonical invoice').toBeTruthy();
+    await page.getByPlaceholder('0').fill('0.50');
+    await page.getByRole('button', { name: /^Bank$/i }).click();
+    await page.getByLabel('Settlement bank account').selectOption({ index: 1 });
+    await page.getByPlaceholder(/Enter bank, UPI, or gateway reference/i)
+      .fill(`${PREFIX}-UI-RCPT-MANUAL-${Date.now()}`);
+    const allocationMethod = page.locator('select').filter({
+      has: page.locator('option[value="manual"]'),
+    });
+    await allocationMethod.selectOption('manual');
+    const manualRow = page.getByRole('row').filter({ hasText: manualSource.invoice_number });
+    await manualRow.getByRole('checkbox').check();
+    await expect(manualRow).toContainText('₹0.50');
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByText('PAYMENT SUMMARY')).toBeVisible();
+    const manualPrepareRequestPromise = page.waitForRequest(request => request.method() === 'POST'
+      && /\/api\/web\/actions\/finance\.customer_receipt\.prepare\/prepare$/.test(new URL(request.url()).pathname));
+    const manualPreparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/finance\.customer_receipt\.prepare\/prepare$/);
+    const manualExecutePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    await page.getByRole('button', { name: 'Post Receipt' }).click();
+    const manualPrepareRequest = (await manualPrepareRequestPromise).postDataJSON();
+    expect(manualPrepareRequest.allocations).toEqual([{
+      open_item_id: manualSource.open_item_id,
+      amount: '0.50',
+    }]);
+    const manualPrepared = await responseJson(await manualPreparePromise);
+    const manualReview = page.getByRole('dialog', { name: 'Approve customer receipt' });
+    await expect(manualReview).toContainText(manualPrepared.command_request_id);
+    await manualReview.getByRole('button', { name: 'Approve & Post Receipt' }).click();
+    const manualExecutedResponse = await manualExecutePromise;
+    const manualExecuted = await responseJson(manualExecutedResponse);
+    const manualReadback = await authorizedGet(
+      page,
+      manualExecutedResponse,
+      `/payment-allocation/payment/${manualExecuted.resource_id}/readback`,
+    );
+    expect(manualReadback.payment_id).toBe(manualExecuted.resource_id);
+    expect(exact(manualReadback.amount, 'manual receipt amount')).toBe('0.50');
+    expect(manualReadback.allocations).toHaveLength(1);
+    expect(manualReadback.allocations[0].open_item_id).toBe(manualSource.open_item_id);
+    expect(exact(manualReadback.allocations[0].amount, 'manual receipt allocation')).toBe('0.50');
+    expect(exact(manualReadback.journal_debit_total, 'manual receipt debit'))
+      .toBe(exact(manualReadback.journal_credit_total, 'manual receipt credit'));
+    await attachExactEvidence(testInfo, 'created-manual-customer-receipt-and-exact-api-evidence.json', {
+      created_records: [{
+        resource_type: 'customer_receipt',
+        allocation_method: 'manual',
+        resource_id: manualExecuted.resource_id,
+        command_request_id: manualPrepared.command_request_id,
+        open_item_id: manualReadback.allocations[0].open_item_id,
+        amount: manualReadback.amount,
+        journal_debit_total: manualReadback.journal_debit_total,
+        journal_credit_total: manualReadback.journal_credit_total,
+      }],
+    });
   });
 
-  test('UI: supplier payment defaults to FIFO, preserves manual allocation, reviews, posts once, and reconciles exact evidence', async ({ page }, testInfo) => {
-    test.setTimeout(180_000);
+  test('UI: supplier payment manual and default FIFO allocations each post with exact evidence', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
     await openHomeAction(page, 'Financial Hub');
     const contextPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-payments\/context$/);
     await chooseHubModule(page, 'Financial Hub', 'Supplier Payment');
@@ -446,15 +515,20 @@ test.describe('live canonical desktop UI journeys', () => {
     await expect(page.getByRole('radio', { name: 'Automatic FIFO' })).toBeChecked();
     await expect(page.getByRole('radio', { name: 'Manual per invoice' })).not.toBeChecked();
     await page.getByRole('radio', { name: 'Manual per invoice' }).click();
-    await expect(page.getByLabel(`Allocation for ${source.document_number}`)).toBeVisible();
-    await page.getByRole('radio', { name: 'Automatic FIFO' }).click();
-    await page.getByLabel('Payment amount').fill('0.01');
-    await page.getByRole('button', { name: 'Allocate FIFO' }).click();
+    await page.getByLabel(`Allocation for ${source.document_number}`).fill('0.01');
     const sourceRow = page.getByRole('row').filter({ hasText: source.document_number });
-    await expect(sourceRow).toContainText('₹0.01');
+    await expect(sourceRow.getByLabel(`Allocation for ${source.document_number}`)).toHaveValue('0.01');
 
+    const prepareRequestPromise = page.waitForRequest(request => request.method() === 'POST'
+      && /\/api\/web\/actions\/finance\.supplier_payment\.prepare\/prepare$/.test(new URL(request.url()).pathname));
     const preparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/finance\.supplier_payment\.prepare\/prepare$/);
     await page.getByRole('button', { name: 'Review immutable preview' }).click();
+    const preparedRequest = (await prepareRequestPromise).postDataJSON();
+    expect(preparedRequest.allocations).toEqual([{
+      open_item_id: source.open_item_id,
+      amount: '0.01',
+    }]);
+    expect(preparedRequest.gross_amount).toBe('0.01');
     const prepared = await responseJson(await preparePromise);
     await expect(page.getByRole('heading', { name: 'Confirm supplier payment' })).toBeVisible();
     await expect(page.getByText('₹0.01', { exact: true })).toBeVisible();
@@ -524,7 +598,64 @@ test.describe('live canonical desktop UI journeys', () => {
         },
       }],
     });
-    await page.screenshot({ path: testInfo.outputPath('supplier-payment-posted-readback.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('supplier-payment-manual-posted-readback.png'), fullPage: true });
+
+    await returnHome(page);
+    await openHomeAction(page, 'Financial Hub');
+    const fifoContextPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-payments\/context$/);
+    await chooseHubModule(page, 'Financial Hub', 'Supplier Payment');
+    const fifoContext = await responseJson(await fifoContextPromise);
+    const fifoSupplier = fifoContext.suppliers.find((candidate: any) => candidate.open_items?.length);
+    const fifoBank = fifoContext.bank_accounts[0];
+    expect(fifoSupplier, 'FIFO payment needs a residual posted payable').toBeTruthy();
+    expect(fifoBank, 'FIFO payment needs an authoritative INR bank').toBeTruthy();
+    const fifoSource = fifoSupplier.open_items[0];
+    await page.getByLabel('Supplier').selectOption(String(fifoSupplier.supplier_account_id));
+    await page.getByLabel('Branch').selectOption(String(fifoSource.branch_id));
+    await page.getByLabel('Bank and settlement ledger').selectOption(String(fifoBank.bank_account_id));
+    await page.getByLabel('Method').selectOption('bank_transfer');
+    await page.getByLabel('Bank / UPI reference').fill(`${PREFIX}-UI-SPAY-FIFO-${Date.now()}`);
+    await expect(page.getByRole('radio', { name: 'Automatic FIFO' })).toBeChecked();
+    await page.getByLabel('Payment amount').fill('0.01');
+    await page.getByRole('button', { name: 'Allocate FIFO' }).click();
+    await expect(page.getByRole('row').filter({ hasText: fifoSource.document_number })).toContainText('₹0.01');
+    const fifoPrepareRequestPromise = page.waitForRequest(request => request.method() === 'POST'
+      && /\/api\/web\/actions\/finance\.supplier_payment\.prepare\/prepare$/.test(new URL(request.url()).pathname));
+    const fifoPreparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/finance\.supplier_payment\.prepare\/prepare$/);
+    await page.getByRole('button', { name: 'Review immutable preview' }).click();
+    const fifoPrepareRequest = (await fifoPrepareRequestPromise).postDataJSON();
+    expect(fifoPrepareRequest.allocations).toEqual([{
+      open_item_id: fifoSource.open_item_id,
+      amount: '0.01',
+    }]);
+    const fifoPrepared = await responseJson(await fifoPreparePromise);
+    await page.getByRole('checkbox', { name: /I reviewed the exact bank/i }).check();
+    const fifoExecutePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    await page.getByRole('button', { name: 'Post ₹0.01', exact: true }).click();
+    const fifoExecutedResponse = await fifoExecutePromise;
+    const fifoExecuted = await responseJson(fifoExecutedResponse);
+    const fifoReadback = await authorizedGet(
+      page,
+      fifoExecutedResponse,
+      `/canonical/supplier-payments/${fifoExecuted.resource_id}`,
+    );
+    expect(fifoReadback.payment_id).toBe(fifoExecuted.resource_id);
+    expect(fifoReadback.allocations).toHaveLength(1);
+    expect(fifoReadback.allocations[0].open_item_id).toBe(fifoSource.open_item_id);
+    expect(exact(fifoReadback.allocations[0].amount, 'supplier FIFO allocation')).toBe('0.01');
+    expect(fifoReadback.journal_balanced).toBe(true);
+    await attachExactEvidence(testInfo, 'created-fifo-supplier-payment-and-exact-api-evidence.json', {
+      created_records: [{
+        resource_type: 'supplier_payment',
+        allocation_method: 'fifo',
+        resource_id: fifoExecuted.resource_id,
+        command_request_id: fifoPrepared.command_request_id,
+        open_item_id: fifoReadback.allocations[0].open_item_id,
+        amount: fifoReadback.amount,
+        journal_debit_total: fifoReadback.journal_debit_total,
+        journal_credit_total: fifoReadback.journal_credit_total,
+      }],
+    });
   });
 
   test('UI: supplier payment future organization date fails closed before prepare', async ({ page }, testInfo) => {

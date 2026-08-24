@@ -1,7 +1,13 @@
 /* eslint-disable jest/valid-expect, jest/valid-title, testing-library/prefer-screen-queries */
 // True visible-UI evidence: network inspection below is readback only.
 import { expect, Page, Response, test } from '@playwright/test';
-import { chooseHubModule, loginToLiveErp, openHomeAction, returnHome } from './support/live-erp';
+import {
+  authorizedJsonGet,
+  chooseHubModule,
+  loginToLiveErp,
+  openHomeAction,
+  returnHome,
+} from './support/live-erp';
 
 const baseURL = process.env.PLAYWRIGHT_LIVE_BASE_URL || '';
 const email = process.env.PLAYWRIGHT_LIVE_EMAIL || '';
@@ -93,7 +99,8 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     }, null, 2) });
   });
 
-  test('direct invoice visibly recommends FEFO but permits an explicit eligible batch choice', async ({ page }, testInfo) => {
+  test('direct invoice visibly recommends FEFO, posts an explicit same-tier batch, and reconciles exact readback', async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
     await openHomeAction(page, 'Sales'); await chooseHubModule(page, 'Sales', 'Create Invoice');
     await choose(page, /search customer/i, 'Demo Retail', /Demo Retail/i);
     await page.getByPlaceholder(/search product/i).fill('Synthetic Corrugated');
@@ -129,8 +136,71 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     ]);
     const review = page.getByRole('dialog', { name: 'Review exact sales invoice' });
     await expect(review).toBeVisible();
-    await review.getByRole('button', { name: 'Back' }).click();
-    await page.screenshot({ path: testInfo.outputPath('direct-invoice-explicit-batch-choice.png'), fullPage: true });
-    // Prepare is read-only command review; Back proves no approve/execute occurs.
+    await review.getByRole('checkbox').check();
+    const executePromise = response(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    const postingReadbackPromise = response(
+      page,
+      'GET',
+      /\/api\/canonical\/sales-invoices\/[0-9a-f-]+\/posting-readback$/,
+    );
+    await review.getByRole('button', { name: 'Approve & Post' }).click();
+    const executedResponse = await executePromise;
+    const executed = await json(executedResponse);
+    expect(String(executed.resource_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    const postingReadback = await json(await postingReadbackPromise);
+    expect(String(postingReadback.sales_invoice_id)).toBe(String(executed.resource_id));
+    expect(postingReadback.status).toBe('posted');
+    expect(postingReadback.inventory_fulfillment).toBe('direct_invoice_issue');
+    expect(postingReadback.invoice_inventory_document_id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(postingReadback.invoice_lines).toHaveLength(1);
+    expect(postingReadback.invoice_lines[0]).toEqual(expect.objectContaining({
+      billed_quantity: '1.125000',
+      free_quantity: '0.250000',
+      base_billed_quantity: '1.125000',
+      base_free_quantity: '0.250000',
+    }));
+    expect(postingReadback.journal_debit_total).toBe(postingReadback.journal_credit_total);
+    expect(postingReadback.receivable_principal).toBe(postingReadback.invoice_total);
+    expect(postingReadback.receivable_outstanding).toBe(postingReadback.invoice_total);
+    expect(postingReadback.inventory_base_quantity).toBe('1.375000');
+    expect(postingReadback.inventory_evidence).toHaveLength(1);
+    expect(postingReadback.inventory_evidence[0]).toEqual(expect.objectContaining({
+      source_kind: 'direct_invoice_issue',
+      allocated_base_billed_quantity: '1.125000',
+      allocated_base_free_quantity: '0.250000',
+      ledger_base_quantity: '1.375000',
+    }));
+
+    const invoiceDetail = await authorizedJsonGet(
+      page,
+      executedResponse,
+      `/canonical/invoices/${executed.resource_id}`,
+    );
+    expect(invoiceDetail.status).toBe('posted');
+    expect(invoiceDetail.items).toHaveLength(1);
+    expect(invoiceDetail.items[0].batch_id).toBe(selectedBatchId);
+    expect(invoiceDetail.items[0].batch_allocations).toHaveLength(1);
+    expect(invoiceDetail.items[0].batch_allocations[0]).toEqual(expect.objectContaining({
+      source_kind: 'direct_issue',
+      batch_id: selectedBatchId,
+      billed_quantity: 1.125,
+      free_quantity: 0.25,
+      base_billed_quantity: 1.125,
+      base_free_quantity: 0.25,
+      inventory_document_id: postingReadback.invoice_inventory_document_id,
+      inventory_document_line_id: postingReadback.inventory_evidence[0].inventory_document_line_id,
+    }));
+    await page.screenshot({ path: testInfo.outputPath('direct-invoice-explicit-batch-posted.png'), fullPage: true });
+    await testInfo.attach('direct-invoice-authoritative-readback.json', {
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sales_invoice_id: executed.resource_id,
+        selected_batch_id: selectedBatchId,
+        inventory_document_id: postingReadback.invoice_inventory_document_id,
+        inventory_document_line_id: postingReadback.inventory_evidence[0].inventory_document_line_id,
+        inventory_evidence_count: postingReadback.inventory_evidence.length,
+        executed_batch_allocation_count: invoiceDetail.items[0].batch_allocations.length,
+      }, null, 2),
+    });
   });
 });

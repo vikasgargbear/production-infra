@@ -2,6 +2,7 @@
 import { expect, test } from '@playwright/test';
 import {
   assertNoVisibleFailure,
+  authorizedJsonGet,
   chooseHubModule,
   collectBrowserFailures,
   expectSuccessfulWrite,
@@ -149,7 +150,12 @@ test.describe('live ERP pilot', () => {
       /\/api\/calculations\/invoice(?:\?|$)/.test(response.url())
       && response.request().method() === 'POST'
     ));
-    await page.getByText(/^DEMO-BATCH-/).first().click();
+    const recommendedBatch = page.getByRole('dialog').getByRole('option')
+      .filter({ hasText: /Recommended FEFO batch/i });
+    await expect(recommendedBatch).toHaveCount(1);
+    const recommendedBatchId = await recommendedBatch.getAttribute('data-batch-id');
+    expect(recommendedBatchId).toMatch(/^[0-9a-f-]{36}$/i);
+    await recommendedBatch.click();
     const calculated = await calculationResponse;
     const body = await calculated.text();
     expect(calculated.status(), body.slice(0, 1500)).toBeGreaterThanOrEqual(200);
@@ -237,6 +243,13 @@ test.describe('live ERP pilot', () => {
       expect(typeof authoritative.total_amount).toBe('string');
       expect(authoritative.total_amount).toMatch(/^\d+(?:\.\d+)?$/);
       expect(BigInt(authoritative.total_amount.replace('.', ''))).toBeGreaterThan(0n);
+      expect(authoritative.items).toHaveLength(1);
+      expect(authoritative.items[0].batch_id).toBe(recommendedBatchId);
+      expect(authoritative.items[0].batch_allocations).toHaveLength(1);
+      expect(authoritative.items[0].batch_allocations[0]).toEqual(expect.objectContaining({
+        source_kind: 'direct_issue',
+        batch_id: recommendedBatchId,
+      }));
       await expect(page.getByText('Invoice Created!', { exact: true })).toBeVisible();
       await expect(page.getByText(authoritative.invoice_number, { exact: true })).toBeVisible();
     }
@@ -307,11 +320,28 @@ test.describe('live ERP pilot', () => {
     await chooseHubModule(page, 'Master', 'Products');
     await page.getByRole('button', { name: 'New draft' }).click();
     await page.getByLabel('Product name').fill(productName);
-    await expectSuccessfulWrite(page, /\/api\/products\/?(?:\?|$)/, async () => {
+    const productWrite = await expectSuccessfulWrite(page, /\/api\/products\/?(?:\?|$)/, async () => {
       await page.getByRole('button', { name: 'Save draft' }).click();
     });
+    const productCreated = await productWrite.json();
+    expect(String(productCreated.product_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(productCreated.product_name).toBe(productName);
+    expect(productCreated.lifecycle_status).toBe('draft');
     await page.getByPlaceholder('Search products').fill(productName);
     await expect(page.getByRole('cell', { name: productName, exact: true })).toBeVisible();
+    const productRows = await authorizedJsonGet(
+      page,
+      productWrite,
+      `/products?include_inactive=true&search=${encodeURIComponent(productName)}`,
+    );
+    expect(productRows).toHaveLength(1);
+    expect(productRows[0]).toEqual(expect.objectContaining({
+      product_id: productCreated.product_id,
+      product_name: productName,
+      product_code: productCreated.product_code,
+      status: 'draft',
+      is_active: false,
+    }));
 
     await chooseHubModule(page, 'Master', 'Customers');
     await page.getByRole('button', { name: 'Add Customer' }).click();
@@ -321,11 +351,29 @@ test.describe('live ERP pilot', () => {
     await page.getByPlaceholder('City').fill('Mumbai');
     await page.locator('select').filter({ hasText: 'Maharashtra' }).selectOption('Maharashtra');
     await page.getByPlaceholder('6-digit').fill('400001');
-    await expectSuccessfulWrite(page, /\/api\/customers\/?(?:\?|$)/, async () => {
+    const customerWrite = await expectSuccessfulWrite(page, /\/api\/customers\/?(?:\?|$)/, async () => {
       await page.getByRole('button', { name: 'Save Customer', exact: true }).first().click();
     });
+    const customerCreated = await customerWrite.json();
+    expect(String(customerCreated.customer_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(customerCreated.customer_name).toBe(customerName);
+    expect(customerCreated.status).toBe('active');
     await page.getByPlaceholder(/Search customers/).fill(customerName);
     await expect(page.getByText(customerName, { exact: true })).toBeVisible();
+    const customerReadback = await authorizedJsonGet(
+      page,
+      customerWrite,
+      `/customers?search=${encodeURIComponent(customerName)}`,
+    );
+    expect(customerReadback.customers).toHaveLength(1);
+    expect(customerReadback.customers[0]).toEqual(expect.objectContaining({
+      customer_id: customerCreated.customer_id,
+      customer_code: customerCreated.customer_code,
+      customer_name: customerName,
+      primary_phone: `90${suffix}`,
+      status: 'active',
+      is_active: true,
+    }));
 
     await chooseHubModule(page, 'Master', 'Suppliers');
     await page.getByRole('button', { name: 'Add Supplier' }).click();
@@ -335,11 +383,38 @@ test.describe('live ERP pilot', () => {
     await page.getByPlaceholder('City').fill('Mumbai');
     await page.locator('select').filter({ hasText: 'Maharashtra' }).selectOption('Maharashtra');
     await page.getByPlaceholder('6-digit').fill('400001');
-    await expectSuccessfulWrite(page, /\/api\/suppliers\/?(?:\?|$)/, async () => {
+    const supplierWrite = await expectSuccessfulWrite(page, /\/api\/suppliers\/?(?:\?|$)/, async () => {
       await page.getByRole('button', { name: 'Save Supplier', exact: true }).first().click();
     });
+    const supplierCreated = await supplierWrite.json();
+    expect(String(supplierCreated.supplier_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(supplierCreated.supplier_name).toBe(supplierName);
+    expect(supplierCreated.status).toBe('active');
     await page.getByPlaceholder(/Search suppliers/).fill(supplierName);
     await expect(page.getByText(supplierName, { exact: true })).toBeVisible();
+    const supplierRows = await authorizedJsonGet(
+      page,
+      supplierWrite,
+      `/suppliers?search=${encodeURIComponent(supplierName)}`,
+    );
+    expect(supplierRows).toHaveLength(1);
+    expect(supplierRows[0]).toEqual(expect.objectContaining({
+      supplier_id: supplierCreated.supplier_id,
+      supplier_code: supplierCreated.supplier_code,
+      supplier_name: supplierName,
+      primary_phone: `91${suffix}`,
+      status: 'active',
+      is_active: true,
+    }));
+
+    await testInfo.attach('master-create-authoritative-readback.json', {
+      contentType: 'application/json',
+      body: JSON.stringify({
+        product_id: productCreated.product_id,
+        customer_id: customerCreated.customer_id,
+        supplier_id: supplierCreated.supplier_id,
+      }, null, 2),
+    });
 
     await failures.assertClean(testInfo);
   });

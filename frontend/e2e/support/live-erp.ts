@@ -1,4 +1,4 @@
-import { expect, Page, TestInfo } from '@playwright/test';
+import { expect, Page, Response, TestInfo } from '@playwright/test';
 
 const VISIBLE_FAILURE = /failed to|permission check failed|sync error|something went wrong|unexpected error|access denied/i;
 const BENIGN_CONSOLE_ERROR = /resizeobserver loop|favicon\.ico|source map/i;
@@ -126,7 +126,7 @@ export async function expectSuccessfulWrite(
   page: Page,
   endpoint: RegExp,
   action: () => Promise<void>,
-): Promise<void> {
+): Promise<Response> {
   const responsePromise = page.waitForResponse(response => (
     endpoint.test(response.url())
     && ['POST', 'PUT', 'PATCH'].includes(response.request().method())
@@ -139,4 +139,22 @@ export async function expectSuccessfulWrite(
   const evidence = `${response.request().method()} ${response.url()} ${body.slice(0, 1500)}`;
   expect(response.status(), evidence).toBeGreaterThanOrEqual(200);
   expect(response.status(), evidence).toBeLessThan(300);
+  return response;
+}
+
+export async function authorizedJsonGet(
+  page: Page,
+  referenceResponse: Response,
+  pathAndQuery: string,
+): Promise<any> {
+  const origin = new URL(referenceResponse.url()).origin;
+  const result = await page.evaluate(async ({ origin, pathAndQuery }) => {
+    const token = localStorage.getItem('authToken');
+    const reply = await fetch(`${origin}/api${pathAndQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return { status: reply.status, text: await reply.text() };
+  }, { origin, pathAndQuery });
+  expect(result.status, result.text).toBe(200);
+  return JSON.parse(result.text);
 }
