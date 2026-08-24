@@ -2,8 +2,9 @@
 """Provision and exercise the disposable canonical staging organization.
 
 This script is intentionally staging-only. Regulatory source data is fetched
-from CBIC, while every organization, party, identifier, and transaction is
-synthetic and isolated under one deterministic demo organization UUID.
+from reviewed official tax authorities, while every organization, party,
+identifier, and transaction is synthetic and isolated under one deterministic
+demo organization UUID.
 """
 
 from __future__ import annotations
@@ -36,6 +37,15 @@ ADJUSTMENT_SOURCE_URI = (
     "https://gstcouncil.gov.in/sites/default/files/2024-02/faq-minin.pdf"
 )
 ADJUSTMENT_SOURCE_PUBLICATION_DATE = date(2017, 7, 1)
+GSTR1_REPORTING_SOURCE_URI = (
+    "https://tutorial.gst.gov.in/downloads/invoiceuploadofflineutility.pdf"
+)
+GSTR1_REPORTING_SOURCE_SHA256 = (
+    "b151edf26c1c159e24eb53083fe0e42addbf0c297a4d6defd02bd8a127163003"
+)
+GSTR1_REPORTING_SOURCE_PUBLICATION_DATE = date(2025, 12, 29)
+GSTR1_REPORTING_EFFECTIVE_FROM = date(2017, 7, 1)
+GSTR1_REPORTING_RULESET_VERSION = "gstn-returns-offline-tool-2025-12-29"
 CLIENT_ID = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "").strip()
 
 IDS = {
@@ -70,6 +80,10 @@ IDS = {
     "adjustment_rule_release": "d3100000-0000-7000-8000-000000000003",
     "sales_return_rule": "d3100000-0000-7000-8000-000000000004",
     "purchase_return_rule": "d3100000-0000-7000-8000-000000000005",
+    "gstr1_reporting_release": "d3300000-0000-7000-8000-000000000001",
+    "gstr1_reporting_legacy_rule": "d3300000-0000-7000-8000-000000000002",
+    "gstr1_reporting_current_rule": "d3300000-0000-7000-8000-000000000003",
+    "gstr1_reporting_activation_request": "d3300000-0000-7000-8000-000000000004",
     "supplier_party": "d3200000-0000-7000-8000-000000000001",
     "supplier_account": "d3200000-0000-7000-8000-000000000002",
     "supplier_address": "d3200000-0000-7000-8000-000000000003",
@@ -309,6 +323,45 @@ def fetch_adjustment_source(evidence_dir: Path) -> bytes:
     if any(fragment.casefold() not in text.casefold() for fragment in required_fragments):
         raise RuntimeError("GST Council return authority lacks reviewed Section 34 fragments")
     (evidence_dir / "gst-council-return-of-goods-faq.pdf").write_bytes(source)
+    return source
+
+
+def fetch_gstr1_reporting_source(evidence_dir: Path) -> bytes:
+    """Fetch and attest the official GSTN Returns Offline Tool boundary evidence."""
+
+    response = requests.get(
+        GSTR1_REPORTING_SOURCE_URI,
+        timeout=60,
+        headers={"User-Agent": "AasoPharma canonical staging evidence/1.0"},
+    )
+    response.raise_for_status()
+    source = response.content
+    if (
+        not 10_000 <= len(source) <= 100 * 1024 * 1024
+        or not source.startswith(b"%PDF")
+        or not source.rstrip().endswith(b"%%EOF")
+        or hashlib.sha256(source).hexdigest() != GSTR1_REPORTING_SOURCE_SHA256
+    ):
+        raise RuntimeError("GSTN Returns Offline Tool source has an unexpected envelope")
+    with pdfplumber.open(BytesIO(source)) as document:
+        creation_date = str((document.metadata or {}).get("CreationDate", ""))
+        text = re.sub(
+            r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages)
+        )
+    required_fragments = (
+        "As per amended rules from August 2024 tax return period onwards",
+        "invoice value is more than Rs. 1 lakh",
+        "up to July 2024 tax return period",
+        "invoice value should be more than Rs. 2.5 lakhs",
+    )
+    if (
+        not creation_date.startswith("D:20251229")
+        or any(fragment.casefold() not in text.casefold() for fragment in required_fragments)
+    ):
+        raise RuntimeError(
+            "GSTN Returns Offline Tool lacks the reviewed GSTR-1 B2CL transition evidence"
+        )
+    (evidence_dir / "gstn-returns-offline-tool-gstr1.pdf").write_bytes(source)
     return source
 
 
@@ -787,6 +840,176 @@ def import_adjustment_release(
         )
         if cursor.fetchone() != (IDS["adjustment_rule_release"],):
             raise RuntimeError("GST adjustment importer returned an unexpected release")
+
+
+def gstr1_reporting_dataset_bytes(connection) -> bytes:
+    """Canonical PostgreSQL JSONB bytes for the complete reviewed B2CL history."""
+
+    dataset = [
+        {
+            "id": IDS["gstr1_reporting_legacy_rule"],
+            "rule_code": "b2cl_invoice_value_threshold",
+            "rule_version": "gstn-through-2024-07",
+            "b2cl_threshold_amount": "250000.00",
+            "effective_from": GSTR1_REPORTING_EFFECTIVE_FROM.isoformat(),
+            "effective_to": "2024-07-31",
+        },
+        {
+            "id": IDS["gstr1_reporting_current_rule"],
+            "rule_code": "b2cl_invoice_value_threshold",
+            "rule_version": "gstn-from-2024-08",
+            "b2cl_threshold_amount": "100000.00",
+            "effective_from": "2024-08-01",
+            "effective_to": "",
+        },
+    ]
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT %s::jsonb::text", (json.dumps(dataset),))
+        row = cursor.fetchone()
+    if not row or not isinstance(row[0], str):
+        raise RuntimeError("database did not canonicalize the GSTR-1 reporting dataset")
+    return row[0].encode("utf-8")
+
+
+def demo_gstr1_reporting_release_exists(connection) -> bool:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT EXISTS(SELECT 1 FROM core.reference_data_releases WHERE id=%s)",
+            (IDS["gstr1_reporting_release"],),
+        )
+        row = cursor.fetchone()
+    return bool(row and row[0])
+
+
+def import_gstr1_reporting_release(
+    connection, source: bytes, dataset_bytes: bytes
+) -> None:
+    """Activate and immediately replay the exact governed release."""
+
+    source_hash = hashlib.sha256(source).digest()
+    dataset_hash = hashlib.sha256(dataset_bytes).digest()
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT transaction_timestamp()")
+        row = cursor.fetchone()
+    if not row or not isinstance(row[0], datetime) or row[0].tzinfo is None:
+        raise RuntimeError("database did not return an aware GSTR-1 activation timestamp")
+    activation_timestamp = row[0]
+    parameters = (
+        IDS["gstr1_reporting_release"],
+        GSTR1_REPORTING_RULESET_VERSION,
+        "gst_portal",
+        GSTR1_REPORTING_SOURCE_URI,
+        "github-actions-artifact",
+        "canonical-demo/gstn-returns-offline-tool-gstr1.pdf",
+        "application/pdf",
+        psycopg2.Binary(source),
+        psycopg2.Binary(source_hash),
+        "github-actions-artifact",
+        "canonical-demo/gstr1-reporting-rules.json",
+        psycopg2.Binary(dataset_bytes),
+        psycopg2.Binary(dataset_hash),
+        GSTR1_REPORTING_SOURCE_PUBLICATION_DATE,
+        GSTR1_REPORTING_EFFECTIVE_FROM,
+        None,
+        IDS["reviewer_user"],
+        activation_timestamp,
+        IDS["operator_user"],
+        activation_timestamp,
+        IDS["gstr1_reporting_activation_request"],
+    )
+    with connection.cursor() as cursor:
+        for attempt in ("activation", "idempotent replay"):
+            cursor.execute(
+                """
+                SELECT erp_regulatory_commands.import_gstr1_reporting_release(
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                )
+                """,
+                parameters,
+            )
+            if cursor.fetchone() != (IDS["gstr1_reporting_release"],):
+                raise RuntimeError(
+                    f"GSTR-1 reporting importer returned an unexpected {attempt} identity"
+                )
+
+
+def reconcile_gstr1_reporting_release(
+    connection, source: bytes, dataset_bytes: bytes,
+    *, initial_activation_replayed: bool,
+) -> dict[str, Any]:
+    """Read back the immutable release and both exact active rule intervals."""
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT release.id,release.ruleset_version,release.status,
+                   release.source_authority,release.source_uri,
+                   encode(release.source_document_sha256,'hex'),
+                   encode(release.dataset_sha256,'hex'),release.record_count,
+                   release.reviewed_by_user_id,release.reviewed_at,
+                   rule.id,rule.rule_version,rule.b2cl_threshold_amount,
+                   rule.effective_from,rule.effective_to,rule.status,
+                   rule.activated_by_user_id,rule.activated_at,
+                   rule.activation_request_id
+              FROM core.reference_data_releases release
+              JOIN tax.gstr1_reporting_rule_versions rule
+                ON rule.release_id=release.id
+             WHERE release.id=%s
+             ORDER BY rule.effective_from,rule.id
+            """,
+            (IDS["gstr1_reporting_release"],),
+        )
+        rows = cursor.fetchall()
+    expected = (
+        (
+            IDS["gstr1_reporting_legacy_rule"], "gstn-through-2024-07",
+            Decimal("250000.00"), date(2017, 7, 1), date(2024, 7, 31),
+        ),
+        (
+            IDS["gstr1_reporting_current_rule"], "gstn-from-2024-08",
+            Decimal("100000.00"), date(2024, 8, 1), None,
+        ),
+    )
+    if len(rows) != 2:
+        raise RuntimeError("GSTR-1 reporting release does not contain exactly two rules")
+    for row, expected_rule in zip(rows, expected):
+        if (
+            str(row[0]) != IDS["gstr1_reporting_release"]
+            or row[1] != GSTR1_REPORTING_RULESET_VERSION
+            or row[2] != "active"
+            or row[3] != "gst_portal"
+            or row[4] != GSTR1_REPORTING_SOURCE_URI
+            or row[5] != hashlib.sha256(source).hexdigest()
+            or row[6] != hashlib.sha256(dataset_bytes).hexdigest()
+            or row[7] != 2
+            or str(row[8]) != IDS["reviewer_user"]
+            or not isinstance(row[9], datetime)
+            or row[9].tzinfo is None
+            or (str(row[10]), row[11], row[12], row[13], row[14]) != expected_rule
+            or row[15] != "active"
+            or str(row[16]) != IDS["operator_user"]
+            or not isinstance(row[17], datetime)
+            or row[17].tzinfo is None
+            or row[17] < row[9]
+            or row[9] != rows[0][9]
+            or row[17] != rows[0][17]
+            or str(row[18]) != IDS["gstr1_reporting_activation_request"]
+        ):
+            raise RuntimeError("GSTR-1 reporting release readback differs from the reviewed exact set")
+    return {
+        "release_id": IDS["gstr1_reporting_release"],
+        "ruleset_version": GSTR1_REPORTING_RULESET_VERSION,
+        "record_count": 2,
+        "source_sha256": hashlib.sha256(source).hexdigest(),
+        "dataset_sha256": hashlib.sha256(dataset_bytes).hexdigest(),
+        "reviewed_by_user_id": IDS["reviewer_user"],
+        "activated_by_user_id": IDS["operator_user"],
+        "reviewed_at": rows[0][9].isoformat(),
+        "activated_at": rows[0][17].isoformat(),
+        "activation_request_id": IDS["gstr1_reporting_activation_request"],
+        "initial_activation_replayed": initial_activation_replayed,
+        "existing_exact_release_reconciled": not initial_activation_replayed,
+    }
 
 
 def seed_business_master(connection) -> None:
@@ -3494,21 +3717,35 @@ def main() -> int:
     evidence_dir.mkdir(parents=True, exist_ok=True)
     source = fetch_official_source(evidence_dir)
     adjustment_source = fetch_adjustment_source(evidence_dir)
+    gstr1_reporting_source = fetch_gstr1_reporting_source(evidence_dir)
 
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         bootstrap_identity(bootstrap)
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
+        gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
     with psycopg2.connect(required("ERP_REGULATORY_IMPORTER_DATABASE_URL")) as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
         adjustment_bytes = adjustment_dataset_bytes(importer)
+        gstr1_reporting_bytes = gstr1_reporting_dataset_bytes(importer)
         (evidence_dir / "hsn-481910-demo.json").write_bytes(dataset_bytes)
         (evidence_dir / "gst-adjustment-rules-demo.json").write_bytes(adjustment_bytes)
+        (evidence_dir / "gstr1-reporting-rules.json").write_bytes(
+            gstr1_reporting_bytes
+        )
         if not release_exists:
             import_tax_release(importer, source, dataset_bytes)
         if not adjustment_release_exists:
             import_adjustment_release(importer, adjustment_source, adjustment_bytes)
+        if not gstr1_reporting_release_exists:
+            import_gstr1_reporting_release(
+                importer, gstr1_reporting_source, gstr1_reporting_bytes
+            )
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+        gstr1_reporting_reconciliation = reconcile_gstr1_reporting_release(
+            bootstrap, gstr1_reporting_source, gstr1_reporting_bytes,
+            initial_activation_replayed=not gstr1_reporting_release_exists,
+        )
         seed_business_master(bootstrap)
         seed_end_to_end_master(bootstrap)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
@@ -3778,6 +4015,7 @@ def main() -> int:
             (evidence_dir / "hsn-481910-demo.json").read_bytes()
         ).hexdigest(),
         "reference_scope": "demo subset; not a complete production tax dataset",
+        "gstr1_reporting_reconciliation": gstr1_reporting_reconciliation,
         "transaction_scope": "canonical day-to-day purchase, sales, inventory, return, and settlement actions",
         "party_master_reconciliation": party_master_reconciliation,
         "purchase_order_reconciliation": purchase_reconciliation,
