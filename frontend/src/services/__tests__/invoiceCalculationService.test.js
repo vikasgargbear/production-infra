@@ -1,3 +1,4 @@
+/* eslint-disable import/first */
 jest.mock('../api/modules/sales/calculations.api', () => ({
   invoiceCalculationsApi: { preview: jest.fn() }
 }));
@@ -5,6 +6,11 @@ jest.mock('../api/modules/sales/calculations.api', () => ({
 import { normalizeInvoicePreview } from '../calculations/invoiceCalculationService';
 import { calculateInvoicePreview } from '../calculations/invoiceCalculationService';
 import { invoiceCalculationsApi } from '../api/modules/sales/calculations.api';
+
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 
 test('normalizes canonical backend invoice totals for the invoice UI', () => {
@@ -50,6 +56,22 @@ test('normalizes canonical backend invoice totals for the invoice UI', () => {
     net_amount: 212.4,
     final_amount: 212
   }));
+});
+
+test('fails closed without calling the API when the live ERP is unavailable', async () => {
+  await expect(calculateInvoicePreview({
+    customer_details: { customer_id: '11111111-1111-4111-8111-111111111111' },
+    gst_type: 'CGST/SGST',
+    items: [{
+      product_id: '22222222-2222-4222-8222-222222222222',
+      quantity: 1,
+      unit_price: 150
+    }]
+  }, false)).rejects.toThrow(
+    'Invoice preview requires the live ERP API. Reconnect and try again.'
+  );
+
+  expect(invoiceCalculationsApi.preview).not.toHaveBeenCalled();
 });
 
 test('preserves canonical UUID IDs in the online calculation request', async () => {

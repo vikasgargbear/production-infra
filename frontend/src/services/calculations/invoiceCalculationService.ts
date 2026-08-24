@@ -1,6 +1,5 @@
 /** Boundary between invoice UI state and canonical backend calculations. */
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import {
     invoiceCalculationsApi,
     InvoiceCalculationRequest,
@@ -52,7 +51,9 @@ export function normalizeInvoicePreview(invoice: any, data: InvoiceCalculationRe
             ...totals,
             subtotal: totals.subtotal_amount,
             gross_amount: totals.subtotal_amount,
+            discount_amount: totals.discount_amount,
             total_discount: totals.discount_amount,
+            taxable_amount: totals.taxable_amount,
             taxable_before_scheme:
                 Number(totals.taxable_amount || 0) + Number(totals.scheme_discount || 0),
             tax_amount: totals.total_tax_amount,
@@ -72,10 +73,7 @@ export function normalizeInvoicePreview(invoice: any, data: InvoiceCalculationRe
 
 export async function calculateInvoicePreview(invoice: any, isOnline: boolean) {
     if (!isOnline) {
-        return {
-            ...EnterpriseCalculator.calculateInvoice(invoice),
-            gst_type: invoice?.gst_type || 'CGST/SGST'
-        };
+        throw new Error('Invoice preview requires the live ERP API. Reconnect and try again.');
     }
 
     const response = await invoiceCalculationsApi.preview(toRequest(invoice));
