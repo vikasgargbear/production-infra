@@ -2772,25 +2772,51 @@ def inventory_stock_status(user: dict = INVENTORY_USER, db: Session = Depends(ge
 
 
 @router.get("/inventory/movements")
-def inventory_movements(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                        user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
+def inventory_movements(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    product_id: Optional[UUID] = None,
+    batch_id: Optional[UUID] = None,
+    user: dict = INVENTORY_USER,
+    db: Session = Depends(get_db),
+):
     org_id = _activate(db, user)
     return _rows(db, """
-        SELECT entry.id, entry.posted_at AS date, entry.entry_kind,
+        SELECT entry.id, entry.posted_at AS date, entry.posted_at AS movement_date,
+               entry.entry_kind,
                CASE WHEN entry.entry_kind IN ('receipt','transfer_in','count_gain') THEN 'In'
-                    WHEN entry.entry_kind IN ('issue','transfer_out') THEN 'Out'
+                    WHEN entry.entry_kind IN ('issue','transfer_out','count_loss') THEN 'Out'
                     ELSE 'Adjustment' END AS type,
-               entry.quantity_delta AS quantity, product.name AS product_name,
-               document.document_number AS reference
+               CASE WHEN entry.entry_kind IN ('receipt','transfer_in','count_gain') THEN 'in'
+                    WHEN entry.entry_kind IN ('issue','transfer_out','count_loss') THEN 'out'
+                    ELSE 'adjustment' END AS movement_type,
+               ABS(entry.quantity_delta) AS quantity, entry.unit_cost,
+               entry.product_id, product.name AS product_name,
+               entry.batch_id, batch.batch_number,
+               document.document_number AS reference,
+               document.document_number AS reference_number,
+               actor.display_name AS user_name,
+               'completed' AS status
           FROM inventory.stock_ledger_entries entry
           JOIN catalog.products product ON product.org_id=entry.org_id AND product.id=entry.product_id
+          JOIN inventory.batches batch
+            ON batch.org_id=entry.org_id AND batch.id=entry.batch_id
           LEFT JOIN inventory.inventory_documents document
             ON document.org_id=entry.org_id AND document.id=entry.inventory_document_id
+          LEFT JOIN core.memberships membership
+            ON membership.org_id=entry.org_id AND membership.id=entry.posted_by_membership_id
+          LEFT JOIN core.users actor ON actor.id=membership.user_id
          WHERE entry.org_id=:org_id
            AND (:date_from IS NULL OR entry.posted_at::date >= CAST(:date_from AS date))
            AND (:date_to IS NULL OR entry.posted_at::date <= CAST(:date_to AS date))
+           AND (:product_id IS NULL OR entry.product_id=:product_id)
+           AND (:batch_id IS NULL OR entry.batch_id=:batch_id)
          ORDER BY entry.posted_at DESC, entry.id DESC LIMIT 500
-    """, _range_params(org_id, date_from, date_to))
+    """, {
+        **_range_params(org_id, date_from, date_to),
+        "product_id": product_id,
+        "batch_id": batch_id,
+    })
 
 
 @router.get("/inventory/categories")

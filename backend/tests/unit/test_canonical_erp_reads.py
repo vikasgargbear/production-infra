@@ -738,3 +738,17 @@ def test_purchase_history_reads_apply_search_status_dates_and_real_totals() -> N
     assert "receipt.status=:status" in receipt_source
     assert "SUM(line.extended_cost) AS total_amount" in receipt_source
     assert "receipt.status='posted' AS stock_updated" in receipt_source
+
+
+def test_inventory_movements_are_canonical_and_uuid_filterable() -> None:
+    source = inspect.getsource(canonical_erp_reads.inventory_movements)
+
+    assert "product_id: Optional[UUID]" in source
+    assert "batch_id: Optional[UUID]" in source
+    assert "entry.product_id=:product_id" in source
+    assert "entry.batch_id=:batch_id" in source
+    assert "inventory.stock_ledger_entries" in source
+    assert "inventory.batches" in source
+    assert "movement_date" in source
+    assert "movement_type" in source
+    assert "reference_number" in source

@@ -10,12 +10,14 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface StockParams {
-    product_id?: number;
-    batch_id?: number;
+    product_id?: number | string;
+    batch_id?: number | string;
     location?: string;
     low_stock?: boolean;
     expiring_soon?: boolean;
     days?: number;
+    date_from?: string;
+    date_to?: string;
     limit?: number;
     offset?: number;
     skip?: number;
@@ -58,7 +60,7 @@ const ENDPOINTS = {
     BASE: '/inventory/stock',
     CURRENT: '/inventory/stock/current',
     ADJUSTMENTS: '/stock-adjustments/',
-    MOVEMENTS: '/stock-movements/',
+    MOVEMENTS: '/inventory/movements',
     TRANSFERS: '/stock-movements/transfer',
     LOW_STOCK: '/stock-movements/low-stock',
     EXPIRING: '/stock-movements/near-expiry',
@@ -126,12 +128,12 @@ export const stockApi = {
     },
 
     // Get movements for a specific batch
-    getBatchMovements: (batchId: number, params: StockParams = {}): Promise<AxiosResponse> => {
+    getBatchMovements: (batchId: number | string, params: StockParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params: { ...params, batch_id: batchId } });
     },
 
     // Get movements for a specific product
-    getProductMovements: (productId: number, params: StockParams = {}): Promise<AxiosResponse> => {
+    getProductMovements: (productId: number | string, params: StockParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params: { ...params, product_id: productId } });
     },
 

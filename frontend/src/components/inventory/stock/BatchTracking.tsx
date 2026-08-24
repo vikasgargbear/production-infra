@@ -155,6 +155,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
 
     } catch (error) {
       setBatchMovements([]);
+      setShowMovements(false);
       setError('Unable to load movement data. Please check your connection.');
     }
   };
