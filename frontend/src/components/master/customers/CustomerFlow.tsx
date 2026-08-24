@@ -8,8 +8,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     User, Phone, Mail, MapPin, Building, FileText, Shield,
-    Calendar, CreditCard, MessageCircle, AlertCircle,
-    ArrowLeft, Loader2, Save, Users, Percent, Banknote
+    CreditCard, MessageCircle, AlertCircle,
+    ArrowLeft, Loader2, Save, Users
 } from 'lucide-react';
 import { customersApi } from '../../../services/api';
 import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
@@ -38,15 +38,9 @@ interface CustomerFormData {
     // Compliance
     gst_number: string;
     pan_number: string;
-    drug_license_number: string;
-    drug_license_validity: string;
-    fssai_number: string;
     // Credit
     credit_limit: number;
     credit_days: number;
-    credit_rating: string;
-    payment_terms: string;
-    discount_percent: number;
     // Address
     address: {
         address_line1: string;
@@ -56,8 +50,6 @@ interface CustomerFormData {
         pincode: string;
         country: string;
     };
-    // Notes
-    internal_notes: string;
 }
 
 // ==================== CONSTANTS ====================
@@ -82,14 +74,6 @@ const BUSINESS_TYPES = [
     { value: 'institution', label: 'Institution' },
     { value: 'doctor', label: 'Doctor' },
     { value: 'distributor', label: 'Distributor' }
-];
-
-const PAYMENT_TERMS = [
-    { value: 'CASH', label: 'Cash' },
-    { value: 'NET15', label: 'Net 15 Days' },
-    { value: 'NET30', label: 'Net 30 Days' },
-    { value: 'NET45', label: 'Net 45 Days' },
-    { value: 'NET60', label: 'Net 60 Days' }
 ];
 
 // ==================== COMPONENT ====================
@@ -124,15 +108,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         // Compliance
         gst_number: '',
         pan_number: '',
-        drug_license_number: '',
-        drug_license_validity: '',
-        fssai_number: '',
         // Credit
         credit_limit: 5000,
         credit_days: 0,
-        credit_rating: 'B',
-        payment_terms: 'CASH',
-        discount_percent: 0,
         // Address
         address: {
             address_line1: '',
@@ -141,9 +119,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             state: '',
             pincode: '',
             country: 'India'
-        },
-        // Notes
-        internal_notes: ''
+        }
     });
 
     useEffect(() => {
@@ -203,9 +179,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         }
 
         if (isBusinessCustomer) {
-            if (features.require_drug_license && !formData.drug_license_number.trim()) {
-                newErrors.push('Drug License Number is required');
-            }
             if (features.require_gst_for_b2b && !formData.gst_number.trim()) {
                 newErrors.push('GST Number is required');
             }
@@ -241,17 +214,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 // Compliance
                 gst_number: formData.gst_number || null,
                 pan_number: formData.pan_number || null,
-                drug_license_number: formData.drug_license_number || null,
-                drug_license_validity: formData.drug_license_validity || null,
-                fssai_number: formData.fssai_number || null,
                 // Credit
                 credit_limit: parseFloat(String(formData.credit_limit || 0)),
                 credit_days: parseInt(String(formData.credit_days || 0)),
-                credit_rating: formData.credit_rating,
-                payment_terms: formData.payment_terms,
-                discount_percent: parseFloat(String(formData.discount_percent || 0)),
-                // Notes
-                internal_notes: formData.internal_notes || null,
                 // Address
                 address_line1: formData.address.address_line1,
                 address_line2: formData.address.address_line2 || '',
@@ -593,50 +558,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     Compliance & Licenses
                                 </h3>
 
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                        <label className={labelClass}>
-                                            Drug License {features.require_drug_license && '*'}
-                                        </label>
-                                        <div className="relative">
-                                            <Shield className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={formData.drug_license_number}
-                                                onChange={(e) => updateField('drug_license_number', e.target.value)}
-                                                className={inputClass}
-                                                placeholder="20B-MH-12345"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>DL Validity</label>
-                                        <div className="relative">
-                                            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="date"
-                                                value={formData.drug_license_validity}
-                                                onChange={(e) => updateField('drug_license_validity', e.target.value)}
-                                                className={inputClass}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>FSSAI License</label>
-                                        <div className="relative">
-                                            <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={formData.fssai_number}
-                                                onChange={(e) => updateField('fssai_number', e.target.value)}
-                                                className={inputClass}
-                                                placeholder="FSSAI number"
-                                            />
-                                        </div>
-                                    </div>
-
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <label className={labelClass}>
                                             GST Number {features.require_gst_for_b2b && '*'}
@@ -669,6 +591,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         </div>
                                     </div>
                                 </div>
+                                <p className="mt-3 text-xs text-gray-500">
+                                    Drug and FSSAI licenses are verified after the core customer profile is created.
+                                </p>
                             </div>
                         )}
 
@@ -680,21 +605,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     Credit & Payment Terms
                                 </h3>
 
-                                <div className="grid grid-cols-4 gap-3">
-                                    <div>
-                                        <label className={labelClass}>Credit Rating</label>
-                                        <select
-                                            value={formData.credit_rating}
-                                            onChange={(e) => updateField('credit_rating', e.target.value)}
-                                            className={inputNoIconClass}
-                                        >
-                                            <option value="A">A - Excellent</option>
-                                            <option value="B">B - Good</option>
-                                            <option value="C">C - Fair</option>
-                                            <option value="D">D - Cash Only</option>
-                                        </select>
-                                    </div>
-
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <label className={labelClass}>Credit Limit (₹)</label>
                                         <input
@@ -704,63 +615,23 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             className={inputNoIconClass}
                                             placeholder="5000"
                                             min={0}
-                                            disabled={formData.credit_rating === 'D'}
                                         />
                                     </div>
 
                                     <div>
-                                        <label className={labelClass}>Payment Terms</label>
-                                        <select
-                                            value={formData.payment_terms}
-                                            onChange={(e) => {
-                                                updateField('payment_terms', e.target.value);
-                                                // Auto-set credit days based on payment terms
-                                                const days = { CASH: 0, NET15: 15, NET30: 30, NET45: 45, NET60: 60 };
-                                                updateField('credit_days', days[e.target.value as keyof typeof days] || 0);
-                                            }}
+                                        <label className={labelClass}>Credit Days</label>
+                                        <input
+                                            type="number"
+                                            value={formData.credit_days}
+                                            onChange={(e) => updateField('credit_days', parseInt(e.target.value) || 0)}
                                             className={inputNoIconClass}
-                                            disabled={formData.credit_rating === 'D'}
-                                        >
-                                            {PAYMENT_TERMS.map(term => (
-                                                <option key={term.value} value={term.value}>{term.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>Default Discount %</label>
-                                        <div className="relative">
-                                            <Percent className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="number"
-                                                value={formData.discount_percent}
-                                                onChange={(e) => updateField('discount_percent', parseFloat(e.target.value) || 0)}
-                                                className={inputClass}
-                                                placeholder="0"
-                                                min={0}
-                                                max={100}
-                                                step={0.5}
-                                            />
-                                        </div>
+                                            min={0}
+                                            max={365}
+                                        />
                                     </div>
                                 </div>
                             </div>
                         )}
-
-                        {/* Internal Notes */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
-                                <FileText className="w-4 h-4 text-gray-600" />
-                                Internal Notes
-                            </h3>
-                            <textarea
-                                value={formData.internal_notes}
-                                onChange={(e) => updateField('internal_notes', e.target.value)}
-                                className={inputNoIconClass + " h-20 resize-none"}
-                                placeholder="Notes for internal reference (not visible to customer)"
-                                maxLength={1000}
-                            />
-                        </div>
                     </div>
                 </div>
             </div>
