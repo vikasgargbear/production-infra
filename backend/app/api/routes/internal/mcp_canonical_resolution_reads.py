@@ -107,7 +107,7 @@ class StockBatchMatch(StrictDTO):
     reserved_quantity: Decimal
     available_quantity: Decimal
     stock_row_version: int
-    fefo_rank: int
+    fefo_expiry_tier: int
 
 
 class StockBatchSearchResponse(StrictDTO):
@@ -307,10 +307,10 @@ def canonical_stock_batch_search(
                    COALESCE(reserved.quantity,0) AS reserved_quantity,
                    balance.on_hand_quantity-COALESCE(reserved.quantity,0) AS available_quantity,
                    balance.row_version AS stock_row_version,
-                   row_number() OVER (
-                     ORDER BY batch.expires_on ASC NULLS LAST, batch.batch_number,
-                              location.code, batch.id
-                   )::integer AS fefo_rank
+                   dense_rank() OVER (
+                     PARTITION BY balance.product_id, balance.location_id
+                     ORDER BY batch.expires_on
+                   )::integer AS fefo_expiry_tier
               FROM inventory.stock_balances AS balance
               JOIN inventory.batches AS batch
                 ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
@@ -364,7 +364,11 @@ def canonical_stock_batch_search(
                AND (:location_id IS NULL OR balance.location_id=CAST(:location_id AS uuid))
                AND balance.on_hand_quantity>0
                AND location.status='active'
-             ORDER BY fefo_rank LIMIT :limit
+               AND batch.lot_kind='manufacturer_batch'
+               AND batch.status='released'
+               AND batch.released_at IS NOT NULL
+               AND batch.expires_on>CURRENT_DATE
+             ORDER BY fefo_expiry_tier, batch.batch_number, batch.id LIMIT :limit
             """
         ),
         {

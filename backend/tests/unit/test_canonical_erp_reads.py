@@ -490,6 +490,16 @@ def test_product_and_batch_reads_project_effective_canonical_gst_rate() -> None:
     assert "tax_version.igst_rate" in source
 
 
+def test_http_batch_read_projects_expiry_equivalent_fefo_tiers() -> None:
+    source = inspect.getsource(canonical_erp_reads.product_batches)
+
+    assert "AS fefo_expiry_tier" in source
+    assert "dense_rank() OVER (" in source
+    assert "PARTITION BY batch.product_id, balance.location_id" in source
+    assert "ORDER BY batch.expires_on" in source
+    assert "ORDER BY batch.expires_on, batch.id" not in source
+
+
 def test_company_profile_projects_canonical_invoice_identity_and_settlement_details() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 

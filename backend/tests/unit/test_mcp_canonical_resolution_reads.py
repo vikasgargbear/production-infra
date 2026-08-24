@@ -243,7 +243,7 @@ def test_decimal_fields_serialize_as_exact_json_strings():
             "valid_from": "2026-04-01", "valid_until": None,
         }], on_hand_quantity=Decimal("10.000000"),
         reserved_quantity=Decimal("3.000000"), available_quantity=Decimal("7.000000"),
-        stock_row_version=2, fefo_rank=1,
+        stock_row_version=2, fefo_expiry_tier=1,
     )
     encoded = payload.model_dump_json()
     assert '"mrp":"123.45"' in encoded
@@ -251,6 +251,7 @@ def test_decimal_fields_serialize_as_exact_json_strings():
     assert '"mrp_pack_to_base_multiplier":"10.000000"' in encoded
     assert '"available_quantity":"7.000000"' in encoded
     assert '"conversion_factor":"10.000000"' in encoded
+    assert '"fefo_expiry_tier":1' in encoded
 
 
 def test_resolution_sql_returns_exact_action_lineage_identifiers():
@@ -265,6 +266,11 @@ def test_resolution_sql_returns_exact_action_lineage_identifiers():
     assert "'uom_conversion_id', conversion.id" in resolution_source
     assert "batch.mrp_uom_conversion_id" in resolution_source
     assert "mrp_conversion.from_uom_code AS mrp_marketed_uom_code" in resolution_source
+    assert "dense_rank() OVER (" in resolution_source
+    assert "PARTITION BY balance.product_id, balance.location_id" in resolution_source
+    assert "ORDER BY batch.expires_on" in resolution_source
+    assert "row_number() OVER (" not in resolution_source
+    assert "batch.expires_on>CURRENT_DATE" in resolution_source
     assert "allocation.id AS invoice_dispatch_allocation_id" in resolution_source
     assert "allocation.id AS supplier_invoice_receipt_allocation_id" in resolution_source
     assert "return_line.invoice_dispatch_allocation_id=allocation.id" in resolution_source

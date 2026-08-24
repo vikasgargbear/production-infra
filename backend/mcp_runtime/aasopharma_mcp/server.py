@@ -132,7 +132,7 @@ def create_app(
         location_id: Annotated[str | None, Field(description="Optional exact inventory location UUID.")] = None,
         limit: Annotated[int, Field(ge=1, le=100, description="Maximum FEFO-ranked batch balances to return.")] = 50,
     ) -> Any:
-        """Return bounded batch availability, UOM, expiry, and FEFO facts."""
+        """Return availability and expiry-date FEFO tiers; equal expiry shares one tier."""
         return await operation_gateway.execute(
             OPERATIONS["erp_stock_batch_search"], _access_token(), locals(),
         )

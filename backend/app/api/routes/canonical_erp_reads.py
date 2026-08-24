@@ -463,6 +463,16 @@ def product_batches(
                balance.average_unit_cost AS cost_per_unit,
                balance.on_hand_quantity AS quantity_available,
                batch.expires_on - CURRENT_DATE AS days_to_expiry,
+               CASE WHEN batch.status='released'
+                          AND batch.released_at IS NOT NULL
+                          AND batch.expires_on>CURRENT_DATE
+                    THEN dense_rank() OVER (
+                           PARTITION BY batch.product_id, balance.location_id,
+                             (batch.status='released' AND batch.released_at IS NOT NULL
+                              AND batch.expires_on>CURRENT_DATE)
+                           ORDER BY batch.expires_on
+                         )::integer
+                    ELSE NULL END AS fefo_expiry_tier,
                false AS has_pending_sync,
                tax_version.taxability,
                CASE WHEN tax_version.taxability IS NULL THEN NULL
