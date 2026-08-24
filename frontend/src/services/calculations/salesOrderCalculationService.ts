@@ -1,130 +1,127 @@
-/** Canonical server-backed sales-order calculations. */
+/** Canonical server-backed sales-order calculations with exact decimals. */
 
 import {
-    InvoiceCalculationResponse,
-    SalesOrderCalculationRequest,
-    salesOrderCalculationsApi
+    type InvoiceCalculationRequest,
+    type SalesOrderCalculationRequest,
+    salesOrderCalculationsApi,
 } from '../api/modules/sales/calculations.api';
 import type { Order } from '../../types/models';
+import { normalizeInvoicePreview } from './invoiceCalculationService';
+import {
+    calculationEntityId,
+    inputMoney,
+    inputPercent,
+    inputQuantity,
+    inputRate,
+} from './exactCalculationPreview';
 
-
-export interface SalesOrderPreviewLine {
-    subtotal?: number;
-    discount_amount?: number;
-    gst_amount?: number;
-    tax_amount?: number;
-    taxable_amount?: number;
-    total_amount?: number;
-    total?: number;
-    line_total?: number;
-    [key: string]: unknown;
+export interface SalesOrderPreviewLine extends Record<string, unknown> {
+    subtotal: string;
+    discount_amount: string;
+    gst_amount: string;
+    tax_amount: string;
+    taxable_amount: string;
+    total_amount: string;
+    total: string;
+    line_total: string;
 }
 
-export interface SalesOrderPreviewTotals {
-    subtotal_amount?: number;
-    gross_amount?: number;
-    discount_amount?: number;
-    total_discount?: number;
-    total_tax_amount?: number;
-    total_tax?: number;
-    tax_amount?: number;
-    final_amount?: number;
-    total_amount?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    round_off_amount?: number;
-    round_off?: number;
-    [key: string]: number | undefined;
+export interface SalesOrderPreviewTotals extends Record<string, string> {
+    subtotal_amount: string;
+    gross_amount: string;
+    discount_amount: string;
+    total_discount: string;
+    total_tax_amount: string;
+    total_tax: string;
+    tax_amount: string;
+    final_amount: string;
+    total_amount: string;
+    cgst_amount: string;
+    sgst_amount: string;
+    igst_amount: string;
+    round_off_amount: string;
+    round_off: string;
 }
 
 export interface SalesOrderPreviewResult {
     items: SalesOrderPreviewLine[];
     totals: SalesOrderPreviewTotals;
-    gst_type: string;
-}
-
-
-function numeric(value: unknown, fallback: number = 0): number {
-    const result = Number(value);
-    return Number.isFinite(result) ? result : fallback;
-}
-
-function canonicalCustomerIdentity(value: string | number): string | number {
-    if (typeof value === 'string' && value.trim() !== '' && value.trim() !== '0') {
-        return value.trim();
-    }
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
-    throw new Error('Select a valid customer before calculating a sales order.');
+    gst_type: 'CGST/SGST' | 'IGST';
 }
 
 function toRequest(order: Order): SalesOrderCalculationRequest {
     return {
-        customer_id: canonicalCustomerIdentity(order.customer_id),
-        gst_type: order.gst_type || 'CGST/SGST',
+        customer_id: calculationEntityId(order.customer_id, 'Customer', true)!,
+        gst_type: order.gst_type as 'CGST/SGST' | 'IGST',
         order_date: order.order_date,
         delivery_date: order.expected_delivery_date || order.delivery_date,
-        items: order.items.map(item => ({
-            product_id: item.product_id,
-            batch_id: item.batch_id || undefined,
-            batch_number: item.batch_number,
-            quantity: numeric(item.quantity),
-            free_quantity: numeric(item.free_quantity),
-            free_supply_tax_treatment: item.free_supply_tax_treatment
-                ?? 'excluded_from_taxable_value',
-            unit_price: numeric(item.unit_price),
-            mrp: numeric(item.mrp, numeric(item.unit_price)),
-            discount_percent: numeric(item.discount_percent),
-            tax_percent: numeric(item.gst_percent),
-            uom: item.uom || item.unit,
-            pack_type: item.pack_type
-        })),
-        delivery_charges: numeric(order.delivery_charges),
-        other_charges: numeric(order.other_charges)
+        items: order.items.map((item, index) => {
+            const label = `Sales order calculation items[${index}]`;
+            return {
+                product_id: calculationEntityId(item.product_id, `${label}.product_id`, true)!,
+                batch_id: calculationEntityId(item.batch_id, `${label}.batch_id`),
+                batch_number: item.batch_number,
+                quantity: inputQuantity(item.quantity, `${label}.quantity`),
+                free_quantity: inputQuantity(item.free_quantity, `${label}.free_quantity`),
+                free_supply_tax_treatment: item.free_supply_tax_treatment ?? 'excluded_from_taxable_value',
+                unit_price: inputRate(item.unit_price, `${label}.unit_price`),
+                mrp: inputRate(item.mrp ?? item.unit_price, `${label}.mrp`),
+                discount_percent: inputPercent(item.discount_percent, `${label}.discount_percent`),
+                tax_percent: inputPercent(item.gst_percent, `${label}.tax_percent`),
+                uom: item.uom || item.unit,
+                pack_type: item.pack_type,
+            };
+        }),
+        delivery_charges: inputMoney(order.delivery_charges, 'Sales order delivery charges'),
+        other_charges: inputMoney(order.other_charges, 'Sales order other charges'),
+        discount_amount: inputMoney(order.discount_amount, 'Sales order discount amount'),
     };
 }
 
 export function normalizeSalesOrderPreview(
     order: Order,
-    data: InvoiceCalculationResponse
+    data: Awaited<ReturnType<typeof salesOrderCalculationsApi.preview>>['data'],
+    request = toRequest(order),
 ): SalesOrderPreviewResult {
-    const totals = data.totals;
-    const items = data.line_items.map((line, index) => ({
-        ...(order.items[index] || {}),
-        ...line,
-        product_id: order.items[index]?.product_id,
-        batch_id: order.items[index]?.batch_id,
-        free_quantity: numeric(order.items[index]?.free_quantity),
-        free_supply_tax_treatment:
-            order.items[index]?.free_supply_tax_treatment
-            ?? 'excluded_from_taxable_value',
-        gst_amount: line.total_tax_amount,
-        tax_amount: line.total_tax_amount,
-        total_amount: line.line_total,
-        total: line.line_total,
-        calculated_total: line.line_total
-    }));
-
-    return {
-        items,
-        totals: {
-            ...totals,
-            tax_amount: totals.total_tax_amount,
-            total_amount: totals.final_amount,
-            round_off: totals.round_off_amount
-        },
-        gst_type: data.gst_type
+    const invoiceRequest: InvoiceCalculationRequest = {
+        customer_id: request.customer_id,
+        gst_type: request.gst_type,
+        items: request.items,
+        freight_charges: request.delivery_charges,
+        insurance_charges: '0.00',
+        other_charges: request.other_charges,
+        discount_type: request.discount_type,
+        discount_percent: request.discount_percent,
+        discount_amount: request.discount_amount,
     };
+    const normalized = normalizeInvoicePreview({ items: order.items }, data, invoiceRequest);
+    return {
+        items: normalized.items.map((line, index) => ({
+            ...line,
+            product_id: order.items[index]?.product_id,
+            batch_id: order.items[index]?.batch_id,
+            free_quantity: request.items[index].free_quantity || '0.000000',
+            free_supply_tax_treatment: request.items[index].free_supply_tax_treatment,
+            tax_amount: line.total_tax_amount,
+            total: line.line_total,
+            calculated_total: line.line_total,
+        })) as SalesOrderPreviewLine[],
+        totals: {
+            ...normalized.totals,
+            tax_amount: normalized.totals.total_tax_amount,
+            total_amount: normalized.totals.final_amount,
+            round_off: normalized.totals.round_off_amount,
+        },
+        gst_type: normalized.gst_type,
+    } as SalesOrderPreviewResult;
 }
 
 export async function calculateSalesOrderPreview(
     order: Order,
-    isOnline: boolean
+    isOnline: boolean,
 ): Promise<SalesOrderPreviewResult> {
-    if (!isOnline) {
-        throw new Error('Sales order preview requires the live API');
-    }
-
-    const response = await salesOrderCalculationsApi.preview(toRequest(order));
-    return normalizeSalesOrderPreview(order, response.data);
+    if (!isOnline) throw new Error('Sales order preview requires the live API');
+    const request = toRequest(order);
+    const response = await salesOrderCalculationsApi.preview(request);
+    return normalizeSalesOrderPreview(order, response.data, request);
 }

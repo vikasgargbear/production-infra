@@ -14,6 +14,7 @@ import {
 } from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
 import { usePurchaseEntrySave } from './usePurchaseEntrySave';
+import { compareExactDecimals } from '../../../../utils/exactDecimal';
 
 // Types
 export interface PurchaseItem {
@@ -218,25 +219,25 @@ export function usePurchaseEntryLogic({
                 let itemValuesChanged = false;
                 const items = prev.items.map((item, index) => {
                     const calculated = calculation.items[index] || {};
-                    const taxableAmount = Number(calculated.taxable_amount || 0);
-                    const taxAmount = Number(calculated.tax_amount || 0);
-                    const totalAmount = Number(calculated.total || calculated.total_amount || 0);
+                    const taxableAmount = String(calculated.taxable_amount);
+                    const taxAmount = String(calculated.tax_amount);
+                    const totalAmount = String(calculated.total ?? calculated.total_amount);
                     if (
-                        Number(item.taxable_amount || 0) === taxableAmount &&
-                        Number(item.tax_amount || 0) === taxAmount &&
-                        Number(item.total_amount || 0) === totalAmount
+                        compareExactDecimals(item.taxable_amount || 0, taxableAmount, 'Purchase line taxable', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
+                        compareExactDecimals(item.tax_amount || 0, taxAmount, 'Purchase line tax', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
+                        compareExactDecimals(item.total_amount || 0, totalAmount, 'Purchase line total', { scale: 2, maximumWholeDigits: 20 }) === 0
                     ) return item;
                     itemValuesChanged = true;
-                    return { ...item, taxable_amount: taxableAmount, tax_amount: taxAmount, total_amount: totalAmount };
+                    return { ...item, taxable_amount: taxableAmount, tax_amount: taxAmount, total_amount: totalAmount } as unknown as PurchaseItem;
                 });
                 return {
                     ...prev,
                     items: itemValuesChanged ? items : prev.items,
-                    gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
-                    tax_amount: totals.tax_amount || totals.total_tax_amount || totals.total_tax || 0,
-                    round_off: totals.round_off_amount || totals.round_off || 0,
-                    net_amount: totals.net_amount || totals.total_amount || 0,
-                    total_amount: totals.final_amount || totals.total_amount || 0
+                    gross_amount: totals.subtotal_amount as unknown as number,
+                    tax_amount: totals.tax_amount as unknown as number,
+                    round_off: totals.round_off_amount as unknown as number,
+                    net_amount: totals.net_amount as unknown as number,
+                    total_amount: totals.final_amount as unknown as number
                 };
             });
         } catch (calculationError) {

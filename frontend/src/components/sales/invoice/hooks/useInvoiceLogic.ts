@@ -375,8 +375,8 @@ export const useInvoiceLogic = (
                         source_billed_quantity: item.source_billed_quantity,
                         source_free_quantity: item.source_free_quantity,
                     })),
-                    totals: result.totals as InvoiceTotals,
-                    final_amount: Number(result.totals.final_amount || 0)
+                    totals: result.totals as unknown as InvoiceTotals,
+                    final_amount: result.totals.final_amount as unknown as number
                 }));
             } catch (calculationError) {
                 if (!cancelled) {

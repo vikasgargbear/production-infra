@@ -24,7 +24,11 @@ import {
     CreatedChallanData,
     getInitialChallan
 } from '../types/challanTypes';
-import { formatExactDecimal } from '../../../../utils/exactDecimal';
+import {
+    addExactDecimals,
+    compareExactDecimals,
+    formatExactDecimal,
+} from '../../../../utils/exactDecimal';
 
 // ==================== PROPS ====================
 
@@ -109,13 +113,13 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                     let itemsChanged = false;
                     const items = prev.items.map((item, index) => {
                         const calculated = calculation.items[index] || {};
-                        const lineTotal = Number(calculated.line_total || 0);
-                        const taxable = Number(calculated.taxable_amount || 0);
-                        const tax = Number(calculated.total_tax_amount || calculated.total_tax || 0);
+                        const lineTotal = String(calculated.line_total);
+                        const taxable = String(calculated.taxable_amount);
+                        const tax = String(calculated.total_tax_amount);
                         if (
-                            Number(item.line_total || 0) === lineTotal &&
-                            Number(item.taxable_amount || 0) === taxable &&
-                            Number(item.tax_amount || 0) === tax
+                            compareExactDecimals(item.line_total || 0, lineTotal, 'Challan line total', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
+                            compareExactDecimals(item.taxable_amount || 0, taxable, 'Challan taxable amount', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
+                            compareExactDecimals(item.tax_amount || 0, tax, 'Challan tax amount', { scale: 2, maximumWholeDigits: 20 }) === 0
                         ) return item;
                         itemsChanged = true;
                         return {
@@ -130,27 +134,27 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                             total: lineTotal,
                             taxable_amount: taxable,
                             tax_amount: tax
-                        } as ChallanItem;
+                        } as unknown as ChallanItem;
                     });
-                    const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-                    const totalAmount = Number(calculation.totals.final_amount || 0);
-                    const taxableAmount = Number(calculation.totals.taxable_amount || 0);
-                    const totalTaxAmount = Number(calculation.totals.total_tax_amount || 0);
+                    const totalQuantity = addExactDecimals(items.map(item => item.quantity), 'Challan total quantity', { scale: 6, maximumWholeDigits: 14 });
+                    const totalAmount = calculation.totals.final_amount;
+                    const taxableAmount = calculation.totals.taxable_amount;
+                    const totalTaxAmount = calculation.totals.total_tax_amount;
                     if (
                         !itemsChanged &&
-                        prev.total_quantity === totalQuantity &&
-                        prev.total_amount === totalAmount &&
-                        prev.taxable_amount === taxableAmount &&
-                        prev.total_tax_amount === totalTaxAmount &&
+                        compareExactDecimals(prev.total_quantity, totalQuantity, 'Challan total quantity', { scale: 6, maximumWholeDigits: 14 }) === 0 &&
+                        compareExactDecimals(prev.total_amount, totalAmount, 'Challan total amount', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
+                        compareExactDecimals(prev.taxable_amount || 0, taxableAmount, 'Challan taxable total', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
+                        compareExactDecimals(prev.total_tax_amount || 0, totalTaxAmount, 'Challan tax total', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
                         prev.gst_type === calculation.gst_type
                     ) return prev;
                     return {
                         ...prev,
                         items: itemsChanged ? items : prev.items,
-                        total_quantity: totalQuantity,
-                        total_amount: totalAmount,
-                        taxable_amount: taxableAmount,
-                        total_tax_amount: totalTaxAmount,
+                        total_quantity: totalQuantity as unknown as number,
+                        total_amount: totalAmount as unknown as number,
+                        taxable_amount: taxableAmount as unknown as number,
+                        total_tax_amount: totalTaxAmount as unknown as number,
                         gst_type: calculation.gst_type
                     };
                 });
@@ -305,7 +309,7 @@ Delivery Challan: ${challan.challan_number}
 Date: ${challan.challan_date}
 Customer: ${challan.customer_name}
 Items: ${challan.total_quantity}
-Amount: ₹${challan.total_amount.toFixed(2)}
+Amount: ₹${formatExactDecimal(challan.total_amount, 'Challan total', { scale: 2, maximumWholeDigits: 20 }, 2)}
 Expected Delivery: ${challan.expected_delivery_date}
     `.trim();
 

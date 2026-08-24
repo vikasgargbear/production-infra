@@ -14,7 +14,7 @@ import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 import type { ImportData } from '../../../global/modals/DocumentImportModal';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
-import { addExactDecimals, normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -239,16 +239,20 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
                 setOrder(prev => ({
                     ...prev,
-                    items: updatedItems,
-                    total_quantity: items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0),
-                    subtotal_amount: formattedTotals.subtotal_amount || formattedTotals.gross_amount || 0,
-                    discount_amount: formattedTotals.discount_amount || formattedTotals.total_discount || 0,
-                    tax_amount: formattedTotals.total_tax_amount || formattedTotals.total_tax || 0,
-                    total_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
-                    final_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
-                    cgst_amount: formattedTotals.cgst_amount || 0,
-                    sgst_amount: formattedTotals.sgst_amount || 0,
-                    igst_amount: formattedTotals.igst_amount || 0,
+                    items: updatedItems as unknown as OrderItem[],
+                    total_quantity: addExactDecimals(
+                        items.map(item => item.quantity),
+                        'Sales order total quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ) as unknown as number,
+                    subtotal_amount: formattedTotals.subtotal_amount as unknown as number,
+                    discount_amount: formattedTotals.discount_amount as unknown as number,
+                    tax_amount: formattedTotals.total_tax_amount as unknown as number,
+                    total_amount: formattedTotals.final_amount as unknown as number,
+                    final_amount: formattedTotals.final_amount as unknown as number,
+                    cgst_amount: formattedTotals.cgst_amount as unknown as number,
+                    sgst_amount: formattedTotals.sgst_amount as unknown as number,
+                    igst_amount: formattedTotals.igst_amount as unknown as number,
                     calculatedLineItems: result.items
                 }));
             }
@@ -554,7 +558,7 @@ Sales Order: ${order.order_number}
 Date: ${order.order_date}
 Customer: ${order.customer_name}
 Items: ${order.total_quantity}
-Amount: ₹${order.total_amount.toFixed(2)}
+Amount: ₹${formatExactDecimal(order.total_amount, 'Order total', { scale: 2, maximumWholeDigits: 20 }, 2)}
 Expected Delivery: ${order.expected_delivery_date}
     `.trim();
 

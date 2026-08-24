@@ -54,6 +54,12 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
     messageType,
     companyInfo
 }) => {
+    const money = (value: unknown, label: string) => formatExactDecimal(
+        value ?? 0,
+        label,
+        { scale: 2, maximumWholeDigits: 20, allowNegative: true },
+        2,
+    );
     return (
         <div className="max-w-6xl mx-auto p-6">
             {/* Message Display */}
@@ -91,8 +97,8 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                         subtotal: order.subtotal_amount,
                         discount: order.discount_amount || 0,
                         tax_amount: order.tax_amount,
-                        cgst_amount: order.cgst_amount || (order.tax_amount / 2),
-                        sgst_amount: order.sgst_amount || (order.tax_amount / 2),
+                        cgst_amount: order.cgst_amount || 0,
+                        sgst_amount: order.sgst_amount || 0,
                         igst_amount: order.igst_amount || 0,
                         total_amount: order.total_amount,
                         final_amount: order.total_amount
@@ -290,7 +296,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                                 2,
                                             )}</td>
                                             <td className="text-right py-2 px-3 text-sm">{item.gst_percent}%</td>
-                                            <td className="text-right py-2 px-3 text-sm font-medium">₹{(item.calculated_total || item.total || 0).toFixed(2)}</td>
+                                            <td className="text-right py-2 px-3 text-sm font-medium">₹{money(item.calculated_total || item.total, `Order item ${index + 1} total`)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -305,23 +311,23 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     {order.gst_type === 'IGST' ? (
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-600">IGST</span>
-                                            <span className="font-medium">₹{(order.igst_amount || order.tax_amount || 0).toFixed(2)}</span>
+                                            <span className="font-medium">₹{money(order.igst_amount || order.tax_amount, 'Order IGST')}</span>
                                         </div>
                                     ) : (
                                         <>
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-gray-600">CGST</span>
-                                                <span className="font-medium">₹{(order.cgst_amount || order.tax_amount / 2 || 0).toFixed(2)}</span>
+                                                <span className="font-medium">₹{money(order.cgst_amount, 'Order CGST')}</span>
                                             </div>
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-gray-600">SGST</span>
-                                                <span className="font-medium">₹{(order.sgst_amount || order.tax_amount / 2 || 0).toFixed(2)}</span>
+                                                <span className="font-medium">₹{money(order.sgst_amount, 'Order SGST')}</span>
                                             </div>
                                         </>
                                     )}
                                     <div className="flex justify-between text-sm border-t pt-1">
                                         <span className="text-blue-700 font-medium">Total GST</span>
-                                        <span className="font-semibold">₹{(order.tax_amount || 0).toFixed(2)}</span>
+                                        <span className="font-semibold">₹{money(order.tax_amount, 'Order total GST')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -331,15 +337,15 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Sub Total</span>
-                                        <span className="font-medium">₹{(order.subtotal_amount || 0).toFixed(2)}</span>
+                                        <span className="font-medium">₹{money(order.subtotal_amount, 'Order subtotal')}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Total GST</span>
-                                        <span className="font-medium">₹{(order.tax_amount || 0).toFixed(2)}</span>
+                                        <span className="font-medium">₹{money(order.tax_amount, 'Order total GST')}</span>
                                     </div>
                                     <div className="flex justify-between text-sm border-t pt-1">
                                         <span className="text-blue-700 font-semibold">Grand Total</span>
-                                        <span className="font-bold text-lg text-blue-700">₹{order.total_amount.toFixed(2)}</span>
+                                        <span className="font-bold text-lg text-blue-700">₹{money(order.total_amount, 'Order grand total')}</span>
                                     </div>
                                 </div>
                             </div>

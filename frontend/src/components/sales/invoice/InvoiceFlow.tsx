@@ -248,8 +248,8 @@ ${companyInfo?.name || 'Your Company'}`;
             // Update invoice with calculated totals
             setInvoice(prev => ({
                 ...prev,
-                totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount || 0
+                totals: result.totals as unknown as Invoice['totals'],
+                final_amount: result.totals.final_amount as unknown as number
             }));
             setCurrentStep(2);
         } catch (calcError) {
@@ -274,8 +274,8 @@ ${companyInfo?.name || 'Your Company'}`;
             // Update invoice with latest totals
             setInvoice(prev => ({
                 ...prev,
-                totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount || 0,
+                totals: result.totals as unknown as Invoice['totals'],
+                final_amount: result.totals.final_amount as unknown as number,
                 items: result.items as unknown as Invoice['items']
             }));
             setCurrentStep(3);

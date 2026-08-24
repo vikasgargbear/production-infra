@@ -3,81 +3,133 @@
 import type { AxiosResponse } from 'axios';
 import { apiHelpers } from '../../apiClient';
 
+export type CalculationDecimalString = string;
+export type CalculationEntityId = number | string;
 
 export interface InvoiceCalculationLine {
-    product_id?: number | string;
-    quantity: number | string;
-    free_quantity?: number | string;
+    product_id?: CalculationEntityId;
+    quantity: CalculationDecimalString;
+    free_quantity?: CalculationDecimalString;
     free_supply_tax_treatment?:
         | 'excluded_from_taxable_value'
         | 'included_at_unit_rate';
-    unit_price: number | string;
-    discount_percent?: number | string;
-    gst_percent?: number | string;
-    [key: string]: unknown;
+    unit_price: CalculationDecimalString;
+    mrp?: CalculationDecimalString;
+    discount_percent?: CalculationDecimalString;
+    gst_percent?: CalculationDecimalString;
+    tax_percent?: CalculationDecimalString;
 }
 
 export interface InvoiceCalculationRequest {
-    customer_id?: number | string;
+    customer_id?: CalculationEntityId;
     gst_type?: string;
     items: InvoiceCalculationLine[];
-    freight_charges?: number | string;
-    insurance_charges?: number | string;
-    other_charges?: number | string;
+    freight_charges?: CalculationDecimalString;
+    insurance_charges?: CalculationDecimalString;
+    other_charges?: CalculationDecimalString;
     discount_type?: 'percentage' | 'amount' | 'fixed';
-    discount_percent?: number | string;
-    discount_amount?: number | string;
+    discount_percent?: CalculationDecimalString;
+    discount_amount?: CalculationDecimalString;
 }
 
-export interface InvoiceCalculationPreviewLine extends Record<string, unknown> {
-    free_supply_tax_treatment?:
+export interface InvoiceCalculationPreviewLine {
+    product_id?: CalculationEntityId;
+    batch_id?: CalculationEntityId;
+    quantity: CalculationDecimalString;
+    free_quantity: CalculationDecimalString;
+    free_supply_tax_treatment:
         | 'excluded_from_taxable_value'
         | 'included_at_unit_rate';
-    line_total?: number;
-    total_tax_amount?: number;
-    total_tax?: number;
-    taxable_amount?: number;
+    subtotal: CalculationDecimalString;
+    discount_amount: CalculationDecimalString;
+    taxable_amount: CalculationDecimalString;
+    cgst_amount: CalculationDecimalString;
+    sgst_amount: CalculationDecimalString;
+    igst_amount: CalculationDecimalString;
+    total_tax: CalculationDecimalString;
+    total_tax_amount: CalculationDecimalString;
+    line_total: CalculationDecimalString;
+    gst_percent?: CalculationDecimalString;
+    cgst_percent?: CalculationDecimalString;
+    sgst_percent?: CalculationDecimalString;
+    igst_percent?: CalculationDecimalString;
+    scheme_discount?: CalculationDecimalString;
+}
+
+export interface InvoiceCalculationPreviewTotals {
+    subtotal_amount: CalculationDecimalString;
+    discount_amount: CalculationDecimalString;
+    scheme_discount: CalculationDecimalString;
+    scheme_discount_percent: CalculationDecimalString;
+    taxable_amount: CalculationDecimalString;
+    cgst_amount: CalculationDecimalString;
+    sgst_amount: CalculationDecimalString;
+    igst_amount: CalculationDecimalString;
+    total_tax_amount: CalculationDecimalString;
+    freight_charges: CalculationDecimalString;
+    insurance_charges: CalculationDecimalString;
+    other_charges: CalculationDecimalString;
+    round_off_amount: CalculationDecimalString;
+    final_amount: CalculationDecimalString;
+}
+
+export interface ChallanCalculationPreviewTotals {
+    subtotal_amount: CalculationDecimalString;
+    discount_amount: CalculationDecimalString;
+    taxable_amount: CalculationDecimalString;
+    cgst_amount: CalculationDecimalString;
+    sgst_amount: CalculationDecimalString;
+    igst_amount: CalculationDecimalString;
+    total_tax_amount: CalculationDecimalString;
+    freight_charges: CalculationDecimalString;
+    final_amount: CalculationDecimalString;
 }
 
 export interface InvoiceCalculationResponse {
     success: true;
     line_items: InvoiceCalculationPreviewLine[];
-    totals: Record<string, number>;
+    totals: InvoiceCalculationPreviewTotals;
     calculation_timestamp: number;
     gst_type: 'CGST/SGST' | 'IGST';
 }
 
 export interface SalesOrderCalculationRequest {
-    customer_id: number | string;
+    customer_id: CalculationEntityId;
     gst_type?: string;
     order_date?: string;
     delivery_date?: string;
     items: Array<{
-        product_id: number | string;
-        batch_id?: number | string;
+        product_id: CalculationEntityId;
+        batch_id?: CalculationEntityId;
         batch_number?: string;
-        quantity: number;
-        free_quantity?: number;
+        quantity: CalculationDecimalString;
+        free_quantity?: CalculationDecimalString;
         free_supply_tax_treatment?:
             | 'excluded_from_taxable_value'
             | 'included_at_unit_rate';
-        unit_price: number;
-        mrp?: number;
-        discount_percent?: number;
-        tax_percent?: number;
+        unit_price: CalculationDecimalString;
+        mrp?: CalculationDecimalString;
+        discount_percent?: CalculationDecimalString;
+        tax_percent?: CalculationDecimalString;
         uom?: string;
         pack_type?: string;
     }>;
-    delivery_charges?: number;
-    other_charges?: number;
-    discount_amount?: number;
+    delivery_charges?: CalculationDecimalString;
+    other_charges?: CalculationDecimalString;
+    discount_type?: 'percentage' | 'amount' | 'fixed';
+    discount_percent?: CalculationDecimalString;
+    discount_amount?: CalculationDecimalString;
 }
 
 export interface ChallanCalculationRequest {
-    customer_id: number | string;
+    customer_id: CalculationEntityId;
     gst_type: 'CGST/SGST' | 'IGST';
     items: InvoiceCalculationLine[];
-    freight_charges?: number | string;
+    freight_charges?: CalculationDecimalString;
+}
+
+export interface ChallanCalculationResponse extends Omit<InvoiceCalculationResponse, 'totals'> {
+    totals: ChallanCalculationPreviewTotals;
 }
 
 export const invoiceCalculationsApi = {
@@ -99,7 +151,7 @@ export const salesOrderCalculationsApi = {
 export const challanCalculationsApi = {
     preview: (
         data: ChallanCalculationRequest
-    ): Promise<AxiosResponse<InvoiceCalculationResponse>> => {
-        return apiHelpers.post<InvoiceCalculationResponse>('/calculations/challan', data);
+    ): Promise<AxiosResponse<ChallanCalculationResponse>> => {
+        return apiHelpers.post<ChallanCalculationResponse>('/calculations/challan', data);
     }
 };

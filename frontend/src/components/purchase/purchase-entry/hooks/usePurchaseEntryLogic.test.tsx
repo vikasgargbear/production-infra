@@ -29,8 +29,15 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
 
     it('debounces one UUIDv7 calculation and does not loop after projection state updates', async () => {
         mockedPreview.mockResolvedValue({
-            items: [{ taxable_amount: 100, tax_amount: 12, total: 112 }],
-            totals: { subtotal_amount: 100, tax_amount: 12, total_amount: 112 }
+            items: [{ taxable_amount: '100.00', tax_amount: '12.00', total: '112.00' }],
+            totals: {
+                subtotal_amount: '100.00',
+                tax_amount: '12.00',
+                round_off_amount: '0.00',
+                net_amount: '112.00',
+                final_amount: '112.00',
+            },
+            gst_type: 'CGST/SGST',
         });
         const { result } = renderHook(() => usePurchaseEntryLogic({ onClose: jest.fn() }));
 
@@ -56,7 +63,7 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
         });
 
         expect(mockedPreview).toHaveBeenCalledTimes(1);
-        expect(result.current.purchase.total_amount).toBe(112);
+        expect(result.current.purchase.total_amount).toBe('112.00');
         expect(mockError).not.toHaveBeenCalled();
     });
 });
