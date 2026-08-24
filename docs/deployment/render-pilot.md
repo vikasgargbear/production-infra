@@ -87,6 +87,14 @@ ID, their normalized emails match, and both the ERP user and organization are
 active. Existing email-only ERP users require an explicit reviewed linkage; the
 login exchange intentionally does not auto-link or auto-provision accounts.
 
+Canonical staging browser writes additionally require the environment-scoped
+GitHub variable `CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID`. Set it only to the
+reviewed Supabase Auth UUID for the designated staging browser test operator.
+The staging provisioner resolves that immutable identifier to exactly one active
+canonical user and membership in the fixed demo organization before issuing the
+bounded `aasopharma-erp-web` grant. It must never discover or grant browser
+authority by email, role, or organization membership alone.
+
 The service-role key is not used for interactive session verification. Keep it
 backend-only for explicitly authorized administrative provisioning operations.
 

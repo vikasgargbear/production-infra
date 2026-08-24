@@ -10,7 +10,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 import psycopg2
 import requests
 
@@ -20,6 +20,7 @@ SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
 CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
+WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
 TEST_CALLBACK = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
 REDIRECT_URIS = (
     TEST_CALLBACK,
@@ -218,7 +219,12 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
     return user_id
 
 
-def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
+def _bind_demo(
+    database_url: str,
+    client_id: str,
+    auth_user_id: str,
+    web_auth_user_id: str,
+) -> bool:
     run_id = os.getenv("GITHUB_RUN_ID", "local")
     access_grant_id = str(
         uuid5(NAMESPACE_URL, f"canonical-staging-mcp-access:{DEMO_ORG_ID}:{run_id}")
@@ -227,7 +233,10 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
         uuid5(NAMESPACE_URL, f"canonical-staging-mcp-agent:{DEMO_ORG_ID}:{run_id}")
     )
     web_agent_grant_id = str(
-        uuid5(NAMESPACE_URL, f"canonical-staging-web-agent:{DEMO_ORG_ID}:{run_id}")
+        uuid5(
+            NAMESPACE_URL,
+            f"canonical-staging-web-agent:{DEMO_ORG_ID}:{web_auth_user_id}:{run_id}",
+        )
     )
     with psycopg2.connect(database_url) as connection:
         with connection.cursor() as cursor:
@@ -240,6 +249,31 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
             )
             if cursor.fetchone() != (1,):
                 return False
+            cursor.execute(
+                """
+                SELECT user_row.id::text, membership.id::text
+                  FROM core.users AS user_row
+                  JOIN core.memberships AS membership
+                    ON membership.user_id=user_row.id
+                   AND membership.org_id=%s
+                  JOIN core.organizations AS organization
+                    ON organization.id=membership.org_id
+                 WHERE user_row.auth_user_id=%s
+                   AND user_row.status='active'
+                   AND membership.status='active'
+                   AND organization.status='active'
+                 ORDER BY user_row.id,membership.id
+                 LIMIT 2
+                """,
+                (DEMO_ORG_ID, web_auth_user_id),
+            )
+            web_bindings = cursor.fetchall()
+            if len(web_bindings) != 1:
+                raise ProvisioningError(
+                    "Reviewed staging web identity must resolve to exactly one active "
+                    "user and membership in the demo organization"
+                )
+            web_user_id, web_membership_id = web_bindings[0]
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             for name, value in (
                 ("app.org_id", DEMO_ORG_ID),
@@ -352,7 +386,7 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                  WHERE org_id=%s AND subject_membership_id=%s AND client_id=%s
                    AND status='active'
                 """,
-                (DEMO_ORG_ID, TEST_MEMBERSHIP_ID, WEB_CLIENT_ID),
+                (DEMO_ORG_ID, web_membership_id, WEB_CLIENT_ID),
             )
             cursor.execute(
                 """
@@ -373,10 +407,10 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                 (
                     DEMO_ORG_ID,
                     web_agent_grant_id,
-                    TEST_MEMBERSHIP_ID,
+                    web_membership_id,
                     WEB_CLIENT_ID,
                     WEB_CLIENT_NAME,
-                    TEST_MEMBERSHIP_ID,
+                    web_membership_id,
                     REVIEWER_MEMBERSHIP_ID,
                     REVIEWER_MEMBERSHIP_ID,
                     REVIEWER_MEMBERSHIP_ID,
@@ -521,11 +555,11 @@ def _bind_demo(database_url: str, client_id: str, auth_user_id: str) -> bool:
                    AND capability.status='active'
                  GROUP BY user_row.auth_user_id,grant_row.client_id
                 """,
-                (DEMO_ORG_ID, TEST_USER_ID, TEST_MEMBERSHIP_ID, web_agent_grant_id),
+                (DEMO_ORG_ID, web_user_id, web_membership_id, web_agent_grant_id),
             )
             expected_web_capabilities = len(WRITE_CAPABILITIES) + 1
             if cursor.fetchone() != (
-                auth_user_id,
+                web_auth_user_id,
                 WEB_CLIENT_ID,
                 expected_web_capabilities,
             ):
@@ -566,8 +600,23 @@ def main() -> int:
     print("Reconciled the reviewed public OAuth client")
     auth_user_id = _reconcile_test_user(service_key, password)
     print("Reconciled the disposable OAuth test identity")
-    demo_bound = _bind_demo(database_url, client["client_id"], auth_user_id)
-    print("Reconciled the isolated bounded read and write demo grant")
+    try:
+        web_auth_user_id = str(UUID(_required(WEB_TEST_AUTH_USER_ENV)))
+    except ValueError as exc:
+        raise ProvisioningError(
+            f"{WEB_TEST_AUTH_USER_ENV} must be a canonical UUID"
+        ) from exc
+    if web_auth_user_id == auth_user_id:
+        raise ProvisioningError(
+            "The reviewed staging web identity must be distinct from the disposable MCP identity"
+        )
+    demo_bound = _bind_demo(
+        database_url,
+        client["client_id"],
+        auth_user_id,
+        web_auth_user_id,
+    )
+    print("Reconciled the isolated MCP and reviewed web demo grants")
     _write_github_env(
         {
             "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client["client_id"],
@@ -588,6 +637,7 @@ def main() -> int:
                 "redirect_uris": list(REDIRECT_URIS),
                 "dynamic_client_registration": False,
                 "demo_grant_bound": demo_bound,
+                "web_test_grant_bound": demo_bound,
             },
             indent=2,
             sort_keys=True,
@@ -601,6 +651,7 @@ def main() -> int:
                 "status": "ready",
                 "client_id": client["client_id"],
                 "demo_grant_bound": demo_bound,
+                "web_test_grant_bound": demo_bound,
             },
             sort_keys=True,
         )

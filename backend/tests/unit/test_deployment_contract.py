@@ -872,6 +872,11 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert '"method": "tools/list"' in exercise
     assert '"name": "erp_product_search"' in exercise
     assert "CANONICAL_STAGING_MCP_EXERCISE_MODE" in workflow
+    assert "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID" in workflow
+    assert 'WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"' in provisioner
+    assert "web_bindings = cursor.fetchall()" in provisioner
+    assert "if len(web_bindings) != 1:" in provisioner
+    assert "web_auth_user_id == auth_user_id" in provisioner
     assert "boundary_only" in workflow
     assert "business_flow" in workflow
     assert 'exercise_mode not in {"boundary_only", "business_flow"}' in exercise
