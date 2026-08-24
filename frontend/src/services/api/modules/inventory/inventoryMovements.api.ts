@@ -1,5 +1,9 @@
 /**
  * Inventory Movements API Module
+ *
+ * All reads go through the canonical /inventory/movements endpoint which
+ * uses UUID-keyed stock_ledger_entries — NOT the legacy /inventory-movements
+ * integer-ID path which no longer exists in the canonical ERP router.
  */
 
 import { apiHelpers } from '../../apiClient';
@@ -10,8 +14,8 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface MovementParams {
-    product_id?: number;
-    batch_id?: number;
+    product_id?: string;   // UUID
+    batch_id?: string;     // UUID
     movement_type?: 'in' | 'out' | 'transfer' | 'adjustment';
     from_date?: string;
     to_date?: string;
@@ -20,13 +24,12 @@ export interface MovementParams {
 }
 
 // ============================================
-// Endpoints
+// Endpoints — canonical ERP reads (UUID-based)
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/inventory-movements',
-    BY_PRODUCT: (id: number) => `/inventory-movements/product/${id}`,
-    BY_BATCH: (id: number) => `/inventory-movements/batch/${id}`
+    /** Canonical stock-ledger movements endpoint (UUID, tenant-scoped). */
+    BASE: '/inventory/movements',
 } as const;
 
 // ============================================
@@ -34,15 +37,18 @@ const ENDPOINTS = {
 // ============================================
 
 export const inventoryMovementsApi = {
+    /** List all movements, optionally filtered by date range. */
     getAll: (params: MovementParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.BASE, { params });
     },
 
-    getByProduct: (productId: number, params: MovementParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), { params });
+    /** List movements for a single product (UUID). */
+    getByProduct: (productId: string, params: MovementParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.BASE, { params: { ...params, product_id: productId } });
     },
 
-    getByBatch: (batchId: number, params: MovementParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BY_BATCH(batchId), { params });
+    /** List movements for a single batch (UUID). */
+    getByBatch: (batchId: string, params: MovementParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.BASE, { params: { ...params, batch_id: batchId } });
     }
 };

@@ -10,7 +10,7 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface BatchParams {
-    product_id?: number | string;
+    product_id?: string;   // UUID
     expiring_soon?: boolean;
     expired?: boolean;
     days?: number;
@@ -19,7 +19,7 @@ export interface BatchParams {
 }
 
 export interface BatchData {
-    product_id: number | string;
+    product_id: string;   // UUID
     batch_number: string;
     manufacturing_date?: string;
     expiry_date: string;
@@ -35,8 +35,10 @@ export interface BatchData {
 // ============================================
 
 const ENDPOINTS = {
+    /** Canonical batch list — UUID-keyed, tenant-scoped. */
     BASE: '/inventory/batches/',
-    BY_PRODUCT: (id: number | string) => `/products/${id}/batches`,
+    /** Per-product batches via canonical products router (UUID preferred). */
+    BY_PRODUCT: (id: string | number) => `/products/${id}/batches`,
     EXPIRING: '/inventory/batches/expiring',
     EXPIRED: '/inventory/batches/expired'
 } as const;
@@ -50,11 +52,13 @@ export const batchesApi = {
         return apiHelpers.get(ENDPOINTS.BASE, { params });
     },
 
-    getById: (batchId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${batchId}`);
+    /** Fetch a single batch by its UUID. */
+    getById: (batchId: string): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}${batchId}`);
     },
 
-    getByProduct: (productId: number | string, params: BatchParams = {}): Promise<AxiosResponse> => {
+    /** Fetch batches for a product by its UUID (or legacy integer ID). */
+    getByProduct: (productId: string | number, params: BatchParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), { params });
     },
 
@@ -62,12 +66,12 @@ export const batchesApi = {
         return apiHelpers.post(ENDPOINTS.BASE, data);
     },
 
-    update: (batchId: number, data: Partial<BatchData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${batchId}`, data);
+    update: (batchId: string, data: Partial<BatchData>): Promise<AxiosResponse> => {
+        return apiHelpers.put(`${ENDPOINTS.BASE}${batchId}`, data);
     },
 
-    delete: (batchId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${batchId}`);
+    delete: (batchId: string): Promise<AxiosResponse> => {
+        return apiHelpers.delete(`${ENDPOINTS.BASE}${batchId}`);
     },
 
     getExpiring: (days: number = 90): Promise<AxiosResponse> => {

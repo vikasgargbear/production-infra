@@ -9,7 +9,25 @@ const requiredNumber = (value: unknown, field: string, row: number): number => {
   return parsed;
 };
 
-/** Strict decoder for the canonical product-grain current-stock DTO. */
+const optionalPositiveNumber = (value: unknown): number | undefined => {
+  if (value == null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+/**
+ * Strict decoder for the canonical product-grain current-stock DTO.
+ *
+ * Field contract (canonical /inventory/stock/current response):
+ *   Required: product_id (string/UUID), product_name, total_quantity_available,
+ *             total_value, cost_per_unit, total_batches, expired_batches,
+ *             near_expiry_batches
+ *   Optional: product_code, generic_name, category, product_type, unit,
+ *             hsn_code, requires_cold_chain,
+ *             reorder_level, low_stock_threshold, is_below_reorder (not in
+ *             canonical SQL yet — passed through when present, omitted otherwise),
+ *             location (not in current canonical SQL — omitted rather than defaulted)
+ */
 export const normalizeCurrentStock = (rows: unknown): StockItem[] => {
   if (!Array.isArray(rows)) throw new Error('Current stock response must be an array');
 
@@ -24,6 +42,18 @@ export const normalizeCurrentStock = (rows: unknown): StockItem[] => {
     const totalValue = requiredNumber(row.total_value, 'total_value', rowNumber);
     const nearExpiry = requiredNumber(row.near_expiry_batches, 'near_expiry_batches', rowNumber);
 
+    // reorder_level comes from the canonical schema route (not the raw-SQL read),
+    // so it may be absent. Never default to 0 — that would mislead the UI into
+    // showing a fake threshold.
+    const reorderLevel = optionalPositiveNumber(row.reorder_level);
+
+    // low_stock: prefer explicit is_below_reorder flag; fall back to quantity
+    // comparison when reorder_level is present; never guess without data.
+    const lowStock: boolean | undefined =
+      typeof row.is_below_reorder === 'boolean'
+        ? row.is_below_reorder
+        : (reorderLevel != null ? quantity <= reorderLevel : undefined);
+
     return {
       product_id: row.product_id,
       product_name: row.product_name,
@@ -31,6 +61,7 @@ export const normalizeCurrentStock = (rows: unknown): StockItem[] => {
       generic_name: typeof row.generic_name === 'string' ? row.generic_name : undefined,
       category: typeof row.category === 'string' ? row.category : undefined,
       product_type: typeof row.product_type === 'string' ? row.product_type : undefined,
+      /** HSN code from catalog.products — display in stock table for GST compliance. */
       hsn_code: typeof row.hsn_code === 'string' ? row.hsn_code : undefined,
       unit: typeof row.unit === 'string' ? row.unit : undefined,
       total_quantity_available: quantity,
@@ -43,6 +74,9 @@ export const normalizeCurrentStock = (rows: unknown): StockItem[] => {
       total_value: totalValue,
       stock_value: totalValue,
       requires_cold_chain: row.requires_cold_chain === true,
+      // Optional fields — only set when the API actually returns them
+      ...(reorderLevel !== undefined ? { reorder_level: reorderLevel } : {}),
+      ...(lowStock !== undefined ? { low_stock: lowStock } : {}),
     };
   });
 };

@@ -129,6 +129,9 @@ export const StockTable = React.memo<StockTableProps>(({
                                     <td className="px-6 py-4">
                                         <div className="font-medium text-gray-900">{item.product_name}</div>
                                         <div className="text-sm text-gray-500">{item.product_code || 'No Code'}</div>
+                                        {item.hsn_code && (
+                                            <div className="text-xs text-gray-400">HSN: {item.hsn_code}</div>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
@@ -151,7 +154,9 @@ export const StockTable = React.memo<StockTableProps>(({
                                         </div>
                                     </td>
                                     <td className={`px-6 py-4 ${item.low_stock ? 'text-orange-600 font-medium' : ''}`}>
-                                        {item.reorder_level || 0} {item.unit}
+                                        {item.reorder_level != null
+                                            ? `${item.reorder_level} ${item.unit || ''}`.trim()
+                                            : '—'}
                                     </td>
                                     <td className="px-6 py-4">
                                         {formatCurrency(item.stock_value || item.total_value || 0)}
