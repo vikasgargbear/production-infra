@@ -49,8 +49,8 @@ test('GSTR-1 can mount directly without a supplied date range', async () => {
 
   await waitFor(() => expect(mockGetInvoices).toHaveBeenCalledTimes(1));
   expect(mockGetInvoices.mock.calls[0][0]).toEqual(expect.objectContaining({
-    from_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    to_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    date_from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    date_to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
   }));
   expect(await screen.findByText('B2B Invoices')).toBeTruthy();
 });
@@ -60,8 +60,8 @@ test('GSTR-3B can mount directly without a supplied date range', async () => {
 
   await waitFor(() => expect(mockSearchInvoices).toHaveBeenCalledTimes(1));
   expect(mockSearchInvoices.mock.calls[0][0]).toEqual(expect.objectContaining({
-    dateFrom: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    dateTo: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    date_from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    date_to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
   }));
   expect(await screen.findByText('Net GST Payable')).toBeTruthy();
 });

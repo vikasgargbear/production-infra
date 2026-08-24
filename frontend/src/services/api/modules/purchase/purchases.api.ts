@@ -14,6 +14,8 @@ export interface PurchaseParams {
     status?: string;
     from_date?: string;
     to_date?: string;
+    date_from?: string;
+    date_to?: string;
     dateFrom?: string;  // Alias for GST reports
     dateTo?: string;    // Alias for GST reports
     limit?: number;

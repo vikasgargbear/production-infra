@@ -46,9 +46,9 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
     // Load invoice data
     const loadInvoices = async (): Promise<any[]> => {
         const response = await invoicesApi.getAll({
-            from_date: dateRange.from,
-            to_date: dateRange.to,
-            limit: 5000
+            date_from: dateRange.from,
+            date_to: dateRange.to,
+            limit: 500
         });
         const responseData = response?.data || response;
         return Array.isArray(responseData) ? responseData : responseData?.invoices || [];

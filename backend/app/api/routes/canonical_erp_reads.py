@@ -1258,7 +1258,8 @@ def gst_returns_status(user: dict = Depends(PermissionChecker("gst", "view")),
 
 def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                 date_column: str, line_table: str, foreign_key: str,
-                limit: int, offset: int) -> list[dict]:
+                limit: int, offset: int, date_from: Optional[str] = None,
+                date_to: Optional[str] = None) -> list[dict]:
     return _rows(db, f"""
         SELECT document.id, document.id AS document_id,
                document.{number_column} AS document_number,
@@ -1297,17 +1298,22 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                 JOIN catalog.products product ON product.org_id=line.org_id AND product.id=line.product_id
                WHERE line.org_id=document.org_id AND line.{foreign_key}=document.id
           ) lines ON true
-         WHERE document.org_id=:org_id ORDER BY document.{date_column} DESC, document.id DESC
+         WHERE document.org_id=:org_id
+           AND (:date_from IS NULL OR document.{date_column} >= CAST(:date_from AS date))
+           AND (:date_to IS NULL OR document.{date_column} <= CAST(:date_to AS date))
+         ORDER BY document.{date_column} DESC, document.id DESC
          LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": offset})
+    """, {"org_id": org_id, "date_from": date_from, "date_to": date_to,
+            "limit": limit, "offset": offset})
 
 
 @router.get("/invoices/")
 def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
+             date_from: Optional[str] = None, date_to: Optional[str] = None,
              user: dict = SALES_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _sales_rows(db, org_id, "invoices", "invoice_number", "invoice_date",
-                       "invoice_lines", "invoice_id", limit, offset)
+                       "invoice_lines", "invoice_id", limit, offset, date_from, date_to)
     for row in rows:
         row.update(invoice_id=row["id"], invoice_number=row["document_number"],
                    invoice_date=row["document_date"])
@@ -1374,6 +1380,7 @@ def challans(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
 
 @router.get("/purchases/")
 def purchase_orders(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
+                    date_from: Optional[str] = None, date_to: Optional[str] = None,
                     user: dict = PURCHASE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
@@ -1386,9 +1393,13 @@ def purchase_orders(limit: int = Query(100, ge=1, le=500), offset: int = Query(0
           FROM procurement.purchase_orders purchase
           JOIN parties.supplier_accounts account ON account.org_id=purchase.org_id AND account.id=purchase.supplier_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-         WHERE purchase.org_id=:org_id ORDER BY purchase.order_date DESC, purchase.id DESC
+         WHERE purchase.org_id=:org_id
+           AND (:date_from IS NULL OR purchase.order_date >= CAST(:date_from AS date))
+           AND (:date_to IS NULL OR purchase.order_date <= CAST(:date_to AS date))
+         ORDER BY purchase.order_date DESC, purchase.id DESC
          LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": offset})
+    """, {"org_id": org_id, "date_from": date_from, "date_to": date_to,
+            "limit": limit, "offset": offset})
     return {"orders": rows, "purchases": rows, "total": len(rows)}
 
 

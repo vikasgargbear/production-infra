@@ -49,9 +49,9 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
 
             try {
                 const invoiceRes = await invoicesApi.search({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
-                    limit: 5000
+                    date_from: dateRange.from,
+                    date_to: dateRange.to,
+                    limit: 500
                 });
                 const invoiceData = invoiceRes?.data || invoiceRes;
                 const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
@@ -66,9 +66,9 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                 setOutputTax({ cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal });
 
                 const purchaseRes = await purchasesApi.getOrders({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
-                    limit: 5000
+                    date_from: dateRange.from,
+                    date_to: dateRange.to,
+                    limit: 500
                 });
                 const purchaseData = purchaseRes?.data || purchaseRes;
                 const purchases = Array.isArray(purchaseData) ? purchaseData : purchaseData?.purchases || purchaseData?.orders || [];
