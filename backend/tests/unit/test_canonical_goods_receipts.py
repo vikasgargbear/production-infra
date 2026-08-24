@@ -27,6 +27,7 @@ def _detail_payload():
         "branch_id": "10000000-0000-7000-8000-000000000003",
         "supplier_account_id": "10000000-0000-7000-8000-000000000004",
         "supplier_name": "Canonical Supplier",
+        "organization_timezone": "Asia/Kolkata",
         "purchase_order_id": "10000000-0000-7000-8000-000000000005",
         "purchase_order_number": "CODEX-E2E-PO-0001",
         "received_at": "2026-08-25 10:30:00+05:30",
@@ -152,6 +153,8 @@ def test_detail_reconciles_receipt_inventory_ledger_and_value():
     ("field", "value", "message"),
     [
         ("base_quantity", "11.000000", "base quantity"),
+        ("unit_cost", "9.0000", "unit cost"),
+        ("extended_cost", "119.00", "inventory line value"),
         ("ledger_quantity_delta", "11.000000", "stock ledger quantity"),
         ("ledger_value_delta", "119.00", "stock ledger valuation"),
     ],
@@ -160,6 +163,15 @@ def test_detail_fails_closed_on_inventory_reconciliation_drift(field, value, mes
     payload = deepcopy(_detail_payload())
     payload["lines"][0]["inventory"][field] = value
     with pytest.raises(ValidationError, match=message):
+        canonical_goods_receipts.ReceiptDetailResponse.model_validate(payload)
+
+
+def test_detail_rejects_inventory_evidence_from_another_document():
+    payload = deepcopy(_detail_payload())
+    payload["lines"][0]["inventory"]["inventory_document_id"] = (
+        "10000000-0000-7000-8000-000000000099"
+    )
+    with pytest.raises(ValidationError, match="different inventory document"):
         canonical_goods_receipts.ReceiptDetailResponse.model_validate(payload)
 
 
@@ -180,6 +192,7 @@ def test_context_requires_at_least_one_receivable_line():
             "branch_id": "10000000-0000-7000-8000-000000000003",
             "supplier_account_id": "10000000-0000-7000-8000-000000000004",
             "supplier_name": "Canonical Supplier",
+            "organization_timezone": "Asia/Kolkata",
             "status": "approved",
             "lines": [],
         })

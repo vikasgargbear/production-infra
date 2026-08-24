@@ -27,6 +27,7 @@ const GRNFlow = ({
   const [grns, setGrns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGrn, setSelectedGrn] = useState<CanonicalReceiptDetail | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
@@ -41,12 +42,17 @@ const GRNFlow = ({
 
   const fetchGRNs = useCallback(async () => {
     setLoading(true);
+    setListError(null);
     try {
       const response = await grnApi.getAll({ limit: 50 });
       const data = response?.data;
       const grnList = Array.isArray(data) ? data : (data?.grns || data?.data || []);
       setGrns(grnList);
-    } catch (err) {
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setListError(typeof detail === 'string'
+        ? detail
+        : detail?.message || error?.message || 'Canonical goods receipts could not be loaded');
       setGrns([]);
     } finally {
       setLoading(false);
@@ -222,7 +228,9 @@ const GRNFlow = ({
                   <div>
                     <span className="text-sm text-gray-500">Date</span>
                     <p className="font-medium">
-                      {new Date(selectedGrn.received_at).toLocaleString('en-IN')}
+                      {new Date(selectedGrn.received_at).toLocaleString('en-IN', {
+                        timeZone: selectedGrn.organization_timezone,
+                      })}
                     </p>
                   </div>
                   <div>
@@ -311,7 +319,7 @@ const GRNFlow = ({
           onSaveDraft={() => {}}
           additionalActions={[
             {
-              label: "",
+              label: "Refresh",
               onClick: fetchGRNs,
               variant: "ghost",
               icon: RefreshCw,
@@ -341,6 +349,24 @@ const GRNFlow = ({
                   <p className="font-semibold">Receipt detail could not be verified</p>
                   <p>{detailError}</p>
                 </div>
+              </div>
+            )}
+            {listError && (
+              <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Receipts could not be loaded</p>
+                    <p>{listError}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchGRNs}
+                  className="min-h-11 rounded-lg border border-red-300 bg-white px-4 py-2 font-semibold text-red-800 hover:bg-red-100"
+                >
+                  Retry
+                </button>
               </div>
             )}
             {loading ? (

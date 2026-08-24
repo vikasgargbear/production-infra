@@ -1,18 +1,27 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, PackageCheck, X } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  PackageCheck,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 import { clientUuid } from '../../../utils/clientUuid';
-import {
-  approveAndExecuteCanonicalAction,
-  canonicalExecutionCompleted,
-} from '../../../services/api/canonicalOperatorActions';
+import { canonicalExecutionCompleted } from '../../../services/api/canonicalOperatorActions';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import type { CanonicalReceiptContext } from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 import {
+  initialReceiptBatchDraft,
   initialReceiptDraft,
 } from './canonicalReceiptCommand';
 import type { CanonicalReceiptDraft } from './canonicalReceiptCommand';
-import { prepareCanonicalGoodsReceipt } from './canonicalReceiptLifecycle';
+import {
+  postCanonicalGoodsReceipt,
+  prepareCanonicalGoodsReceipt,
+} from './canonicalReceiptLifecycle';
 
 
 interface Props {
@@ -29,11 +38,6 @@ function errorMessage(error: any): string {
   return error?.message || 'Goods receipt request failed. No receipt was posted.';
 }
 
-function datetimeLocalValue(value: string): string {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 16);
-}
-
 const inputClass = 'mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200';
 
 export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
@@ -43,8 +47,9 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
 }) => {
   const [draft, setDraft] = useState<CanonicalReceiptDraft>(() => initialReceiptDraft(
     context,
-    `CODEX-E2E-PUR-RET-20260825:receipt:${clientUuid()}`,
+    `erp-web-goods-receipt-prepare:${clientUuid()}`,
   ));
+  const [lifecycleId] = useState(() => clientUuid());
   const [preview, setPreview] = useState<CanonicalCommandPreview | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -60,6 +65,62 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
       ...current,
       lines: current.lines.map((line, lineIndex) => (
         lineIndex === index ? { ...line, ...patch } : line
+      )),
+    }));
+  };
+
+  const updateBatch = (
+    lineIndex: number,
+    batchIndex: number,
+    patch: Record<string, unknown>,
+  ) => {
+    setPreview(null);
+    setDraft(current => ({
+      ...current,
+      lines: current.lines.map((line, currentLineIndex) => (
+        currentLineIndex === lineIndex
+          ? {
+            ...line,
+            batches: line.batches.map((batch, currentBatchIndex) => (
+              currentBatchIndex === batchIndex ? { ...batch, ...patch } : batch
+            )),
+          }
+          : line
+      )),
+    }));
+  };
+
+  const addBatch = (lineIndex: number) => {
+    setPreview(null);
+    setDraft(current => ({
+      ...current,
+      lines: current.lines.map((line, currentLineIndex) => (
+        currentLineIndex === lineIndex
+          ? {
+            ...line,
+            batches: [
+              ...line.batches,
+              initialReceiptBatchDraft(context.lines[lineIndex]),
+            ],
+          }
+          : line
+      )),
+    }));
+  };
+
+  const removeBatch = (lineIndex: number, batchIndex: number) => {
+    setPreview(null);
+    setDraft(current => ({
+      ...current,
+      lines: current.lines.map((line, currentLineIndex) => (
+        currentLineIndex === lineIndex
+          ? {
+            ...line,
+            batches: line.batches.filter((_batch, currentBatchIndex) => (
+              currentBatchIndex !== batchIndex
+            )),
+          }
+          : line
       )),
     }));
   };
@@ -83,10 +144,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
     setError(null);
     setPosting(true);
     try {
-      const { executed } = await approveAndExecuteCanonicalAction(
-        'procurement.goods_receipt.prepare',
-        preview,
-      );
+      const { executed } = await postCanonicalGoodsReceipt(preview, lifecycleId);
       if (!canonicalExecutionCompleted(executed.data) || !executed.data.resource_id) {
         throw new Error(
           `Execution returned ${executed.data.status || 'an unknown status'} without a receipt UUID. Check command status before retrying.`,
@@ -125,7 +183,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
             Physical receipt time
             <input
               type="datetime-local"
-              value={datetimeLocalValue(draft.receivedAt)}
+              value={draft.receivedAt}
               onChange={event => {
                 setPreview(null);
                 setDraft(current => ({
@@ -182,68 +240,99 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
               </label>
 
               {line.included && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <label className="text-sm font-medium text-gray-700 lg:col-span-2">
-                    Manufacturer batch number
-                    <input value={line.manufacturerBatchNumber} onChange={event => updateLine(index, { manufacturerBatchNumber: event.target.value })} className={inputClass} maxLength={64} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Manufactured on
-                    <input type="date" value={line.manufacturedOn} onChange={event => updateLine(index, { manufacturedOn: event.target.value })} className={inputClass} />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Expires on
-                    <input type="date" value={line.expiresOn} onChange={event => updateLine(index, { expiresOn: event.target.value })} className={inputClass} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Received billed qty
-                    <input inputMode="decimal" value={line.receivedQuantity} onChange={event => updateLine(index, { receivedQuantity: event.target.value })} className={inputClass} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Accepted billed qty
-                    <input inputMode="decimal" value={line.acceptedQuantity} onChange={event => updateLine(index, { acceptedQuantity: event.target.value })} className={inputClass} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Rejected qty
-                    <input inputMode="decimal" value={line.rejectedQuantity} onChange={event => updateLine(index, { rejectedQuantity: event.target.value })} className={inputClass} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Accepted free qty
-                    <input inputMode="decimal" value={line.freeQuantity} onChange={event => updateLine(index, { freeQuantity: event.target.value })} className={inputClass} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    MRP
-                    <input inputMode="decimal" value={line.mrp} onChange={event => updateLine(index, { mrp: event.target.value })} className={inputClass} required />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    MRP unit
-                    <select value={line.mrpUomConversionId} onChange={event => updateLine(index, { mrpUomConversionId: event.target.value })} className={inputClass} required>
-                      <option value="">Select MRP unit</option>
-                      {source.mrp_conversions.map(conversion => (
-                        <option key={conversion.id} value={conversion.id}>{conversion.from_uom_code} → {conversion.to_uom_code} × {conversion.multiplier}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 lg:col-span-2">
-                    Destination location
-                    <select value={line.toLocationId} onChange={event => updateLine(index, { toLocationId: event.target.value })} className={inputClass} required>
-                      <option value="">Select destination</option>
-                      {source.eligible_locations.map(location => (
-                        <option key={location.id} value={location.id}>{location.code} — {location.name} ({location.location_type})</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    QC disposition
-                    <select value={line.qcStatus} onChange={event => updateLine(index, { qcStatus: event.target.value })} className={inputClass}>
-                      <option value="accepted">Accepted</option>
-                      <option value="partial">Partially accepted</option>
-                    </select>
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 lg:col-span-3">
-                    QC notes {line.qcStatus === 'partial' ? '(required)' : '(optional)'}
-                    <input value={line.qcNotes} onChange={event => updateLine(index, { qcNotes: event.target.value })} className={inputClass} maxLength={1024} />
-                  </label>
+                <div className="space-y-4">
+                  {line.batches.map((batch, batchIndex) => (
+                    <fieldset
+                      key={`${source.purchase_order_line_id}:${batchIndex}`}
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <legend className="px-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                        Physical batch {batchIndex + 1}
+                      </legend>
+                      <div className="mb-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => removeBatch(index, batchIndex)}
+                          disabled={line.batches.length === 1}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Remove physical batch ${batchIndex + 1} from line ${source.line_number}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <label className="text-sm font-medium text-gray-700 lg:col-span-2">
+                          Manufacturer batch number
+                          <input value={batch.manufacturerBatchNumber} onChange={event => updateBatch(index, batchIndex, { manufacturerBatchNumber: event.target.value })} className={inputClass} maxLength={64} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          Manufactured on
+                          <input type="date" value={batch.manufacturedOn} onChange={event => updateBatch(index, batchIndex, { manufacturedOn: event.target.value })} className={inputClass} />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          Expires on
+                          <input type="date" value={batch.expiresOn} onChange={event => updateBatch(index, batchIndex, { expiresOn: event.target.value })} className={inputClass} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          Received billed qty
+                          <input inputMode="decimal" value={batch.receivedQuantity} onChange={event => updateBatch(index, batchIndex, { receivedQuantity: event.target.value })} className={inputClass} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          Accepted billed qty
+                          <input inputMode="decimal" value={batch.acceptedQuantity} onChange={event => updateBatch(index, batchIndex, { acceptedQuantity: event.target.value })} className={inputClass} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          Rejected qty
+                          <input inputMode="decimal" value={batch.rejectedQuantity} onChange={event => updateBatch(index, batchIndex, { rejectedQuantity: event.target.value })} className={inputClass} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          Accepted free qty
+                          <input inputMode="decimal" value={batch.freeQuantity} onChange={event => updateBatch(index, batchIndex, { freeQuantity: event.target.value })} className={inputClass} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          MRP
+                          <input inputMode="decimal" value={batch.mrp} onChange={event => updateBatch(index, batchIndex, { mrp: event.target.value })} className={inputClass} required />
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          MRP unit
+                          <select value={batch.mrpUomConversionId} onChange={event => updateBatch(index, batchIndex, { mrpUomConversionId: event.target.value })} className={inputClass} required>
+                            <option value="">Select MRP unit</option>
+                            {source.mrp_conversions.map(conversion => (
+                              <option key={conversion.id} value={conversion.id}>{conversion.from_uom_code} → {conversion.to_uom_code} × {conversion.multiplier}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-sm font-medium text-gray-700 lg:col-span-2">
+                          Destination location
+                          <select value={batch.toLocationId} onChange={event => updateBatch(index, batchIndex, { toLocationId: event.target.value })} className={inputClass} required>
+                            <option value="">Select destination</option>
+                            {source.eligible_locations.map(location => (
+                              <option key={location.id} value={location.id}>{location.code} — {location.name} ({location.location_type})</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-sm font-medium text-gray-700">
+                          QC disposition
+                          <select value={batch.qcStatus} onChange={event => updateBatch(index, batchIndex, { qcStatus: event.target.value })} className={inputClass}>
+                            <option value="accepted">Accepted</option>
+                            <option value="partial">Partially accepted</option>
+                          </select>
+                        </label>
+                        <label className="text-sm font-medium text-gray-700 lg:col-span-3">
+                          QC notes {batch.qcStatus === 'partial' ? '(required)' : '(optional)'}
+                          <input value={batch.qcNotes} onChange={event => updateBatch(index, batchIndex, { qcNotes: event.target.value })} className={inputClass} maxLength={1024} />
+                        </label>
+                      </div>
+                    </fieldset>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => addBatch(index)}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add another physical batch
+                  </button>
                 </div>
               )}
             </fieldset>
@@ -297,7 +386,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
                 <p className="text-sm font-semibold text-gray-900">Inventory impact</p>
                 {(preview.inventory_impact as any[]).map((impact, index) => (
                   <div key={index} className="rounded-lg border border-gray-200 p-3 text-xs text-gray-700">
-                    +{String(Number(impact.base_accepted_quantity || 0) + Number(impact.base_free_quantity || 0))} base units · ₹{String(impact.extended_cost)} · {String(impact.location_id)}
+                    {String(impact.base_accepted_quantity || '0')} accepted + {String(impact.base_free_quantity || '0')} free base units · ₹{String(impact.extended_cost)} · {String(impact.location_id)}
                   </div>
                 ))}
               </div>

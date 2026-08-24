@@ -4,7 +4,10 @@ import {
 } from '../../../services/api/canonicalOperatorActions';
 import type { CanonicalReceiptContext } from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 import { initialReceiptDraft } from './canonicalReceiptCommand';
-import { prepareCanonicalGoodsReceipt } from './canonicalReceiptLifecycle';
+import {
+  postCanonicalGoodsReceipt,
+  prepareCanonicalGoodsReceipt,
+} from './canonicalReceiptLifecycle';
 
 
 jest.mock('../../../services/api/canonicalOperatorActions', () => ({
@@ -18,6 +21,7 @@ const context: CanonicalReceiptContext = {
   branch_id: '10000000-0000-7000-8000-000000000002',
   supplier_account_id: '10000000-0000-7000-8000-000000000003',
   supplier_name: 'Canonical Supplier',
+  organization_timezone: 'Asia/Kolkata',
   status: 'approved',
   lines: [{
     purchase_order_line_id: '10000000-0000-7000-8000-000000000004',
@@ -54,9 +58,9 @@ function draft() {
     new Date('2026-08-25T12:00:00Z'),
   );
   value.receivedAt = '2026-08-24T12:00:00Z';
-  value.lines[0].manufacturerBatchNumber = 'CODEX-E2E-BATCH-RETRY-0001';
-  value.lines[0].expiresOn = '2027-08-25';
-  value.lines[0].mrp = '125.00';
+  value.lines[0].batches[0].manufacturerBatchNumber = 'CODEX-E2E-BATCH-RETRY-0001';
+  value.lines[0].batches[0].expiresOn = '2027-08-25';
+  value.lines[0].batches[0].mrp = '125.00';
   return value;
 }
 
@@ -103,5 +107,32 @@ describe('canonical goods-receipt prepare lifecycle', () => {
       'CODEX-E2E-PUR-RET-20260825:receipt:retry-0001',
     );
     expect(approveAndExecuteCanonicalAction).not.toHaveBeenCalled();
+  });
+
+  it('reuses the caller-owned approval and execution lifecycle identity', async () => {
+    const preview = {
+      command_request_id: '10000000-0000-7000-8000-000000000008',
+      preview_hash: `sha256:${'a'.repeat(64)}`,
+    } as any;
+    (approveAndExecuteCanonicalAction as jest.Mock).mockResolvedValue({
+      approved: { data: { status: 'approved' } },
+      executed: { data: { status: 'executed' } },
+    });
+
+    await postCanonicalGoodsReceipt(preview, 'stable-grn-lifecycle-0001');
+    await postCanonicalGoodsReceipt(preview, 'stable-grn-lifecycle-0001');
+
+    expect(approveAndExecuteCanonicalAction).toHaveBeenNthCalledWith(
+      1,
+      'procurement.goods_receipt.prepare',
+      preview,
+      'stable-grn-lifecycle-0001',
+    );
+    expect(approveAndExecuteCanonicalAction).toHaveBeenNthCalledWith(
+      2,
+      'procurement.goods_receipt.prepare',
+      preview,
+      'stable-grn-lifecycle-0001',
+    );
   });
 });

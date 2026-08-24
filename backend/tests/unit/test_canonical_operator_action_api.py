@@ -1133,6 +1133,26 @@ def test_goods_receipt_prepare_requires_paired_challan_facts(enabled_boundary):
     assert fake.calls == []
 
 
+def test_goods_receipt_prepare_requires_explicit_received_timezone(enabled_boundary):
+    fake = FakeOperatorActionService()
+    policy = ACTION_POLICIES["procurement.goods_receipt.prepare"]
+    holder = {"value": _context(policy.operation_key, policy.permission)}
+    client = TestClient(_app(fake, holder))
+    payload = _goods_receipt_payload()
+    payload["received_at"] = "2026-08-20T10:30:00"
+
+    response = client.post(
+        "/api/internal/mcp/actions/procurement.goods_receipt.prepare/prepare",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["message"] == (
+        "goods receipt received_at must include an explicit timezone offset"
+    )
+    assert fake.calls == []
+
+
 def test_supplier_invoice_prepare_accepts_exact_attested_receipt_match(
     enabled_boundary,
 ):

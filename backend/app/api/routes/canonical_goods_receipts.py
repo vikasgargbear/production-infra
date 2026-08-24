@@ -8,7 +8,7 @@ command and the immutable inventory evidence produced after execution.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Security
@@ -57,7 +57,7 @@ class ReceiptLocation(BaseModel):
     id: UUID
     code: str
     name: str
-    location_type: str
+    location_type: Literal["saleable", "quarantine", "cold_storage"]
 
 
 class ReceiptMrpConversion(BaseModel):
@@ -83,6 +83,24 @@ class ReceiptContextLine(BaseModel):
     eligible_locations: list[ReceiptLocation]
     mrp_conversions: list[ReceiptMrpConversion]
 
+    @model_validator(mode="after")
+    def require_valid_remaining_context(self):
+        if self.uom_conversion_factor <= 0:
+            raise ValueError("receipt UOM conversion factor must be positive")
+        if self.remaining_billed_quantity < 0 or self.remaining_free_quantity < 0:
+            raise ValueError("receipt remaining quantities cannot be negative")
+        if self.remaining_billed_quantity + self.remaining_free_quantity <= 0:
+            raise ValueError("receipt line has no remaining quantity")
+        if len({item.id for item in self.eligible_locations}) != len(
+            self.eligible_locations
+        ):
+            raise ValueError("receipt locations must be unique")
+        if len({item.id for item in self.mrp_conversions}) != len(
+            self.mrp_conversions
+        ):
+            raise ValueError("receipt MRP conversions must be unique")
+        return self
+
 
 class ReceiptContextResponse(BaseModel):
     purchase_order_id: UUID
@@ -90,7 +108,8 @@ class ReceiptContextResponse(BaseModel):
     branch_id: UUID
     supplier_account_id: UUID
     supplier_name: str
-    status: str
+    organization_timezone: str
+    status: Literal["approved", "partially_received"]
     lines: list[ReceiptContextLine]
 
     model_config = ConfigDict(extra="forbid")
@@ -99,13 +118,15 @@ class ReceiptContextResponse(BaseModel):
     def require_receivable_lines(self):
         if not self.lines:
             raise ValueError("purchase order has no remaining canonical receipt lines")
+        if len({line.purchase_order_line_id for line in self.lines}) != len(self.lines):
+            raise ValueError("purchase order receipt lines must be unique")
         return self
 
 
 class ReceiptInventoryEvidence(BaseModel):
     inventory_document_line_id: UUID
     inventory_document_id: UUID
-    movement_kind: str
+    movement_kind: Literal["receipt"]
     entered_quantity: Decimal
     base_quantity: Decimal
     unit_cost: Decimal
@@ -158,6 +179,10 @@ class ReceiptDetailLine(BaseModel):
             raise ValueError("inventory base quantity does not reconcile to accepted plus free")
         if self.inventory.ledger_quantity_delta != expected_base:
             raise ValueError("stock ledger quantity does not reconcile to receipt base quantity")
+        if self.inventory.unit_cost != self.unit_cost:
+            raise ValueError("inventory unit cost does not reconcile to receipt unit cost")
+        if self.inventory.extended_cost != self.extended_cost:
+            raise ValueError("inventory line value does not reconcile to receipt extended cost")
         if self.inventory.ledger_value_delta != self.extended_cost:
             raise ValueError("stock ledger valuation does not reconcile to receipt extended cost")
         return self
@@ -169,17 +194,18 @@ class ReceiptDetailResponse(BaseModel):
     branch_id: UUID
     supplier_account_id: UUID
     supplier_name: str
+    organization_timezone: str
     purchase_order_id: UUID
     purchase_order_number: str
     received_at: str
     supplier_challan_number: Optional[str]
     supplier_challan_date: Optional[str]
-    status: str
+    status: Literal["posted"]
     posted_at: str
     inventory_document_id: UUID
     inventory_document_number: str
-    inventory_document_status: str
-    costing_method: str
+    inventory_document_status: Literal["posted"]
+    costing_method: Literal["moving_weighted_average"]
     total_abs_base_quantity: Decimal
     total_inventory_value: Decimal
     impact_scope: str = "inventory_only_reference_no_payable_or_itc"
@@ -193,6 +219,11 @@ class ReceiptDetailResponse(BaseModel):
     def reconcile_document_totals(self):
         if not self.lines:
             raise ValueError("posted goods receipt has no inventory evidence")
+        if any(
+            line.inventory.inventory_document_id != self.inventory_document_id
+            for line in self.lines
+        ):
+            raise ValueError("receipt line references a different inventory document")
         if sum((line.inventory.base_quantity for line in self.lines), Decimal("0")) != self.total_abs_base_quantity:
             raise ValueError("inventory document quantity does not reconcile to receipt lines")
         if sum((line.inventory.extended_cost for line in self.lines), Decimal("0")) != self.total_inventory_value:
@@ -212,14 +243,30 @@ def purchase_order_receipt_context(
     """Return exact remaining PO facts accepted by goods-receipt prepare."""
 
     org_id = _activate(db, user)
+    return _canonical_purchase_order_receipt_context(
+        db, org_id, purchase_order_id
+    )
+
+
+def _canonical_purchase_order_receipt_context(
+    db: Session,
+    org_id: UUID,
+    purchase_order_id: UUID,
+) -> ReceiptContextResponse:
+    """Execute the runtime-role purchase-order receipt projection."""
+
     header = _one(db, """
         SELECT purchase_order.id AS purchase_order_id,
                purchase_order.purchase_order_number,
                purchase_order.branch_id,
                purchase_order.supplier_account_id,
                party.legal_name AS supplier_name,
+               organization.timezone AS organization_timezone,
                purchase_order.status
           FROM procurement.purchase_orders purchase_order
+          JOIN core.organizations organization
+            ON organization.id=purchase_order.org_id
+           AND organization.status='active'
           JOIN parties.supplier_accounts supplier
             ON supplier.org_id=purchase_order.org_id
            AND supplier.id=purchase_order.supplier_account_id
@@ -340,6 +387,7 @@ def _canonical_goods_receipt_detail(
                receipt.branch_id,
                receipt.supplier_account_id,
                party.legal_name AS supplier_name,
+               organization.timezone AS organization_timezone,
                source.purchase_order_id,
                source.purchase_order_number,
                receipt.received_at::text AS received_at,
@@ -357,6 +405,9 @@ def _canonical_goods_receipt_detail(
             ON supplier.org_id=receipt.org_id AND supplier.id=receipt.supplier_account_id
           JOIN parties.parties party
             ON party.org_id=supplier.org_id AND party.id=supplier.party_id
+          JOIN core.organizations organization
+            ON organization.id=receipt.org_id
+           AND organization.status='active'
           JOIN inventory.inventory_documents document
             ON document.org_id=receipt.org_id AND document.goods_receipt_id=receipt.id
            AND document.document_type='purchase_receipt' AND document.status='posted'

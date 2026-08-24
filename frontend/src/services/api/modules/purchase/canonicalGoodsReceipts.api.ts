@@ -41,6 +41,7 @@ export interface CanonicalReceiptContext {
   branch_id: string;
   supplier_account_id: string;
   supplier_name: string;
+  organization_timezone: string;
   status: 'approved' | 'partially_received';
   lines: CanonicalReceiptContextLine[];
 }
@@ -98,6 +99,7 @@ export interface CanonicalReceiptDetail {
   branch_id: string;
   supplier_account_id: string;
   supplier_name: string;
+  organization_timezone: string;
   purchase_order_id: string;
   purchase_order_number: string;
   received_at: string;

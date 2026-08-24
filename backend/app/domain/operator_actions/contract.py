@@ -353,6 +353,10 @@ def validate_prepare_payload_semantics(
             raise ValueError("purchase order expected_on must not precede order_date")
 
     if operation_key == "procurement.goods_receipt.prepare":
+        if values["received_at"].utcoffset() is None:
+            raise ValueError(
+                "goods receipt received_at must include an explicit timezone offset"
+            )
         receipt_date = values["received_at"].date()
         challan_number = values.get("supplier_challan_number")
         challan_date = values.get("supplier_challan_date")
