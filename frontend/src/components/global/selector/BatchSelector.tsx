@@ -5,13 +5,16 @@ import { searchCache } from '../../../utils/searchCache';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
-import { mergeProductAndBatch } from '../../../utils/productMapper';
+import { hasCanonicalBatchIdentity, mergeProductAndBatch } from '../../../utils/productMapper';
 import type { Product as CanonicalProduct } from '../../../types/models';
 
 // ==================== HELPERS ====================
 
 /** Generate consistent cache key for batches */
 const getBatchCacheKey = (productId: string | number): string => `batches_${productId}`;
+
+const canUseCachedBatches = (batches: unknown): batches is any[] =>
+    Array.isArray(batches) && batches.length > 0 && batches.every(hasCanonicalBatchIdentity);
 
 // Simple class concatenation helper (replaces cx from invoiceStyles)
 const cx = (...classNames: (string | boolean | undefined | null)[]) =>
@@ -154,7 +157,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         if (!product) return;
 
         // OPTIMIZATION: Use embedded batches if available (no API call needed)
-        if (product.batches && Array.isArray(product.batches) && product.batches.length > 0) {
+        if (canUseCachedBatches(product.batches)) {
             console.log('[BatchSelector] Using embedded batches from product (OPTIMIZED)');
             processBatches(product.batches);
             return;
@@ -170,7 +173,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
         // LAYER 1: Memory cache (instant)
         const cachedBatches = searchCache.get(cacheKey, {});
-        if (cachedBatches && cachedBatches.length > 0) {
+        if (canUseCachedBatches(cachedBatches)) {
             console.log('[BatchSelector] Using memory cache (instant)');
             processBatches(cachedBatches);
             return;
@@ -178,7 +181,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
         try {
             const offlineBatches = await offlineDB.getBatchesByProduct(productId);
-            if (offlineBatches && offlineBatches.length > 0) {
+            if (canUseCachedBatches(offlineBatches)) {
                 console.log(`[BatchSelector] Loaded ${offlineBatches.length} batches from IndexedDB (instant)`);
                 processBatches(offlineBatches);
                 searchCache.set(cacheKey, {}, offlineBatches); // Promote to memory cache

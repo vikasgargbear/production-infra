@@ -377,11 +377,9 @@ def products_with_batches(
                            MAX(balance.average_unit_cost) AS average_unit_cost,
                            CASE WHEN COUNT(DISTINCT balance.location_id)=1
                                 THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
-                           CASE WHEN COUNT(DISTINCT location.branch_id)=1
-                                THEN (array_agg(DISTINCT location.branch_id))[1] END AS branch_id
+                           CASE WHEN COUNT(DISTINCT balance.branch_id)=1
+                                THEN (array_agg(DISTINCT balance.branch_id))[1] END AS branch_id
                       FROM inventory.stock_balances balance
-                      JOIN inventory.locations location
-                        ON location.org_id=balance.org_id AND location.id=balance.location_id
                      WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
                 ) stock ON true
                WHERE batch.org_id=product.org_id AND batch.product_id=product.id
@@ -423,11 +421,9 @@ def product_batches(
                      MAX(balance.average_unit_cost) AS average_unit_cost,
                      CASE WHEN COUNT(DISTINCT balance.location_id)=1
                           THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
-                     CASE WHEN COUNT(DISTINCT location.branch_id)=1
-                          THEN (array_agg(DISTINCT location.branch_id))[1] END AS branch_id
+                     CASE WHEN COUNT(DISTINCT balance.branch_id)=1
+                          THEN (array_agg(DISTINCT balance.branch_id))[1] END AS branch_id
                 FROM inventory.stock_balances balance
-                JOIN inventory.locations location
-                  ON location.org_id=balance.org_id AND location.id=balance.location_id
                WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
           ) stock ON true
           LEFT JOIN LATERAL (
@@ -1985,11 +1981,9 @@ def sync_delta(
                          MAX(average_unit_cost) cost_per_unit,
                          CASE WHEN COUNT(DISTINCT balance.location_id)=1
                               THEN (array_agg(DISTINCT balance.location_id))[1] END AS location_id,
-                         CASE WHEN COUNT(DISTINCT location.branch_id)=1
-                              THEN (array_agg(DISTINCT location.branch_id))[1] END AS branch_id
+                         CASE WHEN COUNT(DISTINCT balance.branch_id)=1
+                              THEN (array_agg(DISTINCT balance.branch_id))[1] END AS branch_id
                     FROM inventory.stock_balances balance
-                    JOIN inventory.locations location
-                      ON location.org_id=balance.org_id AND location.id=balance.location_id
                    WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
               ) stock ON true
               LEFT JOIN LATERAL (

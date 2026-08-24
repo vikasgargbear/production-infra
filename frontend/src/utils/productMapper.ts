@@ -32,6 +32,23 @@ export interface RawProductInput {
     [key: string]: any;
 }
 
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Cached batch rows created before the canonical cutover do not contain the
+ * stock scope required by command writes. Treat them as stale so online flows
+ * refresh from the authoritative API instead of failing at final submission.
+ */
+export function hasCanonicalBatchIdentity(raw: RawBatchInput): boolean {
+    return [
+        raw.product_id,
+        raw.batch_id ?? raw.id,
+        raw.uom_conversion_id,
+        raw.location_id,
+        raw.branch_id,
+    ].every(value => CANONICAL_UUID.test(String(value ?? '').trim()));
+}
+
 // ==================== MAPPER FUNCTIONS ====================
 
 /**

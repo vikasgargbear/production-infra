@@ -107,6 +107,13 @@ def test_batch_reads_use_canonical_inventory_lifecycle_states() -> None:
     assert "batch.status IN ('active','blocked')" not in source
 
 
+def test_batch_reads_project_branch_from_authoritative_stock_balance() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+
+    assert source.count("COUNT(DISTINCT balance.branch_id)=1") == 3
+    assert "COUNT(DISTINCT location.branch_id)=1" not in source
+
+
 class ProductDraftDatabase:
     def __init__(self) -> None:
         self.statements = []
