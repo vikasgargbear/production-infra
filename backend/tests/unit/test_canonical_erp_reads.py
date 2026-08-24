@@ -498,7 +498,12 @@ def test_company_profile_projects_canonical_invoice_identity_and_settlement_deta
     assert "COALESCE(license.licenses, '[]'::jsonb) AS licenses" in source
     assert "COALESCE(bank.accounts, '[]'::jsonb) AS bank_accounts" in source
     assert "FROM compliance.licenses" in source
-    assert "FROM finance.bank_accounts" in source
+    assert "FROM finance.bank_accounts bank_account" in source
+    assert "JOIN finance.accounts ledger_account" in source
+    assert "bank_account.status='active'" in source
+    assert "ledger_account.status='active'" in source
+    assert "ledger_account.allows_bank_reconciliation" in source
+    assert "ledger_account.allows_bank_reconciliation=true" not in source
 
 
 def test_hsn_report_projects_complete_numeric_contract_for_selected_period() -> None:

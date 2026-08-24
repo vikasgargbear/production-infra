@@ -21,7 +21,7 @@ class BankAccountService:
                    bank.org_id,
                    account.code,
                    account.name,
-                   account.name AS account_name,
+                   COALESCE(bank.account_holder_name, account.name) AS account_name,
                    '••••'::text AS account_number,
                    account.account_type,
                    bank.bank_name,
@@ -31,6 +31,7 @@ class BankAccountService:
                    NULL::jsonb AS bank_address,
                    false AS is_default_account,
                    true AS is_payment_account,
+                   account.allows_bank_reconciliation,
                    bank.status='active' AS is_active,
                    bank.currency_code,
                    COALESCE(balance.book_balance, 0) AS balance,
@@ -52,7 +53,6 @@ class BankAccountService:
              WHERE bank.org_id=:org_id
                AND bank.status='active'
                AND account.status='active'
-               AND account.allows_bank_reconciliation=true
              ORDER BY bank.bank_name, account.code, bank.id
         """
 

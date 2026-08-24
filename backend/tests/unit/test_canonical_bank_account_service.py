@@ -45,6 +45,7 @@ class _Database:
             "bank_address": None,
             "is_default_account": False,
             "is_payment_account": True,
+            "allows_bank_reconciliation": False,
             "is_active": True,
             "currency_code": "INR",
             "balance": Decimal("125.50"),
@@ -60,10 +61,14 @@ def test_bank_account_read_uses_canonical_tenant_scoped_tables():
     assert "FROM finance.bank_accounts bank" in database.statement
     assert "JOIN finance.accounts account" in database.statement
     assert "bank.org_id=:org_id" in database.statement
+    assert "bank.status='active'" in database.statement
+    assert "account.status='active'" in database.statement
+    assert "account.allows_bank_reconciliation=true" not in database.statement
     assert "master.org_bank_accounts" not in database.statement
     assert "account_number_ciphertext" not in database.statement
     assert database.params == {"org_id": "org-1"}
     assert rows[0]["account_number"] == "••••"
+    assert rows[0]["allows_bank_reconciliation"] is False
     assert rows[0]["balance"] == Decimal("125.50")
 
 
@@ -74,6 +79,7 @@ def test_bank_account_route_serializes_balance_as_exact_money(monkeypatch):
         "bank_account_id": account_id,
         "org_id": org_id,
         "account_name": "Demo settlement",
+        "allows_bank_reconciliation": False,
         "balance": Decimal("125.50"),
     }])
 
@@ -82,6 +88,7 @@ def test_bank_account_route_serializes_balance_as_exact_money(monkeypatch):
     ))
 
     assert result[0]["id"] == account_id
+    assert result[0]["allows_bank_reconciliation"] is False
     assert result[0]["balance"] == "125.50"
 
 

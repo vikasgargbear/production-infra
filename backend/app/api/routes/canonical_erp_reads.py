@@ -1119,14 +1119,23 @@ def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
           ) license ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
-                         'id', id,
-                         'bank_name', bank_name,
-                         'account_name', account_holder_name,
-                         'ifsc_code', ifsc,
-                         'currency_code', currency_code
-                     ) ORDER BY bank_name, id) AS accounts
-                FROM finance.bank_accounts
-               WHERE org_id=organization.id AND status='active'
+                         'id', bank_account.id,
+                         'bank_name', bank_account.bank_name,
+                         'account_name', COALESCE(
+                             bank_account.account_holder_name, ledger_account.name
+                         ),
+                         'ifsc_code', bank_account.ifsc,
+                         'currency_code', bank_account.currency_code,
+                         'allows_bank_reconciliation',
+                             ledger_account.allows_bank_reconciliation
+                     ) ORDER BY bank_account.bank_name, bank_account.id) AS accounts
+                FROM finance.bank_accounts bank_account
+                JOIN finance.accounts ledger_account
+                  ON ledger_account.org_id=bank_account.org_id
+                 AND ledger_account.id=bank_account.account_id
+               WHERE bank_account.org_id=organization.id
+                 AND bank_account.status='active'
+                 AND ledger_account.status='active'
           ) bank ON true
          WHERE organization.id=:org_id AND organization.status='active'
     """, {"org_id": org_id})
