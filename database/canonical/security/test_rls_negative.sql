@@ -166,6 +166,80 @@ VALUES
         '20000000-0000-7000-8000-000000000002'
     );
 
+-- Payment history is branch authority, not merely organization authority.
+-- Use posted commercial settlements so this proves the exact table boundary
+-- consumed by the canonical history projection.
+INSERT INTO parties.parties (
+    org_id, id, party_kind, legal_name, status,
+    created_by_membership_id, updated_by_membership_id
+) VALUES (
+    '10000000-0000-7000-8000-000000000001',
+    '71000000-0000-7000-8000-000000000001',
+    'organization', 'Payment history party', 'active',
+    '20000000-0000-7000-8000-000000000001',
+    '20000000-0000-7000-8000-000000000001'
+);
+
+INSERT INTO finance.accounts (
+    org_id, id, code, name, account_type, currency_code,
+    allows_bank_reconciliation, status,
+    created_by_membership_id, updated_by_membership_id
+) VALUES (
+    '10000000-0000-7000-8000-000000000001',
+    '72000000-0000-7000-8000-000000000001',
+    'RLSBANK', 'RLS settlement account', 'asset', 'INR', true, 'active',
+    '20000000-0000-7000-8000-000000000001',
+    '20000000-0000-7000-8000-000000000001'
+);
+
+INSERT INTO finance.bank_accounts (
+    org_id, id, account_id, bank_name, account_holder_name,
+    account_number_ciphertext, account_number_hash, ifsc, currency_code, status,
+    created_by_membership_id, updated_by_membership_id
+) VALUES (
+    '10000000-0000-7000-8000-000000000001',
+    '73000000-0000-7000-8000-000000000001',
+    '72000000-0000-7000-8000-000000000001',
+    'RLS Bank', 'RLS Org', decode('01','hex'), digest('rls-account','sha256'),
+    'TEST0000001', 'INR', 'active',
+    '20000000-0000-7000-8000-000000000001',
+    '20000000-0000-7000-8000-000000000001'
+);
+
+INSERT INTO finance.payments (
+    org_id, id, payment_number, payment_date, direction, party_id, branch_id,
+    bank_account_id, settlement_account_id, payment_method, payment_purpose,
+    currency_code, amount, functional_amount, fx_rate, external_reference,
+    status, approved_at, approved_by_membership_id, posted_at,
+    posted_by_membership_id, created_by_membership_id, updated_by_membership_id
+) VALUES
+    (
+        '10000000-0000-7000-8000-000000000001',
+        '74000000-0000-7000-8000-000000000001', 'RLS-RCPT-ALLOWED', DATE '2026-08-25',
+        'receipt', '71000000-0000-7000-8000-000000000001',
+        '40000000-0000-7000-8000-000000000001',
+        '73000000-0000-7000-8000-000000000001',
+        '72000000-0000-7000-8000-000000000001', 'upi',
+        'commercial_settlement', 'INR', 168.00, 168.00, 1.000000, 'RLS-ALLOWED',
+        'posted', transaction_timestamp(), '20000000-0000-7000-8000-000000000001',
+        transaction_timestamp(), '20000000-0000-7000-8000-000000000001',
+        '20000000-0000-7000-8000-000000000001',
+        '20000000-0000-7000-8000-000000000001'
+    ),
+    (
+        '10000000-0000-7000-8000-000000000001',
+        '74000000-0000-7000-8000-000000000002', 'RLS-PAY-DENIED', DATE '2026-08-25',
+        'disbursement', '71000000-0000-7000-8000-000000000001',
+        '40000000-0000-7000-8000-000000000002',
+        '73000000-0000-7000-8000-000000000001',
+        '72000000-0000-7000-8000-000000000001', 'upi',
+        'commercial_settlement', 'INR', 168.00, 168.00, 1.000000, 'RLS-DENIED',
+        'posted', transaction_timestamp(), '20000000-0000-7000-8000-000000000001',
+        transaction_timestamp(), '20000000-0000-7000-8000-000000000001',
+        '20000000-0000-7000-8000-000000000001',
+        '20000000-0000-7000-8000-000000000001'
+    );
+
 RESET ROLE;
 SET LOCAL ROLE "erp_runtime";
 
@@ -245,6 +319,19 @@ BEGIN
     END IF;
     IF (SELECT count(*) FROM core.permissions WHERE code = 'core.settings.manage') <> 1 THEN
         RAISE EXCEPTION 'global reference SELECT was not granted';
+    END IF;
+    IF (SELECT count(*) FROM finance.payments) <> 1
+       OR NOT EXISTS (
+           SELECT 1 FROM finance.payments
+            WHERE id='74000000-0000-7000-8000-000000000001'
+              AND branch_id='40000000-0000-7000-8000-000000000001'
+              AND status='posted' AND payment_purpose='commercial_settlement'
+       )
+       OR EXISTS (
+           SELECT 1 FROM finance.payments
+            WHERE id='74000000-0000-7000-8000-000000000002'
+       ) THEN
+        RAISE EXCEPTION 'restricted runtime payment history crossed its branch claim';
     END IF;
 END;
 $test$;
