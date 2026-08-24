@@ -2,9 +2,8 @@
 Payment Allocation API
 REFACTORED: Uses AllocationService for database operations
 """
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from decimal import Decimal
-from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 import logging
@@ -17,7 +16,7 @@ from .....core.idempotency import (
     IdempotencyStateError,
     require_dedicated_payment_idempotency_store,
 )
-from .....core.utils.constants import InvoiceStatus, PaymentRecordStatus, PartyType, InvoicePaymentStatus
+from .....core.utils.constants import PaymentRecordStatus, PartyType
 from ....services.finance.allocation.service import AllocationService
 
 logger = logging.getLogger(__name__)
@@ -202,36 +201,6 @@ async def get_payment_allocations(
         logger.error(f"Error fetching allocations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/invoice/{invoice_id}/payments")
-@with_tenant_context
-async def get_invoice_payments(
-    invoice_id: Union[int, UUID],
-    _: dict = Depends(PermissionChecker("finance", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Get all payments allocated to an invoice"""
-    try:
-        org_id = str(context.org_id)
-        payments = AllocationService.get_invoice_payments(db, org_id, invoice_id)
-        invoice = AllocationService.get_invoice_summary(db, org_id, invoice_id)
-        
-        return {
-            "invoice": {"invoice_id": invoice_id, "invoice_number": invoice["invoice_number"] if invoice else None,
-                       "total_amount": money_json(invoice["final_amount"]) if invoice else "0.00",
-                       "allocated_amount": money_json(invoice["allocated_amount"]) if invoice else "0.00",
-                       "due_amount": money_json(invoice["final_amount"] - invoice["allocated_amount"]) if invoice else "0.00",
-                       "payment_status": invoice["payment_status"] if invoice else None},
-            "payments": [{"allocation_id": p["allocation_id"], "payment_id": p["payment_id"],
-                         "payment_number": p["payment_number"], "payment_date": p["payment_date"].isoformat() if p.get("payment_date") else None,
-                         "payment_amount": money_json(p["payment_amount"]), "allocated_amount": money_json(p["allocated_amount"]),
-                         "allocation_date": p["allocation_date"].isoformat() if p.get("allocation_date") else None,
-                         "allocation_type": "manual"} for p in payments]
-        }
-    except Exception as e:
-        logger.error(f"Error fetching invoice payments: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.delete("/allocation/{allocation_id}")
 @with_tenant_context
 async def delete_allocation(
@@ -288,30 +257,4 @@ async def get_unallocated_payments(
         }
     except Exception as e:
         logger.error(f"Error fetching unallocated payments: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/unpaid-invoices")
-@with_tenant_context
-async def get_unpaid_invoices(
-    customer_id: Optional[Union[int, UUID]] = None,
-    _: dict = Depends(PermissionChecker("finance", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Get invoices with outstanding amounts"""
-    try:
-        invoices = AllocationService.get_unpaid_invoices(
-            db, str(context.org_id), customer_id,
-            InvoiceStatus.CANCELLED.value, InvoicePaymentStatus.PAID.value
-        )
-        return {
-            "invoices": [{"invoice_id": i["invoice_id"], "open_item_id": i.get("open_item_id"),
-                         "invoice_number": i["invoice_number"],
-                         "invoice_date": i["invoice_date"].isoformat() if i.get("invoice_date") else None,
-                         "customer_id": i["customer_id"], "customer_name": i["customer_name"],
-                         "total_amount": money_json(i["final_amount"]), "allocated": money_json(i["allocated_amount"]),
-                         "due": money_json(i["due_amount"]), "payment_status": i["payment_status"]} for i in invoices]
-        }
-    except Exception as e:
-        logger.error(f"Error fetching unpaid invoices: {e}")
         raise HTTPException(status_code=500, detail=str(e))

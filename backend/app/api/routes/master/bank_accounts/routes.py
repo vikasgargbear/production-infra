@@ -11,6 +11,7 @@ import json
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
+from .....core.money import money_json
 
 # Service layer
 from ....services.master.bank_account_service import BankAccountService
@@ -46,7 +47,7 @@ async def get_bank_accounts(
                 "account_name": account.get("account_name"),
                 "code": account.get("code"),
                 "name": account.get("name"),
-                "balance": float(account.get("balance") or 0),
+                "balance": money_json(account.get("balance") or 0),
                 "account_number": account.get("account_number"),
                 "account_type": account.get("account_type"),
                 "bank_name": account.get("bank_name"),

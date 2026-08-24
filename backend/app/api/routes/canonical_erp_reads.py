@@ -9,6 +9,7 @@ only a non-transactional draft.
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
@@ -20,7 +21,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
+from ...core.money import money_json
 from ...core.security.permissions import PermissionChecker
+from ..schemas.money import MoneyJSON
 from ..schemas.master.customer import CanonicalCustomerCreate
 from ..schemas.master.supplier import CanonicalSupplierCreate
 
@@ -2158,6 +2161,48 @@ def chart_of_accounts(user: dict = FINANCE_USER, db: Session = Depends(get_db)):
     """, {"org_id": org_id})
 
 
+class CanonicalUnpaidInvoice(BaseModel):
+    invoice_id: UUID
+    open_item_id: UUID
+    invoice_number: str
+    invoice_date: date
+    customer_id: UUID
+    customer_name: str
+    total_amount: MoneyJSON
+    allocated: MoneyJSON
+    due: MoneyJSON
+    payment_status: str
+
+
+class CanonicalUnpaidInvoicesResponse(BaseModel):
+    invoices: list[CanonicalUnpaidInvoice]
+
+
+class CanonicalInvoiceAllocationSummary(BaseModel):
+    invoice_id: UUID
+    invoice_number: str
+    total_amount: MoneyJSON
+    allocated_amount: MoneyJSON
+    due_amount: MoneyJSON
+    payment_status: str
+
+
+class CanonicalInvoicePayment(BaseModel):
+    allocation_id: UUID
+    payment_id: UUID
+    payment_number: str
+    payment_date: date
+    payment_amount: MoneyJSON
+    allocated_amount: MoneyJSON
+    allocation_date: date
+    allocation_type: str = "manual"
+
+
+class CanonicalInvoicePaymentsResponse(BaseModel):
+    invoice: CanonicalInvoiceAllocationSummary
+    payments: list[CanonicalInvoicePayment]
+
+
 def _canonical_receivable_rows(
     db: Session,
     org_id: UUID,
@@ -2294,6 +2339,152 @@ def _canonical_receivable_rows(
         "organization_scope": organization_scope,
         "branch_ids": branch_ids,
     })
+
+
+@router.get(
+    "/payment-allocation/unpaid-invoices",
+    response_model=CanonicalUnpaidInvoicesResponse,
+)
+def canonical_unpaid_invoices(
+    customer_id: Optional[UUID] = None,
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+):
+    """Return branch-visible canonical receivables for payment selection."""
+    org_id = _activate(db, user)
+    parties = _canonical_receivable_rows(db, org_id, user)
+    invoices = []
+    for party in parties:
+        if customer_id is not None and party.get("customer_id") != customer_id:
+            continue
+        for invoice in party.get("invoices") or []:
+            invoices.append({
+                "invoice_id": invoice.get("invoice_id"),
+                "open_item_id": invoice.get("open_item_id"),
+                "invoice_number": invoice.get("invoice_number"),
+                "invoice_date": invoice.get("invoice_date"),
+                "customer_id": party.get("customer_id"),
+                "customer_name": party.get("customer_name"),
+                "total_amount": money_json(invoice.get("original_amount")),
+                "allocated": money_json(invoice.get("paid_amount")),
+                "due": money_json(invoice.get("current_outstanding")),
+                "payment_status": invoice.get("status"),
+            })
+    invoices.sort(key=lambda row: (str(row.get("invoice_date") or ""), str(row.get("invoice_id"))))
+    return {"invoices": invoices}
+
+
+@router.get(
+    "/payment-allocation/invoice/{invoice_id}/payments",
+    response_model=CanonicalInvoicePaymentsResponse,
+)
+def canonical_invoice_payments(
+    invoice_id: UUID,
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+):
+    """Return branch-visible posted allocations for a canonical sales invoice."""
+    org_id = _activate(db, user)
+    branch_ids = [UUID(str(value)) for value in (user.get("branch_ids") or [])]
+    organization_scope = (
+        user.get("is_admin") is True
+        or str(user.get("data_access_level") or "").lower() == "organization"
+        or str(user.get("branch_scope") or "").lower() in {"all", "organization"}
+    )
+    params = {
+        "org_id": org_id,
+        "invoice_id": invoice_id,
+        "organization_scope": organization_scope,
+        "branch_ids": branch_ids,
+    }
+    summaries = _rows(db, """
+        WITH effective_allocations AS (
+            SELECT allocation.org_id, allocation.open_item_id,
+                   COALESCE(SUM(allocation.amount), 0) AS allocated_amount
+              FROM finance.allocations allocation
+             WHERE allocation.org_id=:org_id
+               AND allocation.status='posted'
+               AND allocation.reversal_of_allocation_id IS NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM finance.allocations reversal
+                    WHERE reversal.org_id=allocation.org_id
+                      AND reversal.reversal_of_allocation_id=allocation.id
+               )
+             GROUP BY allocation.org_id, allocation.open_item_id
+        )
+        SELECT invoice.id AS invoice_id, invoice.invoice_number,
+               item.principal_amount AS total_amount,
+               COALESCE(applied.allocated_amount, 0) AS allocated_amount,
+               GREATEST(item.principal_amount-COALESCE(applied.allocated_amount,0),0)
+                 AS due_amount,
+               CASE
+                 WHEN COALESCE(applied.allocated_amount,0)<=0 THEN 'pending'
+                 WHEN applied.allocated_amount<item.principal_amount THEN 'partial'
+                 ELSE 'paid'
+               END AS payment_status
+          FROM sales.invoices invoice
+          JOIN finance.accounting_events event
+            ON event.org_id=invoice.org_id AND event.sales_invoice_id=invoice.id
+          JOIN finance.open_items item
+            ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+           AND item.item_side='receivable' AND item.status<>'reversed'
+          LEFT JOIN effective_allocations applied
+            ON applied.org_id=item.org_id AND applied.open_item_id=item.id
+         WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
+           AND invoice.status='posted'
+           AND (:organization_scope OR invoice.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+         ORDER BY item.created_at, item.id LIMIT 1
+    """, params)
+    if not summaries:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    summary = summaries[0]
+    payment_rows = _rows(db, """
+        SELECT allocation.id AS allocation_id,
+               payment.id AS payment_id,
+               payment.payment_number,
+               payment.payment_date,
+               payment.amount AS payment_amount,
+               allocation.amount AS allocated_amount,
+               allocation.allocation_date
+          FROM sales.invoices invoice
+          JOIN finance.accounting_events event
+            ON event.org_id=invoice.org_id AND event.sales_invoice_id=invoice.id
+          JOIN finance.open_items item
+            ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+           AND item.item_side='receivable'
+          JOIN finance.allocations allocation
+            ON allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+           AND allocation.status='posted'
+           AND allocation.reversal_of_allocation_id IS NULL
+          JOIN finance.payments payment
+            ON payment.org_id=allocation.org_id AND payment.id=allocation.payment_id
+           AND payment.status='posted'
+         WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
+           AND invoice.status='posted'
+           AND (:organization_scope OR invoice.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+           AND NOT EXISTS (
+               SELECT 1 FROM finance.allocations reversal
+                WHERE reversal.org_id=allocation.org_id
+                  AND reversal.reversal_of_allocation_id=allocation.id
+           )
+         ORDER BY allocation.allocation_date DESC, allocation.id
+    """, params)
+    return {
+        "invoice": {
+            "invoice_id": summary["invoice_id"],
+            "invoice_number": summary["invoice_number"],
+            "total_amount": money_json(summary["total_amount"]),
+            "allocated_amount": money_json(summary["allocated_amount"]),
+            "due_amount": money_json(summary["due_amount"]),
+            "payment_status": summary["payment_status"],
+        },
+        "payments": [{
+            **row,
+            "payment_amount": money_json(row["payment_amount"]),
+            "allocated_amount": money_json(row["allocated_amount"]),
+            "allocation_type": "manual",
+        } for row in payment_rows],
+    }
 
 
 def _amount(rows: list[dict], key: str):

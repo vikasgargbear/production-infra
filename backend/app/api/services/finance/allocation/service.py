@@ -2,11 +2,10 @@
 Payment Allocation Service
 Handles all database operations for payment allocations
 """
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from decimal import Decimal
-from uuid import UUID
 import logging
 
 logger = logging.getLogger(__name__)
@@ -189,7 +188,7 @@ class AllocationService:
         result = db.execute(text(
             "SELECT * FROM financial.auto_allocate_payment(:payment_id, :method)"
         ), {"payment_id": payment_id, "method": method})
-        return [{"invoice_id": row.invoice_id, "allocated_amount": float(row.allocated_amount)} for row in result]
+        return [{"invoice_id": row.invoice_id, "allocated_amount": row.allocated_amount} for row in result]
     
     @staticmethod
     def get_payment_allocations(db: Session, org_id: str, payment_id: int) -> List[Dict[str, Any]]:
@@ -207,103 +206,6 @@ class AllocationService:
             ORDER BY allocation.created_at DESC
         """), {"payment_id": payment_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
-    
-    @staticmethod
-    def get_invoice_payments(db: Session, org_id: str, invoice_id: Union[int, UUID]) -> List[Dict[str, Any]]:
-        """Get payments allocated to an invoice."""
-        if isinstance(invoice_id, UUID):
-            result = db.execute(text("""
-                SELECT allocation.id AS allocation_id,
-                       payment.id AS payment_id,
-                       payment.payment_number,
-                       payment.payment_date,
-                       payment.amount AS payment_amount,
-                       allocation.amount AS allocated_amount,
-                       allocation.created_at AS allocation_date
-                  FROM finance.accounting_events event
-                  JOIN finance.open_items item
-                    ON item.org_id=event.org_id
-                   AND item.accounting_event_id=event.id
-                   AND item.item_side='receivable'
-                  JOIN finance.allocations allocation
-                    ON allocation.org_id=item.org_id
-                   AND allocation.open_item_id=item.id
-                   AND allocation.status='posted'
-                   AND allocation.reversal_of_allocation_id IS NULL
-                  JOIN finance.payments payment
-                    ON payment.org_id=allocation.org_id
-                   AND payment.id=allocation.payment_id
-                   AND payment.status='posted'
-                 WHERE event.org_id=:org_id
-                   AND event.sales_invoice_id=:invoice_id
-                   AND NOT EXISTS (
-                       SELECT 1 FROM finance.allocations reversal
-                        WHERE reversal.org_id=allocation.org_id
-                          AND reversal.reversal_of_allocation_id=allocation.id
-                   )
-                 ORDER BY allocation.created_at DESC, allocation.id
-            """), {"invoice_id": invoice_id, "org_id": org_id})
-            return [dict(row._mapping) for row in result]
-        result = db.execute(text("""
-            SELECT pa.allocation_id, pa.payment_id, p.payment_number, p.payment_date,
-                   p.payment_amount, pa.allocated_amount, pa.created_at as allocation_date
-            FROM financial.allocations pa
-            JOIN financial.payments p ON pa.payment_id = p.payment_id
-            JOIN sales.invoices invoice ON invoice.invoice_id = pa.reference_id
-            WHERE UPPER(pa.reference_type) = 'INVOICE' AND pa.reference_id = :invoice_id
-            AND pa.allocation_status = 'active'
-            AND p.org_id = :org_id AND invoice.org_id = :org_id
-            ORDER BY pa.created_at DESC
-        """), {"invoice_id": invoice_id, "org_id": org_id})
-        return [dict(row._mapping) for row in result]
-    
-    @staticmethod
-    def get_invoice_summary(db: Session, org_id: str, invoice_id: Union[int, UUID]) -> Optional[Dict[str, Any]]:
-        """Get invoice summary for allocation view."""
-        if isinstance(invoice_id, UUID):
-            result = db.execute(text("""
-                SELECT invoice.invoice_number,
-                       invoice.grand_total AS final_amount,
-                       COALESCE(applied.allocated_amount, 0) AS allocated_amount,
-                       CASE
-                         WHEN COALESCE(applied.allocated_amount, 0) <= 0 THEN 'pending'
-                         WHEN applied.allocated_amount < invoice.grand_total THEN 'partial'
-                         ELSE 'paid'
-                       END AS payment_status
-                  FROM sales.invoices invoice
-                  LEFT JOIN LATERAL (
-                      SELECT COALESCE(SUM(allocation.amount), 0) AS allocated_amount
-                        FROM finance.accounting_events event
-                        JOIN finance.open_items item
-                          ON item.org_id=event.org_id
-                         AND item.accounting_event_id=event.id
-                         AND item.item_side='receivable'
-                        JOIN finance.allocations allocation
-                          ON allocation.org_id=item.org_id
-                         AND allocation.open_item_id=item.id
-                         AND allocation.status='posted'
-                         AND allocation.reversal_of_allocation_id IS NULL
-                       WHERE event.org_id=invoice.org_id
-                         AND event.sales_invoice_id=invoice.id
-                         AND NOT EXISTS (
-                             SELECT 1 FROM finance.allocations reversal
-                              WHERE reversal.org_id=allocation.org_id
-                                AND reversal.reversal_of_allocation_id=allocation.id
-                         )
-                  ) applied ON true
-                 WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
-            """), {"invoice_id": invoice_id, "org_id": org_id})
-            row = result.first()
-            return dict(row._mapping) if row else None
-        result = db.execute(text("""
-            SELECT invoice_number, final_amount, paid_amount AS allocated_amount,
-                   payment_status
-            FROM sales.invoices
-            WHERE invoice_id = :invoice_id AND org_id = :org_id
-        """), {"invoice_id": invoice_id, "org_id": org_id})
-        row = result.first()
-        return dict(row._mapping) if row else None
-    
     @staticmethod
     def get_allocation_with_org(db: Session, org_id: str, allocation_id: int) -> Optional[Dict[str, Any]]:
         """Get allocation with org verification."""
@@ -366,84 +268,5 @@ class AllocationService:
             query += " AND party_id = :party_id"
             params["party_id"] = party_id
         query += " ORDER BY payment_date DESC"
-        result = db.execute(text(query), params)
-        return [dict(row._mapping) for row in result]
-    
-    @staticmethod
-    def get_unpaid_invoices(
-        db: Session, org_id: str, customer_id: Optional[Union[int, UUID]] = None,
-        cancelled_status: str = "cancelled", paid_status: str = "paid"
-    ) -> List[Dict[str, Any]]:
-        """Get invoices with outstanding amounts."""
-        if isinstance(customer_id, UUID):
-            customer_filter = " AND account.id = :customer_id"
-            params: Dict[str, Any] = {"org_id": org_id, "customer_id": customer_id}
-            result = db.execute(text(f"""
-                WITH effective_allocations AS (
-                    SELECT allocation.org_id, allocation.open_item_id,
-                           COALESCE(SUM(allocation.amount), 0) AS allocated_amount
-                      FROM finance.allocations allocation
-                     WHERE allocation.org_id=:org_id
-                       AND allocation.status='posted'
-                       AND allocation.reversal_of_allocation_id IS NULL
-                       AND NOT EXISTS (
-                           SELECT 1 FROM finance.allocations reversal
-                            WHERE reversal.org_id=allocation.org_id
-                              AND reversal.reversal_of_allocation_id=allocation.id
-                       )
-                     GROUP BY allocation.org_id, allocation.open_item_id
-                )
-                SELECT invoice.id AS invoice_id, item.id AS open_item_id,
-                       invoice.invoice_number,
-                       invoice.invoice_date,
-                       account.id AS customer_id,
-                       party.legal_name AS customer_name,
-                       invoice.grand_total AS final_amount,
-                       COALESCE(applied.allocated_amount, 0) AS allocated_amount,
-                       GREATEST(item.principal_amount
-                                - COALESCE(applied.allocated_amount, 0), 0) AS due_amount,
-                       CASE
-                         WHEN COALESCE(applied.allocated_amount, 0) <= 0 THEN 'pending'
-                         WHEN applied.allocated_amount < item.principal_amount THEN 'partial'
-                         ELSE 'paid'
-                       END AS payment_status
-                  FROM sales.invoices invoice
-                  JOIN parties.customer_accounts account
-                    ON account.org_id=invoice.org_id
-                   AND account.id=invoice.customer_account_id
-                  JOIN parties.parties party
-                    ON party.org_id=account.org_id AND party.id=account.party_id
-                  JOIN finance.accounting_events event
-                    ON event.org_id=invoice.org_id
-                   AND event.sales_invoice_id=invoice.id
-                  JOIN finance.open_items item
-                    ON item.org_id=event.org_id
-                   AND item.accounting_event_id=event.id
-                   AND item.item_side='receivable'
-                   AND item.status='open'
-                  LEFT JOIN effective_allocations applied
-                    ON applied.org_id=item.org_id AND applied.open_item_id=item.id
-                 WHERE invoice.org_id=:org_id
-                   AND invoice.status NOT IN ('cancelled', 'reversed')
-                   AND item.reversed_at IS NULL
-                   AND item.principal_amount-COALESCE(applied.allocated_amount, 0)>0
-                   {customer_filter}
-                 ORDER BY invoice.invoice_date ASC, invoice.id
-            """), params)
-            return [dict(row._mapping) for row in result]
-        query = """
-            SELECT invoice_id, invoice_number, invoice_date, customer_id, customer_name,
-                   final_amount, paid_amount AS allocated_amount,
-                   final_amount - paid_amount as due_amount,
-                   payment_status
-            FROM sales.invoices
-            WHERE org_id = :org_id
-              AND invoice_status != :cancelled_status AND payment_status != :paid_status
-        """
-        params = {"org_id": org_id, "cancelled_status": cancelled_status, "paid_status": paid_status}
-        if customer_id:
-            query += " AND customer_id = :customer_id"
-            params["customer_id"] = customer_id
-        query += " ORDER BY invoice_date ASC"
         result = db.execute(text(query), params)
         return [dict(row._mapping) for row in result]
