@@ -16,7 +16,8 @@ export type CanonicalOperationKey =
   | 'finance.customer_receipt.prepare'
   | 'finance.supplier_payment.prepare'
   | 'finance.supplier_advance.prepare'
-  | 'inventory.adjustment.prepare';
+  | 'inventory.adjustment.prepare'
+  | 'inventory.transfer.prepare';
 
 export interface CanonicalCommandPreview {
   command_request_id: string;

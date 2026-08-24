@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -60,6 +61,11 @@ const ENDPOINTS = {
     BASE: '/inventory/stock',
     CURRENT: '/inventory/stock/current',
     ADJUSTMENTS: '/stock-adjustments/',
+    /**
+     * Canonical movement reads — stock_ledger_entries, UUID-keyed.
+     * The legacy /stock-movements/ path is a write-only router; reads must
+     * go through /inventory/movements (canonical_erp_reads).
+     */
     MOVEMENTS: '/inventory/movements',
     TRANSFERS: '/stock-movements/transfer',
     LOW_STOCK: '/stock-movements/low-stock',
@@ -87,15 +93,13 @@ export const stockApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/batch/${batchId}`);
     },
 
-    // Adjust stock
-    adjust: (data: StockAdjustmentData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.ADJUSTMENTS, data);
-    },
+    // Adjust stock — route through canonical command; do not hit legacy endpoint
+    adjust: (_data: StockAdjustmentData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Stock adjustment'),
 
-    // Transfer stock
-    transfer: (data: StockTransferData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.TRANSFERS, data);
-    },
+    // Transfer stock — route through canonical command; do not hit legacy endpoint
+    transfer: (_data: StockTransferData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Stock transfer'),
 
     // Get low stock items
     getLowStock: (params: StockParams = {}): Promise<AxiosResponse> => {
@@ -117,12 +121,12 @@ export const stockApi = {
         return apiHelpers.get(ENDPOINTS.ADJUSTMENTS, { params });
     },
 
-    // Get transfer history
+    // Get transfer history (read from canonical movements endpoint)
     getTransfers: (params: StockParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.TRANSFERS, { params });
+        return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params: { ...params, movement_type: 'transfer' } });
     },
 
-    // Get stock movements (alias for adjustments history)
+    // Get stock movements (canonical stock_ledger_entries reads)
     getMovements: (params: StockParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params });
     },
@@ -137,8 +141,7 @@ export const stockApi = {
         return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params: { ...params, product_id: productId } });
     },
 
-    // Create stock adjustment (proper method name for flow components)
-    createAdjustment: (data: StockAdjustmentData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.ADJUSTMENTS, data);
-    }
+    // Create stock adjustment — route through canonical command; do not hit legacy endpoint
+    createAdjustment: (_data: StockAdjustmentData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Stock adjustment'),
 };

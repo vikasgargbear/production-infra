@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, AlertCircle, TrendingUp, TrendingDown, Settings,
-  Plus, X, Trash2, Upload, Download, Loader2, RefreshCw
+  Plus, X, Trash2, Upload, Download, Loader2, RefreshCw, CheckCircle
 } from 'lucide-react';
 import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
   NotesSection, useToast
 } from '../../global';
 import { stockApi } from '../../../services/api';
+import {
+  prepareCanonicalAction,
+  approveAndExecuteCanonicalAction,
+  canonicalExecutionCompleted,
+} from '../../../services/api/canonicalOperatorActions';
+import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../../constants/stockAdjustment';
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
@@ -44,6 +50,13 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [showBatchSelector, setShowBatchSelector] = useState(false);
+
+  // Canonical command state: prepare → confirm modal → execute
+  const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [committedRef, setCommittedRef] = useState<string | null>(null);
 
   // Generate adjustment number
   const generateAdjustmentNumber = () => {
@@ -361,6 +374,62 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     }
   };
 
+  // Step 1: Prepare the canonical command — does NOT mutate any data yet.
+  const handlePrepare = async () => {
+    if (!validateAdjustment()) return;
+    setIsPreparing(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        adjustment_type: adjustmentData.adjustment_type,
+        reason: adjustmentData.reason,
+        adjustment_date: adjustmentData.adjustment_date,
+        notes: adjustmentData.notes || '',
+        idempotency_key: `erp-web-inventory-adjustment-prepare:${adjustmentData.adjustment_no}`,
+        items: adjustmentData.items.map(item => ({
+          product_id: String(item.product_id),
+          batch_id: String(item.batch_id),
+          quantity: item.adjustment_quantity,
+        })),
+      };
+      const prepared = await prepareCanonicalAction('inventory.adjustment.prepare', payload);
+      setPreparedPreview(prepared.data);
+      setShowConfirmModal(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Failed to prepare adjustment. No data was changed.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  // Step 2: User confirmed — approve + execute the prepared command.
+  const handleCommit = async () => {
+    if (!preparedPreview) return;
+    setIsCommitting(true);
+    setError(null);
+    try {
+      const { executed } = await approveAndExecuteCanonicalAction('inventory.adjustment.prepare', preparedPreview);
+      if (canonicalExecutionCompleted(executed.data)) {
+        const ref = executed.data.resource_id
+          ? String(executed.data.resource_id)
+          : adjustmentData.adjustment_no;
+        setCommittedRef(ref);
+        setShowConfirmModal(false);
+        toast.success(`Stock adjustment ${ref} posted successfully`);
+      } else {
+        throw new Error(`Unexpected execution status: ${executed.data.status}`);
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Adjustment execution failed. Check server status before retrying.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
   // Create content for step 1
   const createContent = (
     <div className="space-y-6">
@@ -581,7 +650,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   setShowBulkUpload(!showBulkUpload);
                   setShowProductSearch(false);
                 }}
-                className="flex items-center space-x-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
+                className="flex items-center space-x-2 px-3 py-1.5 min-h-[44px] border border-gray-300 bg-white text-gray-700 text-sm rounded-lg hover:bg-gray-50"
               >
                 <Upload className="w-4 h-4" />
                 <span>Bulk Upload</span>
@@ -747,19 +816,80 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
   // Review content for step 2
   const reviewContent = (
     <div className="space-y-6">
-      {/* Warning Message */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">Review only</p>
-            <p className="text-sm text-amber-700 mt-1">
-              Submission is unavailable until the canonical online stock-adjustment action is connected.
-              No inventory request was sent and nothing was changed.
-            </p>
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Could not prepare adjustment</p>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Success State */}
+      {committedRef && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Adjustment posted</p>
+              <p className="text-sm text-green-700 mt-1">
+                Stock adjustment <strong>{committedRef}</strong> has been committed to inventory.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Canonical Confirm Modal */}
+      {showConfirmModal && preparedPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => !isCommitting && setShowConfirmModal(false)} />
+          <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-lg p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Confirm Stock Adjustment</h3>
+            </div>
+            <p className="text-sm text-gray-700 mb-2">
+              You are about to post a <strong>{adjustmentData.adjustment_type}</strong> adjustment
+              for <strong>{adjustmentData.items.length}</strong> product(s) on{' '}
+              <strong>{new Date(adjustmentData.adjustment_date).toLocaleDateString()}</strong>.
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              Command ID: <span className="font-mono">{preparedPreview.command_request_id}</span>
+            </p>
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-6">
+              This action will permanently update stock levels. It cannot be undone from the UI.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isCommitting}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCommit}
+                disabled={isCommitting}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {isCommitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Posting...</span>
+                  </>
+                ) : (
+                  <span>Post Adjustment</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Card */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -863,6 +993,19 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       reviewContent={reviewContent}
       onClose={onClose}
       canProceedToReview={isAdjustmentValid}
+      keyboardShortcuts={{
+        1: [
+          { key: 'Ctrl+A', action: 'Add Product' },
+          { key: 'Ctrl+U', action: 'Bulk Upload' },
+          { key: 'Esc', action: 'Close' }
+        ],
+        2: [
+          { key: 'Esc', action: 'Back' }
+        ]
+      }}
+      onSave={committedRef ? undefined : handlePrepare}
+      isSaving={isPreparing || isCommitting}
+      saveLabel={committedRef ? 'Adjustment Posted' : 'Post Adjustment'}
       footerTotals={{ itemCount: adjustmentData.items.length }}
       additionalActions={[
         {

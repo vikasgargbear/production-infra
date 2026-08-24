@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ArrowRightLeft, Package, MapPin, AlertCircle,
-  X, ArrowRight
+  ArrowRightLeft, Package, MapPin, AlertCircle, CheckCircle,
+  X, ArrowRight, Loader2
 } from 'lucide-react';
 import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
   NotesSection, useToast
 } from '../../global';
 import { branchesApi, settingsApi } from '../../../services/api';
+import {
+  prepareCanonicalAction,
+  approveAndExecuteCanonicalAction,
+  canonicalExecutionCompleted,
+} from '../../../services/api/canonicalOperatorActions';
+import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import { canReviewStockTransfer } from './utils/canReviewStockTransfer';
 
 const StockTransfer = ({ open = true, onClose }) => {
@@ -30,6 +36,14 @@ const StockTransfer = ({ open = true, onClose }) => {
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showBatchSelector, setShowBatchSelector] = useState(false);
+
+  // Canonical command state: prepare → confirm modal → execute
+  const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [committedRef, setCommittedRef] = useState<string | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
 
   // Load storage locations
   useEffect(() => {
@@ -160,6 +174,62 @@ const StockTransfer = ({ open = true, onClose }) => {
     }
     return true;
   }, [transferData, toast]);
+
+  // Step 1: Prepare the canonical command — does NOT mutate data yet.
+  const handlePrepare = async () => {
+    if (!validate()) return;
+    setIsPreparing(true);
+    setTransferError(null);
+    try {
+      const idempotencyKey = `erp-web-inventory-transfer-prepare:${transferData.movement_date}-${transferData.source_location}-${transferData.destination_location}-${Date.now()}`;
+      const payload: Record<string, unknown> = {
+        movement_date: transferData.movement_date,
+        source_branch_id: String(transferData.source_location),
+        destination_branch_id: String(transferData.destination_location),
+        reason: transferData.reason,
+        notes: transferData.notes || '',
+        idempotency_key: idempotencyKey,
+        items: transferData.items.map(item => ({
+          product_id: String(item.product_id),
+          batch_id: String(item.batch_id),
+          quantity: item.transfer_quantity,
+        })),
+      };
+      const prepared = await prepareCanonicalAction('inventory.transfer.prepare', payload);
+      setPreparedPreview(prepared.data);
+      setShowConfirmModal(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Failed to prepare transfer. No data was changed.';
+      setTransferError(msg);
+      toast.error(msg);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  // Step 2: User confirmed — approve + execute the prepared command.
+  const handleCommit = async () => {
+    if (!preparedPreview) return;
+    setIsCommitting(true);
+    setTransferError(null);
+    try {
+      const { executed } = await approveAndExecuteCanonicalAction('inventory.transfer.prepare', preparedPreview);
+      if (canonicalExecutionCompleted(executed.data)) {
+        const ref = executed.data.resource_id ? String(executed.data.resource_id) : `TRF-${Date.now()}`;
+        setCommittedRef(ref);
+        setShowConfirmModal(false);
+        toast.success(`Stock transfer ${ref} posted successfully`);
+      } else {
+        throw new Error(`Unexpected execution status: ${executed.data.status}`);
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Transfer execution failed. Check server status before retrying.';
+      setTransferError(msg);
+      toast.error(msg);
+    } finally {
+      setIsCommitting(false);
+    }
+  };
 
   const locationOptions = [
     { value: '', label: 'Select location...' },
@@ -428,18 +498,83 @@ const StockTransfer = ({ open = true, onClose }) => {
   // Step 2: Review content
   const reviewContent = (
     <div className="space-y-6">
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">Review only</p>
-            <p className="text-sm text-amber-700 mt-1">
-              Submission is unavailable until the canonical online stock-transfer action is connected.
-              No inventory request was sent and nothing was changed.
-            </p>
+      {/* Error State */}
+      {transferError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Could not prepare transfer</p>
+              <p className="text-sm text-red-700 mt-1">{transferError}</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Success State */}
+      {committedRef && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Transfer posted</p>
+              <p className="text-sm text-green-700 mt-1">
+                Stock transfer <strong>{committedRef}</strong> has been committed to inventory.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Canonical Confirm Modal */}
+      {showConfirmModal && preparedPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => !isCommitting && setShowConfirmModal(false)} />
+          <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-lg p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Confirm Stock Transfer</h3>
+            </div>
+            <p className="text-sm text-gray-700 mb-2">
+              You are about to transfer <strong>{transferData.items.length}</strong> product(s)
+              from{' '}
+              <strong>{locations.find(l => (l.branch_id || l.location_id) === transferData.source_location)?.branch_name || 'source'}</strong>
+              {' '}to{' '}
+              <strong>{locations.find(l => (l.branch_id || l.location_id) === transferData.destination_location)?.branch_name || 'destination'}</strong>
+              {' '}on <strong>{new Date(transferData.movement_date).toLocaleDateString()}</strong>.
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              Command ID: <span className="font-mono">{preparedPreview.command_request_id}</span>
+            </p>
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-6">
+              This action will permanently move stock between locations. It cannot be undone from the UI.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isCommitting}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCommit}
+                disabled={isCommitting}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {isCommitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Posting...</span>
+                  </>
+                ) : (
+                  <span>Post Transfer</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Transfer Summary</h3>
@@ -532,6 +667,9 @@ const StockTransfer = ({ open = true, onClose }) => {
       createContent={createContent}
       reviewContent={reviewContent}
       canProceedToReview={() => canReviewStockTransfer(transferData)}
+      onSave={committedRef ? undefined : handlePrepare}
+      isSaving={isPreparing || isCommitting}
+      saveLabel={committedRef ? 'Transfer Posted' : 'Post Transfer'}
       onClose={onClose}
     />
   );
