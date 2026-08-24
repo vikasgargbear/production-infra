@@ -125,6 +125,7 @@ function EntitySearchInner<T>(
     const searchInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const searchRequestRef = useRef(0);
 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
@@ -142,24 +143,24 @@ function EntitySearchInner<T>(
 
     // Debounced search - only recreate when debounceMs or minLength changes
     const performSearch = useMemo(
-        () => debounce(async (query: string) => {
+        () => debounce(async (query: string, requestId: number) => {
             if (!query || query.length < minLength) {
-                setSearchResults([]);
-                setHighlightedIndex(-1);
                 return;
             }
 
             setLoading(true);
             try {
                 const results = await searchFnRef.current(query);
+                if (requestId !== searchRequestRef.current) return;
                 setSearchResults(results || []);
                 setHighlightedIndex(results?.length > 0 ? 0 : -1);
             } catch (error) {
+                if (requestId !== searchRequestRef.current) return;
                 console.error(`[EntitySearch] ${entityType} search failed:`, error);
                 setSearchResults([]);
                 setHighlightedIndex(-1);
             } finally {
-                setLoading(false);
+                if (requestId === searchRequestRef.current) setLoading(false);
             }
         }, debounceMs),
         [minLength, debounceMs, entityType]
@@ -167,20 +168,29 @@ function EntitySearchInner<T>(
 
     // Trigger search when query changes
     useEffect(() => {
-        if (searchQuery) {
+        const requestId = ++searchRequestRef.current;
+        if (searchQuery && searchQuery.length >= minLength) {
             setShowDropdown(true);
-            performSearch(searchQuery);
+            performSearch(searchQuery, requestId);
         } else {
-            setShowDropdown(false);
+            setShowDropdown(Boolean(searchQuery));
             setSearchResults([]);
+            setHighlightedIndex(-1);
+            setLoading(false);
         }
-        return () => performSearch.cancel();
-    }, [searchQuery, performSearch]);
+        return () => {
+            performSearch.cancel();
+            if (searchRequestRef.current === requestId) {
+                searchRequestRef.current += 1;
+            }
+        };
+    }, [searchQuery, minLength, performSearch]);
 
     // Auto-scroll to highlighted item
     useEffect(() => {
-        if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
-            resultRefs.current[highlightedIndex]?.scrollIntoView({
+        const highlightedResult = resultRefs.current[highlightedIndex];
+        if (highlightedIndex >= 0 && typeof highlightedResult?.scrollIntoView === 'function') {
+            highlightedResult.scrollIntoView({
                 behavior: 'smooth',
                 block: 'nearest'
             });

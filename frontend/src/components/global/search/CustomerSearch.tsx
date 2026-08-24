@@ -1,7 +1,7 @@
 import React, { forwardRef, useCallback } from 'react';
-import { Building, User, Phone, MapPin, Mail, Trash2 } from 'lucide-react';
+import { Building, Phone, MapPin, Trash2 } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
-import { EntitySearch, EntitySearchRef, EntitySearchProps } from './EntitySearch';
+import { EntitySearch, EntitySearchRef } from './EntitySearch';
 import { customersApi } from '../../../services/api';
 
 /**
