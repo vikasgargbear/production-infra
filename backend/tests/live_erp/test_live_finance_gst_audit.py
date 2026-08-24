@@ -7,6 +7,7 @@ GST dashboard values matching the database source of truth.
 """
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
+from uuid import UUID
 
 import pytest
 
@@ -25,7 +26,7 @@ def _money(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def _default_branch_id(db_query, org_id: str) -> int:
+def _default_branch_id(db_query, org_id: UUID) -> UUID:
     rows = db_query(
         """
         SELECT branch_id

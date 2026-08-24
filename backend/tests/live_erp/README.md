@@ -33,8 +33,8 @@ explicitly selected deployment.
 export PHARMA_LIVE_API_BASE_URL="https://isolated-test-api.example.com"
 export PHARMA_LIVE_DATABASE_URL="postgresql://..."
 export PHARMA_LIVE_ACCESS_TOKEN="short-lived-token-for-dedicated-test-user"
-export PHARMA_LIVE_TEST_ORG_ID="..."
-export PHARMA_LIVE_TEST_BRANCH_ID="..."
+export PHARMA_LIVE_TEST_ORG_ID="canonical-test-organization-uuid"
+export PHARMA_LIVE_TEST_BRANCH_ID="canonical-test-branch-uuid"
 
 # Required for test_live_finance_gst_audit.py only. Do not set this for the
 # explicitly mutating journey/write-contract suite.
@@ -50,6 +50,9 @@ Use an isolated test organization. The suite creates and reverses real business
 documents. Supply a short-lived token issued through the real authentication
 flow; never give this test harness the backend JWT signing key.
 
+Both organization and branch identities must be canonical UUIDs. The harness
+rejects legacy integer IDs before opening the database or calling the API.
+
 ```bash
 cd backend
 ./venv/bin/pytest tests/live_erp -q
@@ -57,6 +60,22 @@ cd backend
 # or, if you are using a non-venv Python with pytest installed
 python3 -m pytest tests/live_erp -q
 ```
+
+## MCP reconciliation is a separate live gate
+
+The normal no-reset staging deploy runs
+`exercise_staging_mcp_oauth.py` in `boundary_only` mode. That proves hosted
+OAuth denial/approval, MCP readiness, and the advertised tool registry only;
+its evidence deliberately records `live_read_tool_calls: []`. It is not proof
+that an MCP write, REST readback, and PostgreSQL row agree.
+
+Cross-boundary reconciliation requires a separately approved disposable-demo
+run with `CANONICAL_STAGING_MCP_EXERCISE_MODE=business_flow` and the existing
+staging OAuth/database environment. That mode creates one sales order, reads
+the exact returned UUID through `erp_sales_order_get`, and compares exact
+quantities and totals with the command preview and PostgreSQL. If those
+credentials or the disposable demo are unavailable, record this gate as
+blocked/skipped; never promote `boundary_only` evidence to data reconciliation.
 
 ## Why This Exists
 

@@ -34,8 +34,8 @@ class LiveERPConfig:
     api_base_url: str
     database_url: str = field(repr=False)
     access_token: str = field(repr=False)
-    test_org_id: str
-    test_branch_id: int
+    test_org_id: uuid.UUID
+    test_branch_id: uuid.UUID
     timeout_seconds: int = 30
     database_read_only: bool = False
 
@@ -47,19 +47,33 @@ def _env_required(name: str) -> str:
     return value
 
 
-@pytest.fixture(scope="session")
-def live_config() -> LiveERPConfig:
+def _uuid_env_required(name: str) -> uuid.UUID:
+    value = _env_required(name)
+    try:
+        return uuid.UUID(value)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{name} must be one canonical UUID; legacy integer IDs are not accepted"
+        ) from exc
+
+
+def _load_live_config() -> LiveERPConfig:
     return LiveERPConfig(
         api_base_url=_env_required("PHARMA_LIVE_API_BASE_URL"),
         database_url=_with_connection_overrides(_env_required("PHARMA_LIVE_DATABASE_URL")),
         access_token=_env_required("PHARMA_LIVE_ACCESS_TOKEN"),
-        test_org_id=_env_required("PHARMA_LIVE_TEST_ORG_ID"),
-        test_branch_id=int(_env_required("PHARMA_LIVE_TEST_BRANCH_ID")),
+        test_org_id=_uuid_env_required("PHARMA_LIVE_TEST_ORG_ID"),
+        test_branch_id=_uuid_env_required("PHARMA_LIVE_TEST_BRANCH_ID"),
         timeout_seconds=int(os.getenv("PHARMA_LIVE_TIMEOUT_SECONDS", "30")),
         database_read_only=os.getenv(
             "PHARMA_LIVE_DATABASE_READ_ONLY", ""
         ).lower() in {"1", "true", "yes"},
     )
+
+
+@pytest.fixture(scope="session")
+def live_config() -> LiveERPConfig:
+    return _load_live_config()
 
 
 @pytest.fixture(scope="session")

@@ -11,6 +11,7 @@ import secrets
 import sys
 import time
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -239,6 +240,64 @@ def _tool_payload(response: dict[str, Any]) -> dict[str, Any]:
     raise ExerciseError("Live MCP tool response omitted one JSON object payload")
 
 
+def _decimal(value: Any, label: str) -> Decimal:
+    if not isinstance(value, str):
+        raise ExerciseError(f"{label} must remain an exact decimal string")
+    try:
+        return Decimal(value)
+    except InvalidOperation as exc:
+        raise ExerciseError(f"{label} is not an exact decimal string") from exc
+
+
+def _verify_sales_order_readback(
+    prepared: dict[str, Any],
+    executed: dict[str, Any],
+    status: dict[str, Any],
+    readback: dict[str, Any],
+) -> dict[str, Any]:
+    resource_id = executed.get("resource_id")
+    if not isinstance(resource_id, str) or status.get("resource_id") != resource_id:
+        raise ExerciseError("Live execute/status omitted one stable sales-order resource UUID")
+    if readback.get("match_state") != "matched" or readback.get("matched_count") != 1:
+        raise ExerciseError(f"Live sales-order readback was not one exact match: {readback}")
+    document = readback.get("document")
+    if not isinstance(document, dict) or document.get("sales_order_id") != resource_id:
+        raise ExerciseError("Live sales-order readback identity differs from execute")
+    financial = prepared.get("financial_impact")
+    if not isinstance(financial, list) or len(financial) != 1:
+        raise ExerciseError("Live sales-order preview omitted one financial impact")
+    preview_total = financial[0].get("grand_total")
+    readback_total = document.get("grand_total")
+    if preview_total != readback_total:
+        raise ExerciseError(
+            f"Live sales-order total drifted between preview and readback: "
+            f"{preview_total!r} != {readback_total!r}"
+        )
+    _decimal(preview_total, "sales-order preview grand_total")
+    lines = document.get("lines")
+    if not isinstance(lines, list) or len(lines) != 1:
+        raise ExerciseError("Live sales-order readback did not contain one exact product line")
+    line = lines[0]
+    expected = {
+        "base_billed_quantity": Decimal("12"),
+        "base_free_quantity": Decimal("2"),
+        "quoted_unit_rate": Decimal("125.50"),
+    }
+    for field, expected_value in expected.items():
+        if _decimal(line.get(field), f"sales-order readback {field}") != expected_value:
+            raise ExerciseError(
+                f"Live sales-order readback {field} differs from the command input"
+            )
+    return {
+        "sales_order_id": resource_id,
+        "grand_total": readback_total,
+        "base_billed_quantity": line["base_billed_quantity"],
+        "base_free_quantity": line["base_free_quantity"],
+        "quoted_unit_rate": line["quoted_unit_rate"],
+        "line_total": line["line_total"],
+    }
+
+
 def _exercise_mcp(
     access_token: str, *, business_flow: bool
 ) -> tuple[list[str], dict[str, Any] | None]:
@@ -391,16 +450,30 @@ def _exercise_mcp(
     status = call("erp_operation_status_get", {"command_request_id": command_id})
     if status.get("status") != "succeeded":
         raise ExerciseError(f"Live command did not succeed: {status}")
+    resource_id = executed.get("resource_id")
+    if not isinstance(resource_id, str):
+        raise ExerciseError("Live sales-order execute omitted resource_id")
+    readback = call(
+        "erp_sales_order_get",
+        {"branch_id": DEMO_BRANCH_ID, "sales_order_id": resource_id},
+    )
+    exact_values = _verify_sales_order_readback(
+        prepared, executed, status, readback
+    )
     return names, {
         "command_request_id": command_id,
         "prepared": prepared,
         "approved": approved,
         "executed": executed,
         "status": status,
+        "readback": readback,
+        "exact_values": exact_values,
     }
 
 
-def _reconcile_database(command_id: str) -> dict[str, Any]:
+def _reconcile_database(workflow: dict[str, Any]) -> dict[str, Any]:
+    command_id = workflow["command_request_id"]
+    readback = workflow["readback"]["document"]
     with psycopg2.connect(_required("PSYCOPG_DATABASE_URL")) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -417,9 +490,49 @@ def _reconcile_database(command_id: str) -> dict[str, Any]:
                 (DEMO_ORG_ID, command_id),
             )
             row = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT order_row.grand_total::text,
+                       line.base_billed_quantity::text,
+                       line.base_free_quantity::text,
+                       line.quoted_unit_rate::text,
+                       line.line_total::text
+                  FROM sales.orders AS order_row
+                  JOIN sales.order_lines AS line
+                    ON line.org_id=order_row.org_id
+                   AND line.order_id=order_row.id
+                   AND line.line_kind='product'
+                 WHERE order_row.org_id=%s AND order_row.id=%s
+                 ORDER BY line.line_number, line.id
+                """,
+                (DEMO_ORG_ID, readback["sales_order_id"]),
+            )
+            value_rows = cursor.fetchall()
     if row is None or row[0] != "succeeded" or row[2] != 1:
         raise ExerciseError(f"Database did not reconcile the live MCP sales order: {row}")
-    return {"command_status": row[0], "sales_order_id": row[1], "order_count": row[2]}
+    if str(row[1]) != readback["sales_order_id"] or len(value_rows) != 1:
+        raise ExerciseError("Database resource identity/line cardinality differs from MCP readback")
+    value_row = value_rows[0]
+    fields = (
+        "grand_total",
+        "base_billed_quantity",
+        "base_free_quantity",
+        "quoted_unit_rate",
+        "line_total",
+    )
+    database_values = dict(zip(fields, value_row))
+    for field, database_value in database_values.items():
+        if _decimal(database_value, f"database {field}") != _decimal(
+            readback["lines"][0][field] if field != "grand_total" else readback[field],
+            f"MCP readback {field}",
+        ):
+            raise ExerciseError(f"Database {field} differs from MCP readback")
+    return {
+        "command_status": row[0],
+        "sales_order_id": str(row[1]),
+        "order_count": row[2],
+        "exact_values": database_values,
+    }
 
 
 def _wait_for_mcp_readiness() -> None:
@@ -512,7 +625,7 @@ def main() -> int:
         token["access_token"], business_flow=exercise_mode == "business_flow"
     )
     reconciliation = (
-        _reconcile_database(workflow["command_request_id"])
+        _reconcile_database(workflow)
         if workflow is not None
         else None
     )
@@ -534,7 +647,8 @@ def main() -> int:
         "mcp_tools": tool_names,
         "exercise_mode": exercise_mode,
         "live_read_tool_calls": (
-            ["erp_product_search", "erp_customer_search"] if workflow is not None else []
+            ["erp_product_search", "erp_customer_search", "erp_sales_order_get"]
+            if workflow is not None else []
         ),
         "live_demo_product_verified": workflow is not None,
         "live_write_workflow": (
@@ -549,6 +663,13 @@ def main() -> int:
         ),
         "live_command_request_id": (
             workflow["command_request_id"] if workflow is not None else None
+        ),
+        "live_readback_tool": "erp_sales_order_get" if workflow is not None else None,
+        "live_readback_resource_id": (
+            workflow["exact_values"]["sales_order_id"] if workflow is not None else None
+        ),
+        "live_readback_exact_values": (
+            workflow["exact_values"] if workflow is not None else None
         ),
         "database_reconciliation": reconciliation,
     }

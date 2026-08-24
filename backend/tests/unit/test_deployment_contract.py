@@ -893,6 +893,12 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert '_decide(session, denial_id, user_access_token, "deny")' in exercise
     assert '"method": "tools/list"' in exercise
     assert '"name": "erp_product_search"' in exercise
+    assert '"erp_sales_order_get"' in exercise
+    assert '"live_readback_tool"' in exercise
+    assert '"live_readback_resource_id"' in exercise
+    assert '"live_readback_exact_values"' in exercise
+    assert '"live_read_tool_calls": (' in exercise
+    assert '["erp_product_search", "erp_customer_search", "erp_sales_order_get"]' in exercise
     assert "CANONICAL_STAGING_MCP_EXERCISE_MODE" in workflow
     assert "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID" in workflow
     assert 'WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"' in provisioner
