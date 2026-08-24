@@ -40,6 +40,54 @@ const ADMIN_ONLY_IDS = new Set([
   'company-profile', 'user-management', 'role-management',
 ]);
 
+const MASTER_MODULES: MasterModule[] = [
+  {
+    id: 'product-master', label: 'Products', fullLabel: 'Product Master',
+    description: 'Manage item catalog', icon: Package, color: 'green',
+    component: ProductMaster, group: 'Masters'
+  },
+  {
+    id: 'customer-master', label: 'Customers', fullLabel: 'Customer Master',
+    description: 'Manage customer database', icon: Users, color: 'blue',
+    component: CustomerMaster, group: 'Masters'
+  },
+  {
+    id: 'supplier-master', label: 'Suppliers', fullLabel: 'Supplier Master',
+    description: 'Manage supplier network', icon: Truck, color: 'purple',
+    component: SupplierMaster, group: 'Masters'
+  },
+  {
+    id: 'company-profile', label: 'Company', fullLabel: 'Company Profile',
+    description: 'Business identity & GST', icon: Building, color: 'blue',
+    component: CompanyProfile, group: 'Business Setup'
+  },
+  {
+    id: 'tax-master', label: 'Tax & GST', fullLabel: 'Tax Master',
+    description: 'GST rates & slabs', icon: Calculator, color: 'amber',
+    component: TaxMaster, group: 'Business Setup'
+  },
+  {
+    id: 'unit-master', label: 'Units', fullLabel: 'Unit Master',
+    description: 'Measurement units', icon: Ruler, color: 'orange',
+    component: UnitMaster, group: 'Business Setup'
+  },
+  {
+    id: 'warehouse-master', label: 'Locations', fullLabel: 'Warehouse & Locations',
+    description: 'Storage locations', icon: Warehouse, color: 'indigo',
+    component: WarehouseMaster, group: 'Business Setup'
+  },
+  {
+    id: 'user-management', label: 'Users', fullLabel: 'User Management',
+    description: 'Manage user accounts', icon: UserCheck, color: 'red',
+    component: UserManagement, group: 'Administration'
+  },
+  {
+    id: 'role-management', label: 'Roles', fullLabel: 'Role Management',
+    description: 'Roles & permissions', icon: Shield, color: 'indigo',
+    component: RoleManagement, group: 'Administration'
+  },
+];
+
 const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('master', 'edit');
@@ -60,109 +108,10 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
     return () => window.removeEventListener('navigateToMaster', handleNavigateToMaster);
   }, []);
 
-  const masterModules: MasterModule[] = [
-    // ── Masters ───────────────────────────────────────────
-    // Data you manage daily: add, edit, look up
-    {
-      id: 'product-master',
-      label: 'Products',
-      fullLabel: 'Product Master',
-      description: 'Manage item catalog',
-      icon: Package,
-      color: 'green',
-      component: ProductMaster,
-      group: 'Masters'
-    },
-    {
-      id: 'customer-master',
-      label: 'Customers',
-      fullLabel: 'Customer Master',
-      description: 'Manage customer database',
-      icon: Users,
-      color: 'blue',
-      component: CustomerMaster,
-      group: 'Masters'
-    },
-    {
-      id: 'supplier-master',
-      label: 'Suppliers',
-      fullLabel: 'Supplier Master',
-      description: 'Manage supplier network',
-      icon: Truck,
-      color: 'purple',
-      component: SupplierMaster,
-      group: 'Masters'
-    },
-    // ── Business Setup ────────────────────────────────────
-    // One-time setup: your business identity, rules, structure
-    {
-      id: 'company-profile',
-      label: 'Company',
-      fullLabel: 'Company Profile',
-      description: 'Business identity & GST',
-      icon: Building,
-      color: 'blue',
-      component: CompanyProfile,
-      group: 'Business Setup'
-    },
-    {
-      id: 'tax-master',
-      label: 'Tax & GST',
-      fullLabel: 'Tax Master',
-      description: 'GST rates & slabs',
-      icon: Calculator,
-      color: 'amber',
-      component: TaxMaster,
-      group: 'Business Setup'
-    },
-    {
-      id: 'unit-master',
-      label: 'Units',
-      fullLabel: 'Unit Master',
-      description: 'Measurement units',
-      icon: Ruler,
-      color: 'orange',
-      component: UnitMaster,
-      group: 'Business Setup'
-    },
-    {
-      id: 'warehouse-master',
-      label: 'Locations',
-      fullLabel: 'Warehouse & Locations',
-      description: 'Storage locations',
-      icon: Warehouse,
-      color: 'indigo',
-      component: WarehouseMaster,
-      group: 'Business Setup'
-    },
-    // ── Administration ────────────────────────────────────
-    // App admin: who can do what, what's enabled, system config
-    {
-      id: 'user-management',
-      label: 'Users',
-      fullLabel: 'User Management',
-      description: 'Manage user accounts',
-      icon: UserCheck,
-      color: 'red',
-      component: UserManagement,
-      group: 'Administration'
-    },
-    {
-      id: 'role-management',
-      label: 'Roles',
-      fullLabel: 'Role Management',
-      description: 'Roles & permissions',
-      icon: Shield,
-      color: 'indigo',
-      component: RoleManagement,
-      group: 'Administration'
-    },
-  ];
-
   // Filter out admin-only modules for non-admin users
   const visibleModules = useMemo(
-    () => canEdit ? masterModules : masterModules.filter(m => !ADMIN_ONLY_IDS.has(m.id)),
-    [canEdit, masterModules]
+    () => canEdit ? MASTER_MODULES : MASTER_MODULES.filter(m => !ADMIN_ONLY_IDS.has(m.id)),
+    [canEdit]
   );
 
   return (
