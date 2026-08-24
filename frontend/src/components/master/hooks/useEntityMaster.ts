@@ -111,7 +111,11 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     const {
         entityName,
         idField,
-        api,
+        api: {
+            getAll,
+            update,
+            delete: deleteEntity,
+        },
         searchFields,
         filterField,
         softDelete = true,
@@ -175,7 +179,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         try {
             setIsLoading(true);
             setError(null);
-            const response = await api.getAll();
+            const response = await getAll();
 
             const data = extractData
                 ? extractData(response)
@@ -188,7 +192,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         } finally {
             setIsLoading(false);
         }
-    }, [api, entityName, extractData]);
+    }, [getAll, entityName, extractData]);
 
     // Load on mount
     useEffect(() => {
@@ -228,7 +232,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
             if (!window.confirm(confirmMessage)) return;
 
             try {
-                await api.update(id, {
+                await update(id, {
                     ...entity,
                     is_active: !isCurrentlyActive
                 } as Partial<T>);
@@ -239,7 +243,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
             }
         } else {
             // Hard delete
-            if (!api.delete) {
+            if (!deleteEntity) {
                 toast.error('Delete not supported');
                 return;
             }
@@ -249,14 +253,14 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
             }
 
             try {
-                await api.delete(id);
+                await deleteEntity(id);
                 toast.success(`${entityLabel} deleted successfully`);
                 await loadEntities();
             } catch (err) {
                 toast.error(`Failed to delete ${entityName}.`);
             }
         }
-    }, [entities, idField, entityName, entityLabel, api, softDelete, toast, loadEntities]);
+    }, [entities, idField, entityName, entityLabel, update, deleteEntity, softDelete, toast, loadEntities]);
 
     const handleSaved = useCallback((): void => {
         setEditingEntity(null);
@@ -278,10 +282,10 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         try {
             if (softDelete) {
                 await Promise.all(selectedIds.map(id =>
-                    api.update(id, { is_active: false } as Partial<T>)
+                    update(id, { is_active: false } as Partial<T>)
                 ));
-            } else if (api.delete) {
-                await Promise.all(selectedIds.map(id => api.delete!(id)));
+            } else if (deleteEntity) {
+                await Promise.all(selectedIds.map(id => deleteEntity(id)));
             }
 
             toast.success(`${selectedIds.length} ${entityName}s ${action}d successfully`);
@@ -290,7 +294,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         } catch (err) {
             toast.error(`Failed to ${action} some ${entityName}s.`);
         }
-    }, [selectedIds, entityName, softDelete, api, toast, loadEntities]);
+    }, [selectedIds, entityName, softDelete, update, deleteEntity, toast, loadEntities]);
 
     // ========================================
     // Return
