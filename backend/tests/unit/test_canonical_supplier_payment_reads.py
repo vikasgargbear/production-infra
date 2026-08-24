@@ -48,9 +48,21 @@ def _posted(**overrides):
 
 
 def test_uuid_only_context_and_readback_routes_are_registered():
-    paths = {route.path for route in app.routes if isinstance(route, APIRoute)}
-    assert "/api/canonical/supplier-payments/context" in paths
-    assert "/api/canonical/supplier-payments/{payment_id}" in paths
+    routes = {
+        route.path: route
+        for route in reads.router.routes
+        if isinstance(route, APIRoute)
+    }
+    assert routes["/canonical/supplier-payments/context"].endpoint is reads.supplier_payment_context
+    assert routes["/canonical/supplier-payments/{payment_id}"].endpoint is reads.posted_supplier_payment
+
+    paths = app.openapi()["paths"]
+    assert paths["/api/canonical/supplier-payments/context"]["get"]["operationId"].startswith(
+        "supplier_payment_context"
+    )
+    assert paths["/api/canonical/supplier-payments/{payment_id}"]["get"]["operationId"].startswith(
+        "posted_supplier_payment"
+    )
 
 
 def test_posted_readback_preserves_exact_decimals_and_reconciles():

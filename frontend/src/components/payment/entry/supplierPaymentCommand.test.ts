@@ -51,7 +51,7 @@ test.each([
   [draft({ allocations: [{ open_item_id: ids.item1, amount: '100.02' }] }), 'exceeds'],
   [draft({ allocations: [{ open_item_id: ids.item1, amount: '1.00' }, { open_item_id: ids.item1, amount: '1.00' }] }), 'only once'],
   [draft({ settlement_account_id: ids.item2 }), 'do not match'],
-  [draft({ payment_date: '2099-01-01' }), 'not in the future'],
+  [draft({ payment_date: '2099-01-01' }), 'authoritative organization date'],
   [draft({ external_reference: ' ' }), 'reference'],
 ])('fails closed on invalid draft evidence', (candidate, message) => {
   expect(() => buildSupplierPaymentPreparePayload(candidate, context, 'stable')).toThrow(message);
@@ -59,6 +59,12 @@ test.each([
 
 test('uses local calendar fields rather than UTC conversion', () => {
   expect(localBusinessDate(new Date(2026, 7, 25, 0, 15))).toBe('2026-08-25');
+});
+
+test('fails closed when the backend organization date contract is malformed', () => {
+  expect(() => buildSupplierPaymentPreparePayload(
+    draft(), { ...context, payment_date: '25/08/2026' }, 'stable',
+  )).toThrow('authoritative supplier-payment context');
 });
 
 test('accepts only an exact immutable supplier-payment preview', () => {

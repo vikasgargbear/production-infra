@@ -172,14 +172,25 @@ def _context_line(**overrides):
 
 
 def test_routes_are_uuid_only_and_registered():
-    paths = {
-        route.path
-        for route in app.routes
+    routes = {
+        route.path: route
+        for route in reads.router.routes
         if isinstance(route, APIRoute)
     }
-    assert "/api/canonical/supplier-invoices/context" in paths
-    assert "/api/canonical/supplier-invoices/{supplier_invoice_id}" in paths
-    assert "/api/canonical/supplier-invoices/eligible-receipts" in paths
+    assert routes["/canonical/supplier-invoices/context"].endpoint is reads.supplier_invoice_context
+    assert routes["/canonical/supplier-invoices/{supplier_invoice_id}"].endpoint is reads.posted_supplier_invoice
+    assert routes["/canonical/supplier-invoices/eligible-receipts"].endpoint is reads.eligible_receipts
+
+    paths = app.openapi()["paths"]
+    assert paths["/api/canonical/supplier-invoices/context"]["get"]["operationId"].startswith(
+        "supplier_invoice_context"
+    )
+    assert paths["/api/canonical/supplier-invoices/{supplier_invoice_id}"]["get"]["operationId"].startswith(
+        "posted_supplier_invoice"
+    )
+    assert paths["/api/canonical/supplier-invoices/eligible-receipts"]["get"]["operationId"].startswith(
+        "eligible_receipts"
+    )
 
 
 def test_context_preserves_exact_quantities_and_inventory_value():

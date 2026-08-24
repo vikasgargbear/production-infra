@@ -127,8 +127,11 @@ export function buildSupplierPaymentPreparePayload(
   if (!isCanonicalUuid(draft.bank_account_id) || !isCanonicalUuid(draft.settlement_account_id)) {
     throw new Error('Select a canonical INR bank settlement account.');
   }
-  if (!DATE.test(draft.payment_date) || draft.payment_date > localBusinessDate()) {
-    throw new Error('Payment date must be a valid local date that is not in the future.');
+  if (!DATE.test(context.payment_date)) {
+    throw new Error('The authoritative supplier-payment context has an invalid organization date.');
+  }
+  if (!DATE.test(draft.payment_date) || draft.payment_date > context.payment_date) {
+    throw new Error('Payment date must be valid and cannot be later than the authoritative organization date.');
   }
   if (!['bank_transfer', 'upi'].includes(draft.payment_method)) {
     throw new Error('Supplier payment supports only bank transfer or UPI.');

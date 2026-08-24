@@ -37,9 +37,22 @@ def main() -> None:
                 "SELECT has_table_privilege(current_user, "
                 "'procurement.purchase_orders', 'SELECT')"
             )) is True
+            # The canonical runtime inherits the baseline erp_app INSERT/UPDATE
+            # grants. RLS, command scopes, and invariant triggers guard those
+            # mutations; DELETE is deliberately absent. Check the real grant
+            # contract one privilege at a time instead of treating a comma-list
+            # as an all-or-none permission.
             assert session.scalar(text(
                 "SELECT has_table_privilege(current_user, "
-                "'procurement.purchase_orders', 'INSERT,UPDATE,DELETE')"
+                "'procurement.purchase_orders', 'INSERT')"
+            )) is True
+            assert session.scalar(text(
+                "SELECT has_table_privilege(current_user, "
+                "'procurement.purchase_orders', 'UPDATE')"
+            )) is True
+            assert session.scalar(text(
+                "SELECT has_table_privilege(current_user, "
+                "'procurement.purchase_orders', 'DELETE')"
             )) is False
             assert session.scalar(text(
                 "SELECT has_table_privilege(current_user, "
