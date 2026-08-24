@@ -50,9 +50,17 @@ function numeric(value: unknown, fallback: number = 0): number {
     return Number.isFinite(result) ? result : fallback;
 }
 
+function canonicalCustomerIdentity(value: string | number): string | number {
+    if (typeof value === 'string' && value.trim() !== '' && value.trim() !== '0') {
+        return value.trim();
+    }
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+    throw new Error('Select a valid customer before calculating a sales order.');
+}
+
 function toRequest(order: Order): SalesOrderCalculationRequest {
     return {
-        customer_id: order.customer_id,
+        customer_id: canonicalCustomerIdentity(order.customer_id),
         gst_type: order.gst_type || 'CGST/SGST',
         order_date: order.order_date,
         delivery_date: order.expected_delivery_date || order.delivery_date,

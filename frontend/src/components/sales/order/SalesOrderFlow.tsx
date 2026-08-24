@@ -216,7 +216,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         <DocumentImportModal
                             isOpen={showImportModal}
                             onClose={() => setShowImportModal(false)}
-                            onImport={handleImport as any}
+                            onImport={handleImport}
                             title="Import from Invoice or Delivery Challan"
                             documentTypes={salesOrderImportDocumentTypes}
                         />

@@ -25,6 +25,17 @@ export interface OrderItem {
         | 'excluded_from_taxable_value'
         | 'included_at_unit_rate';
 
+    // Canonical executed-allocation lineage retained by document imports
+    source_line_id?: string | number;
+    source_allocation_kind?: 'direct_issue' | 'dispatch_allocation';
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
+
     // Pricing
     unit_price: number;
     mrp?: number;
@@ -36,6 +47,11 @@ export interface OrderItem {
     discount_amount?: number;
     gst_percent: number;
     tax_amount?: number;
+    total_tax_amount?: number;
+    cgst_amount?: number;
+    sgst_amount?: number;
+    igst_amount?: number;
+    cess_amount?: number;
 
     // Units
     unit?: string;

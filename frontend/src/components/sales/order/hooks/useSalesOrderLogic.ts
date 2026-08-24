@@ -12,6 +12,7 @@ import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
+import type { ImportData } from '../../../global/modals/DocumentImportModal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -53,16 +54,6 @@ type ProductInput = Product & {
     sale_price?: number;
     unit_price?: number;
 };
-
-interface ImportData {
-    customer_id?: number | string;
-    customer_name?: string;
-    customer_details?: Customer;
-    billing_address?: string;
-    shipping_address?: string;
-    items?: OrderItem[];
-    notes?: string;
-}
 
 export interface UseSalesOrderLogicReturn {
     // State
@@ -186,7 +177,10 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const calculationRequestRef = useRef(0);
 
     // Recalculate totals
-    const recalculateTotals = useCallback(async (items: OrderItem[]): Promise<void> => {
+    const recalculateTotals = useCallback(async (
+        items: OrderItem[],
+        sourceOrder: Order = order,
+    ): Promise<void> => {
         const requestId = ++calculationRequestRef.current;
         if (!items || items.length === 0) {
             setOrder(prev => ({
@@ -202,11 +196,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
         try {
             const orderData = {
-                ...order,
+                ...sourceOrder,
                 items,
-                customer_id: String(
-                    selectedCustomer?.customer_id || selectedCustomer?.id || order.customer_id
-                )
             };
             const result = await calculateSalesOrderPreview(orderData, true);
 
@@ -244,7 +235,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     cgst_amount: formattedTotals.cgst_amount || 0,
                     sgst_amount: formattedTotals.sgst_amount || 0,
                     igst_amount: formattedTotals.igst_amount || 0,
-                    calculatedLineItems: result.items as any
+                    calculatedLineItems: result.items
                 }));
             }
         } catch (error) {
@@ -254,7 +245,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             console.error('Calculation error:', error);
             toast.error('Unable to calculate order totals. Please review the entered item values.');
         }
-    }, [order, selectedCustomer]);
+    }, [order]);
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
@@ -338,7 +329,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         const gstType = determineGstTypeForSupply(
             companyInfo?.state,
             customerState,
-            (companyInfo as any)?.gst_number,
+            companyInfo?.gst_number,
             customer.gst_number
         );
 
@@ -346,7 +337,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             ...prev,
             customer_id: String(customer?.customer_id || customer?.id || ''),
             customer_name: customer?.customer_name || customer?.name || '',
-            customer_details: customer as unknown as Order['customer_details'],
+            customer_details: customer,
             billing_address: fullAddress,
             shipping_address: fullAddress,
             billing_address_data: addressData,
@@ -403,50 +394,73 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
     // Handle import
     const handleImport = useCallback((importData: ImportData): void => {
-        if (importData.customer_id) {
-            const importedCustomer = importData.customer_details || {
-                customer_id: importData.customer_id,
-                customer_name: importData.customer_name || '',
-            } as Customer;
-            setSelectedCustomer(importedCustomer);
-            void handleCustomerSelect(importedCustomer);
+        const importedCustomerId = importData.customer_id;
+        if (importedCustomerId === undefined || importedCustomerId === null
+            || String(importedCustomerId).trim() === '' || String(importedCustomerId) === '0') {
+            const errorMessage = 'The imported document is missing its canonical customer identity.';
+            setMessage(errorMessage);
+            setMessageType('error');
+            toast.error(errorMessage);
+            return;
         }
-
-        if (importData.billing_address) {
-            setOrder(prev => ({
-                ...prev,
-                billing_address: importData.billing_address || '',
-                shipping_address: importData.shipping_address || importData.billing_address || ''
-            }));
-        }
-
-        if (importData.items && importData.items.length > 0) {
-            const formattedItems: OrderItem[] = importData.items.map((item, index) => ({
-                ...item,
-                id: item.id || `imported-${Date.now()}-${index}`,
-                product_id: item.product_id,
-                product_name: item.product_name,
-                quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0,
-                discount_percent: parseFloat(String(item.discount_percent)) || 0,
-                gst_percent: parseFloat(String(item.gst_percent)) || 0,
-                total: 0
-            }));
-
-            setOrder(prev => ({
-                ...prev,
-                items: formattedItems,
-                notes: importData.notes || prev.notes
-            }));
-
-            setTimeout(() => recalculateTotals(formattedItems), 100);
-        } else {
+        if (!importData.items.length) {
             const warningMsg = 'No items found in the selected document';
             setMessage(warningMsg);
             setMessageType('warning');
             toast.warning(warningMsg);
+            return;
         }
-    }, [handleCustomerSelect, recalculateTotals]);
+
+        const suppliedCustomer = importData.customer_details;
+        const importedCustomer: Customer = suppliedCustomer
+            && typeof suppliedCustomer === 'object'
+            ? {
+                ...(suppliedCustomer as Customer),
+                customer_id: importedCustomerId,
+                customer_name: importData.customer_name
+                    || (suppliedCustomer as Customer).customer_name
+                    || '',
+            }
+            : {
+                customer_id: importedCustomerId,
+                customer_name: importData.customer_name || '',
+            } as Customer;
+        const formattedItems: OrderItem[] = importData.items.map((item, index) => ({
+            ...item,
+            id: `imported-${Date.now()}-${index}`,
+            quantity: Number(item.quantity),
+            free_quantity: Number(item.free_quantity),
+            unit_price: Number(item.unit_price),
+            discount_percent: Number(item.discount_percent),
+            gst_percent: Number(item.gst_percent),
+            total: 0,
+        }));
+        const importedCustomerState = importedCustomer.state || '';
+        const importedOrder: Order = {
+            ...order,
+            customer_id: importedCustomerId,
+            customer_name: importData.customer_name || importedCustomer.customer_name || '',
+            customer_details: importedCustomer,
+            billing_address: importData.billing_address || importedCustomer.address || '',
+            shipping_address: importData.shipping_address
+                || importData.billing_address
+                || importedCustomer.address
+                || '',
+            items: formattedItems,
+            notes: importData.notes || order.notes,
+            gst_type: determineGstTypeForSupply(
+                companyInfo?.state,
+                importedCustomerState,
+                companyInfo?.gst_number,
+                importedCustomer.gst_number,
+            ),
+            place_of_supply: importedCustomerState || companyInfo?.state || '',
+        };
+
+        setSelectedCustomer(importedCustomer);
+        setOrder(importedOrder);
+        void recalculateTotals(formattedItems, importedOrder);
+    }, [companyInfo, order, recalculateTotals]);
 
     // Update item
     const updateItem = useCallback((index: number, field: string, value: unknown): void => {

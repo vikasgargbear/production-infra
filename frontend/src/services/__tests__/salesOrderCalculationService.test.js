@@ -63,6 +63,13 @@ test('fails closed instead of calculating an offline preview', async () => {
   expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
 });
 
+test('does not send the blank-order customer sentinel to the API', async () => {
+  await expect(calculateSalesOrderPreview({ ...order, customer_id: 0 }, true)).rejects.toThrow(
+    'Select a valid customer before calculating a sales order'
+  );
+  expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
+});
+
 test('preserves canonical UUID identities in the server request', async () => {
   salesOrderCalculationsApi.preview.mockResolvedValue({
     data: {
