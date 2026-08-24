@@ -27,6 +27,13 @@ const exact = (value: unknown, label: string): string => {
   return String(value);
 };
 
+const moneyMinor = (value: unknown, label: string): bigint => {
+  const text = exact(value, label);
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(text);
+  if (!match) throw new Error(`${label} must be an exact non-negative INR string`);
+  return BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0'));
+};
+
 const addOneExact = (value: string): string => {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
   if (!match) throw new Error(`Cannot add one to non-decimal ${value}`);
@@ -257,6 +264,133 @@ test.describe('live canonical desktop UI journeys', () => {
       }],
     });
     await page.screenshot({ path: testInfo.outputPath('customer-receipt-posted-readback.png'), fullPage: true });
+  });
+
+  test('UI: supplier payment defaults to FIFO, preserves manual allocation, reviews, posts once, and reconciles exact evidence', async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    await openHomeAction(page, 'Financial Hub');
+    const contextPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-payments\/context$/);
+    await chooseHubModule(page, 'Financial Hub', 'Supplier Payment');
+    const context = await responseJson(await contextPromise);
+    expect(context.ready, JSON.stringify(context.blocking_reasons)).toBe(true);
+    const supplier = context.suppliers.find((candidate: any) => candidate.open_items?.length);
+    const bank = context.bank_accounts[0];
+    expect(supplier, 'live test org requires a posted supplier-invoice payable').toBeTruthy();
+    expect(bank, 'live test org requires a canonical INR bank and settlement pair').toBeTruthy();
+    const source = supplier.open_items[0];
+
+    await page.getByLabel('Supplier').selectOption(String(supplier.supplier_account_id));
+    await page.getByLabel('Branch').selectOption(String(source.branch_id));
+    await expect(page.getByLabel('Organization payment date')).toHaveValue(context.payment_date);
+    await page.getByLabel('Bank and settlement ledger').selectOption(String(bank.bank_account_id));
+    await page.getByLabel('Method').selectOption('bank_transfer');
+    const reference = `${PREFIX}-UI-SPAY-${Date.now()}`;
+    await page.getByLabel('Bank / UPI reference').fill(reference);
+
+    await expect(page.getByRole('radio', { name: 'Automatic FIFO' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Manual per invoice' })).not.toBeChecked();
+    await page.getByRole('radio', { name: 'Manual per invoice' }).click();
+    await expect(page.getByLabel(`Allocation for ${source.document_number}`)).toBeVisible();
+    await page.getByRole('radio', { name: 'Automatic FIFO' }).click();
+    await page.getByLabel('Payment amount').fill('0.01');
+    await page.getByRole('button', { name: 'Allocate FIFO' }).click();
+    const sourceRow = page.getByRole('row').filter({ hasText: source.document_number });
+    await expect(sourceRow).toContainText('₹0.01');
+
+    const preparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/finance\.supplier_payment\.prepare\/prepare$/);
+    await page.getByRole('button', { name: 'Review immutable preview' }).click();
+    const prepared = await responseJson(await preparePromise);
+    await expect(page.getByRole('heading', { name: 'Confirm supplier payment' })).toBeVisible();
+    await expect(page.getByText('₹0.01', { exact: true })).toBeVisible();
+    await page.getByRole('checkbox', { name: /I reviewed the exact bank/i }).check();
+
+    let executeCalls = 0;
+    page.on('request', request => {
+      if (request.method() === 'POST' && /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/.test(request.url())) executeCalls += 1;
+    });
+    const approvalPromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/approve$/);
+    const executePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/commands\/[0-9a-f-]+\/execute$/);
+    const uiReadbackPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-payments\/[0-9a-f-]+$/);
+    await page.getByRole('button', { name: 'Post ₹0.01', exact: true }).click();
+    await responseJson(await approvalPromise);
+    const executedResponse = await executePromise;
+    const executed = await responseJson(executedResponse);
+    const uiReadback = await responseJson(await uiReadbackPromise);
+    await expect(page.getByRole('heading', { name: 'Supplier payment reconciled' })).toBeVisible();
+
+    const paymentId = String(executed.resource_id);
+    expect(paymentId).toMatch(/^[0-9a-f-]{36}$/i);
+    const posted = await authorizedGet(page, executedResponse, `/canonical/supplier-payments/${paymentId}`);
+    const retryReadback = await authorizedGet(page, executedResponse, `/canonical/supplier-payments/${paymentId}`);
+    expect(retryReadback).toEqual(posted);
+    expect(executeCalls).toBe(1);
+    expect(uiReadback.payment_id).toBe(paymentId);
+    expect(posted.payment_id).toBe(paymentId);
+    expect(posted.supplier_account_id).toBe(supplier.supplier_account_id);
+    expect(posted.branch_id).toBe(source.branch_id);
+    expect(posted.bank_account_id).toBe(bank.bank_account_id);
+    expect(posted.settlement_account_id).toBe(bank.settlement_account_id);
+    expect(exact(posted.amount, 'supplier UI payment amount')).toBe('0.01');
+    expect(exact(prepared.financial_impact[0].cash_disbursed_amount, 'supplier UI preview cash')).toBe('0.01');
+    expect(posted.allocations).toHaveLength(1);
+    const allocation = posted.allocations[0];
+    expect(allocation.open_item_id).toBe(source.open_item_id);
+    expect(allocation.supplier_invoice_id).toBe(source.supplier_invoice_id);
+    expect(exact(allocation.amount, 'supplier UI allocation')).toBe('0.01');
+    expect(
+      moneyMinor(allocation.principal_amount, 'supplier UI principal')
+        - moneyMinor(allocation.effective_allocated_amount, 'supplier UI effective allocation'),
+    ).toBe(moneyMinor(allocation.residual_amount, 'supplier UI residual'));
+    expect(posted.allocation_reconciled).toBe(true);
+    expect(posted.payable_residuals_reconciled).toBe(true);
+    expect(posted.journal_balanced).toBe(true);
+    expect(posted.journal_lines).toHaveLength(2);
+    const debit = posted.journal_lines.reduce(
+      (sum: bigint, line: any, index: number) => sum + moneyMinor(line.debit, `supplier UI debit ${index + 1}`), 0n,
+    );
+    const credit = posted.journal_lines.reduce(
+      (sum: bigint, line: any, index: number) => sum + moneyMinor(line.credit, `supplier UI credit ${index + 1}`), 0n,
+    );
+    expect(debit).toBe(1n);
+    expect(credit).toBe(debit);
+    await attachExactEvidence(testInfo, 'created-supplier-payment-and-exact-api-evidence.json', {
+      created_records: [{
+        resource_type: 'supplier_payment', resource_id: paymentId, resource_number: posted.payment_number,
+        command_request_id: prepared.command_request_id, preview_hash: prepared.preview_hash,
+        execution_status: executed.status, ui_readback_resource_id: uiReadback.payment_id,
+        exact: {
+          amount: posted.amount, allocation_amount: allocation.amount,
+          principal_amount: allocation.principal_amount,
+          effective_allocated_amount: allocation.effective_allocated_amount,
+          residual_amount: allocation.residual_amount,
+          journal_debit_total: posted.journal_debit_total,
+          journal_credit_total: posted.journal_credit_total,
+        },
+      }],
+    });
+    await page.screenshot({ path: testInfo.outputPath('supplier-payment-posted-readback.png'), fullPage: true });
+  });
+
+  test('UI: supplier payment future organization date fails closed before prepare', async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    await openHomeAction(page, 'Financial Hub');
+    const initialContextPromise = canonicalResponse(page, 'GET', /\/api\/canonical\/supplier-payments\/context$/);
+    await chooseHubModule(page, 'Financial Hub', 'Supplier Payment');
+    await responseJson(await initialContextPromise);
+    let prepareCalls = 0;
+    page.on('request', request => {
+      if (request.method() === 'POST' && /finance\.supplier_payment\.prepare\/prepare$/.test(request.url())) prepareCalls += 1;
+    });
+    const futurePromise = page.waitForResponse(response => response.request().method() === 'GET'
+      && new URL(response.url()).pathname === '/api/canonical/supplier-payments/context'
+      && new URL(response.url()).searchParams.get('payment_date') === '9999-12-31');
+    await page.getByLabel('Organization payment date').fill('9999-12-31');
+    const future = await futurePromise;
+    expect(future.status()).toBe(422);
+    expect(await future.text()).toMatch(/future/i);
+    await expect(page.getByRole('alert')).toContainText(/future/i);
+    expect(prepareCalls).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath('supplier-payment-future-date-fail-closed.png'), fullPage: true });
   });
 
   test('UI: cycle-count form prepares immutable preview and visibly waits for an independent approver', async ({ page }, testInfo) => {

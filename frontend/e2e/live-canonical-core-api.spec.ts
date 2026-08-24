@@ -25,6 +25,13 @@ function exact(value: unknown, label: string): string {
   return String(value);
 }
 
+function moneyMinor(value: unknown, label: string): bigint {
+  const text = exact(value, label);
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(text);
+  if (!match) throw new Error(`${label} must be an exact non-negative INR string`);
+  return BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0'));
+}
+
 function todayIst(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -249,6 +256,122 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     expect(exact(receipt.readback.allocations[0].amount, 'allocation amount')).toBe('1.00');
     expect(exact(receipt.readback.journal_debit_total, 'journal debit')).toBe(exact(receipt.readback.journal_credit_total, 'journal credit'));
     await testInfo.attach('canonical-api-evidence', { body: JSON.stringify(evidence, null, 2), contentType: 'application/json' });
+  });
+
+  test('API: supplier payment uses authoritative payable/bank context, posts once, and reconciles exact residuals and journal', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const evidence: ApiEvidence[] = [];
+    const origin = await apiOrigin(page);
+    const context = await ok(page, origin, evidence, 'GET', '/canonical/supplier-payments/context');
+    expect(context.ready, JSON.stringify(context.blocking_reasons)).toBe(true);
+    expect(context.payment_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const supplier = context.suppliers.find((candidate: Json) => candidate.open_items?.length);
+    const bank = context.bank_accounts[0];
+    expect(supplier, 'live test org requires a posted supplier-invoice payable').toBeTruthy();
+    expect(bank, 'live test org requires a canonical INR bank and settlement pair').toBeTruthy();
+    const openItem = supplier.open_items[0];
+    uuid(openItem.open_item_id, 'supplier payable open-item ID');
+    uuid(openItem.supplier_invoice_id, 'posted supplier-invoice ID');
+    const paymentAmount = moneyMinor(openItem.outstanding_amount, 'supplier payable outstanding') >= 1n ? '0.01' : '';
+    expect(paymentAmount, 'supplier payable must retain at least one paisa').toBe('0.01');
+    const run = suffix();
+    const payment = await lifecycle(page, origin, evidence, 'finance.supplier_payment.prepare', {
+      idempotency_key: `${PREFIX}-SPAY-${run}`,
+      supplier_account_id: supplier.supplier_account_id,
+      branch_id: openItem.branch_id,
+      bank_account_id: bank.bank_account_id,
+      settlement_account_id: bank.settlement_account_id,
+      payment_date: context.payment_date,
+      payment_method: 'bank_transfer',
+      external_reference: `${PREFIX}-SPAY-${run}`,
+      gross_amount: paymentAmount,
+      allocations: [{ open_item_id: openItem.open_item_id, amount: paymentAmount }],
+    }, id => `/canonical/supplier-payments/${id}`);
+
+    const posted = payment.readback;
+    expect(posted.payment_id).toBe(payment.executed.resource_id);
+    expect(posted.supplier_account_id).toBe(supplier.supplier_account_id);
+    expect(posted.branch_id).toBe(openItem.branch_id);
+    expect(posted.bank_account_id).toBe(bank.bank_account_id);
+    expect(posted.settlement_account_id).toBe(bank.settlement_account_id);
+    expect(exact(posted.amount, 'supplier payment amount')).toBe(paymentAmount);
+    expect(exact(payment.prepared.financial_impact[0].cash_disbursed_amount, 'supplier preview cash')).toBe(paymentAmount);
+    expect(posted.allocations).toHaveLength(1);
+    const allocation = posted.allocations[0];
+    expect(allocation.open_item_id).toBe(openItem.open_item_id);
+    expect(allocation.supplier_invoice_id).toBe(openItem.supplier_invoice_id);
+    expect(exact(allocation.amount, 'supplier allocation amount')).toBe(paymentAmount);
+    expect(
+      moneyMinor(allocation.principal_amount, 'supplier allocation principal')
+        - moneyMinor(allocation.effective_allocated_amount, 'supplier effective allocation'),
+    ).toBe(moneyMinor(allocation.residual_amount, 'supplier payable residual'));
+    expect(posted.allocation_reconciled).toBe(true);
+    expect(posted.payable_residuals_reconciled).toBe(true);
+    expect(posted.journal_balanced).toBe(true);
+    expect(posted.journal_lines).toHaveLength(2);
+    const debit = posted.journal_lines.reduce(
+      (sum: bigint, line: Json, index: number) => sum + moneyMinor(line.debit, `supplier journal debit ${index + 1}`), 0n,
+    );
+    const credit = posted.journal_lines.reduce(
+      (sum: bigint, line: Json, index: number) => sum + moneyMinor(line.credit, `supplier journal credit ${index + 1}`), 0n,
+    );
+    expect(debit).toBe(moneyMinor(posted.amount, 'supplier posted amount'));
+    expect(credit).toBe(debit);
+    expect(exact(posted.journal_debit_total, 'supplier journal debit total')).toBe(
+      exact(posted.journal_credit_total, 'supplier journal credit total'),
+    );
+    await testInfo.attach('supplier-payment-api-evidence.json', {
+      body: JSON.stringify({
+        evidence_kind: 'live_canonical_api_only_write_and_readback',
+        requests: evidence,
+        created_record: {
+          payment_id: posted.payment_id,
+          payment_number: posted.payment_number,
+          command_request_id: payment.prepared.command_request_id,
+          preview_hash: payment.prepared.preview_hash,
+          exact: {
+            amount: posted.amount,
+            allocation_amount: allocation.amount,
+            principal_amount: allocation.principal_amount,
+            effective_allocated_amount: allocation.effective_allocated_amount,
+            residual_amount: allocation.residual_amount,
+            journal_debit_total: posted.journal_debit_total,
+            journal_credit_total: posted.journal_credit_total,
+          },
+        },
+      }, null, 2),
+      contentType: 'application/json',
+    });
+  });
+
+  test('API: supplier payment rejects future organization dates and non-context payable identities without preparing', async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    const evidence: ApiEvidence[] = [];
+    const origin = await apiOrigin(page);
+    const future = await call(page, origin, evidence, 'GET', '/canonical/supplier-payments/context?payment_date=9999-12-31');
+    expect(future.status).toBe(422);
+    expect(JSON.stringify(future.body)).toMatch(/future/i);
+
+    const context = await ok(page, origin, evidence, 'GET', '/canonical/supplier-payments/context');
+    const bank = context.bank_accounts[0];
+    const branch = context.branches[0];
+    expect(bank, 'negative boundary requires a configured canonical bank pair').toBeTruthy();
+    expect(branch, 'negative boundary requires a visible canonical branch').toBeTruthy();
+    const run = suffix();
+    const rejected = await call(page, origin, evidence, 'POST', '/web/actions/finance.supplier_payment.prepare/prepare', {
+      idempotency_key: `${PREFIX}-SPAY-NEG-${run}`,
+      supplier_account_id: testUuid(), branch_id: branch.branch_id,
+      bank_account_id: bank.bank_account_id, settlement_account_id: bank.settlement_account_id,
+      payment_date: context.payment_date, payment_method: 'upi', external_reference: `${PREFIX}-SPAY-NEG-${run}`,
+      gross_amount: '0.01', allocations: [{ open_item_id: testUuid(), amount: '0.01' }],
+    });
+    expect(rejected.status).toBeGreaterThanOrEqual(400);
+    expect(rejected.status).toBeLessThan(500);
+    expect(evidence.filter(item => item.method === 'POST' && item.status >= 200 && item.status < 300)).toHaveLength(0);
+    expect(evidence.some(item => item.path.endsWith('/execute'))).toBe(false);
+    await testInfo.attach('supplier-payment-negative-api-evidence.json', {
+      body: JSON.stringify(evidence, null, 2), contentType: 'application/json',
+    });
   });
 
   test('API: cycle count prepare requires a different approver and never executes as preparer', async ({ page }, testInfo) => {

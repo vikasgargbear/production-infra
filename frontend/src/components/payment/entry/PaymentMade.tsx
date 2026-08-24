@@ -16,6 +16,7 @@ import { reconcileCanonicalSupplierPayment } from './supplierPaymentLifecycle';
 
 interface PaymentMadeProps { onClose?: () => void }
 type Step = 'entry' | 'review' | 'posted';
+type AllocationMode = 'fifo' | 'manual';
 
 const errorMessage = (error: any): string => {
   const detail = error?.response?.data?.detail;
@@ -33,6 +34,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
   const [method, setMethod] = useState<'upi' | 'bank_transfer'>('upi');
   const [reference, setReference] = useState('');
   const [amount, setAmount] = useState('');
+  const [allocationMode, setAllocationMode] = useState<AllocationMode>('fifo');
   const [allocations, setAllocations] = useState<Array<{ open_item_id: string; amount: string }>>([]);
   const [prepared, setPrepared] = useState<CanonicalCommandPreview | null>(null);
   const [preparedPayload, setPreparedPayload] = useState<SupplierPaymentPreparePayload | null>(null);
@@ -95,6 +97,16 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
       setError(''); setPrepared(null); setPreparedPayload(null);
     } catch (allocationError) { setAllocations([]); setError(errorMessage(allocationError)); }
   };
+  const changeAllocationMode = (next: AllocationMode) => {
+    invalidate(); setAllocationMode(next); setAmount(''); setAllocations([]); setError('');
+  };
+  const setManualAllocation = (openItemId: string, value: string) => {
+    invalidate(); setError('');
+    setAllocations(current => {
+      const retained = current.filter(row => row.open_item_id !== openItemId);
+      return value ? [...retained, { open_item_id: openItemId, amount: value }] : retained;
+    });
+  };
   const prepare = async () => {
     if (!context || !bank) return;
     setBusy(true); setError('');
@@ -149,9 +161,15 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
             </div>
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="font-semibold">FIFO allocation</h2><p className="mt-1 text-sm text-slate-600">Oldest posted invoice is allocated first. Review every allocation before posting.</p>
-            <div className="mt-4 flex flex-wrap gap-3"><label className="min-w-64 flex-1 text-sm font-medium">Payment amount<input inputMode="decimal" value={amount} onChange={event => { invalidate(); setAmount(event.target.value); setAllocations([]); }} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={applyFifo} disabled={!supplier || !branchId || !amount} className="min-h-11 self-end rounded-lg bg-blue-600 px-5 text-white disabled:bg-slate-300">Allocate FIFO</button></div>
-            <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left text-slate-600"><th className="p-3">Invoice</th><th className="p-3">Date / Due</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Allocated</th></tr></thead><tbody>{visibleItems.map(item => { const row = allocations.find(value => value.open_item_id === item.open_item_id); return <tr key={item.open_item_id} className="border-b border-slate-100"><td className="p-3 font-medium">{item.document_number}</td><td className="p-3">{item.document_date}<br /><span className="text-slate-500">Due {item.due_date}</span></td><td className="p-3 text-right">₹{item.outstanding_amount}</td><td className="p-3 text-right">₹{row?.amount || '0.00'}</td></tr>; })}</tbody></table></div>
+            <h2 className="font-semibold">Invoice allocation</h2><p className="mt-1 text-sm text-slate-600">Automatic FIFO is the default. You can instead enter exact amounts per invoice. Review every allocation before posting.</p>
+            <fieldset className="mt-4 flex flex-wrap gap-3" aria-label="Allocation method">
+              <legend className="sr-only">Allocation method</legend>
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4"><input type="radio" name="supplier-allocation-mode" checked={allocationMode === 'fifo'} onChange={() => changeAllocationMode('fifo')} />Automatic FIFO</label>
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4"><input type="radio" name="supplier-allocation-mode" checked={allocationMode === 'manual'} onChange={() => changeAllocationMode('manual')} />Manual per invoice</label>
+            </fieldset>
+            {allocationMode === 'fifo' && <div className="mt-4 flex flex-wrap gap-3"><label className="min-w-64 flex-1 text-sm font-medium">Payment amount<input inputMode="decimal" value={amount} onChange={event => { invalidate(); setAmount(event.target.value); setAllocations([]); }} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={applyFifo} disabled={!supplier || !branchId || !amount} className="min-h-11 self-end rounded-lg bg-blue-600 px-5 text-white disabled:bg-slate-300">Allocate FIFO</button></div>}
+            {allocationMode === 'manual' && <p className="mt-4 text-sm text-slate-600">Enter the exact amount beside each invoice. Blank invoices are not included.</p>}
+            <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left text-slate-600"><th className="p-3">Invoice</th><th className="p-3">Date / Due</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Allocated</th></tr></thead><tbody>{visibleItems.map(item => { const row = allocations.find(value => value.open_item_id === item.open_item_id); return <tr key={item.open_item_id} className="border-b border-slate-100"><td className="p-3 font-medium">{item.document_number}</td><td className="p-3">{item.document_date}<br /><span className="text-slate-500">Due {item.due_date}</span></td><td className="p-3 text-right">₹{item.outstanding_amount}</td><td className="p-3 text-right">{allocationMode === 'manual' ? <input aria-label={`Allocation for ${item.document_number}`} inputMode="decimal" value={row?.amount || ''} onChange={event => setManualAllocation(item.open_item_id, event.target.value)} placeholder="0.00" className="min-h-11 w-32 rounded-lg border px-3 text-right" /> : <>₹{row?.amount || '0.00'}</>}</td></tr>; })}</tbody></table></div>
             <div className="mt-4 flex items-center justify-between border-t pt-4"><span className="font-semibold">Allocated ₹{supplierMinorToMoney(allocatedTotal)}</span><button type="button" onClick={() => void prepare()} disabled={busy || !context.ready || !allocations.length} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Review immutable preview</button></div>
           </section>
         </>}

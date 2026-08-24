@@ -25,3 +25,9 @@ CTAs. Created records use `CODEX-E2E-20260825` where the form/API exposes an
 operator reference. Do not claim the skipped suite as a live pass, and do not
 clean up posted accounting or stock records unless the canonical API supplies
 a reviewed reversal command.
+
+Supplier-payment acceptance takes the organization date, posted invoice
+payable, branch, and paired INR bank/settlement ledger from the canonical
+context. The visible UI journey verifies automatic FIFO is the default while
+manual per-invoice allocation remains available; all amount decisions and
+readback comparisons use exact decimal strings/BigInt rather than floats.
