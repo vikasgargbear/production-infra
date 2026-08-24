@@ -8,7 +8,8 @@ mounting the legacy router's POST/PUT/PATCH/DELETE handlers.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
@@ -52,21 +53,29 @@ def include_legacy_read_only_router(
     )
 
 
-def include_explicit_safe_post_utilities(
+def include_explicit_non_persistent_post_utilities(
     parent: APIRouter,
     source: APIRouter,
     *,
-    paths: Iterable[str],
+    routes: Mapping[str, Callable[..., Any]],
     prefix: str = "",
     tags: Iterable[str] | None = None,
 ) -> None:
-    """Mount an exact allowlist of side-effect-free POST utility routes.
+    """Mount exact, owner-pinned POST previews/parsers with no durable effects.
 
-    This is deliberately path-exact and POST-only.  Missing paths fail startup
-    so a renamed parser/calculator cannot silently broaden the exception.
+    POST is appropriate for bounded calculation payloads and uploads even when
+    they do not mutate business state.  The exception is deliberately exact in
+    method, path *and endpoint identity*.  A renamed route or a different
+    handler at an allowlisted path therefore fails startup instead of silently
+    inheriting the exception.
+
+    "Non-persistent" means no database mutation, external communication, queue,
+    cache, or retained local state.  A parser may use a bounded temporary file
+    only when its handler owns unconditional cleanup; that implementation is
+    covered separately by boundary tests.
     """
 
-    expected = frozenset(paths)
+    expected = frozenset(routes)
     selected = _selected_router(
         source,
         allowed_methods=frozenset({"POST"}),
@@ -77,7 +86,24 @@ def include_explicit_safe_post_utilities(
     )
     if mounted != expected:
         raise RuntimeError(
-            "Safe POST utility allowlist does not match router paths: "
+            "Non-persistent POST utility allowlist does not match router paths: "
             f"missing={sorted(expected - mounted)}, unexpected={sorted(mounted - expected)}"
+        )
+    owner_mismatches = []
+    for route in selected.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if route.endpoint is not routes[route.path]:
+            owner_mismatches.append(
+                (
+                    route.path,
+                    f"{route.endpoint.__module__}.{route.endpoint.__name__}",
+                    f"{routes[route.path].__module__}.{routes[route.path].__name__}",
+                )
+            )
+    if owner_mismatches:
+        raise RuntimeError(
+            "Non-persistent POST utility endpoint owner mismatch: "
+            f"{owner_mismatches}"
         )
     parent.include_router(selected, prefix=prefix, tags=list(tags or ()))

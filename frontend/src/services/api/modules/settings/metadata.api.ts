@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -40,17 +41,15 @@ export const metadataApi = {
         return apiHelpers.get(ENDPOINTS.CATEGORIES);
     },
 
-    createProductCategory: (data: { category_name: string }): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.CATEGORIES, data);
-    },
+    createProductCategory: (_data: { category_name: string }): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Creating a legacy product category'),
 
     getProductTypes: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.PRODUCT_TYPES);
     },
 
-    createProductType: (data: { type_name: string }): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.PRODUCT_TYPES, data);
-    },
+    createProductType: (_data: { type_name: string }): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Creating a legacy product type'),
 
     getManufacturers: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.MANUFACTURERS);

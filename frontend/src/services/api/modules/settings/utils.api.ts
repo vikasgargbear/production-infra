@@ -3,56 +3,34 @@
  * Utility endpoints
  */
 
-import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
-
-// ============================================
-// Endpoints
-// ============================================
-
-const ENDPOINTS = {
-    BASE: '/utils',
-    VALIDATE_GSTIN: '/utils/validate-gst_number',
-    VALIDATE_PAN: '/utils/validate-pan',
-    VALIDATE_IFSC: '/utils/validate-ifsc',
-    GENERATE_BARCODE: '/utils/generate-barcode',
-    SEND_SMS: '/utils/send-sms',
-    SEND_EMAIL: '/utils/send-email',
-    SEND_WHATSAPP: '/utils/send-whatsapp'
-} as const;
 
 // ============================================
 // API Module
 // ============================================
 
 const utilsApi = {
-    validateGSTIN: (gst_number: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.VALIDATE_GSTIN, { gst_number });
-    },
+    validateGSTIN: (_gst_number: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy GSTIN validation'),
 
-    validatePAN: (pan: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.VALIDATE_PAN, { pan });
-    },
+    validatePAN: (_pan: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy PAN validation'),
 
-    validateIFSC: (ifsc: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.VALIDATE_IFSC, { ifsc });
-    },
+    validateIFSC: (_ifsc: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy IFSC validation'),
 
-    generateBarcode: (data: string, format?: 'EAN13' | 'CODE128'): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.GENERATE_BARCODE, { data, format });
-    },
+    generateBarcode: (_data: string, _format?: 'EAN13' | 'CODE128'): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy barcode generation'),
 
-    sendSMS: (phone: string, message: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.SEND_SMS, { phone, message });
-    },
+    sendSMS: (_phone: string, _message: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Sending SMS'),
 
-    sendEmail: (email: string, subject: string, body: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.SEND_EMAIL, { email, subject, body });
-    },
+    sendEmail: (_email: string, _subject: string, _body: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Sending email'),
 
-    sendWhatsApp: (phone: string, message: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.SEND_WHATSAPP, { phone, message });
-    }
+    sendWhatsApp: (_phone: string, _message: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Sending WhatsApp')
 };
 
 export default utilsApi;

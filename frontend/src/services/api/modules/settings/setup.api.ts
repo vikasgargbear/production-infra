@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -39,15 +40,12 @@ export const setupApi = {
         return apiHelpers.get(ENDPOINTS.STATUS);
     },
 
-    runInitialSetup: (data: SetupData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.INITIAL, data);
-    },
+    runInitialSetup: (_data: SetupData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Running legacy initial setup'),
 
-    completeSetup: (): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.COMPLETE);
-    },
+    completeSetup: (): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Completing legacy setup'),
 
-    seedData: (dataType: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/seed`, { data_type: dataType });
-    }
+    seedData: (_dataType: string): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Seeding legacy setup data')
 };

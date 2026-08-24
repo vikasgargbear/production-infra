@@ -15,7 +15,7 @@ from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
 from .core.read_only_router import (
-    include_explicit_safe_post_utilities,
+    include_explicit_non_persistent_post_utilities,
     include_legacy_read_only_router,
 )
 from .middleware.error_handler import global_exception_handler
@@ -59,6 +59,7 @@ from .api.routes.purchase import orders as purchases
 from .api.routes.purchase import supplier_invoices
 from .api.routes.purchase import grn
 from .api.routes.purchase import upload as purchase_upload
+from .api.routes.purchase.upload import routes as purchase_upload_routes
 
 # Inventory Module
 from .api.routes.inventory import stock as inventory
@@ -72,6 +73,7 @@ from .api.routes.finance import allocation as payment_allocation
 from .api.routes.finance import ledger
 from .api.routes.finance import journal as journal_entries
 from .api.routes.finance import tax as tax_entries
+from .api.routes.finance.tax import routes as tax_entries_routes
 from .api.routes.finance import credit_notes as credit_debit_notes
 from .api.routes.finance import expenses as expense_claims
 
@@ -310,12 +312,15 @@ include_legacy_read_only_router(api, purchases.router, prefix="/purchases", tags
 include_legacy_read_only_router(api, supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
 include_legacy_read_only_router(api, grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
 include_legacy_read_only_router(api, purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
-include_explicit_safe_post_utilities(
+include_explicit_non_persistent_post_utilities(
     api,
     purchase_upload.router,
     prefix="/purchase-upload",
     tags=["Purchase Upload"],
-    paths={"/parse-invoice-safe", "/validate-invoice"},
+    routes={
+        "/parse-invoice-safe": purchase_upload_routes.parse_purchase_invoice_safe,
+        "/validate-invoice": purchase_upload_routes.validate_invoice_data,
+    },
 )
 
 # --- Inventory ---
@@ -330,16 +335,24 @@ include_legacy_read_only_router(api, payment_allocation.router, tags=["Payment A
 api.include_router(ledger.router, tags=["Ledger"])
 include_legacy_read_only_router(api, journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
 include_legacy_read_only_router(api, tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
-include_explicit_safe_post_utilities(
-    api, tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"], paths={"/calculate"}
+include_explicit_non_persistent_post_utilities(
+    api,
+    tax_entries.router,
+    prefix="/tax-entries",
+    tags=["Tax Entries"],
+    routes={"/calculate": tax_entries_routes.calculate_tax},
 )
 include_legacy_read_only_router(api, credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
 include_legacy_read_only_router(api, expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
 
 # --- Compliance ---
 include_legacy_read_only_router(api, gst.router, prefix="/gst", tags=["GST"])
-include_explicit_safe_post_utilities(
-    api, gst.router, prefix="/gst", tags=["GST"], paths={"/calculate"}
+include_explicit_non_persistent_post_utilities(
+    api,
+    gst.router,
+    prefix="/gst",
+    tags=["GST"],
+    routes={"/calculate": gst.calculate_gst},
 )
 include_legacy_read_only_router(api, gstr2b.router, prefix="/gst", tags=["GST"])
 include_legacy_read_only_router(api, compliance.router, prefix="/compliance", tags=["Compliance"])
@@ -364,7 +377,18 @@ include_legacy_read_only_router(api, settings_router, prefix="/settings", tags=[
 # --- Utilities ---
 include_legacy_read_only_router(api, documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
-api.include_router(calculations.router)
+include_explicit_non_persistent_post_utilities(
+    api,
+    calculations.router,
+    routes={
+        "/calculations/invoice": calculations.preview_invoice_totals,
+        "/calculations/sales-order": calculations.preview_sales_order_totals,
+        "/calculations/purchase-order": calculations.preview_purchase_order_totals,
+        "/calculations/challan": calculations.preview_challan_totals,
+        "/calculations/return": calculations.preview_return_totals,
+        "/calculations/note": calculations.preview_note_totals,
+    },
+)
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
 

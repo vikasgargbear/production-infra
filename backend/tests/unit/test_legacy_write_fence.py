@@ -1,8 +1,11 @@
+import ast
+import inspect
+
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
 
 from app.core.read_only_router import (
-    include_explicit_safe_post_utilities,
+    include_explicit_non_persistent_post_utilities,
     include_legacy_read_only_router,
 )
 from app.main import api
@@ -26,6 +29,30 @@ SAFE_POSTS = {
     "/api/purchase-upload/validate-invoice",
     "/api/tax-entries/calculate",
     "/api/gst/calculate",
+}
+CALCULATION_POSTS = {
+    "/api/calculations/invoice": "preview_invoice_totals",
+    "/api/calculations/sales-order": "preview_sales_order_totals",
+    "/api/calculations/purchase-order": "preview_purchase_order_totals",
+    "/api/calculations/challan": "preview_challan_totals",
+    "/api/calculations/return": "preview_return_totals",
+    "/api/calculations/note": "preview_note_totals",
+}
+NON_PERSISTENT_POST_OWNERS = {
+    "/api/purchase-upload/parse-invoice-safe": (
+        "app.api.routes.purchase.upload.routes", "parse_purchase_invoice_safe"
+    ),
+    "/api/purchase-upload/validate-invoice": (
+        "app.api.routes.purchase.upload.routes", "validate_invoice_data"
+    ),
+    "/api/tax-entries/calculate": (
+        "app.api.routes.finance.tax.routes", "calculate_tax"
+    ),
+    "/api/gst/calculate": ("app.api.routes.compliance.gst", "calculate_gst"),
+    **{
+        path: ("app.api.routes.calculations", endpoint)
+        for path, endpoint in CALCULATION_POSTS.items()
+    },
 }
 CANONICAL_MASTER_WRITES = {
     ("POST", "/api/products/"): "create_product_draft",
@@ -72,6 +99,42 @@ def _routes():
     return [route for route in api.routes if isinstance(route, APIRoute)]
 
 
+def _direct_durable_side_effects(route: APIRoute):
+    """Return direct writes in a handler; called services have focused tests."""
+
+    tree = ast.parse(inspect.getsource(route.endpoint))
+    findings = []
+    forbidden_calls = {
+        "add", "commit", "delete", "flush", "mkdir", "patch", "post",
+        "publish", "put", "send", "touch", "write_bytes", "write_text",
+    }
+    forbidden_sql = (
+        "INSERT INTO", "UPDATE ", "DELETE FROM", "UPSERT ",
+        "CREATE TABLE", "ALTER TABLE", "DROP TABLE",
+    )
+    function = next(
+        node for node in tree.body
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+    )
+    body_nodes = (
+        node for statement in function.body for node in ast.walk(statement)
+    )
+    for node in body_nodes:
+        if isinstance(node, ast.Call):
+            called = node.func.attr if isinstance(node.func, ast.Attribute) else (
+                node.func.id if isinstance(node.func, ast.Name) else ""
+            )
+            if called in forbidden_calls or called.startswith("send_"):
+                findings.append((node.lineno, called))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            upper = node.value.upper()
+            for token in forbidden_sql:
+                if token in upper:
+                    findings.append((node.lineno, token.strip()))
+                    break
+    return findings
+
+
 def test_read_only_helper_drops_legacy_mutations_and_non_http_routes():
     source = APIRouter()
 
@@ -90,7 +153,7 @@ def test_read_only_helper_drops_legacy_mutations_and_non_http_routes():
     assert mounted == {("/api/legacy/records", frozenset({"GET"}))}
 
 
-def test_safe_post_utility_allowlist_is_exact_and_fails_on_drift():
+def test_non_persistent_post_allowlist_is_exact_and_owner_pinned():
     source = APIRouter()
 
     @source.post("/parse")
@@ -98,18 +161,37 @@ def test_safe_post_utility_allowlist_is_exact_and_fails_on_drift():
         return {}
 
     parent = APIRouter(prefix="/api")
-    include_explicit_safe_post_utilities(parent, source, paths={"/parse"})
+    include_explicit_non_persistent_post_utilities(
+        parent, source, routes={"/parse": parse}
+    )
     assert [(route.path, route.methods) for route in parent.routes] == [
         ("/api/parse", {"POST"})
     ]
 
     missing = APIRouter()
     try:
-        include_explicit_safe_post_utilities(missing, source, paths={"/renamed"})
+        include_explicit_non_persistent_post_utilities(
+            missing, source, routes={"/renamed": parse}
+        )
     except RuntimeError as exc:
         assert "missing=['/renamed']" in str(exc)
     else:
         raise AssertionError("a missing safe utility path must fail startup")
+
+    impostor_source = APIRouter()
+
+    @impostor_source.post("/parse")
+    def impostor():
+        return {}
+
+    try:
+        include_explicit_non_persistent_post_utilities(
+            APIRouter(), impostor_source, routes={"/parse": parse}
+        )
+    except RuntimeError as exc:
+        assert "endpoint owner mismatch" in str(exc)
+    else:
+        raise AssertionError("a different handler at a safe path must fail startup")
 
 
 def test_no_legacy_core_mutation_is_mounted():
@@ -121,6 +203,22 @@ def test_no_legacy_core_mutation_is_mounted():
         if route.path.startswith(LEGACY_PREFIXES):
             leaked.append((route.path, sorted(methods), route.name))
     assert leaked == []
+
+
+def test_mounted_legacy_safe_method_handlers_have_no_direct_durable_effects():
+    audited = []
+    findings = []
+    for route in _routes():
+        if not set(route.methods or ()) & {"GET", "HEAD", "OPTIONS"}:
+            continue
+        if not route.path.startswith(LEGACY_PREFIXES):
+            continue
+        audited.append((route.path, route.name))
+        effects = _direct_durable_side_effects(route)
+        if effects:
+            findings.append((route.path, route.name, effects))
+    assert audited
+    assert findings == []
 
 
 def test_every_effective_mutation_has_an_explicit_reviewed_owner():
@@ -195,6 +293,23 @@ def test_only_explicit_side_effect_free_post_utilities_survive_the_fence():
     }
     assert mounted == SAFE_POSTS
     assert "/api/purchase-upload/create-from-parsed" not in mounted
+
+
+def test_non_persistent_post_handlers_have_exact_reviewed_owners():
+    mounted = {
+        route.path: route
+        for route in _routes()
+        if "POST" in (route.methods or set())
+        and route.path in NON_PERSISTENT_POST_OWNERS
+    }
+    assert set(mounted) == set(NON_PERSISTENT_POST_OWNERS)
+    for path, (module, endpoint) in NON_PERSISTENT_POST_OWNERS.items():
+        route = mounted[path]
+        assert (route.endpoint.__module__, route.endpoint.__name__) == (module, endpoint)
+        # The PDF parser's bounded tempfile is an explicit scratch exception;
+        # upload security tests prove it is removed in a finally block.
+        effects = _direct_durable_side_effects(route)
+        assert effects == [], (path, effects)
 
 
 def test_canonical_command_and_calculation_posts_remain_mounted():

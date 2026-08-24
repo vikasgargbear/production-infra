@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -37,17 +38,14 @@ const organizationsApi = {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${orgId}`);
     },
 
-    create: (data: OrganizationData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: OrganizationData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Creating an organization'),
 
-    update: (orgId: number, data: Partial<OrganizationData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${orgId}`, data);
-    },
+    update: (_orgId: number, _data: Partial<OrganizationData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Editing an organization'),
 
-    delete: (orgId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${orgId}`);
-    }
+    delete: (_orgId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Deleting an organization')
 };
 
 export default organizationsApi;

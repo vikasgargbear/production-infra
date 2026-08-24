@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api/apiClient';
+import { rejectCanonicalWrite } from '../services/api/canonicalWritePolicy';
 
 // ============================================
 // Types
@@ -61,6 +62,9 @@ export interface UseFeatureFlagsResult {
     refetch: () => Promise<void>;
     updateFeature: (key: string, value: any) => Promise<boolean>;
 }
+
+export const updateFeatureFlag = (_key: string, _value: unknown): Promise<never> =>
+    rejectCanonicalWrite('Updating feature settings');
 
 // ============================================
 // Default Values
@@ -122,7 +126,7 @@ export function useFeatureFlags(): UseFeatureFlagsResult {
 
     const updateFeature = useCallback(async (key: string, value: any): Promise<boolean> => {
         try {
-            await apiClient.patch('/settings/features', { [key]: value });
+            await updateFeatureFlag(key, value);
             setFeatures(prev => ({ ...prev, [key]: value }));
             return true;
         } catch (err: any) {

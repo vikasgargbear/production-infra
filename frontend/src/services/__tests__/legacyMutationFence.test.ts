@@ -14,6 +14,13 @@ import { departmentsApi } from '../api/modules/org/departments.api';
 import { documentsApi } from '../api/modules/system/documents.api';
 import { collectionCenterApi } from '../api/modules/analytics/collectionCenter.api';
 import settingsApi from '../api/modules/settings/settings.api';
+import organizationsApi from '../api/modules/org/organizations.api';
+import { setupApi } from '../api/modules/settings/setup.api';
+import { metadataApi } from '../api/modules/settings/metadata.api';
+import utilsApi from '../api/modules/settings/utils.api';
+import ledgerApi from '../api/modules/finance/ledger.api';
+import { createCrudApi } from '../api/utils/createCrudApi';
+import { updateFeatureFlag } from '../../hooks/useFeatureFlags';
 
 jest.mock('../api/apiClient', () => ({
   apiHelpers: {
@@ -43,6 +50,13 @@ describe('legacy mutation adapters fail before transport', () => {
     ['document-number reservation', () => documentsApi.reserveNumber('INV')],
     ['collection payment recording', () => collectionCenterApi.markCollected(1, 100)],
     ['stock settings update', () => settingsApi.updateStock({ allow_negative_stock: false })],
+    ['organization creation', () => organizationsApi.create({ org_name: 'Legacy' })],
+    ['legacy setup', () => setupApi.completeSetup()],
+    ['metadata creation', () => metadataApi.createProductCategory({ category_name: 'Legacy' })],
+    ['utility messaging', () => utilsApi.sendWhatsApp('9999999999', 'Legacy')],
+    ['unsupported ledger export', () => ledgerApi.exportReport({})],
+    ['feature flag update', () => updateFeatureFlag('offline_mode', true)],
+    ['generic CRUD mutation', () => createCrudApi({ basePath: '/legacy' }).create({})],
   ])('%s rejects without an HTTP mutation', async (_label, action) => {
     await expect(action()).rejects.toMatchObject(unavailable);
     expect(apiHelpers.post).not.toHaveBeenCalled();

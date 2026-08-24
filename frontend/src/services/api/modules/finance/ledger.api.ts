@@ -240,9 +240,8 @@ export const ledgerApi = {
     },
 
     // EXPORT
-    exportReport: (params: ReportFilters = {}): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.REPORTS}/export`, params, { responseType: 'blob' });
-    },
+    exportReport: (_params: ReportFilters = {}): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Exporting the unsupported legacy ledger report'),
 
     exportLedger: (partyId: number, partyType: 'customer' | 'supplier', format: 'pdf' | 'excel' = 'pdf'): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.PARTY_V2_BASE}/export/${partyId}`, {
