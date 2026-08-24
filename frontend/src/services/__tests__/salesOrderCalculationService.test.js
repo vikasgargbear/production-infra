@@ -2,12 +2,6 @@
 jest.mock('../api/modules/sales/calculations.api', () => ({
   salesOrderCalculationsApi: { preview: jest.fn() }
 }));
-jest.mock('../enterpriseCalculator', () => ({
-  __esModule: true,
-  default: { calculateSalesOrder: jest.fn() }
-}));
-
-import EnterpriseCalculator from '../enterpriseCalculator';
 import { salesOrderCalculationsApi } from '../api/modules/sales/calculations.api';
 import { calculateSalesOrderPreview } from '../calculations/salesOrderCalculationService';
 
@@ -57,21 +51,47 @@ test('uses authenticated backend preview when online', async () => {
     delivery_charges: 12,
     items: [expect.objectContaining({ tax_percent: 18 })]
   }));
-  expect(EnterpriseCalculator.calculateSalesOrder).not.toHaveBeenCalled();
   expect(result.items[0]).toEqual(expect.objectContaining({ tax_amount: 34.2, total: 224.2 }));
   expect(result.totals).toEqual(expect.objectContaining({ tax_amount: 34.2, total_amount: 236 }));
 });
 
 
-test('uses deterministic local calculation only when explicitly offline', async () => {
-  EnterpriseCalculator.calculateSalesOrder.mockReturnValue({
-    items: [{ total_amount: 224.2 }],
-    totals: { final_amount: 224 }
-  });
-
-  const result = await calculateSalesOrderPreview(order, false);
-
-  expect(EnterpriseCalculator.calculateSalesOrder).toHaveBeenCalledWith(order);
+test('fails closed instead of calculating an offline preview', async () => {
+  await expect(calculateSalesOrderPreview(order, false)).rejects.toThrow(
+    'Sales order preview requires the live API'
+  );
   expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
-  expect(result.gst_type).toBe('IGST');
+});
+
+test('preserves canonical UUID identities in the server request', async () => {
+  salesOrderCalculationsApi.preview.mockResolvedValue({
+    data: {
+      success: true,
+      gst_type: 'CGST/SGST',
+      calculation_timestamp: 1,
+      line_items: [{ total_tax_amount: 12, line_total: 112 }],
+      totals: { total_tax_amount: 12, final_amount: 112 }
+    }
+  });
+  const canonicalOrder = {
+    ...order,
+    customer_id: '10000000-0000-4000-8000-000000000001',
+    gst_type: 'CGST/SGST',
+    items: [{
+      ...order.items[0],
+      product_id: '10000000-0000-4000-8000-000000000002',
+      batch_id: '10000000-0000-4000-8000-000000000003'
+    }]
+  };
+
+  await calculateSalesOrderPreview(canonicalOrder, true);
+
+  expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
+    customer_id: canonicalOrder.customer_id,
+    gst_type: 'CGST/SGST',
+    items: [expect.objectContaining({
+      product_id: canonicalOrder.items[0].product_id,
+      batch_id: canonicalOrder.items[0].batch_id
+    })]
+  }));
 });

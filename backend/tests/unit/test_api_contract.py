@@ -131,8 +131,10 @@ def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
         contract.path != "/api/calculations/sales-order"
         for contract in OPERATION_REGISTRY
     )
-    request_schema = schema["components"]["schemas"]["OrderCreate"]
+    request_schema = schema["components"]["schemas"]["SalesOrderCalculationRequest"]
     assert request_schema["properties"]["items"]["maxItems"] == 200
+    entity_schema = schema["components"]["schemas"]["SalesOrderCalculationLine"]
+    assert any(option.get("format") == "uuid" for option in entity_schema["properties"]["product_id"]["anyOf"])
 
 
 @pytest.mark.parametrize("contract", OPERATION_REGISTRY)

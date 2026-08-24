@@ -3,7 +3,10 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.api.schemas.calculations import InvoiceCalculationRequest
+from app.api.schemas.calculations import (
+    InvoiceCalculationRequest,
+    SalesOrderCalculationRequest,
+)
 
 
 def _request(**overrides):
@@ -24,6 +27,28 @@ def test_invoice_preview_accepts_canonical_uuid_ids():
 
     assert request.customer_id is not None
     assert request.items[0].product_id is not None
+
+
+def test_sales_order_preview_accepts_canonical_customer_product_and_batch_ids():
+    customer_id = uuid4()
+    product_id = uuid4()
+    batch_id = uuid4()
+
+    request = SalesOrderCalculationRequest.model_validate({
+        "customer_id": customer_id,
+        "gst_type": "CGST/SGST",
+        "items": [{
+            "product_id": product_id,
+            "batch_id": batch_id,
+            "quantity": 1,
+            "unit_price": 100,
+            "tax_percent": 12,
+        }],
+    })
+
+    assert request.customer_id == customer_id
+    assert request.items[0].product_id == product_id
+    assert request.items[0].batch_id == batch_id
 
 
 def test_invoice_preview_keeps_legacy_positive_integer_ids():

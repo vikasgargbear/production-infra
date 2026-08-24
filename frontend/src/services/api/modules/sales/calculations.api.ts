@@ -36,6 +36,7 @@ export interface InvoiceCalculationResponse {
 
 export interface SalesOrderCalculationRequest {
     customer_id: number | string;
+    gst_type?: string;
     order_date?: string;
     delivery_date?: string;
     items: Array<{

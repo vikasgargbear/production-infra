@@ -19,15 +19,14 @@ from ..services.returns.return_service import ReturnService
 from ..services.finance.credit_note.service import CreditNoteService
 from ..services.sales.invoice.invoice_service import InvoiceService
 from ..services.sales.challan.service import ChallanService
-from ..services.sales.order.order_service import OrderService
 from ..schemas.calculations import (
     InvoiceCalculationRequest,
+    SalesOrderCalculationRequest,
     PurchaseCalculationRequest,
     ChallanCalculationRequest,
     ReturnCalculationRequest,
     NoteCalculationRequest,
 )
-from ..schemas.sales.order import OrderCreate
 
 
 router = APIRouter(prefix="/calculations", tags=["Calculations"])
@@ -84,25 +83,45 @@ async def preview_invoice_totals(
 @router.post("/sales-order")
 @with_tenant_context
 async def preview_sales_order_totals(
-    order_data: OrderCreate,
+    order_data: SalesOrderCalculationRequest,
     _: dict = Depends(PermissionChecker("sales", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context),
 ):
     """Calculate a sales order without writing or allocating inventory."""
     try:
-        calculation = OrderService.calculate_order_totals(
-            db=db,
-            org_id=str(context.org_id),
-            branch_id=context.primary_branch_id,
-            order_data=order_data,
+        customer_id = order_data.customer_id
+        if not isinstance(customer_id, UUID):
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=str(context.org_id),
+                branch_id=context.primary_branch_id,
+                customer_id=int(customer_id),
+            )
+        else:
+            gst_type = order_data.gst_type
+        items = []
+        for item in order_data.items:
+            item_data = item.model_dump()
+            if item_data.get("tax_percent") is not None:
+                item_data["gst_percent"] = item_data["tax_percent"]
+            items.append(item_data)
+        result = InvoiceService.calculate_invoice_totals(
+            items=items,
+            gst_type=gst_type,
+            freight_charges=order_data.delivery_charges,
+            insurance_charges=0,
+            other_charges=order_data.other_charges,
+            discount_type=order_data.discount_type,
+            discount_percent=order_data.discount_percent,
+            discount_amount=order_data.discount_amount,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return _preview_response(
-        calculation["totals"],
-        calculation["gst_type"],
+        result,
+        gst_type,
     )
 
 

@@ -1,6 +1,7 @@
 """Typed contracts for non-persistent financial calculation previews."""
 
 from decimal import Decimal
+from datetime import date
 from typing import List, Literal, Optional, Union
 from uuid import UUID
 
@@ -31,6 +32,28 @@ class InvoiceCalculationRequest(BaseModel):
     items: List[CalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
     insurance_charges: Decimal = Field(default=Decimal("0"), ge=0)
+    other_charges: Decimal = Field(default=Decimal("0"), ge=0)
+    discount_type: Literal["percentage", "amount", "fixed"] = "percentage"
+    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SalesOrderCalculationLine(CalculationLine):
+    batch_id: Optional[EntityId] = None
+    batch_number: Optional[str] = Field(default=None, max_length=128)
+    uom: Optional[str] = Field(default=None, max_length=32)
+    pack_type: Optional[str] = Field(default=None, max_length=32)
+
+
+class SalesOrderCalculationRequest(BaseModel):
+    customer_id: EntityId
+    gst_type: GSTType = "CGST/SGST"
+    order_date: Optional[date] = None
+    delivery_date: Optional[date] = None
+    items: List[SalesOrderCalculationLine] = Field(min_length=1, max_length=200)
+    delivery_charges: Decimal = Field(default=Decimal("0"), ge=0)
     other_charges: Decimal = Field(default=Decimal("0"), ge=0)
     discount_type: Literal["percentage", "amount", "fixed"] = "percentage"
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)

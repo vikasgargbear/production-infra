@@ -1,6 +1,5 @@
-/** Online sales-order calculations with an explicit deterministic offline fallback. */
+/** Canonical server-backed sales-order calculations. */
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import {
     InvoiceCalculationResponse,
     SalesOrderCalculationRequest,
@@ -53,12 +52,13 @@ function numeric(value: unknown, fallback: number = 0): number {
 
 function toRequest(order: Order): SalesOrderCalculationRequest {
     return {
-        customer_id: numeric(order.customer_id),
+        customer_id: order.customer_id,
+        gst_type: order.gst_type || 'CGST/SGST',
         order_date: order.order_date,
         delivery_date: order.expected_delivery_date || order.delivery_date,
         items: order.items.map(item => ({
-            product_id: numeric(item.product_id),
-            batch_id: item.batch_id ? numeric(item.batch_id) : undefined,
+            product_id: item.product_id,
+            batch_id: item.batch_id || undefined,
             batch_number: item.batch_number,
             quantity: numeric(item.quantity),
             free_quantity: numeric(item.free_quantity),
@@ -107,12 +107,7 @@ export async function calculateSalesOrderPreview(
     isOnline: boolean
 ): Promise<SalesOrderPreviewResult> {
     if (!isOnline) {
-        const local = EnterpriseCalculator.calculateSalesOrder(order);
-        return {
-            items: local.items as unknown as SalesOrderPreviewLine[],
-            totals: local.totals as unknown as SalesOrderPreviewTotals,
-            gst_type: order.gst_type || 'CGST/SGST'
-        };
+        throw new Error('Sales order preview requires the live API');
     }
 
     const response = await salesOrderCalculationsApi.preview(toRequest(order));
