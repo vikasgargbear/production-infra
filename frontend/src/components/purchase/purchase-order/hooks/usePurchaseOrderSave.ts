@@ -1,30 +1,261 @@
-/**
- * Purchase Order submission boundary.
- *
- * The current form does not collect the explicit canonical branch and product
- * UOM-conversion UUIDs required by procurement.purchase_order.prepare. Fail
- * closed instead of calling the legacy endpoint or persisting a local queue.
- */
+/** Canonical API-only purchase-order prepare, approval, execution and readback. */
 
-export const PURCHASE_ORDER_SUBMIT_UNAVAILABLE_REASON =
-    'Purchase order submission is unavailable until canonical branch and product UOM identities are mapped.';
+import { useCallback, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
+
+import { canonicalPurchaseOrdersApi } from '../../../../services/api/modules/purchase/canonicalPurchaseOrders.api';
+import { clientUuid } from '../../../../utils/clientUuid';
+import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import type {
+    CreatedPOData,
+    PurchaseOrderData,
+} from './usePurchaseOrderLogic';
+import {
+    buildCanonicalPurchaseOrderPreparePayload,
+    canonicalPurchaseOrderReview,
+    canonicalPurchaseOrderValidationError,
+    canonicalMoneyCents,
+    type CanonicalPurchaseOrderReview,
+    type PurchaseOrderSupplier,
+} from '../utils/canonicalPurchaseOrderCommand';
+
+export const PURCHASE_ORDER_CANONICAL_OPERATION = 'procurement.purchase_order.prepare' as const;
+
+export const getPurchaseOrderSubmissionBoundary = () => ({
+    operationKey: PURCHASE_ORDER_CANONICAL_OPERATION,
+    legacyEndpointAllowed: false,
+    requiresActorConfirmation: true,
+});
+
+export interface UsePurchaseOrderSaveProps {
+    purchaseOrder: PurchaseOrderData;
+    selectedSupplier: PurchaseOrderSupplier | null;
+    branchId: unknown;
+    isOnline: boolean;
+    setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
+    setCreatedPOData: React.Dispatch<React.SetStateAction<CreatedPOData | null>>;
+    setShowSuccessModal: React.Dispatch<React.SetStateAction<boolean>>;
+    setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}
 
 export interface UsePurchaseOrderSaveReturn {
-    saving: false;
-    handleSavePurchaseOrder?: undefined;
-    unavailableReason: string;
+    saving: boolean;
+    preparingReview: boolean;
+    canonicalReview: CanonicalPurchaseOrderReview | null;
+    prepareForReview: () => Promise<boolean>;
+    handleSavePurchaseOrder: () => Promise<void>;
 }
 
-export function getPurchaseOrderSubmissionBoundary(): UsePurchaseOrderSaveReturn {
-    return {
-        saving: false,
-        handleSavePurchaseOrder: undefined,
-        unavailableReason: PURCHASE_ORDER_SUBMIT_UNAVAILABLE_REASON
+const submissionError = (error: unknown): string => {
+    const apiError = error as {
+        message?: string;
+        response?: { data?: { detail?: unknown } };
     };
-}
+    const detail = apiError.response?.data?.detail;
+    if (Array.isArray(detail)) {
+        return detail.map((entry: { loc?: string[]; msg?: string }) =>
+            `${entry.loc?.join('.') || 'Field'}: ${entry.msg || 'Invalid value'}`
+        ).join('\n');
+    }
+    if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object') {
+        const structured = detail as { message?: string; error?: string };
+        return structured.message || structured.error || JSON.stringify(detail);
+    }
+    return apiError.message || 'Purchase-order submission failed. No approval was executed.';
+};
 
-export function usePurchaseOrderSave(): UsePurchaseOrderSaveReturn {
-    return getPurchaseOrderSubmissionBoundary();
+export const formatCanonicalPurchaseOrderConfirmation = (
+    review: CanonicalPurchaseOrderReview,
+): string => [
+    'Authoritative backend purchase-order preview',
+    `Supplier commitment: ₹${review.supplierCommitment}`,
+    `CGST: ₹${review.cgstTotal}`,
+    `SGST: ₹${review.sgstTotal}`,
+    `IGST: ₹${review.igstTotal}`,
+    `Cess: ₹${review.cessTotal}`,
+    ...(review.warnings.length ? [
+        'Warnings:',
+        ...review.warnings.map(warning => `- ${warning}`),
+    ] : []),
+    '',
+    'Approve and create this purchase order now?',
+    'Choose Cancel to leave it unapproved; nothing is queued on this device.',
+].join('\n');
+
+export function usePurchaseOrderSave(
+    props: UsePurchaseOrderSaveProps,
+): UsePurchaseOrderSaveReturn {
+    const {
+        purchaseOrder,
+        selectedSupplier,
+        branchId,
+        isOnline,
+        setPurchaseOrder,
+        setCreatedPOData,
+        setShowSuccessModal,
+        setErrors,
+    } = props;
+    const [saving, setSaving] = useState(false);
+    const [preparingReview, setPreparingReview] = useState(false);
+    const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+    const [canonicalReview, setCanonicalReview] = useState<CanonicalPurchaseOrderReview | null>(null);
+    const prepareIdentityRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
+
+    const currentFingerprint = useCallback(() => JSON.stringify({
+        branchId,
+        supplierId: selectedSupplier?.supplier_id ?? selectedSupplier?.id,
+        poDate: purchaseOrder.po_date,
+        expectedOn: purchaseOrder.expected_delivery_date,
+        discount: purchaseOrder.discount_amount,
+        freight: purchaseOrder.freight_charges,
+        lines: purchaseOrder.items.map(item => ({
+            productId: item.product_id,
+            uomConversionId: item.uom_conversion_id,
+            billed: item.quantity,
+            free: item.free_quantity ?? 0,
+            treatment: item.free_supply_tax_treatment,
+            rate: item.unit_price,
+            discount: item.discount_percent ?? 0,
+        })),
+    }), [branchId, purchaseOrder, selectedSupplier]);
+
+    const prepareForReview = useCallback(async (): Promise<boolean> => {
+        const validationError = canonicalPurchaseOrderValidationError(
+            purchaseOrder,
+            selectedSupplier,
+            branchId,
+        );
+        if (validationError) {
+            setErrors({ submission: validationError });
+            toast.error(validationError);
+            return false;
+        }
+        if (!isOnline) {
+            const message = 'Purchase-order review requires the live ERP API. Nothing was saved or queued.';
+            setErrors({ submission: message });
+            toast.error(message);
+            return false;
+        }
+
+        setPreparingReview(true);
+        setErrors({});
+        try {
+            const fingerprint = currentFingerprint();
+            if (prepareIdentityRef.current?.fingerprint !== fingerprint) {
+                prepareIdentityRef.current = {
+                    fingerprint,
+                    idempotencyKey: `erp-web-purchase-order:${clientUuid()}`,
+                };
+            }
+            const payload = buildCanonicalPurchaseOrderPreparePayload(
+                purchaseOrder,
+                selectedSupplier!,
+                branchId,
+                prepareIdentityRef.current.idempotencyKey,
+            );
+            const prepared = await canonicalPurchaseOrdersApi.prepare(payload);
+            const review = canonicalPurchaseOrderReview(
+                prepared.data,
+                branchId,
+                selectedSupplier!.supplier_id ?? selectedSupplier!.id,
+            );
+            setPreparedPreview(prepared.data);
+            setCanonicalReview(review);
+            setPurchaseOrder(previous => ({
+                ...previous,
+                tax_amount: Number(review.gstTotal),
+                total_amount: Number(review.supplierCommitment),
+                net_amount: Number(review.supplierCommitment),
+            }));
+            return true;
+        } catch (error) {
+            const message = submissionError(error);
+            setPreparedPreview(null);
+            setCanonicalReview(null);
+            setErrors({ submission: message });
+            toast.error(message);
+            return false;
+        } finally {
+            setPreparingReview(false);
+        }
+    }, [
+        branchId,
+        currentFingerprint,
+        isOnline,
+        purchaseOrder,
+        selectedSupplier,
+        setErrors,
+        setPurchaseOrder,
+    ]);
+
+    const handleSavePurchaseOrder = useCallback(async (): Promise<void> => {
+        if (!preparedPreview || !canonicalReview) {
+            const message = 'Prepare the authoritative backend review before approving this purchase order.';
+            setErrors({ submission: message });
+            toast.error(message);
+            return;
+        }
+        if (!window.confirm(formatCanonicalPurchaseOrderConfirmation(canonicalReview))) return;
+
+        setSaving(true);
+        setErrors({});
+        try {
+            const { readback } = await canonicalPurchaseOrdersApi.executePrepared(preparedPreview);
+            const readbackTaxCents = [
+                readback.cgst_amount, readback.sgst_amount,
+                readback.igst_amount, readback.cess_amount,
+            ].reduce((sum, value) => sum + canonicalMoneyCents(value, 'readback GST'), 0);
+            if (
+                readback.branch_id !== canonicalReview.branchId
+                || readback.supplier_id !== canonicalReview.supplierId
+                || canonicalMoneyCents(readback.total_amount, 'readback total')
+                    !== canonicalMoneyCents(canonicalReview.supplierCommitment, 'approved total')
+                || readbackTaxCents !== canonicalMoneyCents(canonicalReview.gstTotal, 'approved GST')
+            ) {
+                throw new Error('Canonical purchase-order readback does not match the approved backend preview.');
+            }
+            setPurchaseOrder(previous => ({
+                ...previous,
+                po_no: readback.purchase_order_number,
+                gross_amount: Number(readback.subtotal),
+                discount_amount: Number(readback.discount_total),
+                freight_charges: Number(readback.charges_total),
+                tax_amount: readbackTaxCents / 100,
+                net_amount: Number(readback.total_amount),
+                total_amount: Number(readback.total_amount),
+                status: readback.status,
+            }));
+            setCreatedPOData({
+                poId: readback.purchase_order_id,
+                poNumber: readback.purchase_order_number,
+                supplierName: readback.supplier_name,
+                totalAmount: Number(readback.total_amount),
+            });
+            setShowSuccessModal(true);
+        } catch (error) {
+            const message = submissionError(error);
+            setErrors({ submission: message });
+            toast.error(message);
+        } finally {
+            setSaving(false);
+        }
+    }, [
+        canonicalReview,
+        preparedPreview,
+        setCreatedPOData,
+        setErrors,
+        setPurchaseOrder,
+        setShowSuccessModal,
+    ]);
+
+    return {
+        saving,
+        preparingReview,
+        canonicalReview,
+        prepareForReview,
+        handleSavePurchaseOrder,
+    };
 }
 
 export default usePurchaseOrderSave;

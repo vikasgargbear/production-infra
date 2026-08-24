@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactNode, SetStateAction, Dispatch } from 'react';
+import React, { useState, useEffect, useCallback, ReactNode, SetStateAction, Dispatch } from 'react';
 import { LucideIcon } from 'lucide-react';
 import ModuleHeader, { ModuleHeaderAction } from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';
@@ -48,14 +48,6 @@ interface DocumentData {
     [key: string]: unknown;
 }
 
-interface AdditionalAction {
-    label: string;
-    onClick: () => void;
-    variant?: string;
-    className?: string;
-    icon?: React.ComponentType<{ className?: string }>;
-}
-
 export interface GlobalDocumentFlowProps {
     // Document Configuration
     documentType?: DocumentType;
@@ -84,6 +76,7 @@ export interface GlobalDocumentFlowProps {
 
     // Validation & Actions
     canProceedToReview?: () => boolean;
+    onProceedToReview?: () => boolean | Promise<boolean>;
     onSave?: () => void;
     onPrint?: () => void;
     isSaving?: boolean;
@@ -137,6 +130,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
     // Validation & Actions
     canProceedToReview,
+    onProceedToReview,
     onSave,
     onPrint,
     isSaving = false,
@@ -155,6 +149,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     const toast = useToast();
 
     const [localStep, setLocalStep] = useState<number>(currentStep);
+    const [isPreparingReview, setIsPreparingReview] = useState(false);
 
     // Document type configurations
     const documentConfigs: Record<DocumentType, DocumentConfig> = {
@@ -255,10 +250,10 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     const finalIconColor = iconColor || 'text-blue-600';
 
     // Handle step changes
-    const handleStepChange = (newStep: number): void => {
+    const handleStepChange = useCallback((newStep: number): void => {
         setLocalStep(newStep);
         onStepChange?.(newStep);
-    };
+    }, [onStepChange]);
 
     // Default keyboard shortcuts per step
     const defaultShortcuts: Record<number, Shortcut[]> = {
@@ -300,15 +295,21 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [localStep, onSave, onClose]);
+    }, [handleStepChange, localStep, onSave, onClose]);
 
     // Handle proceed to review
-    const handleProceedToReview = (): void => {
+    const handleProceedToReview = async (): Promise<void> => {
         if (canProceedToReview?.() === false) {
             toast?.error?.('Please complete all required fields');
             return;
         }
-        handleStepChange(2);
+        setIsPreparingReview(true);
+        try {
+            if (await onProceedToReview?.() === false) return;
+            handleStepChange(2);
+        } finally {
+            setIsPreparingReview(false);
+        }
     };
 
     // Additional actions for header based on step
@@ -368,7 +369,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                         onContinue={handleProceedToReview}
                         cancelLabel="Reset"
                         continueLabel="Continue"
-                        continueDisabled={canProceedToReview?.() === false}
+                        continueDisabled={isPreparingReview || canProceedToReview?.() === false}
                         continueButtonColor="blue"
                     />
                 ) : (

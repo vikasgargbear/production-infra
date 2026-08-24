@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Search, Loader2, X, LucideIcon } from 'lucide-react';
 import { ActionButton } from '../ui';
 import { debounce } from '../../../utils/debounce';
@@ -174,6 +174,7 @@ function EntitySearchInner<T>(
             setShowDropdown(false);
             setSearchResults([]);
         }
+        return () => performSearch.cancel();
     }, [searchQuery, performSearch]);
 
     // Auto-scroll to highlighted item

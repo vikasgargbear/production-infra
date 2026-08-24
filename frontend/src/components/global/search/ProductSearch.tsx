@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, KeyboardEvent, MouseEvent } from 'react';
+import React, { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle, KeyboardEvent } from 'react';
 import { Search, Package } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import BatchSelector from '../selector/BatchSelector';
@@ -57,8 +57,8 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         }));
 
         // Search the canonical API; no device cache or fallback authority.
-        const searchProducts = useCallback(
-            debounce(async (query: string): Promise<void> => {
+        const searchProducts = useMemo(
+            () => debounce(async (query: string): Promise<void> => {
                 if (!query || query.length < 2) {
                     setSearchResults([]);
                     setHighlightedIndex(-1);
@@ -124,6 +124,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
 
         useEffect(() => {
             searchProducts(searchQuery);
+            return () => searchProducts.cancel();
         }, [searchQuery, searchProducts]);
 
         // Auto-scroll to highlighted item

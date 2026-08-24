@@ -10,11 +10,13 @@ describe('purchase submission boundaries', () => {
         expect(boundary.unavailableReason).toContain('canonical goods-receipt');
     });
 
-    it('fails closed for purchase orders without exposing a legacy save handler', () => {
+    it('routes purchase orders only through the canonical confirmed command', () => {
         const boundary = getPurchaseOrderSubmissionBoundary();
 
-        expect(boundary.saving).toBe(false);
-        expect(boundary.handleSavePurchaseOrder).toBeUndefined();
-        expect(boundary.unavailableReason).toContain('canonical branch');
+        expect(boundary).toEqual({
+            operationKey: 'procurement.purchase_order.prepare',
+            legacyEndpointAllowed: false,
+            requiresActorConfirmation: true,
+        });
     });
 });

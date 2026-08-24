@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Package, FileText, Building2, Truck, CreditCard } from 'lucide-react';
+import { Package, FileText, Building2, ShieldCheck } from 'lucide-react';
 import {
   GlobalDocumentFlow,
   SupplierSearch,
@@ -13,9 +13,8 @@ import {
   StandardDatePicker
 } from '../../global';
 import { usePurchaseOrderLogic } from './hooks';
-import { PURCHASE_ORDER_SUBMIT_UNAVAILABLE_REASON } from './hooks/usePurchaseOrderSave';
 import { toast } from 'react-toastify';
-import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
+import { useCompany } from '../../../contexts/CompanyContext';
 
 /**
  * PurchaseOrderFlow - Purchase Order using the full global document system
@@ -30,6 +29,7 @@ import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledData?: any }) => {
   const productSearchRef = useRef<any>(null);
+  const { companyInfo } = useCompany();
 
   // Use the extracted hook for all state and handlers
   const {
@@ -40,7 +40,10 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     currentStep,
     setCurrentStep,
     saving,
+    preparingReview,
     errors,
+    purchaseOrderValidationError,
+    canonicalReview,
 
     // Modal states
     showSupplierModal,
@@ -58,6 +61,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     handleAddItem,
     handleUpdateItem,
     handleRemoveItem,
+    prepareForReview,
     handleSavePurchaseOrder,
     handlePrint,
     formatCurrency
@@ -161,10 +165,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             items={purchaseOrder.items.map(item => ({
               ...item,
               unit_price: item.unit_price,
-              tax: item.tax_percent,
+              gst_percent: item.gst_percent ?? item.tax_percent,
               discount_percent: item.discount_percent || 0,
-              free_quantity: item.free_quantity || 0,
-              total: ((item.quantity || 0) * (item.unit_price || 0) * (1 + ((item.tax_percent || 0) / 100))).toFixed(2)
+              free_quantity: item.free_quantity || 0
             }))}
             onUpdateItem={(index, field, value) => {
               const mappedField = field === 'unit_price' ? 'unit_price' :
@@ -175,421 +178,130 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             onRemoveItem={handleRemoveItem}
             showTotals={false}
             title=""
-            // columns={['product', 'pack_type', 'pack_config', 'qty', 'free', 'mrp', 'unit_price', 'disc', 'tax', 'total']}
-            // @ts-ignore
-            customColumns={{
-              pack_type: {
-                label: 'Pack',
-                align: 'center',
-                render: (item, index) => (
-                  <select
-                    value={item.pack_type || 'STRIP'}
-                    onChange={(e) => handleUpdateItem(index, 'pack_type', e.target.value)}
-                    className="w-16 text-xs border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
-                  >
-                    {/* TODO: Fetch pack types from backend categories */}
-                    <option value="STRIP">STRIP</option>
-                    <option value="BOX">BOX</option>
-                    <option value="BOTTLE">BOTTLE</option>
-                    <option value="VIAL">VIAL</option>
-                    <option value="TUBE">TUBE</option>
-                  </select>
-                )
-              },
-              pack_config: {
-                label: 'Pack Size',
-                align: 'center',
-                render: (item, index) => (
-                  <div className="flex gap-1">
-                    <NumberInput
-                      value={item.pack_size}
-                      onChange={(value) => handleUpdateItem(index, 'pack_size', value)}
-                      min={1}
-                      className="w-8 text-xs text-center"
-                    />
-                    <span className="text-xs text-gray-400">×</span>
-                    <NumberInput
-                      value={item.packages_per_box}
-                      onChange={(value) => handleUpdateItem(index, 'packages_per_box', value)}
-                      min={1}
-                      className="w-8 text-center text-xs"
-                    />
-                  </div>
-                )
-              },
-              qty: {
-                label: 'Qty',
-                align: 'center',
-                render: (item, index) => (
-                  <NumberInput
-                    value={item.quantity}
-                    onChange={(value) => handleUpdateItem(index, 'quantity', value)}
-                    min={0}
-                    className="w-12 text-center"
-                  />
-                )
-              },
-              free: {
-                label: 'Free',
-                align: 'center',
-                render: (item, index) => (
-                  <NumberInput
-                    value={item.free_quantity}
-                    onChange={(value) => handleUpdateItem(index, 'free_quantity', value)}
-                    min={0}
-                    className="w-10 text-center"
-                  />
-                )
-              },
-              mrp: {
-                label: 'MRP',
-                align: 'center',
-                render: (item, index) => (
-                  <NumberInput
-                    value={item.mrp}
-                    onChange={(value) => handleUpdateItem(index, 'mrp', value)}
-                    min={0}
-                    decimals={2}
-                    className="w-16 text-center"
-                    prefix="₹"
-                  />
-                )
-              },
-              unit_price: {
-                label: 'Rate',
-                align: 'center',
-                render: (item, index) => (
-                  <NumberInput
-                    value={item.unit_price}
-                    onChange={(value) => handleUpdateItem(index, 'unit_price', value)}
-                    min={0}
-                    decimals={2}
-                    className="w-16 text-center"
-                    prefix="₹"
-                  />
-                )
-              },
-              disc: {
-                label: 'Disc%',
-                align: 'center',
-                render: (item, index) => (
-                  <NumberInput
-                    value={item.discount_percent}
-                    onChange={(value) => handleUpdateItem(index, 'discount_percent', value)}
-                    min={0}
-                    max={100}
-                    decimals={1}
-                    className="w-12 text-center"
-                    suffix="%"
-                  />
-                )
-              },
-              tax: {
-                label: 'Tax%',
-                align: 'center',
-                render: (item, index) => (
-                  <select
-                    value={item.tax_percent || 12}
-                    onChange={(e) => handleUpdateItem(index, 'tax_percent', parseFloat(e.target.value))}
-                    className="w-12 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
-                  >
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                )
-              },
-              total: {
-                label: 'Total',
-                align: 'right',
-                render: (item) => (
-                  <span className="font-medium">₹{Number(item.total || 0).toFixed(2)}</span>
-                )
-              }
-            }}
           />
 
-          {/* Totals Section */}
-          {purchaseOrder.items?.length > 0 && (
-            <div className="mt-4 bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-end">
-                <div className="w-80 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Subtotal:</span>
-                    <span className="font-medium">₹{(purchaseOrder.gross_amount || 0).toFixed(2)}</span>
-                  </div>
-                  {purchaseOrder.freight_charges > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span>Freight Charges:</span>
-                      <span>₹{purchaseOrder.freight_charges.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm">
-                    <span>Tax Amount:</span>
-                    <span>₹{(purchaseOrder.tax_amount || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm items-center">
-                    <span>Discount:</span>
-                    <NumberInput
-                      value={purchaseOrder.discount_amount}
-                      onChange={(value) => setPurchaseOrder(prev => ({ ...prev, discount_amount: value || 0 }))}
-                      min={0}
-                      decimals={2}
-                      prefix="₹"
-                      className="w-32 text-red-600"
-                    />
-                  </div>
-                  <div className="border-t pt-2 flex justify-between text-base font-semibold">
-                    <span>Total Amount:</span>
-                    <span className="text-blue-600">₹{(purchaseOrder.total_amount || 0).toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-      {errors.items && (
-        <p className="text-red-500 text-xs mt-1">{errors.items}</p>
-      )}
-    </>
-  );
-
-  // Review content for step 2
-  const reviewContent = (
-    <>
-      <CanonicalWriteNotice
-        title="Purchase order submission is not available yet"
-        description={PURCHASE_ORDER_SUBMIT_UNAVAILABLE_REASON}
-        className="mb-4"
-      />
-      {/* Delivery & Payment Terms */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Truck className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">Delivery & Payment Terms</h3>
-        </div>
-        <ContentCard title={undefined} subtitle={undefined} actions={undefined}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Payment Terms</label>
-              <div className="relative">
-                <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <select
-                  value={purchaseOrder.payment_terms || '30 days'}
-                  onChange={(e) => setPurchaseOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="Immediate">Immediate</option>
-                  <option value="7 days">7 days</option>
-                  <option value="15 days">15 days</option>
-                  <option value="30 days">30 days</option>
-                  <option value="45 days">45 days</option>
-                  <option value="60 days">60 days</option>
-                  <option value="90 days">90 days</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Delivery Terms</label>
-              <input
-                type="text"
-                value={purchaseOrder.delivery_terms || ''}
-                onChange={(e) => setPurchaseOrder(prev => ({ ...prev, delivery_terms: e.target.value }))}
-                placeholder="e.g., F.O.R. Destination"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Freight Charges</label>
-              <NumberInput
-                value={purchaseOrder.freight_charges}
-                onChange={(value) => setPurchaseOrder(prev => ({ ...prev, freight_charges: value || 0 }))}
-                min={0}
-                decimals={2}
-                className="w-full"
-                prefix="₹"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Delivery Location</label>
-              <input
-                type="text"
-                value={purchaseOrder.delivery_location}
-                onChange={(e) => setPurchaseOrder(prev => ({ ...prev, delivery_location: e.target.value }))}
-                placeholder="e.g., Main Warehouse"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Transport Mode</label>
+          {purchaseOrder.items.map((item, index) => Number(item.free_quantity ?? 0) > 0 && (
+            <label key={String(item.id)} className="mt-3 block border border-gray-200 bg-white p-3 text-sm">
+              <span className="mb-2 block font-medium text-gray-800">
+                Free-supply tax treatment for {item.product_name}
+              </span>
               <select
-                value={purchaseOrder.transport_mode}
-                onChange={(e) => setPurchaseOrder(prev => ({ ...prev, transport_mode: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={item.free_supply_tax_treatment || ''}
+                onChange={(event) => handleUpdateItem(index, 'free_supply_tax_treatment', event.target.value)}
+                className="min-h-11 w-full border border-gray-300 bg-white px-3"
               >
-                <option value="By Road">By Road</option>
-                <option value="By Rail">By Rail</option>
-                <option value="By Air">By Air</option>
-                <option value="By Sea">By Sea</option>
+                <option value="">Select canonical treatment</option>
+                <option value="excluded_from_taxable_value">Exclude free quantity from taxable value</option>
+                <option value="included_at_unit_rate">Include free quantity at unit rate</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Discount Amount</label>
+            </label>
+          ))}
+
+          <div className="mt-4 grid gap-3 border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">
+              Document discount
               <NumberInput
                 value={purchaseOrder.discount_amount}
                 onChange={(value) => setPurchaseOrder(prev => ({ ...prev, discount_amount: value || 0 }))}
                 min={0}
                 decimals={2}
-                className="w-full"
                 prefix="₹"
+                className="mt-1 w-full"
               />
+            </label>
+            <div className="border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+              Exact subtotal, GST and supplier commitment are calculated by the canonical backend when you select Continue.
             </div>
           </div>
-        </ContentCard>
+        </>
+      )}
+      {errors.items && (
+        <p className="text-red-500 text-xs mt-1">{errors.items}</p>
+      )}
+      {(errors.submission || purchaseOrderValidationError) && (
+        <div role="alert" className="mt-4 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {errors.submission || purchaseOrderValidationError}
+        </div>
+      )}
+    </>
+  );
+
+  // The active review is derived only from the immutable canonical prepare.
+  const reviewContent = canonicalReview ? (
+    <div className="space-y-5">
+      <div className="border border-blue-200 bg-blue-50 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
+          <div>
+            <h3 className="font-semibold text-blue-950">Authoritative backend review</h3>
+            <p className="mt-1 text-sm text-blue-900">
+              GST classification, tax amounts and supplier commitment below came from the immutable canonical prepare. The PO number is assigned only after approval.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* PO Preview */}
-      <ContentCard
-        title="Purchase Order Preview"
-        subtitle={undefined}
-        actions={undefined}
-      >
-        <div className="bg-white rounded-lg p-6">
-          {/* Company Branding Header */}
-          <div className="text-center mb-6 pb-4 border-b-2 border-gray-300">
-            <h1 className="text-3xl font-bold text-blue-600 mb-2">PHARMA SOLUTIONS PVT. LTD.</h1>
-            <p className="text-sm text-gray-600">Wholesale Pharmaceutical Distributor</p>
-            <p className="text-sm text-gray-600">GST: 27AAACP1234B1Z5 | Drug License: 20B/123456</p>
-            <p className="text-sm text-gray-600">123 Business Park, Mumbai - 400001 | Tel: +91-22-12345678</p>
-          </div>
+      <ContentCard title="Purchase order parties" subtitle={undefined} actions={undefined}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Buyer</p>
+            <p className="mt-2 font-medium text-gray-900">{companyInfo?.name}</p>
+            <p className="mt-1 text-sm text-gray-600">{companyInfo?.address}</p>
+            <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || 'Not configured'}</p>
+            <p className="mt-2 break-all font-mono text-xs text-gray-500">Branch: {canonicalReview.branchId}</p>
+          </section>
+          <section className="border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Supplier</p>
+            <p className="mt-2 font-medium text-gray-900">{selectedSupplier?.supplier_name}</p>
+            {selectedSupplier?.primary_phone && <p className="mt-1 text-sm text-gray-600">Phone: {selectedSupplier.primary_phone}</p>}
+            <p className="text-sm text-gray-600">GSTIN: {selectedSupplier?.gst_number || 'Unregistered'}</p>
+            <p className="mt-2 break-all font-mono text-xs text-gray-500">Supplier: {canonicalReview.supplierId}</p>
+          </section>
+        </div>
+      </ContentCard>
 
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold">PURCHASE ORDER</h2>
-            <p className="text-gray-600">PO No: <span className="font-semibold">{purchaseOrder.po_no}</span></p>
-            <p className="text-gray-600">Date: {new Date(purchaseOrder.po_date).toLocaleDateString('en-IN')}</p>
-            <p className="text-gray-600">Expected Delivery: {new Date(purchaseOrder.expected_delivery_date).toLocaleDateString('en-IN')}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6 mb-6">
-            {/* From (Company) */}
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <h3 className="font-semibold mb-2 text-blue-900">From:</h3>
-              <p className="text-blue-900 font-medium">Pharma Solutions Pvt. Ltd.</p>
-              <p className="text-blue-800 text-sm">123 Business Park</p>
-              <p className="text-blue-800 text-sm">Mumbai - 400001</p>
-              <p className="text-blue-800 text-sm">Email: purchase@pharmasolutions.com</p>
-            </div>
-
-            {/* To (Supplier) */}
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-semibold mb-2 text-gray-700">To (Supplier):</h3>
-              <p className="text-gray-900 font-medium">{selectedSupplier?.supplier_name}</p>
-              {selectedSupplier?.phone && <p className="text-gray-600 text-sm">Phone: {selectedSupplier.phone}</p>}
-              {selectedSupplier?.gst_number && <p className="text-gray-600 text-sm">GST: {selectedSupplier.gst_number}</p>}
-              {selectedSupplier?.address && <p className="text-gray-600 text-sm">Address: {selectedSupplier.address}</p>}
-            </div>
-          </div>
-
-          <table className="w-full mb-6">
+      <ContentCard title="Reviewed line facts" subtitle="Rates and quantities are the exact facts submitted for backend calculation." actions={undefined}>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="text-left py-2">Item</th>
-                <th className="text-center py-2">Pack</th>
-                <th className="text-center py-2">Qty</th>
-                <th className="text-center py-2">Free</th>
-                <th className="text-right py-2">MRP</th>
-                <th className="text-right py-2">Rate</th>
-                <th className="text-right py-2">Tax</th>
-                <th className="text-right py-2">Amount</th>
+              <tr className="border-b border-gray-300 text-left text-xs uppercase tracking-wide text-gray-600">
+                <th className="px-3 py-2">Product</th>
+                <th className="px-3 py-2">UOM identity</th>
+                <th className="px-3 py-2 text-right">Billed</th>
+                <th className="px-3 py-2 text-right">Free</th>
+                <th className="px-3 py-2 text-right">Quoted rate</th>
               </tr>
             </thead>
             <tbody>
-              {(purchaseOrder.items || []).map((item, index) => {
-                const quantity = Number(item.quantity) || 0;
-                const unitPrice = Number(item.unit_price) || 0;
-                const taxPercent = Number(item.tax_percent) || 0;
-                const itemTotal = quantity * unitPrice;
-                const itemTax = (itemTotal * taxPercent) / 100;
-                const totalWithTax = itemTotal + itemTax;
-
-                return (
-                  <tr key={index} className="border-b border-gray-200">
-                    <td className="py-2">{item.product_name}</td>
-                    <td className="text-center py-2 text-sm">
-                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.packages_per_box || 10}
-                    </td>
-                    <td className="text-center py-2">{quantity}</td>
-                    <td className="text-center py-2">{item.free_quantity || 0}</td>
-                    <td className="text-right py-2">{formatCurrency(item.mrp ?? 0)}</td>
-                    <td className="text-right py-2">{formatCurrency(unitPrice)}</td>
-                    <td className="text-right py-2">{taxPercent}%</td>
-                    <td className="text-right py-2 font-medium">{formatCurrency(totalWithTax)}</td>
-                  </tr>
-                );
-              })}
+              {purchaseOrder.items.map(item => (
+                <tr key={String(item.id)} className="border-b border-gray-200">
+                  <td className="px-3 py-3 font-medium text-gray-900">{item.product_name}</td>
+                  <td className="px-3 py-3 font-mono text-xs text-gray-600">{item.uom_conversion_id}</td>
+                  <td className="px-3 py-3 text-right">{item.quantity}</td>
+                  <td className="px-3 py-3 text-right">{item.free_quantity ?? 0}</td>
+                  <td className="px-3 py-3 text-right">{formatCurrency(item.unit_price)}</td>
+                </tr>
+              ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-300">
-                <td colSpan={7} className="text-right py-2 font-medium">Subtotal:</td>
-                <td className="text-right py-2 font-medium">{formatCurrency(purchaseOrder.gross_amount)}</td>
-              </tr>
-              <tr>
-                <td colSpan={7} className="text-right py-2">Tax:</td>
-                <td className="text-right py-2">{formatCurrency(purchaseOrder.tax_amount)}</td>
-              </tr>
-              {purchaseOrder.freight_charges > 0 && (
-                <tr>
-                  <td colSpan={7} className="text-right py-2">Freight Charges:</td>
-                  <td className="text-right py-2">{formatCurrency(purchaseOrder.freight_charges)}</td>
-                </tr>
-              )}
-              {purchaseOrder.discount_amount > 0 && (
-                <tr>
-                  <td colSpan={7} className="text-right py-2">Discount:</td>
-                  <td className="text-right py-2 text-red-600">-{formatCurrency(purchaseOrder.discount_amount)}</td>
-                </tr>
-              )}
-              <tr className="border-t border-gray-300">
-                <td colSpan={7} className="text-right py-2 text-lg font-bold">Total Amount:</td>
-                <td className="text-right py-2 text-lg font-bold">{formatCurrency(purchaseOrder.total_amount)}</td>
-              </tr>
-            </tfoot>
           </table>
-
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Terms & Conditions:</h4>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• Payment Terms: {purchaseOrder.payment_terms || '30 days'}</li>
-                <li>• Delivery Terms: {purchaseOrder.delivery_terms || 'F.O.R. Destination'}</li>
-                <li>• Delivery Location: {purchaseOrder.delivery_location || 'Main Warehouse'}</li>
-                <li>• Transport Mode: {purchaseOrder.transport_mode || 'By Road'}</li>
-              </ul>
-            </div>
-
-            <div className="p-4 bg-yellow-50 rounded-lg">
-              <h4 className="font-medium text-yellow-900 mb-2">Important Notes:</h4>
-              <ul className="text-sm text-yellow-800 space-y-1">
-                <li>• Please ensure all items are properly packed</li>
-                <li>• Include batch numbers and expiry dates</li>
-                <li>• Send invoice copy with delivery</li>
-                <li>• Quality certificate required for all items</li>
-              </ul>
-            </div>
-          </div>
-
-          {purchaseOrder.notes && (
-            <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
-              <h4 className="font-medium text-yellow-900 mb-2">Notes:</h4>
-              <p className="text-sm text-yellow-800">{purchaseOrder.notes}</p>
-            </div>
-          )}
         </div>
       </ContentCard>
-    </>
+
+      <ContentCard title="Backend totals" subtitle="These values—not browser arithmetic—are bound to the approval hash." actions={undefined}>
+        <dl className="ml-auto grid max-w-md grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <dt className="text-gray-600">CGST</dt><dd className="text-right">{formatCurrency(canonicalReview.cgstTotal)}</dd>
+          <dt className="text-gray-600">SGST</dt><dd className="text-right">{formatCurrency(canonicalReview.sgstTotal)}</dd>
+          <dt className="text-gray-600">IGST</dt><dd className="text-right">{formatCurrency(canonicalReview.igstTotal)}</dd>
+          <dt className="text-gray-600">Cess</dt><dd className="text-right">{formatCurrency(canonicalReview.cessTotal)}</dd>
+          <dt className="border-t border-gray-300 pt-3 font-semibold text-gray-900">Supplier commitment</dt>
+          <dd className="border-t border-gray-300 pt-3 text-right text-lg font-bold text-blue-700">{formatCurrency(canonicalReview.supplierCommitment)}</dd>
+        </dl>
+      </ContentCard>
+    </div>
+  ) : (
+    <div role="alert" className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+      The authoritative backend preview is unavailable. Return to edit and prepare the purchase order again.
+    </div>
   );
 
   return (
@@ -610,10 +322,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
 
         // Validation & Actions
         canProceedToReview={() => {
-          return !!selectedSupplier &&
-            purchaseOrder.items &&
-            purchaseOrder.items.length > 0;
+          return purchaseOrderValidationError === null && !preparingReview;
         }}
+        onProceedToReview={prepareForReview}
         onSave={handleSavePurchaseOrder}
         isSaving={saving}
 
