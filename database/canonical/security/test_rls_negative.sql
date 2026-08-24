@@ -175,10 +175,20 @@ INSERT INTO parties.parties (
 ) VALUES (
     '10000000-0000-7000-8000-000000000001',
     '71000000-0000-7000-8000-000000000001',
-    'organization', 'Payment history party', 'active',
+    'organization', 'Payment history party', 'draft',
     '20000000-0000-7000-8000-000000000001',
     '20000000-0000-7000-8000-000000000001'
 );
+
+-- Exercise the governed draft -> active transition used by canonical party
+-- commands instead of bypassing the party lifecycle in this RLS fixture.
+UPDATE parties.parties
+   SET status = 'active',
+       row_version = row_version + 1,
+       updated_at = transaction_timestamp(),
+       updated_by_membership_id = '20000000-0000-7000-8000-000000000001'
+ WHERE org_id = '10000000-0000-7000-8000-000000000001'
+   AND id = '71000000-0000-7000-8000-000000000001';
 
 INSERT INTO finance.accounts (
     org_id, id, code, name, account_type, currency_code,
