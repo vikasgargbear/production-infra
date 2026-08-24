@@ -31,8 +31,11 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
         "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD",
     ):
         assert f"secrets.{long_lived_secret}" not in two_user_job
-    assert "SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}" in two_user_job
-    assert "SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}" in two_user_job
+    job_environment = two_user_job.split("    steps:", 1)[0]
+    for admin_secret in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD"):
+        reference = f"{admin_secret}: ${{{{ secrets.{admin_secret} }}}}"
+        assert reference not in job_environment
+        assert two_user_job.count(reference) == 2
     assert "SUPABASE_SERVICE_ROLE_KEY" not in two_user_job
     assert "canonical-staging-two-user-browser-identities" in two_user_job
     assert "provision_ephemeral_browser_identities.py" in two_user_job
@@ -44,6 +47,9 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     assert "if: always()" in cleanup_step
     assert two_user_job.index("npm run test:e2e:live:approvals") < two_user_job.index(
         "Always restore seeded identities and remove disposable Auth users"
+    )
+    assert two_user_job.index("npm ci") < two_user_job.index(
+        "Provision masked disposable maker and checker identities"
     )
     assert "https://*)" in workflow
     assert "npm run test:e2e:live:approvals" in workflow

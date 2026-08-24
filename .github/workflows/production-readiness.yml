@@ -780,8 +780,6 @@ jobs:
       PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
       PLAYWRIGHT_LIVE_RETURN_INVOICE_PATTERN: "DEMO-SI-"
       PLAYWRIGHT_LIVE_RETURN_SUPPLIER_QUERY: "Synthetic Packaging"
@@ -808,8 +806,6 @@ jobs:
           test -n "$PLAYWRIGHT_LIVE_BASE_URL"
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
-          test -n "$SUPABASE_ACCESS_TOKEN"
-          test -n "$SUPABASE_DB_PASSWORD"
           case "$PLAYWRIGHT_LIVE_BASE_URL" in
             https://*) ;;
             *) echo "Two-user browser target must use HTTPS" >&2; exit 2 ;;
@@ -817,18 +813,24 @@ jobs:
       - name: Install pinned ephemeral identity reconciler dependencies
         working-directory: ${{ github.workspace }}
         run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
-      - name: Provision masked disposable maker and checker identities
-        working-directory: ${{ github.workspace }}
-        run: |
-          python3 backend/scripts/provision_ephemeral_browser_identities.py \
-            provision --state "$RUNNER_TEMP/canonical-browser-identities.json"
       - run: npm ci
       - name: Install Playwright video support
         run: npx playwright install ffmpeg
+      - name: Provision masked disposable maker and checker identities
+        working-directory: ${{ github.workspace }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --state "$RUNNER_TEMP/canonical-browser-identities.json"
       - run: npm run test:e2e:live:approvals
       - name: Always restore seeded identities and remove disposable Auth users
         if: always()
         working-directory: ${{ github.workspace }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           python3 backend/scripts/provision_ephemeral_browser_identities.py \
             cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"
