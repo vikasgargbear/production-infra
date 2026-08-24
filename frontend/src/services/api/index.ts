@@ -22,8 +22,6 @@ import { auditApi } from './modules/audit/audit.api';
 // AUTH
 // =========================================================================
 import { authApi } from './modules/auth/auth.api';
-import { usersApi } from './modules/auth/users.api';
-import { roleManagementApi } from './modules/auth/roleManagement.api';
 
 // =========================================================================
 // COMPLIANCE
@@ -115,8 +113,6 @@ export {
 
   // Auth
   authApi,
-  usersApi,
-  roleManagementApi,
 
   // Compliance
   gstApi,
@@ -192,7 +188,7 @@ const apiModules = {
   audit: { auditLogs: auditApi },
 
   // Auth
-  auth: { auth: authApi, users: usersApi, roles: roleManagementApi },
+  auth: { auth: authApi },
 
   // Compliance
   compliance: { gst: gstApi, taxEntries: taxEntriesApi, compliance: complianceApi },

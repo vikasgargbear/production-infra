@@ -3,9 +3,9 @@
  * Manages state and logic for sales order creation flow
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
-import { apiClient, usersApi } from '../../../../services/api';
+import { apiClient } from '../../../../services/api';
 import { calculateSalesOrderPreview } from '../../../../services/calculations/salesOrderCalculationService';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
@@ -28,14 +28,6 @@ type Customer = BaseCustomer & {
     state?: string;
     pincode?: string;
 };
-
-interface Employee {
-    user_id?: number | string;
-    id?: number | string;
-    full_name?: string;
-    name?: string;
-    email?: string;
-}
 
 interface CompanyInfo {
     name?: string;
@@ -80,7 +72,6 @@ export interface UseSalesOrderLogicReturn {
     setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>;
     sameAsBilling: boolean;
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
-    employees: Employee[];
     saving: boolean;
     submissionUnavailableReason: string;
     message: string;
@@ -162,7 +153,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [order, setOrder] = useState<Order>(createInitialOrder());
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [sameAsBilling, setSameAsBilling] = useState(true);
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<BankAccount | null>(null);
@@ -194,37 +184,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [newProductName, setNewProductName] = useState('');
     const calculationRequestRef = useRef(0);
-
-    // Load employees
-    useEffect(() => {
-        const loadEmployees = async (): Promise<void> => {
-            try {
-                const response = await usersApi.getAll({ limit: 20, role: 'sales' });
-                const users = response.data?.data || response.data || [];
-
-                if (Array.isArray(users) && users.length > 0) {
-                    setEmployees(users);
-                    if (!order.created_by && users.length > 0) {
-                        setOrder(prev => ({
-                            ...prev,
-                            created_by: users[0].id,
-                            created_by_name: users[0].full_name || 'User'
-                        }));
-                    }
-                } else {
-                    throw new Error('No users returned');
-                }
-            } catch (error) {
-                console.error('[SalesOrder] Unable to load sales users from the API:', error);
-                setEmployees([]);
-                setMessage('Unable to load sales users from the API.');
-                setMessageType('error');
-            }
-        };
-
-        loadEmployees();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [companyInfo]);
 
     // Recalculate totals
     const recalculateTotals = useCallback(async (items: OrderItem[]): Promise<void> => {
@@ -572,7 +531,6 @@ Expected Delivery: ${order.expected_delivery_date}
         setSelectedCustomer,
         sameAsBilling,
         setSameAsBilling,
-        employees,
         saving: submissionSaving,
         submissionUnavailableReason,
         message,

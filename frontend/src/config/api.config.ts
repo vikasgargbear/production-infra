@@ -201,8 +201,6 @@ export const API_CONFIG: APIConfig = {
     SETTINGS: {
       COMPANY: '/settings/company/',  // Added trailing slash
       PREFERENCES: '/settings/preferences/',  // Added trailing slash
-      USERS: '/users/',  // Added trailing slash
-      ROLES: '/roles/',  // Added trailing slash
       PERMISSIONS: '/permissions/',  // Added trailing slash
     },
 

@@ -25,7 +25,6 @@ from .security import (
     require_reports_permission, require_master_permission,
     require_returns_permission, get_current_user,
     check_module_access, check_permission, MODULES, PERMISSIONS,
-    RoleManager,
 )
 
 # Utils exports (backward compatible)
