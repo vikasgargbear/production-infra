@@ -18,6 +18,7 @@ import ItemProfitModal from '../../modals/ItemProfitModal';
 import { toast } from 'react-toastify';
 import { ordersApi, challansApi } from '../../../../services/api';
 import { extractDocumentCollection, extractDocumentDetail } from '../../utils/documentImport';
+import { invoiceBatchAllocationValidationError } from '../utils/canonicalInvoiceCommand';
 
 // Shared Types
 import { Customer, Invoice, InvoiceItem, Employee, ProductForLastDeal } from '../types/invoiceTypes';
@@ -117,7 +118,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     setShowItemProfitModal
 }) => {
     // Ctrl+Enter → Continue shortcut
-    const continueDisabled = !selectedCustomer || !invoice.items || invoice.items.length === 0;
+    const batchAllocationError = invoiceBatchAllocationValidationError(invoice as any);
+    const continueDisabled = !selectedCustomer || !invoice.items || invoice.items.length === 0
+        || Boolean(batchAllocationError);
     const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.ctrlKey && e.key === 'Enter' && !continueDisabled) {
             e.preventDefault();
@@ -267,6 +270,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                             <ProductSearch
                                 onAddItem={handleAddItem}
                                 onCreateProduct={() => setShowProductModal(true)}
+                                enforceFefo
                                 ref={productSearchRef}
                                 tabIndex={5}
                             />
@@ -290,6 +294,14 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     productSearchRef={productSearchRef as any}
                                     currencySymbol="₹"
                                 />
+                                {batchAllocationError && (
+                                    <div
+                                        role="alert"
+                                        className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                                    >
+                                        {batchAllocationError}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

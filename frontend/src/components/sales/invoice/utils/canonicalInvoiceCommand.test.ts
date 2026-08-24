@@ -43,6 +43,7 @@ const invoice = {
         location_id: ids.location,
         quantity: 2,
         free_quantity: 1,
+        available_quantity: 10,
         unit_price: 100,
         discount_percent: 10,
         hsn_code: '481910',
@@ -106,6 +107,27 @@ describe('canonical invoice command', () => {
         expect(canonicalInvoiceValidationError(invalid, customer)).toMatch(
             /stock location is missing its canonical UUID/i,
         );
+    });
+
+    it('fails closed instead of partially allocating beyond the selected batch', () => {
+        const insufficient = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                quantity: 9,
+                free_quantity: 2,
+                available_quantity: 10,
+            }],
+        } as Invoice;
+
+        expect(canonicalInvoiceValidationError(insufficient, customer)).toMatch(
+            /needs 11 units but the selected batch has 10.*multi-batch allocation is not available/i,
+        );
+        expect(() => buildCanonicalInvoicePreparePayload(
+            insufficient,
+            customer,
+            'erp-web-invoice:insufficient-batch',
+        )).toThrow(/multi-batch allocation is not available/i);
     });
 
     it('fails closed for delivery until exact distance is captured', () => {

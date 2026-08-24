@@ -11,7 +11,10 @@ import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
 import { useInvoiceLogic, Invoice, CreatedInvoiceData } from './hooks/useInvoiceLogic';
 import { GenericSuccessModal } from '../../global';
 import InvoicePreview from './ui/InvoicePreviewEnterprise';
-import { invoicePreviewValidationError } from './utils/canonicalInvoiceCommand';
+import {
+    invoiceBatchAllocationValidationError,
+    invoicePreviewValidationError,
+} from './utils/canonicalInvoiceCommand';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -225,6 +228,12 @@ ${companyInfo?.name || 'Your Company'}`;
             toast.error('Please add at least one item');
             return;
         }
+        const batchAllocationError = invoiceBatchAllocationValidationError(invoice);
+        if (batchAllocationError) {
+            setError(batchAllocationError);
+            toast.error(batchAllocationError);
+            return;
+        }
 
         try {
             const result = await calculateInvoicePreview(invoice, isOnline);
@@ -239,7 +248,7 @@ ${companyInfo?.name || 'Your Company'}`;
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
         }
-    }, [selectedCustomer, invoice, isOnline, setInvoice]);
+    }, [selectedCustomer, invoice, isOnline, setError, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
         const validationError = invoicePreviewValidationError(

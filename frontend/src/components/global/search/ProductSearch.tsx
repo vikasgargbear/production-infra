@@ -22,6 +22,7 @@ interface ProductSearchProps {
     onAddItem: (product: ProductWithBatch) => void;
     onCreateProduct?: (productName: string) => void;
     showBatchSelection?: boolean;
+    enforceFefo?: boolean;
     placeholder?: string;
     className?: string;
     tabIndex?: number;
@@ -34,7 +35,7 @@ export interface ProductSearchRef {
 // ==================== COMPONENT ====================
 
 const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
-    ({ onAddItem, onCreateProduct, showBatchSelection = true, tabIndex }, ref) => {
+    ({ onAddItem, onCreateProduct, showBatchSelection = true, enforceFefo = false, tabIndex }, ref) => {
         const [searchQuery, setSearchQuery] = useState<string>('');
         const [searchResults, setSearchResults] = useState<Product[]>([]);
         const [loading, setLoading] = useState<boolean>(false);
@@ -312,6 +313,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         show={showBatchModal}
                         product={selectedProduct as any}
                         mode="modal"
+                        enforceFefo={enforceFefo}
                         onClose={() => {
                             setShowBatchModal(false);
                             setSelectedProduct(null);

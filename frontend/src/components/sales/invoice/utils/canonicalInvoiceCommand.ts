@@ -96,6 +96,25 @@ const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
     };
 };
 
+/**
+ * The current invoice command emits one selected batch allocation per line.
+ * Until consecutive FEFO lots can be allocated as one audited operation, do
+ * not partially submit a quantity that the selected batch cannot fulfill.
+ */
+export function invoiceBatchAllocationValidationError(invoice: Invoice): string | null {
+    for (const [index, item] of invoice.items.entries()) {
+        const availableQuantity = Number(item.available_quantity ?? item.quantity_available);
+        if (!Number.isFinite(availableQuantity) || availableQuantity < 0) {
+            return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
+        }
+        const requestedQuantity = Number(item.quantity || 0) + Number(item.free_quantity || 0);
+        if (requestedQuantity > availableQuantity) {
+            return `Item ${index + 1} needs ${requestedQuantity} units but the selected batch has ${availableQuantity}. Multi-batch allocation is not available yet; reduce the quantity or stop and refresh stock.`;
+        }
+    }
+    return null;
+}
+
 export function canonicalInvoiceValidationError(
     invoice: Invoice,
     customer: Customer | null,
@@ -115,6 +134,8 @@ export function canonicalInvoiceValidationError(
     if (invoice.delivery_type !== 'PICKUP') {
         return 'Delivery and courier invoices need an exact transport distance. Use Pickup until distance capture is available.';
     }
+    const batchAllocationError = invoiceBatchAllocationValidationError(invoice);
+    if (batchAllocationError) return batchAllocationError;
 
     let branchId: string | undefined;
     let locationId: string | undefined;

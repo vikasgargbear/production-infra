@@ -6,7 +6,11 @@ import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.c
 import { mergeProductAndBatch } from '../../../utils/productMapper';
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Product as CanonicalProduct } from '../../../types/models';
-import { batchDisabledReason } from './batchEligibility';
+import {
+    batchDisabledReason,
+    batchSelectionDisabledReason,
+    compareBatchesByCanonicalFefo,
+} from './batchEligibility';
 
 // ==================== HELPERS ====================
 
@@ -100,6 +104,7 @@ interface BatchSelectorProps {
     sortOrder?: 'asc' | 'desc';
     filterExpired?: boolean;
     minQuantity?: number;
+    enforceFefo?: boolean;
     renderBatchInfo?: (batch: Batch) => ReactNode;
     className?: string;
     maxHeight?: string;
@@ -115,9 +120,10 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     mode = 'modal',
     showExpiryStatus = true,
     sortBy = 'expiry',
-    sortOrder = 'desc',
+    sortOrder = 'asc',
     filterExpired = true,
     minQuantity = 0,
+    enforceFefo = false,
     renderBatchInfo,
     className = '',
     maxHeight = '400px'
@@ -255,9 +261,9 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
                 case 'expiry':
                 default:
-                    const daysA = a.days_to_expiry ?? 999999;
-                    const daysB = b.days_to_expiry ?? 999999;
-                    return sortOrder === 'asc' ? daysA - daysB : daysB - daysA;
+                    return sortOrder === 'asc'
+                        ? compareBatchesByCanonicalFefo(a, b)
+                        : compareBatchesByCanonicalFefo(b, a);
             }
         });
 
@@ -265,9 +271,12 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         batchRefs.current = processedBatches.map(() => null);
 
         // Auto-focus the first saleable batch; blocked stock is informational.
-        const firstSaleableIndex = processedBatches.findIndex(batch => !batchDisabledReason(batch));
+        const firstSaleableIndex = processedBatches.findIndex(batch =>
+            !batchSelectionDisabledReason(batch, processedBatches, enforceFefo)
+        );
         if (firstSaleableIndex >= 0) {
             setFocusedIndex(firstSaleableIndex);
+            setSelectedBatch(enforceFefo ? processedBatches[firstSaleableIndex] : null);
         } else {
             setFocusedIndex(-1);
             // Keep lifecycle-blocked rows visible so the reason is actionable.
@@ -278,7 +287,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     };
 
     const handleBatchSelect = (batch: Batch): void => {
-        const disabledReason = batchDisabledReason(batch);
+        const disabledReason = batchSelectionDisabledReason(batch, batches, enforceFefo);
         if (disabledReason) {
             setError(`${disabledReason}. Refresh or select another batch.`);
             return;
@@ -327,7 +336,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const expiryInfo = showExpiryStatus ? getExpiryInfo(batch.expiry_date) : null;
         const isSelected = selectedBatch?.batch_id === batch.batch_id;
         const isFocused = typeof index === 'number' && index === focusedIndex;
-        const disabledReason = batchDisabledReason(batch);
+        const disabledReason = batchSelectionDisabledReason(batch, batches, enforceFefo);
+        const recommendedBatchId = batches.find(candidate =>
+            !batchSelectionDisabledReason(candidate, batches, enforceFefo)
+        )?.batch_id;
+        const isRecommended = enforceFefo && recommendedBatchId === batch.batch_id;
 
         return (
             <button
@@ -375,6 +388,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         {batch.location_name && (
                             <div className="mt-1 text-xs text-gray-500">
                                 {batch.location_name}{batch.branch_name ? ` · ${batch.branch_name}` : ''}
+                            </div>
+                        )}
+                        {isRecommended && (
+                            <div className="mt-1 text-xs font-semibold text-blue-700">
+                                Recommended FEFO batch
                             </div>
                         )}
                     </div>
@@ -564,7 +582,16 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 </div>
             ) : (
                 <>
-                    {!batches.some(batch => !batchDisabledReason(batch)) && (
+                    {enforceFefo && batches.some(batch =>
+                        batchSelectionDisabledReason(batch, batches, true)?.includes('FEFO requires')
+                    ) && (
+                        <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                            FEFO protects stock from expiry loss. Choose any batch in the earliest-expiry tier; later-expiry stock unlocks only after earlier stock is used.
+                        </div>
+                    )}
+                    {!batches.some(batch =>
+                        !batchSelectionDisabledReason(batch, batches, enforceFefo)
+                    ) && (
                         <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                             No saleable batch is currently released. See each batch for the blocking reason.
                         </div>
@@ -633,7 +660,9 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
 
         const saleableIndexes = batches
-            .map((batch, index) => batchDisabledReason(batch) ? -1 : index)
+            .map((batch, index) =>
+                batchSelectionDisabledReason(batch, batches, enforceFefo) ? -1 : index
+            )
             .filter(index => index >= 0);
         if (saleableIndexes.length === 0) return;
 

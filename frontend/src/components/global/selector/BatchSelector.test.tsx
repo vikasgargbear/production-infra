@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import BatchSelector from './BatchSelector';
 import { batchesApi } from '../../../services/api';
 
@@ -25,6 +25,12 @@ const canonicalBatch = (status: string, suffix: string) => ({
     batch_status: status,
     location_name: 'Saleable stock',
     branch_name: 'Mumbai',
+});
+
+const withExpiry = (status: string, suffix: string, expiryDate: string, batchNumber: string) => ({
+    ...canonicalBatch(status, suffix),
+    expiry_date: expiryDate,
+    batch_number: batchNumber,
 });
 
 describe('BatchSelector lifecycle and mobile presentation', () => {
@@ -62,5 +68,48 @@ describe('BatchSelector lifecycle and mobile presentation', () => {
         expect(within(released).getByText('MRP')).toBeTruthy();
 
         await waitFor(() => expect(batchesApi.getByProduct).toHaveBeenCalledTimes(1));
+    });
+
+    it('recommends one earliest-expiry lot, permits its expiry tier, and blocks later expiry', async () => {
+        const onBatchSelect = jest.fn();
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({
+            data: {
+                batches: [
+                    withExpiry('released', '23', '2099-10-01', 'LATER'),
+                    withExpiry('released', '22', '2099-09-01', 'SAME-EXPIRY'),
+                    withExpiry('released', '21', '2099-09-01', 'EARLIEST'),
+                ],
+            },
+        });
+
+        render(
+            <BatchSelector
+                show
+                enforceFefo
+                product={{
+                    product_id: 'd3000000-0000-7000-8000-000000000015',
+                    product_name: 'Demo Product',
+                } as any}
+                onBatchSelect={onBatchSelect}
+                onClose={jest.fn()}
+            />
+        );
+
+        const earliest = await screen.findByRole('option', { name: /Select batch EARLIEST/i });
+        const sameExpiry = screen.getByRole('option', { name: /Select batch SAME-EXPIRY/i });
+        const later = screen.getByRole('option', {
+            name: /LATER unavailable: FEFO requires batch EARLIEST \(expires 2099-09-01\) first/i,
+        });
+
+        expect((earliest as HTMLButtonElement).disabled).toBe(false);
+        expect(earliest.getAttribute('aria-selected')).toBe('true');
+        expect(within(earliest).getByText('Recommended FEFO batch')).toBeTruthy();
+        expect((sameExpiry as HTMLButtonElement).disabled).toBe(false);
+        expect((later as HTMLButtonElement).disabled).toBe(true);
+        expect(within(later).getByText(/FEFO requires batch EARLIEST/i)).toBeTruthy();
+
+        fireEvent.click(sameExpiry);
+        await waitFor(() => expect(onBatchSelect).toHaveBeenCalledTimes(1));
+        expect(onBatchSelect.mock.calls[0][0]).toMatchObject({ batch_number: 'SAME-EXPIRY' });
     });
 });
