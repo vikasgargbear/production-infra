@@ -579,7 +579,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             </h3>
             <button
               onClick={() => setShowBulkUpload(false)}
-              className="text-gray-500 hover:text-gray-700"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              aria-label="Close bulk upload"
+              title="Close bulk upload"
             >
               <X className="w-4 h-4" />
             </button>
@@ -666,7 +668,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   <h4 className="font-medium text-gray-900">Search Product</h4>
                   <button
                     onClick={() => setShowProductSearch(false)}
-                    className="text-gray-500 hover:text-gray-700"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    aria-label="Close product search"
+                    title="Close product search"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -711,7 +715,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                         setShowBatchSelector(false);
                         setSelectedProduct(null);
                       }}
-                      className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                      aria-label="Close batch selector"
+                      title="Close batch selector"
                     >
                       <X className="h-5 w-5 text-gray-500" />
                     </button>
@@ -789,7 +795,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                           <td className="px-4 py-3 text-center">
                             <button
                               onClick={() => handleRemoveItem(item.id)}
-                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                              aria-label={`Remove ${item.product_name}`}
+                              title={`Remove ${item.product_name}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -846,12 +854,17 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
 
       {/* Canonical Confirm Modal */}
       {showConfirmModal && preparedPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="adjustment-confirm-title"
+        >
           <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => !isCommitting && setShowConfirmModal(false)} />
           <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-lg p-6">
             <div className="flex items-center space-x-3 mb-4">
               <AlertCircle className="w-6 h-6 text-amber-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Confirm Stock Adjustment</h3>
+              <h3 id="adjustment-confirm-title" className="text-lg font-semibold text-gray-900">Confirm Stock Adjustment</h3>
             </div>
             <p className="text-sm text-gray-700 mb-2">
               You are about to post a <strong>{adjustmentData.adjustment_type}</strong> adjustment

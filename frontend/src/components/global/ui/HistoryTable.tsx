@@ -363,6 +363,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                 onClick={exportSelectedPDF}
                                 className="w-full px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center justify-center"
                                 title="Export PDF"
+                                aria-label="Export selected rows as PDF"
                             >
                                 <Download className="w-4 h-4" />
                             </button>
@@ -381,7 +382,8 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                 <div className="flex items-center space-x-2">
                                     <button
                                         onClick={exportSelectedPDF}
-                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium flex items-center space-x-1"
+                                        className="px-3 py-1.5 min-h-[44px] bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium flex items-center space-x-1"
+                                        aria-label="Export selected rows as PDF"
                                     >
                                         <Download className="w-3 h-3" />
                                         <span>PDF</span>
@@ -389,6 +391,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                     <button
                                         onClick={printSelected}
                                         className="px-3 py-1.5 min-h-[44px] bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium flex items-center space-x-1"
+                                        aria-label="Print selected rows"
                                     >
                                         <Printer className="w-3 h-3" />
                                         <span>Print</span>
@@ -494,8 +497,9 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                                         e.stopPropagation();
                                                         onView(item);
                                                     }}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    className="inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                     title="View Details"
+                                                    aria-label="View details"
                                                 >
                                                     <Eye className="w-4 h-4" />
                                                 </button>
@@ -507,8 +511,9 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                                     setSelectedIds(new Set([item[idField]]));
                                                     setTimeout(() => printSelected(), 0);
                                                 }}
-                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                className="inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                 title="Print"
+                                                aria-label="Print this record"
                                             >
                                                 <Printer className="w-4 h-4" />
                                             </button>
@@ -519,8 +524,9 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                                     setSelectedIds(new Set([item[idField]]));
                                                     setTimeout(() => exportSelectedPDF(), 0);
                                                 }}
-                                                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                                                className="inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                                                 title="Download PDF"
+                                                aria-label="Download as PDF"
                                             >
                                                 <Download className="w-4 h-4" />
                                             </button>
@@ -531,8 +537,9 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                                         e.stopPropagation();
                                                         onWhatsApp(item);
                                                     }}
-                                                    className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                    className="inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                                     title="Send WhatsApp"
+                                                    aria-label="Send via WhatsApp"
                                                 >
                                                     <MessageCircle className="w-4 h-4" />
                                                 </button>
@@ -545,8 +552,9 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                                         e.stopPropagation();
                                                         action.onClick(item);
                                                     }}
-                                                    className={`p-2 rounded-lg transition-colors ${action.className || 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                                                    className={`inline-flex min-h-11 min-w-11 items-center justify-center p-2 rounded-lg transition-colors ${action.className || 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
                                                     title={action.title}
+                                                    aria-label={action.title}
                                                 >
                                                     {action.icon}
                                                 </button>

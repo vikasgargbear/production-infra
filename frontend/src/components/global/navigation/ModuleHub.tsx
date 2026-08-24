@@ -197,8 +197,9 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+          className="absolute top-4 right-4 z-10 min-h-11 min-w-11 flex items-center justify-center p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
           title="Close (Esc)"
+          aria-label="Close"
         >
           <X className="w-6 h-6 text-gray-600" />
         </button>
@@ -207,8 +208,9 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         {!isGrid && (
           <button
             onClick={() => handleSetActiveModule('')}
-            className="absolute top-4 left-4 z-10 px-3 py-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow text-sm text-gray-700"
+            className="absolute top-4 left-4 z-10 min-h-11 px-3 py-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow text-sm text-gray-700"
             title="Back to modules"
+            aria-label="Back to modules"
           >
             ← Modules
           </button>
@@ -225,6 +227,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                     key={module.id}
                     onClick={() => handleSetActiveModule(module.id)}
                     className="group relative bg-white/80 backdrop-blur border border-gray-200 rounded-2xl p-6 text-left shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
+                    aria-label={module.fullLabel}
                   >
                     <div className="flex items-center">
                       <div className={`p-3 rounded-xl mr-4 ${colors.inactive} group-hover:${colors.hover} transition-colors`}>
@@ -359,6 +362,8 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                     }
                   `}
                   title={!isExpanded ? (module.label || module.fullLabel) : undefined}
+                  aria-label={module.label || module.fullLabel}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-blue-600' : ''}`} />
                   {isExpanded && (

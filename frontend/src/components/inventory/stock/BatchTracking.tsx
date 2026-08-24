@@ -697,18 +697,25 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
 
       {/* Batch Movements Modal */}
       {showMovements && selectedBatch && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="batch-movements-title"
+        >
           <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-xl font-bold text-gray-900">
+                <h3 id="batch-movements-title" className="text-xl font-bold text-gray-900">
                   Batch Movements - {selectedBatch.batch_number}
                 </h3>
                 <p className="text-gray-600">{selectedBatch.product_name}</p>
               </div>
               <button
                 onClick={() => setShowMovements(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                aria-label="Close batch movements"
+                title="Close"
               >
                 Close
               </button>
