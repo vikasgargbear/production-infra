@@ -40,6 +40,26 @@ export interface ProductInput {
     [key: string]: any; // Allow additional fields
 }
 
+function nonNegativeQuantity(
+    value: unknown,
+    defaultValue: number,
+    label: string,
+): number {
+    const candidate = value ?? defaultValue;
+    if (
+        (typeof candidate !== 'number' && typeof candidate !== 'string')
+        || (typeof candidate === 'string' && candidate.trim() === '')
+    ) {
+        throw new Error(`${label} must be a finite non-negative number.`);
+    }
+
+    const quantity = Number(candidate);
+    if (!Number.isFinite(quantity) || quantity < 0) {
+        throw new Error(`${label} must be a finite non-negative number.`);
+    }
+    return quantity;
+}
+
 /**
  * Transform product data into a generic line item
  * 
@@ -115,8 +135,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         expiry_date: expiryDate,
         unit_price: unitPrice,  // ✅ CANONICAL
         mrp: mrp,
-        quantity: parseInt(String(product.quantity || 1)),
-        free_quantity: parseInt(String(product.free_quantity || 0)),
+        quantity: nonNegativeQuantity(product.quantity, 1, 'Quantity'),
+        free_quantity: nonNegativeQuantity(product.free_quantity, 0, 'Free quantity'),
         free_supply_tax_treatment:
             product.free_supply_tax_treatment || 'excluded_from_taxable_value',
         unit: ''
