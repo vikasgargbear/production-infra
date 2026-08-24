@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.domain.operator_actions import (
     ACTION_POLICIES,
@@ -231,8 +232,9 @@ class FakeCalculatorSession:
 
 
 class FakeSalesInvoiceSession:
-    def __init__(self, *, fail_persist=False):
+    def __init__(self, *, fail_persist=False, resolve_error=None):
         self.fail_persist = fail_persist
+        self.resolve_error = resolve_error
         self.executions = []
         self.transaction_entries = 0
         self.transaction_exits = 0
@@ -253,6 +255,8 @@ class FakeSalesInvoiceSession:
             return FakeResult()
         self.executions.append((sql, params))
         if "resolve_sales_invoice_prepare" in sql:
+            if self.resolve_error is not None:
+                raise self.resolve_error
             request = json.loads(params["request_json"])
             resolved_lines = []
             direct_count = 0
@@ -2424,6 +2428,89 @@ def test_sales_invoice_prepare_failure_rolls_back_the_only_transaction():
         )
 
     assert session.transaction_entries == session.transaction_exits == 1
+    assert session.transaction_failures == 1
+
+
+class _PostgresPolicyFailure(Exception):
+    def __init__(self, sqlstate, message):
+        super().__init__(message)
+        self.pgcode = sqlstate
+        self.diag = type("Diagnostic", (), {"message_primary": message})()
+
+
+def test_sales_invoice_fefo_rejection_is_structured_and_rolls_back():
+    database_error = IntegrityError(
+        "SELECT resolve_sales_invoice_prepare(...) ",
+        {},
+        _PostgresPolicyFailure(
+            "23514", "direct invoice batches do not follow FEFO"
+        ),
+    )
+    session = FakeSalesInvoiceSession(resolve_error=database_error)
+    payload = _sales_invoice_service_payload()
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["branch_id"],)).__dict__,
+            "operation_key": "sales.invoice.prepare",
+            "permission": "sales.invoice.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(
+        lambda: (_ for _ in ()).throw(AssertionError("ordinary DB opened")),
+        calculator_factory=lambda: session,
+        runtime_principal_configured=True,
+    )
+
+    with pytest.raises(OperatorActionError) as error:
+        service.prepare(
+            policy=ACTION_POLICIES["sales.invoice.prepare"],
+            payload=payload,
+            idempotency_key="prepare:sales-invoice:fefo-rejected",
+            context=context,
+        )
+
+    assert error.value.code == ActionErrorCode.BATCH_BLOCKED
+    assert error.value.retryable is False
+    assert error.value.metadata == {
+        "operation_key": "sales.invoice.prepare",
+        "reason": "FEFO_ALLOCATION_REQUIRED",
+        "sqlstate": "23514",
+    }
+    assert "earliest eligible batch" in error.value.message
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert session.transaction_failures == 1
+
+
+def test_unrecognized_database_failure_remains_unhandled():
+    database_error = IntegrityError(
+        "SELECT resolve_sales_invoice_prepare(...) ",
+        {},
+        _PostgresPolicyFailure("XX000", "unexpected internal database failure"),
+    )
+    session = FakeSalesInvoiceSession(resolve_error=database_error)
+    payload = _sales_invoice_service_payload()
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["branch_id"],)).__dict__,
+            "operation_key": "sales.invoice.prepare",
+            "permission": "sales.invoice.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(
+        lambda: (_ for _ in ()).throw(AssertionError("ordinary DB opened")),
+        calculator_factory=lambda: session,
+        runtime_principal_configured=True,
+    )
+
+    with pytest.raises(IntegrityError) as error:
+        service.prepare(
+            policy=ACTION_POLICIES["sales.invoice.prepare"],
+            payload=payload,
+            idempotency_key="prepare:sales-invoice:internal-failure",
+            context=context,
+        )
+
+    assert error.value is database_error
     assert session.transaction_failures == 1
 
 

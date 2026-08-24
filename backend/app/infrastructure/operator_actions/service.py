@@ -11,6 +11,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ...core.database import SessionLocal
@@ -377,6 +378,106 @@ def _lock_prepare_idempotency(
     )
 
 
+_DATABASE_ACTION_FAILURES: dict[str, tuple[ActionErrorCode, str, bool]] = {
+    "21000": (
+        ActionErrorCode.AMBIGUOUS_REFERENCE,
+        "Canonical reference resolution is ambiguous",
+        False,
+    ),
+    "22023": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command input is invalid",
+        False,
+    ),
+    "22P02": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command input is invalid",
+        False,
+    ),
+    "23502": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command input is incomplete",
+        False,
+    ),
+    "23503": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command references an unavailable resource",
+        False,
+    ),
+    "23505": (
+        ActionErrorCode.IDEMPOTENCY_CONFLICT,
+        "Canonical command conflicts with an existing idempotent request",
+        False,
+    ),
+    "23514": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command violates a reviewed business rule",
+        False,
+    ),
+    "40001": (
+        ActionErrorCode.STALE_VERSION,
+        "Canonical source facts changed; refresh and review again",
+        True,
+    ),
+    "42501": (
+        ActionErrorCode.SCOPE_DENIED,
+        "Canonical command authority is insufficient",
+        False,
+    ),
+    "55000": (
+        ActionErrorCode.POLICY_BLOCKED,
+        "Canonical command is not eligible in its current state",
+        False,
+    ),
+    "0A000": (
+        ActionErrorCode.POLICY_BLOCKED,
+        "Canonical command is outside the reviewed product scope",
+        False,
+    ),
+    "P0002": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command references a resource that is no longer available",
+        False,
+    ),
+}
+
+
+def _database_action_error(
+    exc: DBAPIError, operation_key: str
+) -> OperatorActionError | None:
+    """Translate reviewed PostgreSQL business states without leaking DB detail."""
+    original = exc.orig
+    sqlstate = getattr(original, "sqlstate", None) or getattr(
+        original, "pgcode", None
+    )
+    if not isinstance(sqlstate, str) or sqlstate not in _DATABASE_ACTION_FAILURES:
+        return None
+
+    diagnostic = getattr(original, "diag", None)
+    primary = str(getattr(diagnostic, "message_primary", "") or "").lower()
+    code, message, retryable = _DATABASE_ACTION_FAILURES[sqlstate]
+    reason = "CANONICAL_DATABASE_POLICY_REJECTED"
+    if "follow fefo" in primary:
+        code = ActionErrorCode.BATCH_BLOCKED
+        message = "Selected batches do not follow FEFO; refresh and use the earliest eligible batch"
+        reason = "FEFO_ALLOCATION_REQUIRED"
+    elif "exceeds locked stock" in primary or "exceeds locked on-hand stock" in primary:
+        code = ActionErrorCode.INSUFFICIENT_STOCK
+        message = "Selected batch stock is no longer sufficient; refresh available stock"
+        reason = "INSUFFICIENT_LOCKED_STOCK"
+
+    return OperatorActionError(
+        code,
+        message,
+        retryable=retryable,
+        metadata={
+            "operation_key": operation_key,
+            "reason": reason,
+            "sqlstate": sqlstate,
+        },
+    )
+
+
 class SqlAlchemyOperatorActionService:
     """Use only reviewed canonical facts/functions and one transaction per call."""
 
@@ -449,6 +550,27 @@ class SqlAlchemyOperatorActionService:
         )
 
     def prepare(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        try:
+            return self._prepare(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        except DBAPIError as exc:
+            translated = _database_action_error(exc, policy.operation_key)
+            if translated is None:
+                raise
+            raise translated from exc
+
+    def _prepare(
         self,
         *,
         policy: ActionPolicy,

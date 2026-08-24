@@ -7,7 +7,11 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from app.api.routes import web_operator_actions as web
-from app.domain.operator_actions import PreparedCommand
+from app.domain.operator_actions import (
+    ActionErrorCode,
+    OperatorActionError,
+    PreparedCommand,
+)
 
 
 class _Payload(BaseModel):
@@ -135,3 +139,39 @@ def test_web_prepare_calls_the_shared_operator_service(monkeypatch):
     assert captured["context"] is context
     assert captured["idempotency_key"] == "web-test-0001"
     assert captured["payload"] == {"branch_id": branch_id}
+
+
+def test_web_prepare_maps_fefo_policy_rejection_to_structured_conflict(monkeypatch):
+    operation = "sales.invoice.prepare"
+    branch_id = uuid4()
+
+    class Service:
+        def deployment_readiness(self):
+            return True
+
+        def adapter_readiness(self):
+            return {operation: True}
+
+        def prepare(self, **_kwargs):
+            raise OperatorActionError(
+                ActionErrorCode.BATCH_BLOCKED,
+                "Selected batches do not follow FEFO; refresh and use the earliest eligible batch",
+                metadata={"reason": "FEFO_ALLOCATION_REQUIRED"},
+            )
+
+    monkeypatch.setitem(web.PREPARE_PAYLOAD_MODELS, operation, _Payload)
+    monkeypatch.setattr(web, "validate_prepare_payload_semantics", lambda *_: None)
+    monkeypatch.setattr(web, "_resolve_context", lambda *_args, **_kwargs: SimpleNamespace())
+
+    with pytest.raises(HTTPException) as error:
+        web.prepare_action(
+            web.OperatorCommandType(operation),
+            {"idempotency_key": "web-test-fefo", "branch_id": str(branch_id)},
+            user=_user(),
+            db=object(),
+            service=Service(),
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "BATCH_BLOCKED"
+    assert error.value.detail["metadata"]["reason"] == "FEFO_ALLOCATION_REQUIRED"
