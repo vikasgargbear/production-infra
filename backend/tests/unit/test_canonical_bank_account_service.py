@@ -1,10 +1,25 @@
 import asyncio
+from pathlib import Path
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+
 from app.api.services.master.bank_account_service import BankAccountService
-from app.api.routes.master.bank_accounts.routes import get_bank_accounts
+from app.api.routes.master.bank_accounts.routes import (
+    create_bank_account,
+    delete_bank_account,
+    get_bank_accounts,
+    set_default_account,
+    update_bank_account,
+)
+from app.main import app
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class _Database:
@@ -68,3 +83,56 @@ def test_bank_account_route_serializes_balance_as_exact_money(monkeypatch):
 
     assert result[0]["id"] == account_id
     assert result[0]["balance"] == "125.50"
+
+
+@pytest.mark.parametrize(
+    ("handler", "kwargs"),
+    [
+        (create_bank_account, {}),
+        (update_bank_account, {"account_id": "bank-from-another-org"}),
+        (delete_bank_account, {"account_id": "bank-from-another-org"}),
+        (set_default_account, {"account_id": "bank-from-another-org"}),
+    ],
+)
+def test_bank_account_mutations_fail_closed_without_database_access(handler, kwargs):
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            handler.__wrapped__(
+                _={}, context=SimpleNamespace(org_id=uuid4()), **kwargs
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "reviewed finance command" in str(exc_info.value.detail)
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/api/bank-accounts/"),
+        ("put", "/api/bank-accounts/not-our-bank"),
+        ("delete", "/api/bank-accounts/not-our-bank"),
+        ("put", "/api/bank-accounts/not-our-bank/set-default"),
+    ],
+)
+def test_bank_account_mutations_require_bearer_authority_before_handler(method, path):
+    response = TestClient(app, raise_server_exceptions=False).request(
+        method.upper(), path, json={"unexpected": "legacy payload"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_bank_account_write_surface_contains_no_legacy_table_mutations():
+    route_source = (
+        REPO_ROOT / "backend/app/api/routes/master/bank_accounts/routes.py"
+    ).read_text()
+    service_source = (
+        REPO_ROOT / "backend/app/api/services/master/bank_account_service.py"
+    ).read_text()
+
+    assert 'PermissionChecker("master", "create")' in route_source
+    assert route_source.count('PermissionChecker("master", "edit")') >= 2
+    assert 'PermissionChecker("master", "delete")' in route_source
+    assert "master.org_bank_accounts" not in route_source
+    assert "master.org_bank_accounts" not in service_source
