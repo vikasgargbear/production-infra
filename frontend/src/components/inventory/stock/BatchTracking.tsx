@@ -728,9 +728,19 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                           {new Date(movement.movement_date).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge
-                            status={movement.movement_type === 'in' ? 'green' : 'red'}
-                          />
+                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            movement.movement_type === 'in'
+                              ? 'bg-green-100 text-green-700'
+                              : movement.movement_type === 'out'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {movement.movement_type === 'in'
+                              ? 'Stock In'
+                              : movement.movement_type === 'out'
+                                ? 'Stock Out'
+                                : 'Adjustment'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {movement.quantity}
