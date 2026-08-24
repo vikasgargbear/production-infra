@@ -20,7 +20,12 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
-from .web_operator_actions import PreparedResponse, _command_context, _web_user
+from .web_operator_actions import (
+    WEB_CLIENT_ID,
+    _command_context,
+    _uuid,
+    _web_user,
+)
 
 
 router = APIRouter(
@@ -61,6 +66,51 @@ def _rows(db: Session, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]
 
 class StrictRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+ReturnCommandStatus = Literal[
+    "prepared",
+    "pending_approval",
+    "approved",
+    "executing",
+    "succeeded",
+    "failed",
+    "rejected",
+    "expired",
+    "cancelled",
+]
+
+
+class ReturnCommandSummary(StrictRead):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    command_request_id: UUID
+    command_type: Literal["sales.return.post", "procurement.purchase_return.post"]
+    return_kind: Literal["sales", "purchase"]
+    status: ReturnCommandStatus
+    branch_id: UUID
+    requested_by_membership_id: UUID
+    requester_name: str
+    created_at: datetime
+    expires_at: datetime
+    approved_at: Optional[datetime]
+    executed_at: Optional[datetime]
+    resource_type: Optional[Literal["sales_return", "purchase_return"]]
+    resource_id: Optional[UUID]
+    failure_code: Optional[str]
+    failure_message: Optional[str]
+
+
+class ReturnCommandDetail(ReturnCommandSummary):
+    preview_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    resolved_references: list[dict[str, Any]]
+    source_versions: list[dict[str, Any]]
+    calculation_ruleset: list[dict[str, Any]]
+    inventory_impact: list[dict[str, Any]]
+    financial_impact: list[dict[str, Any]]
+    tax_impact: list[dict[str, Any]]
+    policy_warnings: list[dict[str, Any]]
+    required_approvals: list[dict[str, Any]]
 
 
 class ReturnLocation(StrictRead):
@@ -1011,15 +1061,275 @@ def purchase_return_readback(
     return _posted_return_readback(db, _activate(db, user), return_id, side="purchase")
 
 
+def _signed_membership(
+    db: Session,
+    user: dict[str, Any],
+) -> tuple[UUID, UUID]:
+    """Resolve one active membership from signed UUID claims, without a grant."""
+
+    org_id = _uuid(user.get("org_id"), "organization")
+    auth_user_id = _uuid(user.get("auth_user_id"), "identity")
+    user_id = _uuid(user.get("user_id"), "user")
+    db.execute(
+        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+        {"auth_user_id": auth_user_id, "org_id": org_id},
+    )
+    rows = db.execute(
+        text(
+            """
+            SELECT membership.id
+              FROM core.memberships membership
+              JOIN core.users user_row ON user_row.id=membership.user_id
+              JOIN core.organizations organization ON organization.id=membership.org_id
+             WHERE membership.org_id=:org_id
+               AND membership.user_id=:user_id
+               AND membership.status='active'
+               AND user_row.auth_user_id=:auth_user_id
+               AND user_row.status='active'
+               AND organization.status='active'
+             ORDER BY membership.id
+             LIMIT 2
+            """
+        ),
+        {
+            "org_id": org_id,
+            "user_id": user_id,
+            "auth_user_id": auth_user_id,
+        },
+    ).fetchall()
+    if len(rows) != 1:
+        raise HTTPException(
+            status_code=403,
+            detail="Exactly one active ERP membership is required",
+        )
+    return org_id, rows[0]._mapping["id"]
+
+
+def _return_command_status(value: dict[str, Any]) -> str:
+    status = str(value["status"])
+    if status in {"prepared", "pending_approval", "approved"}:
+        expires_at = value["expires_at"]
+        if expires_at <= datetime.now(tz=expires_at.tzinfo):
+            return "expired"
+    return status
+
+
+def _return_command_model(value: dict[str, Any]) -> ReturnCommandDetail:
+    preview = value["preview"]
+    return ReturnCommandDetail(
+        command_request_id=value["id"],
+        command_type=value["operation"],
+        return_kind="sales"
+        if value["capability_code"] == "sales.return.prepare"
+        else "purchase",
+        status=_return_command_status(value),
+        branch_id=value["branch_id"],
+        requested_by_membership_id=value["requested_by_membership_id"],
+        requester_name=value["requester_name"],
+        created_at=value["created_at"],
+        expires_at=value["expires_at"],
+        approved_at=value["approved_at"],
+        executed_at=value["completed_at"],
+        resource_type=value["result_resource_type"],
+        resource_id=value["result_resource_id"],
+        failure_code=value["failure_code"],
+        failure_message=value["failure_message"],
+        preview_hash="sha256:" + bytes(value["preview_hash"]).hex(),
+        resolved_references=list(preview.get("resolved_references") or []),
+        source_versions=list(preview.get("source_versions") or []),
+        calculation_ruleset=list(preview.get("calculation_ruleset") or []),
+        inventory_impact=list(preview.get("inventory_impact") or []),
+        financial_impact=list(preview.get("financial_impact") or []),
+        tax_impact=list(preview.get("tax_impact") or []),
+        policy_warnings=list(preview.get("policy_warnings") or []),
+        required_approvals=[{"policy": "separate_approver", "count": 1}],
+    )
+
+
+def _return_command_summary(value: dict[str, Any]) -> ReturnCommandSummary:
+    detail = _return_command_model(value)
+    return ReturnCommandSummary(
+        **{
+            field_name: getattr(detail, field_name)
+            for field_name in ReturnCommandSummary.model_fields
+        }
+    )
+
+
+_RETURN_COMMAND_SELECT = """
+    SELECT command.id, command.operation, command.capability_code,
+           command.status, command.branch_id,
+           command.requested_by_membership_id,
+           COALESCE(NULLIF(user_row.display_name,''), 'ERP member') AS requester_name,
+           command.created_at, command.expires_at, command.completed_at,
+           command.result_resource_type, command.result_resource_id,
+           command.failure_code, command.failure_message,
+           command.preview_hash,
+           convert_from(command.preview_bytes,'UTF8')::jsonb AS preview,
+           approval.approved_at
+      FROM automation.command_requests command
+      JOIN core.memberships requester
+        ON requester.org_id=command.org_id
+       AND requester.id=command.requested_by_membership_id
+      JOIN core.users user_row ON user_row.id=requester.user_id
+      LEFT JOIN LATERAL (
+          SELECT max(decided_at) AS approved_at
+            FROM automation.command_approvals
+           WHERE org_id=command.org_id
+             AND command_request_id=command.id
+             AND decision='approved'
+             AND preview_hash=command.preview_hash
+             AND aggregate_version_hash=command.aggregate_version_hash
+      ) approval ON true
+"""
+
+
+@router.get("/approval-inbox", response_model=list[ReturnCommandSummary])
+def return_approval_inbox(
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> list[ReturnCommandSummary]:
+    """List only live return commands this distinct reviewer may approve."""
+
+    if not WEB_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="ERP web client authority is not configured")
+    org_id, membership_id = _signed_membership(db, user)
+    rows = _rows(
+        db,
+        _RETURN_COMMAND_SELECT
+        + """
+         WHERE command.org_id=:org_id
+           AND command.capability_code IN (
+                'sales.return.prepare',
+                'procurement.purchase_return.prepare'
+           )
+           AND command.approval_policy='separate_approver'
+           AND command.status IN ('prepared','pending_approval')
+           AND command.expires_at>transaction_timestamp()
+           AND command.requested_by_membership_id<>:membership_id
+           AND 1=(
+               SELECT count(*)
+                 FROM automation.agent_grants reviewer_grant
+                 JOIN automation.agent_grant_capabilities reviewer_capability
+                   ON reviewer_capability.org_id=reviewer_grant.org_id
+                  AND reviewer_capability.agent_grant_id=reviewer_grant.id
+                WHERE reviewer_grant.org_id=command.org_id
+                  AND reviewer_grant.client_id=:client_id
+                  AND reviewer_grant.subject_membership_id=:membership_id
+                  AND reviewer_grant.consented_by_membership_id=:membership_id
+                  AND reviewer_grant.status='active'
+                  AND reviewer_grant.expires_at>transaction_timestamp()
+                  AND reviewer_capability.capability_code='automation.command.approve'
+                  AND reviewer_capability.status='active'
+                  AND (reviewer_grant.branch_id IS NULL
+                       OR reviewer_grant.branch_id=command.branch_id)
+           )
+           AND EXISTS (
+               SELECT 1
+                 FROM core.access_grants access_grant
+                 JOIN core.roles role
+                   ON role.org_id=access_grant.org_id
+                  AND role.id=access_grant.role_id
+                 JOIN core.role_permissions role_permission
+                   ON role_permission.org_id=role.org_id
+                  AND role_permission.role_id=role.id
+                 JOIN core.permissions permission
+                   ON permission.code=role_permission.permission_code
+                WHERE access_grant.org_id=command.org_id
+                  AND access_grant.membership_id=:membership_id
+                  AND access_grant.status='active'
+                  AND access_grant.scope_kind='organization'
+                  AND access_grant.branch_id IS NULL
+                  AND access_grant.valid_from_at<=transaction_timestamp()
+                  AND (access_grant.expires_at IS NULL
+                       OR access_grant.expires_at>transaction_timestamp())
+                  AND role.status='active'
+                  AND permission.code='automation.command.approve'
+                  AND permission.status='active'
+           )
+         ORDER BY command.created_at, command.id
+         LIMIT 100
+        """,
+        {
+            "org_id": org_id,
+            "membership_id": membership_id,
+            "client_id": WEB_CLIENT_ID,
+        },
+    )
+    return [_return_command_summary(row) for row in rows]
+
+
+@router.get("/requester-inbox", response_model=list[ReturnCommandSummary])
+def return_requester_inbox(
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> list[ReturnCommandSummary]:
+    """List the signed requester's immutable return commands and outcomes."""
+
+    org_id, membership_id = _signed_membership(db, user)
+    rows = _rows(
+        db,
+        _RETURN_COMMAND_SELECT
+        + """
+         WHERE command.org_id=:org_id
+           AND command.requested_by_membership_id=:membership_id
+           AND command.capability_code IN (
+                'sales.return.prepare',
+                'procurement.purchase_return.prepare'
+           )
+           AND command.approval_policy='separate_approver'
+         ORDER BY command.created_at DESC, command.id DESC
+         LIMIT 100
+        """,
+        {"org_id": org_id, "membership_id": membership_id},
+    )
+    return [_return_command_summary(row) for row in rows]
+
+
+@router.get(
+    "/requester/commands/{command_request_id}",
+    response_model=ReturnCommandDetail,
+)
+def requester_return_command(
+    command_request_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> ReturnCommandDetail:
+    org_id, membership_id = _signed_membership(db, user)
+    row = _one(
+        db,
+        _RETURN_COMMAND_SELECT
+        + """
+         WHERE command.org_id=:org_id
+           AND command.id=:command_request_id
+           AND command.requested_by_membership_id=:membership_id
+           AND command.capability_code IN (
+                'sales.return.prepare',
+                'procurement.purchase_return.prepare'
+           )
+           AND command.approval_policy='separate_approver'
+         FOR SHARE OF command
+        """,
+        {
+            "org_id": org_id,
+            "membership_id": membership_id,
+            "command_request_id": command_request_id,
+        },
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Requester return command not found")
+    return _return_command_model(row)
+
+
 @router.get(
     "/commands/{command_request_id}/review",
-    response_model=PreparedResponse,
+    response_model=ReturnCommandDetail,
 )
 def return_command_review(
     command_request_id: UUID,
     user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
-) -> PreparedResponse:
+) -> ReturnCommandDetail:
     """Load an immutable return preview for a distinct authorized approver.
 
     Approval itself remains on the shared reviewed command endpoint.  Resolving
@@ -1032,13 +1342,8 @@ def return_command_review(
     )
     row = db.execute(
         text(
-            """
-            SELECT command.id,
-                   command.operation,
-                   command.expires_at,
-                   command.preview_hash,
-                   convert_from(command.preview_bytes,'UTF8')::jsonb AS preview
-              FROM automation.command_requests AS command
+            _RETURN_COMMAND_SELECT
+            + """
              WHERE command.org_id=:org_id
                AND command.id=:command_request_id
                AND command.capability_code IN (
@@ -1046,10 +1351,10 @@ def return_command_review(
                     'procurement.purchase_return.prepare'
                )
                AND command.approval_policy='separate_approver'
-               AND command.status IN ('prepared','pending_approval','approved')
+               AND command.status IN ('prepared','pending_approval')
                AND command.expires_at>transaction_timestamp()
                AND command.requested_by_membership_id<>:membership_id
-             FOR SHARE
+             FOR SHARE OF command
             """
         ),
         {
@@ -1063,19 +1368,4 @@ def return_command_review(
             status_code=404,
             detail="No unexpired return preview is available for independent approval",
         )
-    value = row._mapping
-    preview = value["preview"]
-    return PreparedResponse(
-        command_request_id=value["id"],
-        command_type=value["operation"],
-        preview_hash="sha256:" + bytes(value["preview_hash"]).hex(),
-        expires_at=value["expires_at"],
-        resolved_references=list(preview.get("resolved_references") or []),
-        source_versions=list(preview.get("source_versions") or []),
-        calculation_ruleset=list(preview.get("calculation_ruleset") or []),
-        inventory_impact=list(preview.get("inventory_impact") or []),
-        financial_impact=list(preview.get("financial_impact") or []),
-        tax_impact=list(preview.get("tax_impact") or []),
-        policy_warnings=list(preview.get("policy_warnings") or []),
-        required_approvals=[{"policy": "separate_approver", "count": 1}],
-    )
+    return _return_command_model(dict(row._mapping))

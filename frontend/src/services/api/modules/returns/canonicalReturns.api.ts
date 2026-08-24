@@ -2,6 +2,45 @@ import { apiHelpers } from '../../apiClient';
 import type { CanonicalCommandExecution, CanonicalCommandPreview } from '../../canonicalOperatorActions';
 
 export type DecimalString = string;
+export type CanonicalReturnCommandStatus =
+  | 'prepared'
+  | 'pending_approval'
+  | 'approved'
+  | 'executing'
+  | 'succeeded'
+  | 'failed'
+  | 'rejected'
+  | 'expired'
+  | 'cancelled';
+
+export interface CanonicalReturnCommandSummary {
+  command_request_id: string;
+  command_type: 'sales.return.post' | 'procurement.purchase_return.post';
+  return_kind: 'sales' | 'purchase';
+  status: CanonicalReturnCommandStatus;
+  branch_id: string;
+  requested_by_membership_id: string;
+  requester_name: string;
+  created_at: string;
+  expires_at: string;
+  approved_at?: string;
+  executed_at?: string;
+  resource_type?: 'sales_return' | 'purchase_return';
+  resource_id?: string;
+  failure_code?: string;
+  failure_message?: string;
+}
+
+export interface CanonicalReturnCommandDetail extends CanonicalReturnCommandSummary, CanonicalCommandPreview {
+  resolved_references: Array<Record<string, unknown>>;
+  source_versions: Array<Record<string, unknown>>;
+  calculation_ruleset: Array<Record<string, unknown>>;
+  inventory_impact: Array<Record<string, unknown>>;
+  financial_impact: Array<Record<string, unknown>>;
+  tax_impact: Array<Record<string, unknown>>;
+  policy_warnings: Array<Record<string, unknown>>;
+  required_approvals: Array<Record<string, unknown>>;
+}
 
 export interface CanonicalReturnLocation {
   id: string;
@@ -132,6 +171,14 @@ export interface CanonicalPurchaseReturnContext {
 }
 
 export const canonicalReturnsApi = {
+  listApprovalInbox: () =>
+    apiHelpers.get<CanonicalReturnCommandSummary[]>('/canonical/returns/approval-inbox'),
+  listRequesterInbox: () =>
+    apiHelpers.get<CanonicalReturnCommandSummary[]>('/canonical/returns/requester-inbox'),
+  getRequesterCommand: (commandRequestId: string) =>
+    apiHelpers.get<CanonicalReturnCommandDetail>(
+      `/canonical/returns/requester/commands/${commandRequestId}`,
+    ),
   getSalesContext: (invoiceId: string, returnDate: string) =>
     apiHelpers.get<CanonicalSalesReturnContext>(
       `/canonical/returns/sales-invoices/${invoiceId}/context`,
@@ -147,7 +194,7 @@ export const canonicalReturnsApi = {
   getPurchaseReadback: (returnId: string) =>
     apiHelpers.get(`/canonical/returns/purchases/${returnId}`),
   getApprovalReview: (commandRequestId: string) =>
-    apiHelpers.get<CanonicalCommandPreview>(
+    apiHelpers.get<CanonicalReturnCommandDetail>(
       `/canonical/returns/commands/${commandRequestId}/review`,
     ),
   approveAsIndependentReviewer: (
@@ -159,6 +206,17 @@ export const canonicalReturnsApi = {
     {
       preview_hash: previewHash,
       approval_intent: 'approve',
+      idempotency_key: idempotencyKey,
+    },
+  ),
+  executeAsRequester: (
+    commandRequestId: string,
+    previewHash: string,
+    idempotencyKey: string,
+  ) => apiHelpers.post<CanonicalCommandExecution>(
+    `/web/actions/commands/${commandRequestId}/execute`,
+    {
+      preview_hash: previewHash,
       idempotency_key: idempotencyKey,
     },
   ),

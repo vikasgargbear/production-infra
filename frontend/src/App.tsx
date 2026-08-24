@@ -182,7 +182,14 @@ const AppContent = (): JSX.Element => {
           </PaymentProvider>
         );
       case 'returns':
-        return <ReturnsHub open onClose={goHome} />;
+        return (
+          <ReturnsHub
+            open
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'stock-management':
         return (
           <StockHub

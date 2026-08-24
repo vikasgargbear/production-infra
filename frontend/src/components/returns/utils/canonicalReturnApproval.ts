@@ -1,5 +1,6 @@
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import { canonicalReturnsApi } from '../../../services/api/modules/returns/canonicalReturns.api';
+import type { CanonicalReturnCommandDetail } from '../../../services/api/modules/returns/canonicalReturns.api';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 
 const PREVIEW_HASH = /^sha256:[0-9a-f]{64}$/i;
@@ -12,7 +13,7 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
  */
 export async function loadReturnForIndependentApproval(
   commandRequestId: string,
-): Promise<CanonicalCommandPreview> {
+): Promise<CanonicalReturnCommandDetail> {
   if (!isCanonicalUuid(commandRequestId)) {
     throw new Error('A canonical return command UUID is required.');
   }

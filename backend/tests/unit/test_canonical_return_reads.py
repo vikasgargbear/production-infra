@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -14,6 +14,7 @@ from app.api.routes import canonical_return_reads, web_operator_actions
 from app.api.routes.canonical_return_reads import (
     PostedReturnReadback,
     PurchaseReturnableAllocation,
+    ReturnCommandSummary,
     SalesReturnableAllocation,
 )
 
@@ -214,6 +215,12 @@ def test_return_http_contract_exposes_source_review_and_posted_readback():
         "/canonical/returns/commands/{command_request_id}/review",
         ("GET",),
     ) in contracts
+    assert ("/canonical/returns/approval-inbox", ("GET",)) in contracts
+    assert ("/canonical/returns/requester-inbox", ("GET",)) in contracts
+    assert (
+        "/canonical/returns/requester/commands/{command_request_id}",
+        ("GET",),
+    ) in contracts
 
 
 def test_independent_return_review_and_web_context_forbid_self_approval():
@@ -229,3 +236,66 @@ def test_independent_return_review_and_web_context_forbid_self_approval():
     ).read_text()
     assert "NEW.approver_membership_id = request_row.requested_by_membership_id" in invariant
     assert "separate approval requires a distinct approver" in invariant
+
+
+def test_approval_inbox_denies_self_cross_org_and_cross_branch_visibility():
+    source = inspect.getsource(canonical_return_reads.return_approval_inbox)
+    assert "command.org_id=:org_id" in source
+    assert "command.requested_by_membership_id<>:membership_id" in source
+    assert "reviewer_grant.subject_membership_id=:membership_id" in source
+    assert "reviewer_grant.branch_id=command.branch_id" in source
+    assert "SELECT count(*)" in source
+    assert "access_grant.scope_kind='organization'" in source
+    assert "permission.code='automation.command.approve'" in source
+
+
+def test_reviewer_detail_excludes_approved_expired_and_rejected_commands():
+    source = inspect.getsource(canonical_return_reads.return_command_review)
+    assert "command.status IN ('prepared','pending_approval')" in source
+    assert "command.expires_at>transaction_timestamp()" in source
+    assert "'approved'" not in source.split("command.status IN", 1)[1].split(")", 1)[0]
+    assert "'rejected'" not in source
+
+
+def test_requester_effective_status_surfaces_expiry_without_mutating_command():
+    value = {
+        "status": "approved",
+        "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    assert canonical_return_reads._return_command_status(value) == "expired"
+    value["expires_at"] = datetime.now(timezone.utc) + timedelta(minutes=5)
+    assert canonical_return_reads._return_command_status(value) == "approved"
+    value["status"] = "rejected"
+    assert canonical_return_reads._return_command_status(value) == "rejected"
+
+
+def test_requester_command_query_is_tenant_and_requester_bound():
+    source = inspect.getsource(canonical_return_reads.requester_return_command)
+    assert "command.org_id=:org_id" in source
+    assert "command.requested_by_membership_id=:membership_id" in source
+    assert "command.id=:command_request_id" in source
+
+
+def test_return_command_api_schema_rejects_coerced_and_extra_fields():
+    value = {
+        "command_request_id": uid(50),
+        "command_type": "sales.return.post",
+        "return_kind": "sales",
+        "status": "approved",
+        "branch_id": uid(51),
+        "requested_by_membership_id": uid(52),
+        "requester_name": "Requester",
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+        "approved_at": datetime.now(timezone.utc),
+        "executed_at": None,
+        "resource_type": None,
+        "resource_id": None,
+        "failure_code": None,
+        "failure_message": None,
+    }
+    assert ReturnCommandSummary.model_validate(value).status == "approved"
+    with pytest.raises(ValidationError):
+        ReturnCommandSummary.model_validate({**value, "branch_id": str(uid(51))})
+    with pytest.raises(ValidationError):
+        ReturnCommandSummary.model_validate({**value, "invented": True})
