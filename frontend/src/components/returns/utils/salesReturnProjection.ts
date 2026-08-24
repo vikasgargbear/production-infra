@@ -47,7 +47,7 @@ export function updateSalesReturnItem(
     field: string,
     rawValue: unknown,
 ): ReturnFormItem {
-    const value = String(rawValue ?? '').trim();
+    const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
     if (field === 'return_paid_qty' || field === 'quantity') {
         const paid = value;
         const free = finiteNumber(item.return_free_qty);

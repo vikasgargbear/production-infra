@@ -53,9 +53,11 @@ export function updatePurchaseReturnItem(items: any[], index: number, field: str
   const stateField = field === 'quantity' ? 'return_quantity' : field;
   return items.map((item, itemIndex) => {
     if (itemIndex !== index) return item;
-    const nextValue = ['return_quantity', 'return_paid_qty', 'return_free_qty', 'unit_price'].includes(stateField)
-      ? String(value ?? '')
-      : value;
+    const nextValue = ['return_paid_qty', 'return_free_qty'].includes(stateField)
+      ? String(value ?? '').trim()
+      : ['return_quantity', 'unit_price'].includes(stateField)
+        ? Number(value || 0)
+        : value;
     return { ...item, [stateField]: nextValue };
   });
 }
