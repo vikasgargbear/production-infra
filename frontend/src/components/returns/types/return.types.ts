@@ -11,7 +11,7 @@ import type { Invoice, Customer } from '../../../types/api.types';
 
 export interface ReturnFormItem {
     id?: string | number;
-    product_id: number;
+    product_id: number | string;
     product_name: string;
     batch_id?: number | string;
     batch_number: string;
@@ -34,7 +34,7 @@ export interface ReturnFormItem {
     available_stock?: number;
     return_reason?: string;
     disposition?: string;
-    invoice_item_id?: number;
+    invoice_item_id?: number | string;
     requires_approval?: boolean;
     verification_status?: string;
     [key: string]: any;

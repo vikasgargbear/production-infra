@@ -2,7 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, FileText, ShoppingCart, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { invoicesApi, ordersApi } from '../../../../services/api';
-import { extractDocumentCollection, extractDocumentDetail } from '../../utils/documentImport';
+import {
+    extractDocumentCollection,
+    extractDocumentDetail,
+    projectCanonicalImportLines,
+} from '../../utils/documentImport';
 
 interface DocumentItem {
     product_id: string;
@@ -17,6 +21,11 @@ interface DocumentItem {
     gst_percent?: number;
     manufacturer?: string;
     category?: string;
+    batch_id?: string;
+    batch_number?: string;
+    expiry_date?: string;
+    free_quantity?: number;
+    discount_percent?: number;
 }
 
 interface Document {
@@ -142,6 +151,16 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 detailResponse,
                 searchType === 'invoice' ? ['invoice'] : ['order', 'sales_order'],
             ) as unknown as Document;
+            const sourceNumber = searchType === 'invoice'
+                ? sourceDoc.invoice_number
+                : sourceDoc.order_number;
+            if (!sourceDoc.customer_id || !sourceDoc.customer_name || !sourceNumber) {
+                throw new Error('The canonical document detail is missing its customer or document identity.');
+            }
+            const importableItems = projectCanonicalImportLines(
+                sourceDoc.items || sourceDoc.invoice_items,
+                { requireBatch: true },
+            );
 
             const importData: ImportData = {
                 customer_id: sourceDoc.customer_id,
@@ -161,7 +180,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 delivery_city: sourceDoc.shipping_city || sourceDoc.billing_city,
                 delivery_state: sourceDoc.shipping_state || sourceDoc.billing_state,
                 delivery_pincode: sourceDoc.shipping_pincode || sourceDoc.billing_pincode,
-                items: (sourceDoc.items || sourceDoc.invoice_items || []).map(item => ({
+                items: importableItems.map(item => ({
                     id: Date.now() + Math.random(),
                     product_id: item.product_id,
                     product_name: item.product_name,
@@ -169,15 +188,20 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                     quantity: item.quantity,
                     unit: item.unit || 'NOS',
                     mrp: item.mrp,
-                    unit_price: item.unit_price || item.selling_price,
-                    gst_percent: item.tax_percent || item.gst_percent || 0,
+                    unit_price: item.unit_price,
+                    gst_percent: item.gst_percent,
                     manufacturer: item.manufacturer,
-                    category: item.category
+                    category: item.category,
+                    batch_id: item.batch_id,
+                    batch_number: item.batch_number,
+                    expiry_date: item.expiry_date,
+                    free_quantity: item.free_quantity,
+                    discount_percent: item.discount_percent,
                 })),
                 reference_doc: searchType === 'invoice' ?
-                    `Invoice: ${sourceDoc.invoice_number}` :
-                    `Order: ${sourceDoc.order_number}`,
-                notes: `Delivery for ${searchType === 'invoice' ? 'Invoice' : 'Order'} #${sourceDoc.invoice_number || sourceDoc.order_number}`
+                    `Invoice: ${sourceNumber}` :
+                    `Order: ${sourceNumber}`,
+                notes: `Delivery for ${searchType === 'invoice' ? 'Invoice' : 'Order'} #${sourceNumber}`
             };
 
             onImport(importData);

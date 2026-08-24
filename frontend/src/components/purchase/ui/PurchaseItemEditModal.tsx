@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Package, Calendar, DollarSign, Percent, Hash, Gift, AlertCircle } from 'lucide-react';
 import { MonthYearPicker } from '../../global';
 import { toast } from 'react-toastify';
+import { calculatePurchaseItemTotal, getPurchaseItemErrors } from './purchaseItemValidation';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -78,6 +79,8 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
         discount_percent: item.discount_percent || 0,
         scheme_discount: item.scheme_discount || 0
       });
+    } else {
+      setEditedItem({});
     }
   }, [item]);
 
@@ -90,19 +93,7 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
     }));
   };
 
-  const calculateTotal = () => {
-    const qty = parseFloat(String(editedItem.quantity ?? 0));
-    const cost = parseFloat(String(editedItem.unit_price ?? 0));
-    const taxPercent = parseFloat(String(editedItem.tax_percent ?? 0));
-    const discountPercent = parseFloat(String(editedItem.discount_percent ?? 0));
-
-    const baseAmount = qty * cost;
-    const discountAmount = baseAmount * (discountPercent / 100);
-    const discountedAmount = baseAmount - discountAmount;
-    const taxAmount = discountedAmount * (taxPercent / 100);
-
-    return discountedAmount + taxAmount;
-  };
+  const validationErrors = getPurchaseItemErrors(editedItem);
 
   const generateBatchNumber = () => {
     // Generate batch number format: BATCH-YYYYMM-XXXX
@@ -115,34 +106,8 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
 
   const handleSave = () => {
     // Validate required fields
-    const errors: string[] = [];
-
-    if (!editedItem.expiry_date) {
-      errors.push('Expiry date');
-    }
-    const qty = parseFloat(String(editedItem.quantity)) || 0;
-    if (!editedItem.quantity || qty <= 0) {
-      errors.push('Quantity');
-    }
-    const mrp = parseFloat(String(editedItem.mrp)) || 0;
-    if (!editedItem.mrp || mrp <= 0) {
-      errors.push('MRP');
-    }
-    const purchasePrice = parseFloat(String(editedItem.unit_price)) || 0;
-    if (!editedItem.unit_price || purchasePrice <= 0) {
-      errors.push('Purchase Price/Cost');
-    }
-    const sellingPrice = parseFloat(String(editedItem.selling_price)) || 0;
-    if (!editedItem.selling_price || sellingPrice <= 0) {
-      errors.push('Selling Price');
-    }
-    if (editedItem.tax_percent === undefined || editedItem.tax_percent === null || editedItem.tax_percent === '') {
-      errors.push('GST %');
-    }
-
-
-    if (errors.length > 0) {
-      toast.error(`Required fields missing: ${errors.join(', ')}`);
+    if (validationErrors.length > 0) {
+      toast.error(`Required fields missing: ${validationErrors.join(', ')}`);
       return;
     }
 
@@ -462,7 +427,7 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700">Total Amount</span>
-              <span className="text-2xl font-bold text-blue-600">₹{calculateTotal().toFixed(2)}</span>
+              <span className="text-2xl font-bold text-blue-600">₹{calculatePurchaseItemTotal(editedItem).toFixed(2)}</span>
             </div>
             {parseFloat(String(editedItem.free_quantity ?? 0)) > 0 && (
               <div className="mt-2 text-sm text-green-600 flex items-center gap-1">
@@ -495,12 +460,19 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              disabled={validationErrors.length > 0}
+              aria-describedby={validationErrors.length > 0 ? 'purchase-item-validation' : undefined}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4" />
               {isNewItem ? 'Add Item' : 'Save Changes'}
             </button>
           </div>
+          {validationErrors.length > 0 && (
+            <span id="purchase-item-validation" className="sr-only">
+              Complete required fields: {validationErrors.join(', ')}
+            </span>
+          )}
         </div>
       </div>
     </div>

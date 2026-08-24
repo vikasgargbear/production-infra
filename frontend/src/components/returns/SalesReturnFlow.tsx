@@ -30,6 +30,7 @@ import type { SalesReturnFlowProps, ReturnFormItem } from './types/return.types'
 import type { Customer, Invoice } from '../../types/api.types';
 
 import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBoundaries';
+import { projectInvoiceLineToSalesReturn, updateSalesReturnItem } from './utils/salesReturnProjection';
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -163,46 +164,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Map invoice item to return item
   const mapInvoiceItemToReturnItem = (item: any): ReturnFormItem => {
-    const totalQty = parseFloat(item.quantity || 0);
-    const freeQty = parseFloat(item.free_quantity || 0);
-    const paidQty = totalQty - freeQty;
-    // GST rate: sum of cgst_rate + sgst_rate + igst_rate (standard DB fields)
-    const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0);
-
-
-    return {
-      ...item,
-      // Use invoice_item_id as unique id for this item
-      id: item.invoice_item_id || `inv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      // Original invoice quantities
-      quantity: totalQty,
-      paid_quantity: paidQty,
-      free_quantity: freeQty,
-      // Return quantities (editable) - default to full return
-      return_quantity: totalQty,
-      return_paid_qty: paidQty,
-      return_free_qty: freeQty,
-      // Pricing
-      unit_price: item.unit_price || 0,
-      discount_percent: item.discount_percent || 0,
-      tax_percent: gstPercent,
-      // Limits
-      max_returnable_qty: totalQty,
-      max_paid_qty: paidQty,
-      max_free_qty: freeQty,
-      // Pack info (for display)
-      packages_per_box: item.packages_per_box,
-      units_per_pack: item.units_per_pack,
-      // References
-      selected: true,
-      batch_id: item.batch_id,
-      batch_number: item.batch_number,
-      manufacturing_date: item.manufacturing_date,
-      expiry_date: item.expiry_date,
-      invoice_item_id: item.invoice_item_id,
-      disposition: 'RESTOCK',
-      is_manual: false
-    };
+    return projectInvoiceLineToSalesReturn(item);
   };
 
   // Handle customer selection
@@ -346,11 +308,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Update item
   const handleUpdateItem = useCallback((indexOrId: string | number, field: string, value: any) => {
-    const actualField = (field === 'quantity') ? 'return_quantity' : field;
-
     const updatedItems = returnData.items.map((item, index) => {
       if (index === indexOrId || item.id === indexOrId) {
-        return { ...item, [actualField]: value };
+        return updateSalesReturnItem(item, field, value);
       }
       return item;
     });

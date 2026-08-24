@@ -226,29 +226,23 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 ...item,
                 id: item.id || `imported-${Date.now()}-${index}`,
                 quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0
+                unit_price: parseFloat(String(item.unit_price ?? item.sale_price)) || 0
             }));
 
             setChallan(prev => ({
                 ...prev,
                 items: formattedItems,
-                notes: importData.notes || prev.notes
+                notes: importData.notes || prev.notes,
+                total_quantity: formattedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+                total_amount: 0,
+                taxable_amount: 0,
+                total_tax_amount: 0,
             }));
-
-            // Recalculate totals and update document
-            setTimeout(() => {
-                const { totalQuantity, totalAmount } = recalculateTotals(formattedItems);
-                setChallan(prev => ({
-                    ...prev,
-                    total_quantity: totalQuantity,
-                    total_amount: totalAmount
-                }));
-            }, 100);
         } else {
             setMessage('⚠️ No items found in the selected document');
             setMessageType('warning');
         }
-    }, [handleCustomerSelect, recalculateTotals, setChallan, setSelectedCustomer]);
+    }, [handleCustomerSelect, setChallan, setSelectedCustomer]);
 
     const saveChallan = handleSaveChallan;
 

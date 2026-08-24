@@ -38,3 +38,72 @@ export function extractDocumentDetail(
     }
     return normalized;
 }
+
+export interface CanonicalImportLine extends Record<string, unknown> {
+    product_id: string | number;
+    product_name: string;
+    batch_id: string | number;
+    batch_number: string;
+    quantity: number;
+    unit_price: number;
+}
+
+const finiteNumber = (value: unknown): number | null => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+/**
+ * Project authoritative document lines into an importable transaction shape.
+ * A line without its canonical product, batch, quantity, or rate fails closed;
+ * callers must not silently turn incomplete list rows into business drafts.
+ */
+export function projectCanonicalImportLines(
+    value: unknown,
+    options: { requireBatch?: boolean } = { requireBatch: true },
+): CanonicalImportLine[] {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw new Error('The selected document has no importable line items.');
+    }
+
+    return value.map((raw, index) => {
+        const item = (raw || {}) as Record<string, unknown>;
+        const productId = item.product_id ?? item.id;
+        const productName = String(item.product_name ?? item.name ?? '').trim();
+        const batchId = item.batch_id ?? (item.best_batch as Record<string, unknown> | undefined)?.batch_id;
+        const batchNumber = String(
+            item.batch_number ?? (item.best_batch as Record<string, unknown> | undefined)?.batch_number ?? '',
+        ).trim();
+        const quantity = finiteNumber(item.dispatched_quantity ?? item.quantity);
+        const unitPrice = finiteNumber(
+            item.unit_price ?? item.sale_price ?? item.selling_price ?? item.quoted_unit_rate,
+        );
+
+        if (productId === undefined || productId === null || productName === '') {
+            throw new Error(`Line ${index + 1} is missing its canonical product identity.`);
+        }
+        if (options.requireBatch !== false && (batchId === undefined || batchId === null || batchNumber === '')) {
+            throw new Error(`Line ${index + 1} is missing its canonical batch allocation.`);
+        }
+        if (quantity === null || quantity <= 0) {
+            throw new Error(`Line ${index + 1} has no positive quantity.`);
+        }
+        if (unitPrice === null || unitPrice < 0) {
+            throw new Error(`Line ${index + 1} is missing its canonical rate.`);
+        }
+
+        return {
+            ...item,
+            product_id: productId as string | number,
+            product_name: productName,
+            batch_id: batchId as string | number,
+            batch_number: batchNumber,
+            quantity,
+            unit_price: unitPrice,
+            sale_price: unitPrice,
+            gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
+            free_quantity: finiteNumber(item.free_quantity) ?? 0,
+            discount_percent: finiteNumber(item.discount_percent) ?? 0,
+        };
+    });
+}

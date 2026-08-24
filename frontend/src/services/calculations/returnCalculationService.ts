@@ -47,8 +47,8 @@ export async function calculateReturnPreview(
         items: selectedItems.map((item: any) => ({
             product_id: entityId(item.product_id),
             return_quantity: numeric(item.return_quantity ?? item.quantity),
-            paid_quantity: numeric(item.paid_quantity ?? item.quantity),
-            free_quantity: numeric(item.free_quantity),
+            paid_quantity: numeric(item.return_paid_qty ?? item.paid_quantity ?? item.quantity),
+            free_quantity: numeric(item.return_free_qty ?? item.free_quantity),
             unit_price: numeric(item.unit_price ?? item.rate),
             discount_percent: numeric(item.discount_percent),
             tax_percent: numeric(item.tax_percent ?? item.gst_percent)

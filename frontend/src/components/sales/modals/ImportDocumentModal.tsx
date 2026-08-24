@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, FileText, Truck, ShoppingCart, Calendar, LucideIcon } from 'lucide-react';
+import { X, Search, Truck, ShoppingCart, Calendar } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { ordersApi, challansApi } from '../../../services/api';
+import {
+  extractDocumentCollection,
+  extractDocumentDetail,
+  projectCanonicalImportLines,
+} from '../utils/documentImport';
 
 interface DocumentItem {
   item_id?: number;
@@ -23,20 +29,14 @@ interface DocumentItem {
   available_quantity?: number;
 }
 
-interface TransportDetails {
-  transport_company?: string;
-  vehicle_number?: string;
-  lr_number?: string;
-}
-
 interface Document {
-  order_id?: number;
-  challan_id?: number;
+  order_id?: number | string;
+  challan_id?: number | string;
   order_number?: string;
   challan_number?: string;
   order_date?: string;
   challan_date?: string;
-  customer_id: number;
+  customer_id: number | string;
   customer_name: string;
   customer_phone?: string;
   billing_address?: string;
@@ -57,17 +57,13 @@ interface Document {
 }
 
 interface ImportData {
-  source_type: string;
-  source_id: number;
-  customer_id: number;
-  customer_name: string;
-  customer_phone?: string;
-  billing_address?: string;
-  delivery_address?: string;
+  customer: Record<string, unknown>;
   items: DocumentItem[];
-  order_id?: number;
-  challan_id?: number | null;
-  transport_details: TransportDetails;
+  delivery_details: {
+    delivery_type: 'DELIVERY';
+    delivery_charges: number;
+  };
+  source: string;
 }
 
 interface ImportDocumentModalProps {
@@ -82,6 +78,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -91,6 +88,8 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
 
   const loadDocuments = async () => {
     setLoading(true);
+    setLoadError('');
+    setSelectedDoc(null);
     try {
       let results: Document[] = [];
 
@@ -102,29 +101,15 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             order_status: 'approved',
             invoice_created: false
           });
-          results = ordersResponse.data || [];
+          results = extractDocumentCollection(ordersResponse, ['orders', 'sales_orders']) as Document[];
           break;
 
         case 'challan':
-          // Get challans - try multiple endpoints to find working one
-          try {
-            // Try main challans endpoint first
-            const challansResponse = await challansApi.getAll({
-              limit: 20,
-              converted_to_invoice: false
-            });
-            results = challansResponse.data || [];
-
-            // If no results, try delivery API as fallback
-            if (!results.length) {
-              const deliveryResponse = await fetch('/api/delivery-challans/')
-                .then(res => res.json())
-                .catch(() => ({ data: [] }));
-              results = deliveryResponse.data || [];
-            }
-          } catch (error) {
-            results = []; // No mock data - let user know API is not working
-          }
+          const challansResponse = await challansApi.getAll({
+            limit: 20,
+            converted_to_invoice: false
+          });
+          results = extractDocumentCollection(challansResponse, ['challans', 'delivery_challans']) as Document[];
           break;
 
         default:
@@ -134,6 +119,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       setDocuments(results);
     } catch (error) {
       setDocuments([]);
+      setLoadError('Unable to load canonical documents. Nothing can be imported right now.');
     } finally {
       setLoading(false);
     }
@@ -153,17 +139,19 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
         const response = await ordersApi.search(searchQuery, {
           invoice_created: false
         });
-        results = response.data || [];
+        results = extractDocumentCollection(response, ['orders', 'sales_orders']) as Document[];
       } else if (documentType === 'challan') {
         const response = await challansApi.getAll({
           search: searchQuery,
           converted_to_invoice: false
         });
-        results = response.data || [];
+        results = extractDocumentCollection(response, ['challans', 'delivery_challans']) as Document[];
       }
 
       setDocuments(results);
     } catch (error) {
+      setDocuments([]);
+      setLoadError('Search failed against the canonical API. Nothing was imported.');
     } finally {
       setLoading(false);
     }
@@ -175,86 +163,48 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
     setLoading(true);
 
     try {
-      if (documentType === 'challan') {
-        // For challans, get the challan data and populate the form (don't create invoice yet)
-
-        let challan: Document;
-        try {
-          const challanResponse = await challansApi.getById(selectedDoc.challan_id!);
-          challan = challanResponse.data;
-        } catch (fetchError) {
-          // Use the selectedDoc data directly if fetch fails
-          challan = selectedDoc;
-        }
-
-        if (challan) {
-          // Transform challan data for invoice form population
-          const importData: ImportData = {
-            source_type: 'challan',
-            source_id: challan.challan_id!,
-            customer_id: challan.customer_id,
-            customer_name: challan.customer_name,
-            customer_phone: challan.customer_phone,
-            billing_address: challan.billing_address || challan.delivery_address,
-            delivery_address: challan.delivery_address,
-            items: (challan.items || []).map(item => ({
-              item_id: Date.now() + Math.random(),
-              product_id: item.product_id,
-              product_name: item.product_name,
-              product_code: item.product_code,
-              batch_id: item.batch_id,
-              batch_number: item.batch_number,
-              hsn_code: item.hsn_code,
-              expiry_date: item.expiry_date,
-              quantity: item.dispatched_quantity || item.quantity,
-              mrp: item.mrp,
-              unit_price: item.unit_price || item.unit_price || item.sale_price || 0,  // ✅ CANONICAL
-              discount_percent: 0,
-              free_quantity: 0,
-              gst_percent: item.gst_percent || 0,
-              available_quantity: item.quantity
-            })),
-            // Link references
-            order_id: challan.order_id,
-            challan_id: challan.challan_id,
-            // Transport details
-            transport_details: {
-              transport_company: challan.transport_company,
-              vehicle_number: challan.vehicle_number,
-              lr_number: challan.lr_number
-            }
-          };
-
-          onImport(importData);
-        }
-      } else {
-        // For sales orders, transform document data for invoice form population
-        const importData: ImportData = {
-          source_type: documentType,
-          source_id: selectedDoc.order_id!,
-          customer_id: selectedDoc.customer_id,
-          customer_name: selectedDoc.customer_name,
-          customer_phone: selectedDoc.customer_phone,
-          billing_address: selectedDoc.billing_address || selectedDoc.address,
-          delivery_address: selectedDoc.delivery_address || selectedDoc.shipping_address,
-          items: selectedDoc.items || selectedDoc.order_items || [],
-          // Link references
-          order_id: selectedDoc.order_id,
-          challan_id: null,
-          // Additional data
-          transport_details: {
-            transport_company: selectedDoc.transport_company,
-            vehicle_number: selectedDoc.vehicle_number,
-            lr_number: selectedDoc.lr_number
-          }
-        };
-
-        onImport(importData);
+      const selectedId = documentType === 'challan' ? selectedDoc.challan_id : selectedDoc.order_id;
+      if (!selectedId) throw new Error('The selected document has no canonical UUID.');
+      const detailResponse = documentType === 'challan'
+        ? await challansApi.getById(selectedId)
+        : await ordersApi.getById(selectedId);
+      const sourceDoc = extractDocumentDetail(
+        detailResponse,
+        documentType === 'challan' ? ['challan', 'delivery_challan'] : ['order', 'sales_order'],
+      ) as unknown as Document;
+      const sourceNumber = documentType === 'challan'
+        ? sourceDoc.challan_number
+        : sourceDoc.order_number;
+      if (!sourceDoc.customer_id || !sourceDoc.customer_name || !sourceNumber) {
+        throw new Error('The canonical document detail is missing its customer or document identity.');
       }
+
+      const importData: ImportData = {
+        customer: {
+          id: sourceDoc.customer_id,
+          customer_id: sourceDoc.customer_id,
+          customer_name: sourceDoc.customer_name,
+          primary_phone: sourceDoc.customer_phone,
+          address: sourceDoc.billing_address || sourceDoc.delivery_address || sourceDoc.address || '',
+          billing_address: sourceDoc.billing_address || sourceDoc.address || '',
+          shipping_address: sourceDoc.delivery_address || sourceDoc.shipping_address || '',
+        },
+        items: projectCanonicalImportLines(
+          sourceDoc.items || sourceDoc.order_items,
+          { requireBatch: true },
+        ) as DocumentItem[],
+        delivery_details: {
+          delivery_type: 'DELIVERY',
+          delivery_charges: 0,
+        },
+        source: `${documentType === 'challan' ? 'Delivery Challan' : 'Sales Order'} ${sourceNumber}`,
+      };
+
+      onImport(importData);
 
       onClose();
     } catch (error: any) {
-      alert(`Failed to import: ${error.response?.data?.detail || error.message}`);
+      toast.error(error.response?.data?.detail || error.message || 'Unable to import canonical document details.');
     } finally {
       setLoading(false);
     }
@@ -330,7 +280,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : documents.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No {documentType === 'sales-order' ? 'orders' : 'challans'} found
+              {loadError || `No ${documentType === 'sales-order' ? 'orders' : 'challans'} found`}
             </div>
           ) : (
             <div className="space-y-2">

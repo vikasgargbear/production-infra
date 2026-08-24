@@ -327,7 +327,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                         {formatExpiry(item.expiry_date)}
                                                     </td>
                                                     <td className="py-1.5 px-1.5 text-center border-r border-gray-200 font-medium">
-                                                        {item.return_quantity}
+                                                        {item.return_paid_qty ?? item.return_quantity}
                                                     </td>
                                                     <td className="py-1.5 px-1.5 text-center border-r border-gray-200 text-green-600 font-medium">
                                                         {freeQty > 0 ? freeQty : '-'}
