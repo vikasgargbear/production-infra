@@ -7,7 +7,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
-    const { login, loginWithGoogle, isOnline } = useAuth();
+    const {
+        login,
+        loginWithGoogle,
+        logout,
+        retrySessionExchange,
+        hasCloudSession,
+        sessionExchangeError,
+        isOnline,
+    } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -47,6 +55,17 @@ const LoginPage: React.FC = () => {
         }
     };
 
+    const handleRetry = async () => {
+        setError('');
+        setLoading(true);
+        try {
+            const result = await retrySessionExchange();
+            if (!result.success) setError(result.error || 'Unable to connect to ERP.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
             <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-8">
@@ -69,13 +88,38 @@ const LoginPage: React.FC = () => {
                 )}
 
                 {/* Error Message */}
-                {error && (
+                {(error || sessionExchangeError) && (
                     <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start">
                         <AlertCircle className="w-5 h-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
-                        <div className="text-sm text-red-800">{error}</div>
+                        <div className="text-sm text-red-800">{error || sessionExchangeError}</div>
                     </div>
                 )}
 
+                {hasCloudSession ? (
+                    <div className="space-y-4">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                            Your cloud sign-in is still active. Reconnect to the live ERP, or sign out to use another account.
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleRetry}
+                            disabled={loading || !isOnline}
+                            className="flex min-h-11 w-full items-center justify-center rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                            {loading ? 'Reconnecting...' : 'Retry ERP connection'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={logout}
+                            disabled={loading}
+                            className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Sign out
+                        </button>
+                    </div>
+                ) : (
+                <>
                 {/* Login Form */}
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
@@ -150,6 +194,8 @@ const LoginPage: React.FC = () => {
                     </svg>
                     Sign in with Google
                 </button>
+                </>
+                )}
 
                 {/* Footer */}
                 <div className="mt-6 text-center text-sm text-gray-500">

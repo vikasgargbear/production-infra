@@ -8,7 +8,7 @@
  * migrate these to use MemoryRouter + <Routes> and update routerDependency.test.js.
  */
 
-import { parseHash, buildHash } from '../hooks/useHashRouter';
+import { parseHash, buildHash, normalizePathnameRoute } from '../hooks/useHashRouter';
 
 // ---------------------------------------------------------------------------
 // parseHash
@@ -193,5 +193,26 @@ describe('stable URL contracts', () => {
     expect(parseHash(subHash).subpage).toBe('batch-tracking');
     // The subpage hash is "deeper" than the tab hash — replace ensures no extra history entry
     expect(subHash).toContain(navHash.replace('#/', '#/'));
+  });
+});
+
+describe('legacy pathname normalization', () => {
+  const tabs = ['home', 'sales', 'purchase', 'stock-management'] as const;
+
+  it('maps a supported pathname into the canonical tab and subpage', () => {
+    expect(normalizePathnameRoute('/sales/create-invoice', '', tabs)).toEqual({
+      tab: 'sales', subpage: 'create-invoice',
+    });
+  });
+
+  it('keeps an existing hash authoritative', () => {
+    expect(normalizePathnameRoute('/unsupported', '#/purchase/history', tabs)).toEqual({
+      tab: 'purchase', subpage: 'history',
+    });
+  });
+
+  it('fails unsupported and reserved pathnames closed to home', () => {
+    expect(normalizePathnameRoute('/unsupported', '', tabs)).toEqual({ tab: 'home', subpage: null });
+    expect(normalizePathnameRoute('/oauth/consent', '', tabs)).toEqual({ tab: 'home', subpage: null });
   });
 });

@@ -41,6 +41,27 @@ export function buildHash(tab: string, subpage?: string | null): string {
   return `#/${tab}`;
 }
 
+const RESERVED_PATHS = new Set(['/oauth/consent', '/e2e/calculation-smoke', '/e2e/mobile-navigation']);
+
+/** Convert an old pathname deep link into the one canonical hash route. */
+export function normalizePathnameRoute(
+  pathname: string,
+  hash: string,
+  validTabs: readonly string[]
+): HashRouterState {
+  if (hash) return parseHash(hash);
+  if (RESERVED_PATHS.has(pathname)) return { tab: 'home', subpage: null };
+  let segments: string[];
+  try {
+    segments = pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment));
+  } catch {
+    return { tab: 'home', subpage: null };
+  }
+  const tab = segments[0];
+  if (!tab || !validTabs.includes(tab)) return { tab: 'home', subpage: null };
+  return { tab, subpage: segments[1] || null };
+}
+
 export interface UseHashRouterResult {
   tab: string;
   subpage: string | null;
@@ -61,7 +82,7 @@ export function useHashRouter(
   hasAccess: (tab: string) => boolean
 ): UseHashRouterResult {
   const [state, setState] = useState<HashRouterState>(() => {
-    const parsed = parseHash(window.location.hash);
+    const parsed = normalizePathnameRoute(window.location.pathname, window.location.hash, validTabs);
     const tab = validTabs.includes(parsed.tab) ? parsed.tab : 'home';
     return { tab, subpage: parsed.subpage };
   });
@@ -80,6 +101,10 @@ export function useHashRouter(
   // On first mount, write the canonical hash for whatever tab is active (so reload works)
   useEffect(() => {
     const canonical = buildHash(state.tab, state.subpage);
+    if (window.location.pathname !== '/' && !RESERVED_PATHS.has(window.location.pathname)) {
+      window.history.replaceState(window.history.state, '', `/${window.location.search}${canonical}`);
+      return;
+    }
     if (window.location.hash !== canonical) {
       window.location.replace(canonical);
     }

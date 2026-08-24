@@ -289,6 +289,75 @@ test('a transient token-refresh failure preserves the last valid ERP session', a
 });
 
 
+test('cold-start ERP failure preserves the Supabase session and supports explicit retry', async () => {
+    jest.useFakeTimers();
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'cold-start-access' } },
+        error: null,
+    });
+    fetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ detail: 'ERP is starting' }),
+    });
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await act(async () => Promise.resolve());
+    await act(async () => {
+        jest.advanceTimersByTime(1500);
+        await Promise.resolve();
+    });
+    await act(async () => {
+        jest.advanceTimersByTime(3000);
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+
+    expect(currentAuth.isAuthenticated).toBe(false);
+    expect(currentAuth.hasCloudSession).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBe('ERP is starting');
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: token() }),
+    });
+    let retry;
+    await act(async () => {
+        retry = await currentAuth.retrySessionExchange();
+    });
+    expect(retry.success).toBe(true);
+    expect(currentAuth.isAuthenticated).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBeNull();
+    jest.useRealTimers();
+});
+
+
+test('cold-start ERP authorization failure waits for explicit sign out', async () => {
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'unauthorized-access' } },
+        error: null,
+    });
+    fetch.mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: async () => ({ detail: 'ERP access is not reviewed' }),
+    });
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    expect(currentAuth.hasCloudSession).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBe('ERP access is not reviewed');
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    act(() => currentAuth.logout());
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(currentAuth.hasCloudSession).toBe(false);
+});
+
+
 test('an authorization failure on token refresh clears the ERP session', async () => {
     render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(currentAuth.isLoading).toBe(false));

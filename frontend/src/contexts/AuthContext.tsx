@@ -51,6 +51,9 @@ export interface AuthContextValue extends AuthState {
     getOrgId: () => string | null;
     getToken: () => string | null;
     isOnline: boolean;
+    hasCloudSession: boolean;
+    sessionExchangeError: string | null;
+    retrySessionExchange: () => Promise<LoginResult>;
 }
 
 interface JWTPayload {
@@ -142,6 +145,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: true,
     });
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [hasCloudSession, setHasCloudSession] = useState(false);
+    const [sessionExchangeError, setSessionExchangeError] = useState<string | null>(null);
     const pendingExchange = useRef<{
         accessToken: string;
         promise: Promise<LoginResult>;
@@ -149,7 +154,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const clearErpSession = useCallback(() => {
         clearErpSessionStorage();
+        setHasCloudSession(false);
+        setSessionExchangeError(null);
         setState({ user: null, token: null, isAuthenticated: false, isLoading: false });
+    }, []);
+
+    const preserveCloudSessionFailure = useCallback((result: LoginResult) => {
+        setHasCloudSession(true);
+        setSessionExchangeError(result.error || 'The ERP session could not be established.');
+        setState((previous) => {
+            if (previous.isAuthenticated && !result.authorizationFailure) {
+                return { ...previous, isLoading: false };
+            }
+            clearErpSessionStorage();
+            return { user: null, token: null, isAuthenticated: false, isLoading: false };
+        });
     }, []);
 
     const exchangeSupabaseSession = useCallback((accessToken: string): Promise<LoginResult> => {
@@ -187,6 +206,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 };
 
                 saveErpSession(data.access_token, user);
+                setHasCloudSession(true);
+                setSessionExchangeError(null);
                 setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
                 return { success: true, user };
             } catch {
@@ -215,15 +236,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
             if (error) return { success: false, error: error.message };
             if (!data.session) return { success: false, error: 'Email verification is required' };
+            setHasCloudSession(true);
             const result = await exchangeSupabaseSession(data.session.access_token);
-            if (!result.success && result.authorizationFailure) {
-                await getSupabaseClient().auth.signOut();
-            }
+            if (!result.success) preserveCloudSessionFailure(result);
             return result;
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
         }
-    }, [exchangeSupabaseSession]);
+    }, [exchangeSupabaseSession, preserveCloudSessionFailure]);
 
     const loginWithGoogle = useCallback(async (): Promise<LoginResult | void> => {
         if (!navigator.onLine) {
@@ -252,6 +272,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearErpSession();
     }, [clearErpSession]);
 
+    const retrySessionExchange = useCallback(async (): Promise<LoginResult> => {
+        if (!navigator.onLine) {
+            const result = { success: false, error: 'An internet connection is required to connect to ERP.' };
+            setSessionExchangeError(result.error);
+            return result;
+        }
+        try {
+            const { data, error } = await getSupabaseClient().auth.getSession();
+            if (error || !data.session) {
+                const result = { success: false, error: error?.message || 'Your cloud session has ended. Please sign in again.' };
+                clearErpSession();
+                return result;
+            }
+            setHasCloudSession(true);
+            setSessionExchangeError(null);
+            setState((previous) => ({ ...previous, isLoading: !previous.isAuthenticated }));
+            const result = await exchangeSupabaseSession(data.session.access_token);
+            if (!result.success) preserveCloudSessionFailure(result);
+            return result;
+        } catch (error) {
+            const result = {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unable to reconnect to ERP.',
+            };
+            preserveCloudSessionFailure(result);
+            return result;
+        }
+    }, [clearErpSession, exchangeSupabaseSession, preserveCloudSessionFailure]);
+
     useEffect(() => {
         removeLegacyErpSessionKeys();
 
@@ -269,10 +318,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 clearErpSession();
                 return;
             }
+            setHasCloudSession(true);
             const result = await exchangeSupabaseSession(data.session.access_token);
-            if (active && !result.success) clearErpSession();
+            if (active && !result.success) preserveCloudSessionFailure(result);
         }).catch(() => {
-            if (active) clearErpSession();
+            if (active) {
+                const result = { success: false, error: 'Unable to read the cloud session. Please retry.' };
+                preserveCloudSessionFailure(result);
+            }
         });
 
         const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -282,10 +335,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 return;
             }
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                setHasCloudSession(true);
                 void exchangeSupabaseSession(session.access_token).then((result) => {
-                    if (active && !result.success && result.authorizationFailure) {
-                        clearErpSession();
-                    }
+                    if (active && !result.success) preserveCloudSessionFailure(result);
                 });
             }
         });
@@ -294,7 +346,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             active = false;
             listener.subscription.unsubscribe();
         };
-    }, [clearErpSession, exchangeSupabaseSession]);
+    }, [clearErpSession, exchangeSupabaseSession, preserveCloudSessionFailure]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -316,6 +368,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         getOrgId: () => state.user?.org_id || null,
         getToken: () => state.token,
         isOnline,
+        hasCloudSession,
+        sessionExchangeError,
+        retrySessionExchange,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
