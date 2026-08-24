@@ -15,6 +15,7 @@ import { useCompany } from '../../../../contexts/CompanyContext';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useChallanSave } from './useChallanSave';
 import { calculateChallanPreview } from '../../../../services/calculations/challanCalculationService';
+import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import {
     Challan,
     ChallanItem,
@@ -179,7 +180,8 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 delivery_state: '',
                 delivery_pincode: '',
                 delivery_contact_person: '',
-                delivery_contact_phone: ''
+                delivery_contact_phone: '',
+                gst_type: 'CGST/SGST'
             }));
             return;
         }
@@ -191,24 +193,41 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         const pincode = customer.pincode || customer.pincode || customer.pincode || '';
         const phone = customer.phone || customer.primary_phone || customer.mobile || customer.contact_number || '';
 
-        setChallan(prev => ({
-            ...prev,
-            customer_details: { ...customer, address, city, state, pincode, phone } as CustomerDetails,
-            delivery_address: sameAsBilling ? address : prev.delivery_address,
-            delivery_city: sameAsBilling ? city : prev.delivery_city,
-            delivery_state: sameAsBilling ? state : prev.delivery_state,
-            delivery_pincode: sameAsBilling ? pincode : prev.delivery_pincode,
-            delivery_contact_person: sameAsBilling ? (customer.contact_person || customer.customer_name || customer.name || '') : prev.delivery_contact_person,
-            delivery_contact_phone: sameAsBilling ? phone : prev.delivery_contact_phone
-        }));
-    }, [baseHandleCustomerSelect, sameAsBilling, setChallan]);
+        setChallan(prev => {
+            const deliveryState = sameAsBilling ? state : prev.delivery_state;
+            return {
+                ...prev,
+                customer_details: { ...customer, address, city, state, pincode, phone } as CustomerDetails,
+                delivery_address: sameAsBilling ? address : prev.delivery_address,
+                delivery_city: sameAsBilling ? city : prev.delivery_city,
+                delivery_state: deliveryState,
+                delivery_pincode: sameAsBilling ? pincode : prev.delivery_pincode,
+                delivery_contact_person: sameAsBilling ? (customer.contact_person || customer.customer_name || customer.name || '') : prev.delivery_contact_person,
+                delivery_contact_phone: sameAsBilling ? phone : prev.delivery_contact_phone,
+                gst_type: determineGstTypeForSupply(
+                    companyInfo?.state,
+                    deliveryState || state,
+                    companyInfo?.gst_number,
+                    customer.gst_number
+                )
+            };
+        });
+    }, [baseHandleCustomerSelect, companyInfo, sameAsBilling, setChallan]);
 
     // ==================== HANDLE IMPORT ====================
-    const handleImport = useCallback((importData: ImportData) => {
+    const handleImport = useCallback(async (importData: ImportData) => {
         if (importData.customer_id && importData.customer_details) {
             setSelectedCustomer(importData.customer_details);
-            handleCustomerSelect(importData.customer_details);
+            await handleCustomerSelect(importData.customer_details);
         }
+
+        const importedState = importData.delivery_state || importData.customer_details?.state || '';
+        const importedGstType = determineGstTypeForSupply(
+            companyInfo?.state,
+            importedState,
+            companyInfo?.gst_number,
+            importData.customer_details?.gst_number
+        );
 
         if (importData.delivery_address) {
             setSameAsBilling(false);
@@ -217,7 +236,8 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 delivery_address: importData.delivery_address || '',
                 delivery_city: importData.delivery_city || '',
                 delivery_state: importData.delivery_state || '',
-                delivery_pincode: importData.delivery_pincode || ''
+                delivery_pincode: importData.delivery_pincode || '',
+                gst_type: importedGstType
             }));
         }
 
@@ -237,12 +257,14 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 total_amount: 0,
                 taxable_amount: 0,
                 total_tax_amount: 0,
+                gst_type: importedGstType,
             }));
         } else {
+            setChallan(prev => ({ ...prev, gst_type: importedGstType }));
             setMessage('⚠️ No items found in the selected document');
             setMessageType('warning');
         }
-    }, [handleCustomerSelect, setChallan, setSelectedCustomer]);
+    }, [companyInfo, handleCustomerSelect, setChallan, setSelectedCustomer]);
 
     const saveChallan = handleSaveChallan;
 

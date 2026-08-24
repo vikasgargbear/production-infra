@@ -256,7 +256,7 @@ export interface UseChallanLogicReturn {
     // Handlers
     handleCustomerSelect: (customer: CustomerDetails | null) => Promise<void>;
     handleProductSelect: (product: any) => void;
-    handleImport: (importData: ImportData) => void;
+    handleImport: (importData: ImportData) => Promise<void>;
     updateItem: (index: number, field: string, value: any) => void;
     removeItem: (itemId: number | string) => void;
     saveChallan: () => Promise<void>;
