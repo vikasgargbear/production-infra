@@ -9,6 +9,7 @@ export interface BrowserFailureCollector {
 
 export function collectBrowserFailures(page: Page): BrowserFailureCollector {
   const failures: string[] = [];
+  const pendingDiagnostics = new Set<Promise<void>>();
 
   page.on('pageerror', error => failures.push(`pageerror: ${error.message}`));
   page.on('console', message => {
@@ -23,12 +24,22 @@ export function collectBrowserFailures(page: Page): BrowserFailureCollector {
   });
   page.on('response', response => {
     if (/\/api\//.test(response.url()) && response.status() >= 400) {
-      failures.push(`response: ${response.status()} ${response.request().method()} ${response.url()}`);
+      const diagnostic = response.text()
+        .catch(() => '<response body unavailable>')
+        .then(body => {
+          failures.push(
+            `response: ${response.status()} ${response.request().method()} ${response.url()} `
+            + `${body.slice(0, 1500)}`,
+          );
+        })
+        .finally(() => pendingDiagnostics.delete(diagnostic));
+      pendingDiagnostics.add(diagnostic);
     }
   });
 
   return {
     async assertClean(testInfo: TestInfo) {
+      await Promise.all([...pendingDiagnostics]);
       const uniqueFailures = [...new Set(failures)];
       if (uniqueFailures.length > 0) {
         await testInfo.attach('browser-failures', {
@@ -122,6 +133,10 @@ export async function expectSuccessfulWrite(
   ), { timeout: 30_000 });
   await action();
   const response = await responsePromise;
-  expect(response.status(), `${response.request().method()} ${response.url()}`).toBeGreaterThanOrEqual(200);
-  expect(response.status(), `${response.request().method()} ${response.url()}`).toBeLessThan(300);
+  const body = response.status() >= 300
+    ? await response.text().catch(() => '<response body unavailable>')
+    : '';
+  const evidence = `${response.request().method()} ${response.url()} ${body.slice(0, 1500)}`;
+  expect(response.status(), evidence).toBeGreaterThanOrEqual(200);
+  expect(response.status(), evidence).toBeLessThan(300);
 }

@@ -1,22 +1,28 @@
-"""Canonical read compatibility for the current ERP UI.
+"""Canonical compatibility for the current ERP UI.
 
 These endpoints preserve the UI's existing response field names while reading
-only the canonical schemas. Mutations intentionally remain outside this router.
+and writing only the canonical schemas. Consequential document mutations still
+use the reviewed operator-command boundary; the product mutation below creates
+only a non-transactional draft.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Query, Security
+from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from fastapi.security import HTTPBearer
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
+from ..schemas.master.customer import CustomerCreate
+from ..schemas.master.supplier import SupplierCreate
 
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
 
@@ -51,16 +57,124 @@ PURCHASE_USER = Depends(PermissionChecker("purchase", "view"))
 INVENTORY_USER = Depends(PermissionChecker("inventory", "view"))
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
 
+INDIAN_STATE_CODES = {
+    "Andaman and Nicobar Islands": "35", "Andhra Pradesh": "37",
+    "Arunachal Pradesh": "12", "Assam": "18", "Bihar": "10",
+    "Chandigarh": "04", "Chhattisgarh": "22",
+    "Dadra and Nagar Haveli and Daman and Diu": "26", "Delhi": "07",
+    "Goa": "30", "Gujarat": "24", "Haryana": "06",
+    "Himachal Pradesh": "02", "Jammu and Kashmir": "01", "Jharkhand": "20",
+    "Karnataka": "29", "Kerala": "32", "Ladakh": "38",
+    "Lakshadweep": "31", "Madhya Pradesh": "23", "Maharashtra": "27",
+    "Manipur": "14", "Meghalaya": "17", "Mizoram": "15", "Nagaland": "13",
+    "Odisha": "21", "Puducherry": "34", "Punjab": "03",
+    "Rajasthan": "08", "Sikkim": "11", "Tamil Nadu": "33",
+    "Telangana": "36", "Tripura": "16", "Uttar Pradesh": "09",
+    "Uttarakhand": "05", "West Bengal": "19",
+}
+
+
+def _state_code(state_name: Optional[str], gstin: Optional[str]) -> Optional[str]:
+    if gstin:
+        gst_state = gstin[:2]
+        if state_name and INDIAN_STATE_CODES.get(state_name) != gst_state:
+            raise HTTPException(status_code=422, detail="GSTIN state does not match the address state")
+        return gst_state
+    if not state_name:
+        return None
+    code = INDIAN_STATE_CODES.get(state_name)
+    if code is None:
+        raise HTTPException(status_code=422, detail=f"Unsupported Indian state: {state_name}")
+    return code
+
+
+def _party_posting_account(db: Session, org_id: UUID, account_type: str) -> UUID:
+    account_id = db.execute(text("""
+        SELECT id FROM finance.accounts
+         WHERE org_id=:org_id AND account_type=:account_type
+           AND allows_party_posting AND status='active' AND currency_code='INR'
+         ORDER BY code, id LIMIT 1
+    """), {"org_id": org_id, "account_type": account_type}).scalar()
+    if account_id is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"No active INR party-posting {account_type} account is configured",
+        )
+    return account_id
+
+
+def _reject_unreviewed_party_fields(kind: str, values: dict[str, Any]) -> None:
+    entered = [label for field, label in (
+        ("drug_license_number", "drug license"),
+        ("fssai_number", "FSSAI license"),
+        ("bank_name", "supplier bank details"),
+        ("account_number", "supplier bank details"),
+        ("ifsc_code", "supplier bank details"),
+        ("internal_notes", "internal notes"),
+    ) if values.get(field)]
+    if values.get("discount_percent"):
+        entered.append("default discount")
+    if entered:
+        fields = ", ".join(sorted(set(entered)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"{kind} {fields} require their dedicated reviewed workflow",
+        )
+
+
+class CanonicalProductDraftCreate(BaseModel):
+    """Small, honest product-draft contract for the canonical catalog."""
+
+    product_name: str = Field(min_length=1, max_length=255)
+    product_code: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+    )
+    generic_name: Optional[str] = Field(default=None, max_length=255)
+    product_kind: str = Field(default="medicine", pattern=r"^(medicine|medical_device|consumable)$")
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CanonicalCustomerCreate(CustomerCreate):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CanonicalSupplierCreate(SupplierCreate):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CanonicalProductDraftUpdate(BaseModel):
+    product_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    generic_name: Optional[str] = Field(default=None, max_length=255)
+    product_kind: Optional[str] = Field(
+        default=None, pattern=r"^(medicine|medical_device|consumable)$"
+    )
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def require_change(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one product field is required")
+        return self
+
 
 @router.get("/products")
 @router.get("/products/")
 def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
-             search: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db)):
+             offset: Optional[int] = Query(None, ge=0),
+             search: str = "", include_inactive: bool = False,
+             user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
+    effective_offset = offset if offset is not None else skip
     return _rows(db, """
         SELECT p.id AS product_id, p.sku AS product_code, p.name AS product_name,
                p.generic_name, p.product_kind AS product_type, p.base_uom_code AS unit,
-               p.hsn_code, p.dosage_form, p.strength_display, p.drug_schedule,
+               CASE WHEN p.status='draft' AND p.hsn_code='0000' THEN NULL ELSE p.hsn_code END AS hsn_code,
+               p.dosage_form, p.strength_display, p.drug_schedule,
                p.requires_prescription, p.cold_chain_required,
                p.status='active' AS is_active, p.status, p.created_at, p.updated_at,
                COALESCE(stock.current_stock, 0) AS current_stock
@@ -70,12 +184,121 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                 FROM inventory.stock_balances balance
                WHERE balance.org_id=p.org_id AND balance.product_id=p.id
           ) stock ON true
-         WHERE p.org_id=:org_id AND p.status IN ('active','blocked')
+         WHERE p.org_id=:org_id
+           AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
            AND (:search='' OR p.name ILIKE :pattern OR p.sku ILIKE :pattern
                 OR COALESCE(p.generic_name,'') ILIKE :pattern)
          ORDER BY p.name, p.id LIMIT :limit OFFSET :skip
     """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
-            "limit": limit, "skip": skip})
+            "include_drafts": include_inactive,
+            "limit": limit, "skip": effective_offset})
+
+
+@router.post("/products/", status_code=status.HTTP_201_CREATED)
+def create_product_draft(
+    product: CanonicalProductDraftCreate,
+    user: dict = Depends(PermissionChecker("master", "create")),
+    db: Session = Depends(get_db),
+):
+    """Create an unusable draft; regulatory activation remains a separate command.
+
+    The canonical baseline currently requires an HSN-shaped value even for a
+    draft. ``0000`` is an internal sentinel hidden by read projections and can
+    never make the product active because activation also requires reviewed HSN
+    release, manufacturer, and regulatory facts.
+    """
+
+    org_id = _activate(db, user)
+    duplicate = db.execute(
+        text("""
+            SELECT 1 FROM catalog.products
+             WHERE org_id=:org_id AND lower(btrim(name))=lower(btrim(:name))
+             LIMIT 1
+        """),
+        {"org_id": org_id, "name": product.product_name},
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Product name already exists")
+
+    sku = product.product_code or f"DRAFT-{uuid4().hex[:12].upper()}"
+    try:
+        created = db.execute(
+            text("""
+                INSERT INTO catalog.products (
+                    org_id, sku, product_kind, name, generic_name,
+                    base_uom_code, hsn_code, cold_chain_required, status
+                ) VALUES (
+                    :org_id, :sku, :product_kind, :name, :generic_name,
+                    'EA', '0000', false, 'draft'
+                )
+                RETURNING id, sku, name
+            """),
+            {
+                "org_id": org_id,
+                "sku": sku,
+                "product_kind": product.product_kind,
+                "name": product.product_name,
+                "generic_name": product.generic_name,
+            },
+        ).one()
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Product code already exists") from exc
+
+    return {
+        "product_id": created.id,
+        "product_code": created.sku,
+        "product_name": created.name,
+        "lifecycle_status": "draft",
+        "message": "Product draft created; classification is required before sale",
+    }
+
+
+@router.put("/products/{product_id}")
+def update_product_draft(
+    product_id: UUID,
+    product: CanonicalProductDraftUpdate,
+    user: dict = Depends(PermissionChecker("master", "update")),
+    db: Session = Depends(get_db),
+):
+    """Update only mutable identity fields while the product remains a draft."""
+
+    org_id = _activate(db, user)
+    fields = product.model_fields_set
+    updated = db.execute(
+        text("""
+            UPDATE catalog.products
+               SET name = CASE WHEN :set_name THEN :name ELSE name END,
+                   generic_name = CASE WHEN :set_generic THEN :generic_name ELSE generic_name END,
+                   product_kind = CASE WHEN :set_kind THEN :product_kind ELSE product_kind END,
+                   updated_at = transaction_timestamp(),
+                   row_version = row_version + 1
+             WHERE org_id=:org_id AND id=:product_id AND status='draft'
+             RETURNING id, sku, name
+        """),
+        {
+            "org_id": org_id,
+            "product_id": product_id,
+            "set_name": "product_name" in fields,
+            "name": product.product_name,
+            "set_generic": "generic_name" in fields,
+            "generic_name": product.generic_name,
+            "set_kind": "product_kind" in fields,
+            "product_kind": product.product_kind,
+        },
+    ).first()
+    if updated is None:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Only existing product drafts can be edited")
+    db.commit()
+    return {
+        "product_id": updated.id,
+        "product_code": updated.sku,
+        "product_name": updated.name,
+        "lifecycle_status": "draft",
+        "message": "Product draft updated",
+    }
 
 
 @router.get("/products/all-with-batches")
@@ -156,6 +379,214 @@ def product_batches(
          ORDER BY batch.expires_on NULLS LAST, batch.batch_number
     """, {"org_id": org_id, "product_id": product_id})
     return {"batches": rows}
+
+
+def _insert_party_contact_address_and_tax(
+    db: Session,
+    *,
+    org_id: UUID,
+    legal_name: str,
+    party_kind: str,
+    pan: Optional[str],
+    contact_name: str,
+    phone: Optional[str],
+    email: Optional[str],
+    address_line1: Optional[str],
+    address_line2: Optional[str],
+    city: Optional[str],
+    state_name: Optional[str],
+    postal_code: Optional[str],
+    gstin: Optional[str],
+) -> UUID:
+    duplicate = db.execute(text("""
+        SELECT 1 FROM parties.parties
+         WHERE org_id=:org_id AND lower(btrim(legal_name))=lower(btrim(:legal_name))
+           AND status IN ('draft','active','blocked') LIMIT 1
+    """), {"org_id": org_id, "legal_name": legal_name}).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="A party with this legal name already exists")
+
+    party_id = db.execute(text("""
+        INSERT INTO "parties"."parties" (
+            org_id, party_kind, legal_name, pan, pan_verification_status, status
+        ) VALUES (:org_id, :party_kind, :legal_name, :pan, 'unverified', 'draft')
+        RETURNING id
+    """), {
+        "org_id": org_id, "party_kind": party_kind,
+        "legal_name": legal_name, "pan": pan,
+    }).scalar_one()
+
+    if phone or email:
+        db.execute(text("""
+            INSERT INTO "parties"."contacts" (
+                org_id, party_id, contact_kind, name, email, phone, is_primary, status
+            ) VALUES (
+                :org_id, :party_id, 'business', :name, :email, :phone, true, 'active'
+            )
+        """), {
+            "org_id": org_id, "party_id": party_id, "name": contact_name,
+            "email": str(email) if email else None, "phone": phone,
+        })
+
+    address_values = [address_line1, city, state_name, postal_code]
+    if any(address_values) and not all(address_values):
+        raise HTTPException(
+            status_code=422,
+            detail="Address line, city, state, and pincode must be supplied together",
+        )
+    state_code = _state_code(state_name, gstin)
+    if all(address_values):
+        db.execute(text("""
+            INSERT INTO "parties"."addresses" (
+                org_id, party_id, address_kind, line1, line2, city, state_code,
+                postal_code, country_code, is_primary, status
+            ) VALUES (
+                :org_id, :party_id, 'billing', :line1, :line2, :city, :state_code,
+                :postal_code, 'IN', true, 'active'
+            )
+        """), {
+            "org_id": org_id, "party_id": party_id, "line1": address_line1,
+            "line2": address_line2, "city": city, "state_code": state_code,
+            "postal_code": postal_code,
+        })
+
+    if gstin:
+        db.execute(text("""
+            INSERT INTO "parties"."tax_registrations" (
+                org_id, party_id, registration_type, registration_number,
+                registered_legal_name, state_code, taxpayer_type, status
+            ) VALUES (
+                :org_id, :party_id, 'GSTIN', :gstin,
+                :legal_name, :state_code, 'regular', 'pending_verification'
+            )
+        """), {
+            "org_id": org_id, "party_id": party_id, "gstin": gstin,
+            "legal_name": legal_name, "state_code": state_code,
+        })
+    return party_id
+
+
+@router.post(
+    "/customers/",
+    status_code=status.HTTP_201_CREATED,
+    operation_id="create_canonical_customer",
+)
+def create_customer(
+    customer: CanonicalCustomerCreate,
+    user: dict = Depends(PermissionChecker("master", "create")),
+    db: Session = Depends(get_db),
+):
+    values = customer.model_dump()
+    _reject_unreviewed_party_fields("Customer", values)
+    org_id = _activate(db, user)
+    receivable_account_id = _party_posting_account(db, org_id, "asset")
+    try:
+        party_id = _insert_party_contact_address_and_tax(
+            db,
+            org_id=org_id,
+            legal_name=customer.customer_name,
+            party_kind="individual" if customer.customer_type == "individual" else "organization",
+            pan=customer.pan_number,
+            contact_name=customer.contact_person_name or customer.customer_name,
+            phone=customer.primary_phone,
+            email=customer.primary_email,
+            address_line1=customer.address_line1,
+            address_line2=customer.address_line2,
+            city=customer.city,
+            state_name=customer.state,
+            postal_code=customer.pincode,
+            gstin=customer.gst_number,
+        )
+        customer_code = customer.customer_code or f"CUST-{uuid4().hex[:10].upper()}"
+        account = db.execute(text("""
+            INSERT INTO "parties"."customer_accounts" (
+                org_id, party_id, customer_code, credit_limit, credit_days,
+                default_receivable_account_id, status
+            ) VALUES (
+                :org_id, :party_id, :code, :credit_limit, :credit_days,
+                :account_id, 'active'
+            ) RETURNING id
+        """), {
+            "org_id": org_id, "party_id": party_id, "code": customer_code,
+            "credit_limit": customer.credit_limit, "credit_days": customer.credit_days,
+            "account_id": receivable_account_id,
+        }).scalar_one()
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Customer code or contact already exists") from exc
+    return {
+        "customer_id": account,
+        "customer_code": customer_code,
+        "customer_name": customer.customer_name,
+        "primary_phone": customer.primary_phone,
+        "status": "active",
+        "message": "Customer created",
+    }
+
+
+@router.post(
+    "/suppliers/",
+    status_code=status.HTTP_201_CREATED,
+    operation_id="create_canonical_supplier",
+)
+def create_supplier(
+    supplier: CanonicalSupplierCreate,
+    user: dict = Depends(PermissionChecker("master", "create")),
+    db: Session = Depends(get_db),
+):
+    values = supplier.model_dump()
+    _reject_unreviewed_party_fields("Supplier", values)
+    org_id = _activate(db, user)
+    payable_account_id = _party_posting_account(db, org_id, "liability")
+    try:
+        party_id = _insert_party_contact_address_and_tax(
+            db,
+            org_id=org_id,
+            legal_name=supplier.supplier_name,
+            party_kind="organization",
+            pan=supplier.pan_number,
+            contact_name=supplier.contact_person or supplier.supplier_name,
+            phone=supplier.primary_phone,
+            email=supplier.primary_email,
+            address_line1=supplier.address_line1,
+            address_line2=supplier.address_line2,
+            city=supplier.city,
+            state_name=supplier.state,
+            postal_code=supplier.pincode,
+            gstin=supplier.gst_number,
+        )
+        supplier_code = supplier.supplier_code or f"SUP-{uuid4().hex[:10].upper()}"
+        account = db.execute(text("""
+            INSERT INTO "parties"."supplier_accounts" (
+                org_id, party_id, supplier_code, payment_days,
+                default_payable_account_id, status
+            ) VALUES (
+                :org_id, :party_id, :code, :payment_days, :account_id, 'active'
+            ) RETURNING id
+        """), {
+            "org_id": org_id, "party_id": party_id, "code": supplier_code,
+            "payment_days": supplier.payment_days or supplier.credit_days,
+            "account_id": payable_account_id,
+        }).scalar_one()
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Supplier code or contact already exists") from exc
+    return {
+        "supplier_id": account,
+        "supplier_code": supplier_code,
+        "supplier_name": supplier.supplier_name,
+        "primary_phone": supplier.primary_phone,
+        "status": "active",
+        "message": "Supplier created",
+    }
 
 
 _PARTY_CONTACTS = """

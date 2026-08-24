@@ -115,7 +115,7 @@ test.describe('live ERP pilot', () => {
     await chooseHubModule(page, 'Master', 'Products');
     await page.getByRole('button', { name: 'New draft' }).click();
     await page.getByLabel('Product name').fill(productName);
-    await expectSuccessfulWrite(page, /\/api\/products(?:\?|$)/, async () => {
+    await expectSuccessfulWrite(page, /\/api\/products\/?(?:\?|$)/, async () => {
       await page.getByRole('button', { name: 'Save draft' }).click();
     });
     await page.getByPlaceholder('Search products').fill(productName);
@@ -123,22 +123,28 @@ test.describe('live ERP pilot', () => {
 
     await chooseHubModule(page, 'Master', 'Customers');
     await page.getByRole('button', { name: 'Add Customer' }).click();
-    await page.getByPlaceholder('Enter customer name').fill(customerName);
-    await page.getByRole('button', { name: 'Contact & Address' }).click();
-    await page.getByPlaceholder('+91-9876543210').first().fill(`90${suffix}`);
-    await expectSuccessfulWrite(page, /\/api\/customers(?:\?|$)/, async () => {
-      await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByPlaceholder('Company name').fill(customerName);
+    await page.getByPlaceholder('10-digit').first().fill(`90${suffix}`);
+    await page.getByPlaceholder('Building, street address').fill('E2E Test Lane 1');
+    await page.getByPlaceholder('City').fill('Mumbai');
+    await page.locator('select').filter({ hasText: 'Maharashtra' }).selectOption('Maharashtra');
+    await page.getByPlaceholder('6-digit').fill('400001');
+    await expectSuccessfulWrite(page, /\/api\/customers\/?(?:\?|$)/, async () => {
+      await page.getByRole('button', { name: 'Save Customer', exact: true }).first().click();
     });
     await page.getByPlaceholder(/Search customers/).fill(customerName);
     await expect(page.getByText(customerName, { exact: true })).toBeVisible();
 
     await chooseHubModule(page, 'Master', 'Suppliers');
     await page.getByRole('button', { name: 'Add Supplier' }).click();
-    await page.getByPlaceholder('Enter supplier name').fill(supplierName);
-    await page.getByRole('button', { name: 'Contact & Address' }).click();
-    await page.getByPlaceholder('+91-9876543210').first().fill(`91${suffix}`);
-    await expectSuccessfulWrite(page, /\/api\/suppliers(?:\?|$)/, async () => {
-      await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByPlaceholder('e.g., ABC Pharmaceuticals').fill(supplierName);
+    await page.getByPlaceholder('Business phone').fill(`91${suffix}`);
+    await page.getByPlaceholder('Building, street address').fill('E2E Supplier Lane 1');
+    await page.getByPlaceholder('City').fill('Mumbai');
+    await page.locator('select').filter({ hasText: 'Maharashtra' }).selectOption('Maharashtra');
+    await page.getByPlaceholder('6-digit').fill('400001');
+    await expectSuccessfulWrite(page, /\/api\/suppliers\/?(?:\?|$)/, async () => {
+      await page.getByRole('button', { name: 'Save Supplier', exact: true }).first().click();
     });
     await page.getByPlaceholder(/Search suppliers/).fill(supplierName);
     await expect(page.getByText(supplierName, { exact: true })).toBeVisible();

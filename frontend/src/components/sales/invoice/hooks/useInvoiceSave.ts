@@ -62,12 +62,12 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         },
 
         preparePayload: () => ({
-            customer_id: Number(selectedCustomer!.customer_id),
+            customer_id: String(selectedCustomer!.customer_id),
             invoice_date: invoice.invoice_date || getTodayBusinessDate(),
             due_date: invoice.due_date,
             items: invoice.items.map(item => ({
-                product_id: Number(item.product_id),
-                batch_id: item.batch_id ? Number(item.batch_id) : undefined,
+                product_id: String(item.product_id),
+                batch_id: item.batch_id ? String(item.batch_id) : undefined,
                 quantity: parseFloat(String(item.quantity)) || 0,
                 free_quantity: parseFloat(String(item.free_quantity)) || 0,
                 unit_price: parseFloat(String(item.unit_price)) || 0,

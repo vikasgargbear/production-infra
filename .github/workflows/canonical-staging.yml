@@ -1169,7 +1169,10 @@ jobs:
             exit 1
           fi
 
-          for attempt in 1 2 3 4 5; do
+          # Render free services can serialize three deployments and keep the
+          # API in update_in_progress for more than fifteen minutes. Keep this
+          # bounded, but allow the observed cold-build window to complete.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
             all_live=true
             while IFS=$'\t' read -r service_name service_id deploy_id; do
               deploy_status=$(curl --fail --silent --show-error \
@@ -1190,8 +1193,8 @@ jobs:
             if [ "$all_live" = true ]; then
               break
             fi
-            if [ "$attempt" = 5 ]; then
-              echo "::error title=Render deploy timeout::Exact commit did not become live after five bounded checks"
+            if [ "$attempt" = 10 ]; then
+              echo "::error title=Render deploy timeout::Exact commit did not become live after ten bounded checks"
               exit 1
             fi
             sleep 180

@@ -50,9 +50,9 @@ export function usePurchaseOrderSave(props: UsePurchaseOrderSaveProps): UsePurch
             po_no: purchaseOrder.po_no,
             po_date: purchaseOrder.po_date,
             expected_delivery_date: purchaseOrder.expected_delivery_date,
-            supplier_id: parseInt(String(purchaseOrder.supplier_id)),
+            supplier_id: String(purchaseOrder.supplier_id),
             items: purchaseOrder.items.map((item: any) => ({
-                product_id: parseInt(String(item.product_id)),
+                product_id: String(item.product_id),
                 quantity: parseFloat(String(item.quantity)) || 1,
                 unit_price: parseFloat(String(item.unit_price)) || 0,
                 tax_percent: parseFloat(String(item.tax_percent)) || 12

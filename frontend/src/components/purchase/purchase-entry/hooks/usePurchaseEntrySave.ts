@@ -40,19 +40,16 @@ export function usePurchaseEntrySave(props: UsePurchaseEntrySaveProps): UsePurch
     const buildPayload = () => ({
         supplier_invoice_number: purchase.supplier_invoice_number || generateInvoiceNumber(),
         invoice_date: purchase.invoice_date,
-        supplier_id: parseInt(String(purchase.supplier_id)),
+        supplier_id: String(purchase.supplier_id),
         subtotal_amount: purchase.gross_amount || 0,
         tax_amount: purchase.tax_amount || 0,
         discount_amount: purchase.discount_amount || 0,
         total_amount: purchase.total_amount || 0,
         other_charges: purchase.other_charges || 0,
         items: purchase.items.map((item: any) => {
-            let productId: number | null = null;
+            let productId: string | null = null;
             if (item.product_id && item.product_id !== item.id) {
-                const parsed = parseInt(String(item.product_id));
-                if (!isNaN(parsed) && parsed > 0 && parsed < 2147483647) {
-                    productId = parsed;
-                }
+                productId = String(item.product_id);
             }
             return {
                 po_item_id: item.po_item_id || undefined,

@@ -255,7 +255,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             const orderData = {
                 ...order,
                 items,
-                customer_id: Number(
+                customer_id: String(
                     selectedCustomer?.customer_id || selectedCustomer?.id || order.customer_id
                 )
             };
@@ -395,7 +395,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
         setOrder(prev => ({
             ...prev,
-            customer_id: Number(customer?.customer_id || customer?.id) || 0,
+            customer_id: String(customer?.customer_id || customer?.id || ''),
             customer_name: customer?.customer_name || customer?.name || '',
             customer_details: customer as unknown as Order['customer_details'],
             billing_address: fullAddress,

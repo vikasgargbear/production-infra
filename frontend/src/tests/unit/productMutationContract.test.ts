@@ -30,8 +30,6 @@ describe('product mutation contract', () => {
     expect(productCreateSchema.parse({ product_name: 'Draft product' })).toEqual({
       product_name: 'Draft product',
       product_kind: 'medicine',
-      maintain_batch: true,
-      maintain_expiry: true,
     });
   });
 
@@ -40,11 +38,11 @@ describe('product mutation contract', () => {
     expect(() => productUpdateSchema.parse({})).toThrow();
   });
 
-  it('rejects inconsistent stock thresholds', () => {
+  it('rejects inventory policy fields that belong to later commands', () => {
     expect(() => productCreateSchema.parse({
       product_name: 'Draft product',
       min_stock_quantity: 20,
       max_stock_quantity: 10,
-    })).toThrow('Minimum stock cannot exceed maximum stock');
+    })).toThrow();
   });
 });

@@ -22,10 +22,10 @@ interface InvoiceParams {
 }
 
 interface InvoiceData {
-    customer_id: number;
+    customer_id: number | string;
     items: Array<{
-        product_id: number;
-        batch_id?: number;
+        product_id: number | string;
+        batch_id?: number | string;
         quantity: number;
         discount_percent?: number;
         [key: string]: unknown;

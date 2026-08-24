@@ -11,7 +11,7 @@ import { z } from 'zod';
  */
 export interface Product {
   // Primary fields - NOT NULL in DB
-  product_id: number;     // NOT NULL
+  product_id: number | string; // Canonical IDs are UUID strings
   product_code: string;   // NOT NULL (was incorrectly optional!)
   product_name: string;   // NOT NULL
   product_type: string;   // NOT NULL (was missing!)
@@ -132,29 +132,8 @@ export const productDraftBaseSchema = z.object({
   product_code: z.string().trim().min(1).max(64)
     .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/).optional(),
   generic_name: z.string().trim().max(255).optional(),
-  brand: z.string().trim().max(100).optional(),
-  manufacturer: z.string().trim().max(200).optional(),
-  category_id: z.number().int().positive().optional(),
-  type_id: z.number().int().positive().optional(),
   product_kind: productKindSchema.default('medicine'),
-  reorder_level: z.number().nonnegative().optional(),
-  min_stock_quantity: z.number().nonnegative().optional(),
-  max_stock_quantity: z.number().nonnegative().optional(),
-  maintain_batch: z.boolean().default(true),
-  maintain_expiry: z.boolean().default(true),
-}).strict().superRefine((data, context) => {
-  if (
-    data.min_stock_quantity !== undefined &&
-    data.max_stock_quantity !== undefined &&
-    data.min_stock_quantity > data.max_stock_quantity
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['min_stock_quantity'],
-      message: 'Minimum stock cannot exceed maximum stock',
-    });
-  }
-});
+}).strict();
 
 export const productCreateSchema = productDraftBaseSchema;
 
@@ -192,7 +171,7 @@ export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
 
 export interface ProductMutationResponse {
-  product_id: number;
+  product_id: string;
   product_code: string;
   product_name: string;
   lifecycle_status: 'draft';

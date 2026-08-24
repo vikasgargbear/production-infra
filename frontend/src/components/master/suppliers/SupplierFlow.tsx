@@ -9,7 +9,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Building2, Phone, Mail, MapPin, FileText,
     AlertTriangle, ArrowLeft, Loader2, Save,
-    User, CreditCard, Globe, Banknote
+    Banknote
 } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import useEscapeKey from '../../../hooks/useEscapeKey';
@@ -37,7 +37,6 @@ interface SupplierFormData {
     phone: string;
     whatsapp_number: string;
     email: string;
-    website: string;
     // Contact Person
     contact_person: string;
     contact_person_phone: string;
@@ -50,18 +49,9 @@ interface SupplierFormData {
     // Compliance
     gst_number: string;
     pan_number: string;
-    drug_license_no: string;
-    fssai_number: string;
-    // Banking
-    bank_name: string;
-    bank_account_no: string;
-    bank_ifsc_code: string;
-    account_holder_name: string;
     // Terms
     payment_terms: string;
     credit_days: number;
-    // Notes
-    internal_notes: string;
 }
 
 // ==================== CONSTANTS ====================
@@ -122,7 +112,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         phone: '',
         whatsapp_number: '',
         email: '',
-        website: '',
         // Contact Person
         contact_person: '',
         contact_person_phone: '',
@@ -135,18 +124,9 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         // Compliance
         gst_number: '',
         pan_number: '',
-        drug_license_no: '',
-        fssai_number: '',
-        // Banking
-        bank_name: '',
-        bank_account_no: '',
-        bank_ifsc_code: '',
-        account_holder_name: '',
         // Terms
         payment_terms: 'NET30',
         credit_days: 30,
-        // Notes
-        internal_notes: '',
         ...initialData
     });
 
@@ -221,24 +201,16 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                 primary_phone: formData.phone,
                 secondary_phone: formData.whatsapp_number !== formData.phone ? formData.whatsapp_number : undefined,
                 primary_email: formData.email || undefined,
-                website: formData.website || undefined,
-                contact_person_name: formData.contact_person || undefined,
+                contact_person: formData.contact_person || undefined,
                 contact_person_phone: formData.contact_person_phone || undefined,
                 address_line1: formData.address_line1 || undefined,
                 address_line2: formData.address_line2 || undefined,
                 city: formData.city,
-                state_name: formData.state,
+                state: formData.state,
                 pincode: formData.pincode || undefined,
                 gst_number: formData.gst_number || undefined,
                 pan_number: formData.pan_number || undefined,
-                drug_license_number: formData.drug_license_no || undefined,
-                fssai_number: formData.fssai_number || undefined,
-                bank_name: formData.bank_name || undefined,
-                account_number: formData.bank_account_no || undefined,
-                ifsc_code: formData.bank_ifsc_code || undefined,
-                account_holder_name: formData.account_holder_name || undefined,
-                payment_days: formData.credit_days,
-                internal_notes: formData.internal_notes || undefined
+                payment_days: formData.credit_days
             };
 
             const response = await suppliersApi.create(supplierData);
@@ -354,7 +326,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <Phone className="w-5 h-5 text-blue-600" />
                             Contact Information
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Phone <span className="text-red-500">*</span>
@@ -397,16 +369,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     className={inputClass}
                                     placeholder="email@example.com"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
-                                <input
-                                    type="url"
-                                    value={formData.website}
-                                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="www.example.com"
                                 />
                             </div>
                         </div>
@@ -473,7 +435,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <FileText className="w-5 h-5 text-blue-600" />
                             Tax & Compliance
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
                                 <input
@@ -496,36 +458,19 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     maxLength={10}
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Drug License</label>
-                                <input
-                                    type="text"
-                                    value={formData.drug_license_no}
-                                    onChange={(e) => setFormData({ ...formData, drug_license_no: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="License number"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">FSSAI</label>
-                                <input
-                                    type="text"
-                                    value={formData.fssai_number}
-                                    onChange={(e) => setFormData({ ...formData, fssai_number: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="FSSAI number"
-                                />
-                            </div>
                         </div>
+                        <p className="mt-3 text-xs text-gray-500">
+                            License verification is completed after the supplier profile is created.
+                        </p>
                     </section>
 
-                    {/* Payment & Banking */}
+                    {/* Payment terms */}
                     <section className="bg-white rounded-xl border border-gray-200 p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <Banknote className="w-5 h-5 text-blue-600" />
-                            Payment & Banking
+                            Payment Terms
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="max-w-sm">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
                                 <select
@@ -538,52 +483,10 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.bank_name}
-                                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="Bank name"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Account No.</label>
-                                <input
-                                    type="text"
-                                    value={formData.bank_account_no}
-                                    onChange={(e) => setFormData({ ...formData, bank_account_no: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="Account number"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
-                                <input
-                                    type="text"
-                                    value={formData.bank_ifsc_code}
-                                    onChange={(e) => setFormData({ ...formData, bank_ifsc_code: e.target.value.toUpperCase() })}
-                                    className={inputClass}
-                                    placeholder="IFSC code"
-                                    maxLength={11}
-                                />
-                            </div>
                         </div>
-                    </section>
-
-                    {/* Notes */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                            Internal Notes
-                        </h2>
-                        <textarea
-                            value={formData.internal_notes}
-                            onChange={(e) => setFormData({ ...formData, internal_notes: e.target.value })}
-                            className={`${inputClass} h-20 resize-none`}
-                            placeholder="Notes for internal reference only"
-                        />
+                        <p className="mt-3 text-xs text-gray-500">
+                            Bank details are added through the reviewed banking workflow.
+                        </p>
                     </section>
                 </div>
             </main>

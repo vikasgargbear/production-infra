@@ -51,7 +51,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
         },
 
         preparePayload: () => ({
-            customer_id: parseInt(String(order.customer_id)),
+            customer_id: String(order.customer_id),
             order_date: order.order_date || new Date().toISOString().split('T')[0],
             delivery_date: order.expected_delivery_date || order.order_date,
             order_type: 'sales',
@@ -64,9 +64,9 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
                 const taxPercent = parseFloat(String(item.gst_percent)) || 0;
 
                 return {
-                    product_id: parseInt(String(item.product_id)),
+                    product_id: String(item.product_id),
                     product_code: item.product_code || null,
-                    batch_id: item.batch_id ? parseInt(String(item.batch_id)) : null,
+                    batch_id: item.batch_id ? String(item.batch_id) : null,
                     batch_number: item.batch_number || null,
                     quantity,
                     free_quantity: freeQuantity,

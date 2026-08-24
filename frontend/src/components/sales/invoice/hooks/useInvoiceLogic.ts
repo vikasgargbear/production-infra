@@ -500,7 +500,7 @@ export const useInvoiceLogic = (
                         console.log('[Invoice] Auto-selected offline batch:', bestBatch);
 
                         // Update item with batch details
-                        invoiceItem.batch_id = Number(bestBatch.batch_id);
+                        invoiceItem.batch_id = String(bestBatch.batch_id);
                         invoiceItem.batch_number = bestBatch.batch_number;
                         invoiceItem.expiry_date = bestBatch.expiry_date;
                         invoiceItem.manufacturing_date = bestBatch.manufacturing_date;

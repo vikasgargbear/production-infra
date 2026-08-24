@@ -188,7 +188,7 @@ const Orders: React.FC = () => {
     setShowAddModal(true);
   }, []);
 
-  const handleDelete = useCallback(async (orderId: number): Promise<void> => {
+  const handleDelete = useCallback(async (orderId: number | string): Promise<void> => {
     // Show a confirmation dialog with more details
     if (window.confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
       try {

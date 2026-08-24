@@ -23,8 +23,6 @@ describe('canonical master mutation endpoints', () => {
     expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/products/', {
       product_name: 'E2E product',
       product_kind: 'medicine',
-      maintain_batch: true,
-      maintain_expiry: true,
     });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(2, '/suppliers/', {
       supplier_name: 'E2E supplier',

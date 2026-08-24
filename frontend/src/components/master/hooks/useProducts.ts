@@ -13,7 +13,7 @@ import type { ProductCreateInput, ProductUpdateInput } from '../../../types/mode
 // ============================================
 
 export interface Product {
-    product_id: number;
+    product_id: number | string;
     product_name: string;
     category?: string;
     manufacturer?: string;
@@ -90,7 +90,8 @@ export function useProducts() {
         try {
             const response = await productsApi.getAll({
                 limit: perPage,
-                offset: (pageNum - 1) * perPage
+                offset: (pageNum - 1) * perPage,
+                include_inactive: true,
             });
 
             if (response.data?.success || response.data) {
@@ -121,7 +122,7 @@ export function useProducts() {
         }
     }, [fetchProducts, page]);
 
-    const updateProduct = useCallback(async (productId: number, formData: ProductUpdateInput) => {
+    const updateProduct = useCallback(async (productId: number | string, formData: ProductUpdateInput) => {
         setLoading(true);
         try {
             const response = await productsApi.update(productId, formData);
@@ -134,7 +135,7 @@ export function useProducts() {
         }
     }, [fetchProducts, page]);
 
-    const deleteProduct = useCallback(async (productId: number) => {
+    const deleteProduct = useCallback(async (productId: number | string) => {
         if (!window.confirm('Are you sure you want to delete this product?')) {
             return { success: false };
         }

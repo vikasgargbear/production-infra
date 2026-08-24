@@ -13,16 +13,6 @@ import {
   type ProductUpdateInput,
 } from '../../../types/models/product';
 
-interface Category {
-  category_id: number;
-  category_name: string;
-}
-
-interface ProductType {
-  type_id: number;
-  type_name: string;
-}
-
 interface ProductFlowProps {
   open?: boolean;
   show?: boolean;
@@ -36,40 +26,21 @@ type DraftForm = {
   product_name: string;
   product_code: string;
   generic_name: string;
-  brand: string;
-  manufacturer: string;
-  category_id: string;
-  type_id: string;
   product_kind: ProductCreateInput['product_kind'];
-  reorder_level: string;
-  min_stock_quantity: string;
-  max_stock_quantity: string;
-  maintain_batch: boolean;
-  maintain_expiry: boolean;
 };
 
 const initialForm = (product?: Partial<Product> | null, name = ''): DraftForm => ({
   product_name: product?.product_name ?? name,
   product_code: product?.product_code ?? '',
   generic_name: product?.generic_name ?? '',
-  brand: product?.brand ?? '',
-  manufacturer: product?.manufacturer ?? '',
-  category_id: product?.category_id ? String(product.category_id) : '',
-  type_id: product?.type_id ? String(product.type_id) : '',
   product_kind: (
     product?.product_type === 'medical_device' || product?.product_type === 'consumable'
       ? product.product_type
       : 'medicine'
   ),
-  reorder_level: product?.reorder_level === undefined ? '' : String(product.reorder_level),
-  min_stock_quantity: product?.min_stock_quantity === undefined ? '' : String(product.min_stock_quantity),
-  max_stock_quantity: product?.max_stock_quantity === undefined ? '' : String(product.max_stock_quantity),
-  maintain_batch: product?.maintain_batch ?? true,
-  maintain_expiry: product?.maintain_expiry ?? true,
 });
 
 const optionalText = (value: string): string | undefined => value.trim() || undefined;
-const optionalNumber = (value: string): number | undefined => value === '' ? undefined : Number(value);
 
 const ProductFlow: React.FC<ProductFlowProps> = ({
   open,
@@ -84,8 +55,6 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
   const formRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const [form, setForm] = useState<DraftForm>(() => initialForm(product, initialProductName));
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -96,30 +65,11 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
     if (isOpen) setForm(initialForm(product, initialProductName));
   }, [isOpen, product, initialProductName]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    Promise.all([productsApi.getMasterCategories(), productsApi.getProductTypes()])
-      .then(([categoryResponse, typeResponse]) => {
-        setCategories(categoryResponse.data?.data ?? []);
-        setProductTypes(typeResponse.data?.data ?? []);
-      })
-      .catch(() => setErrors(['Could not load product categories and types.']));
-  }, [isOpen]);
-
   const payload = useMemo<ProductCreateInput>(() => ({
     product_name: form.product_name,
     product_code: optionalText(form.product_code),
     generic_name: optionalText(form.generic_name),
-    brand: optionalText(form.brand),
-    manufacturer: optionalText(form.manufacturer),
-    category_id: optionalNumber(form.category_id),
-    type_id: optionalNumber(form.type_id),
     product_kind: form.product_kind,
-    reorder_level: optionalNumber(form.reorder_level),
-    min_stock_quantity: optionalNumber(form.min_stock_quantity),
-    max_stock_quantity: optionalNumber(form.max_stock_quantity),
-    maintain_batch: form.maintain_batch,
-    maintain_expiry: form.maintain_expiry,
   }), [form]);
 
   const save = async () => {
@@ -169,7 +119,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
           <Package className="h-5 w-5 text-green-700" />
           <div>
             <h1 className="text-lg font-semibold text-gray-900">{isEditing ? 'Edit product draft' : 'New product draft'}</h1>
-            <p className="text-sm text-gray-500">Identity and inventory policy</p>
+            <p className="text-sm text-gray-500">Basic identity now; classification before sale</p>
           </div>
         </div>
         <button type="button" onClick={save} disabled={saving} className="flex items-center gap-2 bg-green-700 px-4 py-2 text-white hover:bg-green-800 disabled:opacity-50">
@@ -186,7 +136,11 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             </div>
           )}
 
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            <p className="mb-4 text-sm text-gray-600">
+              Drafts cannot be sold or purchased until HSN, manufacturer, tax, and regulatory details are reviewed.
+            </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">Product name
               <input autoFocus value={form.product_name} onChange={event => set('product_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
             </label>
@@ -196,12 +150,6 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             <label className="text-sm font-medium text-gray-700">Generic display name
               <input value={form.generic_name} onChange={event => set('generic_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
             </label>
-            <label className="text-sm font-medium text-gray-700">Brand
-              <input value={form.brand} onChange={event => set('brand', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
-            </label>
-            <label className="text-sm font-medium text-gray-700">Manufacturer display name
-              <input value={form.manufacturer} onChange={event => set('manufacturer', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
-            </label>
             <label className="text-sm font-medium text-gray-700">Product kind
               <select value={form.product_kind} onChange={event => set('product_kind', event.target.value as DraftForm['product_kind'])} className="mt-1 w-full border border-gray-300 px-3 py-2">
                 <option value="medicine">Medicine</option>
@@ -209,36 +157,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
                 <option value="consumable">Consumable</option>
               </select>
             </label>
-            <label className="text-sm font-medium text-gray-700">Category
-              <select value={form.category_id} onChange={event => set('category_id', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2">
-                <option value="">Unassigned</option>
-                {categories.map(category => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-gray-700">Product type
-              <select value={form.type_id} onChange={event => set('type_id', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2">
-                <option value="">Unassigned</option>
-                {productTypes.map(type => <option key={type.type_id} value={type.type_id}>{type.type_name}</option>)}
-              </select>
-            </label>
-          </section>
-
-          <section className="grid grid-cols-1 gap-4 border-t border-gray-200 pt-6 md:grid-cols-3">
-            <label className="text-sm font-medium text-gray-700">Reorder level
-              <input type="number" min="0" value={form.reorder_level} onChange={event => set('reorder_level', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
-            </label>
-            <label className="text-sm font-medium text-gray-700">Minimum stock
-              <input type="number" min="0" value={form.min_stock_quantity} onChange={event => set('min_stock_quantity', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
-            </label>
-            <label className="text-sm font-medium text-gray-700">Maximum stock
-              <input type="number" min="0" value={form.max_stock_quantity} onChange={event => set('max_stock_quantity', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={form.maintain_batch} onChange={event => set('maintain_batch', event.target.checked)} /> Batch tracking
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={form.maintain_expiry} onChange={event => set('maintain_expiry', event.target.checked)} /> Expiry tracking
-            </label>
+            </div>
           </section>
         </div>
       </main>

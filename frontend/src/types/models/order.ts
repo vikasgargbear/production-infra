@@ -74,7 +74,7 @@ export interface Address {
  */
 export interface Order {
     // Identifiers - DB: order_id (integer NOT NULL), order_number (text NOT NULL)
-    order_id: number;  // REQUIRED - DB: integer NOT NULL
+    order_id: number | string;
     order_number: string;  // REQUIRED - DB: text NOT NULL
 
     // Dates - DB: order_date (date NOT NULL)
@@ -83,7 +83,7 @@ export interface Order {
     delivery_date?: string;
 
     // Customer - DB: customer_id (integer NOT NULL)
-    customer_id: number;  // REQUIRED - DB: integer NOT NULL
+    customer_id: number | string;
     customer_name: string;
     customer_details: Customer | null;
     customer_phone?: string;

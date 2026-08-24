@@ -6,7 +6,7 @@
 
 export interface Customer {
   // Primary fields - NOT NULL in DB
-  customer_id: number;  // NOT NULL
+  customer_id: number | string;
   customer_code: string;  // NOT NULL in DB (was incorrectly optional!)
   customer_name: string;  // NOT NULL
   customer_type: string;  // NOT NULL (was incorrectly optional!)
