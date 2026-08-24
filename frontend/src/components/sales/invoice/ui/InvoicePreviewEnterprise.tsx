@@ -198,8 +198,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               )}
               {/* GST, DL Row */}
               <div className="text-[11px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
-                <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst_number || '-'}</span>
-                <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drug_license_number || '-'}</span>
+                <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst_number || 'Not configured'}</span>
+                <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drug_license_number || 'Not configured'}</span>
               </div>
               {/* FSSAI and MSME Row */}
               {(companyInfo?.fssai_number || companyInfo?.msme_number) && (
@@ -217,7 +217,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
             {/* Customer Info Tile */}
             <div className="bg-gray-50 rounded p-3 border border-gray-200">
               <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Customer Details</div>
-              <div className="font-bold text-gray-900 text-sm leading-tight">{invoice.customer_name}</div>
+              <div className="font-bold text-gray-900 text-sm leading-tight">
+                {invoice.customer_name || invoice.customer_details?.customer_name || invoice.customer_details?.name}
+              </div>
               {/* Compact address */}
               {(() => {
                 // Build address line — prefer structured data (has state) over plain string
@@ -283,12 +285,12 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                           return (
                             <div className="text-[10px] text-gray-600 space-y-0.5">
                               <p className="font-semibold text-gray-900">{selectedBank.bank_name}</p>
-                              <p>A/C: {selectedBank.account_number}</p>
+                              {selectedBank.account_number && <p>A/C: {selectedBank.account_number}</p>}
                               <p>IFSC: {selectedBank.ifsc_code}</p>
                             </div>
                           );
                         } else {
-                          return <p className="text-[10px] text-gray-500 italic">No bank configured</p>;
+                          return <p className="text-[10px] text-gray-500 italic">Optional: add a bank account in Settings</p>;
                         }
                       })()}
                     </div>
@@ -296,12 +298,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <div className="flex flex-col items-center flex-shrink-0 justify-center">
                       {companyInfo?.paymentQR ? (
                         <img src={companyInfo.paymentQR} alt="Payment QR" className="w-[100px] h-auto object-contain" />
-                      ) : (
-                        <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                        </svg>
-                      )}
-                      <p className="text-[8px] text-gray-500 mt-0.5">Scan to Pay</p>
+                      ) : <p className="text-[8px] text-gray-500 text-center">Payment QR<br />not configured</p>}
+                      {companyInfo?.paymentQR && <p className="text-[8px] text-gray-500 mt-0.5">Scan to Pay</p>}
                       {companyInfo?.upiId && (
                         <p className="text-[8px] text-gray-600 font-medium">{companyInfo.upiId}</p>
                       )}

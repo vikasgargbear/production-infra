@@ -111,6 +111,22 @@ test.describe('live ERP pilot', () => {
     test.skip(testInfo.project.name !== 'desktop-chrome', 'Run the seeded transaction journey once.');
     const failures = collectBrowserFailures(page);
 
+    const companyProfileResponse = page.waitForResponse(response => (
+      /\/api\/company\/info(?:\?|$)/.test(response.url())
+      && response.request().method() === 'GET'
+    ));
+    await page.reload();
+    const profileResponse = await companyProfileResponse;
+    const profileBody = await profileResponse.text();
+    expect(profileResponse.status(), profileBody).toBe(200);
+    const profilePayload = JSON.parse(profileBody);
+    const profile = profilePayload.data;
+    expect(profile?.legal_name).toBeTruthy();
+    expect(profile?.gst_number).toMatch(/^[0-9A-Z]{15}$/);
+    expect(profile?.registered_address).toBeTruthy();
+    expect(profile?.bank_accounts?.length).toBeGreaterThan(0);
+    await waitForErpToSettle(page);
+
     await openHomeAction(page, 'Sales');
     await chooseHubModule(page, 'Sales', 'Create Invoice');
 
@@ -161,6 +177,15 @@ test.describe('live ERP pilot', () => {
     expect(previewed.status(), await previewed.text()).toBeGreaterThanOrEqual(200);
     expect(previewed.status()).toBeLessThan(300);
     await expect(page.getByText('Invoice Preview', { exact: true })).toBeVisible();
+    await expect(page.getByText(profile.legal_name, { exact: true })).toBeVisible();
+    await expect(page.getByText(new RegExp(`GST:\\s*${profile.gst_number}`))).toBeVisible();
+    await expect(page.getByText(customerName, { exact: true })).toBeVisible();
+    await expect(page.getByText(profile.bank_accounts[0].bank_name, { exact: true })).toBeVisible();
+    await expect(page.getByText(/Payment QR\s*not configured/)).toBeVisible();
+    await testInfo.attach('invoice-preview-positive', {
+      body: await page.screenshot({ fullPage: false }),
+      contentType: 'image/png',
+    });
 
     if (writesEnabled) {
       const prepare = page.waitForResponse(response => (
@@ -201,6 +226,55 @@ test.describe('live ERP pilot', () => {
 
     await assertNoVisibleFailure(page);
     await failures.assertClean(testInfo);
+  });
+
+  test('blocks invoice submission when mandatory issuer profile data is absent', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Run the negative transaction journey once.');
+
+    await page.route('**/api/company/info', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          legal_name: 'Mandatory Field Negative Test Company',
+          registered_address: null,
+          city: 'Mumbai',
+          state: '27',
+          pincode: '400001',
+          gst_number: '27ABCDE1234F1Z5',
+          bank_accounts: [],
+        },
+      }),
+    }));
+    await page.reload();
+    await waitForErpToSettle(page);
+
+    await openHomeAction(page, 'Sales');
+    await chooseHubModule(page, 'Sales', 'Create Invoice');
+    await page.getByRole('textbox', { name: 'Search customer by name, phone, or code...' })
+      .fill('Demo Retail');
+    await page.getByText('Demo Retail Customer Private Limited', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search products by name, code, or HSN...' })
+      .fill('Synthetic Corrugated');
+    await page.getByText('Synthetic Corrugated Pharmacy Packing Carton', { exact: true }).click();
+    await page.getByText(/^DEMO-BATCH-/).first().click();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue to Preview', exact: true }).click();
+    await expect(page.getByText('Invoice Preview', { exact: true })).toBeVisible();
+
+    let commandRequests = 0;
+    page.on('request', request => {
+      if (/\/api\/web\/actions\//.test(request.url())) commandRequests += 1;
+    });
+    await page.getByRole('button', { name: 'Generate Invoice', exact: true }).last().click();
+    await expect(page.getByRole('alert')).toContainText(/registered address is missing/i);
+    await testInfo.attach('invoice-preview-missing-mandatory-field', {
+      body: await page.screenshot({ fullPage: false }),
+      contentType: 'image/png',
+    });
+    await page.waitForTimeout(300);
+    expect(commandRequests).toBe(0);
   });
 
   test('writes and reads back uniquely labeled pilot master data', async ({ page }, testInfo) => {

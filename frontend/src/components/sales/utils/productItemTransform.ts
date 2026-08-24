@@ -126,6 +126,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         available_quantity: availableQty,
         gst_percent: parseFloat(String(product.gst_percent || product.tax_rate || 0)),
         hsn_code: product.hsn_code || '',
+        product_type: product.product_type,
+        requires_prescription: Boolean(product.requires_prescription),
         discount_percent: parseFloat(String(product.discount_percent || 0)),
         location_id: product.location_id || bestBatch?.location_id,
         branch_id: product.branch_id || bestBatch?.branch_id,

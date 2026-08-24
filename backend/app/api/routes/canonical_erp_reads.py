@@ -847,6 +847,8 @@ def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
                registration.gstin AS gst_number,
                ARRAY[branch.phone] AS contact_numbers,
                ARRAY[branch.email] AS email_addresses,
+               COALESCE(license.licenses, '[]'::jsonb) AS licenses,
+               COALESCE(bank.accounts, '[]'::jsonb) AS bank_accounts,
                organization.status, organization.updated_at
           FROM core.organizations organization
           LEFT JOIN LATERAL (
@@ -859,6 +861,34 @@ def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
                WHERE org_id=organization.id AND status='active'
                ORDER BY code, id LIMIT 1
           ) branch ON true
+          LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                         'id', id,
+                         'license_type_code', license_type_code,
+                         'license_number', license_number,
+                         'valid_from', valid_from,
+                         'valid_until', valid_until
+                     ) ORDER BY license_type_code, id) AS licenses
+                FROM compliance.licenses
+               WHERE org_id=organization.id
+                 AND organization_subject_id=organization.id
+                 AND license_type_code IN (
+                     'drug_wholesale_form_20b', 'drug_wholesale_form_21b'
+                 )
+                 AND status='active' AND valid_from<=CURRENT_DATE
+                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+          ) license ON true
+          LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                         'id', id,
+                         'bank_name', bank_name,
+                         'account_name', account_holder_name,
+                         'ifsc_code', ifsc,
+                         'currency_code', currency_code
+                     ) ORDER BY bank_name, id) AS accounts
+                FROM finance.bank_accounts
+               WHERE org_id=organization.id AND status='active'
+          ) bank ON true
          WHERE organization.id=:org_id AND organization.status='active'
     """, {"org_id": org_id})
     data = rows[0] if rows else None

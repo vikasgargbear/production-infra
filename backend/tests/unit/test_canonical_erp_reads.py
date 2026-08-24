@@ -114,6 +114,17 @@ def test_batch_reads_project_branch_from_authoritative_stock_balance() -> None:
     assert "COUNT(DISTINCT location.branch_id)=1" not in source
 
 
+def test_company_profile_projects_canonical_invoice_identity_and_settlement_details() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+
+    assert "organization.legal_name" in source
+    assert "registration.gstin AS gst_number" in source
+    assert "COALESCE(license.licenses, '[]'::jsonb) AS licenses" in source
+    assert "COALESCE(bank.accounts, '[]'::jsonb) AS bank_accounts" in source
+    assert "FROM compliance.licenses" in source
+    assert "FROM finance.bank_accounts" in source
+
+
 class ProductDraftDatabase:
     def __init__(self) -> None:
         self.statements = []

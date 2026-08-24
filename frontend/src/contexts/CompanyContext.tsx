@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { companyApi } from '../services/api';
 import type { CompanyContextInfo as CompanyInfo } from '../types/common/company.types';
 import { useAuth } from './AuthContext';
+import { normalizeCompanyProfile } from '../utils/companyProfile';
 
 interface CompanyContextValue {
     companyInfo: CompanyInfo | null;
@@ -90,26 +91,10 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     ? rawResponse.data
                     : rawResponse;
 
-                // Check if we have valid profile data (must have name or company_name)
-                if (profileData && (profileData.name || profileData.company_name)) {
-                    const apiCompanyInfo: CompanyInfo = {
-                        name: profileData.name || profileData.company_name || cachedCompanyInfo.name,
-                        address: profileData.address || cachedCompanyInfo.address,
-                        city: profileData.city || cachedCompanyInfo.city,
-                        state: profileData.state || cachedCompanyInfo.state,
-                        pincode: profileData.pincode || cachedCompanyInfo.pincode,
-                        phone: profileData.phone || cachedCompanyInfo.phone,
-                        email: profileData.email || cachedCompanyInfo.email,
-                        gst_number: profileData.gst_number || cachedCompanyInfo.gst_number,
-                        pan_number: profileData.pan_number || cachedCompanyInfo.pan_number,
-                        drug_license_number: profileData.drug_license_number || cachedCompanyInfo.drug_license_number,
-                        fssai_number: profileData.fssai_number || cachedCompanyInfo.fssai_number,
-                        msme_number: profileData.msme_number || cachedCompanyInfo.msme_number,
-                        logo: profileData.logo || cachedCompanyInfo.logo,
-                        bankAccounts: profileData.bank_accounts || [],
-                        paymentQR: profileData.payment_qr_code || null,
-                        business_settings: profileData.business_settings || {},
-                    };
+                const apiCompanyInfo = profileData
+                    ? normalizeCompanyProfile(profileData, cachedCompanyInfo)
+                    : null;
+                if (apiCompanyInfo) {
 
                     setCompanyInfo(apiCompanyInfo);
 

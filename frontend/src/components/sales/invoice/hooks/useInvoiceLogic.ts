@@ -272,6 +272,7 @@ export const useInvoiceLogic = (
     const { saving, handleSaveInvoice } = useInvoiceSave({
         invoice,
         selectedCustomer,
+        companyInfo,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,

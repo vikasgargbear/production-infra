@@ -189,6 +189,8 @@ export interface InvoiceItem {
     name?: string;
     product_code?: string;
     hsn_code?: string;
+    product_type?: string;
+    requires_prescription?: boolean;
 
     // Batch info
     batch_number?: string;

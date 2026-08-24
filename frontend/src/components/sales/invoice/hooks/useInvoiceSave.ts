@@ -22,11 +22,14 @@ import { clientUuid } from '../../../../utils/clientUuid';
 import {
     buildCanonicalInvoicePreparePayload,
     canonicalInvoiceValidationError,
+    companyInvoiceValidationError,
 } from '../utils/canonicalInvoiceCommand';
+import type { CompanyInfo } from '../../../../types/common/company.types';
 
 export interface UseInvoiceSaveProps {
     invoice: Invoice;
     selectedCustomer: Customer | null;
+    companyInfo: CompanyInfo | null;
     isOnline: boolean;
     setInvoice: Dispatch<SetStateAction<Invoice>>;
     setCreatedInvoiceData: Dispatch<SetStateAction<CreatedInvoiceData | null>>;
@@ -43,6 +46,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
     const {
         invoice,
         selectedCustomer,
+        companyInfo,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,
@@ -61,6 +65,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
 
         validate: () => {
             setError(null);
+            const companyError = companyInvoiceValidationError(companyInfo, invoice);
+            if (companyError) return companyError;
             return canonicalInvoiceValidationError(invoice, selectedCustomer);
         },
 

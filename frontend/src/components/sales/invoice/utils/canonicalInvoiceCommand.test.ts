@@ -1,6 +1,7 @@
 import {
     buildCanonicalInvoicePreparePayload,
     canonicalInvoiceValidationError,
+    companyInvoiceValidationError,
 } from './canonicalInvoiceCommand';
 import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { Customer } from '../../../../types/models/customer';
@@ -30,6 +31,7 @@ const invoice = {
     discount_percent: 5,
     discount_amount: 0,
     freight_charges: 12.5,
+    billing_address: '1 Canonical Customer Road',
     items: [{
         product_id: ids.product,
         batch_id: ids.batch,
@@ -40,8 +42,16 @@ const invoice = {
         free_quantity: 1,
         unit_price: 100,
         discount_percent: 10,
+        hsn_code: '481910',
+        product_type: 'consumable',
     }],
 } as Invoice;
+
+const company = {
+    name: 'Canonical Pharma Private Limited',
+    address: '1 Canonical Seller Road',
+    gst_number: '27ABCDE1234F1Z5',
+} as any;
 
 describe('canonical invoice command', () => {
     it('maps the browser invoice to the shared canonical action contract', () => {
@@ -100,5 +110,29 @@ describe('canonical invoice command', () => {
         expect(canonicalInvoiceValidationError(delivery, customer)).toMatch(
             /exact transport distance/i,
         );
+    });
+
+    it.each([
+        [{ ...company, name: '' }, /legal name/i],
+        [{ ...company, address: '' }, /registered address/i],
+        [{ ...company, gst_number: '' }, /GSTIN/i],
+    ])('blocks a tax invoice when a mandatory issuer field is missing', (invalid, message) => {
+        expect(companyInvoiceValidationError(invalid, invoice)).toMatch(message);
+    });
+
+    it('requires an issuer drug licence only for medicine invoices', () => {
+        const medicine = {
+            ...invoice,
+            items: [{ ...invoice.items[0], product_type: 'medicine' }],
+        } as Invoice;
+        expect(companyInvoiceValidationError(company, medicine)).toMatch(/drug licence/i);
+        expect(companyInvoiceValidationError(company, invoice)).toBeNull();
+    });
+
+    it.each([
+        [{ ...invoice, billing_address: '' }, /billing address/i],
+        [{ ...invoice, items: [{ ...invoice.items[0], hsn_code: '' }] }, /HSN code/i],
+    ])('blocks a canonical invoice when a mandatory document field is missing', (invalid, message) => {
+        expect(canonicalInvoiceValidationError(invalid as Invoice, customer)).toMatch(message);
     });
 });

@@ -1,5 +1,6 @@
 import type { Customer } from '../../../../types/models/customer';
 import type { Invoice } from '../hooks/useInvoiceLogic';
+import type { CompanyInfo } from '../../../../types/common/company.types';
 
 type CanonicalDiscountKind = 'none' | 'percent' | 'amount';
 
@@ -24,6 +25,30 @@ const requiredUuid = (value: unknown, label: string): string => {
     }
     return normalized;
 };
+
+const nonEmpty = (value: unknown): boolean => String(value ?? '').trim().length > 0;
+
+export function companyInvoiceValidationError(
+    company: CompanyInfo | null,
+    invoice?: Invoice,
+): string | null {
+    if (!company || !nonEmpty(company.name || company.company_name)) {
+        return 'Company legal name is missing. Complete Company Settings before generating an invoice.';
+    }
+    if (!nonEmpty(company.address)) {
+        return 'Company registered address is missing. Complete Company Settings before generating an invoice.';
+    }
+    if (!/^[0-9A-Z]{15}$/.test(String(company.gst_number || '').trim().toUpperCase())) {
+        return 'Company GSTIN is missing or invalid. Complete Company Settings before generating a tax invoice.';
+    }
+    const containsMedicine = invoice?.items.some(
+        item => item.product_type === 'medicine' || item.requires_prescription,
+    );
+    if (containsMedicine && !nonEmpty(company.drug_license_number)) {
+        return 'A drug licence is required for medicine invoices. Complete Company Settings first.';
+    }
+    return null;
+}
 
 const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
     const percent = Number(invoice.discount_percent || 0);
@@ -55,6 +80,10 @@ export function canonicalInvoiceValidationError(
 ): string | null {
     if (!customer) return 'Please select a customer';
     if (invoice.items.length === 0) return 'Please add at least one item';
+    if (!nonEmpty(customer.customer_name)) return 'Selected customer legal name is missing';
+    if (!nonEmpty(invoice.billing_address)) {
+        return 'Customer billing address is missing. Add an address and re-select the customer.';
+    }
     if (!/^[0-9]{2}$/.test(customer.place_of_supply_state_code || '')) {
         return 'Customer place of supply is missing. Add a valid GST state/address and re-select the customer.';
     }
@@ -66,6 +95,9 @@ export function canonicalInvoiceValidationError(
     let locationId: string | undefined;
     for (const [index, item] of invoice.items.entries()) {
         try {
+            if (!/^[0-9]{4,8}$/.test(String(item.hsn_code || '').trim())) {
+                return `Item ${index + 1} HSN code is missing or invalid. Complete the product master first.`;
+            }
             const itemBranch = requiredUuid(item.branch_id, `Item ${index + 1} branch`);
             const itemLocation = requiredUuid(item.location_id, `Item ${index + 1} stock location`);
             requiredUuid(item.product_id, `Item ${index + 1} product`);
