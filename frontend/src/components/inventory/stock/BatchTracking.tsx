@@ -5,7 +5,7 @@ import {
   XCircle, Clock, AlertTriangle, Loader2, ChevronDown
 } from 'lucide-react';
 import { DataTable, StatusBadge, ModuleHeader } from '../../global';
-import { stockApi, batchesApi } from '../../../services/api';
+import { batchesApi, inventoryMovementsApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
@@ -58,7 +58,15 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       batchesData = batchesData.map(batch => ({
         ...batch,
         quantity_available: Number(batch.quantity_available ?? batch.quantity ?? 0),
-        cost_per_unit: Number(batch.cost_per_unit ?? batch.average_unit_cost ?? 0)
+        // Keep cost_per_unit as null/undefined when not authoritative — never
+        // default to 0. The display layer must show "—" for missing cost.
+        cost_per_unit: (batch.cost_per_unit != null && batch.average_unit_cost != null)
+          ? Number(batch.cost_per_unit ?? batch.average_unit_cost)
+          : (batch.cost_per_unit != null
+              ? Number(batch.cost_per_unit)
+              : (batch.average_unit_cost != null
+                  ? Number(batch.average_unit_cost)
+                  : null))
       }));
 
       if (batchesData.length > 0) {
@@ -120,8 +128,11 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       (batch.quantity_available || 0) === 0
     );
 
+    // Only include batches with authoritative cost in the total — null cost means
+    // the value is unknown, not zero.
     const totalValue = batchesData.reduce((sum, batch) => {
-      return sum + ((batch.quantity_available || 0) * (batch.cost_per_unit || 0));
+      if (batch.cost_per_unit == null) return sum;
+      return sum + ((batch.quantity_available || 0) * batch.cost_per_unit);
     }, 0);
 
     setStats({
@@ -134,10 +145,10 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     });
   };
 
-  // Load batch movements from the API.
-  const loadBatchMovements = async (batchId) => {
+  // Load batch movements from the canonical API using UUID batch_id.
+  const loadBatchMovements = async (batchId: string) => {
     try {
-      const response = await stockApi.getBatchMovements(batchId);
+      const response = await inventoryMovementsApi.getByBatch(batchId);
 
       // Handle both array and object with movements property
       let movementsData: any[] = [];
@@ -169,7 +180,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       await loadBatches();
 
       if (selectedBatch) {
-        await loadBatchMovements(selectedBatch.batch_id);
+        await loadBatchMovements(String(selectedBatch.batch_id));
       }
     } catch (error) {
       setError('Failed to refresh data. Please try again.');
@@ -178,11 +189,11 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     }
   };
 
-  // Handle batch selection
+  // Handle batch selection — batch_id is a UUID string from the canonical API.
   const handleBatchSelect = async (batch) => {
     setSelectedBatch(batch);
     setShowMovements(true);
-    await loadBatchMovements(batch.batch_id);
+    await loadBatchMovements(String(batch.batch_id));
   };
 
   // Filter batches
@@ -289,7 +300,9 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         item.quantity_available || 0,
         new Date(item.expiry_date).toLocaleDateString(),
         getBatchStatusText(item),
-        formatCurrency((item.quantity_available || 0) * (item.cost_per_unit || 0))
+        item.cost_per_unit != null
+          ? formatCurrency((item.quantity_available || 0) * item.cost_per_unit)
+          : 'Unavailable'
       ]);
 
       autoTable(doc, {
@@ -313,7 +326,10 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       yPos += 10;
 
       itemsToExport.forEach(item => {
-        const rowText = `${item.batch_number} | ${item.product_name} | ${item.quantity_available} | ${new Date(item.expiry_date).toLocaleDateString()} | ${getBatchStatusText(item)} | ${formatCurrency((item.quantity_available || 0) * (item.cost_per_unit || 0))}`;
+        const batchValue = item.cost_per_unit != null
+          ? formatCurrency((item.quantity_available || 0) * item.cost_per_unit)
+          : 'Unavailable';
+        const rowText = `${item.batch_number} | ${item.product_name} | ${item.quantity_available} | ${new Date(item.expiry_date).toLocaleDateString()} | ${getBatchStatusText(item)} | ${batchValue}`;
         doc.text(rowText, 20, yPos);
         yPos += 8;
 
@@ -338,7 +354,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       <h2>Batch Tracking Report</h2>
       <table><thead><tr><th>Batch #</th><th>Product</th><th>Available</th><th>Expiry Date</th><th>Status</th><th>Value</th></tr></thead>
       <tbody>
-      ${itemsToPrint.map(item => `<tr><td>${item.batch_number}</td><td>${item.product_name}</td><td>${item.quantity_available}</td><td>${new Date(item.expiry_date).toLocaleDateString()}</td><td>${getBatchStatusText(item)}</td><td>${formatCurrency((item.quantity_available || 0) * (item.cost_per_unit || 0))}</td></tr>`).join('')}
+      ${itemsToPrint.map(item => `<tr><td>${item.batch_number}</td><td>${item.product_name}</td><td>${item.quantity_available}</td><td>${new Date(item.expiry_date).toLocaleDateString()}</td><td>${getBatchStatusText(item)}</td><td>${item.cost_per_unit != null ? formatCurrency((item.quantity_available || 0) * item.cost_per_unit) : '—'}</td></tr>`).join('')}
       </tbody></table>
       </body></html>`;
     const w = window.open('', '_blank');
@@ -606,7 +622,8 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                     </button>
                     <button
                       onClick={whatsappSelected}
-                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+                      className="px-3 py-2 min-h-[44px] border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center space-x-1"
+                      aria-label="Share selected batches via WhatsApp"
                     >
                       <MessageCircle className="w-4 h-4" />
                       <span>WhatsApp</span>
@@ -628,7 +645,10 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                 <div>
                   <span className="text-gray-500">Total Value:</span>
                   <span className="ml-1 font-semibold">
-                    {formatCurrency(filteredBatches.reduce((sum, item) => sum + ((item.quantity_available || 0) * (item.cost_per_unit || 0)), 0))}
+                    {formatCurrency(filteredBatches.reduce((sum, item) =>
+                      item.cost_per_unit != null
+                        ? sum + ((item.quantity_available || 0) * item.cost_per_unit)
+                        : sum, 0))}
                   </span>
                 </div>
                 <div>

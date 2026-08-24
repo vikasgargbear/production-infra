@@ -35,6 +35,7 @@ const PDFUploadCard: React.FC<PDFUploadCardProps> = ({
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
     const [uploadSuccess, setUploadSuccess] = useState<boolean>(false);
     const [fileName, setFileName] = useState<string>('');
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
         e.preventDefault();
@@ -65,10 +66,11 @@ const PDFUploadCard: React.FC<PDFUploadCardProps> = ({
 
     const handleFileUpload = async (file: File): Promise<void> => {
         if (file.type !== 'application/pdf') {
-            alert('Please upload a PDF file');
+            setUploadError('Please upload a PDF file.');
             return;
         }
 
+        setUploadError(null);
         setFileName(file.name);
         setIsProcessing(true);
 
@@ -85,7 +87,7 @@ const PDFUploadCard: React.FC<PDFUploadCardProps> = ({
                 }
             }, 2000);
         } catch (error) {
-            alert('Failed to process PDF. Please try again.');
+            setUploadError('Failed to process PDF. Please try again.');
         } finally {
             setIsProcessing(false);
         }
@@ -132,6 +134,12 @@ const PDFUploadCard: React.FC<PDFUploadCardProps> = ({
                                 <CheckCircle className="w-8 h-8 text-green-600 mb-2" />
                                 <p className="text-sm font-medium text-green-600">Successfully extracted!</p>
                                 <p className="text-xs text-gray-500 mt-1">{fileName}</p>
+                            </div>
+                        ) : uploadError ? (
+                            <div className="flex flex-col items-center">
+                                <Upload className="w-8 h-8 text-red-400 mb-2" />
+                                <p className="text-sm font-medium text-red-600" role="alert">{uploadError}</p>
+                                <p className="text-xs text-gray-500 mt-1">Please try again</p>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center">

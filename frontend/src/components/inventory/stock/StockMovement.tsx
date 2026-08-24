@@ -33,8 +33,10 @@ interface StockMovementItem {
   location_to?: string;
   created_by?: string;
   status: MovementStatus;
-  unit_cost: number;
-  total_value: number;
+  /** null means cost is unknown — never treat as ₹0 in the UI. */
+  unit_cost: number | null;
+  /** null means valuation is unknown — display "—", not ₹0. */
+  total_value: number | null;
 }
 
 const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) => {
@@ -88,8 +90,16 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         location_to: movement.location_to || movement.to_location,
         created_by: movement.created_by || movement.user_name,
         status: movement.status || 'completed',
-        unit_cost: parseFloat(movement.unit_cost) || 0,
-        total_value: (parseFloat(movement.quantity) || 0) * (parseFloat(movement.unit_cost) || 0)
+        // Never default cost to 0 — null cost must stay null so the display
+        // layer can show "—" instead of a misleading ₹0.
+        unit_cost: (movement.unit_cost != null && movement.unit_cost !== '')
+          ? parseFloat(movement.unit_cost)
+          : null,
+        total_value: (movement.total_value != null && movement.total_value !== '')
+          ? parseFloat(movement.total_value)
+          : ((movement.unit_cost != null && movement.unit_cost !== '')
+              ? (Math.abs(parseFloat(movement.quantity) || 0)) * parseFloat(movement.unit_cost)
+              : null)
       }));
 
       setMovements(movementsData);
@@ -182,7 +192,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         item.product_name || '',
         getMovementTypeLabel(item.movement_type) || '',
         item.quantity || 0,
-        item.total_value || 0,
+        item.total_value != null ? item.total_value : 'Unavailable',
         item.reference_no || '',
         new Date(item.movement_date).toLocaleDateString() || '',
         item.location_from || '',
@@ -207,9 +217,11 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       link.click();
       document.body.removeChild(link);
 
-      alert(`Successfully exported ${itemsToExport.length} movements to CSV`);
+      // Download initiated — no blocking dialog needed
     } catch (error) {
-      alert('Failed to export movements. Please try again.');
+      console.error('CSV export failed:', error);
+      // Non-blocking: error is surfaced via the existing error state
+      setError('Failed to export movements. Please try again.');
     }
   };
 
@@ -230,7 +242,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         item.product_name || 'N/A',
         getMovementTypeLabel(item.movement_type),
         item.quantity || 0,
-        formatCurrency(item.total_value || 0),
+        item.total_value != null ? formatCurrency(item.total_value) : '—',
         new Date(item.movement_date).toLocaleDateString(),
         item.status || 'N/A'
       ]);
@@ -256,7 +268,8 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       yPos += 10;
 
       itemsToExport.forEach(item => {
-        const rowText = `${item.movement_no} | ${item.product_name} | ${getMovementTypeLabel(item.movement_type)} | ${item.quantity} | ${formatCurrency(item.total_value)} | ${new Date(item.movement_date).toLocaleDateString()} | ${item.status}`;
+        const valueStr = item.total_value != null ? formatCurrency(item.total_value) : '—';
+        const rowText = `${item.movement_no} | ${item.product_name} | ${getMovementTypeLabel(item.movement_type)} | ${item.quantity} | ${valueStr} | ${new Date(item.movement_date).toLocaleDateString()} | ${item.status}`;
         doc.text(rowText, 20, yPos);
         yPos += 8;
 
@@ -281,7 +294,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       <h2>Stock Movement Report</h2>
       <table><thead><tr><th>Movement #</th><th>Product</th><th>Type</th><th>Quantity</th><th>Value</th><th>Date</th><th>Status</th></tr></thead>
       <tbody>
-      ${itemsToPrint.map(item => `<tr><td>${item.movement_no}</td><td>${item.product_name}</td><td>${getMovementTypeLabel(item.movement_type)}</td><td>${item.quantity}</td><td>${formatCurrency(item.total_value)}</td><td>${new Date(item.movement_date).toLocaleDateString()}</td><td>${item.status}</td></tr>`).join('')}
+      ${itemsToPrint.map(item => `<tr><td>${item.movement_no}</td><td>${item.product_name}</td><td>${getMovementTypeLabel(item.movement_type)}</td><td>${item.quantity}</td><td>${item.total_value != null ? formatCurrency(item.total_value) : '—'}</td><td>${new Date(item.movement_date).toLocaleDateString()}</td><td>${item.status}</td></tr>`).join('')}
       </tbody></table>
       </body></html>`;
     const w = window.open('', '_blank');
@@ -301,10 +314,11 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
 
     const message = encodeURIComponent(
       `Stock Movement Report:\n\n${itemsToSend.map(item =>
-        `${item.movement_no} - ${item.product_name} (${getMovementTypeLabel(item.movement_type)}) - ${item.quantity} units - ${formatCurrency(item.total_value)}`
+        `${item.movement_no} - ${item.product_name} (${getMovementTypeLabel(item.movement_type)}) - ${item.quantity} units - ${item.total_value != null ? formatCurrency(item.total_value) : 'value unavailable'}`
       ).join('\n')}`
     );
 
+    // Opens WhatsApp with pre-filled text; recipient must be chosen by the user inside WhatsApp.
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
@@ -416,7 +430,8 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       key: 'total_value',
       align: 'right' as const,
       sortable: true,
-      render: (value) => formatCurrency(value),
+      // Never show ₹0 for unknown/missing cost — display "—" instead.
+      render: (value: number | null) => value != null ? formatCurrency(value) : '—',
     },
     {
       header: 'Description',
@@ -473,7 +488,8 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
               setTimeout(() => whatsappSelected(), 0);
             }}
             className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-            title="Send WhatsApp"
+            title="Share via WhatsApp"
+            aria-label="Share this movement via WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />
           </button>
@@ -634,7 +650,8 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
                 <div>
                   <span className="text-gray-500">Total Value:</span>
                   <span className="ml-1 font-semibold">
-                    {formatCurrency(filteredMovements.reduce((sum, item) => sum + (item.total_value || 0), 0))}
+                    {formatCurrency(filteredMovements.reduce((sum, item) =>
+                      item.total_value != null ? sum + item.total_value : sum, 0))}
                   </span>
                 </div>
                 <div>

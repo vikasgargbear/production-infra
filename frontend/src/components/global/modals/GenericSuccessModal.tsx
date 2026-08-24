@@ -244,6 +244,7 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                         }
                                     }}
                                     className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+                                    aria-label={`Send ${documentType} #${documentNumber} to ${customerName} via WhatsApp`}
                                 >
                                     <MessageCircle className="w-5 h-5" />
                                     <span className="font-medium">WhatsApp</span>
@@ -258,6 +259,7 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                         window.open(gmailUrl, '_blank');
                                     }}
                                     className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+                                    aria-label={`Send ${documentType} #${documentNumber} to ${customerName} via Email`}
                                 >
                                     <Mail className="w-5 h-5" />
                                     <span className="font-medium">Email</span>

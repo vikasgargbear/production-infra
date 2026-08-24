@@ -296,7 +296,17 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                             <Filter className="w-4 h-4 text-gray-500" />
                             <span className="text-sm font-medium text-gray-700">Filters & Search</span>
                         </div>
-                        <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button
+                            onClick={() => {
+                                setSearchQuery('');
+                                setFilterStatus('all');
+                                setDateFilter('all');
+                                setSelectedIds(new Set());
+                            }}
+                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Clear all filters"
+                            aria-label="Clear all filters"
+                        >
                             <RefreshCw className="w-4 h-4" />
                         </button>
                     </div>
@@ -378,14 +388,15 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
                                     </button>
                                     <button
                                         onClick={printSelected}
-                                        className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-medium flex items-center space-x-1"
+                                        className="px-3 py-1.5 min-h-[44px] bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium flex items-center space-x-1"
                                     >
                                         <Printer className="w-3 h-3" />
                                         <span>Print</span>
                                     </button>
                                     <button
                                         onClick={whatsappSelected}
-                                        className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-medium flex items-center space-x-1"
+                                        className="px-3 py-1.5 min-h-[44px] border border-gray-300 bg-white text-gray-700 rounded-md hover:bg-gray-50 text-xs font-medium flex items-center space-x-1"
+                                        aria-label="Share selected items via WhatsApp"
                                     >
                                         <MessageCircle className="w-3 h-3" />
                                         <span>WhatsApp</span>

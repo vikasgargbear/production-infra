@@ -251,8 +251,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       if (allocateAmount > 0) {
         newManualAllocations[invoiceId] = allocateAmount;
       } else {
-        // No remaining payment to allocate
-        alert('Payment amount fully allocated. Increase payment amount or uncheck other invoices.');
+        // No remaining payment to allocate — surface non-blocking inline message
+        setMessage('Payment amount fully allocated. Increase the payment amount or uncheck other invoices.', 'error');
         return;
       }
     } else {
