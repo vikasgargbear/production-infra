@@ -14,6 +14,9 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     workflow = _read(".github/workflows/production-readiness.yml")
     package = json.loads(_read("frontend/package.json"))
     spec = _read("frontend/e2e/live-two-user-approval.spec.ts")
+    provisioner = _read(
+        "backend/scripts/provision_ephemeral_browser_identities.py"
+    )
 
     assert "run_live_erp_two_user_approvals:" in workflow
     assert "inputs.run_live_erp_two_user_approvals" in workflow
@@ -21,20 +24,41 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     assert "environment: canonical-staging" in two_user_job
     assert 'PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"' in two_user_job
     assert "environment: live-erp-test" not in two_user_job
-    for secret in (
+    for long_lived_secret in (
         "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
         "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
         "PLAYWRIGHT_LIVE_REVIEWER_EMAIL",
         "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD",
     ):
-        assert f"${{{{ secrets.{secret} }}}}" in workflow
-        assert f'${secret}' in two_user_job
-    assert 'test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"' in workflow
+        assert f"secrets.{long_lived_secret}" not in two_user_job
+    assert "SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}" in two_user_job
+    assert "SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}" in two_user_job
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in two_user_job
+    assert "canonical-staging-two-user-browser-identities" in two_user_job
+    assert "provision_ephemeral_browser_identities.py" in two_user_job
+    assert 'provision --state "$RUNNER_TEMP/canonical-browser-identities.json"' in two_user_job
+    assert 'cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"' in two_user_job
+    cleanup_step = two_user_job.split(
+        "Always restore seeded identities and remove disposable Auth users", 1
+    )[1]
+    assert "if: always()" in cleanup_step
+    assert two_user_job.index("npm run test:e2e:live:approvals") < two_user_job.index(
+        "Always restore seeded identities and remove disposable Auth users"
+    )
     assert "https://*)" in workflow
     assert "npm run test:e2e:live:approvals" in workflow
     assert "live-erp-two-user-approval-evidence" in workflow
-    assert "Two-user staging prerequisite missing" in two_user_job
-    assert "exactly one active aasopharma-erp-web grant per membership" in two_user_job
+    assert 'EXPECTED_PROJECT_REF = "rgihahbmkrmhitjdjvev"' in provisioner
+    assert "from provision_staging_mcp_oauth import" in provisioner
+    assert "_service_role_key" in provisioner
+    assert 'WEB_CLIENT_ID = "aasopharma-erp-web"' in provisioner
+    assert "status='suspended'" in provisioner
+    assert "_clear_browser_environment()" in provisioner
+    assert "_delete_auth_user" in provisioner
+    assert "email_confirm" in provisioner
+    assert '"password"' in provisioner
+    assert 'state["auth_users"].append' in provisioner
+    assert '"auth_user_id": auth_user_id' in provisioner
 
     command = package["scripts"]["test:e2e:live:approvals"]
     assert "PLAYWRIGHT_LIVE_WRITES=true" in command

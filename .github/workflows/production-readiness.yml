@@ -769,15 +769,19 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals
     runs-on: ubuntu-latest
     environment: canonical-staging
+    timeout-minutes: 45
+    concurrency:
+      group: canonical-staging-two-user-browser-identities
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: frontend
     env:
       PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
-      PLAYWRIGHT_LIVE_REQUESTER_EMAIL: ${{ secrets.PLAYWRIGHT_LIVE_REQUESTER_EMAIL }}
-      PLAYWRIGHT_LIVE_REQUESTER_PASSWORD: ${{ secrets.PLAYWRIGHT_LIVE_REQUESTER_PASSWORD }}
-      PLAYWRIGHT_LIVE_REVIEWER_EMAIL: ${{ secrets.PLAYWRIGHT_LIVE_REVIEWER_EMAIL }}
-      PLAYWRIGHT_LIVE_REVIEWER_PASSWORD: ${{ secrets.PLAYWRIGHT_LIVE_REVIEWER_PASSWORD }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
       PLAYWRIGHT_LIVE_RETURN_INVOICE_PATTERN: "DEMO-SI-"
       PLAYWRIGHT_LIVE_RETURN_SUPPLIER_QUERY: "Synthetic Packaging"
@@ -788,31 +792,46 @@ jobs:
       PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Refuse unsafe or incomplete maker/checker configuration
+      - name: Refuse any browser target except reviewed canonical staging
         run: |
           set -euo pipefail
           test -n "$PLAYWRIGHT_LIVE_BASE_URL"
-          if [ -z "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" ] || \
-             [ -z "$PLAYWRIGHT_LIVE_REQUESTER_PASSWORD" ] || \
-             [ -z "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL" ] || \
-             [ -z "$PLAYWRIGHT_LIVE_REVIEWER_PASSWORD" ]; then
-            echo "::error title=Two-user staging prerequisite missing::Provision two disposable confirmed browser users, bind each to a distinct active demo membership, and issue exactly one active aasopharma-erp-web grant per membership before this job can run."
-            exit 2
-          fi
-          test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
           case "$PLAYWRIGHT_LIVE_BASE_URL" in
             https://*) ;;
             *) echo "Two-user browser target must use HTTPS" >&2; exit 2 ;;
           esac
+      - name: Install pinned ephemeral identity reconciler dependencies
+        working-directory: ${{ github.workspace }}
+        run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
+      - name: Provision masked disposable maker and checker identities
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --state "$RUNNER_TEMP/canonical-browser-identities.json"
       - run: npm ci
       - name: Install Playwright video support
         run: npx playwright install ffmpeg
       - run: npm run test:e2e:live:approvals
+      - name: Always restore seeded identities and remove disposable Auth users
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"
       - name: Upload maker/checker traces, screenshots, videos, and reports
         if: always()
         uses: actions/upload-artifact@v4
