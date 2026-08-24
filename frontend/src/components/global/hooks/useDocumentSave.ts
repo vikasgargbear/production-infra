@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
 import { generateTempId } from '../../sales/utils/offlineSaveHelpers';
+import { isRecoverableOfflineFailure } from './documentSaveFailure';
 
 export interface UseDocumentSaveConfig {
     docTypeKey: string;              // DOC_TYPES.INVOICE etc
@@ -77,49 +78,50 @@ export function useDocumentSave(config: UseDocumentSaveConfig): UseDocumentSaveR
                 created_offline: !cfg.isOnline,
             };
 
-            // 5. Save to IDB
-            await offlineDB.add(cfg.idbStoreName, localDoc);
-
-            // 6. Stock operation (if applicable)
-            if (cfg.stockOperation) {
-                await cfg.stockOperation();
-            }
-
-            // 7. Success callback
-            cfg.onSuccess(tempId, docNo);
-
-            // 8. Background sync
+            // 5. Online writes are server-first. A validation or policy failure
+            // must never be presented as a successful local business document.
             if (cfg.isOnline) {
-                (async () => {
+                try {
+                    const response = await cfg.apiCall({ ...payload, [cfg.docNumberField]: docNo });
                     try {
-                        const response = await cfg.apiCall({ ...payload, [cfg.docNumberField]: docNo });
+                        await offlineDB.add(cfg.idbStoreName, {
+                            ...localDoc,
+                            sync_status: 'synced',
+                            created_offline: false,
+                        });
                         const serverId = response?.data?.[cfg.serverIdField];
                         if (serverId) {
                             await offlineDB.updateLocalId(cfg.idbStoreName, tempId, serverId);
                         }
-                        await cfg.onServerSuccess?.(response, tempId, docNo, payload);
-                    } catch (syncError: any) {
-                        // Invoice-specific: handle conflict
-                        if (cfg.handleConflict && syncError.response?.status === 409) {
-                            cfg.handleConflict(syncError);
-                            return;
-                        }
-
-                        // Invoice-specific: fallback to offline on server errors
-                        if (cfg.fallbackToOffline && (
-                            syncError.response?.status >= 500 ||
-                            syncError.code === 'ERR_NETWORK' ||
-                            syncError.code === 'ECONNABORTED'
-                        )) {
-                            console.warn(`[DocumentSave] Server error, saved offline: ${cfg.entityType}`);
-                        }
-
-                        await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
-                        await cfg.onSyncQueued?.(tempId, docNo, payload, 'sync_failed');
+                        await cfg.stockOperation?.();
+                    } catch (cacheError) {
+                        // The business write is already committed. Cache failures
+                        // are diagnostics, not a reason to claim that the write failed.
+                        console.warn(`[DocumentSave] Server write succeeded but local cache failed: ${cfg.entityType}`, cacheError);
                     }
-                })();
+                    cfg.onSuccess(tempId, docNo);
+                    await cfg.onServerSuccess?.(response, tempId, docNo, payload);
+                } catch (syncError: any) {
+                    if (cfg.handleConflict && syncError.response?.status === 409) {
+                        cfg.handleConflict(syncError);
+                        return;
+                    }
+
+                    const mayQueueOffline = cfg.fallbackToOffline && isRecoverableOfflineFailure(syncError);
+                    if (!mayQueueOffline) throw syncError;
+
+                    console.warn(`[DocumentSave] Server unavailable, saved offline: ${cfg.entityType}`);
+                    await offlineDB.add(cfg.idbStoreName, localDoc);
+                    await cfg.stockOperation?.();
+                    await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
+                    cfg.onSuccess(tempId, docNo);
+                    await cfg.onSyncQueued?.(tempId, docNo, payload, 'sync_failed');
+                }
             } else {
+                await offlineDB.add(cfg.idbStoreName, localDoc);
+                await cfg.stockOperation?.();
                 await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
+                cfg.onSuccess(tempId, docNo);
                 await cfg.onSyncQueued?.(tempId, docNo, payload, 'offline');
             }
 
