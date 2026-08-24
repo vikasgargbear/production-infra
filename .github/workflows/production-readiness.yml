@@ -56,6 +56,16 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_render_api_hotfix:
+        description: Deploy one reviewed commit to only the free Render API service
+        required: true
+        default: false
+        type: boolean
+      render_api_hotfix_sha:
+        description: Reviewed application SHA for the API-only Render deployment
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -161,6 +171,106 @@ jobs:
                   if labels.get("type") not in {"app", "build"}:
                       continue
                   print(entry.get("timestamp"), labels.get("type"), redact(entry.get("message", "")))
+          PY
+
+  render-api-hotfix:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_render_api_hotfix
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_OWNER_ID: tea-da2nh58ae00c73ciaqog
+      REVIEWED_DEPLOY_SHA: ${{ inputs.render_api_hotfix_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate the reviewed API-only commit
+        run: |
+          set -euo pipefail
+          test "${#REVIEWED_DEPLOY_SHA}" = 40
+          case "$REVIEWED_DEPLOY_SHA" in
+            *[!0-9a-f]*) echo "Deploy SHA must be lowercase hexadecimal" >&2; exit 2 ;;
+          esac
+          git cat-file -e "$REVIEWED_DEPLOY_SHA^{commit}"
+          git merge-base --is-ancestor "$REVIEWED_DEPLOY_SHA" "$GITHUB_SHA"
+      - name: Deploy and verify only the free Render API
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          api_key = os.environ["RENDER_API_KEY"]
+          owner_id = os.environ["RENDER_OWNER_ID"]
+          commit_id = os.environ["REVIEWED_DEPLOY_SHA"]
+
+          def request(method, path, payload=None, query=None, timeout=30):
+              url = "https://api.render.com/v1" + path
+              if query:
+                  url += "?" + urlencode(query, doseq=True)
+              data = None if payload is None else json.dumps(payload).encode()
+              headers = {
+                  "Accept": "application/json",
+                  "Authorization": f"Bearer {api_key}",
+              }
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+              with urlopen(Request(url, data=data, method=method, headers=headers), timeout=timeout) as response:
+                  body = response.read()
+                  return json.loads(body) if body else None
+
+          rows = request(
+              "GET",
+              "/services",
+              query={
+                  "ownerId": owner_id,
+                  "name": "aasopharma-api-pilot",
+                  "includePreviews": "false",
+                  "limit": 20,
+              },
+          )
+          matches = [row.get("service", row) for row in rows if row.get("service", row).get("name") == "aasopharma-api-pilot"]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one API service, found {len(matches)}")
+          service = matches[0]
+          service_id = service["id"]
+          service_url = service.get("url") or service.get("serviceDetails", {}).get("url")
+          if not service_url and service.get("slug"):
+              service_url = f"https://{service['slug']}.onrender.com"
+          if not service_url:
+              raise SystemExit("API service has no public URL")
+          deploy = request(
+              "POST",
+              f"/services/{service_id}/deploys",
+              {"clearCache": "do_not_clear", "commitId": commit_id},
+          )
+          deploy_id = deploy["id"]
+          print(f"API deploy {deploy_id} requested for {commit_id}")
+          terminal_failures = {
+              "build_failed", "update_failed", "pre_deploy_failed",
+              "canceled", "deactivated",
+          }
+          for attempt in range(1, 11):
+              current = request("GET", f"/services/{service_id}/deploys/{deploy_id}")
+              status = current.get("status")
+              print(f"check {attempt}/10: {status}")
+              if status == "live":
+                  break
+              if status in terminal_failures:
+                  raise SystemExit(f"API deploy ended as {status}")
+              if attempt == 10:
+                  raise SystemExit("API deploy did not become live within 15 minutes")
+              time.sleep(90)
+          for path in ("/health", "/ready"):
+              with urlopen(service_url.rstrip("/") + path, timeout=30) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"{path} returned HTTP {response.status}")
+          print("API-only deployment is live and ready")
           PY
 
   mcp-sdk-compatibility:
