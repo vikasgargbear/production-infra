@@ -66,7 +66,12 @@ test.describe('live ERP pilot', () => {
       else await openHomeAction(page, desktop);
       await expect(page.getByRole('navigation', { name: `${hub} modules` })).toBeVisible();
       await waitForErpToSettle(page);
-      for (const module of modules) await chooseHubModule(page, hub, module);
+      for (const module of modules) {
+        await chooseHubModule(page, hub, module);
+        if (hub === 'Sales' && module === 'Sales History') {
+          await expect(page.getByText(/₹NaN|\bCustom\b/)).toHaveCount(0);
+        }
+      }
       await returnHome(page);
     };
 

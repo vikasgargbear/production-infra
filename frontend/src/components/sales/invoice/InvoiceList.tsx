@@ -19,6 +19,7 @@ import { InvoiceTable } from './invoicelist/components/InvoiceTable';
 import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
 import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
 import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.types';
+import { projectInvoiceListRow } from './invoicelist/utils/invoiceListProjection';
 
 // Document type configuration
 type DocumentType = 'invoice' | 'challan' | 'sales_order';
@@ -136,21 +137,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
         // Map invoice fields to display format
         // Backend fields: invoice_id, invoice_number, invoice_date, customer_name, final_amount, paid_amount, pending_amount, payment_status, due_date
-        transformedData = invoicesData.map((invoice: any) => ({
-          id: String(invoice.invoice_id),
-          invoice_number: invoice.invoice_number,
-          customer_id: String(invoice.customer_id),
-          customer_name: invoice.customer_name,
-          invoice_date: invoice.invoice_date,
-          due_date: invoice.due_date,
-          total_amount: Number(invoice.final_amount),
-          paid_amount: Number(invoice.paid_amount),
-          pending_amount: Number(invoice.pending_amount),
-          payment_status: invoice.payment_status,
-          items_count: invoice.items_count ?? 0,
-          created_at: invoice.created_at,
-          updated_at: invoice.updated_at
-        }));
+        transformedData = invoicesData.map(projectInvoiceListRow);
 
         const total = responseData?.total ?? transformedData.length;
         dispatch({ type: 'SET_INVOICES', invoices: transformedData });
