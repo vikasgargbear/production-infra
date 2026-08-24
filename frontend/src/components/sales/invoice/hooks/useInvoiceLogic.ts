@@ -361,7 +361,18 @@ export const useInvoiceLogic = (
                     gst_type: result.gst_type as GstType,
                     items: prev.items.map((item, idx) => ({
                         ...item,
-                        ...(result.items[idx] || {})
+                        ...(result.items[idx] || {}),
+                        // Preview calculation may return JSON numbers. Source and
+                        // allocation identities remain the posting authority, so
+                        // retain their exact decimal strings through review.
+                        quantity: item.quantity,
+                        free_quantity: item.free_quantity,
+                        unit_price: item.unit_price,
+                        discount_percent: item.discount_percent,
+                        base_billed_quantity: item.base_billed_quantity,
+                        base_free_quantity: item.base_free_quantity,
+                        source_billed_quantity: item.source_billed_quantity,
+                        source_free_quantity: item.source_free_quantity,
                     })),
                     totals: result.totals as InvoiceTotals,
                     final_amount: Number(result.totals.final_amount || 0)

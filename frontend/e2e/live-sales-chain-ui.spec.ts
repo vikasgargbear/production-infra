@@ -67,7 +67,14 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     await page.getByRole('button', { name: 'Import Selected', exact: true }).click();
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await page.getByRole('button', { name: /continue to preview/i }).click();
+    const invoicePrepareRequest = page.waitForRequest(request => request.method() === 'POST'
+      && /\/api\/web\/actions\/sales\.invoice\.prepare\/prepare$/.test(new URL(request.url()).pathname));
     await page.getByRole('button', { name: 'Generate Invoice', exact: true }).click();
+    const invoicePrepare = (await invoicePrepareRequest).postDataJSON();
+    expect(invoicePrepare.lines[0].billed_quantity).toBe(dispatchDetail.lines[0].billed_quantity);
+    expect(invoicePrepare.lines[0].free_quantity).toBe(dispatchDetail.lines[0].free_quantity);
+    expect(invoicePrepare.lines[0].base_billed_quantity).toBe(dispatchDetail.lines[0].base_billed_quantity);
+    expect(invoicePrepare.lines[0].base_free_quantity).toBe(dispatchDetail.lines[0].base_free_quantity);
     const invoiceReview = page.getByRole('dialog', { name: 'Review exact sales invoice' });
     await expect(invoiceReview).toBeVisible();
     await invoiceReview.getByRole('checkbox').check();
@@ -77,6 +84,9 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     const invoice = await json(await invoiceExecute); expect(String(invoice.resource_id)).toMatch(/^[0-9a-f-]{36}$/i);
     const invoiceDetail = await json(await invoiceReadback);
     expect(String(invoiceDetail.sales_invoice_id)).toBe(String(invoice.resource_id));
+    expect(invoiceDetail.inventory_fulfillment).toBe('dispatch_issue');
+    expect(invoiceDetail.invoice_inventory_document_id).toBeNull();
+    expect(invoiceDetail.inventory_evidence.every((item: any) => item.source_kind === 'dispatch_issue')).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('sales-invoice-posted.png'), fullPage: true });
     await testInfo.attach('visible-sales-chain-created-ids.json', { contentType: 'application/json', body: JSON.stringify({
       sales_order_id: order.resource_id, dispatch_id: dispatch.resource_id, sales_invoice_id: invoice.resource_id,
@@ -98,8 +108,10 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     const row = page.getByRole('row').filter({ hasText: /Synthetic Corrugated Pharmacy Packing Carton/i });
     await row.locator('input[type="number"]').nth(0).fill('1.125000');
     await row.locator('input[type="number"]').nth(1).fill('84.1250');
+    await row.locator('input[type="number"]').nth(3).fill('0.250000');
     await expect(row.locator('input[type="number"]').nth(0)).toHaveValue('1.125000');
     await expect(row.locator('input[type="number"]').nth(1)).toHaveValue('84.1250');
+    await expect(row.locator('input[type="number"]').nth(3)).toHaveValue('0.250000');
     await expect(page.getByText(/batch/i).first()).toBeVisible();
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await page.getByRole('button', { name: /continue to preview/i }).click();
@@ -108,6 +120,7 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     await page.getByRole('button', { name: 'Generate Invoice', exact: true }).click();
     const preparedPayload = (await prepareRequest).postDataJSON();
     expect(preparedPayload.lines[0].billed_quantity).toBe('1.125000');
+    expect(preparedPayload.lines[0].free_quantity).toBe('0.250000');
     expect(preparedPayload.lines[0].quoted_unit_rate).toBe('84.1250');
     const review = page.getByRole('dialog', { name: 'Review exact sales invoice' });
     await expect(review).toBeVisible();

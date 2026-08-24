@@ -151,4 +151,43 @@ describe('useInvoiceLogic selected quantity boundary', () => {
             free_supply_tax_treatment: 'included_at_unit_rate',
         }));
     });
+
+    it('does not let numeric preview output overwrite exact dispatch-import strings', async () => {
+        mockedPreview.mockResolvedValue({
+            items: [{
+                quantity: 1.125, free_quantity: 0.25, unit_price: 84.125,
+                discount_percent: 0, base_billed_quantity: 11.25,
+                base_free_quantity: 2.5,
+            }],
+            totals: { subtotal: 94.64, taxable_amount: 94.64, total_tax: 11.36, final_amount: 106 },
+            gst_type: 'CGST/SGST',
+        } as any);
+        const { result } = renderHook(() => useInvoiceLogic());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            await result.current.handleImport({
+                source: 'delivery_challan', customer,
+                items: [{
+                    product_id: ids.product, product_name: 'Fractional Carton',
+                    batch_id: ids.batch, batch_number: 'BATCH-1',
+                    branch_id: ids.branch, location_id: ids.location,
+                    uom_conversion_id: ids.uom,
+                    quantity: '1.125000', free_quantity: '0.250000',
+                    base_billed_quantity: '11.250000', base_free_quantity: '2.500000',
+                    source_billed_quantity: '1.125000', source_free_quantity: '0.250000',
+                    unit_price: '84.1250', sale_price: '84.1250',
+                    gst_percent: '12.000000', discount_percent: '0.000000',
+                    free_supply_tax_treatment: 'excluded_from_taxable_value',
+                }],
+            } as any);
+        });
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalled());
+        await waitFor(() => expect(result.current.invoice.items[0]).toEqual(expect.objectContaining({
+            quantity: '1.125000', free_quantity: '0.250000', unit_price: '84.1250',
+            discount_percent: '0.000000', base_billed_quantity: '11.250000',
+            base_free_quantity: '2.500000', source_billed_quantity: '1.125000',
+            source_free_quantity: '0.250000',
+        })));
+    });
 });

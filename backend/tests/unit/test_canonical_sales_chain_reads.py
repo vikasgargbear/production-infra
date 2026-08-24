@@ -9,12 +9,13 @@ from app.main import app
 
 
 def valid_row():
-    ids = [uuid4() for _ in range(10)]
+    ids = [uuid4() for _ in range(16)]
     return {
         "sales_invoice_id": ids[0], "invoice_number": "SI-1", "status": "posted",
         "taxable_amount": "100.00", "cgst_amount": "6.00", "sgst_amount": "6.00",
         "igst_amount": "0.00", "cess_amount": "0.00", "invoice_total": "112.00",
-        "invoice_lines": [{"invoice_line_id": ids[1], "product_id": ids[2],
+        "rounding_adjustment": "0.00",
+        "invoice_lines": [{"invoice_line_id": ids[1], "line_kind": "product", "product_id": ids[2],
             "billed_quantity": "1.125000", "free_quantity": "0.250000",
             "base_billed_quantity": "11.250000", "base_free_quantity": "2.500000",
             "taxable_amount": "100.00", "cgst_amount": "6.00", "sgst_amount": "6.00",
@@ -30,7 +31,18 @@ def valid_row():
              "transaction_debit": "0.00", "transaction_credit": "112.00"},
         ],
         "open_item_id": uuid4(), "receivable_principal": "112.00", "receivable_outstanding": "112.00",
-        "inventory_document_id": uuid4(), "inventory_base_quantity": "13.750000", "inventory_value": "84.13",
+        "inventory_fulfillment": "direct_invoice_issue",
+        "invoice_inventory_document_id": ids[10],
+        "inventory_base_quantity": "13.750000", "inventory_value": "84.13",
+        "inventory_evidence": [{
+            "invoice_line_id": ids[1], "source_kind": "direct_invoice_issue",
+            "source_document_id": ids[0], "source_line_id": ids[1],
+            "invoice_dispatch_allocation_id": None,
+            "inventory_document_id": ids[10], "inventory_document_line_id": ids[11],
+            "ledger_entry_id": ids[12], "allocated_base_billed_quantity": "11.250000",
+            "allocated_base_free_quantity": "2.500000", "ledger_base_quantity": "13.750000",
+            "ledger_value": "84.13",
+        }],
     }
 
 
@@ -38,7 +50,7 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
     ids = [uuid4() for _ in range(12)]
     order = {
         "sales_order_id": ids[0], "order_number": "SO-1", "status": "approved",
-        "customer_name": "Customer", "total_amount": "168.00", "lines": [{
+        "customer_name": "Customer", "total_amount": "168.00", "rounding_adjustment": "0.00", "lines": [{
             "sales_order_line_id": ids[1], "product_id": ids[2],
             "billed_quantity": "1.125000", "free_quantity": "0.250000",
             "base_billed_quantity": "11.250000", "base_free_quantity": "2.500000",
@@ -68,6 +80,40 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
         reads.CanonicalSalesDispatchReadback.model_validate(dispatch)
 
 
+@pytest.mark.parametrize("target,field,value,message", [
+    ("order", "total_amount", "167.99", "header total"),
+    ("order_line", "reserved_base_quantity", "13.749999", "reservation"),
+    ("dispatch", "inventory_base_quantity", "13.749999", "inventory quantity"),
+    ("dispatch", "inventory_value", "84.12", "inventory value"),
+    ("dispatch_line", "ledger_base_quantity", "13.749999", "ledger quantity"),
+])
+def test_order_and_dispatch_readbacks_fail_closed_for_arithmetic_drift(target, field, value, message):
+    ids = [uuid4() for _ in range(11)]
+    order = {"sales_order_id": ids[0], "order_number": "SO-1", "status": "approved",
+             "customer_name": "Customer", "total_amount": "112.00", "rounding_adjustment": "0.00", "lines": [{
+                 "sales_order_line_id": ids[1], "product_id": ids[2], "billed_quantity": "1.000000",
+                 "free_quantity": "0.250000", "base_billed_quantity": "10.000000",
+                 "base_free_quantity": "2.500000", "quoted_unit_rate": "100.0000",
+                 "taxable_amount": "100.00", "total_tax": "12.00", "line_total": "112.00",
+                 "reservation_id": ids[3], "batch_id": ids[4], "location_id": ids[5],
+                 "reserved_base_quantity": "12.500000"}]}
+    dispatch = {"dispatch_id": ids[6], "challan_number": "DC-1", "sales_order_id": ids[0],
+                "status": "posted", "customer_name": "Customer", "inventory_document_id": ids[7],
+                "inventory_base_quantity": "12.500000", "inventory_value": "84.13", "lines": [{
+                    "dispatch_line_id": ids[8], "sales_order_line_id": ids[1], "product_id": ids[2],
+                    "batch_id": ids[4], "from_location_id": ids[5], "billed_quantity": "1.000000",
+                    "free_quantity": "0.250000", "base_billed_quantity": "10.000000",
+                    "base_free_quantity": "2.500000", "inventory_document_line_id": ids[9],
+                    "ledger_entry_id": ids[10], "ledger_base_quantity": "12.500000",
+                    "ledger_value": "84.13"}]}
+    subject = order if target.startswith("order") else dispatch
+    container = subject["lines"][0] if target.endswith("line") else subject
+    container[field] = value
+    model = reads.CanonicalSalesOrderReadback if target.startswith("order") else reads.CanonicalSalesDispatchReadback
+    with pytest.raises(ValidationError, match=message):
+        model.model_validate(subject)
+
+
 def test_posting_readback_schema_preserves_uuid_and_exact_decimal_strings():
     model = reads.CanonicalSalesInvoicePostingReadback.model_validate(valid_row())
     payload = model.model_dump(mode="json")
@@ -76,12 +122,37 @@ def test_posting_readback_schema_preserves_uuid_and_exact_decimal_strings():
     assert payload["journal_debit_total"] == payload["journal_credit_total"]
 
 
+def test_posting_readback_reconciles_charge_lines_and_rounding_without_inventory_lineage():
+    row = valid_row()
+    row["invoice_lines"].append({
+        "invoice_line_id": uuid4(), "line_kind": "charge", "product_id": None,
+        "billed_quantity": None, "free_quantity": None,
+        "base_billed_quantity": None, "base_free_quantity": None,
+        "taxable_amount": "10.00", "cgst_amount": "0.60", "sgst_amount": "0.60",
+        "igst_amount": "0.00", "cess_amount": "0.00", "line_total": "11.20",
+    })
+    row.update(
+        taxable_amount="110.00", tax_taxable_amount="110.00",
+        cgst_amount="6.60", tax_cgst_amount="6.60",
+        sgst_amount="6.60", tax_sgst_amount="6.60",
+        invoice_total="123.00", tax_payable_amount="123.00",
+        rounding_adjustment="-0.20", receivable_principal="123.00",
+        receivable_outstanding="123.00", journal_debit_total="123.00",
+        journal_credit_total="123.00",
+    )
+    row["journal_lines"][0]["transaction_debit"] = "123.00"
+    row["journal_lines"][1]["transaction_credit"] = "123.00"
+    assert reads.CanonicalSalesInvoicePostingReadback.model_validate(row).invoice_total == "123.00"
+
+
 @pytest.mark.parametrize("mutation", [
     lambda row: row.update(sales_invoice_id="not-a-uuid"),
     lambda row: row.update(invoice_total=112.0),
     lambda row: row.update(invoice_total="112.000"),
     lambda row: row.update(tax_payable_amount="111.99"),
     lambda row: row.update(journal_credit_total="111.00"),
+    lambda row: row.update(taxable_amount="99.99", tax_taxable_amount="99.99"),
+    lambda row: row.update(inventory_base_quantity="13.749999"),
 ])
 def test_posting_readback_fails_closed_for_bad_identity_precision_or_reconciliation(mutation):
     row = valid_row(); mutation(row)
@@ -115,7 +186,35 @@ def test_posting_readback_uses_org_scoped_posted_companions(monkeypatch):
     assert captured["params"] == {"org_id": org_id, "invoice_id": invoice_id}
     assert "invoice.org_id=:org_id" in captured["sql"]
     assert "journal.status='posted'" in captured["sql"]
-    assert "inventory_document.status='posted'" in captured["sql"]
+    assert "document.status='posted'" in captured["sql"]
+    assert "invoice_inventory.sales_invoice_id=invoice.id" in captured["sql"]
+    assert "allocation.allocated_base_billed_quantity" in captured["sql"]
+
+
+def test_dispatch_allocated_invoice_proves_no_second_invoice_stock_issue():
+    row = valid_row()
+    evidence = row["inventory_evidence"][0]
+    evidence.update(
+        source_kind="dispatch_issue",
+        source_document_id=uuid4(),
+        source_line_id=uuid4(),
+        invoice_dispatch_allocation_id=uuid4(),
+    )
+    row.update(inventory_fulfillment="dispatch_issue", invoice_inventory_document_id=None)
+    model = reads.CanonicalSalesInvoicePostingReadback.model_validate(row)
+    assert model.invoice_inventory_document_id is None
+    assert model.inventory_evidence[0].source_kind == "dispatch_issue"
+
+
+def test_dispatch_allocated_invoice_rejects_duplicate_invoice_owned_stock_issue():
+    row = valid_row()
+    row["inventory_evidence"][0].update(
+        source_kind="dispatch_issue", source_document_id=uuid4(), source_line_id=uuid4(),
+        invoice_dispatch_allocation_id=uuid4(),
+    )
+    row["inventory_fulfillment"] = "dispatch_issue"
+    with pytest.raises(ValidationError, match="direct inventory ownership|second stock issue"):
+        reads.CanonicalSalesInvoicePostingReadback.model_validate(row)
 
 
 def test_dispatch_readback_uses_canonical_stock_ledger_columns(monkeypatch):

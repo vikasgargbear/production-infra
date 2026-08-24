@@ -50,7 +50,7 @@ describe('DocumentImportModal detail resolution', () => {
             source_type: 'invoice',
             customer_id: 'customer-1',
             customer: expect.objectContaining({ customer_id: 'customer-1' }),
-            items: [expect.objectContaining({ product_id: 'product-1', quantity: 1 })],
+            items: [expect.objectContaining({ product_id: 'product-1', quantity: '1.000000' })],
         })));
         expect(resolveDocument).toHaveBeenCalledWith(expect.objectContaining({ invoice_id: 'invoice-1' }));
         expect(onClose).toHaveBeenCalledTimes(1);
@@ -108,15 +108,15 @@ describe('DocumentImportModal detail resolution', () => {
         const imported = onImport.mock.calls[0][0];
         expect(imported.items).toEqual([
             expect.objectContaining({
-                batch_id: 'batch-1', quantity: 1, free_quantity: 1,
+                batch_id: 'batch-1', quantity: '1.000000', free_quantity: '1.000000',
                 dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
             }),
             expect.objectContaining({
-                batch_id: 'batch-2', quantity: 2, free_quantity: 0,
+                batch_id: 'batch-2', quantity: '2.000000', free_quantity: '0.000000',
                 invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
                 dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-2',
             }),
         ]);
-        expect(imported.items.reduce((sum: number, item: any) => sum + item.line_total, 0)).toBe(336);
+        expect(imported.items.map((item: any) => item.line_total)).toEqual(['112.00', '224.00']);
     });
 });

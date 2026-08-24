@@ -127,6 +127,32 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         expect(item.free_quantity).toBe(1.625);
     });
 
+    it('preserves imported dispatch fractional strings without a Number boundary', () => {
+        const [item] = prepareImportedItemsForInvoice([{
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Fractional dispatch item',
+            batch_id: '33333333-3333-4333-8333-333333333333',
+            batch_number: 'BATCH-FRACTIONAL',
+            quantity: '1.125000',
+            free_quantity: '0.250000',
+            base_billed_quantity: '11.250000',
+            base_free_quantity: '2.500000',
+            source_billed_quantity: '1.125000',
+            source_free_quantity: '0.250000',
+            unit_price: '84.1250',
+            sale_price: '84.1250',
+            gst_percent: '12.000000',
+            discount_percent: '0.000000',
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
+        }]);
+        expect(item).toEqual(expect.objectContaining({
+            quantity: '1.125000', free_quantity: '0.250000',
+            base_billed_quantity: '11.250000', base_free_quantity: '2.500000',
+            source_billed_quantity: '1.125000', source_free_quantity: '0.250000',
+            unit_price: '84.1250', discount_percent: '0.000000',
+        }));
+    });
+
     it.each([
         ['negative billed quantity', -1, 0],
         ['negative free quantity', 1, -1],
@@ -142,7 +168,7 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             free_quantity: freeQuantity,
             free_supply_tax_treatment: 'excluded_from_taxable_value',
             unit_price: 100,
-        } as any])).toThrow('must be a finite non-negative number');
+        } as any])).toThrow(/plain decimal string|exact decimal string/);
     });
 
     it.each([
@@ -157,7 +183,7 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             unit_price: 100,
             free_supply_tax_treatment: 'excluded_from_taxable_value',
             ...quantities,
-        } as any])).toThrow('must be a finite non-negative number');
+        } as any])).toThrow(/exact decimal string/);
     });
 
     it('fails closed when a canonical import omits free-supply tax treatment', () => {

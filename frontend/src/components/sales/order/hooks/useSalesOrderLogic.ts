@@ -440,7 +440,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 customer_id: importedCustomerId,
                 customer_name: importData.customer_name || '',
             } as Customer;
-        const formattedItems: OrderItem[] = importData.items.map((item, index) => ({
+        const formattedItems = importData.items.map((item, index) => ({
             ...item,
             id: `imported-${Date.now()}-${index}`,
             quantity: Number(item.quantity),
@@ -448,8 +448,9 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             unit_price: Number(item.unit_price),
             discount_percent: Number(item.discount_percent),
             gst_percent: Number(item.gst_percent),
+            mrp: item.mrp === undefined ? undefined : Number(item.mrp),
             total: 0,
-        }));
+        })) as unknown as OrderItem[];
         const importedCustomerState = importedCustomer.state || '';
         const importedOrder: Order = {
             ...order,

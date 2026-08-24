@@ -53,9 +53,9 @@ describe('Sales document import envelope normalization', () => {
             product_id: '10000000-0000-7000-8000-000000000001',
             batch_id: '20000000-0000-7000-8000-000000000001',
             batch_number: 'BATCH-1',
-            quantity: 2,
-            unit_price: 150.25,
-            gst_percent: 12,
+            quantity: '2.000000',
+            unit_price: '150.2500',
+            gst_percent: '12.000000',
         })]);
     });
 
@@ -74,8 +74,9 @@ describe('Sales document import envelope normalization', () => {
             allocation_id: 'inventory-line-1',
             inventory_document_line_id: 'inventory-line-1',
             batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
-            quantity: 1, free_quantity: 0, unit_price: 150, gst_percent: 12,
-            base_billed_quantity: 1, base_free_quantity: 0,
+            quantity: '1.000000', free_quantity: '0.000000',
+            unit_price: '150.0000', gst_percent: '12.000000',
+            base_billed_quantity: '1.000000', base_free_quantity: '0.000000',
         })]);
     });
 
@@ -105,13 +106,12 @@ describe('Sales document import envelope normalization', () => {
 
         expect(result).toHaveLength(2);
         expect(result.map(item => [item.batch_id, item.quantity, item.free_quantity]))
-            .toEqual([['batch-1', 1, 1], ['batch-2', 2, 0]]);
-        expect(result.map(item => item.line_total)).toEqual([37.67, 75.33]);
-        expect(result.reduce((sum, item) => sum + Number(item.taxable_amount), 0)).toBe(100);
-        expect(result.reduce((sum, item) => sum + Number(item.cgst_amount), 0)).toBe(6);
-        expect(result.reduce((sum, item) => sum + Number(item.sgst_amount), 0)).toBe(6);
-        expect(result.reduce((sum, item) => sum + Number(item.cess_amount), 0)).toBe(1);
-        expect(result.reduce((sum, item) => sum + Number(item.line_total), 0)).toBe(113);
+            .toEqual([['batch-1', '1.000000', '1.000000'], ['batch-2', '2.000000', '0.000000']]);
+        expect(result.map(item => item.line_total)).toEqual(['37.67', '75.33']);
+        expect(result.map(item => item.taxable_amount)).toEqual(['33.33', '66.67']);
+        expect(result.map(item => item.cgst_amount)).toEqual(['2.00', '4.00']);
+        expect(result.map(item => item.sgst_amount)).toEqual(['2.00', '4.00']);
+        expect(result.map(item => item.cess_amount)).toEqual(['0.33', '0.67']);
     });
 
     it('preserves distinct dispatch allocation and custody identities', () => {
@@ -135,8 +135,8 @@ describe('Sales document import envelope normalization', () => {
     });
 
     it.each([
-        ['excluded_from_taxable_value', [1, 1], [0.01, 0.01, 0, 0]],
-        ['included_at_unit_rate', [1, 1], [0.01, 0.01, 0, 0]],
+        ['excluded_from_taxable_value', [1, 1], ['0.01', '0.01', '0.00', '0.00']],
+        ['included_at_unit_rate', [1, 1], ['0.01', '0.01', '0.00', '0.00']],
     ])('apportions ₹0.02 across four %s allocations without negative residuals', (
         freeSupplyTaxTreatment, billedAndFree, expected,
     ) => {
@@ -152,12 +152,11 @@ describe('Sales document import envelope normalization', () => {
             product_id: 'product-1', product_name: 'Product', quantity: billed * 4,
             free_quantity: free * 4, unit_price: 1,
             free_supply_tax_treatment: freeSupplyTaxTreatment,
-            taxable_amount: 0.02, line_total: 0.02, batch_allocations: allocations,
+            taxable_amount: '0.02', line_total: '0.02', batch_allocations: allocations,
         }]);
 
         expect(result.map(item => item.line_total)).toEqual(expected);
-        expect(result.every(item => Number(item.line_total) >= 0)).toBe(true);
-        expect(result.reduce((sum, item) => sum + Number(item.line_total), 0)).toBe(0.02);
+        expect(result.every(item => !String(item.line_total).startsWith('-'))).toBe(true);
     });
 
     it('uses free quantity in the valuation basis only when canonical treatment includes it', () => {
@@ -177,11 +176,11 @@ describe('Sales document import envelope normalization', () => {
 
         expect(projectCanonicalImportLines([{
             ...shared, free_supply_tax_treatment: 'included_at_unit_rate',
-        }]).map(item => item.line_total)).toEqual([20, 20]);
+        }]).map(item => item.line_total)).toEqual(['20.00', '20.00']);
         expect(projectCanonicalImportLines([{
             ...shared, free_supply_tax_treatment: 'excluded_from_taxable_value',
             taxable_amount: 20, line_total: 20,
-        }]).map(item => item.line_total)).toEqual([20, 0]);
+        }]).map(item => item.line_total)).toEqual(['20.00', '0.00']);
     });
 
     it('supports a free-only included-at-unit-rate line with exact allocation evidence', () => {
@@ -203,11 +202,11 @@ describe('Sales document import envelope normalization', () => {
         }]);
 
         expect(result.map(item => [item.quantity, item.free_quantity, item.line_total]))
-            .toEqual([[0, 1, 10], [0, 1, 10]]);
+            .toEqual([['0.000000', '1.000000', '10.00'], ['0.000000', '1.000000', '10.00']]);
         expect(projectCanonicalImportLines([{
             ...freeOnlyLine,
             free_supply_tax_treatment: 'excluded_from_taxable_value', line_total: 0,
-        }]).map(item => item.line_total)).toEqual([0, 0]);
+        }]).map(item => item.line_total)).toEqual(['0.00', '0.00']);
     });
 
     it.each([
@@ -226,11 +225,11 @@ describe('Sales document import envelope normalization', () => {
             allocation_id: 'inventory-line-2', inventory_document_line_id: 'inventory-line-2',
             batch_id: 'batch-2', batch_number: 'BATCH-2', billed_quantity: null,
         })], 'does not identify billed and free quantities separately'],
-        [[allocation({ billed_quantity: 0.5, base_quantity: 0.5,
-            base_billed_quantity: 0.5 }), allocation({
+        [[allocation({ billed_quantity: '0.500000', base_quantity: '0.500000',
+            base_billed_quantity: '0.500000' }), allocation({
             allocation_id: 'inventory-line-2', inventory_document_line_id: 'inventory-line-2',
             command_request_id: 'command-2', batch_id: 'batch-2', batch_number: 'BATCH-2',
-            billed_quantity: 0.5, base_quantity: 0.5, base_billed_quantity: 0.5,
+            billed_quantity: '0.500000', base_quantity: '0.500000', base_billed_quantity: '0.500000',
         })], 'different canonical commands'],
         [[allocation({ allocation_id: 'wrong-direct-id' })], 'direct-issue lineage identities'],
         [[allocation({ billed_quantity: 2 })], 'do not reconcile'],

@@ -8,7 +8,6 @@ import {
     extractDocumentCollection,
     extractDocumentDetail,
     projectCanonicalImportLines,
-    type CanonicalImportLine,
 } from '../../utils/documentImport';
 import type {
     ChallanItem,
@@ -16,10 +15,10 @@ import type {
     ImportData,
 } from '../types/challanTypes';
 
-interface DocumentItem extends Partial<CanonicalImportLine> {
+interface DocumentItem {
     product_id: string | number;
     product_name: string;
-    quantity: number;
+    quantity: number | string;
     batch_allocations?: unknown[];
 }
 
@@ -144,11 +143,11 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 sourceDoc.items || sourceDoc.invoice_items,
                 { requireBatch: true },
             );
-            const challanItems: ChallanItem[] = importableItems.map((item, index) => ({
+            const challanItems = importableItems.map((item, index) => ({
                 ...item,
                 id: `imported-${Date.now()}-${index}`,
                 source_order_line_id: searchType === 'order' ? String(item.source_line_id ?? '') : undefined,
-            }));
+            })) as unknown as ChallanItem[];
 
             const importData: ImportData = {
                 source_order_id: searchType === 'order' ? sourceDoc.order_id : undefined,

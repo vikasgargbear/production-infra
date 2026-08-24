@@ -11,7 +11,7 @@ import {
   type CanonicalImportLine,
 } from '../utils/documentImport';
 
-interface DocumentItem extends Partial<CanonicalImportLine> {
+interface DocumentItem {
   item_id?: number;
   product_id: string;
   product_name: string;
@@ -20,16 +20,16 @@ interface DocumentItem extends Partial<CanonicalImportLine> {
   batch_number?: string;
   hsn_code?: string;
   expiry_date?: string | null;
-  quantity: number;
-  dispatched_quantity?: number;
-  mrp?: number;
-  unit_price?: number;
-  sale_price?: number;
-  discount_percent?: number;
-  free_quantity?: number;
-  gst_percent?: number;
-  tax_rate?: number;
-  available_quantity?: number;
+  quantity: number | string;
+  dispatched_quantity?: number | string;
+  mrp?: number | string;
+  unit_price?: number | string;
+  sale_price?: number | string;
+  discount_percent?: number | string;
+  free_quantity?: number | string;
+  gst_percent?: number | string;
+  tax_rate?: number | string;
+  available_quantity?: number | string;
 }
 
 interface Document {

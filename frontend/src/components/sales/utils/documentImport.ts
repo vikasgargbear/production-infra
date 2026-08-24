@@ -1,5 +1,13 @@
 /** Normalize the envelope shapes returned by Sales read APIs. */
 
+import {
+    addExactDecimals,
+    compareExactDecimals,
+    exactDecimalString,
+    exactDecimalUnits,
+    normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
+
 export function extractDocumentCollection(
     response: unknown,
     collectionKeys: string[],
@@ -56,36 +64,36 @@ export interface CanonicalImportLine {
     batch_id: string | number | null;
     batch_number: string;
     expiry_date: string | null;
-    quantity: number;
-    free_quantity: number;
-    unit_price: number;
-    sale_price: number;
-    mrp?: number;
+    quantity: string;
+    free_quantity: string;
+    unit_price: string;
+    sale_price: string;
+    mrp?: string;
     unit?: string;
     uom_code?: string;
     manufacturer?: string;
     category?: string;
-    gst_percent: number;
-    tax_percent?: number;
-    discount_percent: number;
+    gst_percent: string;
+    tax_percent?: string;
+    discount_percent: string;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     branch_id?: string;
     location_id?: string;
     uom_conversion_id?: string;
-    available_quantity?: number;
-    base_billed_quantity?: number;
-    base_free_quantity?: number;
-    source_billed_quantity?: number;
-    source_free_quantity?: number;
-    taxable_amount?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    cess_amount?: number;
-    tax_amount?: number;
-    total_tax_amount?: number;
-    line_total?: number;
-    total?: number;
+    available_quantity?: string;
+    base_billed_quantity?: string;
+    base_free_quantity?: string;
+    source_billed_quantity?: string;
+    source_free_quantity?: string;
+    taxable_amount?: string;
+    cgst_amount?: string;
+    sgst_amount?: string;
+    igst_amount?: string;
+    cess_amount?: string;
+    tax_amount?: string;
+    total_tax_amount?: string;
+    line_total?: string;
+    total?: string;
     source_line_id?: string | number;
     source_document_kind?: CanonicalSourceDocumentKind;
     source_allocation_kind?: CanonicalAllocationSourceKind;
@@ -119,15 +127,18 @@ interface CanonicalExecutedBatchAllocation {
     base_free_quantity?: number | string | null;
 }
 
-const finiteNumber = (value: unknown): number | null => {
+const exactOptional = (
+    value: unknown,
+    label: string,
+    scale: number,
+): string | null => {
     if (value === undefined || value === null
         || (typeof value === 'string' && value.trim() === '')) return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    return normalizeExactDecimal(value, label, { scale });
 };
 
-const quantitiesMatch = (left: number, right: number): boolean =>
-    Math.abs(left - right) <= 0.000001;
+const quantitiesMatch = (left: unknown, right: unknown, label: string): boolean =>
+    compareExactDecimals(left, right, label, { scale: 6 }) === 0;
 
 const requiredFreeSupplyTaxTreatment = (
     value: unknown,
@@ -147,47 +158,48 @@ const moneyFields = [
     'tax_amount', 'total_tax_amount', 'line_total', 'total',
 ] as const;
 
-const apportionMinorUnits = (total: number, weights: number[], field: string): number[] => {
-    if (total < 0) throw new Error(`The canonical ${field} cannot be negative.`);
-    const totalMinor = Math.round(total * 100);
-    if (!quantitiesMatch(total, totalMinor / 100)) {
-        throw new Error(`The canonical ${field} exceeds minor-unit precision.`);
-    }
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-    if (weights.some(weight => !Number.isFinite(weight) || weight < 0)) {
+const apportionMinorUnits = (total: string, weights: string[], field: string): string[] => {
+    const totalMinor = exactDecimalUnits(total, `Canonical ${field}`, { scale: 2 });
+    if (totalMinor < 0n) throw new Error(`The canonical ${field} cannot be negative.`);
+    const weightUnits = weights.map((weight, index) =>
+        exactDecimalUnits(weight, `Canonical ${field} weight ${index + 1}`, { scale: 6 }));
+    const totalWeight = weightUnits.reduce((sum, weight) => sum + weight, 0n);
+    if (weightUnits.some(weight => weight < 0n)) {
         throw new Error(`The canonical ${field} allocation basis is invalid.`);
     }
-    if (totalWeight === 0) {
-        if (totalMinor !== 0) {
+    if (totalWeight === 0n) {
+        if (totalMinor !== 0n) {
             throw new Error(`A zero-value allocation basis cannot carry ${field}.`);
         }
-        return weights.map(() => 0);
+        return weights.map(() => '0.00');
     }
 
-    const exactShares = weights.map(weight => totalMinor * weight / totalWeight);
-    const minorShares = exactShares.map(Math.floor);
-    const residual = totalMinor - minorShares.reduce((sum, value) => sum + value, 0);
-    if (residual < 0 || residual > weights.length) {
+    const numerators = weightUnits.map(weight => totalMinor * weight);
+    const minorShares = numerators.map(numerator => numerator / totalWeight);
+    const residual = totalMinor - minorShares.reduce((sum, value) => sum + value, 0n);
+    if (residual < 0n || residual > BigInt(weights.length)) {
         throw new Error(`The canonical ${field} minor-unit apportionment is inconsistent.`);
     }
-    const remainderOrder = exactShares
-        .map((exact, index) => ({ index, remainder: exact - Math.floor(exact) }))
-        .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
-    for (let index = 0; index < residual; index += 1) {
-        minorShares[remainderOrder[index].index] += 1;
-    }
-    return minorShares.map(value => value / 100);
+    const remainderOrder = numerators
+        .map((numerator, index) => ({ index, remainder: numerator % totalWeight }))
+        .sort((left, right) => left.remainder === right.remainder
+            ? left.index - right.index
+            : left.remainder > right.remainder ? -1 : 1);
+    remainderOrder.forEach((entry, index) => {
+        if (BigInt(index) < residual) minorShares[entry.index] += 1n;
+    });
+    return minorShares.map(value => exactDecimalString(value, 2));
 };
 
 const splitMoney = (
     item: Record<string, unknown>,
-    weights: number[],
-): Array<Record<string, number>> => {
-    const splits = weights.map(() => ({} as Record<string, number>));
+    weights: string[],
+): Array<Record<string, string>> => {
+    const splits = weights.map(() => ({} as Record<string, string>));
     for (const field of moneyFields) {
         if (item[field] === undefined || item[field] === null) continue;
-        const total = finiteNumber(item[field]);
-        if (total === null) throw new Error(`The canonical ${field} is not numeric.`);
+        const total = exactOptional(item[field], `Canonical ${field}`, 2);
+        if (total === null) throw new Error(`The canonical ${field} is missing.`);
         apportionMinorUnits(total, weights, field).forEach((amount, index) => {
             splits[index][field] = amount;
         });
@@ -199,9 +211,9 @@ const projectExecutedAllocations = (
     item: Record<string, unknown>,
     allocations: CanonicalExecutedBatchAllocation[],
     index: number,
-    sourceQuantity: number,
-    sourceFreeQuantity: number,
-    unitPrice: number,
+    sourceQuantity: string,
+    sourceFreeQuantity: string,
+    unitPrice: string,
 ): CanonicalImportLine[] => {
     if (allocations.length === 0) {
         throw new Error(`Line ${index + 1} has no executed canonical batch allocations.`);
@@ -278,23 +290,25 @@ const projectExecutedAllocations = (
         }
         seenInventoryLines.add(inventoryLineId);
 
-        const billed = finiteNumber(allocation.billed_quantity);
-        const free = finiteNumber(allocation.free_quantity);
+        const billed = exactOptional(allocation.billed_quantity, `${prefix} billed quantity`, 6);
+        const free = exactOptional(allocation.free_quantity, `${prefix} free quantity`, 6);
         if (billed === null || free === null) {
             throw new Error(`${prefix} does not identify billed and free quantities separately.`);
         }
-        if (billed < 0 || free < 0 || billed + free <= 0) {
+        if (exactDecimalUnits(billed, `${prefix} billed quantity`, { scale: 6 }) < 0n
+            || exactDecimalUnits(free, `${prefix} free quantity`, { scale: 6 }) < 0n
+            || exactDecimalUnits(addExactDecimals([billed, free], `${prefix} total quantity`, { scale: 6 }), `${prefix} total quantity`, { scale: 6 }) <= 0n) {
             throw new Error(`${prefix} has invalid executed quantities.`);
         }
 
-        const baseQuantity = finiteNumber(allocation.base_quantity);
-        const baseBilled = finiteNumber(allocation.base_billed_quantity);
-        const baseFree = finiteNumber(allocation.base_free_quantity);
-        if (baseQuantity !== null && baseQuantity <= 0) {
+        const baseQuantity = exactOptional(allocation.base_quantity, `${prefix} base quantity`, 6);
+        const baseBilled = exactOptional(allocation.base_billed_quantity, `${prefix} base billed quantity`, 6);
+        const baseFree = exactOptional(allocation.base_free_quantity, `${prefix} base free quantity`, 6);
+        if (baseQuantity !== null && exactDecimalUnits(baseQuantity, `${prefix} base quantity`, { scale: 6 }) <= 0n) {
             throw new Error(`${prefix} has no positive executed base quantity.`);
         }
         if (baseQuantity !== null && baseBilled !== null && baseFree !== null
-            && !quantitiesMatch(baseQuantity, baseBilled + baseFree)) {
+            && !quantitiesMatch(baseQuantity, addExactDecimals([baseBilled, baseFree], `${prefix} base total`, { scale: 6 }), `${prefix} base reconciliation`)) {
             throw new Error(`${prefix} has contradictory executed base quantities.`);
         }
         return { billed, free };
@@ -304,10 +318,10 @@ const projectExecutedAllocations = (
         throw new Error(`Line ${index + 1} mixes allocations from different canonical commands.`);
     }
 
-    const billedTotal = quantities.reduce((sum, allocation) => sum + allocation.billed, 0);
-    const freeTotal = quantities.reduce((sum, allocation) => sum + allocation.free, 0);
-    if (!quantitiesMatch(billedTotal, sourceQuantity)
-        || !quantitiesMatch(freeTotal, sourceFreeQuantity)) {
+    const billedTotal = addExactDecimals(quantities.map(allocation => allocation.billed), `Line ${index + 1} billed total`, { scale: 6 });
+    const freeTotal = addExactDecimals(quantities.map(allocation => allocation.free), `Line ${index + 1} free total`, { scale: 6 });
+    if (!quantitiesMatch(billedTotal, sourceQuantity, `Line ${index + 1} billed reconciliation`)
+        || !quantitiesMatch(freeTotal, sourceFreeQuantity, `Line ${index + 1} free reconciliation`)) {
         throw new Error(`Line ${index + 1} batch allocations do not reconcile to its billed and free quantities.`);
     }
 
@@ -317,9 +331,10 @@ const projectExecutedAllocations = (
     )) {
         throw new Error(`Line ${index + 1} is missing its canonical free-supply tax treatment.`);
     }
-    const monetaryWeights = quantities.map(value => value.billed + (
-        freeTreatment === 'included_at_unit_rate' ? value.free : 0
-    ));
+    const monetaryWeights = quantities.map(value => addExactDecimals([
+        value.billed,
+        freeTreatment === 'included_at_unit_rate' ? value.free : '0',
+    ], `Line ${index + 1} monetary allocation weight`, { scale: 6 }));
     const monetarySplits = splitMoney(item, monetaryWeights);
     return allocations.map((allocation, allocationIndex) => ({
         ...monetarySplits[allocationIndex],
@@ -343,9 +358,9 @@ const projectExecutedAllocations = (
         uom_conversion_id: typeof item.uom_conversion_id === 'string'
             ? item.uom_conversion_id
             : undefined,
-        available_quantity: finiteNumber(item.available_quantity) ?? undefined,
-        base_billed_quantity: finiteNumber(allocation.base_billed_quantity) ?? undefined,
-        base_free_quantity: finiteNumber(allocation.base_free_quantity) ?? undefined,
+        available_quantity: exactOptional(item.available_quantity, `Line ${index + 1} availability`, 6) ?? undefined,
+        base_billed_quantity: exactOptional(allocation.base_billed_quantity, `Line ${index + 1} base billed quantity`, 6) ?? undefined,
+        base_free_quantity: exactOptional(allocation.base_free_quantity, `Line ${index + 1} base free quantity`, 6) ?? undefined,
         source_billed_quantity: quantities[allocationIndex].billed,
         source_free_quantity: quantities[allocationIndex].free,
         product_id: (item.product_id ?? item.id) as string | number,
@@ -359,14 +374,14 @@ const projectExecutedAllocations = (
         free_quantity: quantities[allocationIndex].free,
         unit_price: unitPrice,
         sale_price: unitPrice,
-        mrp: finiteNumber(item.mrp) ?? undefined,
+        mrp: exactOptional(item.mrp, `Line ${index + 1} MRP`, 4) ?? undefined,
         unit: typeof item.unit === 'string' ? item.unit : undefined,
         uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
         manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
         category: typeof item.category === 'string' ? item.category : undefined,
-        gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
-        tax_percent: finiteNumber(item.tax_percent ?? item.tax_rate) ?? undefined,
-        discount_percent: finiteNumber(item.discount_percent) ?? 0,
+        gst_percent: exactOptional(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6) ?? '0.000000',
+        tax_percent: exactOptional(item.tax_percent ?? item.tax_rate, `Line ${index + 1} tax percent`, 6) ?? undefined,
+        discount_percent: exactOptional(item.discount_percent, `Line ${index + 1} discount percent`, 6) ?? '0.000000',
         free_supply_tax_treatment: freeTreatment as FreeSupplyTaxTreatment,
     }));
 };
@@ -393,10 +408,12 @@ export function projectCanonicalImportLines(
         const batchNumber = String(
             item.batch_number ?? (item.best_batch as Record<string, unknown> | undefined)?.batch_number ?? '',
         ).trim();
-        const quantity = finiteNumber(item.dispatched_quantity ?? item.quantity);
-        const freeQuantity = finiteNumber(item.free_quantity);
-        const unitPrice = finiteNumber(
+        const quantity = exactOptional(item.dispatched_quantity ?? item.quantity, `Line ${index + 1} billed quantity`, 6);
+        const freeQuantity = exactOptional(item.free_quantity, `Line ${index + 1} free quantity`, 6);
+        const unitPrice = exactOptional(
             item.unit_price ?? item.sale_price ?? item.selling_price ?? item.quoted_unit_rate,
+            `Line ${index + 1} unit rate`,
+            4,
         );
 
         if (productId === undefined || productId === null || productName === '') {
@@ -405,10 +422,12 @@ export function projectCanonicalImportLines(
         if (quantity === null || freeQuantity === null) {
             throw new Error(`Line ${index + 1} must identify billed and free quantities separately.`);
         }
-        if (quantity < 0 || freeQuantity < 0 || quantity + freeQuantity <= 0) {
+        if (exactDecimalUnits(quantity, `Line ${index + 1} billed quantity`, { scale: 6 }) < 0n
+            || exactDecimalUnits(freeQuantity, `Line ${index + 1} free quantity`, { scale: 6 }) < 0n
+            || exactDecimalUnits(addExactDecimals([quantity, freeQuantity], `Line ${index + 1} total quantity`, { scale: 6 }), `Line ${index + 1} total quantity`, { scale: 6 }) <= 0n) {
             throw new Error(`Line ${index + 1} has no positive billed or free quantity.`);
         }
-        if (unitPrice === null || unitPrice < 0) {
+        if (unitPrice === null || exactDecimalUnits(unitPrice, `Line ${index + 1} unit rate`, { scale: 4 }) < 0n) {
             throw new Error(`Line ${index + 1} is missing its canonical rate.`);
         }
 
@@ -446,15 +465,15 @@ export function projectCanonicalImportLines(
             quantity,
             unit_price: unitPrice,
             sale_price: unitPrice,
-            mrp: finiteNumber(item.mrp) ?? undefined,
+            mrp: exactOptional(item.mrp, `Line ${index + 1} MRP`, 4) ?? undefined,
             unit: typeof item.unit === 'string' ? item.unit : undefined,
             uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
             manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
             category: typeof item.category === 'string' ? item.category : undefined,
-            gst_percent: finiteNumber(item.gst_percent ?? item.tax_percent ?? item.tax_rate) ?? 0,
-            tax_percent: finiteNumber(item.tax_percent ?? item.tax_rate) ?? undefined,
+            gst_percent: exactOptional(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6) ?? '0.000000',
+            tax_percent: exactOptional(item.tax_percent ?? item.tax_rate, `Line ${index + 1} tax percent`, 6) ?? undefined,
             free_quantity: freeQuantity,
-            discount_percent: finiteNumber(item.discount_percent) ?? 0,
+            discount_percent: exactOptional(item.discount_percent, `Line ${index + 1} discount percent`, 6) ?? '0.000000',
             free_supply_tax_treatment: requiredFreeSupplyTaxTreatment(
                 item.free_supply_tax_treatment,
                 index,
@@ -464,7 +483,7 @@ export function projectCanonicalImportLines(
             uom_conversion_id: typeof item.uom_conversion_id === 'string'
                 ? item.uom_conversion_id
                 : undefined,
-            available_quantity: finiteNumber(item.available_quantity) ?? undefined,
+            available_quantity: exactOptional(item.available_quantity, `Line ${index + 1} availability`, 6) ?? undefined,
         });
     });
     return projected;
