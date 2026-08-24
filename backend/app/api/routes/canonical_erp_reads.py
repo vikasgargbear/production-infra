@@ -9,7 +9,7 @@ only a non-transactional draft.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
@@ -1447,6 +1447,76 @@ def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
     return {"invoices": rows, "total": total}
 
 
+class CanonicalInvoiceExecutedBatchAllocation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["direct_issue", "dispatch_allocation"]
+    allocation_id: UUID
+    inventory_document_id: UUID
+    dispatch_id: Optional[UUID]
+    dispatch_line_id: Optional[UUID]
+    batch_id: UUID
+    batch_number: str
+    expiry_date: Optional[date]
+    from_location_id: Optional[UUID]
+    uom_code: str
+    base_quantity: float
+
+
+class CanonicalInvoiceDetailItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    product_id: UUID
+    product_name: str
+    product_code: str
+    hsn_code: str
+    uom_code: str
+    unit: str
+    quantity: float
+    free_quantity: float
+    unit_price: float
+    discount_percent: float
+    tax_rate: float
+    gst_percent: float
+    taxable_amount: float
+    cgst_amount: float
+    sgst_amount: float
+    igst_amount: float
+    line_total: float
+    batch_id: Optional[UUID]
+    batch_number: Optional[str]
+    expiry_date: Optional[date]
+    batch_allocations: list[CanonicalInvoiceExecutedBatchAllocation]
+
+
+class CanonicalInvoiceDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invoice_id: UUID
+    invoice_number: str
+    invoice_date: date
+    status: str
+    customer_id: UUID
+    customer_name: str
+    customer_phone: Optional[str]
+    customer_email: Optional[str]
+    customer_gst_number: Optional[str]
+    billing_address: str
+    shipping_address: str
+    due_date: Optional[date]
+    currency_code: str
+    taxable_amount: float
+    cgst_amount: float
+    sgst_amount: float
+    igst_amount: float
+    cess_amount: float
+    total_amount: float
+    items: list[CanonicalInvoiceDetailItem]
+    created_at: datetime
+    updated_at: datetime
+
+
 def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> dict:
     rows = _rows(db, """
         SELECT invoice.id AS invoice_id, invoice.invoice_number,
@@ -1494,26 +1564,99 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'taxable_amount', line.gst_taxable_value,
                          'cgst_amount', line.cgst_amount, 'sgst_amount', line.sgst_amount,
                          'igst_amount', line.igst_amount, 'line_total', line.line_total,
-                         'batch_id', allocation.batch_id,
-                         'batch_number', allocation.batch_number,
-                         'expiry_date', allocation.expiry_date
+                         'batch_id', CASE WHEN allocation.allocation_count=1
+                                          THEN allocation.batch_id END,
+                         'batch_number', CASE WHEN allocation.allocation_count=1
+                                              THEN allocation.batch_number END,
+                         'expiry_date', CASE WHEN allocation.allocation_count=1
+                                             THEN allocation.expiry_date END,
+                         'batch_allocations', COALESCE(allocation.batch_allocations, '[]'::jsonb)
                      ) ORDER BY line.line_number) AS items
                 FROM sales.invoice_lines line
                 LEFT JOIN catalog.products product
                   ON product.org_id=line.org_id AND product.id=line.product_id
                 LEFT JOIN LATERAL (
-                    SELECT dispatch_line.batch_id, batch.batch_number,
-                           batch.expires_on AS expiry_date
-                      FROM sales.invoice_dispatch_allocations invoice_allocation
-                      JOIN sales.dispatch_lines dispatch_line
-                        ON dispatch_line.org_id=invoice_allocation.org_id
-                       AND dispatch_line.id=invoice_allocation.dispatch_line_id
-                      JOIN inventory.batches batch
-                        ON batch.org_id=dispatch_line.org_id
-                       AND batch.id=dispatch_line.batch_id
-                     WHERE invoice_allocation.org_id=line.org_id
-                       AND invoice_allocation.invoice_line_id=line.id
-                     ORDER BY dispatch_line.id LIMIT 1
+                    SELECT count(*) AS allocation_count,
+                           (array_agg(executed.batch_id ORDER BY
+                              executed.source_kind, executed.allocation_id))[1] AS batch_id,
+                           (array_agg(executed.batch_number ORDER BY
+                              executed.source_kind, executed.allocation_id))[1] AS batch_number,
+                           (array_agg(executed.expiry_date ORDER BY
+                              executed.source_kind, executed.allocation_id))[1] AS expiry_date,
+                           jsonb_agg(jsonb_build_object(
+                               'source_kind', executed.source_kind,
+                               'allocation_id', executed.allocation_id,
+                               'inventory_document_id', executed.inventory_document_id,
+                               'dispatch_id', executed.dispatch_id,
+                               'dispatch_line_id', executed.dispatch_line_id,
+                               'batch_id', executed.batch_id,
+                               'batch_number', executed.batch_number,
+                               'expiry_date', executed.expiry_date,
+                               'from_location_id', executed.from_location_id,
+                               'uom_code', executed.uom_code,
+                               'base_quantity', executed.base_quantity
+                           ) ORDER BY executed.source_kind, executed.allocation_id)
+                             AS batch_allocations
+                      FROM (
+                          SELECT 'direct_issue'::text AS source_kind,
+                                 inventory_line.id AS allocation_id,
+                                 inventory_line.inventory_document_id,
+                                 NULL::uuid AS dispatch_id,
+                                 NULL::uuid AS dispatch_line_id,
+                                 inventory_line.batch_id, batch.batch_number,
+                                 batch.expires_on AS expiry_date,
+                                 inventory_line.from_location_id,
+                                 inventory_line.uom_code,
+                                 inventory_line.base_quantity
+                            FROM inventory.inventory_document_lines inventory_line
+                            JOIN inventory.inventory_documents inventory_document
+                             ON inventory_document.org_id=inventory_line.org_id
+                             AND inventory_document.id=inventory_line.inventory_document_id
+                             AND inventory_document.sales_invoice_id=invoice.id
+                             AND inventory_document.branch_id=invoice.branch_id
+                             AND inventory_document.document_type='sales_issue'
+                             AND inventory_document.status='posted'
+                            JOIN inventory.batches batch
+                              ON batch.org_id=inventory_line.org_id
+                             AND batch.id=inventory_line.batch_id
+                           WHERE inventory_line.org_id=line.org_id
+                             AND inventory_line.sales_invoice_line_id=line.id
+                          UNION ALL
+                          SELECT 'dispatch_allocation'::text AS source_kind,
+                                 invoice_allocation.id AS allocation_id,
+                                 inventory_line.inventory_document_id,
+                                 dispatch.id AS dispatch_id,
+                                 dispatch_line.id AS dispatch_line_id,
+                                 dispatch_line.batch_id, batch.batch_number,
+                                 batch.expires_on AS expiry_date,
+                                 dispatch_line.from_location_id,
+                                 dispatch_line.uom_code,
+                                 invoice_allocation.allocated_base_billed_quantity
+                                   + invoice_allocation.allocated_base_free_quantity AS base_quantity
+                            FROM sales.invoice_dispatch_allocations invoice_allocation
+                            JOIN sales.dispatch_lines dispatch_line
+                              ON dispatch_line.org_id=invoice_allocation.org_id
+                             AND dispatch_line.id=invoice_allocation.dispatch_line_id
+                            JOIN sales.dispatches dispatch
+                              ON dispatch.org_id=dispatch_line.org_id
+                             AND dispatch.id=dispatch_line.dispatch_id
+                             AND dispatch.status='posted'
+                            JOIN inventory.inventory_document_lines inventory_line
+                              ON inventory_line.org_id=dispatch_line.org_id
+                             AND inventory_line.sales_dispatch_line_id=dispatch_line.id
+                            JOIN inventory.inventory_documents inventory_document
+                             ON inventory_document.org_id=inventory_line.org_id
+                             AND inventory_document.id=inventory_line.inventory_document_id
+                             AND inventory_document.sales_dispatch_id=dispatch.id
+                             AND inventory_document.branch_id=invoice.branch_id
+                             AND inventory_document.document_type='sales_issue'
+                             AND inventory_document.status='posted'
+                            JOIN inventory.batches batch
+                              ON batch.org_id=dispatch_line.org_id
+                             AND batch.id=dispatch_line.batch_id
+                           WHERE invoice_allocation.org_id=line.org_id
+                             AND invoice_allocation.invoice_line_id=line.id
+                      ) executed
                 ) allocation ON true
                WHERE line.org_id=invoice.org_id AND line.invoice_id=invoice.id
                  AND line.product_id IS NOT NULL
@@ -1525,7 +1668,10 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
     return rows[0]
 
 
-@router.get("/canonical/invoices/{invoice_id}")
+@router.get(
+    "/canonical/invoices/{invoice_id}",
+    response_model=CanonicalInvoiceDetailResponse,
+)
 def canonical_invoice(
     invoice_id: UUID,
     user: dict = SALES_USER,
@@ -1534,7 +1680,10 @@ def canonical_invoice(
     return _canonical_invoice_detail(db, _activate(db, user), invoice_id)
 
 
-@router.get("/invoices/{invoice_id:uuid}")
+@router.get(
+    "/invoices/{invoice_id:uuid}",
+    response_model=CanonicalInvoiceDetailResponse,
+)
 def canonical_invoice_compatibility_detail(
     invoice_id: UUID,
     user: dict = SALES_USER,

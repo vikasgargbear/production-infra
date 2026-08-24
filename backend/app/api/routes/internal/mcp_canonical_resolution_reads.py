@@ -420,12 +420,16 @@ class SalesOrderResolutionResponse(DocumentResolution):
 
 class SalesInvoiceDispatchAllocation(StrictDTO):
     invoice_dispatch_allocation_id: UUID
+    inventory_document_id: UUID
+    inventory_document_line_id: UUID
     dispatch_id: UUID
     dispatch_line_id: UUID
     dispatch_number: str
     dispatch_date: date
     product_id: UUID
     batch_id: UUID
+    batch_number: str
+    expires_on: Optional[date]
     from_location_id: UUID
     uom_code: str
     allocated_base_billed_quantity: Decimal
@@ -434,6 +438,19 @@ class SalesInvoiceDispatchAllocation(StrictDTO):
     returned_base_free_quantity: Decimal
     remaining_base_billed_quantity: Decimal
     remaining_base_free_quantity: Decimal
+
+
+class SalesInvoiceDirectIssueAllocation(StrictDTO):
+    inventory_document_id: UUID
+    inventory_document_line_id: UUID
+    batch_id: UUID
+    batch_number: str
+    expires_on: Optional[date]
+    from_location_id: Optional[UUID]
+    uom_code: str
+    base_quantity: Decimal
+    unit_cost: Decimal
+    extended_cost: Decimal
 
 
 class SalesInvoiceLine(StrictDTO):
@@ -454,6 +471,7 @@ class SalesInvoiceLine(StrictDTO):
     taxability_snapshot: str
     line_total: Decimal
     dispatch_allocations: list[SalesInvoiceDispatchAllocation]
+    direct_issue_allocations: list[SalesInvoiceDirectIssueAllocation]
 
 
 class SalesInvoiceDocument(StrictDTO):
@@ -648,9 +666,12 @@ def canonical_sales_invoice_get(
             """
             SELECT invoice_line.id AS invoice_line_id,
                    allocation.id AS invoice_dispatch_allocation_id,
+                   inventory_document.id AS inventory_document_id,
+                   inventory_line.id AS inventory_document_line_id,
                    dispatch.id AS dispatch_id, dispatch_line.id AS dispatch_line_id,
                    dispatch.dispatch_number, dispatch.dispatch_date,
                    dispatch_line.product_id, dispatch_line.batch_id,
+                   batch.batch_number, batch.expires_on,
                    dispatch_line.from_location_id, dispatch_line.uom_code,
                    allocation.allocated_base_billed_quantity,
                    allocation.allocated_base_free_quantity,
@@ -674,6 +695,19 @@ def canonical_sales_invoice_get(
                AND dispatch.id=dispatch_line.dispatch_id
                AND dispatch.status='posted'
                AND dispatch.branch_id=:branch_id
+              JOIN inventory.batches AS batch
+                ON batch.org_id=dispatch_line.org_id
+               AND batch.id=dispatch_line.batch_id
+              JOIN inventory.inventory_document_lines AS inventory_line
+                ON inventory_line.org_id=dispatch_line.org_id
+               AND inventory_line.sales_dispatch_line_id=dispatch_line.id
+              JOIN inventory.inventory_documents AS inventory_document
+                ON inventory_document.org_id=inventory_line.org_id
+               AND inventory_document.id=inventory_line.inventory_document_id
+               AND inventory_document.sales_dispatch_id=dispatch.id
+               AND inventory_document.document_type='sales_issue'
+               AND inventory_document.status='posted'
+               AND inventory_document.branch_id=:branch_id
               LEFT JOIN LATERAL (
                   SELECT SUM(return_line.base_billed_quantity) AS base_billed_quantity,
                          SUM(return_line.base_free_quantity) AS base_free_quantity
@@ -705,10 +739,56 @@ def canonical_sales_invoice_get(
         allocations_by_line.setdefault(invoice_line_id, []).append(
             SalesInvoiceDispatchAllocation(**allocation)
         )
+    direct_issue_rows = db.execute(
+        text(
+            """
+            SELECT invoice_line.id AS invoice_line_id,
+                   inventory_document.id AS inventory_document_id,
+                   inventory_line.id AS inventory_document_line_id,
+                   inventory_line.batch_id, batch.batch_number, batch.expires_on,
+                   inventory_line.from_location_id, inventory_line.uom_code,
+                   inventory_line.base_quantity, inventory_line.unit_cost,
+                   inventory_line.extended_cost
+              FROM sales.invoice_lines AS invoice_line
+              JOIN inventory.inventory_document_lines AS inventory_line
+                ON inventory_line.org_id=invoice_line.org_id
+               AND inventory_line.sales_invoice_line_id=invoice_line.id
+              JOIN inventory.inventory_documents AS inventory_document
+                ON inventory_document.org_id=inventory_line.org_id
+               AND inventory_document.id=inventory_line.inventory_document_id
+               AND inventory_document.sales_invoice_id=invoice_line.invoice_id
+               AND inventory_document.document_type='sales_issue'
+               AND inventory_document.status='posted'
+               AND inventory_document.branch_id=:branch_id
+              JOIN inventory.batches AS batch
+                ON batch.org_id=inventory_line.org_id
+               AND batch.id=inventory_line.batch_id
+             WHERE invoice_line.org_id=:org_id
+               AND invoice_line.invoice_id=:document_id
+             ORDER BY invoice_line.line_number, inventory_line.line_number,
+                      inventory_line.id
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "branch_id": branch_id,
+            "document_id": header["sales_invoice_id"],
+        },
+    ).fetchall()
+    direct_issues_by_line: dict[UUID, list[SalesInvoiceDirectIssueAllocation]] = {}
+    for row in direct_issue_rows:
+        allocation = _mapping(row)
+        invoice_line_id = allocation.pop("invoice_line_id")
+        direct_issues_by_line.setdefault(invoice_line_id, []).append(
+            SalesInvoiceDirectIssueAllocation(**allocation)
+        )
     line_models = []
     for row in lines:
         line = _mapping(row)
         line["dispatch_allocations"] = allocations_by_line.get(line["invoice_line_id"], [])
+        line["direct_issue_allocations"] = direct_issues_by_line.get(
+            line["invoice_line_id"], []
+        )
         line_models.append(SalesInvoiceLine(**line))
     header["lines"] = line_models
     return SalesInvoiceResolutionResponse(

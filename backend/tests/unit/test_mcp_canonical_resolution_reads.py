@@ -299,9 +299,11 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
     )
     allocation = _row(
         invoice_line_id=line_id, invoice_dispatch_allocation_id=allocation_id,
+        inventory_document_id=uuid4(), inventory_document_line_id=uuid4(),
         dispatch_id=uuid4(), dispatch_line_id=uuid4(), dispatch_number="DSP-1",
         dispatch_date=date(2026, 8, 19), product_id=line._mapping["product_id"],
-        batch_id=uuid4(), from_location_id=uuid4(), uom_code="BOX",
+        batch_id=uuid4(), batch_number="BATCH-1", expires_on=date(2028, 9, 1),
+        from_location_id=uuid4(), uom_code="BOX",
         allocated_base_billed_quantity=Decimal("10"),
         allocated_base_free_quantity=Decimal("2"),
         returned_base_billed_quantity=Decimal("3"),
@@ -309,14 +311,75 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
         remaining_base_billed_quantity=Decimal("7"),
         remaining_base_free_quantity=Decimal("1"),
     )
+    database = _Database([header], [line], [allocation], [])
     result = reads.canonical_sales_invoice_get(
-        invoice_id, None, None, _context("sales.invoices.get"),
-        _Database([header], [line], [allocation]),
+        invoice_id, None, None, _context("sales.invoices.get"), database,
     )
     lineage = result.document.lines[0].dispatch_allocations[0]
     assert lineage.invoice_dispatch_allocation_id == allocation_id
     assert lineage.remaining_base_billed_quantity == Decimal("7")
     assert lineage.remaining_base_free_quantity == Decimal("1")
+    assert lineage.batch_number == "BATCH-1"
+    assert lineage.expires_on == date(2028, 9, 1)
+    dispatch_sql = database.calls[2][0]
+    assert "inventory_line.sales_dispatch_line_id=dispatch_line.id" in dispatch_sql
+    assert "inventory_document.sales_dispatch_id=dispatch.id" in dispatch_sql
+    assert "inventory_document.status='posted'" in dispatch_sql
+
+
+def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocations():
+    invoice_id, line_id = uuid4(), uuid4()
+    header = _row(
+        sales_invoice_id=invoice_id, branch_id=uuid4(), customer_account_id=uuid4(),
+        seller_tax_registration_id=uuid4(), customer_tax_registration_id=None,
+        invoice_number="INV-DIRECT-1", fiscal_year=2026,
+        invoice_date=date(2026, 8, 24), due_date=date(2026, 8, 24),
+        invoice_type="tax_invoice", supply_type="intra_state",
+        place_of_supply_state_code="27", currency_code="INR",
+        grand_total=Decimal("168.00"), calculation_ruleset_version="gst-v1",
+        posted_at=datetime(2026, 8, 24, 17, 22), row_version=2,
+    )
+    line = _row(
+        invoice_line_id=line_id, line_number=1, line_kind="product",
+        order_line_id=None, product_id=uuid4(), charge_code=None, uom_code="EA",
+        base_billed_quantity=Decimal("1"), base_free_quantity=Decimal("0"),
+        returned_base_billed_quantity=Decimal("0"),
+        returned_base_free_quantity=Decimal("0"),
+        returnable_base_billed_quantity=Decimal("1"),
+        returnable_base_free_quantity=Decimal("0"),
+        tax_code_version_id=uuid4(), taxability_snapshot="taxable",
+        line_total=Decimal("168.00"),
+    )
+    inventory_document_id, inventory_line_id, batch_id = uuid4(), uuid4(), uuid4()
+    direct_issue = _row(
+        invoice_line_id=line_id, inventory_document_id=inventory_document_id,
+        inventory_document_line_id=inventory_line_id, batch_id=batch_id,
+        batch_number="DEMO-BATCH-1", expires_on=date(2028, 9, 1),
+        from_location_id=uuid4(), uom_code="EA", base_quantity=Decimal("1.000000"),
+        unit_cost=Decimal("95.2382"), extended_cost=Decimal("95.24"),
+    )
+    database = _Database([header], [line], [], [direct_issue])
+
+    result = reads.canonical_sales_invoice_get(
+        invoice_id, None, None, _context("sales.invoices.get"), database,
+    )
+
+    assert result.document is not None
+    assert result.document.lines[0].dispatch_allocations == []
+    allocation = result.document.lines[0].direct_issue_allocations[0]
+    assert allocation.inventory_document_id == inventory_document_id
+    assert allocation.inventory_document_line_id == inventory_line_id
+    assert allocation.batch_id == batch_id
+    assert allocation.batch_number == "DEMO-BATCH-1"
+    assert allocation.expires_on == date(2028, 9, 1)
+    assert allocation.base_quantity == Decimal("1.000000")
+    assert allocation.extended_cost == Decimal("95.24")
+
+    sql = database.calls[3][0]
+    assert "inventory_line.sales_invoice_line_id=invoice_line.id" in sql
+    assert "inventory_document.sales_invoice_id=invoice_line.invoice_id" in sql
+    assert "inventory_document.document_type='sales_issue'" in sql
+    assert "inventory_document.status='posted'" in sql
 
 
 def test_supplier_receipt_allocation_dto_preserves_ids_and_exact_balances():

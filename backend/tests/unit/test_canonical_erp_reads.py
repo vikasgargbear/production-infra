@@ -539,6 +539,47 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
     assert "COALESCE(document.cess_total, 0) AS cess_amount," in list_source
 
 
+def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
+    source = inspect.getsource(canonical_erp_reads._canonical_invoice_detail)
+
+    assert "inventory_line.sales_invoice_line_id=line.id" in source
+    assert "inventory_document.sales_invoice_id=invoice.id" in source
+    assert source.count("inventory_document.branch_id=invoice.branch_id") == 2
+    assert "inventory_document.sales_dispatch_id=dispatch.id" in source
+    assert "inventory_document.document_type='sales_issue'" in source
+    assert "inventory_document.status='posted'" in source
+    assert "dispatch.status='posted'" in source
+    assert "'batch_allocations', COALESCE(allocation.batch_allocations" in source
+    assert "CASE WHEN allocation.allocation_count=1" in source
+    assert "'source_kind', executed.source_kind" in source
+    assert "jsonb_agg(jsonb_build_object(" in source
+    assert "UNION ALL" in source
+    assert "ORDER BY dispatch_line.id LIMIT 1" not in source
+    assert "request_document" not in source
+
+    detail_routes = [
+        route for route in canonical_erp_reads.router.routes
+        if isinstance(route, APIRoute) and route.path in {
+            "/canonical/invoices/{invoice_id}",
+            "/invoices/{invoice_id:uuid}",
+        }
+    ]
+    assert len(detail_routes) == 2
+    assert all(
+        route.response_model is canonical_erp_reads.CanonicalInvoiceDetailResponse
+        for route in detail_routes
+    )
+    item_schema = canonical_erp_reads.CanonicalInvoiceDetailItem.model_json_schema()
+    assert "batch_allocations" in item_schema["properties"]
+    assert "batch_allocations" in item_schema["required"]
+    allocation_schema = (
+        canonical_erp_reads.CanonicalInvoiceExecutedBatchAllocation.model_json_schema()
+    )
+    assert allocation_schema["properties"]["source_kind"]["enum"] == [
+        "direct_issue", "dispatch_allocation"
+    ]
+
+
 def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:
     source = inspect.getsource(canonical_erp_reads.supplier_invoices)
 

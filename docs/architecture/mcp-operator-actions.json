@@ -116,7 +116,7 @@
       "resource": "sales_invoice",
       "permission": "sales.invoice.create",
       "max_records": 1,
-      "description": "Resolve one posted sales invoice by opaque ID or exact invoice number with returnable line balances and fiscal lineage."
+      "description": "Resolve one posted sales invoice by opaque ID or exact invoice number with returnable balances plus authoritative posted direct-issue or dispatch batch lineage."
     },
     {
       "tool": "erp_purchase_order_get",
