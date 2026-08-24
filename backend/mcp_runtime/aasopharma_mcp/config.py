@@ -41,6 +41,7 @@ class Settings:
     required_scopes: tuple[str, ...]
     bind_host: str
     request_timeout_seconds: float
+    allowed_origins: tuple[str, ...]
 
     @classmethod
     def from_env(cls, environment: Mapping[str, str] | None = None) -> "Settings":
@@ -76,6 +77,29 @@ class Settings:
         bind_host = values.get("MCP_BIND_HOST", "0.0.0.0").strip()
         if bind_host not in {"0.0.0.0", "127.0.0.1", "::"}:
             raise ConfigurationError("MCP_BIND_HOST is not an allowed bind address")
+
+        raw_origins = values.get("MCP_ALLOWED_ORIGINS", "").strip()
+        if raw_origins:
+            origins: tuple[str, ...] = tuple(
+                o.strip() for o in raw_origins.split(",") if o.strip()
+            )
+            if "*" in origins:
+                raise ConfigurationError(
+                    "MCP_ALLOWED_ORIGINS cannot contain '*' when credentials are enabled"
+                )
+            for origin in origins:
+                parsed = urlparse(origin)
+                if parsed.scheme not in {"https", "http"} or not parsed.netloc:
+                    raise ConfigurationError(
+                        f"MCP_ALLOWED_ORIGINS entry must be an absolute HTTP(S) URL: {origin!r}"
+                    )
+                if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+                    raise ConfigurationError(
+                        f"MCP_ALLOWED_ORIGINS: non-localhost HTTP origins are not allowed: {origin!r}"
+                    )
+        else:
+            origins = ()
+
         return cls(
             supabase_issuer=issuer,
             supabase_audience=audience,
@@ -89,4 +113,5 @@ class Settings:
             required_scopes=("openid", "offline_access"),
             bind_host=bind_host,
             request_timeout_seconds=timeout,
+            allowed_origins=origins,
         )

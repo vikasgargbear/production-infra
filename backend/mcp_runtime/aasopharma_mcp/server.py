@@ -9,6 +9,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase
 from pydantic import AnyHttpUrl, ConfigDict, Field, create_model
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -276,9 +277,30 @@ def create_app(
             {"status": "ready", "tools": list(registered_tool_names())}
         )
 
-    return server.streamable_http_app(
+    asgi_app = server.streamable_http_app(
         stateless_http=True,
         json_response=True,
         streamable_http_path="/mcp",
         host=config.bind_host,
     )
+
+    # CORSMiddleware must wrap the outer ASGI app so OPTIONS preflight is answered
+    # before auth middleware evaluates the bearer token. Without this, browsers
+    # receive a 401 on preflight and cannot initiate the OAuth/MCP session.
+    if config.allowed_origins:
+        asgi_app = CORSMiddleware(
+            app=asgi_app,
+            allow_origins=list(config.allowed_origins),
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "MCP-Session-ID",
+                "Last-Event-ID",
+                "Accept",
+            ],
+            expose_headers=["MCP-Session-ID"],
+        )
+
+    return asgi_app

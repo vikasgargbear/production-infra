@@ -7,10 +7,20 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 from pydantic import ValidationError
 from starlette.routing import Route
+from starlette.testclient import TestClient
 
+from aasopharma_mcp.config import ConfigurationError, Settings
 from aasopharma_mcp.operations import OPERATIONS, OPERATOR_OPERATIONS
 from aasopharma_mcp.server import create_app, registered_tool_names
 from conftest import settings
+
+_BASE_ENV = {
+    "SUPABASE_OAUTH_ISSUER": "https://example.supabase.co/auth/v1",
+    "MCP_RESOURCE_SERVER_URL": "https://mcp.example.test/mcp",
+    "ERP_API_BASE_URL": "https://api.example.test",
+    "MCP_INTERNAL_SERVICE_TOKEN": "s" * 48,
+    "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": "claude-installation",
+}
 
 
 class Verifier:
@@ -93,3 +103,65 @@ def test_operator_sdk_argument_models_match_exact_published_schemas(monkeypatch)
     assert "charge_lines" not in sales_order.fn_metadata.validate_arguments(
         required_only
     )
+
+
+# ---------------------------------------------------------------------------
+# MCP_ALLOWED_ORIGINS config validation
+# ---------------------------------------------------------------------------
+
+def test_wildcard_allowed_origin_raises_config_error() -> None:
+    with pytest.raises(ConfigurationError, match="cannot contain '\\*'"):
+        Settings.from_env({**_BASE_ENV, "MCP_ALLOWED_ORIGINS": "*"})
+
+
+def test_http_non_localhost_origin_raises_config_error() -> None:
+    with pytest.raises(ConfigurationError, match="non-localhost HTTP"):
+        Settings.from_env({**_BASE_ENV, "MCP_ALLOWED_ORIGINS": "http://evil.example.com"})
+
+
+def test_https_and_localhost_origins_are_accepted() -> None:
+    s = Settings.from_env(
+        {**_BASE_ENV, "MCP_ALLOWED_ORIGINS": "https://claude.ai,http://localhost:3000"}
+    )
+    assert s.allowed_origins == ("https://claude.ai", "http://localhost:3000")
+
+
+def test_empty_allowed_origins_means_no_cors_middleware() -> None:
+    s = Settings.from_env(_BASE_ENV)
+    assert s.allowed_origins == ()
+
+
+# ---------------------------------------------------------------------------
+# CORS preflight is answered before auth middleware evaluates bearer token
+# ---------------------------------------------------------------------------
+
+def test_cors_preflight_from_allowed_origin_returns_acao_header() -> None:
+    s = Settings.from_env({**_BASE_ENV, "MCP_ALLOWED_ORIGINS": "https://claude.ai"})
+    app = create_app(s, Verifier(), Gateway())
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.options(
+        "/mcp",
+        headers={
+            "Origin": "https://claude.ai",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Authorization, Content-Type",
+        },
+    )
+    assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+    assert resp.headers.get("access-control-allow-credentials") == "true"
+    # Must succeed before auth runs — not a 401
+    assert resp.status_code in {200, 204}
+
+
+def test_cors_preflight_from_disallowed_origin_omits_acao_header() -> None:
+    s = Settings.from_env({**_BASE_ENV, "MCP_ALLOWED_ORIGINS": "https://claude.ai"})
+    app = create_app(s, Verifier(), Gateway())
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.options(
+        "/mcp",
+        headers={
+            "Origin": "https://evil.example.com",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert "access-control-allow-origin" not in resp.headers

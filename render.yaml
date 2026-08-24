@@ -68,6 +68,8 @@ services:
         sync: false
       - key: MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS
         sync: false
+      - key: MCP_ALLOWED_ORIGINS
+        sync: false
 
   - type: web
     name: aasopharma-erp-pilot
