@@ -231,7 +231,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
 
                 {/* Footer */}
                 <DocumentFooter
-                    totalItems={challan.total_quantity}
+                    totalItems={challan.items?.length || 0}
                     totalAmount={challan.total_amount}
                     additionalInfo={challan.freight_charges > 0 ? `Freight: ₹${challan.freight_charges.toFixed(2)}` : undefined}
                     onCancel={onClose}

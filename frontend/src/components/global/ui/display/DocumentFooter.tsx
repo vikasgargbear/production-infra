@@ -5,19 +5,25 @@
 
 import React, { useState, RefObject } from 'react';
 import { ArrowRight, Save, Printer, Receipt } from 'lucide-react';
+import {
+    compareExactDecimals,
+    formatExactCurrency,
+    formatExactDecimal,
+    type EditableDecimalValue,
+} from '../../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
 export interface DocumentFooterProps {
     // Amounts
     totalItems?: number;
-    totalAmount?: number;
-    subtotalAmount?: number;
-    discountAmount?: number;
-    deliveryCharges?: number;
-    taxAmount?: number;
-    roundOffAmount?: number;
-    grandTotal?: number;
+    totalAmount?: EditableDecimalValue;
+    subtotalAmount?: EditableDecimalValue;
+    discountAmount?: EditableDecimalValue;
+    deliveryCharges?: EditableDecimalValue;
+    taxAmount?: EditableDecimalValue;
+    roundOffAmount?: EditableDecimalValue;
+    grandTotal?: EditableDecimalValue;
     additionalInfo?: React.ReactNode;
 
     // Actions - all optional for flexibility
@@ -89,6 +95,10 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
     // The legacy color prop remains accepted so existing callers do not break.
     const getButtonColorClasses = (_color: string): string =>
         'bg-blue-600 hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2';
+    const positiveMoney = (value: EditableDecimalValue, label: string) =>
+        compareExactDecimals(value, '0.00', label, { scale: 2, maximumWholeDigits: 20, allowNegative: true }) > 0;
+    const nonZeroMoney = (value: EditableDecimalValue, label: string) =>
+        compareExactDecimals(value, '0.00', label, { scale: 2, maximumWholeDigits: 20, allowNegative: true }) !== 0;
 
     return (
         <div className={`border-t border-gray-200 bg-white px-3 py-3 sm:px-6 ${className}`}>
@@ -96,42 +106,42 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                 // Review page layout - single line like step 1
                 <div className="flex min-h-[36px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-3 text-sm sm:gap-6">
-                        {totalItems > 0 && (
+                        {compareExactDecimals(totalItems, '0', 'Document item count', { scale: 6, maximumWholeDigits: 14 }) > 0 && (
                             <span className="text-gray-600">
-                                Items: <strong>{totalItems}</strong>
+                                Items: <strong>{formatExactDecimal(totalItems, 'Document item count', { scale: 6, maximumWholeDigits: 14 })}</strong>
                             </span>
                         )}
                         {additionalInfo && (
                             <span className="text-gray-600">{additionalInfo}</span>
                         )}
-                        {subtotalAmount > 0 && (
+                        {positiveMoney(subtotalAmount, 'Document subtotal') && (
                             <span className="text-gray-600">
-                                Sub Total: <strong>₹{subtotalAmount.toFixed(2)}</strong>
+                                Sub Total: <strong>{formatExactCurrency(subtotalAmount, 'Document subtotal')}</strong>
                             </span>
                         )}
-                        {discountAmount > 0 && (
+                        {positiveMoney(discountAmount, 'Document discount') && (
                             <span className="text-gray-600">
-                                Discount: <strong>-₹{discountAmount.toFixed(2)}</strong>
+                                Discount: <strong>-{formatExactCurrency(discountAmount, 'Document discount')}</strong>
                             </span>
                         )}
-                        {deliveryCharges > 0 && (
+                        {positiveMoney(deliveryCharges, 'Document delivery charges') && (
                             <span className="text-gray-600">
-                                Delivery: <strong>+₹{deliveryCharges.toFixed(2)}</strong>
+                                Delivery: <strong>+{formatExactCurrency(deliveryCharges, 'Document delivery charges')}</strong>
                             </span>
                         )}
-                        {taxAmount > 0 && (
+                        {positiveMoney(taxAmount, 'Document tax') && (
                             <span className="text-gray-600">
-                                Tax: <strong>₹{taxAmount.toFixed(2)}</strong>
+                                Tax: <strong>{formatExactCurrency(taxAmount, 'Document tax')}</strong>
                             </span>
                         )}
-                        {roundOffAmount !== 0 && (
+                        {nonZeroMoney(roundOffAmount, 'Document round off') && (
                             <span className="text-gray-600">
-                                Round Off: <strong>{roundOffAmount >= 0 ? '+' : '-'}₹{Math.abs(roundOffAmount).toFixed(2)}</strong>
+                                Round Off: <strong>{formatExactCurrency(roundOffAmount, 'Document round off')}</strong>
                             </span>
                         )}
-                        {grandTotal > 0 && (
+                        {positiveMoney(grandTotal, 'Document grand total') && (
                             <span className="text-lg font-semibold text-gray-900">
-                                Total: <strong>₹{grandTotal.toFixed(2)}</strong>
+                                Total: <strong>{formatExactCurrency(grandTotal, 'Document grand total')}</strong>
                             </span>
                         )}
                     </div>

@@ -2,16 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Calculator, ArrowRight } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import useDialogFocus from '../../../hooks/useDialogFocus';
+import { compareExactDecimals, exactDecimalString, exactDecimalUnits, formatExactCurrency, subtractExactDecimals, type EditableDecimalValue } from '../../../utils/exactDecimal';
 
 interface CashCalculatorModalProps {
     isOpen: boolean;
     onClose: () => void;
-    billAmount?: number;
+    billAmount?: EditableDecimalValue;
 }
 
 const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClose, billAmount = 0 }) => {
     const [receivedAmount, setReceivedAmount] = useState<string>('');
-    const [returnAmount, setReturnAmount] = useState<number>(0);
     const inputRef = useRef<HTMLInputElement>(null);
     const dialogRef = useDialogFocus<HTMLDivElement>(isOpen, inputRef);
 
@@ -24,13 +24,8 @@ const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClo
         }
     }, [isOpen]);
 
-    useEffect(() => {
-        const received = parseFloat(receivedAmount) || 0;
-        setReturnAmount(received - billAmount);
-    }, [receivedAmount, billAmount]);
-
-    const handleQuickAmount = (amount: number): void => {
-        setReceivedAmount(amount.toString());
+    const handleQuickAmount = (amount: EditableDecimalValue): void => {
+        setReceivedAmount(String(amount));
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
@@ -42,8 +37,17 @@ const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClo
 
     if (!isOpen) return null;
 
+    const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
     const quickAmounts = [500, 1000, 2000, 5000];
-    const suggestedAmount = Math.ceil(billAmount / 100) * 100;
+    const billUnits = exactDecimalUnits(billAmount, 'Cash calculator bill', moneyOptions);
+    const suggestedAmount = exactDecimalString(((billUnits + 9999n) / 10000n) * 10000n, 2);
+    let validReceived = '0.00';
+    try {
+        validReceived = exactDecimalString(exactDecimalUnits(receivedAmount || 0, 'Cash received', moneyOptions), 2);
+    } catch {
+        validReceived = '0.00';
+    }
+    const returnAmount = subtractExactDecimals(validReceived, billAmount, 'Cash return', moneyOptions);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -62,7 +66,7 @@ const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClo
                     {/* Bill Amount */}
                     <div className="bg-blue-50 p-4 rounded-lg">
                         <div className="text-sm text-gray-600 mb-1">Bill Amount</div>
-                        <div className="text-3xl font-bold text-gray-900">₹{billAmount.toFixed(2)}</div>
+                        <div className="text-3xl font-bold text-gray-900">{formatExactCurrency(billAmount, 'Cash calculator bill')}</div>
                     </div>
 
                     {/* Cash Received */}
@@ -97,34 +101,34 @@ const CashCalculatorModal: React.FC<CashCalculatorModalProps> = ({ isOpen, onClo
                                 </button>
                             ))}
                         </div>
-                        {suggestedAmount > billAmount && (
+                        {compareExactDecimals(suggestedAmount, billAmount, 'Suggested cash', moneyOptions) > 0 && (
                             <button
                                 onClick={() => handleQuickAmount(suggestedAmount)}
                                 className="w-full mt-2 py-2 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded text-sm font-medium text-blue-700"
                             >
-                                Suggested: ₹{suggestedAmount}
+                                Suggested: {formatExactCurrency(suggestedAmount, 'Suggested cash')}
                             </button>
                         )}
                     </div>
 
                     {/* Return Amount */}
-                    {receivedAmount && parseFloat(receivedAmount) >= billAmount ? (
-                        <div className={`p-4 rounded-lg ${returnAmount >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                    {receivedAmount && compareExactDecimals(validReceived, billAmount, 'Cash received', moneyOptions) >= 0 ? (
+                        <div className="p-4 rounded-lg bg-green-50">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <div className="text-sm text-gray-600">Return Cash</div>
-                                    <div className={`text-3xl font-bold ${returnAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        ₹{Math.abs(returnAmount).toFixed(2)}
+                                    <div className="text-3xl font-bold text-green-600">
+                                        {formatExactCurrency(returnAmount, 'Cash return')}
                                     </div>
                                 </div>
-                                <ArrowRight size={32} className={returnAmount >= 0 ? 'text-green-600' : 'text-red-600'} />
+                                <ArrowRight size={32} className="text-green-600" />
                             </div>
                         </div>
                     ) : receivedAmount ? (
                         <div className="p-4 rounded-lg bg-red-50">
                             <div className="text-sm text-red-600">Insufficient amount</div>
                             <div className="text-xl font-bold text-red-600">
-                                Short by ₹{(billAmount - parseFloat(receivedAmount)).toFixed(2)}
+                                Short by {formatExactCurrency(subtractExactDecimals(billAmount, validReceived, 'Cash shortfall', moneyOptions), 'Cash shortfall')}
                             </div>
                         </div>
                     ) : null}

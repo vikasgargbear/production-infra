@@ -1,4 +1,5 @@
 import React from 'react';
+import { addExactDecimals } from '../../../../utils/exactDecimal';
 import { FileText, AlertCircle, FileInput } from 'lucide-react';
 
 // Global Components
@@ -6,7 +7,7 @@ import { ModuleHeader, DocumentFooter, PrintUtility } from '../../../global';
 import InvoicePreview from '../ui/InvoicePreviewEnterprise';
 
 // Shared Types
-import { Customer, Invoice, InvoiceItem, InvoiceTotals, CompanyInfo } from '../types/invoiceTypes';
+import { Customer, Invoice, CompanyInfo } from '../types/invoiceTypes';
 
 // ==================== COMPONENT PROPS ====================
 
@@ -295,11 +296,15 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                 {/* Footer - Print options disabled in preview (only available after generation via success modal) */}
                 <DocumentFooter
                     totalItems={(invoice.items || []).length}
-                    totalAmount={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0}
-                    subtotalAmount={parseFloat(String(invoice.totals?.taxable_amount || 0))}
-                    taxAmount={parseFloat(String(invoice.totals?.total_tax_amount || 0))}
-                    discountAmount={parseFloat(String(invoice.totals?.total_discount || 0)) + parseFloat(String(invoice.totals?.scheme_discount || 0))}
-                    grandTotal={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0))}
+                    totalAmount={invoice.totals?.final_amount || invoice.final_amount || 0}
+                    subtotalAmount={invoice.totals?.taxable_amount || 0}
+                    taxAmount={invoice.totals?.total_tax_amount || 0}
+                    discountAmount={addExactDecimals(
+                        [invoice.totals?.total_discount || 0, invoice.totals?.scheme_discount || 0],
+                        'Invoice total discounts',
+                        { scale: 2, maximumWholeDigits: 20, allowNegative: true },
+                    )}
+                    grandTotal={invoice.totals?.final_amount || invoice.final_amount || 0}
                     onCancel={() => onBack(2)}
                     onSave={onSave}
                     onGenerate={onSave}

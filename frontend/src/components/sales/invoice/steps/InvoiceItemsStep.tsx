@@ -19,6 +19,7 @@ import { toast } from 'react-toastify';
 import { ordersApi, challansApi } from '../../../../services/api';
 import { extractDocumentCollection, extractDocumentDetail } from '../../utils/documentImport';
 import { invoiceBatchAllocationValidationError } from '../utils/canonicalInvoiceCommand';
+import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
 
 // Shared Types
 import { Customer, Invoice, InvoiceItem, Employee, ProductForLastDeal } from '../types/invoiceTypes';
@@ -48,7 +49,7 @@ interface InvoiceItemsStepProps {
     handleUpdateItem: (index: number, updates: Partial<InvoiceItem>) => void;
     handleRemoveItem: (index: number) => void;
     handleImport: (data: unknown) => void;
-    handleApplyBillDiscount: (discount: number) => void;
+    handleApplyBillDiscount: (discount: EditableDecimalValue, discountType?: 'percentage' | 'amount', discountValue?: EditableDecimalValue) => void;
     // Modal states
     showCustomerModal: boolean;
     setShowCustomerModal: React.Dispatch<React.SetStateAction<boolean>>;

@@ -4,6 +4,12 @@ export interface ExactDecimalOptions {
   allowNegative?: boolean;
 }
 
+/** Base-10 decimal transported by canonical APIs without IEEE-754 coercion. */
+export type ExactDecimalString = string;
+
+/** Editable draft values may be raw safe integers until normalized for transport. */
+export type EditableDecimalValue = ExactDecimalString | number;
+
 const plainDecimal = (allowNegative: boolean): RegExp => (
   allowNegative
     ? /^-?(?:0|[1-9]\d*)(?:\.(\d+))?$/

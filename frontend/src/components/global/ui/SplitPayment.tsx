@@ -6,13 +6,21 @@ import type {
     PaymentMethodType,
     PaymentStatus
 } from '../../sales/invoice/types/invoiceTypes';
+import {
+    addExactDecimals,
+    compareExactDecimals,
+    formatExactCurrency,
+    normalizeExactDecimal,
+    subtractExactDecimals,
+    type EditableDecimalValue,
+} from '../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
 interface Payment {
     id: string;
     method: PaymentMethodType;
-    amount: number | '';
+    amount: EditableDecimalValue | '';
     reference: string;
 }
 
@@ -24,7 +32,7 @@ interface PaymentMethodOption {
 }
 
 interface SplitPaymentProps {
-    totalAmount?: number;
+    totalAmount?: EditableDecimalValue;
     payments?: Payment[];
     onChange?: (payments: Payment[]) => void;
     onPaymentStatusChange?: (status: PaymentStatus) => void;
@@ -47,7 +55,7 @@ const SplitPayment: FC<SplitPaymentProps> = ({
     defaultPaymentMethod = null
 }) => {
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('cash');
-    const [paymentAmount, setPaymentAmount] = useState<number | ''>(totalAmount);
+    const [paymentAmount, setPaymentAmount] = useState<EditableDecimalValue | ''>(totalAmount);
     const [reference, setReference] = useState<string>('');
     const [isSplitMode, setIsSplitMode] = useState<boolean>(false);
     const [splitPayments, setSplitPayments] = useState<Payment[]>([
@@ -64,6 +72,14 @@ const SplitPayment: FC<SplitPaymentProps> = ({
         { value: 'bank', label: 'Bank Transfer', icon: Building2, color: 'indigo' },
         { value: 'check', label: 'Check', icon: FileText, color: 'gray' }
     ];
+    const moneyOptions = { scale: 2, maximumWholeDigits: 20 } as const;
+    const validMoney = (value: EditableDecimalValue | '', label: string): string => {
+        try {
+            return normalizeExactDecimal(value === '' ? 0 : value, label, moneyOptions);
+        } catch {
+            return '0.00';
+        }
+    };
 
     // Initialize from props - only run once
     useEffect(() => {
@@ -93,13 +109,17 @@ const SplitPayment: FC<SplitPaymentProps> = ({
 
         if (isSplitMode) {
             onChange(splitPayments);
-            const totalPaid = splitPayments.reduce((sum, p) => sum + (typeof p.amount === 'number' ? p.amount : 0), 0);
+            const totalPaid = addExactDecimals(
+                splitPayments.map((payment, index) => validMoney(payment.amount, `Split payment ${index + 1}`)),
+                'Split payment total',
+                moneyOptions,
+            );
             onPaymentStatusChange?.(
-                totalPaid >= totalAmount ? 'paid' :
-                    totalPaid > 0 ? 'partial' : 'pending'
+                compareExactDecimals(totalPaid, totalAmount, 'Payment completion', moneyOptions) >= 0 ? 'paid' :
+                    compareExactDecimals(totalPaid, '0.00', 'Payment received', moneyOptions) > 0 ? 'partial' : 'pending'
             );
         } else {
-            const actualAmount = selectedMethod === 'credit' ? 0 : (typeof paymentAmount === 'number' ? paymentAmount : 0);
+            const actualAmount = selectedMethod === 'credit' ? '0.00' : validMoney(paymentAmount, 'Payment amount');
             onChange([{
                 id: '1',
                 method: selectedMethod,
@@ -108,8 +128,8 @@ const SplitPayment: FC<SplitPaymentProps> = ({
             }]);
             onPaymentStatusChange?.(
                 selectedMethod === 'credit' ? 'pending' :
-                    actualAmount >= totalAmount ? 'paid' :
-                        actualAmount > 0 ? 'partial' : 'pending'
+                    compareExactDecimals(actualAmount, totalAmount, 'Payment completion', moneyOptions) >= 0 ? 'paid' :
+                        compareExactDecimals(actualAmount, '0.00', 'Payment received', moneyOptions) > 0 ? 'partial' : 'pending'
             );
         }
     }, [selectedMethod, paymentAmount, reference, isSplitMode, splitPayments, totalAmount, onChange, onPaymentStatusChange]);
@@ -150,13 +170,13 @@ const SplitPayment: FC<SplitPaymentProps> = ({
     };
 
     const addSplitPayment = (): void => {
-        const totalPaid = splitPayments.reduce((sum, p) => sum + (typeof p.amount === 'number' ? p.amount : 0), 0);
-        const remaining = totalAmount - totalPaid;
+        const totalPaid = addExactDecimals(splitPayments.map((payment, index) => validMoney(payment.amount, `Split payment ${index + 1}`)), 'Split payment total', moneyOptions);
+        const remaining = subtractExactDecimals(totalAmount, totalPaid, 'Remaining payment', moneyOptions);
         const newId = (splitPayments.length + 1).toString();
         setSplitPayments([...splitPayments, {
             id: newId,
             method: 'card',
-            amount: remaining > 0 ? remaining : 0,
+            amount: compareExactDecimals(remaining, '0.00', 'Remaining payment', moneyOptions) > 0 ? remaining : '0.00',
             reference: ''
         }]);
     };
@@ -166,7 +186,7 @@ const SplitPayment: FC<SplitPaymentProps> = ({
             p.id === id ? {
                 ...p,
                 [field]: field === 'amount'
-                    ? (value === '' ? '' : parseFloat(String(value)) || 0)
+                    ? value
                     : value
             } : p
         ));
@@ -179,10 +199,10 @@ const SplitPayment: FC<SplitPaymentProps> = ({
     };
 
     const totalPaid = isSplitMode
-        ? splitPayments.reduce((sum, p) => sum + (p.amount === '' ? 0 : parseFloat(String(p.amount)) || 0), 0)
-        : selectedMethod === 'credit' ? 0 : (typeof paymentAmount === 'number' ? paymentAmount : 0);
-    const remaining = totalAmount - totalPaid;
-    const isFullyPaid = totalPaid >= totalAmount;
+        ? addExactDecimals(splitPayments.map((payment, index) => validMoney(payment.amount, `Split payment ${index + 1}`)), 'Split payment total', moneyOptions)
+        : selectedMethod === 'credit' ? '0.00' : validMoney(paymentAmount, 'Payment amount');
+    const remaining = subtractExactDecimals(totalAmount, totalPaid, 'Remaining payment', moneyOptions);
+    const isFullyPaid = compareExactDecimals(totalPaid, totalAmount, 'Payment completion', moneyOptions) >= 0;
 
     const getPaymentIcon = (method: PaymentMethodType): LucideIcon => {
         const methodInfo = paymentMethods.find(m => m.value === method);
@@ -254,7 +274,7 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                                 <div>
                                     <span className="text-sm font-medium text-amber-900">Full Credit Sale</span>
                                     <div className="text-xs text-amber-700 mt-0.5">
-                                        ₹{totalAmount.toFixed(2)} will be marked as unpaid
+                                        {formatExactCurrency(totalAmount, 'Payment total')} will be marked as unpaid
                                     </div>
                                 </div>
                             </div>
@@ -283,13 +303,13 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                                         type="text"
                                         inputMode="decimal"
                                         value={paymentAmount === 0 ? '' : paymentAmount}
-                                        onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                                        onChange={(e) => setPaymentAmount(e.target.value)}
                                         onFocus={(e) => e.target.select()}
                                         disabled={readOnly}
                                         className={`${inputClass} flex-1`}
                                         placeholder="0.00"
                                     />
-                                    {(typeof paymentAmount === 'number' ? paymentAmount : 0) < totalAmount && (
+                                    {compareExactDecimals(validMoney(paymentAmount, 'Payment amount'), totalAmount, 'Payment amount remaining', moneyOptions) < 0 && (
                                         <button
                                             onClick={() => setPaymentAmount(totalAmount)}
                                             disabled={readOnly}
@@ -312,9 +332,9 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                                 </div>
                             </div>
 
-                            {!isFullyPaid && remaining > 0 && (
+                            {!isFullyPaid && compareExactDecimals(remaining, '0.00', 'Remaining payment', moneyOptions) > 0 && (
                                 <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-                                    ₹{remaining.toFixed(2)} will go to credit
+                                    {formatExactCurrency(remaining, 'Remaining payment')} will go to credit
                                 </div>
                             )}
                         </div>
@@ -330,9 +350,9 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                             <Check className="w-4 h-4" />
                             Paid in full
                         </div>
-                    ) : totalPaid > 0 ? (
+                    ) : compareExactDecimals(totalPaid, '0.00', 'Payment received', moneyOptions) > 0 ? (
                         <div className="bg-amber-100 text-amber-800 px-3 py-2 rounded-lg text-sm">
-                            Partial: ₹{totalPaid.toFixed(2)} paid, ₹{remaining.toFixed(2)} credit
+                            Partial: {formatExactCurrency(totalPaid, 'Payment received')} paid, {formatExactCurrency(remaining, 'Remaining payment')} credit
                         </div>
                     ) : (
                         <div className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm">
@@ -410,9 +430,9 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                             <Check className="w-4 h-4" />
                             Paid in full
                         </div>
-                    ) : totalPaid > 0 ? (
+                    ) : compareExactDecimals(totalPaid, '0.00', 'Payment received', moneyOptions) > 0 ? (
                         <div className="bg-amber-100 text-amber-800 px-3 py-2 rounded-lg text-sm font-medium">
-                            Partial: ₹{totalPaid.toFixed(2)} paid, ₹{remaining.toFixed(2)} credit
+                            Partial: {formatExactCurrency(totalPaid, 'Payment received')} paid, {formatExactCurrency(remaining, 'Remaining payment')} credit
                         </div>
                     ) : (
                         <div className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm">

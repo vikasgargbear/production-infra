@@ -255,7 +255,7 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                 </div>}
                 <fieldset disabled={Boolean(submissionUnavailableReason)} aria-describedby={submissionUnavailableReason ? "challan-submission-status" : undefined}>
                     <DocumentFooter
-                        totalItems={challan.total_quantity || challan.items?.length || 0}
+                        totalItems={challan.items?.length || 0}
                         totalAmount={challan.total_amount}
                         subtotalAmount={challan.total_amount || 0}
                         taxAmount={0}

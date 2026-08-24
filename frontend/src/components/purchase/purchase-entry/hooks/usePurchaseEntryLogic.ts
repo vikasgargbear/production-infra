@@ -14,7 +14,11 @@ import {
 } from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
 import { usePurchaseEntrySave } from './usePurchaseEntrySave';
-import { compareExactDecimals } from '../../../../utils/exactDecimal';
+import {
+    compareExactDecimals,
+    formatExactCurrency,
+    type EditableDecimalValue,
+} from '../../../../utils/exactDecimal';
 
 // Types
 export interface PurchaseItem {
@@ -41,6 +45,9 @@ export interface PurchaseItem {
     selling_price?: number;
     sale_price?: number;
     discount_percent?: number;
+    taxable_amount?: EditableDecimalValue;
+    tax_amount?: EditableDecimalValue;
+    total_amount?: EditableDecimalValue;
 
     [key: string]: any;
 }
@@ -60,13 +67,13 @@ export interface PurchaseData {
     transport_company: string;
     vehicle_number: string;
     lr_number: string;
-    gross_amount: number;
-    discount_amount: number;
-    tax_amount: number;
-    other_charges: number;
-    round_off: number;
-    net_amount: number;
-    total_amount: number;
+    gross_amount: EditableDecimalValue;
+    discount_amount: EditableDecimalValue;
+    tax_amount: EditableDecimalValue;
+    other_charges: EditableDecimalValue;
+    round_off: EditableDecimalValue;
+    net_amount: EditableDecimalValue;
+    total_amount: EditableDecimalValue;
     notes: string;
     // PO linking fields (set when pre-filled from a Purchase Order)
     purchase_order_id?: number;
@@ -228,16 +235,16 @@ export function usePurchaseEntryLogic({
                         compareExactDecimals(item.total_amount || 0, totalAmount, 'Purchase line total', { scale: 2, maximumWholeDigits: 20 }) === 0
                     ) return item;
                     itemValuesChanged = true;
-                    return { ...item, taxable_amount: taxableAmount, tax_amount: taxAmount, total_amount: totalAmount } as unknown as PurchaseItem;
+                    return { ...item, taxable_amount: taxableAmount, tax_amount: taxAmount, total_amount: totalAmount };
                 });
                 return {
                     ...prev,
                     items: itemValuesChanged ? items : prev.items,
-                    gross_amount: totals.subtotal_amount as unknown as number,
-                    tax_amount: totals.tax_amount as unknown as number,
-                    round_off: totals.round_off_amount as unknown as number,
-                    net_amount: totals.net_amount as unknown as number,
-                    total_amount: totals.final_amount as unknown as number
+                    gross_amount: totals.subtotal_amount,
+                    tax_amount: totals.tax_amount,
+                    round_off: totals.round_off_amount,
+                    net_amount: totals.net_amount,
+                    total_amount: totals.final_amount
                 };
             });
         } catch (calculationError) {
@@ -289,7 +296,7 @@ export function usePurchaseEntryLogic({
 
     // Update payment amount when final amount changes
     useEffect(() => {
-        if (purchase.total_amount > 0 && purchase.payment_methods?.length > 0) {
+        if (compareExactDecimals(purchase.total_amount, '0.00', 'Purchase total', { scale: 2, maximumWholeDigits: 20 }) > 0 && purchase.payment_methods?.length > 0) {
             if (purchase.payment_methods.length === 1 && purchase.payment_methods[0].method === 'cash') {
                 setPurchase(prev => ({
                     ...prev,
@@ -552,10 +559,8 @@ export function usePurchaseEntryLogic({
         }
     }, [toast]);
 
-    const formatCurrency = useCallback((amount: number | string): string => {
-        const numAmount = parseFloat(String(amount)) || 0;
-        return `₹${numAmount.toFixed(2)}`;
-    }, []);
+    const formatCurrency = useCallback((amount: number | string): string =>
+        formatExactCurrency(amount, 'Purchase amount'), []);
 
     return {
         purchase,

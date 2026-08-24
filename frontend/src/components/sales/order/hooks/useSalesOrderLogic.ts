@@ -239,20 +239,20 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
                 setOrder(prev => ({
                     ...prev,
-                    items: updatedItems as unknown as OrderItem[],
+                    items: updatedItems,
                     total_quantity: addExactDecimals(
                         items.map(item => item.quantity),
                         'Sales order total quantity',
                         { scale: 6, maximumWholeDigits: 14 },
-                    ) as unknown as number,
-                    subtotal_amount: formattedTotals.subtotal_amount as unknown as number,
-                    discount_amount: formattedTotals.discount_amount as unknown as number,
-                    tax_amount: formattedTotals.total_tax_amount as unknown as number,
-                    total_amount: formattedTotals.final_amount as unknown as number,
-                    final_amount: formattedTotals.final_amount as unknown as number,
-                    cgst_amount: formattedTotals.cgst_amount as unknown as number,
-                    sgst_amount: formattedTotals.sgst_amount as unknown as number,
-                    igst_amount: formattedTotals.igst_amount as unknown as number,
+                    ),
+                    subtotal_amount: formattedTotals.subtotal_amount,
+                    discount_amount: formattedTotals.discount_amount,
+                    tax_amount: formattedTotals.total_tax_amount,
+                    total_amount: formattedTotals.final_amount,
+                    final_amount: formattedTotals.final_amount,
+                    cgst_amount: formattedTotals.cgst_amount,
+                    sgst_amount: formattedTotals.sgst_amount,
+                    igst_amount: formattedTotals.igst_amount,
                     calculatedLineItems: result.items
                 }));
             }
@@ -463,14 +463,14 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         const formattedItems = importData.items.map((item, index) => ({
             ...item,
             id: `imported-${Date.now()}-${index}`,
-            quantity: Number(item.quantity),
-            free_quantity: Number(item.free_quantity),
-            unit_price: Number(item.unit_price),
-            discount_percent: Number(item.discount_percent),
-            gst_percent: Number(item.gst_percent),
-            mrp: item.mrp === undefined ? undefined : Number(item.mrp),
-            total: 0,
-        })) as unknown as OrderItem[];
+            quantity: item.quantity,
+            free_quantity: item.free_quantity,
+            unit_price: item.unit_price,
+            discount_percent: item.discount_percent,
+            gst_percent: item.gst_percent,
+            mrp: item.mrp,
+            total: '0.00',
+        }));
         const importedCustomerState = importedCustomer.state || '';
         const importedOrder: Order = {
             ...order,

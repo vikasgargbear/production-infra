@@ -4,6 +4,7 @@
  */
 
 import { Customer } from './customer';
+import type { EditableDecimalValue } from '../../utils/exactDecimal';
 
 /**
  * Order item line
@@ -47,14 +48,14 @@ export interface OrderItem {
 
     // Discounts & Taxes
     discount_percent: string | number;
-    discount_amount?: number;
+    discount_amount?: EditableDecimalValue;
     gst_percent: string | number;
-    tax_amount?: number;
-    total_tax_amount?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    cess_amount?: number;
+    tax_amount?: EditableDecimalValue;
+    total_tax_amount?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
+    cess_amount?: EditableDecimalValue;
 
     // Units
     unit?: string;
@@ -63,11 +64,11 @@ export interface OrderItem {
     pack_type?: string;
 
     // Calculated values
-    subtotal?: number;
-    total?: number;
-    calculated_total?: number;
-    taxable_amount?: number;
-    line_total?: number;
+    subtotal?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    calculated_total?: EditableDecimalValue;
+    taxable_amount?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
 
     // Meta
     manufacturer?: string;
@@ -120,18 +121,18 @@ export interface Order {
     items: OrderItem[];
 
     // Financial (all nullable in DB)
-    subtotal_amount: number;
-    discount_amount: number;
-    tax_amount: number;
-    cgst_amount: number;
-    sgst_amount: number;
-    igst_amount: number;
-    round_off: number;
-    total_amount: number;
-    final_amount?: number;
+    subtotal_amount: EditableDecimalValue;
+    discount_amount: EditableDecimalValue;
+    tax_amount: EditableDecimalValue;
+    cgst_amount: EditableDecimalValue;
+    sgst_amount: EditableDecimalValue;
+    igst_amount: EditableDecimalValue;
+    round_off: EditableDecimalValue;
+    total_amount: EditableDecimalValue;
+    final_amount?: EditableDecimalValue;
     delivery_charges?: number;
     other_charges: number;
-    total_quantity: number;
+    total_quantity: EditableDecimalValue;
 
     // GST
     gst_type: string;

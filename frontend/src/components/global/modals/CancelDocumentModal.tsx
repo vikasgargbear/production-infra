@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import CanonicalWriteNotice from '../ui/CanonicalWriteNotice';
+import type { EditableDecimalValue } from '../../../utils/exactDecimal';
 
 export type CancellableDocumentType =
     | 'order'
@@ -15,7 +16,7 @@ interface CancelDocumentData {
     document_number?: string;
     customer_name?: string;
     supplier_name?: string;
-    amount?: number;
+    amount?: EditableDecimalValue;
 }
 
 interface CancelDocumentModalProps {

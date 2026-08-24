@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Percent, DollarSign } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import useDialogFocus from '../../../hooks/useDialogFocus';
+import { exactDecimalString, exactDecimalUnits, formatExactCurrency, normalizeExactDecimal, subtractExactDecimals, type EditableDecimalValue } from '../../../utils/exactDecimal';
 
 interface BillDiscountModalProps {
     isOpen: boolean;
     onClose: () => void;
     currentDiscount?: number;
-    billAmount?: number;
-    onApply: (discount: number, discountType: 'percentage' | 'amount', discountValue: number) => void;
+    billAmount?: EditableDecimalValue;
+    onApply: (discount: EditableDecimalValue, discountType: 'percentage' | 'amount', discountValue: EditableDecimalValue) => void;
 }
 
 const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
@@ -19,8 +20,7 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
     onApply
 }) => {
     const [discountType, setDiscountType] = useState<'percentage' | 'amount'>('percentage');
-    const [discountValue, setDiscountValue] = useState<number>(currentDiscount);
-    const [calculatedAmount, setCalculatedAmount] = useState<number>(0);
+    const [discountValue, setDiscountValue] = useState<string>(String(currentDiscount));
     const inputRef = useRef<HTMLInputElement>(null);
     const dialogRef = useDialogFocus<HTMLDivElement>(isOpen, inputRef);
 
@@ -33,19 +33,22 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
         }
     }, [isOpen]);
 
-    useEffect(() => {
-        if (discountType === 'percentage') {
-            setCalculatedAmount((billAmount * discountValue) / 100);
-        } else {
-            setCalculatedAmount(discountValue);
+    const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: false } as const;
+    const percentageOptions = { scale: 6, maximumWholeDigits: 3, allowNegative: false } as const;
+    const calculateDiscount = (): string => {
+        try {
+            if (discountType === 'amount') return normalizeExactDecimal(discountValue || 0, 'Bill discount amount', moneyOptions);
+            const billUnits = exactDecimalUnits(billAmount, 'Bill amount', moneyOptions);
+            const percentUnits = exactDecimalUnits(discountValue || 0, 'Bill discount percent', percentageOptions);
+            return exactDecimalString((billUnits * percentUnits) / 100000000n, 2);
+        } catch {
+            return '0.00';
         }
-    }, [discountType, discountValue, billAmount]);
+    };
+    const calculatedAmount = calculateDiscount();
 
     const handleApply = (): void => {
-        const finalDiscount = discountType === 'percentage'
-            ? (billAmount * discountValue) / 100
-            : discountValue;
-        onApply(finalDiscount, discountType, discountValue);
+        onApply(calculatedAmount, discountType, discountValue);
         onClose();
     };
 
@@ -72,7 +75,7 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
                     {/* Bill Amount */}
                     <div className="bg-blue-50 p-3 rounded">
                         <div className="text-sm text-gray-600">Bill Amount</div>
-                        <div className="text-xl font-bold text-gray-900">₹{billAmount.toFixed(2)}</div>
+                        <div className="text-xl font-bold text-gray-900">{formatExactCurrency(billAmount, 'Bill amount')}</div>
                     </div>
 
                     {/* Discount Type */}
@@ -111,7 +114,7 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
                             min="0"
                             max={discountType === 'percentage' ? 100 : billAmount}
                             value={discountValue}
-                            onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                            onChange={(e) => setDiscountValue(e.target.value)}
                             onKeyDown={handleKeyDown}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
@@ -120,14 +123,14 @@ const BillDiscountModal: React.FC<BillDiscountModalProps> = ({
                     {/* Calculated Discount */}
                     <div className="bg-green-50 p-3 rounded">
                         <div className="text-sm text-gray-600">Discount Amount</div>
-                        <div className="text-xl font-bold text-green-600">- ₹{calculatedAmount.toFixed(2)}</div>
+                        <div className="text-xl font-bold text-green-600">- {formatExactCurrency(calculatedAmount, 'Bill discount amount')}</div>
                     </div>
 
                     {/* Final Amount */}
                     <div className="bg-gray-50 p-3 rounded border-2 border-gray-300">
                         <div className="text-sm text-gray-600">Final Bill Amount</div>
                         <div className="text-2xl font-bold text-gray-900">
-                            ₹{(billAmount - calculatedAmount).toFixed(2)}
+                            {formatExactCurrency(subtractExactDecimals(billAmount, calculatedAmount, 'Discounted bill', { ...moneyOptions, allowNegative: true }), 'Discounted bill')}
                         </div>
                     </div>
 

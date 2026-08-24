@@ -1,9 +1,10 @@
 import React from 'react';
 import { DocumentFooter } from '../../../global';
+import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
 
 interface InvoiceItemsFooterProps {
     totalItems: number;
-    totalAmount?: number;
+    totalAmount?: EditableDecimalValue;
     continueDisabled: boolean;
     onReset: () => void;
     onContinue: () => void;

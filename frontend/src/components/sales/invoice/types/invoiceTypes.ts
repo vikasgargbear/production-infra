@@ -15,6 +15,7 @@ import type {
     FreeSupplyTaxTreatment as SharedFreeSupplyTaxTreatment,
 } from '../../types/salesSharedTypes';
 import type { CanonicalImportLine } from '../../utils/documentImport';
+import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
 
 // ==================== BASE TYPES ====================
 
@@ -240,7 +241,7 @@ export interface InvoiceItem {
 
     // Discounts - CANONICAL ONLY
     discount_percent?: number | string;  // Exact string is preserved through the canonical posting boundary
-    discount_amount?: number;   // CANONICAL: calculated discount amount
+    discount_amount?: EditableDecimalValue;
 
     // Taxes
     gst_percent?: number | string;
@@ -251,15 +252,15 @@ export interface InvoiceItem {
     cgst_rate?: number;
     sgst_rate?: number;
     igst_rate?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    tax_amount?: number;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
+    tax_amount?: EditableDecimalValue;
 
     // Totals
-    amount?: number;
-    total?: number;
-    line_total?: number;
+    amount?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
 
     // Pack info (for pharma) - using backend-standard names
     pack_type?: string;
@@ -278,34 +279,34 @@ export interface InvoiceItem {
 /** Calculated totals for an invoice */
 export interface InvoiceTotals {
     // Subtotal before discounts
-    subtotal?: number;
-    gross_amount?: number;
+    subtotal?: EditableDecimalValue;
+    gross_amount?: EditableDecimalValue;
 
     // Discounts
-    total_discount?: number;
-    discount_amount?: number;
-    additional_discount?: number;
+    total_discount?: EditableDecimalValue;
+    discount_amount?: EditableDecimalValue;
+    additional_discount?: EditableDecimalValue;
 
     // Taxable
-    taxable_amount?: number;
+    taxable_amount?: EditableDecimalValue;
 
     // Tax amounts
-    tax_amount?: number;
-    total_tax?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
+    tax_amount?: EditableDecimalValue;
+    total_tax?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
 
     // Delivery
-    delivery_charges?: number;
+    delivery_charges?: EditableDecimalValue;
 
     // Rounding
-    round_off?: number;
+    round_off?: EditableDecimalValue;
 
     // Final totals
-    net_amount?: number;
-    total_amount?: number;
-    final_amount?: number;
+    net_amount?: EditableDecimalValue;
+    total_amount?: EditableDecimalValue;
+    final_amount?: EditableDecimalValue;
 
     // Payment tracking
     paid_amount?: number;

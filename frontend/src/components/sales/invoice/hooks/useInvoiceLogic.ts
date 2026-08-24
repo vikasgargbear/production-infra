@@ -29,7 +29,7 @@ import {
 import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
 import { useInvoiceSave } from './useInvoiceSave';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
-import { addExactDecimals } from '../../../../utils/exactDecimal';
+import { addExactDecimals, type ExactDecimalString } from '../../../../utils/exactDecimal';
 
 // ==================== HOOK-SPECIFIC TYPE EXTENSIONS ====================
 // These extend shared types with required fields for the hook's internal state
@@ -48,29 +48,29 @@ export interface InvoiceItem extends SharedInvoiceItem {
     source_free_quantity?: string | number;
     discount_percent: string | number;
     // Calculated fields (use canonical names from enterpriseCalculator)
-    subtotal?: number;
-    discount_amount?: number;
-    taxable_amount?: number;
-    gst_amount?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    total_amount?: number;
+    subtotal?: ExactDecimalString;
+    discount_amount?: ExactDecimalString;
+    taxable_amount?: ExactDecimalString;
+    gst_amount?: ExactDecimalString;
+    cgst_amount?: ExactDecimalString;
+    sgst_amount?: ExactDecimalString;
+    igst_amount?: ExactDecimalString;
+    total_amount?: ExactDecimalString;
     // Availability
     available_quantity?: string | number;
     manufacturing_date?: string;
 }
 
 export interface InvoiceTotals extends SharedInvoiceTotals {
-    gross_amount: number;
-    discount_amount: number;
-    taxable_amount: number;
-    total_gst: number;
-    cgst_total: number;
-    sgst_total: number;
-    igst_total: number;
-    round_off: number;
-    final_amount: number;
+    gross_amount: ExactDecimalString;
+    discount_amount: ExactDecimalString;
+    taxable_amount: ExactDecimalString;
+    total_gst: ExactDecimalString;
+    cgst_total: ExactDecimalString;
+    sgst_total: ExactDecimalString;
+    igst_total: ExactDecimalString;
+    round_off: ExactDecimalString;
+    final_amount: ExactDecimalString;
 }
 
 export interface Invoice {
@@ -107,14 +107,14 @@ export interface Invoice {
     eway_bill_number: string;  // DB column name (no underscore between e and way)
     eway_bill_date: string;
     eway_bill_valid_upto: string;
-    final_amount: number;
+    final_amount: ExactDecimalString;
     totals: InvoiceTotals | null;
     // Linked challan (auto-created with transport details)
     challan_id?: number;
     challan_number?: string;
     // Legacy field name support
-    net_amount?: number;
-    delivery_charges?: number;
+    net_amount?: ExactDecimalString;
+    delivery_charges?: ExactDecimalString;
     e_way_bill_number?: string;  // Alias for backwards compatibility
 }
 
@@ -223,7 +223,7 @@ export const createInitialInvoice = (): Invoice => ({
     eway_bill_number: '',
     eway_bill_date: '',
     eway_bill_valid_upto: '',
-    final_amount: 0,
+    final_amount: '0.00',
     totals: null,
 });
 
@@ -363,9 +363,8 @@ export const useInvoiceLogic = (
                     items: prev.items.map((item, idx) => ({
                         ...item,
                         ...(result.items[idx] || {}),
-                        // Preview calculation may return JSON numbers. Source and
-                        // allocation identities remain the posting authority, so
-                        // retain their exact decimal strings through review.
+                        // Canonical previews return exact JSON strings. Source and
+                        // allocation identities remain the posting authority.
                         quantity: item.quantity,
                         free_quantity: item.free_quantity,
                         unit_price: item.unit_price,
@@ -375,8 +374,8 @@ export const useInvoiceLogic = (
                         source_billed_quantity: item.source_billed_quantity,
                         source_free_quantity: item.source_free_quantity,
                     })),
-                    totals: result.totals as unknown as InvoiceTotals,
-                    final_amount: result.totals.final_amount as unknown as number
+                    totals: result.totals,
+                    final_amount: result.totals.final_amount
                 }));
             } catch (calculationError) {
                 if (!cancelled) {

@@ -10,7 +10,6 @@ import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
 import {
     useInvoiceLogic,
-    Invoice,
     CreatedInvoiceData,
     PrefilledData,
 } from './hooks/useInvoiceLogic';
@@ -248,8 +247,8 @@ ${companyInfo?.name || 'Your Company'}`;
             // Update invoice with calculated totals
             setInvoice(prev => ({
                 ...prev,
-                totals: result.totals as unknown as Invoice['totals'],
-                final_amount: result.totals.final_amount as unknown as number
+                totals: result.totals,
+                final_amount: result.totals.final_amount
             }));
             setCurrentStep(2);
         } catch (calcError) {
@@ -274,9 +273,9 @@ ${companyInfo?.name || 'Your Company'}`;
             // Update invoice with latest totals
             setInvoice(prev => ({
                 ...prev,
-                totals: result.totals as unknown as Invoice['totals'],
-                final_amount: result.totals.final_amount as unknown as number,
-                items: result.items as unknown as Invoice['items']
+                totals: result.totals,
+                final_amount: result.totals.final_amount,
+                items: result.items
             }));
             setCurrentStep(3);
         } catch (calcError) {

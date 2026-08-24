@@ -7,6 +7,8 @@
 
 // ==================== BASE TYPES ====================
 
+import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
+
 /** Challan status values */
 export type ChallanStatus = 'draft' | 'pending' | 'dispatched' | 'delivered' | 'cancelled';
 
@@ -65,15 +67,15 @@ export interface ChallanItem {
     tax_percent?: string | number;
     discount_percent?: string | number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
-    taxable_amount?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
+    taxable_amount?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
     cess_amount?: number;
-    tax_amount?: number;
-    total_tax_amount?: number;
-    total?: number;
-    line_total?: number;
+    tax_amount?: EditableDecimalValue;
+    total_tax_amount?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
     manufacturer?: string;
     category?: string;
     source_line_id?: string | number;
@@ -157,10 +159,10 @@ export interface Challan {
     // Totals
     total_packages: number;
     total_weight: number;
-    total_quantity: number;
-    total_amount: number;
-    taxable_amount?: number;
-    total_tax_amount?: number;
+    total_quantity: EditableDecimalValue;
+    total_amount: EditableDecimalValue;
+    taxable_amount?: EditableDecimalValue;
+    total_tax_amount?: EditableDecimalValue;
     gst_type: 'CGST/SGST' | 'IGST';
 
     // Notes

@@ -134,7 +134,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                             total: lineTotal,
                             taxable_amount: taxable,
                             tax_amount: tax
-                        } as unknown as ChallanItem;
+                        };
                     });
                     const totalQuantity = addExactDecimals(items.map(item => item.quantity), 'Challan total quantity', { scale: 6, maximumWholeDigits: 14 });
                     const totalAmount = calculation.totals.final_amount;
@@ -151,10 +151,10 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                     return {
                         ...prev,
                         items: itemsChanged ? items : prev.items,
-                        total_quantity: totalQuantity as unknown as number,
-                        total_amount: totalAmount as unknown as number,
-                        taxable_amount: taxableAmount as unknown as number,
-                        total_tax_amount: totalTaxAmount as unknown as number,
+                        total_quantity: totalQuantity,
+                        total_amount: totalAmount,
+                        taxable_amount: taxableAmount,
+                        total_tax_amount: totalTaxAmount,
                         gst_type: calculation.gst_type
                     };
                 });

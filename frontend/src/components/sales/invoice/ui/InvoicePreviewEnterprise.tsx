@@ -2,6 +2,7 @@ import React from 'react';
 
 // Import centralized types - single source of truth
 import type { Invoice, InvoiceItem, CompanyInfo } from '../types/invoiceTypes';
+import { addExactDecimals, compareExactDecimals, formatExactCurrency, formatExactDecimal, normalizeExactDecimal, subtractExactDecimals } from '../../../../utils/exactDecimal';
 
 // ==================== COMPONENT PROPS ====================
 
@@ -36,15 +37,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
   // REMOVED: calculateTotalsViaAPI() - caused race condition with forced calculation
   // Totals are now calculated ONCE in InvoiceFlow before navigation
 
-  const formatCurrency = (amount: number | string | undefined): string => {
-    const value = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(Number.isFinite(value) ? Number(value) : 0);
-  };
+  const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
+  const quantityOptions = { scale: 6, maximumWholeDigits: 20, allowNegative: false } as const;
+  const formatCurrency = (amount: unknown): string => formatExactCurrency(amount ?? 0, 'Invoice preview money');
 
   const formatDate = (date: string): string => {
     return new Date(date).toLocaleDateString('en-IN', {
@@ -315,16 +310,15 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     {invoice.payments && invoice.payments.length > 1 ? (
                       (() => {
                         const finalAmt = totals.final_amount || totals.net_amount || 0;
-                        const paidSum = invoice.payments
-                          .filter(p => p.method !== 'credit')
-                          .reduce((sum, p) => sum + parseFloat(String(p.amount || 0)), 0);
-                        const creditDue = Math.max(0, finalAmt - paidSum);
+                        const paidSum = addExactDecimals(invoice.payments.filter(p => p.method !== 'credit').map(p => p.amount || 0), 'Invoice preview payments', moneyOptions);
+                        const rawCreditDue = subtractExactDecimals(finalAmt, paidSum, 'Invoice preview credit', moneyOptions);
+                        const creditDue = compareExactDecimals(rawCreditDue, 0, 'Invoice preview credit', moneyOptions) > 0 ? rawCreditDue : '0.00';
 
                         return (
                           <>
                             {invoice.payments.filter(p => p.method !== 'credit').map((p, i) => {
-                              const amt = parseFloat(String(p.amount || 0));
-                              if (amt <= 0) return null;
+                              const amt = p.amount || 0;
+                              if (compareExactDecimals(amt, 0, 'Invoice preview payment', moneyOptions) <= 0) return null;
                               return (
                                 <div key={i} className="flex justify-between">
                                   <span className="text-gray-500 capitalize">{p.method}:</span>
@@ -332,7 +326,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                                 </div>
                               );
                             })}
-                            {creditDue > 0.5 && (
+                            {compareExactDecimals(creditDue, 0, 'Invoice preview credit', moneyOptions) > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-gray-500">Credit (Due):</span>
                                 <span className="font-medium text-orange-600">{formatCurrency(creditDue)}</span>
@@ -349,7 +343,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       (() => {
                         const finalAmt = totals.final_amount || totals.net_amount || 0;
                         const paidAmt = invoice.paid_amount || 0;
-                        const creditDue = Math.max(0, finalAmt - paidAmt);
+                        const rawCreditDue = subtractExactDecimals(finalAmt, paidAmt, 'Invoice preview credit', moneyOptions);
+                        const creditDue = compareExactDecimals(rawCreditDue, 0, 'Invoice preview credit', moneyOptions) > 0 ? rawCreditDue : '0.00';
 
                         return (
                           <>
@@ -369,7 +364,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                               <span className="text-gray-500">Paid:</span>
                               <span className="font-medium text-gray-900">{formatCurrency(paidAmt)}</span>
                             </div>
-                            {creditDue > 0.5 && (
+                            {compareExactDecimals(creditDue, 0, 'Invoice preview credit', moneyOptions) > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-gray-500">Credit (Due):</span>
                                 <span className="font-medium text-orange-600">{formatCurrency(creditDue)}</span>
@@ -431,11 +426,11 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
             </thead>
             <tbody>
               {(invoice.items || []).map((item, index) => {
-                const discount = Number(item.discount_percent || 0);
-                const gstPercent = Number(item.gst_percent || item.tax_percent || 0);
-                const freeQty = Number(item.free_quantity || 0);
-                const unitPrice = Number(item.unit_price || 0);
-                const lineTotal = Number(item.line_total ?? item.total_amount ?? item.total ?? 0);
+                const discount = item.discount_percent || 0;
+                const gstPercent = item.gst_percent || item.tax_percent || 0;
+                const freeQty = item.free_quantity || 0;
+                const unitPrice = item.unit_price || 0;
+                const lineTotal = item.line_total ?? item.total_amount ?? item.total ?? 0;
 
                 return (
                   <tr key={index} className="border-b border-gray-200" style={{ lineHeight: '1.2' }}>
@@ -464,16 +459,16 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       {item.quantity}
                     </td>
                     <td className="py-2 px-1 text-center text-green-600 font-medium" style={{ verticalAlign: 'middle' }}>
-                      {freeQty > 0 ? freeQty : '-'}
+                      {compareExactDecimals(freeQty, 0, 'Invoice free quantity', quantityOptions) > 0 ? formatExactDecimal(freeQty, 'Invoice free quantity', quantityOptions) : '-'}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {formatCurrency(unitPrice)}
                     </td>
                     <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
-                      {discount > 0 ? `${discount.toFixed(0)}%` : '-'}
+                      {compareExactDecimals(discount, 0, 'Invoice discount percent', quantityOptions) > 0 ? `${formatExactDecimal(discount, 'Invoice discount percent', quantityOptions)}%` : '-'}
                     </td>
                     <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
-                      {gstPercent > 0 ? `${gstPercent}%` : '-'}
+                      {compareExactDecimals(gstPercent, 0, 'Invoice GST percent', quantityOptions) > 0 ? `${formatExactDecimal(gstPercent, 'Invoice GST percent', quantityOptions)}%` : '-'}
                     </td>
                     <td className="py-2 px-2 text-right font-semibold" style={{ verticalAlign: 'middle' }}>
                       {formatCurrency(lineTotal)}
@@ -516,27 +511,27 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <tbody>
                       {(() => {
                         // Group items by GST rate for proper breakup
-                        const rateGroups: Record<number, { taxable: number; tax: number }> = {};
+                        const rateGroups: Record<string, { taxable: string; tax: string; cgst: string; sgst: string }> = {};
                         (invoice.items || []).forEach((item: InvoiceItem) => {
-                          const rate = Number(item.gst_percent || item.tax_percent || 0);
-                          const taxable = Number(item.taxable_amount || 0);
-                          const tax = Number(item.total_tax_amount ?? item.gst_amount ?? item.tax_amount ?? 0);
-                          if (!rateGroups[rate]) rateGroups[rate] = { taxable: 0, tax: 0 };
-                          rateGroups[rate].taxable += taxable;
-                          rateGroups[rate].tax += tax;
+                          const rate = normalizeExactDecimal(item.gst_percent || item.tax_percent || 0, 'Invoice GST rate', quantityOptions);
+                          if (!rateGroups[rate]) rateGroups[rate] = { taxable: '0.00', tax: '0.00', cgst: '0.00', sgst: '0.00' };
+                          rateGroups[rate].taxable = addExactDecimals([rateGroups[rate].taxable, item.taxable_amount || 0], 'GST taxable group', moneyOptions);
+                          rateGroups[rate].tax = addExactDecimals([rateGroups[rate].tax, item.total_tax_amount ?? item.gst_amount ?? item.tax_amount ?? 0], 'GST tax group', moneyOptions);
+                          rateGroups[rate].cgst = addExactDecimals([rateGroups[rate].cgst, item.cgst_amount ?? 0], 'CGST group', moneyOptions);
+                          rateGroups[rate].sgst = addExactDecimals([rateGroups[rate].sgst, item.sgst_amount ?? 0], 'SGST group', moneyOptions);
                         });
-                        const rates = Object.keys(rateGroups).map(Number).sort((a, b) => a - b);
-                        if (rates.length === 0) rates.push(0);
+                        const rates = Object.keys(rateGroups).sort((a, b) => compareExactDecimals(a, b, 'GST rate order', quantityOptions));
+                        if (rates.length === 0) rates.push('0.000000');
                         return rates.map(rate => (
                           <tr key={rate}>
-                            <td className="pt-1 text-gray-700">{rate}%</td>
+                            <td className="pt-1 text-gray-700">{formatExactDecimal(rate, 'Invoice GST rate', quantityOptions)}%</td>
                             <td className="pt-1 text-right text-gray-700">{formatCurrency(rateGroups[rate]?.taxable || 0)}</td>
                             {invoice.gst_type === 'IGST' ? (
                               <td className="pt-1 text-right text-gray-700">{formatCurrency(rateGroups[rate]?.tax || 0)}</td>
                             ) : (
                               <>
-                                <td className="pt-1 text-right text-gray-700">{formatCurrency((rateGroups[rate]?.tax || 0) / 2)}</td>
-                                <td className="pt-1 text-right text-gray-700">{formatCurrency((rateGroups[rate]?.tax || 0) / 2)}</td>
+                                <td className="pt-1 text-right text-gray-700">{formatCurrency(rateGroups[rate]?.cgst || 0)}</td>
+                                <td className="pt-1 text-right text-gray-700">{formatCurrency(rateGroups[rate]?.sgst || 0)}</td>
                               </>
                             )}
                             <td className="pt-1 text-right text-gray-700 font-medium">{formatCurrency(rateGroups[rate]?.tax || 0)}</td>
@@ -591,13 +586,13 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <span className="text-gray-600">Subtotal:</span>
                     <span className="font-medium">{formatCurrency(totals.subtotal_amount)}</span>
                   </div>
-                  {(totals.discount_amount ?? 0) > 0 && (
+                  {compareExactDecimals(totals.discount_amount ?? 0, 0, 'Invoice discount', moneyOptions) > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-600">Item Discounts:</span>
                       <span className="font-medium text-green-600">-{formatCurrency(totals.discount_amount)}</span>
                     </div>
                   )}
-                  {(totals.scheme_discount ?? 0) > 0 && (
+                  {compareExactDecimals(totals.scheme_discount ?? 0, 0, 'Invoice scheme discount', moneyOptions) > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-600">Scheme Discount:</span>
                       <span className="font-medium text-green-600">-{formatCurrency(totals.scheme_discount ?? 0)}</span>
@@ -611,7 +606,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <span className="text-gray-600">Total GST:</span>
                     <span className="font-medium">{formatCurrency(totals.total_tax_amount || 0)}</span>
                   </div>
-                  {(totals.freight_charges ?? 0) > 0 && (
+                  {compareExactDecimals(totals.freight_charges ?? 0, 0, 'Invoice freight', moneyOptions) > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-600">Delivery Charges:</span>
                       <span className="font-medium">{formatCurrency(totals.freight_charges)}</span>
@@ -620,7 +615,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-600">Round Off:</span>
                     <span className="font-medium">
-                      {(totals.round_off_amount ?? 0) >= 0 ? '+' : ''}{formatCurrency(totals.round_off_amount ?? 0)}
+                      {compareExactDecimals(totals.round_off_amount ?? 0, 0, 'Invoice round off', moneyOptions) >= 0 ? '+' : ''}{formatCurrency(totals.round_off_amount ?? 0)}
                     </span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-gray-300">

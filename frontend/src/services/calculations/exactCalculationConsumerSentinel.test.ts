@@ -28,4 +28,19 @@ describe('exact calculation consumer boundaries', () => {
     expect(modules).not.toMatch(/(?:line_total|taxable_amount|total_amount)\??:\s*number/);
     expect(modules).toContain('CalculationDecimalString');
   });
+
+  it('does not disguise exact calculation strings as runtime number fields', () => {
+    const consumers = [
+      '../../components/sales/invoice/hooks/useInvoiceLogic.ts',
+      '../../components/sales/invoice/InvoiceFlow.tsx',
+      '../../components/sales/order/hooks/useSalesOrderLogic.ts',
+      '../../components/sales/challan/hooks/useChallanLogic.ts',
+      '../../components/purchase/purchase-entry/hooks/usePurchaseEntryLogic.ts',
+      '../../components/sales/invoice/ui/InvoicePreviewEnterprise.tsx',
+      '../../components/global/ui/display/DocumentFooter.tsx',
+      '../../components/global/ui/PrintUtility.tsx',
+    ].map(relative => fs.readFileSync(path.join(__dirname, relative), 'utf8')).join('\n');
+    expect(consumers).not.toMatch(/as unknown as (?:number|InvoiceTotals|OrderItem|ChallanItem)/);
+    expect(consumers).not.toContain('preview may return JSON numbers');
+  });
 });

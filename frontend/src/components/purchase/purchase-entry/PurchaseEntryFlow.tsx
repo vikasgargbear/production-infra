@@ -23,6 +23,12 @@ import PurchaseItemEditModal from '../ui/PurchaseItemEditModal';
 import { usePurchaseEntryLogic, PurchaseItem, PurchaseData } from './hooks';
 import { PURCHASE_ENTRY_SUBMIT_UNAVAILABLE_REASON } from './hooks/usePurchaseEntrySave';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
+import {
+  addExactDecimals,
+  compareExactDecimals,
+  formatExactDecimal,
+  normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
 
 /**
  * PurchaseEntryFlow - Purchase Entry using the full global document system
@@ -254,7 +260,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   const sellingPrice = parseFloat(String(item.selling_price)) || 0;
                   const discountPercent = parseFloat(String(item.discount_percent)) || 0;
                   const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-                  const totalAmount = Number(item.total_amount || 0);
+                  const totalAmount = item.total_amount || '0.00';
 
                   // Format expiry date if exists
                   const expiryDisplay = (() => {
@@ -504,8 +510,8 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 const sellingPrice = parseFloat(String(item.selling_price)) || 0;
                 const discountPercent = parseFloat(String(item.discount_percent || 0));
                 const taxPercent = parseFloat(String(item.tax_percent || 0));
-                const taxAmount = Number(item.tax_amount || 0);
-                const totalWithTax = Number(item.total_amount || 0);
+                const taxAmount = item.tax_amount || '0.00';
+                const totalWithTax = item.total_amount || '0.00';
 
                 // Format expiry date if exists
                 const expiryDisplay = (() => {
@@ -570,19 +576,24 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
               <h4 className="text-sm font-semibold text-gray-700 mb-2">GST Breakdown</h4>
               <div className="bg-gray-50 rounded-lg p-3 space-y-1">
                 {(() => {
-                  const gstBreakdown = {};
+                  const gstBreakdown: Record<string, { taxable: string; tax: string }> = {};
                   (purchase.items || []).forEach(item => {
-                    const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-                    if (taxPercent > 0) {
+                    let taxPercent: string;
+                    try {
+                      taxPercent = normalizeExactDecimal(item.tax_percent || 0, 'Purchase GST rate', { scale: 6, maximumWholeDigits: 3 });
+                    } catch {
+                      return;
+                    }
+                    if (compareExactDecimals(taxPercent, '0', 'Purchase GST rate', { scale: 6, maximumWholeDigits: 3 }) > 0) {
                       if (!gstBreakdown[taxPercent]) {
-                        gstBreakdown[taxPercent] = { taxable: 0, tax: 0 };
+                        gstBreakdown[taxPercent] = { taxable: '0.00', tax: '0.00' };
                       }
-                      gstBreakdown[taxPercent].taxable += Number(item.taxable_amount || 0);
-                      gstBreakdown[taxPercent].tax += Number(item.tax_amount || 0);
+                      gstBreakdown[taxPercent].taxable = addExactDecimals([gstBreakdown[taxPercent].taxable, item.taxable_amount || 0], 'Purchase GST taxable total', { scale: 2, maximumWholeDigits: 20 });
+                      gstBreakdown[taxPercent].tax = addExactDecimals([gstBreakdown[taxPercent].tax, item.tax_amount || 0], 'Purchase GST tax total', { scale: 2, maximumWholeDigits: 20 });
                     }
                   });
 
-                  const gstBands = Object.keys(gstBreakdown).sort((a, b) => parseFloat(a) - parseFloat(b));
+                  const gstBands = Object.keys(gstBreakdown).sort((a, b) => compareExactDecimals(a, b, 'Purchase GST band', { scale: 6, maximumWholeDigits: 3 }));
 
                   if (gstBands.length === 0) {
                     return <p className="text-xs text-gray-500">No GST applicable</p>;
@@ -591,9 +602,9 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   return gstBands.map(band => (
                     <div key={band} className="flex justify-between text-xs">
                       <span className="text-gray-600">
-                        GST @ {band}%
+                        GST @ {formatExactDecimal(band, 'Purchase GST band', { scale: 6, maximumWholeDigits: 3 })}%
                         <span className="text-[10px] ml-1 text-gray-400">
-                          (₹{gstBreakdown[band].taxable.toFixed(2)})
+                          ({formatCurrency(gstBreakdown[band].taxable)})
                         </span>
                       </span>
                       <span className="font-medium text-gray-800">
@@ -621,7 +632,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 <span className="text-sm text-gray-600">Tax</span>
                 <span className="text-sm">{formatCurrency(purchase.tax_amount)}</span>
               </div>
-              {purchase.discount_amount > 0 && (
+              {compareExactDecimals(purchase.discount_amount, '0.00', 'Purchase discount', { scale: 2, maximumWholeDigits: 20 }) > 0 && (
                 <div className="flex justify-between py-2">
                   <span className="text-sm text-gray-600">Discount</span>
                   <span className="text-sm text-red-600">-{formatCurrency(purchase.discount_amount)}</span>

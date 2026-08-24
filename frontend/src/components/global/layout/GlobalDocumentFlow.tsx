@@ -3,6 +3,7 @@ import { LucideIcon } from 'lucide-react';
 import ModuleHeader, { ModuleHeaderAction } from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';
 import { useToast } from '../ui/feedback/Toast';
+import type { EditableDecimalValue } from '../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -35,11 +36,11 @@ interface Shortcut {
 
 interface FooterTotals {
     itemCount?: number;
-    totalAmount?: number;
-    subtotal?: number;
-    tax?: number;
-    roundOff?: number;
-    grandTotal?: number;
+    totalAmount?: EditableDecimalValue;
+    subtotal?: EditableDecimalValue;
+    tax?: EditableDecimalValue;
+    roundOff?: EditableDecimalValue;
+    grandTotal?: EditableDecimalValue;
 }
 
 interface DocumentData {

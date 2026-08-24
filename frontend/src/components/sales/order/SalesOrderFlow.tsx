@@ -179,7 +179,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         </div>
 
                         <DocumentFooter
-                            totalItems={order.total_quantity}
+                            totalItems={order.items.length}
                             totalAmount={order.total_amount}
                             onCancel={handleCancelRequest}
                             onContinue={() => setCurrentStep(2)}
@@ -273,7 +273,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         </div>}
                         <fieldset disabled={Boolean(submissionUnavailableReason)} aria-describedby={submissionUnavailableReason ? "sales-order-submission-status" : undefined}>
                             <DocumentFooter
-                                totalItems={order.total_quantity}
+                                totalItems={order.items.length}
                                 totalAmount={order.total_amount}
                                 subtotalAmount={order.subtotal_amount}
                                 taxAmount={order.tax_amount}

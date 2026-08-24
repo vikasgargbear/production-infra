@@ -12,9 +12,8 @@ import {
     PrintUtility
 } from '../../../global';
 import BankAccountSelector from '../../../global/selector/BankAccountSelector';
-import { numberToWords } from '../../../../utils/formatters';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
-import type { Order, OrderItem, BankAccount, Customer } from '../../../../types/models';
+import type { Order, BankAccount, Customer } from '../../../../types/models';
 
 // Using canonical Customer type from /types/models - no local duplicate
 
@@ -353,7 +352,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
 
                         {/* Amount in Words */}
                         <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <p className="text-sm"><span className="font-medium">Amount in Words:</span> {numberToWords(order.total_amount)}</p>
+                            <p className="text-sm"><span className="font-medium">Exact Amount:</span> ₹{money(order.total_amount, 'Order grand total')}</p>
                         </div>
 
                         {/* Terms & Signature */}

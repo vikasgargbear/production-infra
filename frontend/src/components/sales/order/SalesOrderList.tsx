@@ -9,6 +9,7 @@ import CancelDocumentModal from '../../global/modals/CancelDocumentModal';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import type { Order } from '../../../types/models';
+import { formatExactCurrency, type EditableDecimalValue } from '../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -145,12 +146,8 @@ const OrderList: React.FC = () => {
         }
     };
 
-    const formatCurrency = (amount: number | undefined): string => {
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR'
-        }).format(amount || 0);
-    };
+    const formatCurrency = (amount: EditableDecimalValue | undefined): string =>
+        formatExactCurrency(amount || 0, 'Sales order amount');
 
     const formatDate = (date: string): string => {
         return new Date(date).toLocaleDateString('en-IN', {

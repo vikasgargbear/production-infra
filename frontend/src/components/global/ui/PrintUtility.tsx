@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, ReactNode, forwardRef, useImperativeHandle, ForwardRefRenderFunction, CSSProperties } from 'react';
 import { Printer, Monitor, FileText } from 'lucide-react';
+import { compareExactDecimals, formatExactCurrency, formatExactDecimal, type EditableDecimalValue } from '../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -8,28 +9,28 @@ export interface PrintUtilityDocumentItem {
     name?: string;
     hsn_code?: string;
     batch_number?: string;
-    quantity?: number;
-    free_quantity?: number;
-    unit_price?: number;
-    selling_price?: number;
-    discount_percent?: number;
-    gst_percent?: number;
-    total?: number;
-    line_total?: number;
+    quantity?: EditableDecimalValue;
+    free_quantity?: EditableDecimalValue;
+    unit_price?: EditableDecimalValue;
+    selling_price?: EditableDecimalValue;
+    discount_percent?: EditableDecimalValue;
+    gst_percent?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
     [key: string]: unknown;
 }
 
 export interface PrintUtilityDocumentTotals {
-    subtotal?: number;
-    discount?: number;
-    tax_amount?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    total_amount?: number;
-    final_amount?: number;
-    paid_amount?: number;
-    balance_amount?: number;
+    subtotal?: EditableDecimalValue;
+    discount?: EditableDecimalValue;
+    tax_amount?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
+    total_amount?: EditableDecimalValue;
+    final_amount?: EditableDecimalValue;
+    paid_amount?: EditableDecimalValue;
+    balance_amount?: EditableDecimalValue;
     [key: string]: unknown;
 }
 
@@ -95,6 +96,8 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
     companyInfo,
     width = '80mm'
 }, ref) => {
+    const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
+    const quantityOptions = { scale: 6, maximumWholeDigits: 20, allowNegative: false } as const;
     const {
         documentNumber,
         date,
@@ -187,17 +190,17 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
                             <span style={{ ...style50, fontSize: '10px' }}>{item.batch_number && `Batch: ${item.batch_number}`}</span>
                             <span style={style15Center}>
                                 {item.quantity}
-                                {(item.free_quantity ?? 0) > 0 && `+${item.free_quantity}F`}
+                                {compareExactDecimals(item.free_quantity ?? 0, 0, 'Print free quantity', quantityOptions) > 0 && `+${formatExactDecimal(item.free_quantity ?? 0, 'Print free quantity', quantityOptions)}F`}
                             </span>
-                            <span style={style15Right}>{parseFloat(String(item.unit_price || item.unit_price || item.selling_price || 0)).toFixed(2)}</span>
+                            <span style={style15Right}>{formatExactDecimal(item.unit_price || item.selling_price || 0, 'Print unit price', moneyOptions, 2)}</span>
                             <span style={style20Right}>
-                                {parseFloat(String(item.total || item.line_total || ((item.quantity || 0) * (item.unit_price || item.unit_price || item.selling_price || 0)))).toFixed(2)}
+                                {formatExactDecimal(item.total || item.line_total || 0, 'Print line total', moneyOptions, 2)}
                             </span>
                         </div>
-                        {((item.discount_percent ?? 0) > 0 || (item.gst_percent ?? 0) > 0) && (
+                        {(compareExactDecimals(item.discount_percent ?? 0, 0, 'Print discount percent', quantityOptions) > 0 || compareExactDecimals(item.gst_percent ?? 0, 0, 'Print GST percent', quantityOptions) > 0) && (
                             <div style={{ fontSize: '9px', color: '#666', marginTop: '1mm' }}>
-                                {(item.discount_percent ?? 0) > 0 && `Disc: ${item.discount_percent}% `}
-                                {(item.gst_percent ?? 0) > 0 && `GST: ${item.gst_percent}%`}
+                                {compareExactDecimals(item.discount_percent ?? 0, 0, 'Print discount percent', quantityOptions) > 0 && `Disc: ${formatExactDecimal(item.discount_percent ?? 0, 'Print discount percent', quantityOptions)}% `}
+                                {compareExactDecimals(item.gst_percent ?? 0, 0, 'Print GST percent', quantityOptions) > 0 && `GST: ${formatExactDecimal(item.gst_percent ?? 0, 'Print GST percent', quantityOptions)}%`}
                             </div>
                         )}
                     </div>
@@ -206,23 +209,23 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
 
             <div className="thermal-total-section">
                 {totals.subtotal !== undefined && (
-                    <div className="thermal-total-row"><span>Subtotal:</span><span>₹{parseFloat(String(totals.subtotal || 0)).toFixed(2)}</span></div>
+                    <div className="thermal-total-row"><span>Subtotal:</span><span>{formatExactCurrency(totals.subtotal || 0, 'Print subtotal')}</span></div>
                 )}
-                {(totals.discount ?? 0) > 0 && (
-                    <div className="thermal-total-row"><span>Discount:</span><span>-₹{parseFloat(String(totals.discount || 0)).toFixed(2)}</span></div>
+                {compareExactDecimals(totals.discount ?? 0, 0, 'Print discount', moneyOptions) > 0 && (
+                    <div className="thermal-total-row"><span>Discount:</span><span>-{formatExactCurrency(totals.discount || 0, 'Print discount')}</span></div>
                 )}
-                {totals.tax_amount !== undefined && (totals.tax_amount ?? 0) > 0 && (
-                    <div className="thermal-total-row"><span>GST:</span><span>₹{parseFloat(String(totals.tax_amount || 0)).toFixed(2)}</span></div>
+                {totals.tax_amount !== undefined && compareExactDecimals(totals.tax_amount ?? 0, 0, 'Print GST', moneyOptions) > 0 && (
+                    <div className="thermal-total-row"><span>GST:</span><span>{formatExactCurrency(totals.tax_amount || 0, 'Print GST')}</span></div>
                 )}
                 <div className="thermal-grand-total">
-                    <div className="thermal-total-row"><span>TOTAL:</span><span>₹{parseFloat(String(totals.total_amount || totals.final_amount || 0)).toFixed(2)}</span></div>
+                    <div className="thermal-total-row"><span>TOTAL:</span><span>{formatExactCurrency(totals.total_amount || totals.final_amount || 0, 'Print total')}</span></div>
                 </div>
             </div>
 
             {totals.paid_amount !== undefined && (
                 <div className="thermal-section">
-                    <div className="thermal-total-row"><span>Paid:</span><span>₹{parseFloat(String(totals.paid_amount || 0)).toFixed(2)}</span></div>
-                    <div className="thermal-total-row"><span>Balance:</span><span>₹{parseFloat(String(totals.balance_amount || 0)).toFixed(2)}</span></div>
+                    <div className="thermal-total-row"><span>Paid:</span><span>{formatExactCurrency(totals.paid_amount || 0, 'Print paid amount')}</span></div>
+                    <div className="thermal-total-row"><span>Balance:</span><span>{formatExactCurrency(totals.balance_amount || 0, 'Print balance')}</span></div>
                 </div>
             )}
 

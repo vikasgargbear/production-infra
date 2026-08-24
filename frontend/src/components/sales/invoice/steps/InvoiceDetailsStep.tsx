@@ -9,6 +9,7 @@ import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { indianStateName } from '../../../../utils/indianStates';
 import { applySelectedDeliveryAddress } from '../utils/invoiceAddressSelection';
+import { addExactDecimals, compareExactDecimals, formatExactCurrency, subtractExactDecimals } from '../../../../utils/exactDecimal';
 
 // Shared Types
 import { Customer, Invoice, Payment } from '../types/invoiceTypes';
@@ -41,6 +42,13 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     deliveryChargesRef,
 }) => {
     const { companyInfo } = useCompany();
+    const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
+    const canonicalFinalAmount = invoice.totals?.final_amount || invoice.final_amount || 0;
+    const canonicalTotalPaid = (): string => addExactDecimals(
+        (invoice.payments || []).map(payment => payment.amount || 0),
+        'Invoice payments',
+        moneyOptions,
+    );
     // State for controlling AddressForm add mode externally
     const [addAddressMode, setAddAddressMode] = useState(false);
 
@@ -206,7 +214,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         aria-checked={!!(invoice.payments && invoice.payments.length > 1)}
                                         aria-label="Enable split payment"
                                         onClick={() => {
-                                            const totalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0;
+                                            const totalAmount = canonicalFinalAmount;
                                             if (invoice.payments && invoice.payments.length > 1) {
                                                 setInvoice(prev => ({
                                                     ...prev,
@@ -362,7 +370,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                 <select
                                                     value={invoice.payments?.[0]?.method || 'credit'}
                                                     onChange={(e) => {
-                                                        const totalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0;
+                                                        const totalAmount = canonicalFinalAmount;
                                                         setInvoice(prev => ({
                                                             ...prev,
                                                             payments: [{
@@ -388,7 +396,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
                                                 <input
                                                     type="number"
-                                                    value={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0}
+                                                    value={canonicalFinalAmount}
                                                     readOnly
                                                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
                                                 />
@@ -432,11 +440,10 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         <h4 className="text-sm font-semibold text-gray-700">Bill Discount</h4>
                                         {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) && (
                                             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                                                Saves ₹{(
-                                                    invoice.discount_type === 'fixed'
-                                                        ? invoice.discount_amount || 0
-                                                        : (parseFloat(String(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
-                                                ).toFixed(0)}
+                                                Saves {formatExactCurrency(
+                                                    invoice.totals?.scheme_discount || invoice.discount_amount || 0,
+                                                    'Invoice scheme discount',
+                                                )}
                                             </span>
                                         )}
                                     </div>
@@ -535,16 +542,16 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {invoice.totals?.gross_amount && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Gross Amount</span>
-                                                <span className="text-gray-900">₹{parseFloat(String(invoice.totals.gross_amount)).toFixed(2)}</span>
+                                                <span className="text-gray-900">{formatExactCurrency(invoice.totals.gross_amount, 'Invoice gross amount')}</span>
                                             </div>
                                         )}
 
                                         {/* Item-level Discounts */}
-                                        {(invoice.totals?.total_discount || 0) > 0 && (
+                                        {compareExactDecimals(invoice.totals?.total_discount || 0, 0, 'Invoice item discount', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Item Discounts</span>
                                                 <span className="text-green-600">
-                                                    -₹{parseFloat(String(invoice.totals?.total_discount)).toFixed(2)}
+                                                    -{formatExactCurrency(invoice.totals?.total_discount || 0, 'Invoice item discount')}
                                                 </span>
                                             </div>
                                         )}
@@ -553,19 +560,19 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount) && (
                                             <div className="flex justify-between items-center text-sm font-medium">
                                                 <span className="text-gray-700">Taxable Amount</span>
-                                                <span className="text-gray-900">₹{parseFloat(String(invoice.totals.taxable_before_scheme || invoice.totals.taxable_amount)).toFixed(2)}</span>
+                                                <span className="text-gray-900">{formatExactCurrency(invoice.totals.taxable_before_scheme || invoice.totals.taxable_amount || 0, 'Invoice taxable amount')}</span>
                                             </div>
                                         )}
 
                                         {/* Invoice Discount (scheme_discount from calculator) */}
-                                        {(invoice.totals?.scheme_discount || 0) > 0 && (
+                                        {compareExactDecimals(invoice.totals?.scheme_discount || 0, 0, 'Invoice scheme discount', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">
                                                     Invoice Discount
                                                     {invoice.discount_type === 'percentage' && ` (${invoice.discount_percent}%)`}
                                                 </span>
                                                 <span className="text-green-600">
-                                                    -₹{parseFloat(String(invoice.totals?.scheme_discount)).toFixed(2)}
+                                                    -{formatExactCurrency(invoice.totals?.scheme_discount || 0, 'Invoice scheme discount')}
                                                 </span>
                                             </div>
                                         )}
@@ -574,7 +581,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {(invoice.freight_charges || 0) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Delivery Charges</span>
-                                                <span className="text-gray-900">+₹{parseFloat(String(invoice.freight_charges)).toFixed(2)}</span>
+                                                <span className="text-gray-900">+{formatExactCurrency(invoice.freight_charges || 0, 'Invoice delivery charges')}</span>
                                             </div>
                                         )}
 
@@ -582,7 +589,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                                             <span className="text-sm font-medium text-gray-700">Total Amount</span>
                                             <span className="text-lg font-semibold text-gray-900">
-                                                ₹{parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0)).toFixed(2)}
+                                                {formatExactCurrency(canonicalFinalAmount, 'Invoice final amount')}
                                             </span>
                                         </div>
                                     </div>
@@ -595,32 +602,28 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                 {/* Footer */}
                 <DocumentFooter
-                    totalAmount={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0))}
+                    totalAmount={canonicalFinalAmount}
                     onCancel={onBack}
                     onContinue={onContinue}
                     cancelLabel="← Back to Items"
                     continueLabel="Continue to Preview"
                     continueDisabled={(() => {
-                        const totalPaid = (invoice.payments || []).reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
-                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
-                        return totalPaid > finalAmount;
+                        return compareExactDecimals(canonicalTotalPaid(), canonicalFinalAmount, 'Invoice payment limit', moneyOptions) > 0;
                     })()}
                     continueButtonColor="blue"
                     additionalInfo={(() => {
-                        const totalPaid = (invoice.payments || []).reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
-                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
-                        const remaining = finalAmount - totalPaid;
+                        const remaining = subtractExactDecimals(canonicalFinalAmount, canonicalTotalPaid(), 'Invoice balance', moneyOptions);
 
-                        if (remaining > 0) {
+                        if (compareExactDecimals(remaining, 0, 'Invoice balance', moneyOptions) > 0) {
                             return (
                                 <span className="text-sm text-gray-700">
-                                    Credit: <strong className="text-gray-900">₹{remaining.toFixed(2)}</strong>
+                                    Credit: <strong className="text-gray-900">{formatExactCurrency(remaining, 'Invoice balance')}</strong>
                                 </span>
                             );
-                        } else if (remaining < 0) {
+                        } else if (compareExactDecimals(remaining, 0, 'Invoice balance', moneyOptions) < 0) {
                             return (
                                 <span className="text-sm text-red-600">
-                                    Overpaid: <strong>₹{Math.abs(remaining).toFixed(2)}</strong>
+                                    Overpaid: <strong>{formatExactCurrency(remaining.slice(1), 'Invoice overpayment')}</strong>
                                 </span>
                             );
                         }

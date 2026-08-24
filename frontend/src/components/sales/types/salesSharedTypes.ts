@@ -6,6 +6,8 @@
  * This file contains only the truly shared abstractions.
  */
 
+import type { EditableDecimalValue } from '../../../utils/exactDecimal';
+
 // ==================== BASE ENUMS / UNION TYPES ====================
 
 /** Generic document status (foundation for specific statuses) */
@@ -36,7 +38,7 @@ export type CanonicalSourceDocumentKind =
  * a draft is being edited; API-owned fractions must never cross through an
  * IEEE-754 conversion.
  */
-export type SalesDecimal = string | number;
+export type SalesDecimal = EditableDecimalValue;
 
 // ==================== EMPLOYEE (SHARED) ====================
 
@@ -122,9 +124,9 @@ export interface BaseLineItem {
     // Tax
     gst_percent?: SalesDecimal;
     hsn_code?: string;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
+    cgst_amount?: SalesDecimal;
+    sgst_amount?: SalesDecimal;
+    igst_amount?: SalesDecimal;
 
     // Totals - backend uses line_total
     line_total?: SalesDecimal;
