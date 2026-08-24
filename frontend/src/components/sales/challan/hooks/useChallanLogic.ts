@@ -88,7 +88,20 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         const requestId = ++calculationRequestRef.current;
         if (!challan.items.length || !challan.customer_id) return;
 
-        void calculateChallanPreview(challan, true)
+        // The backend deliberately trusts the explicit GST mode. Derive it from
+        // the current Place of Supply at the request boundary so delivery-address
+        // edits cannot race with or depend on a previously stored gst_type.
+        const calculationChallan: Challan = {
+            ...challan,
+            gst_type: determineGstTypeForSupply(
+                companyInfo?.state,
+                challan.delivery_state || challan.customer_details?.state,
+                companyInfo?.gst_number,
+                challan.customer_details?.gst_number
+            )
+        };
+
+        void calculateChallanPreview(calculationChallan, true)
             .then(calculation => {
                 if (requestId !== calculationRequestRef.current) return;
                 setChallan(prev => {
@@ -142,7 +155,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                     setMessageType('error');
                 }
             });
-    }, [challan, isOnline, setChallan]);
+    }, [challan, companyInfo, isOnline, setChallan]);
 
     // The canonical API must assign the final document number.
     const generateChallanNumber = useCallback(async () => {

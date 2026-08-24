@@ -54,7 +54,7 @@ describe('useChallanLogic GST place-of-supply state', () => {
     beforeEach(() => {
         mockedEmployeeGetAll.mockResolvedValue({ data: [] } as Awaited<ReturnType<typeof employeesApi.getAll>>);
         mockedPreview.mockReset();
-        mockedPreview.mockResolvedValue({
+        mockedPreview.mockImplementation(async challan => ({
             items: [{
                 taxable_amount: 100,
                 total_tax_amount: 12,
@@ -65,8 +65,8 @@ describe('useChallanLogic GST place-of-supply state', () => {
                 total_tax_amount: 12,
                 final_amount: 112,
             },
-            gst_type: 'IGST',
-        });
+            gst_type: challan.gst_type,
+        }));
     });
 
     it('derives IGST for an inter-state UUID customer and resets on clear', async () => {
@@ -118,5 +118,81 @@ describe('useChallanLogic GST place-of-supply state', () => {
         expect(calculatedChallan.delivery_state).toBe('Karnataka');
         expect(calculatedChallan.gst_type).toBe('IGST');
         expect(result.current.challan.gst_type).toBe('IGST');
+    });
+
+    it('re-derives the next preview after delivery-address save and same-as-billing mutations', async () => {
+        const { result } = renderHook(() => useChallanLogic());
+        const maharashtraCustomer = {
+            ...interstateCustomer,
+            customer_name: 'Maharashtra Customer',
+            address: '1 Mumbai Road',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400001',
+            gst_number: '27ABCDE1234F1Z5',
+        };
+
+        await act(async () => {
+            await result.current.handleImport({
+                customer_id: maharashtraCustomer.customer_id,
+                customer_name: maharashtraCustomer.customer_name,
+                customer_details: maharashtraCustomer,
+                delivery_address: maharashtraCustomer.address,
+                delivery_city: maharashtraCustomer.city,
+                delivery_state: maharashtraCustomer.state,
+                delivery_pincode: maharashtraCustomer.pincode,
+                items: [{
+                    id: 'saved-address-line',
+                    product_id: '10000000-0000-7000-8000-000000000002',
+                    product_name: 'Carton',
+                    quantity: 1,
+                    unit_price: 100,
+                    gst_percent: 12,
+                }],
+            });
+        });
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalled());
+
+        mockedPreview.mockClear();
+        act(() => {
+            // Mirrors AddressForm.onSave in ChallanPreviewStep.
+            result.current.setSameAsBilling(false);
+            result.current.setChallan(previous => ({
+                ...previous,
+                delivery_address: '2 Bengaluru Road',
+                delivery_city: 'Bengaluru',
+                delivery_state: 'Karnataka',
+                delivery_pincode: '560001',
+            }));
+        });
+
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalledWith(
+            expect.objectContaining({
+                delivery_state: 'Karnataka',
+                gst_type: 'IGST',
+            }),
+            true
+        ));
+
+        mockedPreview.mockClear();
+        act(() => {
+            // Mirrors AddressForm.onSameAsBillingChange in ChallanPreviewStep.
+            result.current.setSameAsBilling(true);
+            result.current.setChallan(previous => ({
+                ...previous,
+                delivery_address: maharashtraCustomer.address,
+                delivery_city: maharashtraCustomer.city,
+                delivery_state: maharashtraCustomer.state,
+                delivery_pincode: maharashtraCustomer.pincode,
+            }));
+        });
+
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalledWith(
+            expect.objectContaining({
+                delivery_state: 'Maharashtra',
+                gst_type: 'CGST/SGST',
+            }),
+            true
+        ));
     });
 });
