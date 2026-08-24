@@ -104,7 +104,7 @@ def test_list_preserves_exact_money_and_authoritative_total(monkeypatch):
 
 
 def test_list_rejects_invalid_date_range():
-    with pytest.raises(HTTPException, match="date range") as error:
+    with pytest.raises(HTTPException) as error:
         reads.canonical_payment_history(
             direction="all",
             date_from=date(2026, 8, 26),
@@ -116,6 +116,7 @@ def test_list_rejects_invalid_date_range():
             db=_Database(),
         )
     assert error.value.status_code == 422
+    assert "date range" in str(error.value.detail)
 
 
 @pytest.mark.parametrize(
