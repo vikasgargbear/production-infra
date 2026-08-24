@@ -182,9 +182,9 @@ const getColumns = (
         return (
           <div>
             {getPaymentTermsBadge(supplier)}
-            {supplier.current_outstanding && supplier.current_outstanding > 0 && (
+            {(supplier.current_outstanding || 0) > 0 && (
               <div className="text-sm text-gray-500 mt-1">
-                Due: {'\u20B9'}{supplier.current_outstanding.toLocaleString()}
+                Due: {'\u20B9'}{(supplier.current_outstanding || 0).toLocaleString()}
               </div>
             )}
           </div>
@@ -211,17 +211,19 @@ const getColumns = (
         <div className="flex items-center justify-center space-x-2">
           <button
             onClick={() => handleEdit(supplier)}
-            className="text-blue-600 hover:text-blue-700 p-1 rounded transition-colors"
+            aria-label={`Edit ${supplier?.supplier_name || 'supplier'}`}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center text-blue-600 hover:text-blue-700 rounded transition-colors"
             disabled={!supplier}
           >
             <Edit2 className="w-4 h-4" />
           </button>
           <button
             onClick={() => handleDelete(supplier?.supplier_id)}
+            aria-label={`${supplier?.is_active !== false ? 'Deactivate' : 'Reactivate'} ${supplier?.supplier_name || 'supplier'}`}
             className={`${supplier?.is_active !== false
               ? 'text-amber-600 hover:text-amber-700'
               : 'text-green-600 hover:text-green-700'
-              } p-1 rounded transition-colors`}
+              } inline-flex min-h-11 min-w-11 items-center justify-center rounded transition-colors`}
             disabled={!supplier?.supplier_id}
             title={supplier?.is_active !== false ? 'Deactivate Supplier' : 'Reactivate Supplier'}
           >
@@ -322,6 +324,7 @@ const SupplierMaster: React.FC = () => {
             />
           </div>
           <select
+            aria-label="Filter suppliers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

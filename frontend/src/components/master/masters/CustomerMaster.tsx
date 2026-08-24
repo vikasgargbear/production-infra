@@ -179,17 +179,19 @@ const getColumns = (
         <div className="flex items-center justify-center space-x-2">
           <button
             onClick={() => handleEdit(customer)}
-            className="text-blue-600 hover:text-blue-700 p-1 rounded transition-colors"
+            aria-label={`Edit ${customer?.customer_name || 'customer'}`}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center text-blue-600 hover:text-blue-700 rounded transition-colors"
             disabled={!customer}
           >
             <Edit2 className="w-4 h-4" />
           </button>
           <button
             onClick={() => handleDelete(customer?.customer_id)}
+            aria-label={`${customer?.is_active !== false ? 'Deactivate' : 'Reactivate'} ${customer?.customer_name || 'customer'}`}
             className={`${customer?.is_active !== false
               ? 'text-amber-600 hover:text-amber-700'
               : 'text-green-600 hover:text-green-700'
-              } p-1 rounded transition-colors`}
+              } inline-flex min-h-11 min-w-11 items-center justify-center rounded transition-colors`}
             disabled={!customer?.customer_id}
             title={customer?.is_active !== false ? 'Deactivate Customer' : 'Reactivate Customer'}
           >
@@ -286,6 +288,7 @@ const CustomerMaster: React.FC = () => {
             />
           </div>
           <select
+            aria-label="Filter customers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
