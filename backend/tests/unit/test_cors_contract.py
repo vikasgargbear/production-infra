@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
@@ -116,6 +117,51 @@ def test_simple_request_from_allowed_origin_has_acao_header() -> None:
     )
     assert resp.status_code == 200
     assert resp.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+
+
+def test_unhandled_error_from_allowed_origin_has_exact_cors_headers() -> None:
+    client = _make_client(ALLOWED_ORIGIN)
+
+    @client.app.get("/__cors_unhandled_error_contract__")
+    async def unhandled_error_contract():
+        raise RuntimeError("deliberate contract failure")
+
+    resp = client.get(
+        "/__cors_unhandled_error_contract__",
+        headers={"Origin": ALLOWED_ORIGIN},
+    )
+
+    assert resp.status_code == 500
+    assert resp.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+    assert resp.headers.get("access-control-allow-credentials") == "true"
+    assert resp.json() == {
+        "detail": "An internal error occurred. Please try again or contact support.",
+        "error_code": "INTERNAL_ERROR",
+    }
+
+
+def test_unhandled_error_does_not_weaken_origin_allowlist() -> None:
+    client = _make_client(ALLOWED_ORIGIN)
+
+    @client.app.get("/__cors_disallowed_error_contract__")
+    async def disallowed_error_contract():
+        raise RuntimeError("deliberate contract failure")
+
+    resp = client.get(
+        "/__cors_disallowed_error_contract__",
+        headers={"Origin": DISALLOWED_ORIGIN},
+    )
+
+    assert resp.status_code == 500
+    assert "access-control-allow-origin" not in resp.headers
+
+
+def test_global_cors_application_preserves_fastapi_contract() -> None:
+    client = _make_client(ALLOWED_ORIGIN)
+
+    assert isinstance(client.app, FastAPI)
+    assert "/health" in client.app.openapi()["paths"]
+    assert isinstance(client.app.dependency_overrides, dict)
 
 
 # ---------------------------------------------------------------------------

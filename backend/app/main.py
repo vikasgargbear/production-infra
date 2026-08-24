@@ -5,7 +5,6 @@ Reorganized with domain-based folder structure
 import asyncio
 import os
 from fastapi import FastAPI, APIRouter
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from sqlalchemy import text
@@ -18,6 +17,7 @@ from .core.api_contract import install_operation_registry
 from .middleware.error_handler import global_exception_handler
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.request_logger import RequestLoggerMiddleware
+from .middleware.global_cors import GlobalCORSEnabledFastAPI
 
 # =============================================================================
 # DOMAIN-BASED IMPORTS - Organized by module
@@ -139,26 +139,6 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down...")
 
-app = FastAPI(
-    title="Pharma ERP API",
-    description="Enterprise Pharma ERP System API",
-    version="3.0.0",  # Major version bump for folder restructure
-    lifespan=lifespan
-)
-
-# =============================================================================
-# MIDDLEWARE STACK (order matters: last added = first executed)
-# =============================================================================
-
-# Global exception handler (catch-all for unhandled errors)
-app.add_exception_handler(Exception, global_exception_handler)
-
-# Security headers (X-Frame-Options, HSTS, etc.)
-app.add_middleware(SecurityHeadersMiddleware)
-
-# Request logging with correlation IDs
-app.add_middleware(RequestLoggerMiddleware)
-
 # CORS Configuration — env-based whitelist in production
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")
 if _cors_origins_env:
@@ -175,25 +155,43 @@ else:
 if "*" in _allowed_origins:
     raise RuntimeError("CORS_ORIGINS cannot contain '*' when credentials are enabled")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "X-Request-ID",
-        "X-Idempotency-Key",
-        "X-Connection-Check",
-    ],
-    expose_headers=[
-        "X-Request-ID",
-        "X-Idempotency-Key",
-        "X-Idempotency-Replayed",
-    ],
-    max_age=3600,
+app = GlobalCORSEnabledFastAPI(
+    title="Pharma ERP API",
+    description="Enterprise Pharma ERP System API",
+    version="3.0.0",  # Major version bump for folder restructure
+    lifespan=lifespan,
+    global_cors_options={
+        "allow_origins": _allowed_origins,
+        "allow_credentials": True,
+        "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": [
+            "Authorization",
+            "Content-Type",
+            "X-Request-ID",
+            "X-Idempotency-Key",
+            "X-Connection-Check",
+        ],
+        "expose_headers": [
+            "X-Request-ID",
+            "X-Idempotency-Key",
+            "X-Idempotency-Replayed",
+        ],
+        "max_age": 3600,
+    },
 )
+
+# =============================================================================
+# MIDDLEWARE STACK (order matters: last added = first executed)
+# =============================================================================
+
+# Global exception handler (catch-all for unhandled errors)
+app.add_exception_handler(Exception, global_exception_handler)
+
+# Security headers (X-Frame-Options, HSTS, etc.)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Request logging with correlation IDs
+app.add_middleware(RequestLoggerMiddleware)
 
 # Disable redirect_slashes to prevent 307 redirects that break CORS
 # 307 redirects during preflight OPTIONS requests fail CORS validation
