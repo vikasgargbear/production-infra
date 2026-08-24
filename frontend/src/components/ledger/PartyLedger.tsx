@@ -6,38 +6,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar,
-  Download,
-  Filter,
-  Search,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
   FileText,
-  CreditCard,
   AlertCircle,
-  PieChart,
-  BarChart3,
-  CheckCircle,
-  XCircle,
-  Mail,
-  MessageSquare,
-  Eye,
-  Edit,
   Trash2,
   Loader2,
-  RefreshCw,
   FileDown,
   FileSpreadsheet,
   Printer,
-  ChevronDown,
   User,
   Building,
-  X
 } from 'lucide-react';
-import { format, parseISO, subMonths, subDays, differenceInDays, isWithinInterval } from 'date-fns';
+import { format, parseISO, subMonths, subDays } from 'date-fns';
 import { partyLedgerApi } from '../../services/api';
-import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge, ModuleHeader } from '../global';
-import { formatCurrency } from '../../utils/formatters';
+import { CustomerSearch, SupplierSearch, DataTable, ModuleHeader } from '../global';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
 import { useCompany } from '../../contexts/CompanyContext';
 
@@ -88,8 +69,8 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
   });
   const [quickDateRange, setQuickDateRange] = useState('last3months');
   const [filterType, setFilterType] = useState('all');
-  const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
   const { companyInfo } = useCompany();
   const orgDetails = useMemo(() => companyInfo ? ({
     organization_name: companyInfo.name,
@@ -140,28 +121,9 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
   const partyId = initialPartyId || selectedParty?.customer_id || selectedParty?.supplier_id || selectedParty?.id;
 
   // State for data fetching (replacing react-query)
-  const [partyDetails, setPartyDetails] = useState<any>(null);
   const [ledgerData, setLedgerData] = useState<any>(null);
-  const [loadingParty, setLoadingParty] = useState(false);
   const [loadingLedger, setLoadingLedger] = useState(false);
-  const [partyError, setPartyError] = useState<Error | null>(null);
   const [ledgerError, setLedgerError] = useState<Error | null>(null);
-
-  // Fetch party details
-  useEffect(() => {
-    if (!partyId) return;
-
-    setLoadingParty(true);
-    setPartyError(null);
-
-    partyLedgerApi.getBalance(partyId, partyType)
-      .then(data => setPartyDetails(data))
-      .catch(err => {
-        console.error('Failed to fetch party details:', err);
-        setPartyError(err);
-      })
-      .finally(() => setLoadingParty(false));
-  }, [partyId, partyType]);
 
   // Fetch ledger entries
   const fetchLedgerData = useCallback(async () => {
@@ -255,7 +217,7 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
     });
   }, [dateRange, quickDateRange]);
 
-  const errorMessage = partyError?.message || ledgerError?.message;
+  const errorMessage = ledgerError?.message;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -458,9 +420,11 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
 
   const handleExport = async (exportFormat: 'pdf' | 'excel') => {
     if (!selectedParty && !initialPartyId) {
-      alert('Please select a party first');
+      setExportFeedback('Select a party before exporting a ledger statement.');
       return;
     }
+
+    setExportFeedback(null);
 
     if (exportFormat === 'excel') {
       // Generate CSV
@@ -800,7 +764,13 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
               )}
 
               {/* Loading State */}
-              {(loadingParty || loadingLedger) && (
+              {exportFeedback && (
+                <p role="alert" className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {exportFeedback}
+                </p>
+              )}
+
+              {loadingLedger && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
                   <div className="text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />

@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edit, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import type { Product } from '../../../types/models/product';
 import ProductFlow from './ProductFlow';
+import ProductDraftDeleteDialog from './ProductDraftDeleteDialog';
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -12,6 +13,10 @@ const Products: React.FC = () => {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<Product['product_id'] | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteTrigger, setDeleteTrigger] = useState<HTMLElement | null>(null);
+  const newDraftButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,20 +50,34 @@ const Products: React.FC = () => {
     setEditingProduct(null);
   };
 
-  const deleteDraft = async (product: Product) => {
+  const requestDraftDeletion = (product: Product, trigger: HTMLElement) => {
     // The API is authoritative too, but never offer or issue the mutation when
     // the read projection says this is an active or blocked catalog record.
     if (product.status !== 'draft') return;
-    if (!window.confirm(`Delete unused draft “${product.product_name}”? This cannot be undone.`)) return;
+    setDeleteError(null);
+    setDeleteTrigger(trigger);
+    setPendingDelete(product);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deletingProductId !== null) return;
+    setPendingDelete(null);
+    setDeleteError(null);
+  };
+
+  const deleteDraft = async () => {
+    const product = pendingDelete;
+    if (!product || product.status !== 'draft') return;
 
     setDeletingProductId(product.product_id);
-    setError(null);
+    setDeleteError(null);
     try {
       await productsApi.delete(product.product_id);
+      setPendingDelete(null);
       await load();
     } catch (deleteError: any) {
       const detail = deleteError?.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to delete the product draft. It may already be referenced.');
+      setDeleteError(typeof detail === 'string' ? detail : 'Failed to delete the product draft. It may already be referenced.');
     } finally {
       setDeletingProductId(null);
     }
@@ -72,7 +91,7 @@ const Products: React.FC = () => {
             <Package className="h-5 w-5 text-blue-600" />
             <h1 className="text-xl font-semibold text-gray-900">Products</h1>
           </div>
-          <button type="button" onClick={() => setEditorOpen(true)} className="flex min-h-11 items-center gap-2 bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+          <button ref={newDraftButtonRef} type="button" onClick={() => setEditorOpen(true)} className="flex min-h-11 items-center gap-2 bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
             <Plus className="h-4 w-4" /> New draft
           </button>
         </div>
@@ -112,7 +131,7 @@ const Products: React.FC = () => {
                       <button type="button" onClick={() => { setEditingProduct(product); setEditorOpen(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 bg-white px-3 py-2 text-gray-700" aria-label={`Edit draft ${product.product_name}`}>
                         <Edit className="h-4 w-4" /> Edit draft
                       </button>
-                      <button type="button" onClick={() => void deleteDraft(product)} disabled={deletingProductId === product.product_id} className="inline-flex min-h-11 items-center justify-center gap-2 border border-red-200 bg-white px-3 py-2 text-red-700 disabled:opacity-50" aria-label={`Delete draft ${product.product_name}`}>
+                      <button type="button" onClick={(event) => requestDraftDeletion(product, event.currentTarget)} disabled={deletingProductId === product.product_id} className="inline-flex min-h-11 items-center justify-center gap-2 border border-red-200 bg-white px-3 py-2 text-red-700 disabled:opacity-50" aria-label={`Delete draft ${product.product_name}`}>
                         <Trash2 className="h-4 w-4" /> {deletingProductId === product.product_id ? 'Deleting…' : 'Delete draft'}
                       </button>
                     </div>
@@ -155,7 +174,7 @@ const Products: React.FC = () => {
                           <button type="button" onClick={() => { setEditingProduct(product); setEditorOpen(true); }} className="inline-flex min-h-10 items-center gap-2 border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50" aria-label={`Edit draft ${product.product_name}`}>
                             <Edit className="h-4 w-4" /> Edit draft
                           </button>
-                          <button type="button" onClick={() => void deleteDraft(product)} disabled={deletingProductId === product.product_id} className="inline-flex min-h-10 items-center gap-2 border border-red-200 bg-white px-3 py-2 text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`Delete draft ${product.product_name}`}>
+                          <button type="button" onClick={(event) => requestDraftDeletion(product, event.currentTarget)} disabled={deletingProductId === product.product_id} className="inline-flex min-h-10 items-center gap-2 border border-red-200 bg-white px-3 py-2 text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`Delete draft ${product.product_name}`}>
                             <Trash2 className="h-4 w-4" /> {deletingProductId === product.product_id ? 'Deleting…' : 'Delete draft'}
                           </button>
                         </div>
@@ -183,6 +202,15 @@ const Products: React.FC = () => {
           onProductCreated={() => { closeEditor(); void load(); }}
         />
       )}
+      <ProductDraftDeleteDialog
+        product={pendingDelete}
+        deleting={deletingProductId !== null}
+        error={deleteError}
+        onCancel={closeDeleteDialog}
+        onDelete={() => void deleteDraft()}
+        restoreFocusTo={deleteTrigger}
+        fallbackFocusTo={newDraftButtonRef.current}
+      />
     </div>
   );
 };

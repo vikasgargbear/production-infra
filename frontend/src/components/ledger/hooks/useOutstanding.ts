@@ -8,7 +8,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../../services/api/apiClient';
-import { formatCurrency } from '../../../utils/formatters';
 
 // Types
 export interface InvoiceDetail {
@@ -88,6 +87,7 @@ export interface UseOutstandingReturn {
     viewMode: 'summary' | 'aging';
     showDetailsView: boolean;
     allocationModal: AllocationModalState;
+    exportFeedback: { type: 'info' | 'error'; message: string } | null;
 
     // Actions
     setFilters: React.Dispatch<React.SetStateAction<OutstandingFilters>>;
@@ -131,6 +131,7 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
         customerId: null,
         customerName: ''
     });
+    const [exportFeedback, setExportFeedback] = useState<{ type: 'info' | 'error'; message: string } | null>(null);
 
     // Fetch outstanding data
     const { data, isLoading, refetch, error } = useQuery({
@@ -263,7 +264,7 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
         retry: 1
     });
 
-    const parties = data?.parties || [];
+    const parties = useMemo(() => data?.parties || [], [data?.parties]);
     const summary = data?.summary || defaultSummary;
 
     // Filtered parties
@@ -328,6 +329,7 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
     }, []);
 
     const handleExport = useCallback(() => {
+        setExportFeedback(null);
         try {
             const csvData = filteredParties.map(party => ({
                 'Party Name': party.party_name,
@@ -340,7 +342,7 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
             }));
 
             if (csvData.length === 0) {
-                alert('No data to export');
+                setExportFeedback({ type: 'info', message: 'There is no outstanding data to export for the current filters.' });
                 return;
             }
 
@@ -360,7 +362,7 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
         } catch {
-            alert('Failed to export data');
+            setExportFeedback({ type: 'error', message: 'Outstanding export failed. No file was downloaded.' });
         }
     }, [filteredParties, partyType]);
 
@@ -387,6 +389,7 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
         viewMode,
         showDetailsView,
         allocationModal,
+        exportFeedback,
         setFilters,
         setViewMode,
         togglePartyExpansion,

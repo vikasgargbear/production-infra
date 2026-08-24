@@ -238,36 +238,13 @@ export function useSettingsEntity<T extends { isActive?: boolean; is_active?: bo
         }
     }, [formData, editingEntity, idField, api, entityLabel, entityName, formDataToEntity, loadEntities, handleCloseModal]);
 
-    const handleDelete = useCallback(async (id: string | number): Promise<void> => {
-        if (!window.confirm(`Are you sure you want to delete this ${entityName}?`)) {
-            return;
-        }
+    const handleDelete = useCallback(async (_id: string | number): Promise<void> => {
+        setError(`Deleting ${entityName}s is unavailable until a reviewed canonical command exists.`);
+    }, [entityName]);
 
-        try {
-            await api.delete(id);
-            setSuccessMessage(`${entityLabel} deleted successfully!`);
-            await loadEntities();
-            setTimeout(() => setSuccessMessage(''), 3000);
-        } catch (err) {
-            setError(`Failed to delete ${entityName}. Please try again.`);
-        }
-    }, [api, entityLabel, entityName, loadEntities]);
-
-    const handleToggleActive = useCallback(async (id: string | number): Promise<void> => {
-        try {
-            const entity = entities.find(e => e[idField] === id);
-            if (entity) {
-                const isActive = entity.isActive ?? entity.is_active ?? true;
-                const updatedEntity = { ...entity, isActive: !isActive, is_active: !isActive };
-                await api.update(id, updatedEntity as Partial<T>);
-                setSuccessMessage(`${entityLabel} ${!isActive ? 'activated' : 'deactivated'} successfully!`);
-                await loadEntities();
-                setTimeout(() => setSuccessMessage(''), 3000);
-            }
-        } catch (err) {
-            setError(`Failed to update ${entityName} status. Please try again.`);
-        }
-    }, [entities, idField, api, entityLabel, entityName, loadEntities]);
+    const handleToggleActive = useCallback(async (_id: string | number): Promise<void> => {
+        setError(`Changing ${entityName} status is unavailable until a reviewed canonical command exists.`);
+    }, [entityName]);
 
     const clearError = useCallback(() => setError(null), []);
     const clearSuccess = useCallback(() => setSuccessMessage(''), []);

@@ -40,6 +40,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
 }) => {
   // Use centralized state management (replaces 7 useState!)
   const { state, dispatch, filters, ui, selectedParty } = useOutstandingState();
+  const [exportFeedback, setExportFeedback] = React.useState<{ type: 'info' | 'error'; message: string } | null>(null);
 
   // Auto-expand customer when navigating from Collection Center
   React.useEffect(() => {
@@ -128,6 +129,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
   };
 
   const handleExport = () => {
+    setExportFeedback(null);
     try {
       const csvData = filteredParties.map((party: PartyOutstanding) => ({
         'Party Name': party.party_name,
@@ -140,7 +142,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
       }));
 
       if (csvData.length === 0) {
-        alert('No data to export');
+        setExportFeedback({ type: 'info', message: 'There is no outstanding data to export for the current filters.' });
         return;
       }
 
@@ -160,7 +162,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      alert('Failed to export data');
+      setExportFeedback({ type: 'error', message: 'Outstanding export failed. No file was downloaded.' });
     }
   };
 
@@ -287,6 +289,18 @@ const Outstanding: React.FC<OutstandingProps> = ({
                     onExport={handleExport}
                     onRefresh={() => refetch()}
                   />
+
+                  {exportFeedback && (
+                    <p
+                      role={exportFeedback.type === 'error' ? 'alert' : 'status'}
+                      className={`mb-4 rounded-md border px-4 py-3 text-sm ${exportFeedback.type === 'error'
+                        ? 'border-red-200 bg-red-50 text-red-700'
+                        : 'border-blue-200 bg-blue-50 text-blue-800'
+                        }`}
+                    >
+                      {exportFeedback.message}
+                    </p>
+                  )}
 
                   {ui.viewMode === 'summary' && (
                     <OutstandingTable

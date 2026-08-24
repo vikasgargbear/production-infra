@@ -135,26 +135,6 @@ export function useProducts() {
         }
     }, [fetchProducts, page]);
 
-    const deleteProduct = useCallback(async (productId: number | string) => {
-        if (!window.confirm('Delete this unused product draft? Active or referenced products cannot be deleted.')) {
-            return { success: false };
-        }
-
-        setLoading(true);
-        try {
-            const response = await productsApi.delete(productId);
-            if (response.data?.success || response.status === 200) {
-                await fetchProducts(page);
-                return { success: true };
-            }
-            return { success: false, error: 'Failed to delete product' };
-        } catch (err: any) {
-            return { success: false, error: err.message };
-        } finally {
-            setLoading(false);
-        }
-    }, [fetchProducts, page]);
-
     // ============================================
     // Modal Actions
     // ============================================
@@ -215,7 +195,6 @@ export function useProducts() {
         fetchProducts,
         createProduct,
         updateProduct,
-        deleteProduct
     };
 }
 

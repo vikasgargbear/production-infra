@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   CheckCircle, AlertTriangle, XCircle, Eye, Play,
-  Filter, Download, RefreshCw, Settings, Code,
+  Download, RefreshCw, Code,
   Database, Users, Package, FileText, Search, Loader2, X,
   LucideIcon
 } from 'lucide-react';
-import { DataTable, StatusBadge, Toast } from '../../global/ui';
-import { settingsApi } from '../../../services/api';
 
 // Types
 interface DataValidationEngineProps {
@@ -42,12 +40,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
   const [activeTab, setActiveTab] = useState<TabType>('rules');
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -76,74 +72,6 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
       setValidationResults([]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setError(null);
-    try {
-      await Promise.all([loadValidationRules(), loadValidationResults()]);
-    } catch (err) {
-      setError('Failed to refresh data. Please try again.');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleRunValidation = async () => {
-    setIsRunning(true);
-    setError(null);
-
-    try {
-      // TODO: Replace with actual validation API when available
-      // Simulate validation running
-      setTimeout(() => {
-        loadValidationResults();
-      }, 2000);
-    } catch (err) {
-      setError('Failed to start validation. Please try again.');
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  const handleToggleRule = async (ruleId: string, enabled: boolean) => {
-    try {
-      // TODO: Replace with actual validation API when available
-      setValidationRules(prev => prev.map(rule =>
-        rule.id === ruleId ? { ...rule, enabled } : rule
-      ));
-    } catch (err) {
-      setError('Failed to update rule. Please try again.');
-    }
-  };
-
-  const handleDeleteRule = async (ruleId: string) => {
-    if (!window.confirm('Are you sure you want to delete this validation rule?')) return;
-
-    try {
-      // TODO: Replace with actual validation API when available
-      setValidationRules(prev => prev.filter(rule => rule.id !== ruleId));
-    } catch (err) {
-      setError('Failed to delete rule. Please try again.');
-    }
-  };
-
-  const handleExportResults = async () => {
-    try {
-      // TODO: Replace with actual validation API when available
-      // Create a simple CSV export from current results
-      const csvContent = validationResults.map(r => `${r.entity},${r.message},${r.severity}`).join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `validation_results_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setError('Failed to export results. Please try again.');
     }
   };
 
@@ -219,24 +147,22 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={handleRunValidation}
-              disabled={isRunning}
+              type="button"
+              disabled
+              title="A canonical validation command is not available"
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isRunning ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              {isRunning ? 'Running...' : 'Run Validation'}
+              <Play className="h-4 w-4 mr-2" />
+              Run unavailable
             </button>
             <button
-              onClick={handleRefresh}
-              disabled={refreshing}
+              type="button"
+              disabled
+              title="A canonical validation read API is not available"
               className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Refreshing...' : 'Refresh'}
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh unavailable
             </button>
             <button
               onClick={onClose}
@@ -257,14 +183,20 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
                 <span className="text-red-800">{error}</span>
               </div>
               <button
-                onClick={handleRefresh}
-                className="text-sm text-red-600 hover:text-red-800 underline"
+                type="button"
+                disabled
+                title="A canonical validation read API is not available"
+                className="text-sm text-red-600 underline disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Try Again
+                Retry unavailable
               </button>
             </div>
           </div>
         )}
+
+        <div role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Validation rules are read only until the canonical cloud validation API is available. No changes are stored in this browser.
+        </div>
 
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-6">
@@ -317,8 +249,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
             </select>
             {activeTab === 'results' && (
               <button
-                onClick={handleExportResults}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
+                type="button"
+                disabled
+                title="Validation export is unavailable until canonical results exist"
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export
@@ -340,8 +274,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Validation Rules Found</h3>
                 <p className="text-gray-500 mb-4">Configure validation rules through the settings panel</p>
                 <button
-                  onClick={handleRefresh}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  type="button"
+                  disabled
+                  title="A canonical validation read API is not available"
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh
@@ -379,8 +315,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
                         </div>
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => handleToggleRule(rule.id, !rule.enabled)}
-                            className={`px-3 py-1 rounded-md text-sm font-medium ${rule.enabled
+                            type="button"
+                            disabled
+                            title="Changing validation rules requires a canonical command"
+                            className={`px-3 py-1 rounded-md text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${rule.enabled
                               ? 'bg-green-100 text-green-800 hover:bg-green-200'
                               : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                               }`}
@@ -388,8 +326,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
                             {rule.enabled ? 'Enabled' : 'Disabled'}
                           </button>
                           <button
-                            onClick={() => handleDeleteRule(rule.id)}
-                            className="px-3 py-1 bg-red-100 text-red-800 rounded-md hover:bg-red-200 text-sm"
+                            type="button"
+                            disabled
+                            title="Deleting validation rules requires a canonical command"
+                            className="px-3 py-1 bg-red-100 text-red-800 rounded-md text-sm disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Delete
                           </button>
@@ -416,8 +356,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Validation Results Found</h3>
                 <p className="text-gray-500 mb-4">Run validation to see results</p>
                 <button
-                  onClick={handleRunValidation}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  type="button"
+                  disabled
+                  title="A canonical validation command is not available"
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Play className="h-4 w-4 mr-2" />
                   Run Validation
