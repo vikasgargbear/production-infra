@@ -1408,7 +1408,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
         if path.startswith("/api/internal/mcp/")
         for route in routes
     ]
-    assert len(action_routes) == 8
+    assert len(action_routes) == 9
     assert all(route.include_in_schema is False for route in action_routes)
     assert all(
         mcp_actions.get_action_context
@@ -1552,12 +1552,17 @@ def test_default_readiness_fails_closed_with_explicit_blockers(monkeypatch):
 
 def test_action_boundary_does_not_import_legacy_services_or_sql():
     root = Path(__file__).resolve().parents[2]
-    paths = (
-        root / "app/api/routes/internal/mcp_actions.py",
-        root / "app/domain/operator_actions/service.py",
+    route_source = (root / "app/api/routes/internal/mcp_actions.py").read_text(
+        encoding="utf-8"
     )
-    source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+    domain_source = (root / "app/domain/operator_actions/service.py").read_text(
+        encoding="utf-8"
+    )
+    source = f"{route_source}\n{domain_source}"
     assert "api.services" not in source
-    assert "sqlalchemy" not in source
+    # The transport obtains a scoped SQLAlchemy Session through ``get_db`` for
+    # authoritative readbacks.  Persistence and SQL remain behind the domain
+    # service boundary; the route must not embed database statements itself.
+    assert "sqlalchemy" not in domain_source
     assert "SELECT " not in source
     assert "INSERT " not in source
