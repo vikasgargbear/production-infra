@@ -11,6 +11,9 @@ import {
   loadFixture, loadOperationMatrix, OperationContract, OperationFixture, UiStep,
 } from '../support/live18/contracts';
 import {
+  interpolateUiSteps, RuntimeUiValues,
+} from '../support/live18/runtimeUiValues';
+import {
   assertSessionIsolation, loginAndCaptureSession, sessionIdentityFromToken,
 } from '../support/live18/session';
 import { runUiStep } from '../support/live18/uiDriver';
@@ -65,8 +68,10 @@ async function runSteps(
   reviewer: Page,
   appOrigin: string,
   steps: UiStep[],
+  runtime: RuntimeUiValues,
+  phase: string,
 ): Promise<void> {
-  for (const step of steps) {
+  for (const step of interpolateUiSteps(steps, runtime, phase)) {
     await runUiStep(step.actor === 'requester' ? requester : reviewer, appOrigin, step);
   }
 }
@@ -159,14 +164,16 @@ async function runOperation(
     assertSessionIsolation(config, requesterSession, reviewerSession);
     const denialIdentity = sessionIdentityFromToken(config.denialAccessToken);
     expect(denialIdentity.orgId, 'denial token must carry an organization claim').toBeTruthy();
-    expect(denialIdentity.orgId, 'denial token must belong to another organization')
-      .not.toBe(config.expectedOrgId);
+    expect(denialIdentity.orgId, 'denial token must map to the provisioned denial organization')
+      .toBe(config.expectedDenialOrgId);
     const requesterApi = await apiClient(config.apiOrigin, requesterSession.token);
     const reviewerApi = await apiClient(config.apiOrigin, reviewerSession.token);
     const denialApi = await apiClient(config.apiOrigin, config.denialAccessToken);
+    const prePrepareRuntime: RuntimeUiValues = { run_token: config.runToken };
     try {
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.missing_required_steps,
+        prePrepareRuntime, `${contract.id}.missing_required_steps`,
       );
       await Promise.all([...pending]);
       const preparePath = `/api/web/actions/${contract.command_operation}/prepare`;
@@ -180,7 +187,10 @@ async function runOperation(
         path: testInfo.outputPath(`${contract.id}-missing-required.png`), fullPage: true,
       });
 
-      await runSteps(requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps);
+      await runSteps(
+        requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps,
+        prePrepareRuntime, `${contract.id}.prepare_steps`,
+      );
       await Promise.all([...pending]);
       const prepared = captured.filter(item => item.method === 'POST' && item.path === preparePath
         && item.status >= 200 && item.status < 300);
@@ -191,6 +201,11 @@ async function runOperation(
       const commandId = requireUuid(findDeep(prepared[0].responseBody, 'command_request_id'), 'command UUID');
       const previewHash = String(findDeep(prepared[0].responseBody, 'preview_hash') || '');
       expect(previewHash).toMatch(PREVIEW_HASH);
+      const commandRuntime: RuntimeUiValues = {
+        command_request_id: commandId,
+        preview_hash: previewHash,
+        run_token: config.runToken,
+      };
 
       const review = await responseJson(await reviewerApi.get(`/api/web/actions/commands/${commandId}/review`));
       expect(findDeep(review, 'preview_hash')).toBe(previewHash);
@@ -216,7 +231,10 @@ async function runOperation(
         };
       }
 
-      await runSteps(requesterPage, reviewerPage, config.appOrigin, operationFixture.approval_steps);
+      await runSteps(
+        requesterPage, reviewerPage, config.appOrigin, operationFixture.approval_steps,
+        commandRuntime, `${contract.id}.approval_steps`,
+      );
       await Promise.all([...pending]);
       const approvals = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/approve`);
@@ -229,7 +247,10 @@ async function runOperation(
       });
       expect([409, 422]).toContain(stale.status());
 
-      await runSteps(requesterPage, reviewerPage, config.appOrigin, operationFixture.execute_steps);
+      await runSteps(
+        requesterPage, reviewerPage, config.appOrigin, operationFixture.execute_steps,
+        commandRuntime, `${contract.id}.execute_steps`,
+      );
       await Promise.all([...pending]);
       const executions = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/execute` && item.status < 300);

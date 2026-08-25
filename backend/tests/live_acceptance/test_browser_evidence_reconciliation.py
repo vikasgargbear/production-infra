@@ -38,9 +38,32 @@ def _preview(evidence: dict[str, Any]) -> dict[str, Any]:
     candidates = [
         row["responseBody"] for row in evidence["http_evidence"]
         if row["method"] == "POST" and row["path"] == prepare_path
+        and 200 <= row["status"] < 300
     ]
-    assert len(candidates) == 1
+    assert len(candidates) == 1, "expected exactly one successful canonical prepare"
     return candidates[0].get("preview", candidates[0])
+
+
+def test_preview_ignores_a_prior_missing_required_422() -> None:
+    evidence = {
+        "command_operation": "sales.invoice.prepare",
+        "http_evidence": [
+            {
+                "method": "POST",
+                "path": "/api/web/actions/sales.invoice.prepare/prepare",
+                "status": 422,
+                "responseBody": {"detail": "missing customer"},
+            },
+            {
+                "method": "POST",
+                "path": "/api/web/actions/sales.invoice.prepare/prepare",
+                "status": 201,
+                "responseBody": {"preview": {"net_amount": "168.00"}},
+            },
+        ],
+    }
+
+    assert _preview(evidence) == {"net_amount": "168.00"}
 
 
 def _assert_mcp_identity(payload: Any, *, command_id: str, resource_id: str) -> None:

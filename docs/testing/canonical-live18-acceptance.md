@@ -40,10 +40,24 @@ untracked JSON file outside the repository with `fixture_schema` set to
 arrays for each flow. Every missing-required phase must assert a visible error,
 must not create a prepared command, and the valid phase must restart from an
 application route so invalid form state cannot leak into the valid proof.
+`approval_steps` and `execute_steps` must target the exact command created by
+that operation using `{{command_request_id}}` in a field value or locator name;
+selecting the first or latest pending row is forbidden. The only runtime
+substitutions are `{{command_request_id}}`, `{{preview_hash}}`, and
+`{{run_token}}`. Command identity and preview hash come only from the successful
+canonical prepare response. The bounded run token is
+`GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT`; use it only to make external reference
+numbers unique between retries. It must not replace reviewed canonical IDs,
+amounts, quantities, tax facts, or event dates. Unknown, malformed, or
+unavailable tokens fail fixture loading or execution.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,
 telephone, or call controls.
+
+Posted facts are never silently reused or deleted. Evidence must retain every
+resource UUID and the supported reversal/cleanup identifier (when the command
+returns one); any retained test record is reported in the uploaded artifact.
 
 Run the non-live contract gates with:
 

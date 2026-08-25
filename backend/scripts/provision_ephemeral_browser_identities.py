@@ -10,6 +10,7 @@ needed to undo a partially completed run.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -45,10 +46,16 @@ DEMO_REVIEWER_USER_ID = "d3000000-0000-7000-8000-000000000003"
 DEMO_REVIEWER_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000004"
 DEMO_OPERATOR_USER_ID = "d3000000-0000-7000-8000-000000000023"
 DEMO_OPERATOR_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000024"
+DENIAL_ORG_ID = "d3000000-0000-7000-8000-00000000002c"
+DENIAL_CREATOR_MEMBERSHIP_ID = "d3000000-0000-7000-8000-00000000002d"
 LOCK_KEY = "canonical-staging-live-browser-identities"
 TWO_USER_PURPOSE = "canonical-staging-two-user-browser-e2e"
 CORE_OPERATOR_PURPOSE = "canonical-staging-core-browser-e2e"
+LIVE18_PURPOSE = "canonical-staging-live18-browser-e2e"
 STATE_VERSION = 1
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+OPERATOR_CONTRACT_PATH = REPOSITORY_ROOT / "docs/architecture/mcp-operator-actions.json"
+LIVE18_MATRIX_PATH = REPOSITORY_ROOT / "backend/tests/live_acceptance/operation_matrix.json"
 
 REQUESTER_CAPABILITIES = (
     ("sales.return.prepare", "write", "consequential_write", "separate_approver"),
@@ -171,13 +178,60 @@ CORE_IDENTITIES = (
     ("operator", DEMO_OPERATOR_USER_ID, DEMO_OPERATOR_MEMBERSHIP_ID),
 )
 
-PROFILE_TWO_USER = "two-user-approvals"
-PROFILE_CORE_OPERATOR = "core-operator"
-PROFILES = (PROFILE_TWO_USER, PROFILE_CORE_OPERATOR)
-
 
 class EphemeralIdentityError(RuntimeError):
     pass
+
+
+def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[str, ...]]:
+    """Derive the full live18 web grant from the reviewed generated authority contract."""
+    contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
+    matrix = json.loads(LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
+    operations = matrix.get("operations", [])
+    required = {item.get("command_operation") for item in operations}
+    if matrix.get("required_operation_count") != 18 or len(operations) != 18 or None in required:
+        raise EphemeralIdentityError("Live18 operation matrix must contain exactly 18 named operations")
+    actions = contract.get("prepare_actions", [])
+    by_operation = {
+        action.get("operation_key"): action
+        for action in actions
+        if isinstance(action, dict) and action.get("operation_key")
+    }
+    if len(required) != 17 or set(by_operation) != required:
+        raise EphemeralIdentityError(
+            "Generated operator contract must expose exactly the 17 live18 prepare commands"
+        )
+    capabilities = tuple(
+        (
+            operation,
+            "write",
+            str(by_operation[operation]["risk"]),
+            str(by_operation[operation]["approval_policy"]),
+        )
+        for operation in sorted(required)
+    ) + (
+        ("automation.command.approve", "write", "consequential_write", "actor_confirmation"),
+        ("automation.command.execute", "write", "consequential_write", "actor_confirmation"),
+        ("automation.command.status.get", "read", "read_only", "none"),
+    )
+    permissions = tuple(sorted({
+        str(by_operation[operation]["permission"])
+        for operation in required
+    } | {
+        "automation.command.approve",
+        "automation.command.execute",
+        "automation.command.view",
+    }))
+    return capabilities, permissions
+
+
+LIVE18_REQUESTER_CAPABILITIES, LIVE18_REQUESTER_PERMISSIONS = _live18_authority()
+LIVE18_IDENTITIES = IDENTITIES
+
+PROFILE_TWO_USER = "two-user-approvals"
+PROFILE_CORE_OPERATOR = "core-operator"
+PROFILE_LIVE18 = "live18"
+PROFILES = (PROFILE_TWO_USER, PROFILE_CORE_OPERATOR, PROFILE_LIVE18)
 
 
 def _profile_purpose(profile: str) -> str:
@@ -185,12 +239,14 @@ def _profile_purpose(profile: str) -> str:
         return TWO_USER_PURPOSE
     if profile == PROFILE_CORE_OPERATOR:
         return CORE_OPERATOR_PURPOSE
+    if profile == PROFILE_LIVE18:
+        return LIVE18_PURPOSE
     raise EphemeralIdentityError(f"Unsupported browser identity profile: {profile}")
 
 
 def _profile_identities(profile: str):
     _profile_purpose(profile)
-    return IDENTITIES if profile == PROFILE_TWO_USER else CORE_IDENTITIES
+    return CORE_IDENTITIES if profile == PROFILE_CORE_OPERATOR else IDENTITIES
 
 
 def _permissions_for(role: str, profile: str):
@@ -198,6 +254,11 @@ def _permissions_for(role: str, profile: str):
         if role != "operator":
             raise EphemeralIdentityError("Core browser profile only supports operator")
         return CORE_OPERATOR_PERMISSIONS
+    if profile == PROFILE_LIVE18:
+        if role == "requester":
+            return LIVE18_REQUESTER_PERMISSIONS
+        if role == "reviewer":
+            return REVIEWER_PERMISSIONS
     if role == "requester":
         return REQUESTER_PERMISSIONS
     if role == "reviewer":
@@ -210,6 +271,11 @@ def _capabilities_for(role: str, profile: str):
         if role != "operator":
             raise EphemeralIdentityError("Core browser profile only supports operator")
         return CORE_OPERATOR_CAPABILITIES
+    if profile == PROFILE_LIVE18:
+        if role == "requester":
+            return LIVE18_REQUESTER_CAPABILITIES
+        if role == "reviewer":
+            return REVIEWER_CAPABILITIES
     if role == "requester":
         return REQUESTER_CAPABILITIES
     if role == "reviewer":
@@ -223,6 +289,8 @@ def _profile_from_state(state: dict[str, Any]) -> str:
         return PROFILE_TWO_USER
     if purpose == CORE_OPERATOR_PURPOSE:
         return PROFILE_CORE_OPERATOR
+    if purpose == LIVE18_PURPOSE:
+        return PROFILE_LIVE18
     raise EphemeralIdentityError("Unsupported ephemeral browser identity purpose")
 
 
@@ -315,6 +383,14 @@ def _clear_browser_environment() -> None:
             "PLAYWRIGHT_SALES_CHAIN_FIXTURE",
             "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
             "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
+            "LIVE18_REQUESTER_EMAIL",
+            "LIVE18_REQUESTER_PASSWORD",
+            "LIVE18_REVIEWER_EMAIL",
+            "LIVE18_REVIEWER_PASSWORD",
+            "LIVE18_DENIAL_ACCESS_TOKEN",
+            "LIVE18_EXPECTED_ORG_ID",
+            "LIVE18_EXPECTED_BRANCH_ID",
+            "LIVE18_EXPECTED_DENIAL_ORG_ID",
             "PLAYWRIGHT_LIVE_REVIEWER_EMAIL",
             "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD",
         ):
@@ -357,6 +433,7 @@ def _create_auth_user(
     run_token: str,
     email: str,
     password: str,
+    organization_id: str = DEMO_ORG_ID,
 ) -> str:
     result = _admin_request(
         "POST",
@@ -370,7 +447,7 @@ def _create_auth_user(
                 "purpose": purpose,
                 "ephemeral_run_token": run_token,
                 "browser_role": role,
-                "organization_id": DEMO_ORG_ID,
+                "org_id": organization_id,
             },
         },
     )
@@ -457,6 +534,267 @@ def _database_connection(management_token: str):
         gssencmode="disable",
         connect_timeout=15,
         application_name="canonical_ephemeral_browser_identities",
+    )
+
+
+def _provision_live18_denial_database(
+    management_token: str,
+    state_path: Path,
+    state: dict[str, Any],
+) -> None:
+    denial = state["denial_identity"]
+    with _database_connection(management_token) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (LOCK_KEY,),
+            )
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+            cursor.execute(
+                "SELECT status FROM core.organizations WHERE id=%s FOR SHARE",
+                (DENIAL_ORG_ID,),
+            )
+            if cursor.fetchone() != ("active",):
+                raise EphemeralIdentityError("Disposable live18 denial organization is unavailable")
+            cursor.execute(
+                "SELECT status FROM core.memberships WHERE org_id=%s AND id=%s FOR SHARE",
+                (DENIAL_ORG_ID, DENIAL_CREATOR_MEMBERSHIP_ID),
+            )
+            if cursor.fetchone() != ("active",):
+                raise EphemeralIdentityError("Disposable denial organization lacks its reviewed creator")
+            cursor.execute(
+                "SELECT code FROM core.permissions WHERE code=%s AND status='active'",
+                ("automation.command.view",),
+            )
+            if cursor.fetchone() != ("automation.command.view",):
+                raise EphemeralIdentityError("Canonical command-view permission is unavailable")
+            cursor.execute(
+                """
+                INSERT INTO core.users (id,auth_user_id,display_name,status)
+                VALUES (%s,%s,'Ephemeral live18 denial observer','active')
+                """,
+                (denial["user_id"], denial["auth_user_id"]),
+            )
+            cursor.execute(
+                """
+                INSERT INTO core.memberships (
+                    org_id,id,user_id,status,joined_at,
+                    created_by_membership_id,updated_by_membership_id
+                ) VALUES (%s,%s,%s,'active',transaction_timestamp(),%s,%s)
+                """,
+                (
+                    DENIAL_ORG_ID,
+                    denial["membership_id"],
+                    denial["user_id"],
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO core.roles (
+                    org_id,id,code,name,description,is_system,status,
+                    created_by_membership_id,updated_by_membership_id
+                ) VALUES (
+                    %s,%s,%s,'Ephemeral live18 denial observer',
+                    'Run-scoped cross-tenant denial proof only',false,'active',%s,%s
+                )
+                """,
+                (
+                    DENIAL_ORG_ID,
+                    denial["role_id"],
+                    f"live18_denial_{state['run_token'].replace('-', '')[:20]}",
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO core.role_permissions (
+                    org_id,role_id,permission_code,created_by_membership_id
+                ) VALUES (%s,%s,'automation.command.view',%s)
+                """,
+                (DENIAL_ORG_ID, denial["role_id"], DENIAL_CREATOR_MEMBERSHIP_ID),
+            )
+            cursor.execute(
+                """
+                INSERT INTO core.access_grants (
+                    org_id,id,membership_id,role_id,scope_kind,branch_id,
+                    valid_from_at,expires_at,status,created_by_membership_id
+                ) VALUES (
+                    %s,%s,%s,%s,'organization',NULL,transaction_timestamp(),
+                    transaction_timestamp()+interval '2 hours','active',%s
+                )
+                """,
+                (
+                    DENIAL_ORG_ID,
+                    denial["access_grant_id"],
+                    denial["membership_id"],
+                    denial["role_id"],
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO automation.agent_grants (
+                    org_id,id,subject_membership_id,client_id,client_display_name,
+                    branch_id,authorization_mode,consent_version,consent_text_hash,
+                    consented_by_membership_id,consented_at,granted_by_membership_id,
+                    granted_at,expires_at,status,created_by_membership_id,
+                    updated_by_membership_id
+                ) VALUES (
+                    %s,%s,%s,%s,'Ephemeral live18 denial observer',NULL,
+                    'self_consent','live18-denial-v1',extensions.digest(%s,'sha256'),
+                    %s,transaction_timestamp(),%s,transaction_timestamp(),
+                    transaction_timestamp()+interval '2 hours','active',%s,%s
+                )
+                """,
+                (
+                    DENIAL_ORG_ID,
+                    denial["agent_grant_id"],
+                    denial["membership_id"],
+                    WEB_CLIENT_ID,
+                    f"{LIVE18_PURPOSE}:{state['run_token']}:denial",
+                    denial["membership_id"],
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO automation.agent_grant_capabilities (
+                    org_id,agent_grant_id,capability_code,operation_mode,risk_class,
+                    approval_policy,allow_sensitive_read,status,created_by_membership_id
+                ) VALUES (
+                    %s,%s,'automation.command.status.get','read','read_only',
+                    'none',false,'active',%s
+                )
+                """,
+                (
+                    DENIAL_ORG_ID,
+                    denial["agent_grant_id"],
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
+                SELECT user_row.auth_user_id::text,membership.org_id::text,
+                       permission.permission_code,capability.capability_code
+                  FROM core.users user_row
+                  JOIN core.memberships membership
+                    ON membership.user_id=user_row.id AND membership.id=%s
+                  JOIN core.access_grants access_grant
+                    ON access_grant.org_id=membership.org_id
+                   AND access_grant.membership_id=membership.id
+                  JOIN core.role_permissions permission
+                    ON permission.org_id=access_grant.org_id
+                   AND permission.role_id=access_grant.role_id
+                  JOIN automation.agent_grants agent_grant
+                    ON agent_grant.org_id=membership.org_id
+                   AND agent_grant.subject_membership_id=membership.id
+                   AND agent_grant.client_id=%s AND agent_grant.status='active'
+                  JOIN automation.agent_grant_capabilities capability
+                    ON capability.org_id=agent_grant.org_id
+                   AND capability.agent_grant_id=agent_grant.id
+                   AND capability.status='active'
+                 WHERE membership.org_id=%s AND user_row.id=%s
+                """,
+                (
+                    denial["membership_id"],
+                    WEB_CLIENT_ID,
+                    DENIAL_ORG_ID,
+                    denial["user_id"],
+                ),
+            )
+            rows = cursor.fetchall()
+            if rows != [(
+                denial["auth_user_id"],
+                DENIAL_ORG_ID,
+                "automation.command.view",
+                "automation.command.status.get",
+            )]:
+                raise EphemeralIdentityError("Disposable denial authority did not reconcile exactly")
+    state["denial_database_provisioned"] = True
+    _write_state(state_path, state)
+
+
+def _exchange_live18_denial_token(email: str, password: str) -> str:
+    anon_key = _required("SUPABASE_ANON_KEY")
+    login = requests.post(
+        f"{SUPABASE_URL}/auth/v1/token",
+        params={"grant_type": "password"},
+        headers={"apikey": anon_key},
+        json={"email": email, "password": password},
+        timeout=20,
+    )
+    if not login.ok:
+        raise EphemeralIdentityError(
+            f"Disposable denial Supabase login failed with HTTP {login.status_code}"
+        )
+    supabase_token = login.json().get("access_token")
+    if not isinstance(supabase_token, str) or not supabase_token:
+        raise EphemeralIdentityError("Disposable denial login omitted an access token")
+    api_origin = _required("PHARMA_CANONICAL_LIVE_API_BASE_URL").rstrip("/")
+    if not api_origin.startswith("https://"):
+        raise EphemeralIdentityError("Live18 denial exchange requires a non-local HTTPS API")
+    response = requests.post(
+        f"{api_origin}/api/auth/oauth/supabase/session",
+        headers={"Authorization": f"Bearer {supabase_token}"},
+        timeout=20,
+    )
+    if not response.ok:
+        raise EphemeralIdentityError(
+            f"Disposable denial ERP exchange failed with HTTP {response.status_code}"
+        )
+    erp_token = response.json().get("access_token")
+    if not isinstance(erp_token, str) or not erp_token:
+        raise EphemeralIdentityError("Disposable denial ERP exchange omitted an access token")
+    try:
+        encoded = erp_token.split(".")[1]
+        padding = "=" * (-len(encoded) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(encoded + padding))
+    except (IndexError, ValueError, json.JSONDecodeError) as exc:
+        raise EphemeralIdentityError("Disposable denial ERP token is not a JWT") from exc
+    if claims.get("org_id") != DENIAL_ORG_ID or not claims.get("user_id"):
+        raise EphemeralIdentityError("Disposable denial ERP token has the wrong tenant identity")
+    _mask(erp_token)
+    return erp_token
+
+
+def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
+    denial = state.get("denial_identity")
+    if not isinstance(denial, dict):
+        return
+    cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+    cursor.execute(
+        "DELETE FROM automation.agent_grant_capabilities WHERE org_id=%s AND agent_grant_id=%s",
+        (DENIAL_ORG_ID, denial["agent_grant_id"]),
+    )
+    cursor.execute(
+        "DELETE FROM automation.agent_grants WHERE org_id=%s AND id=%s AND subject_membership_id=%s",
+        (DENIAL_ORG_ID, denial["agent_grant_id"], denial["membership_id"]),
+    )
+    cursor.execute(
+        "DELETE FROM core.access_grants WHERE org_id=%s AND id=%s AND membership_id=%s",
+        (DENIAL_ORG_ID, denial["access_grant_id"], denial["membership_id"]),
+    )
+    cursor.execute(
+        "DELETE FROM core.role_permissions WHERE org_id=%s AND role_id=%s",
+        (DENIAL_ORG_ID, denial["role_id"]),
+    )
+    cursor.execute(
+        "DELETE FROM core.roles WHERE org_id=%s AND id=%s AND code LIKE 'live18_denial_%'",
+        (DENIAL_ORG_ID, denial["role_id"]),
+    )
+    cursor.execute(
+        "DELETE FROM core.memberships WHERE org_id=%s AND id=%s AND user_id=%s",
+        (DENIAL_ORG_ID, denial["membership_id"], denial["user_id"]),
+    )
+    cursor.execute(
+        "DELETE FROM core.users WHERE id=%s AND auth_user_id=%s",
+        (denial["user_id"], denial["auth_user_id"]),
     )
 
 
@@ -849,6 +1187,8 @@ def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_reviewer_context(cursor)
+            if profile == PROFILE_LIVE18:
+                _cleanup_live18_denial_database(cursor, state)
             temporary_grants = list(state.get("temporary_grants", {}).values())
             if temporary_grants:
                 cursor.execute(
@@ -972,6 +1312,16 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
         "temporary_grants": {role: str(uuid4()) for role, _, _ in identities},
         "database_provisioned": False,
     }
+    if profile == PROFILE_LIVE18:
+        state["denial_identity"] = {
+            "auth_user_id": "",
+            "user_id": str(uuid4()),
+            "membership_id": str(uuid4()),
+            "role_id": str(uuid4()),
+            "access_grant_id": str(uuid4()),
+            "agent_grant_id": str(uuid4()),
+        }
+        state["denial_database_provisioned"] = False
     _write_state(state_path, state)
     credentials: dict[str, str] = {}
     for role, _, _ in identities:
@@ -994,13 +1344,48 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
         prefix = f"PLAYWRIGHT_LIVE_{role.upper()}"
         credentials[f"{prefix}_EMAIL"] = email
         credentials[f"{prefix}_PASSWORD"] = password
+    denial_credentials: tuple[str, str] | None = None
+    if profile == PROFILE_LIVE18:
+        denial_email = f"erp-denial-{run_token}@canonical-staging.aasopharma.invalid"
+        denial_password = secrets.token_urlsafe(48)
+        _mask(denial_email)
+        _mask(denial_password)
+        denial_auth_user_id = _create_auth_user(
+            service_key,
+            purpose=purpose,
+            role="denial",
+            run_token=run_token,
+            email=denial_email,
+            password=denial_password,
+            organization_id=DENIAL_ORG_ID,
+        )
+        state["auth_users"].append(
+            {"role": "denial", "auth_user_id": denial_auth_user_id}
+        )
+        state["denial_identity"]["auth_user_id"] = denial_auth_user_id
+        _write_state(state_path, state)
+        denial_credentials = (denial_email, denial_password)
     if len({entry["auth_user_id"] for entry in state["auth_users"]}) != len(
-        identities
+        state["auth_users"]
     ):
         raise EphemeralIdentityError(
             "Supabase returned duplicate disposable Auth identities"
         )
     fixture = _provision_database(management_token, state_path, state, profile)
+    if profile == PROFILE_LIVE18:
+        _provision_live18_denial_database(management_token, state_path, state)
+        if denial_credentials is None:
+            raise EphemeralIdentityError("Live18 denial credentials were not generated")
+        credentials.update({
+            "LIVE18_REQUESTER_EMAIL": credentials["PLAYWRIGHT_LIVE_REQUESTER_EMAIL"],
+            "LIVE18_REQUESTER_PASSWORD": credentials["PLAYWRIGHT_LIVE_REQUESTER_PASSWORD"],
+            "LIVE18_REVIEWER_EMAIL": credentials["PLAYWRIGHT_LIVE_REVIEWER_EMAIL"],
+            "LIVE18_REVIEWER_PASSWORD": credentials["PLAYWRIGHT_LIVE_REVIEWER_PASSWORD"],
+            "LIVE18_DENIAL_ACCESS_TOKEN": _exchange_live18_denial_token(*denial_credentials),
+            "LIVE18_EXPECTED_ORG_ID": DEMO_ORG_ID,
+            "LIVE18_EXPECTED_BRANCH_ID": "d3000000-0000-7000-8000-000000000005",
+            "LIVE18_EXPECTED_DENIAL_ORG_ID": DENIAL_ORG_ID,
+        })
     if profile == PROFILE_CORE_OPERATOR:
         credentials["PLAYWRIGHT_LIVE_EMAIL"] = credentials.pop(
             "PLAYWRIGHT_LIVE_OPERATOR_EMAIL"

@@ -42,6 +42,10 @@ from provision_ephemeral_browser_identities import (  # noqa: E402
     DEMO_REVIEWER_MEMBERSHIP_ID,
     DEMO_REVIEWER_USER_ID,
     EXPECTED_PROJECT_REF,
+    DENIAL_ORG_ID,
+    LIVE18_PURPOSE,
+    LIVE18_REQUESTER_CAPABILITIES,
+    PROFILE_LIVE18,
     PROFILE_TWO_USER,
     TWO_USER_PURPOSE,
     _database_connection,
@@ -85,8 +89,19 @@ PREPARE_CAPABILITIES = (
     ("inventory.adjustment.prepare", "separate_approver"),
     ("inventory.transfer.prepare", "actor_confirmation"),
 )
+LIVE18_PREPARE_CAPABILITIES = tuple(
+    (capability, approval)
+    for capability, _, _, approval in LIVE18_REQUESTER_CAPABILITIES
+    if capability.endswith(".prepare")
+)
 REQUESTER_CAPABILITIES = (
     *PREPARE_CAPABILITIES,
+    ("automation.command.approve", "actor_confirmation"),
+    ("automation.command.execute", "actor_confirmation"),
+    ("automation.command.status.get", "none"),
+)
+LIVE18_MCP_REQUESTER_CAPABILITIES = (
+    *LIVE18_PREPARE_CAPABILITIES,
     ("automation.command.approve", "actor_confirmation"),
     ("automation.command.execute", "actor_confirmation"),
     ("automation.command.status.get", "none"),
@@ -188,8 +203,10 @@ def _oauth_token(email: str, password: str, anon_key: str, client_id: str) -> st
     return access_token
 
 
-def _capabilities(role: str):
-    return REQUESTER_CAPABILITIES if role == "requester" else REVIEWER_CAPABILITIES
+def _capabilities(role: str, *, live18: bool = False):
+    if role != "requester":
+        return REVIEWER_CAPABILITIES
+    return LIVE18_MCP_REQUESTER_CAPABILITIES if live18 else REQUESTER_CAPABILITIES
 
 
 def _resolve_fixture_identities(cursor) -> dict[str, str]:
@@ -282,9 +299,11 @@ def _provision_database(
     client_id: str,
     state: dict[str, Any],
 ) -> tuple[str, dict[str, str]]:
+    live18 = browser_state.get("purpose") == LIVE18_PURPOSE
     auth_by_role = {
         entry["role"]: str(UUID(entry["auth_user_id"]))
         for entry in browser_state.get("auth_users", [])
+        if entry.get("role") in {"requester", "reviewer"}
     }
     if set(auth_by_role) != {"requester", "reviewer"}:
         raise CanonicalLiveIdentityError(
@@ -322,24 +341,48 @@ def _provision_database(
                     raise CanonicalLiveIdentityError(
                         f"Disposable {role} Auth identity is not the active seeded binding"
                     )
-            cursor.execute(
-                """
-                SELECT membership.org_id::text
-                  FROM core.memberships AS membership
-                  JOIN core.organizations AS organization
-                    ON organization.id=membership.org_id AND organization.status='active'
-                 WHERE membership.user_id=%s AND membership.status='active'
-                   AND membership.org_id<>%s
-                 ORDER BY membership.org_id
-                 LIMIT 2
-                """,
-                (DEMO_OPERATOR_USER_ID, DEMO_ORG_ID),
-            )
+            if live18:
+                denial = browser_state.get("denial_identity") or {}
+                cursor.execute(
+                    """
+                    SELECT membership.org_id::text
+                      FROM core.memberships AS membership
+                      JOIN core.users AS user_row
+                        ON user_row.id=membership.user_id
+                       AND user_row.auth_user_id=%s AND user_row.status='active'
+                      JOIN core.organizations AS organization
+                        ON organization.id=membership.org_id AND organization.status='active'
+                     WHERE membership.id=%s AND membership.user_id=%s
+                       AND membership.status='active' AND membership.org_id=%s
+                    """,
+                    (
+                        denial.get("auth_user_id"),
+                        denial.get("membership_id"),
+                        denial.get("user_id"),
+                        DENIAL_ORG_ID,
+                    ),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT membership.org_id::text
+                      FROM core.memberships AS membership
+                      JOIN core.organizations AS organization
+                        ON organization.id=membership.org_id AND organization.status='active'
+                     WHERE membership.user_id=%s AND membership.status='active'
+                       AND membership.org_id<>%s
+                     ORDER BY membership.org_id
+                     LIMIT 2
+                    """,
+                    (DEMO_OPERATOR_USER_ID, DEMO_ORG_ID),
+                )
             denial_orgs = cursor.fetchall()
-            if len(denial_orgs) != 1:
+            denial_mapping_is_exact = (
+                denial_orgs == [(DENIAL_ORG_ID,)] if live18 else len(denial_orgs) == 1
+            )
+            if not denial_mapping_is_exact:
                 raise CanonicalLiveIdentityError(
-                    "The reviewed demo operator must have exactly one active membership "
-                    "in a distinct disposable denial organization"
+                    "The reviewed denial identity must map exactly once to its disposable organization"
                 )
             denial_org_id = denial_orgs[0][0]
             fixture_identities = _resolve_fixture_identities(cursor)
@@ -430,7 +473,7 @@ def _provision_database(
                             "read" if capability.endswith(".get") else "write",
                             DEMO_REVIEWER_MEMBERSHIP_ID,
                         )
-                        for capability, approval in _capabilities(role)
+                        for capability, approval in _capabilities(role, live18=live18)
                     ],
                 )
             cursor.execute(
@@ -458,7 +501,9 @@ def _provision_database(
             expected = {
                 membership_by_role[role]: (
                     state["temporary_grants"][role],
-                    tuple(sorted(capability for capability, _ in _capabilities(role))),
+                    tuple(sorted(
+                        capability for capability, _ in _capabilities(role, live18=live18)
+                    )),
                 )
                 for role in ("requester", "reviewer")
             }
@@ -477,11 +522,11 @@ def provision(state_path: Path, browser_state_path: Path) -> None:
     browser_state = _read_browser_state(browser_state_path)
     if (
         browser_state is None
-        or browser_state.get("purpose") != TWO_USER_PURPOSE
+        or browser_state.get("purpose") not in {TWO_USER_PURPOSE, LIVE18_PURPOSE}
         or not browser_state.get("database_provisioned")
     ):
         raise CanonicalLiveIdentityError(
-            f"Provision the {PROFILE_TWO_USER} ephemeral identity profile first"
+            f"Provision the {PROFILE_TWO_USER} or {PROFILE_LIVE18} ephemeral identity profile first"
         )
     service_key = _service_role_key(management_token)
     _mask(service_key)

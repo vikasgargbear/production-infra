@@ -64,7 +64,9 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
         assert reference not in browser_environment
         assert browser_job.count(reference) == 2
 
-    two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1]
+    two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1].split(
+        "\n  live18-acceptance:", 1
+    )[0]
     assert "verify_render_pilot_sha.py" in two_user_job
     assert "needs: [canonical-free-staging]" in two_user_job
     assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
@@ -124,7 +126,9 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
 
     assert "run_live_erp_two_user_approvals:" in workflow
     assert "inputs.run_live_erp_two_user_approvals" in workflow
-    two_user_job = workflow.split("live-browser-erp-two-user-approvals:", 1)[1]
+    two_user_job = workflow.split("live-browser-erp-two-user-approvals:", 1)[1].split(
+        "\n  live18-acceptance:", 1
+    )[0]
     assert "environment: canonical-staging" in two_user_job
     assert 'PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"' in two_user_job
     assert "environment: live-erp-test" not in two_user_job
@@ -1112,3 +1116,36 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     )
     assert "for attempt in range(1, 6):" in exercise
     assert "MCP readiness failed after five checks" in exercise
+
+
+def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    assert "run_live18:" in workflow
+    live18 = workflow.split("\n  live18-acceptance:", 1)[1]
+
+    assert "github.event_name == 'workflow_dispatch' && inputs.run_live18" in live18
+    assert "needs: [canonical-free-staging]" in live18
+    assert "needs.canonical-free-staging.result == 'success'" in live18
+    assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live18
+    assert "verify_render_pilot_sha.py" in live18
+    assert "build-metadata.json" in live18
+    assert "aasopharma-api-pilot.onrender.com/health" in live18
+    assert "secrets.LIVE18_REVIEWED_FIXTURE_JSON" in live18
+    assert 'printf \'%s\' "$LIVE18_REVIEWED_FIXTURE_JSON" > "$LIVE18_FIXTURE_PATH"' in live18
+    assert "${{ runner.temp }}/live18-reviewed-fixture.json" in live18
+    assert 'case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*)' in live18
+    assert "provision --profile live18" in live18
+    assert "LIVE18_DENIAL_ACCESS_TOKEN" in live18
+    assert "LIVE18_EXPECTED_DENIAL_ORG_ID" in live18
+    assert "LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}" in live18
+    assert "test \"$discovered\" -eq 18" in live18
+    assert "e2e/live18/playwright.config.ts" in live18
+    assert "test_browser_evidence_reconciliation.py" in live18
+    assert live18.index("provision_ephemeral_canonical_live.py cleanup") < live18.index(
+        "provision_ephemeral_browser_identities.py cleanup"
+    )
+    assert live18.count("if: always()") >= 4
+    assert "rm -f \"$LIVE18_FIXTURE_PATH\"" in live18
+    assert "secrets.LIVE18_REQUESTER" not in live18
+    assert "secrets.LIVE18_REVIEWER" not in live18
+    assert "secrets.LIVE18_DENIAL_ACCESS_TOKEN" not in live18

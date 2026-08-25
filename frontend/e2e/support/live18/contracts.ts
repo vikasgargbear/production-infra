@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { assertExactCommandTargets, runtimeTokens } from './runtimeUiValues';
+
 export type ApprovalPolicy = 'actor_confirmation' | 'separate_approver';
 
 export interface OperationContract {
@@ -95,6 +97,8 @@ export function loadFixture(required: boolean): Live18Fixture | null {
         if (!supportedActors.includes(step.actor) || !supportedActions.includes(step.action)) {
           throw new Error(`${operationId}.${phase} contains an unsupported actor or action.`);
         }
+        runtimeTokens(step.value, `${operationId}.${phase}.value`);
+        runtimeTokens(step.locator?.name, `${operationId}.${phase}.locator.name`);
       }
     }
     if (!operation.missing_required_steps.some(step => step.action === 'expectText')) {
@@ -104,5 +108,6 @@ export function loadFixture(required: boolean): Live18Fixture | null {
       throw new Error(`${operationId}.prepare_steps must restart from an application route.`);
     }
   }
+  assertExactCommandTargets(fixture.operations);
   return fixture;
 }

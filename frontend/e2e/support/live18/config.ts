@@ -27,10 +27,12 @@ export interface Live18BrowserConfig {
   expectedSha: string;
   expectedOrgId: string;
   expectedBranchId: string;
+  expectedDenialOrgId: string;
   metadataUrls: string[];
   requester: { email: string; password: string };
   reviewer: { email: string; password: string };
   denialAccessToken: string;
+  runToken: string;
 }
 
 export function loadBrowserConfig(): Live18BrowserConfig {
@@ -41,8 +43,10 @@ export function loadBrowserConfig(): Live18BrowserConfig {
   if (!SHA.test(expectedSha)) throw new Error('A full lowercase deployed git SHA is required.');
   const expectedOrgId = required('LIVE18_EXPECTED_ORG_ID');
   const expectedBranchId = required('LIVE18_EXPECTED_BRANCH_ID');
-  if (!UUID.test(expectedOrgId) || !UUID.test(expectedBranchId)) {
-    throw new Error('Canonical organization and branch UUIDs are required.');
+  const expectedDenialOrgId = required('LIVE18_EXPECTED_DENIAL_ORG_ID');
+  if (!UUID.test(expectedOrgId) || !UUID.test(expectedBranchId)
+    || !UUID.test(expectedDenialOrgId) || expectedDenialOrgId === expectedOrgId) {
+    throw new Error('Distinct canonical organization, branch, and denial-organization UUIDs are required.');
   }
   const rawMetadataUrls = JSON.parse(required('LIVE18_METADATA_URLS_JSON')) as unknown;
   if (!Array.isArray(rawMetadataUrls) || rawMetadataUrls.length < 2
@@ -62,16 +66,22 @@ export function loadBrowserConfig(): Live18BrowserConfig {
     password: required('LIVE18_REVIEWER_PASSWORD'),
   };
   if (requester.email === reviewer.email) throw new Error('Requester and reviewer must be distinct users.');
+  const runToken = required('LIVE18_RUN_TOKEN');
+  if (!/^[0-9]{1,20}-[0-9]{1,5}$/.test(runToken) || runToken.length > 26) {
+    throw new Error('LIVE18_RUN_TOKEN must be the bounded GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT value.');
+  }
   return {
     appOrigin: httpsOrigin('LIVE18_APP_ORIGIN'),
     apiOrigin: httpsOrigin('LIVE18_API_ORIGIN'),
     expectedSha,
     expectedOrgId,
     expectedBranchId,
+    expectedDenialOrgId,
     metadataUrls,
     requester,
     reviewer,
     denialAccessToken: required('LIVE18_DENIAL_ACCESS_TOKEN'),
+    runToken,
   };
 }
 

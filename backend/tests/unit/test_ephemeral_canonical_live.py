@@ -60,6 +60,17 @@ def test_capabilities_keep_requester_and_independent_reviewer_separate():
     }
 
 
+def test_live18_capabilities_extend_only_the_live18_profile_from_generated_authority():
+    ordinary = dict(MODULE.REQUESTER_CAPABILITIES)
+    live18 = dict(MODULE.LIVE18_MCP_REQUESTER_CAPABILITIES)
+
+    assert "finance.expense_claim.prepare" not in ordinary
+    assert "inventory.destruction.prepare" not in ordinary
+    assert live18["finance.expense_claim.prepare"] == "separate_approver"
+    assert live18["inventory.destruction.prepare"] == "separate_approver"
+    assert len(MODULE.LIVE18_PREPARE_CAPABILITIES) == 17
+
+
 def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
     class LoginResponse:
         ok = True

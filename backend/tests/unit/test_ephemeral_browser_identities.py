@@ -413,3 +413,117 @@ def test_core_fixture_is_resolved_from_available_live_fefo_stock():
     assert fixture["expected_fefo_batch_id"] == "d5000000-0000-7000-8000-000000000001"
     assert fixture["billed_quantity"] == "1.000000"
     assert fixture["unit_rate"] == "84.0000"
+
+
+def test_live18_profile_derives_every_prepare_permission_from_generated_contract():
+    contract = json.loads(identities.OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
+    matrix = json.loads(identities.LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
+    operations = {row["command_operation"] for row in matrix["operations"]}
+    actions = {
+        row["operation_key"]: row for row in contract["prepare_actions"]
+    }
+    capabilities = {
+        capability: approval
+        for capability, _, _, approval in identities.LIVE18_REQUESTER_CAPABILITIES
+        if capability.endswith(".prepare")
+    }
+
+    assert matrix["required_operation_count"] == 18
+    assert len(operations) == 17
+    assert set(capabilities) == operations == set(actions)
+    assert capabilities == {
+        operation: actions[operation]["approval_policy"] for operation in operations
+    }
+    assert set(identities.LIVE18_REQUESTER_PERMISSIONS) == {
+        *(actions[operation]["permission"] for operation in operations),
+        "automation.command.approve",
+        "automation.command.execute",
+        "automation.command.view",
+    }
+
+
+def test_auth_users_receive_the_exact_canonical_org_claim(monkeypatch):
+    captured = {}
+
+    def admin(method, path, key, *, payload=None, allow_missing=False):
+        captured.update(payload["app_metadata"])
+        return {
+            "id": "d4000000-0000-7000-8000-000000000001",
+            "email_confirmed_at": "2026-08-25T00:00:00Z",
+        }
+
+    monkeypatch.setattr(identities, "_admin_request", admin)
+    identities._create_auth_user(
+        "service-key",
+        purpose=identities.LIVE18_PURPOSE,
+        role="denial",
+        run_token="run-token",
+        email="masked@example.invalid",
+        password="masked-password",
+        organization_id=identities.DENIAL_ORG_ID,
+    )
+
+    assert captured["org_id"] == identities.DENIAL_ORG_ID
+    assert "organization_id" not in captured
+
+
+def test_live18_profile_exports_only_run_scoped_three_identity_credentials(
+    monkeypatch, tmp_path
+):
+    state_path, github_env = _environment(monkeypatch, tmp_path)
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "anon-key")
+    monkeypatch.setenv(
+        "PHARMA_CANONICAL_LIVE_API_BASE_URL",
+        "https://aasopharma-api-pilot.onrender.com",
+    )
+    created = iter(
+        (
+            "d4000000-0000-7000-8000-000000000001",
+            "d4000000-0000-7000-8000-000000000002",
+            "d4000000-0000-7000-8000-000000000003",
+        )
+    )
+    monkeypatch.setattr(
+        identities, "_create_auth_user", lambda *args, **kwargs: next(created)
+    )
+
+    def provision_database(token, path, state, profile):
+        assert profile == identities.PROFILE_LIVE18
+        state["database_provisioned"] = True
+        identities._write_state(path, state)
+        return None
+
+    def provision_denial(token, path, state):
+        assert state["denial_identity"]["auth_user_id"].endswith("0003")
+        state["denial_database_provisioned"] = True
+        identities._write_state(path, state)
+
+    monkeypatch.setattr(identities, "_provision_database", provision_database)
+    monkeypatch.setattr(
+        identities, "_provision_live18_denial_database", provision_denial
+    )
+    monkeypatch.setattr(
+        identities, "_exchange_live18_denial_token", lambda *args: "masked-denial-jwt"
+    )
+
+    identities.provision(state_path, identities.PROFILE_LIVE18)
+
+    state = _assert_state_has_no_credentials(state_path)
+    assert state["purpose"] == identities.LIVE18_PURPOSE
+    assert [row["role"] for row in state["auth_users"]] == [
+        "requester", "reviewer", "denial",
+    ]
+    assert state["denial_database_provisioned"] is True
+    exported = github_env.read_text(encoding="utf-8")
+    for name in (
+        "LIVE18_REQUESTER_EMAIL",
+        "LIVE18_REQUESTER_PASSWORD",
+        "LIVE18_REVIEWER_EMAIL",
+        "LIVE18_REVIEWER_PASSWORD",
+        "LIVE18_DENIAL_ACCESS_TOKEN",
+        "LIVE18_EXPECTED_ORG_ID",
+        "LIVE18_EXPECTED_BRANCH_ID",
+        "LIVE18_EXPECTED_DENIAL_ORG_ID",
+    ):
+        assert exported.count(f"{name}=") == 1
+    assert "masked-denial-jwt" not in state_path.read_text(encoding="utf-8")
