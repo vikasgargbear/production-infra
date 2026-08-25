@@ -169,6 +169,9 @@ def test_postgres_and_staging_gates_prove_runtime_exact_head_before_demo() -> No
     revision_check = "SELECT erp_security.deployed_canonical_revision()"
     assert revision_check in provision
     assert "has_table_privilege(CURRENT_USER, 'public.alembic_version', 'SELECT')" in provision
+    assert "runtime_can_read_alembic=$(psql -X -Atqc" in provision
+    assert 'test "$runtime_can_read_alembic" = f' in provision
+    assert 'psql -X -Atqc \\"SELECT has_table_privilege' not in provision
     assert provision.index(revision_check) < provision.index("python3 -m uvicorn")
     assert provision.index(revision_check) < provision.index(
         "python3 backend/scripts/provision_canonical_demo.py"

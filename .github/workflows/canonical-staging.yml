@@ -1143,7 +1143,10 @@ jobs:
           export ERP_RUNTIME_DATABASE_URL="$runtime_url"
           expected_alembic_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
           test "$(psql -X -Atqc 'SELECT erp_security.deployed_canonical_revision()' "$runtime_url")" = "$expected_alembic_head"
-          test "$(psql -X -Atqc \"SELECT has_table_privilege(CURRENT_USER, 'public.alembic_version', 'SELECT')\" "$runtime_url")" = f
+          runtime_can_read_alembic=$(psql -X -Atqc \
+            "SELECT has_table_privilege(CURRENT_USER, 'public.alembic_version', 'SELECT')" \
+            "$runtime_url")
+          test "$runtime_can_read_alembic" = f
           export CANONICAL_DEMO_API_URL=http://127.0.0.1:8090
           if [ '${{ inputs.deploy_render_pilot }}' != true ]; then
             echo "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" >> "$GITHUB_ENV"
