@@ -10,7 +10,7 @@ import { apiErrorMessage } from '../../../services/api/utils/apiError';
  */
 const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
   supplier_name: formData.supplier_name,
-  supplier_code: formData.supplier_code || undefined,
+  supplier_code: String(formData.supplier_code ?? '').trim(),
   contact_person: formData.contact_person || null,
   primary_phone: formData.phone || null,
   primary_email: formData.email || null,
@@ -124,6 +124,9 @@ const SupplierCreationForm = ({
     if (!formData.supplier_name) {
       newErrors.supplier_name = 'Supplier name is required';
     }
+    if (!formData.supplier_code.trim()) {
+      newErrors.supplier_code = 'Supplier code is required';
+    }
 
     if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
@@ -213,14 +216,20 @@ const SupplierCreationForm = ({
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Canonical party kind
+                Supplier Code *
               </label>
               <input
-                value="Organization"
-                disabled
-                aria-label="Canonical party kind"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
+                required
+                maxLength={50}
+                value={formData.supplier_code}
+                onChange={(e) => handleInputChange('supplier_code', e.target.value)}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.supplier_code ? 'border-red-300' : 'border-gray-300'}`}
+                placeholder="e.g., SUP-001"
               />
+              <p className="mt-1 text-xs text-gray-500">Your unique internal supplier account code; it will not be generated.</p>
+              {errors.supplier_code && (
+                <p className="mt-1 text-xs text-red-600">{errors.supplier_code}</p>
+              )}
             </div>
           </div>
 

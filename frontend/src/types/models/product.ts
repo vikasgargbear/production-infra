@@ -134,8 +134,8 @@ export const productKindSchema = z.enum(['medicine', 'medical_device', 'consumab
  */
 export const productDraftBaseSchema = z.object({
   product_name: z.string().trim().min(1).max(255),
-  product_code: z.string().trim().min(1).max(64)
-    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/).optional(),
+  product_code: z.string().trim().min(1, 'Product code is required').max(64)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/),
   generic_name: z.string().trim().max(255).optional(),
   product_kind: productKindSchema,
 }).strict();

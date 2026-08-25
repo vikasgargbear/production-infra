@@ -70,7 +70,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
 
   const payload = useMemo(() => ({
     product_name: form.product_name,
-    product_code: optionalText(form.product_code),
+    product_code: form.product_code.trim(),
     generic_name: optionalText(form.generic_name),
     product_kind: form.product_kind,
   }), [form]);
@@ -147,8 +147,9 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             <label className="text-sm font-medium text-gray-700">Product name
               <input autoFocus value={form.product_name} onChange={event => set('product_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
             </label>
-            <label className="text-sm font-medium text-gray-700">Product code
-              <input value={form.product_code} disabled={isEditing} onChange={event => set('product_code', event.target.value)} placeholder="Generated when blank" className="mt-1 w-full border border-gray-300 px-3 py-2 disabled:bg-gray-100" />
+            <label className="text-sm font-medium text-gray-700">Product code <span aria-hidden="true" className="text-red-600">*</span>
+              <input required maxLength={64} value={form.product_code} disabled={isEditing} onChange={event => set('product_code', event.target.value)} placeholder="e.g. PARA-500-TAB" className="mt-1 w-full border border-gray-300 px-3 py-2 disabled:bg-gray-100" />
+              {!isEditing && <span className="mt-1 block text-xs font-normal text-gray-500">Enter your unique internal product code. It will not be generated automatically.</span>}
             </label>
             <label className="text-sm font-medium text-gray-700">Generic display name
               <input value={form.generic_name} onChange={event => set('generic_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />

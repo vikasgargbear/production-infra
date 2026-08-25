@@ -337,6 +337,7 @@ def test_consistency_audit_keeps_unresolved_contracts_release_visible():
     assert "DOCUMENT_NUMBER_RESERVATION_IDEMPOTENCY_UNBASELINED" not in codes
     assert "DIVERGENT_ENUM_CONTRACTS" not in codes
     assert "CLIENT_SUPPLIED_GST_RATE_AUTHORITY" not in codes
+    assert "UUID_DERIVED_MASTER_CODES" not in codes
     assert "MISSING_BRANCH_SCOPE_FAILS_OPEN" not in codes
     assert "TENANT_KEY_WIRE_CONTRACT_DIVERGENCE" not in codes
     assert "MONEY_RESPONSE_FLOAT_SERIALIZATION" not in codes

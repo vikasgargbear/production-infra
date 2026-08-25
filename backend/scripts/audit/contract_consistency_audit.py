@@ -671,6 +671,24 @@ def collect_issues() -> List[ConsistencyIssue]:
             "legacy GST/state-name services or integer master routers were reintroduced; "
             "tax facts must resolve from effective canonical registrations and releases",
         ))
+    uuid_master_code_evidence = []
+    for path in (REPOSITORY_ROOT / "backend/app").rglob("*.py"):
+        for line_number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if "uuid4" in line and any(
+                prefix in line for prefix in ("CUST-", "SUP-", "DRAFT-")
+            ):
+                uuid_master_code_evidence.append(
+                    f"{path.relative_to(REPOSITORY_ROOT)}:{line_number}"
+                )
+    if uuid_master_code_evidence:
+        issues.append(ConsistencyIssue(
+            "UUID_DERIVED_MASTER_CODES",
+            "customer, supplier, and product master codes must be explicit operator-owned "
+            "identifiers, not request UUID derivatives: "
+            + ", ".join(uuid_master_code_evidence),
+        ))
     calculation_routes = _read("backend/app/api/routes/calculations.py")
     calculation_schemas = _read("backend/app/api/schemas/calculations.py")
     tax_authority = _read("backend/app/api/services/sales/tax_authority.py")

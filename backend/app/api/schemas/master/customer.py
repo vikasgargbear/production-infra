@@ -170,7 +170,7 @@ class CanonicalCustomerCreate(BaseModel):
     """
 
     customer_name: str = Field(min_length=1, max_length=200)
-    customer_code: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    customer_code: str = Field(min_length=1, max_length=50)
     customer_type: Literal["individual", "organization"]
     primary_phone: str = Field(pattern=r"^\d{10}$")
     primary_email: Optional[EmailStr] = None

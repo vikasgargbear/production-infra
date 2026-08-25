@@ -26,7 +26,7 @@ export interface CustomerParams {
 
 export interface CanonicalCustomerCreateInput {
   customer_name: string;
-  customer_code?: string;
+  customer_code: string;
   customer_type: 'individual' | 'organization';
   primary_phone: string;
   primary_email?: string;
@@ -58,6 +58,10 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
   if (input.customer_type !== 'individual' && input.customer_type !== 'organization') {
     throw new Error('Customer type must be selected explicitly.');
   }
+  const customerCode = optionalText(input.customer_code);
+  if (!customerCode) {
+    throw new Error('Customer code is required.');
+  }
   if (input.credit_limit === undefined || input.credit_limit === null || input.credit_limit === '') {
     throw new Error('Customer credit limit must be entered explicitly.');
   }
@@ -70,7 +74,7 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
   if (mismatch) throw new Error(mismatch);
   const payload = {
     customer_name: input.customer_name,
-    customer_code: input.customer_code,
+    customer_code: customerCode,
     customer_type: input.customer_type,
     primary_phone: canonicalPhone(input.primary_phone),
     primary_email: input.primary_email,

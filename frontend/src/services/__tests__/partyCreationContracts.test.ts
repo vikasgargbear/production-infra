@@ -24,6 +24,7 @@ describe('canonical party creation contracts', () => {
   it('maps the active customer form without legacy or tenant-owned fields', () => {
     const payload = toCanonicalCustomerCreate({
       customer_name: ' Browser Customer ',
+      customer_code: ' CUST-E2E ',
       customer_type: 'organization',
       primary_phone: '+91 98765-43210',
       primary_email: 'buyer@example.com',
@@ -40,6 +41,7 @@ describe('canonical party creation contracts', () => {
 
     expect(payload).toEqual({
       customer_name: ' Browser Customer ',
+      customer_code: 'CUST-E2E',
       customer_type: 'organization',
       primary_phone: '9876543210',
       primary_email: 'buyer@example.com',
@@ -57,13 +59,14 @@ describe('canonical party creation contracts', () => {
   it('rejects missing customer classifications and commercial terms', () => {
     const complete = {
       customer_name: 'Explicit Customer',
+      customer_code: 'CUST-EXPLICIT',
       customer_type: 'organization',
       primary_phone: '9876543210',
       credit_limit: '0.00',
       credit_days: 0,
     };
 
-    for (const field of ['customer_type', 'credit_limit', 'credit_days'] as const) {
+    for (const field of ['customer_code', 'customer_type', 'credit_limit', 'credit_days'] as const) {
       const input = { ...complete } as Record<string, unknown>;
       delete input[field];
       expect(() => toCanonicalCustomerCreate(input)).toThrow();
@@ -101,8 +104,13 @@ describe('canonical party creation contracts', () => {
     expect(apiHelpers.post).toHaveBeenCalledWith('/suppliers/', payload);
   });
 
-  it('rejects a supplier without explicit payment days', () => {
-    expect(() => toCanonicalSupplierCreate({ supplier_name: 'No terms' })).toThrow(
+  it('rejects a supplier without an explicit code or payment days', () => {
+    expect(() => toCanonicalSupplierCreate({
+      supplier_name: 'No code', payment_days: 0,
+    })).toThrow('Supplier code is required.');
+    expect(() => toCanonicalSupplierCreate({
+      supplier_name: 'No terms', supplier_code: 'SUP-NO-TERMS',
+    })).toThrow(
       'Supplier payment days must be selected explicitly.',
     );
   });
@@ -110,6 +118,7 @@ describe('canonical party creation contracts', () => {
   it('rejects state names and GSTIN/address state-code mismatches before transport', () => {
     const customer = {
       customer_name: 'Mismatch Customer',
+      customer_code: 'CUST-MISMATCH',
       customer_type: 'organization',
       primary_phone: '9876543210',
       credit_limit: '0.00',
@@ -127,6 +136,7 @@ describe('canonical party creation contracts', () => {
 
     expect(() => toCanonicalSupplierCreate({
       supplier_name: 'Mismatch Supplier',
+      supplier_code: 'SUP-MISMATCH',
       payment_days: 0,
       state_code: '29',
       gst_number: '27AAPFU0939F1ZV',

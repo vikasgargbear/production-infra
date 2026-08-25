@@ -1,5 +1,6 @@
 export interface SupplierMandatoryFields {
     supplier_name: string;
+    supplier_code: string;
     phone: string;
     address_line1: string;
     city: string;
@@ -24,6 +25,7 @@ export const validateSupplierMandatoryFields = (
 ): string[] => {
     const errors: string[] = [];
     if (!form.supplier_name.trim()) errors.push('Supplier name is required');
+    if (!form.supplier_code.trim()) errors.push('Supplier code is required');
     if (!form.phone.trim()) {
         errors.push('Phone number is required');
     } else if (!indianPhone(form.phone)) {

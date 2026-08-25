@@ -138,7 +138,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         try {
             const supplierData = {
                 supplier_name: formData.supplier_name,
-                supplier_code: formData.supplier_code || undefined,
+                supplier_code: formData.supplier_code.trim(),
                 primary_phone: formData.phone,
                 secondary_phone: formData.whatsapp_number !== formData.phone ? formData.whatsapp_number : undefined,
                 primary_email: formData.email || undefined,
@@ -233,7 +233,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <Building2 className="w-5 h-5 text-blue-600" />
                             Basic Information
                         </h2>
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Supplier Name <span className="text-red-500">*</span>
@@ -246,6 +246,21 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     className={inputClass}
                                     placeholder="e.g., ABC Pharmaceuticals"
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Supplier Code <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    maxLength={50}
+                                    value={formData.supplier_code}
+                                    onChange={(e) => setFormData({ ...formData, supplier_code: e.target.value })}
+                                    className={inputClass}
+                                    placeholder="e.g., SUP-001"
+                                />
+                                <p className="mt-1 text-xs text-gray-500">Your unique internal supplier account code; it will not be generated.</p>
                             </div>
                         </div>
                     </section>

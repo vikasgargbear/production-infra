@@ -220,8 +220,7 @@ class CanonicalProductDraftCreate(BaseModel):
     """Small, honest product-draft contract for the canonical catalog."""
 
     product_name: str = Field(min_length=1, max_length=255)
-    product_code: Optional[str] = Field(
-        default=None,
+    product_code: str = Field(
         min_length=1,
         max_length=64,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
@@ -356,7 +355,7 @@ def create_product_draft(
     if duplicate:
         raise HTTPException(status_code=409, detail="Product name already exists")
 
-    sku = product.product_code or f"DRAFT-{uuid4().hex[:12].upper()}"
+    sku = product.product_code
     try:
         created = db.execute(
             text("""
@@ -780,7 +779,7 @@ def create_customer(
             postal_code=customer.pincode,
             gstin=customer.gst_number,
         )
-        customer_code = customer.customer_code or f"CUST-{uuid4().hex[:10].upper()}"
+        customer_code = customer.customer_code
         account = db.execute(text("""
             INSERT INTO "parties"."customer_accounts" (
                 org_id, party_id, customer_code, credit_limit, credit_days,
@@ -847,7 +846,7 @@ def create_supplier(
             postal_code=supplier.pincode,
             gstin=supplier.gst_number,
         )
-        supplier_code = supplier.supplier_code or f"SUP-{uuid4().hex[:10].upper()}"
+        supplier_code = supplier.supplier_code
         account = db.execute(text("""
             INSERT INTO "parties"."supplier_accounts" (
                 org_id, party_id, supplier_code, payment_days,

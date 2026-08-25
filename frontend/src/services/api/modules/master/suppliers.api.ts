@@ -24,7 +24,7 @@ export interface SupplierParams {
 
 export interface CanonicalSupplierCreateInput {
   supplier_name: string;
-  supplier_code?: string;
+  supplier_code: string;
   primary_phone?: string;
   primary_email?: string;
   contact_person?: string;
@@ -53,6 +53,10 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
   if (input.state !== undefined) {
     throw new Error('State names are not accepted; enter the 2-digit GST state code.');
   }
+  const supplierCode = optionalText(input.supplier_code);
+  if (!supplierCode) {
+    throw new Error('Supplier code is required.');
+  }
   const rawPaymentDays = input.payment_days;
   if (rawPaymentDays === undefined || rawPaymentDays === '') {
     throw new Error('Supplier payment days must be selected explicitly.');
@@ -67,7 +71,7 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
   if (mismatch) throw new Error(mismatch);
   return cleanData({
     supplier_name: input.supplier_name,
-    supplier_code: input.supplier_code,
+    supplier_code: supplierCode,
     primary_phone: canonicalPhone(input.primary_phone),
     primary_email: input.primary_email,
     contact_person: input.contact_person,

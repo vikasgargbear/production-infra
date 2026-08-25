@@ -18,18 +18,24 @@ describe('canonical master mutation endpoints', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('uses only bounded canonical master authoring paths', async () => {
-    productsApi.create({ product_name: 'E2E product', product_kind: 'medicine' });
-    suppliersApi.create({ supplier_name: 'E2E supplier', payment_days: 30 });
+    productsApi.create({
+      product_name: 'E2E product', product_code: 'PROD-E2E', product_kind: 'medicine',
+    });
+    suppliersApi.create({
+      supplier_name: 'E2E supplier', supplier_code: 'SUP-E2E', payment_days: 30,
+    });
     await expect(branchesApi.create({ branch_name: 'E2E branch' })).rejects.toMatchObject({
       code: 'CANONICAL_WRITE_UNAVAILABLE',
     });
 
     expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/products/', {
       product_name: 'E2E product',
+      product_code: 'PROD-E2E',
       product_kind: 'medicine',
     });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(2, '/suppliers/', {
       supplier_name: 'E2E supplier',
+      supplier_code: 'SUP-E2E',
       payment_days: 30,
     });
     expect(apiHelpers.post).toHaveBeenCalledTimes(2);
@@ -52,6 +58,7 @@ describe('canonical master mutation endpoints', () => {
     productsApi.delete(productId);
     customersApi.create({
       customer_name: 'E2E customer',
+      customer_code: 'CUST-E2E',
       customer_type: 'organization',
       primary_phone: '9876543210',
       credit_limit: '0.00',
@@ -70,6 +77,7 @@ describe('canonical master mutation endpoints', () => {
     expect(apiHelpers.delete).toHaveBeenCalledWith(`/products/${productId}`);
     expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/customers/', {
       customer_name: 'E2E customer',
+      customer_code: 'CUST-E2E',
       customer_type: 'organization',
       primary_phone: '9876543210',
       credit_limit: '0.00',

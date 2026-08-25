@@ -27,6 +27,7 @@ interface CustomerFlowProps {
 
 interface CustomerFormData {
     customer_name: string;
+    customer_code: string;
     primary_phone: string;
     primary_email: string;
     whatsapp_number: string;
@@ -73,6 +74,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const [isBusinessCustomer, setIsBusinessCustomer] = useState(!isB2COnly);
     const [formData, setFormData] = useState<CustomerFormData>({
         customer_name: '',
+        customer_code: '',
         primary_phone: '',
         primary_email: '',
         whatsapp_number: '',
@@ -140,6 +142,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         const newErrors: string[] = [];
 
         if (!formData.customer_name.trim()) newErrors.push('Customer name is required');
+        if (!formData.customer_code.trim()) newErrors.push('Customer code is required');
         if (!formData.primary_phone.trim()) {
             newErrors.push('Phone number is required');
         } else if (!/^\d{10}$/.test(formData.primary_phone.replace(/\D/g, ''))) {
@@ -187,6 +190,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         try {
             const customerData = {
                 customer_name: formData.customer_name,
+                customer_code: formData.customer_code.trim(),
                 primary_phone: formData.primary_phone,
                 whatsapp_number: formData.whatsapp_number || null,
                 secondary_phone: formData.secondary_phone || null,
@@ -348,6 +352,19 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             autoFocus
                                         />
                                     </div>
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Customer Code *</label>
+                                    <input
+                                        required
+                                        maxLength={50}
+                                        value={formData.customer_code}
+                                        onChange={(e) => updateField('customer_code', e.target.value)}
+                                        className={inputNoIconClass}
+                                        placeholder="e.g. CUST-001"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">Your unique internal customer account code; it will not be generated.</p>
                                 </div>
 
                                 <div>
