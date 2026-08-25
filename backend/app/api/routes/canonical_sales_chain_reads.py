@@ -289,8 +289,9 @@ class CanonicalSalesInvoicePostingReadback(BaseModel):
             raise ValueError("sales-invoice journal header does not reconcile to its lines")
         if Decimal(self.receivable_principal) != Decimal(self.invoice_total):
             raise ValueError("sales-invoice receivable does not reconcile to invoice total")
-        if Decimal(self.receivable_outstanding) > Decimal(self.receivable_principal):
-            raise ValueError("sales-invoice outstanding exceeds its principal")
+        outstanding = Decimal(self.receivable_outstanding)
+        if outstanding < 0 or outstanding > Decimal(self.receivable_principal):
+            raise ValueError("sales-invoice outstanding is outside its principal bounds")
         for invoice_value, tax_value in (
             (self.taxable_amount, self.tax_taxable_amount),
             (self.cgst_amount, self.tax_cgst_amount),
@@ -469,8 +470,14 @@ def posted_sales_invoice_readback(
                          document.id AS inventory_document_id,
                          inventory_line.id AS inventory_document_line_id,
                          ledger.id AS ledger_entry_id,
-                         line.base_billed_quantity AS allocated_base_billed_quantity,
-                         line.base_free_quantity AS allocated_base_free_quantity,
+                         round(
+                           (requested_allocation.value->>'billed_quantity')::numeric
+                             * line.uom_conversion_factor, 6
+                         ) AS allocated_base_billed_quantity,
+                         round(
+                           (requested_allocation.value->>'free_quantity')::numeric
+                             * line.uom_conversion_factor, 6
+                         ) AS allocated_base_free_quantity,
                          abs(ledger.quantity_delta) AS ledger_base_quantity,
                          abs(ledger.value_delta) AS ledger_value
                     FROM sales.invoice_lines line
@@ -484,6 +491,45 @@ def posted_sales_invoice_readback(
                       ON ledger.org_id=inventory_line.org_id
                      AND ledger.inventory_document_line_id=inventory_line.id
                      AND ledger.entry_kind='issue'
+                    JOIN LATERAL (
+                        SELECT count(*)::integer AS evidence_count,
+                               CASE WHEN count(*)=1 THEN (array_agg(
+                                 pg_catalog.convert_from(command.request_bytes, 'UTF8')::jsonb
+                                 ORDER BY command.id
+                               ))[1] END AS value
+                          FROM automation.command_requests command
+                         WHERE command.org_id=invoice.org_id
+                           AND command.branch_id=invoice.branch_id
+                           AND command.capability_code='sales.invoice.prepare'
+                           AND command.operation='sales.invoice.post'
+                           AND command.target_resource_type='sales_invoice'
+                           AND command.target_resource_id=invoice.id
+                           AND command.status='succeeded'
+                           AND command.result_resource_type='sales_invoice'
+                           AND command.result_resource_id=invoice.id
+                           AND command.response_status=200
+                           AND command.request_hash=pg_catalog.sha256(command.request_bytes)
+                    ) command_evidence ON command_evidence.evidence_count=1
+                    JOIN LATERAL (
+                        SELECT count(*)::integer AS evidence_count,
+                               CASE WHEN count(*)=1 THEN (array_agg(requested.value))[1]
+                               END AS value
+                          FROM pg_catalog.jsonb_array_elements(
+                            COALESCE(command_evidence.value->'lines', '[]'::jsonb)
+                          ) requested(value)
+                         WHERE requested.value->>'line_id'=line.id::text
+                           AND requested.value->>'fulfillment_source'='direct_issue'
+                    ) requested_line ON requested_line.evidence_count=1
+                    JOIN LATERAL (
+                        SELECT count(*)::integer AS evidence_count,
+                               CASE WHEN count(*)=1 THEN (array_agg(requested.value))[1]
+                               END AS value
+                          FROM pg_catalog.jsonb_array_elements(
+                            COALESCE(requested_line.value->'batch_allocations', '[]'::jsonb)
+                          ) requested(value)
+                         WHERE requested.value->>'inventory_line_id'=inventory_line.id::text
+                           AND requested.value->>'batch_id'=inventory_line.batch_id::text
+                    ) requested_allocation ON requested_allocation.evidence_count=1
                    WHERE line.org_id=invoice.org_id AND line.invoice_id=invoice.id
                      AND line.line_kind='product' AND line.product_id IS NOT NULL
                   UNION ALL

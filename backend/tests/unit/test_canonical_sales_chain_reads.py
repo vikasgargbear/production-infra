@@ -122,6 +122,55 @@ def test_posting_readback_schema_preserves_uuid_and_exact_decimal_strings():
     assert payload["journal_debit_total"] == payload["journal_credit_total"]
 
 
+def test_posting_readback_reconciles_one_direct_invoice_line_across_batches():
+    row = valid_row()
+    first = row["inventory_evidence"][0]
+    first.update(
+        allocated_base_billed_quantity="6.250000",
+        allocated_base_free_quantity="1.250000",
+        ledger_base_quantity="7.500000",
+        ledger_value="45.88",
+    )
+    row["inventory_evidence"].append({
+        **first,
+        "inventory_document_line_id": uuid4(),
+        "ledger_entry_id": uuid4(),
+        "allocated_base_billed_quantity": "5.000000",
+        "allocated_base_free_quantity": "1.250000",
+        "ledger_base_quantity": "6.250000",
+        "ledger_value": "38.25",
+    })
+
+    model = reads.CanonicalSalesInvoicePostingReadback.model_validate(row)
+
+    assert len(model.inventory_evidence) == 2
+
+
+def test_posting_readback_direct_batch_split_comes_from_succeeded_command_evidence(
+    monkeypatch,
+):
+    invoice_id, org_id = uuid4(), uuid4()
+    captured = {}
+
+    def fake_rows(db, sql, params):
+        captured["sql"] = sql
+        return [valid_row()]
+
+    monkeypatch.setattr(reads, "_activate", lambda db, user: org_id)
+    monkeypatch.setattr(reads, "_rows", fake_rows)
+    reads.posted_sales_invoice_readback(invoice_id, {"org_id": str(org_id)}, object())
+
+    sql = captured["sql"]
+    assert "command.capability_code='sales.invoice.prepare'" in sql
+    assert "command.status='succeeded'" in sql
+    assert "command.request_hash=pg_catalog.sha256(command.request_bytes)" in sql
+    assert sql.count("evidence_count=1") == 3
+    assert "requested.value->>'inventory_line_id'=inventory_line.id::text" in sql
+    assert "requested.value->>'batch_id'=inventory_line.batch_id::text" in sql
+    assert "requested_allocation.value->>'billed_quantity'" in sql
+    assert "requested_allocation.value->>'free_quantity'" in sql
+
+
 def test_posting_readback_reconciles_charge_lines_and_rounding_without_inventory_lineage():
     row = valid_row()
     row["invoice_lines"].append({
@@ -153,6 +202,7 @@ def test_posting_readback_reconciles_charge_lines_and_rounding_without_inventory
     lambda row: row.update(journal_credit_total="111.00"),
     lambda row: row.update(taxable_amount="99.99", tax_taxable_amount="99.99"),
     lambda row: row.update(inventory_base_quantity="13.749999"),
+    lambda row: row.update(receivable_outstanding="-0.01"),
 ])
 def test_posting_readback_fails_closed_for_bad_identity_precision_or_reconciliation(mutation):
     row = valid_row(); mutation(row)
