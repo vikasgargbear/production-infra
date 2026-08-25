@@ -86,3 +86,25 @@ def test_compiler_rejects_template_that_does_not_target_exact_command(tmp_path: 
             {"display": {"branch_code": "sales"}},
             {"quantity": "1.000000"},
         )
+
+
+def test_template_readiness_names_all_18_operations_without_false_ready_claims() -> None:
+    root = Path(__file__).resolve().parents[3]
+    matrix = json.loads(
+        (root / "backend/tests/live_acceptance/operation_matrix.json").read_text()
+    )
+    readiness = json.loads(
+        (root / "docs/testing/live18-ui-template-readiness.json").read_text()
+    )
+    assert readiness["schema"] == "aasopharma.live18.ui-template-readiness.v1"
+    assert {row["id"] for row in readiness["operations"]} == {
+        row["id"] for row in matrix["operations"]
+    }
+    assert readiness["ready_count"] == sum(
+        row["status"] == "ready" for row in readiness["operations"]
+    )
+    assert all(row["status"] == "blocked" and row["missing"] for row in readiness["operations"])
+    assert all(
+        all((root / source).is_file() for source in row["evidence_sources"])
+        for row in readiness["operations"]
+    )
