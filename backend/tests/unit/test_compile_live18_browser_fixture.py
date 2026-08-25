@@ -120,6 +120,40 @@ def test_compiler_rejects_template_that_does_not_target_exact_command(tmp_path: 
         )
 
 
+def test_customer_search_text_is_not_mistaken_for_a_communication_action(tmp_path: Path) -> None:
+    matrix = _matrix(tmp_path / "matrix.json")
+    templates = _templates(tmp_path / "templates")
+    path = templates / "operation_1.json"
+    template = json.loads(path.read_text())
+    template["steps"]["prepare_steps"].append({
+        "actor": "requester",
+        "action": "fill",
+        "locator": {"kind": "placeholder", "name": "Search by name or phone"},
+        "value": "Canonical Customer",
+    })
+    path.write_text(json.dumps(template))
+    compile_fixture(
+        matrix,
+        templates,
+        {"display": {"branch_code": "sales"}},
+        {"quantity": "1.000000"},
+    )
+
+    template["steps"]["prepare_steps"].append({
+        "actor": "requester",
+        "action": "click",
+        "locator": {"kind": "role", "role": "button", "name": "Send WhatsApp"},
+    })
+    path.write_text(json.dumps(template))
+    with pytest.raises(FixtureCompileError, match="targets communication"):
+        compile_fixture(
+            matrix,
+            templates,
+            {"display": {"branch_code": "sales"}},
+            {"quantity": "1.000000"},
+        )
+
+
 def test_template_readiness_names_all_18_operations_without_false_ready_claims() -> None:
     root = Path(__file__).resolve().parents[3]
     matrix = json.loads(
@@ -192,3 +226,41 @@ def test_sales_order_delivery_date_is_derived_from_canonical_clock_and_reviewed_
             {"sales_order_delivery_offset_days": "0"},
             set(),
         )
+
+
+def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/sales_order.json").read_text()
+    )
+    scalars = {
+        "sales_order_delivery_offset_days": "2",
+        "sales_order_quantity": "1.125000",
+        "sales_order_rate": "84.1250",
+    }
+    used: set[str] = set()
+    facts = _operation_facts(
+        "sales_order",
+        {
+            "clock": {"business_date": "2026-08-25"},
+            "display": {
+                "customer_code": "DEMO-CUSTOMER",
+                "customer_name": "Demo Customer",
+                "product_code": "DEMO-PRODUCT",
+                "product_name": "Demo Product",
+            },
+        },
+        scalars,
+        used,
+    )
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("sales_order", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][1]["value"] == "2026-08-27"
+    assert operation["prepare_steps"][7]["value"] == "1.125000"
+    assert operation["prepare_steps"][8]["value"] == "84.1250"

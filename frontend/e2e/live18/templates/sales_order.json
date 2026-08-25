@@ -1,0 +1,41 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "sales_order",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/sales/sales-order"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Expected Delivery","exact":true},"value":"{{fact.choice.sales_order_requested_delivery_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.customer_name}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.product_name}}"}},
+      {"actor":"requester","action":"press","locator":{"kind":"role","role":"dialog","name":"Select Batch","exact":true},"value":"Enter"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"0"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Generate Order","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Item 1 billed quantity must be greater than zero","exact":true},"value":"Item 1 billed quantity must be greater than zero"}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/sales/sales-order"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Expected Delivery","exact":true},"value":"{{fact.choice.sales_order_requested_delivery_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.customer_name}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.product_name}}"}},
+      {"actor":"requester","action":"press","locator":{"kind":"role","role":"dialog","name":"Select Batch","exact":true},"value":"Enter"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.sales_order_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.sales_order_rate}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Generate Order","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact sales order","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed this exact server preview and want to post it.","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact sales order","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve & Post","exact":true}}
+    ]
+  }
+}

@@ -1,9 +1,9 @@
 {
   "schema": "aasopharma.live18.ui-template-readiness.v1",
-  "ready_count": 1,
+  "ready_count": 2,
   "operations": [
     {"id":"sales_invoice","status":"blocked","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts"],"missing":["current selector extraction after delivery-address/logistics authority changes","authoritative eligible FEFO batch selector","reviewed quantity/rate/free-quantity choices"]},
-    {"id":"sales_order","status":"blocked","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts"],"missing":["current selector extraction after delivery-address authority changes","reviewed quantity/rate choices"]},
+    {"id":"sales_order","status":"ready","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts","frontend/src/components/sales/order/SalesOrderFlow.tsx","frontend/src/components/sales/order/steps/OrderItemsStep.tsx","frontend/e2e/live18/templates/sales_order.json"],"missing":[]},
     {"id":"delivery_challan","status":"blocked","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts"],"missing":["authoritative importable sales-order lineage","reviewed transport mode/distance/transporter facts"]},
     {"id":"purchase_order","status":"blocked","evidence_sources":["frontend/e2e/live-canonical-core-ui.spec.ts"],"missing":["reviewed quantity/rate choices","exact current supplier/product selector verification"]},
     {"id":"goods_receipt","status":"blocked","evidence_sources":["frontend/e2e/live-canonical-core-ui.spec.ts"],"missing":["authoritative receivable purchase-order lineage","reviewed manufacturer batch and expiry evidence","destination/MRP-UOM selector authority"]},

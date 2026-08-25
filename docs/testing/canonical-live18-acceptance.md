@@ -61,6 +61,12 @@ six-place quantity within the server-returned FEFO tier) and
 `stock_transfer_distance_km` (an exact positive two-place distance). Branch,
 location, product, UOM, business date, transport mode, and eligible batch facts
 remain canonical runtime facts and are forbidden in the scalar secret.
+Sales order additionally reviews `sales_order_quantity`, `sales_order_rate`,
+and `sales_order_delivery_offset_days`. The compiler combines the bounded
+1–30-day offset with the canonical organization business date; no calendar
+date is accepted from the secret. Customer, default canonical delivery-address
+identity/row version, product, FEFO batch, GST, and document policy are resolved
+by the authenticated UI and APIs.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,
