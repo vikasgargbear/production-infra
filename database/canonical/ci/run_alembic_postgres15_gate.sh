@@ -25,6 +25,8 @@ test "$server_major" = 15 || {
 }
 
 python3 backend/scripts/package_canonical_baseline_migration.py
+python3 backend/scripts/generate_canonical_command_definition_migration.py --check
+expected_alembic_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
 psql -X -v ON_ERROR_STOP=1 -f database/canonical/ci/bootstrap_supabase_auth.sql
 
 export DATABASE_URL="postgresql+psycopg2://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
@@ -39,7 +41,7 @@ CANONICAL_BASELINE_APPROVED_SHA256=$(
   alembic -c alembic.ini upgrade head
 )
 
-test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260825_0011"
+test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "$expected_alembic_head"
 test "$(psql -X -Atqc "SELECT to_regclass('tax.gstr1_reporting_rule_versions') IS NOT NULL")" = "t"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gstr1_reporting_rule_versions', 'SELECT')")" = "t"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_regulatory_importer', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "t"

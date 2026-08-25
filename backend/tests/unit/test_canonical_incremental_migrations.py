@@ -87,10 +87,8 @@ def test_fefo_definition_checks_use_regular_strpos_calls() -> None:
         "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')"
         in postgres_contract
     )
-    assert (
-        "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')"
-        in staging_workflow
-    )
+    assert "pg_catalog.position(" not in staging_workflow
+    assert "sales_invoice_fefo_expiry_date_equivalence_v1" in staging_workflow
 
 
 def test_fefo_postgres_fixture_is_explicitly_head_only() -> None:

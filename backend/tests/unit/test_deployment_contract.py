@@ -431,7 +431,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "rotate_role_passwords:" in workflow
     role_provisioning = workflow.split(
         "Provision isolated staging login credentials", 1
-    )[1].split("Reconcile reviewed command definitions", 1)[0]
+    )[1].split("Verify Alembic-owned canonical command definitions", 1)[0]
     assert "inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in role_provisioning
     assert "inputs.provision_demo_data" not in role_provisioning
     assert 're.fullmatch(r"[A-Za-z0-9_-]{48,96}", password)' in workflow
@@ -481,105 +481,33 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "${CANONICAL_ACTIVE_POOLER_PORT}/postgres" in workflow
     assert 'pooler_mode: $pooler_mode' in workflow
     assert "/database/query\"" not in workflow
-    reconciliation = workflow.split(
-        "Reconcile reviewed command definitions on pre-cutover staging", 1
+    verification = workflow.split(
+        "Verify Alembic-owned canonical command definitions", 1
     )[1].split("Verify baseline topology", 1)[0]
-    assert "/database/query/read-only" in reconciliation
-    assert "Control plane verified reviewed command definitions are already current" in reconciliation
-    assert "purchase_order.id,purchase_order.row_version" in reconciliation
-    assert "exact_execute_aggregate_bindings_v2" in reconciliation
-    assert "supplier_invoice.id,supplier_invoice.row_version" in reconciliation
-    assert "sales_invoice.id,sales_invoice.row_version" in reconciliation
-    assert "sales_return.id,sales_return.row_version" in reconciliation
-    assert "purchase_return.id,purchase_return.row_version" in reconciliation
-    assert ".core_current? == true and .automation_current? == true" in reconciliation
-    assert ".trade_current? == true" in reconciliation
-    assert ".goods_receipt_post_current? == true" in reconciliation
-    assert ".commercial_supplier_post_current? == true" in reconciliation
-    assert ".commercial_invoice_artifacts_current? == true" in reconciliation
-    assert ".compliance_current? == true" in reconciliation
-    assert ".plumbing_current? == true" in reconciliation
-    assert reconciliation.count("CREATE OR REPLACE FUNCTION") == 1
-    assert '"erp_core_commands"."allocate_document_number"' in reconciliation
-    assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
-    assert '"erp_automation_commands"."resolve_sales_dispatch_prepare"' in reconciliation
-    assert "sales_invoice_fefo_expiry_date_equivalence_v1" in reconciliation
-    reconciliation_targets = reconciliation.split("targets = (", 1)[1].split(
-        ")\n          selected = []", 1
-    )[0]
-    assert '"erp_automation_commands"."resolve_sales_invoice_prepare"' not in reconciliation_targets
-    assert '"erp_automation_commands"."persist_sales_return_prepare"' in reconciliation
-    assert '"erp_automation_commands"."assert_sales_return_draft"' in reconciliation
-    assert '"erp_automation_commands"."resolve_purchase_return_prepare"' in reconciliation
-    assert '"erp_trade_invariants"."guard_direct_invoice_issue"' in reconciliation
-    assert '"erp_trade_commands"."finish_claim"' in reconciliation
-    assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
-    assert '"erp_commercial_commands"."post_supplier_invoice"' in reconciliation
-    assert '"erp_commercial_commands"."post_sales_invoice"' in reconciliation
-    assert '"erp_commercial_commands"."post_sales_return"' in reconciliation
-    assert '"erp_commercial_commands"."post_purchase_return"' in reconciliation
-    assert '"erp_commercial_commands"."assert_sales_invoice_artifact"' in reconciliation
-    assert '"erp_commercial_commands"."assert_supplier_invoice_artifact"' in reconciliation
-    assert '"erp_commercial_commands"."assert_sales_return_artifact"' in reconciliation
-    assert '"erp_commercial_commands"."assert_purchase_return_artifact"' in reconciliation
-    assert '"erp_compliance_commands"."finish_claim"' in reconciliation
-    assert '"erp_plumbing"."enqueue_state_outbox"' in reconciliation
-    assert 'artifact.get("platform_enforcements")' in reconciliation
-    assert "terminal_response_body" in reconciliation
-    assert "goods_receipt_post_current" in reconciliation
-    assert "commercial_sales_post_current" in reconciliation
-    assert "return_rounding_current" in reconciliation
-    assert "sales_return_receipt_current" in reconciliation
-    assert "sales_return_draft_current" in reconciliation
-    assert "purchase_return_resolution_current" in reconciliation
-    assert "commercial_return_post_current" in reconciliation
-    assert "commercial_return_artifacts_current" in reconciliation
-    assert "constraint_targets" in reconciliation
-    assert 'relation["checks"]' in reconciliation
-    assert "ck_sales_returns_rounding_policy" in reconciliation
-    assert "ck_procurement_purchase_returns_rounding_policy" in reconciliation
-    assert "v_purchase_order_id" in reconciliation
-    assert "portal_parser_ownership_current" in reconciliation
-    assert "portal_parser_scope_current" in reconciliation
-    assert '"erp_finance_commands"."parse_portal_document"' in reconciliation
-    assert "target_document_id uuid:=portal_document_id" in reconciliation
-    assert "DROP TRIGGER IF EXISTS tax_portal_documents_immutable_trg" in reconciliation
-    assert "outbox_aggregate_id" in reconciliation
-    assert "trade_trigger_helpers_current" in reconciliation
-    assert "guard_source_inventory_ownership" in reconciliation
-    assert "guard_posted_landed_allocation" in reconciliation
-    assert '"t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
-    assert "resolve_inventory_adjustment_prepare" in reconciliation
-    assert "controlled_batched_movement" in reconciliation
-    assert "stock_balance.branch_id=branch.id" in reconciliation
-    assert "stock_balance.location_id=location.id" in reconciliation
-    assert "inventory_adjustment_persist_current" in reconciliation
-    assert "pg_catalog.session_user" in reconciliation
-    assert "SESSION_USER<>''erp_runtime''" in reconciliation
-    assert "resolve_goods_receipt_prepare" in reconciliation
-    assert "goods_receipt_date_current" in reconciliation
-    assert "pg_catalog.current_date" in reconciliation
-    assert "persist_purchase_order_prepare" in reconciliation
-    assert "purchase_order_binding_current" in reconciliation
-    assert "guard_command_request_match" in reconciliation
-    assert "calculated_guard_current" in reconciliation
-    assert "runtime_prepare_context_current" in reconciliation
-    for function_name in (
-        "persist_supplier_invoice_prepare",
-        "persist_inventory_adjustment_prepare",
-        "persist_supplier_payment_prepare",
-        "persist_supplier_advance_prepare",
-        "persist_customer_receipt_prepare",
+    assert "/database/query/read-only" in verification
+    assert "Control plane verified Alembic-owned command definitions are current" in verification
+    for reviewed_marker in (
+        "purchase_order.id,purchase_order.row_version",
+        "exact_execute_aggregate_bindings_v2",
+        "supplier_invoice.id,supplier_invoice.row_version",
+        "sales_invoice.id,sales_invoice.row_version",
+        "sales_return.id,sales_return.row_version",
+        "purchase_return.id,purchase_return.row_version",
+        "sales_invoice_fefo_expiry_date_equivalence_v1",
+        "terminal_response_body",
+        "return_rounding_current",
+        "portal_parser_ownership_current",
+        "trade_trigger_helpers_current",
+        "inventory_adjustment_persist_current",
+        "goods_receipt_date_current",
+        "purchase_order_binding_current",
+        "runtime_prepare_context_current",
     ):
-        assert function_name in reconciliation
-    assert "SET ROLE erp_migration_owner" in reconciliation
-    assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
-    assert "GRANT erp_migration_owner TO postgres WITH SET FALSE" in reconciliation
-    assert "--single-transaction" in reconciliation
-    assert "Canonical command reconciliation failure" in reconciliation
-    assert "--echo-errors" in reconciliation
-    assert "pg_catalog.greatest(" in reconciliation
-    assert "pg_catalog.least(" in reconciliation
+        assert reviewed_marker in verification
+    assert "CREATE OR REPLACE FUNCTION" not in verification
+    assert "reconciliation_sql" not in verification
+    assert "--single-transaction" not in verification
+    assert "generate_canonical_command_definition_migration.py --check" in workflow
     assert "isolated_role_count" in workflow
     assert "unsafe_role_count" in workflow
     baseline_query = workflow.split("baseline_query=$(cat", 1)[1].split("SQL\n", 1)[0]
