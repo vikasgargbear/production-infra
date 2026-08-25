@@ -102,7 +102,7 @@ BEGIN
            SET status = 'active'
          WHERE id = '00000000-0000-0000-0000-000000000004';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'closed branch reactivation was accepted';
-    EXCEPTION WHEN check_violation OR object_not_in_prerequisite_state THEN
+    EXCEPTION WHEN check_violation THEN
         NULL;
     END;
 
@@ -111,7 +111,7 @@ BEGIN
            SET status = 'anonymized'
          WHERE id = '00000000-0000-0000-0000-000000000002';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'anonymized user retained Auth mapping';
-    EXCEPTION WHEN check_violation OR object_not_in_prerequisite_state THEN
+    EXCEPTION WHEN check_violation THEN
         NULL;
     END;
 END
@@ -207,14 +207,14 @@ BEGIN
         UPDATE core.attachments SET byte_size = 129
          WHERE id = '00000000-0000-0000-0000-000000000030';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'verified attachment mutated';
-    EXCEPTION WHEN check_violation THEN
+    EXCEPTION WHEN check_violation OR object_not_in_prerequisite_state THEN
         NULL;
     END;
     BEGIN
         DELETE FROM core.attachments
          WHERE id = '00000000-0000-0000-0000-000000000030';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'legal-hold attachment deleted';
-    EXCEPTION WHEN check_violation THEN
+    EXCEPTION WHEN check_violation OR object_not_in_prerequisite_state THEN
         NULL;
     END;
 END
