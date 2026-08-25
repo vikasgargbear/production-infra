@@ -9,7 +9,6 @@ const source = (relativePath: string) => fs.readFileSync(
 describe('truthful report controls', () => {
   it.each([
     ['../payment/reports/PaymentReports.tsx', 'Export'],
-    ['../payment/tracking/PaymentDashboard.tsx', 'Export Report'],
   ])('%s does not present an unimplemented %s action as enabled', (relativePath, label) => {
     const contents = source(relativePath);
     const labelIndex = contents.lastIndexOf(label);

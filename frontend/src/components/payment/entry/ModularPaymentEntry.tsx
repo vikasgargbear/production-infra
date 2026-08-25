@@ -560,9 +560,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                             value={payment.allocation_method || 'fifo'}
                             onChange={(e) => {
                               setPaymentField('allocation_method', e.target.value);
-                              if (e.target.value === 'advance') {
-                                setPaymentField('allocations', []);
-                              } else if (e.target.value !== 'manual') {
+                              if (e.target.value !== 'manual') {
                                 applyAllocationMethod(e.target.value);
                               }
                             }}
@@ -572,7 +570,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                             <option value="fifo">FIFO (Oldest First)</option>
                             <option value="lifo">LIFO (Newest First)</option>
                             <option value="highest">Highest First</option>
-                            <option value="advance">Keep as Advance</option>
                           </select>
                         </div>
                       </div>

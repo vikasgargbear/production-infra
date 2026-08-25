@@ -132,14 +132,6 @@ export const API_CONFIG: APIConfig = {
       REPORTS: '/inventory/reports/',  // Added trailing slash
     },
 
-    // Payments
-    PAYMENTS: {
-      BASE: '/payments/',  // Added trailing slash
-      RECONCILE: '/payments/reconcile/',  // Added trailing slash
-      PENDING: '/payments/pending/',  // Added trailing slash
-      METHODS: '/payments/methods/',  // Added trailing slash
-    },
-
     // Returns
     RETURNS: {
       BASE: '/returns/',  // Restored trailing slash for proper Django URL handling
@@ -154,23 +146,6 @@ export const API_CONFIG: APIConfig = {
       // Purchase returns (to suppliers)
       PURCHASE: '/purchase-returns/',  // Matches backend: purchase_returns_router prefix
       PURCHASE_BY_ID: (id) => `/purchase-returns/${id}/`,
-    },
-
-    // Party Ledger
-    LEDGER: {
-      BASE: '/ledger/',  // Added trailing slash
-      PARTY: (partyId) => `/ledger/party/${partyId}/`,  // Added trailing slash
-      STATEMENTS: '/ledger/statements/',  // Added trailing slash
-      OUTSTANDING: '/ledger/outstanding/',  // Added trailing slash
-      AGING: '/ledger/aging/',  // Added trailing slash
-    },
-
-    // Credit/Debit Notes
-    NOTES: {
-      CREDIT: '/credit-notes/',  // Added trailing slash
-      DEBIT: '/debit-notes/',  // Added trailing slash
-      APPROVE: (type, id) => `/${type}-notes/${id}/approve/`,  // Added trailing slash
-      CANCEL: (type, id) => `/${type}-notes/${id}/cancel/`,  // Added trailing slash
     },
 
     // Stock Movement

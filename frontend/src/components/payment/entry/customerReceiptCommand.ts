@@ -58,12 +58,10 @@ export function centsToMoney(cents: bigint): string {
 }
 
 export function canonicalReceiptMethod(paymentMode: string): CanonicalReceiptMethod | null {
-  const methods: Record<string, CanonicalReceiptMethod> = {
-    BANK_TRANSFER: 'bank_transfer',
-    CARD: 'card',
-    UPI: 'upi',
-  };
-  return methods[paymentMode] ?? null;
+  if (paymentMode === 'bank_transfer' || paymentMode === 'card' || paymentMode === 'upi') {
+    return paymentMode;
+  }
+  return null;
 }
 
 export function receiptEscapeAction(currentStep: number, postedPaymentId: string): 'back' | 'block' | 'close' {

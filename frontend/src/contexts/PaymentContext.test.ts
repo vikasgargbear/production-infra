@@ -1,11 +1,11 @@
-import { localBusinessDate } from './PaymentContext';
+import fs from 'fs';
+import path from 'path';
 
-describe('localBusinessDate', () => {
-  it('uses browser-local calendar fields instead of the UTC date', () => {
-    const value = new Date('2026-08-24T18:45:00.000Z');
-    jest.spyOn(value, 'getFullYear').mockReturnValue(2026);
-    jest.spyOn(value, 'getMonth').mockReturnValue(7);
-    jest.spyOn(value, 'getDate').mockReturnValue(25);
-    expect(localBusinessDate(value)).toBe('2026-08-25');
+describe('PaymentContext business-date authority', () => {
+  it('leaves the payment date empty until the canonical context supplies it', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'PaymentContext.tsx'), 'utf8');
+    expect(source).toContain("payment_date: ''");
+    expect(source).not.toContain('toISOString()');
+    expect(source).not.toContain('new Date(');
   });
 });

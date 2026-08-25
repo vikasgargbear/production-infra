@@ -1,6 +1,7 @@
-import { approveCustomerReceipt, prepareCustomerReceipt, reconcileCustomerReceipt } from './customerReceipts.api';
+import { approveCustomerReceipt, getCustomerReceiptContext, prepareCustomerReceipt, reconcileCustomerReceipt } from './customerReceipts.api';
 import { approveAndExecuteCanonicalAction, prepareCanonicalAction } from '../../canonicalOperatorActions';
 import { paymentAllocationApi } from './paymentAllocation.api';
+import { apiHelpers } from '../../apiClient';
 
 jest.mock('../../canonicalOperatorActions', () => ({
   approveAndExecuteCanonicalAction: jest.fn(),
@@ -10,6 +11,7 @@ jest.mock('../../canonicalOperatorActions', () => ({
 jest.mock('./paymentAllocation.api', () => ({ paymentAllocationApi: {
   getInvoicePayments: jest.fn(), getCustomerReceiptReadback: jest.fn(),
 } }));
+jest.mock('../../apiClient', () => ({ apiHelpers: { get: jest.fn() } }));
 
 const paymentId = '0198ea37-2b30-7c8d-9123-123456789abc';
 const openItemId = '0198ea37-2b31-7c8d-9123-123456789abc';
@@ -17,6 +19,17 @@ const invoiceId = '0198ea37-2b32-7c8d-9123-123456789abc';
 
 describe('canonical receipt execution and reconciliation', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it('loads one canonical context for business date, methods, and settlement identities', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
+      business_date: '2026-08-25', payment_methods: ['bank_transfer', 'card', 'upi'],
+      settlement_accounts: [],
+    } });
+    await expect(getCustomerReceiptContext()).resolves.toEqual(expect.objectContaining({
+      data: expect.objectContaining({ business_date: '2026-08-25' }),
+    }));
+    expect(apiHelpers.get).toHaveBeenCalledWith('/canonical/customer-receipts/context');
+  });
 
   const preparePayload = () => ({
     idempotency_key: 'receipt:1', branch_id: invoiceId, payment_date: '2026-08-25',

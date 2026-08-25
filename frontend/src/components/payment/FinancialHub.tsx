@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   CreditCard, FileText, Calculator, Receipt,
-  RefreshCw
+  RefreshCw, History
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './entry/ModularPaymentEntry';
@@ -10,6 +10,7 @@ import SupplierAdvance from './entry/SupplierAdvance';
 import FinancialJournalFlow from './flows/FinancialJournalFlow';
 import ExpenseClaimsFlow from './flows/ExpenseClaimsFlow';
 import BankReconciliationFlow from './flows/BankReconciliationFlow';
+import PaymentHistory from './tracking/PaymentHistory';
 
 
 interface FinancialHubProps {
@@ -39,7 +40,7 @@ interface FinancialModule {
 
 const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   /** All valid sub-module IDs for deep-linking into FinancialHub. */
-  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'supplier-advance', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
+  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'supplier-advance', 'payment-history', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
 
   const resolvedDefault =
     initialSubpage && PAYMENT_SUBPAGE_IDS.includes(initialSubpage as any)
@@ -73,6 +74,15 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initi
       icon: CreditCard,
       color: 'blue',
       component: SupplierAdvance
+    },
+    {
+      id: 'payment-history',
+      label: 'History',
+      fullLabel: 'Posted Payment History',
+      description: 'Verify posted allocations and balanced journals',
+      icon: History,
+      color: 'blue',
+      component: PaymentHistory
     },
     {
       id: 'journal-entry',

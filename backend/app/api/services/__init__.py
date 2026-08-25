@@ -19,7 +19,6 @@ from .returns.return_service import ReturnService
 from .master.product.service import ProductService
 from .master.customer.service import CustomerService
 from .finance.payment.service import PaymentService
-from .finance.ledger.service import LedgerService
 from .finance.credit_note.service import CreditNoteService
 from .inventory.inventory_service import InventoryService
 from .settings.settings_service import SettingsService, SettingsServiceSync, invalidate_settings_cache
@@ -38,7 +37,6 @@ __all__ = [
     "ProductService",
     # Finance
     "PaymentService",
-    "LedgerService",
     "CreditNoteService",
     # Inventory
     "InventoryService",

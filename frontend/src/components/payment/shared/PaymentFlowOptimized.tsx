@@ -3,26 +3,13 @@ import { Calendar } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 import { CustomerSearch } from '../../global';
-import { bankAccountsApi } from '../../../services/api';
 import { moneyToCents } from '../entry/customerReceiptCommand';
+import {
+  getCustomerReceiptContext,
+  type CustomerReceiptContext,
+} from '../../../services/api/modules/finance/customerReceipts.api';
 
-interface SplitPayment {
-  type: string;
-  amount: string;
-  reference?: string;
-}
-
-interface CanonicalBankAccount {
-  id: string;
-  bank_account_id: string;
-  settlement_account_id: string;
-  account_name: string;
-  bank_name: string;
-  is_active: boolean;
-  is_payment_account: boolean;
-  allows_bank_reconciliation: boolean;
-  currency_code: string;
-}
+type CanonicalBankAccount = CustomerReceiptContext['settlement_accounts'][number];
 
 const PaymentFlowOptimized: React.FC = () => {
   const {
@@ -35,12 +22,8 @@ const PaymentFlowOptimized: React.FC = () => {
     setError
   } = usePayment();
 
-  const [showSplitModal, setShowSplitModal] = useState(false);
-  const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([
-    { type: 'CASH', amount: '' },
-    { type: 'UPI', amount: '' }
-  ]);
   const [bankAccounts, setBankAccounts] = useState<CanonicalBankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<CustomerReceiptContext['payment_methods']>([]);
   const [bankAccountsError, setBankAccountsError] = useState('');
 
   const amountRef = useRef<HTMLInputElement>(null);
@@ -65,24 +48,21 @@ const PaymentFlowOptimized: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    bankAccountsApi.getActive()
+    getCustomerReceiptContext()
       .then(response => {
         if (!active) return;
-        const accounts = Array.isArray(response.data) ? response.data.filter(account => (
-          account?.is_active !== false
-          && account?.is_payment_account === true
-          && account?.allows_bank_reconciliation === true
-          && account?.currency_code === 'INR'
-          && account?.bank_account_id
-          && account?.settlement_account_id
-        )) : [];
+        const accounts = response.data.settlement_accounts;
         setBankAccounts(accounts);
+        setPaymentMethods(response.data.payment_methods);
+        setPaymentField('payment_date', response.data.business_date);
         setBankAccountsError(accounts.length ? '' : 'No canonical bank settlement account is available.');
       })
       .catch(() => {
         if (!active) return;
         setBankAccounts([]);
-        setBankAccountsError('Unable to load canonical bank settlement accounts. Receipt posting is unavailable.');
+        setPaymentMethods([]);
+        setPaymentField('payment_date', '');
+        setBankAccountsError('Unable to load the canonical receipt context. Receipt posting is unavailable.');
       });
     return () => { active = false; };
     // The context action is intentionally read once; including its render-local
@@ -111,38 +91,11 @@ const PaymentFlowOptimized: React.FC = () => {
     window.dispatchEvent(new CustomEvent('customerSelected', { detail: customer }));
   };
 
-  // Payment modes including split
-  const paymentModes = [
-    { value: 'CASH', label: 'Cash', icon: '💵', unavailable: true },
-    { value: 'UPI', label: 'UPI', icon: '📱' },
-    { value: 'CARD', label: 'Card', icon: '💳' },
-    { value: 'BANK_TRANSFER', label: 'Bank', icon: '🏦' },
-    { value: 'CHEQUE', label: 'Cheque', icon: '📄', unavailable: true },
-    { value: 'SPLIT', label: 'Split', icon: '➗', unavailable: true }
-  ];
-
-  const needsReference = ['UPI', 'CARD', 'BANK_TRANSFER'].includes(payment.payment_mode);
+  const needsReference = Boolean(payment.payment_mode);
 
   const handlePaymentModeSelect = (mode: string) => {
-    if (mode === 'SPLIT') {
-      setShowSplitModal(true);
-      setPaymentField('payment_mode', 'SPLIT');
-    } else {
-      setPaymentField('payment_mode', mode);
-      setShowSplitModal(false);
-    }
+    setPaymentField('payment_mode', mode);
   };
-
-  const updateSplitPayment = (index: number, field: string, value: string) => {
-    const updated = [...splitPayments];
-    updated[index] = { ...updated[index], [field]: value };
-    setSplitPayments(updated);
-
-    // Update payment field with split details
-    setPaymentField('split_payments', JSON.stringify(updated));
-  };
-
-  const totalSplitAmount = splitPayments.reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0);
 
   return (
     <div className="space-y-4">
@@ -175,8 +128,8 @@ const PaymentFlowOptimized: React.FC = () => {
       {/* Payment Details - Only show after customer selection */}
       {selectedCustomer && (
         <div className="space-y-4">
-          {/* Date and Type - First */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Business date */}
+          <div className="max-w-md">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
               <div className="relative">
@@ -188,18 +141,6 @@ const PaymentFlowOptimized: React.FC = () => {
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Type</label>
-              <select
-                value={payment.payment_type}
-                onChange={(e) => handleFieldChange('payment_type', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="order_payment">Order Payment</option>
-                <option value="advance" disabled>Advance (canonical posting unavailable)</option>
-                <option value="adjustment" disabled>Adjustment (canonical posting unavailable)</option>
-              </select>
             </div>
           </div>
 
@@ -231,24 +172,24 @@ const PaymentFlowOptimized: React.FC = () => {
           {/* Payment Mode Selection */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT METHOD</h3>
-            <div className="grid grid-cols-6 gap-2">
-              {paymentModes.map((mode) => (
+            <div className="grid grid-cols-3 gap-2">
+              {paymentMethods.map((method) => {
+                const label = method === 'bank_transfer'
+                  ? 'Bank Transfer'
+                  : method.charAt(0).toUpperCase() + method.slice(1);
+                return (
                 <button
-                  key={mode.value}
+                  key={method}
                   type="button"
-                  disabled={mode.unavailable}
-                  aria-disabled={mode.unavailable}
-                  title={mode.unavailable ? `${mode.label} receipt posting is not available in the canonical API` : undefined}
-                  onClick={() => handlePaymentModeSelect(mode.value)}
-                  className={`p-2.5 rounded-lg border transition-all disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-50 ${payment.payment_mode === mode.value
+                  onClick={() => handlePaymentModeSelect(method)}
+                  className={`min-h-11 p-2.5 rounded-lg border transition-all ${payment.payment_mode === method
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                     }`}
                 >
-                  <div className="text-lg">{mode.icon}</div>
-                  <div className="text-xs font-medium text-gray-600 mt-1">{mode.label}</div>
+                  <div className="text-xs font-medium text-gray-700">{label}</div>
                 </button>
-              ))}
+              );})}
             </div>
           </div>
 
@@ -270,7 +211,7 @@ const PaymentFlowOptimized: React.FC = () => {
               <option value="">Select bank settlement account</option>
               {bankAccounts.map(account => (
                 <option key={account.bank_account_id} value={account.bank_account_id}>
-                  {account.bank_name} — {account.account_name}
+                  {account.bank_name} — {account.settlement_account_name}
                 </option>
               ))}
             </select>
@@ -281,7 +222,7 @@ const PaymentFlowOptimized: React.FC = () => {
           {needsReference && (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
               <label className="block text-sm font-medium text-gray-600 mb-2">
-                {payment.payment_mode === 'UPI' ? 'UPI Transaction ID' : 'Reference Number'}
+                {payment.payment_mode === 'upi' ? 'UPI Transaction ID' : 'Reference Number'}
                 {' '}<span className="text-red-600" aria-hidden="true">*</span>
               </label>
               <input
@@ -297,71 +238,6 @@ const PaymentFlowOptimized: React.FC = () => {
         </div>
       )}
 
-      {/* Split Payment Details - Compact but user-friendly */}
-      {selectedCustomer && showSplitModal && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">SPLIT PAYMENT DETAILS</h3>
-          <Card className="p-3">
-            <div className="space-y-2">
-              {splitPayments.map((split, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <select
-                    value={split.type}
-                    onChange={(e) => updateSplitPayment(index, 'type', e.target.value)}
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="CASH">💵 Cash</option>
-                    <option value="UPI">📱 UPI</option>
-                    <option value="CARD">💳 Card</option>
-                    <option value="BANK_TRANSFER">🏦 Bank</option>
-                  </select>
-                  <div className="relative flex-1 max-w-[150px]">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-600 font-semibold">₹</span>
-                    <input
-                      type="number"
-                      value={split.amount}
-                      onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      placeholder="Amount"
-                      className="w-full pl-7 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  {['UPI', 'BANK_TRANSFER'].includes(split.type) && (
-                    <input
-                      type="text"
-                      value={split.reference || ''}
-                      onChange={(e) => updateSplitPayment(index, 'reference', e.target.value)}
-                      placeholder="Reference (optional)"
-                      className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  )}
-                  {splitPayments.length > 1 && (
-                    <button
-                      onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== index))}
-                      className="text-red-500 hover:text-red-700 px-2"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              <button
-                onClick={() => setSplitPayments([...splitPayments, { type: 'CASH', amount: '' }])}
-                className="text-sm text-blue-600 hover:text-blue-700 mt-2"
-              >
-                + Add another payment method
-              </button>
-
-              {totalSplitAmount !== parseFloat(payment.amount || '0') && (
-                <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded mt-2">
-                  Split total (₹{totalSplitAmount}) must equal payment amount (₹{payment.amount || '0'})
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
     </div>
   );
 };

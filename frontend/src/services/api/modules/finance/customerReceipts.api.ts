@@ -8,6 +8,25 @@ import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { paymentAllocationApi } from './paymentAllocation.api';
 import type { CanonicalCustomerReceiptPreparePayload } from '../../../../components/payment/entry/customerReceiptCommand';
 import { moneyToCents } from '../../../../components/payment/entry/customerReceiptCommand';
+import { apiHelpers } from '../../apiClient';
+
+export interface CustomerReceiptContext {
+  business_date: string;
+  payment_methods: Array<'bank_transfer' | 'card' | 'upi'>;
+  settlement_accounts: Array<{
+    bank_account_id: string;
+    settlement_account_id: string;
+    settlement_account_code: string;
+    settlement_account_name: string;
+    bank_name: string;
+    account_holder_name: string;
+    currency_code: 'INR';
+  }>;
+}
+
+export async function getCustomerReceiptContext() {
+  return apiHelpers.get<CustomerReceiptContext>('/canonical/customer-receipts/context');
+}
 
 export async function prepareCustomerReceipt(payload: CanonicalCustomerReceiptPreparePayload) {
   const prepared = await prepareCanonicalAction(

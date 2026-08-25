@@ -3993,24 +3993,6 @@ def batches(limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0)
     """, {"org_id": org_id, "limit": limit, "offset": offset})
 
 
-@router.get("/payments/search")
-def payments(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
-             user: dict = FINANCE_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT payment.id AS payment_id, payment.payment_number, payment.payment_date,
-               payment.direction, payment.party_id, party.legal_name AS party_name,
-               payment.payment_method AS payment_mode, payment.amount,
-               payment.external_reference AS reference_number, payment.memo AS notes,
-               payment.status, payment.created_at, payment.updated_at
-          FROM finance.payments payment
-          LEFT JOIN parties.parties party ON party.org_id=payment.org_id AND party.id=payment.party_id
-         WHERE payment.org_id=:org_id ORDER BY payment.payment_date DESC, payment.id DESC
-         LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": offset})
-    return {"payments": rows, "total": len(rows)}
-
-
 @router.get("/accounts/chart")
 @router.get("/journal-entries/chart-of-accounts")
 def chart_of_accounts(user: dict = FINANCE_USER, db: Session = Depends(get_db)):

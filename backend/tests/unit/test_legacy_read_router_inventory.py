@@ -19,7 +19,6 @@ ROOT = Path(__file__).resolve().parents[3]
 EXPECTED_LEGACY_ROUTER_REFERENCES = {
     "sales_returns_router", "purchase_returns_router", "inventory.router",
     "stock_adjustments.router", "stock_movements.router", "stock_writeoff.router",
-    "payments.router", "payment_allocation.router", "credit_debit_notes.router",
     "gst.router", "gstr2b.router", "compliance.router",
 }
 
@@ -42,6 +41,10 @@ RETIRED_MODULE_PREFIXES = (
     "app.api.routes.purchase.upload.",
     "app.api.routes.finance.tax.",
     "app.api.routes.finance.expenses.",
+    "app.api.routes.finance.payments.",
+    "app.api.routes.finance.allocation.",
+    "app.api.routes.finance.credit_notes.",
+    "app.api.routes.finance.ledger.",
     "app.api.routes.documents",
     "app.api.routes.reports.collection",
     "app.api.routes.reports.outstanding",
@@ -81,24 +84,6 @@ LEGACY_READ_INVENTORY = {
     "app.api.routes.inventory.writeoff.routes": {
         "/api/stock-writeoff/expiry-report", "/api/stock-writeoff/",
         "/api/stock-writeoff/{writeoff_id}", "/api/stock-writeoff/itc-summary",
-    },
-    "app.api.routes.finance.payments.routes": {
-        "/api/payments/", "/api/payments/search", "/api/payments/pending",
-        "/api/payments/methods", "/api/payments/outstanding",
-        "/api/payments/invoice/{invoice_id}", "/api/payments/summary",
-        "/api/payments/aging-report", "/api/payments/{payment_id}",
-    },
-    "app.api.routes.finance.allocation.routes": {
-        "/api/payment-allocation/payment/{payment_id}/allocations",
-        "/api/payment-allocation/unallocated-payments",
-    },
-    "app.api.routes.finance.credit_notes.routes": {
-        "/api/credit-debit-notes/", "/api/credit-debit-notes/{note_id}",
-        "/api/credit-debit-notes/{note_id}/print", "/api/credit-debit-notes/reasons/list",
-        "/api/credit-debit-notes/linked-invoices/{party_id}",
-        "/api/credit-debit-notes/invoice-items/{invoice_id}",
-        "/api/credit-debit-notes/credit-note-reasons",
-        "/api/credit-debit-notes/debit-note-reasons",
     },
     "app.api.routes.compliance.gst": {
         "/api/gst/dashboard", "/api/gst/returns/status", "/api/gst/calculate",
@@ -180,6 +165,26 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
         "/api/collection-center/collection/campaigns",
         "/api/customer-outstanding/net-position",
         "/api/customer-outstanding/collection-metrics",
+        "/api/payments/", "/api/payments/search", "/api/payments/pending", "/api/payments/methods",
+        "/api/payments/outstanding", "/api/payments/invoice/{invoice_id}",
+        "/api/payments/summary", "/api/payments/aging-report",
+        "/api/payments/{payment_id}",
+        "/api/payment-allocation/payment/{payment_id}/allocations",
+        "/api/payment-allocation/unallocated-payments",
+        "/api/credit-debit-notes/", "/api/credit-debit-notes/{note_id}",
+        "/api/credit-debit-notes/{note_id}/print",
+        "/api/credit-debit-notes/reasons/list",
+        "/api/credit-debit-notes/linked-invoices/{party_id}",
+        "/api/credit-debit-notes/invoice-items/{invoice_id}",
+        "/api/credit-debit-notes/credit-note-reasons",
+        "/api/credit-debit-notes/debit-note-reasons",
+        "/api/ledger/statement/{party_id}",
+        "/api/ledger/balance/{party_id}",
+        "/api/ledger/outstanding/{party_id}",
+        "/api/ledger/opening-balance/{party_id}",
+        "/api/ledger/last-payment/{party_id}",
+        "/api/ledger/interest-calculation/{party_id}",
+        "/api/ledger/summary", "/api/ledger/top-debtors",
     }:
         assert retired_path not in paths
 
@@ -206,6 +211,15 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
         "/api/web/actions/expense-claims/context",
         "/api/web/actions/expense-claims/commands/{command_request_id}/readback",
         "/api/canonical/document-history",
+        "/api/canonical/payment-history",
+        "/api/canonical/payment-history/{payment_id}",
+        "/api/canonical/customer-receipts/context",
+        "/api/payment-allocation/unpaid-invoices",
+        "/api/payment-allocation/invoice/{invoice_id}/payments",
+        "/api/payment-allocation/payment/{payment_id}/readback",
+        "/api/canonical/adjustment-notes/context",
+        "/api/canonical/adjustment-notes/{note_id}",
+        "/api/canonical/party-ledger/{party_account_id}",
     }:
         assert canonical_path in paths
 

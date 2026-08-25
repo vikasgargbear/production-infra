@@ -49,11 +49,7 @@ from .api.routes.inventory import movements as stock_movements
 from .api.routes.inventory import writeoff as stock_writeoff
 
 # Finance Module
-from .api.routes.finance import payments
-from .api.routes.finance import allocation as payment_allocation
-from .api.routes.finance import ledger
 from .api.routes.finance.tax import routes as tax_entries_routes
-from .api.routes.finance import credit_notes as credit_debit_notes
 
 # Compliance Module
 from .api.routes.compliance import gst
@@ -77,6 +73,7 @@ from .api.routes import (
     canonical_supplier_payment_reads,
     canonical_supplier_advance_reads,
     canonical_payment_history_reads,
+    canonical_customer_receipt_reads,
     canonical_party_ledger_reads,
     canonical_document_history_reads,
     canonical_inventory_reads,
@@ -256,6 +253,7 @@ api.include_router(canonical_return_reads.router)
 api.include_router(canonical_supplier_payment_reads.router)
 api.include_router(canonical_supplier_advance_reads.router)
 api.include_router(canonical_payment_history_reads.router)
+api.include_router(canonical_customer_receipt_reads.router)
 api.include_router(canonical_inventory_reads.router, tags=["Canonical Inventory Reads"])
 api.include_router(canonical_adjustment_note_reads.router)
 api.include_router(canonical_controlled_operation_reads.router)
@@ -303,9 +301,11 @@ include_legacy_read_only_router(api, stock_movements.router, prefix="/stock-move
 include_legacy_read_only_router(api, stock_writeoff.router, tags=["Stock Write-off"])
 
 # --- Finance ---
-include_legacy_read_only_router(api, payments.router, prefix="/payments", tags=["Payments"])
-include_legacy_read_only_router(api, payment_allocation.router, tags=["Payment Allocation"])
-api.include_router(ledger.router, tags=["Ledger"])
+# Posted payment history, open-item allocation context/readback, and standalone
+# adjustment-note context/readback are provided only by canonical UUID routers.
+# The retired payment/allocation/note routers mixed integer identifiers, old
+# outstanding projections, static reason/method lists, and silent zero/error
+# fallbacks, so none of them is mounted.
 include_explicit_non_persistent_post_utilities(
     api,
     tax_entries_routes.router,
@@ -313,7 +313,6 @@ include_explicit_non_persistent_post_utilities(
     tags=["Tax Entries"],
     routes={"/calculate": tax_entries_routes.calculate_tax},
 )
-include_legacy_read_only_router(api, credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
 # Expense-claim eligibility, review and posted readback are canonical web
 # operator-action resources.  The legacy claim list/detail projections are not
 # mounted.

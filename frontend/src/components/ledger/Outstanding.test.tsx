@@ -5,7 +5,6 @@ import { apiHelpers } from '../../services/api/apiClient';
 import Outstanding from './Outstanding';
 
 jest.mock('../global', () => ({ ModuleHeader: () => null }));
-jest.mock('../payment/shared/PaymentAllocationModal', () => () => null);
 jest.mock('../../services/api/apiClient', () => ({
   __esModule: true,
   default: {},

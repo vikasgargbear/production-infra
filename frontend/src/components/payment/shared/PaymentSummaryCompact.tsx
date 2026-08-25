@@ -24,21 +24,6 @@ const PaymentSummaryCompact: React.FC = () => {
   // Get allocations from payment data
   const selectedInvoices = payment.allocations || [];
 
-  const paymentModes: { [key: string]: string } = {
-    CASH: '💵 Cash',
-    UPI: '📱 UPI',
-    CARD: '💳 Card',
-    BANK_TRANSFER: '🏦 Bank',
-    CHEQUE: '📄 Cheque',
-    SPLIT: '➗ Split Payment'
-  };
-
-  const paymentTypes: { [key: string]: string } = {
-    order_payment: 'Order Payment',
-    advance: 'Advance',
-    adjustment: 'Adjustment'
-  };
-
   const formatDate = (date: string): string => {
     return new Date(date).toLocaleDateString('en-IN', {
       day: '2-digit',
@@ -90,7 +75,9 @@ const PaymentSummaryCompact: React.FC = () => {
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-sm px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                {paymentModes[payment.payment_mode]}
+                {payment.payment_mode === 'bank_transfer'
+                  ? 'Bank Transfer'
+                  : payment.payment_mode.charAt(0).toUpperCase() + payment.payment_mode.slice(1)}
               </span>
             </div>
             {payment.reference_number && (
@@ -100,28 +87,7 @@ const PaymentSummaryCompact: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="text-sm text-gray-600">
-            {paymentTypes[payment.payment_type]}
-          </div>
         </div>
-
-        {/* Split Payment Details */}
-        {payment.payment_mode === 'SPLIT' && (payment as any).split_payments && (
-          <div className="pt-3 space-y-2">
-            <div className="text-sm font-medium text-gray-700">Split Payment Breakdown:</div>
-            <div className="space-y-1 pl-4">
-              {JSON.parse((payment as any).split_payments).map((split: any, index: number) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">
-                    {paymentModes[split.type] || split.type}
-                    {split.reference && <span className="text-xs ml-2">(Ref: {split.reference})</span>}
-                  </span>
-                  <span className="font-medium">{formatExactCurrency(split.amount || '0', `Split payment ${index + 1}`)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Payment Allocation Details */}
         <div className="pt-3 space-y-3">
@@ -133,7 +99,6 @@ const PaymentSummaryCompact: React.FC = () => {
                 {payment.allocation_method === 'fifo' && 'FIFO'}
                 {payment.allocation_method === 'lifo' && 'LIFO'}
                 {payment.allocation_method === 'highest' && 'Highest First'}
-                {payment.allocation_method === 'advance' && 'Advance'}
                 {payment.allocation_method === 'manual' && 'Manual'}
                 {!payment.allocation_method && 'Not selected'}
               </span>

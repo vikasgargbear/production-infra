@@ -19,14 +19,13 @@ jest.mock('../../../services/api/modules/finance/customerReceipts.api', () => ({
   reconcileCustomerReceipt: jest.fn(),
 }));
 jest.mock('../shared/PaymentSummaryCompact', () => () => <div>Receipt review</div>);
-jest.mock('../shared/PaymentSummary', () => () => null);
-jest.mock('../shared/InvoiceSelector', () => () => null);
 jest.mock('../shared/PaymentFlowOptimized', () => () => {
   const { usePayment } = require('../../../contexts/PaymentContext');
   const { setPaymentField } = usePayment();
   return <button onClick={() => {
     setPaymentField('amount', '168.00');
-    setPaymentField('payment_mode', 'UPI');
+    setPaymentField('payment_date', '2026-08-25');
+    setPaymentField('payment_mode', 'upi');
     setPaymentField('reference_number', 'UPI-RETRY-1');
     setPaymentField('bank_account_id', '0198ea37-2b20-7c8d-9123-123456789abc');
     setPaymentField('settlement_account_id', '0198ea37-2b21-7c8d-9123-123456789abc');

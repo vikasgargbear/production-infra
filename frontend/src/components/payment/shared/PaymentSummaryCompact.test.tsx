@@ -18,7 +18,7 @@ const Fixture = () => {
     setCustomer({ customer_id: 'customer-1', customer_name: 'Exact Customer' });
     setPaymentData({
       amount: '0.30',
-      payment_mode: 'UPI',
+      payment_mode: 'upi',
       payment_date: '2026-08-25',
       reference_number: 'UPI-EXACT-030',
       allocation_method: 'manual',
