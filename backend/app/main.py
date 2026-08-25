@@ -61,6 +61,7 @@ from .api.routes import (
     canonical_inventory_reads,
     canonical_adjustment_note_reads,
     canonical_controlled_operation_reads,
+    canonical_reference_reads,
 )
 from .api.routes import web_operator_actions
 from .api.routes.internal import (
@@ -257,6 +258,7 @@ api.include_router(canonical_controlled_operation_reads.router)
 api.include_router(canonical_inventory_transfers.router, tags=["Canonical Inventory Transfers"])
 api.include_router(canonical_party_ledger_reads.router)
 api.include_router(canonical_document_history_reads.router)
+api.include_router(canonical_reference_reads.router, tags=["Canonical Reference Reads"])
 
 # --- Master Data ---
 # Canonical product/customer/supplier/address mutations and every supported

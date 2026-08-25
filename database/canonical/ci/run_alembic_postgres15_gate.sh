@@ -46,6 +46,10 @@ test "$(psql -X -Atqc "SELECT to_regclass('tax.gstr1_reporting_rule_versions') I
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gstr1_reporting_rule_versions', 'SELECT')")" = "t"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_regulatory_importer', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "t"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "f"
+test "$(psql -X -Atqc "SELECT count(*) FROM tax.gst_jurisdictions")" = "39"
+test "$(psql -X -Atqc "SELECT count(*) FROM tax.gst_jurisdiction_versions WHERE status='active' AND supports_domestic_address")" = "36"
+test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gst_jurisdiction_versions', 'SELECT')")" = "t"
+test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'tax.assert_effective_gst_jurisdiction(text,date,text,text)', 'EXECUTE')")" = "f"
 test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass")" = "true|true"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
 test "$(psql -X -Atqc "
@@ -139,3 +143,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_bank_reconciliation_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_expense_claim_lifecycle_runtime_role.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_gst_jurisdiction_runtime_role.py

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, CreditCard, Save, User, Banknote } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { apiErrorMessage } from '../../../services/api/utils/apiError';
+import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
 
 // ==================== INLINE TRANSFORMER ====================
 
@@ -407,15 +408,11 @@ const SupplierCreationForm = ({
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 GST state code (2 digits)
               </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{2}"
-                maxLength={2}
+              <GSTJurisdictionSelect
                 value={formData.state_code}
-                onChange={(e) => handleInputChange('state_code', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                onChange={(stateCode) => handleInputChange('state_code', stateCode)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="e.g. 27"
+                required
               />
             </div>
             <div>

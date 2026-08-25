@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { MapPin, Edit2, Check, Plus, Phone, Building2, Home, LucideIcon } from 'lucide-react';
 import { apiClient, customersApi } from '../../../services/api';
+import GSTJurisdictionSelect from './forms/GSTJurisdictionSelect';
 
 // Imports from centralized types
 import type {
@@ -595,19 +596,13 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         </div>
 
                         <div>
-                            <input
+                            <GSTJurisdictionSelect
                                 aria-label="GST state code (2 digits)"
                                 aria-invalid={Boolean(fieldErrors.state)}
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]{2}"
-                                maxLength={2}
-                                value={formData.state}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange(
-                                    'state', e.target.value.replace(/\D/g, '').slice(0, 2),
-                                )}
+                                value={String(formData.state || '')}
+                                onChange={(stateCode) => handleFieldChange('state', stateCode)}
                                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                placeholder="GST state code (2 digits) *"
+                                required
                             />
                             {fieldErrors.state && <p className="mt-1 text-xs text-red-600">{fieldErrors.state}</p>}
                         </div>

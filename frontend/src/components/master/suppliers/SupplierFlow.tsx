@@ -16,6 +16,7 @@ import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
 import { validateSupplierMandatoryFields } from './supplierValidation';
+import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
 
 // ==================== TYPES ====================
 
@@ -362,7 +363,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                 <input value={formData.city} onChange={(event) => setFormData({ ...formData, city: event.target.value })} className={`${inputClass} mt-1`} />
                             </label>
                             <label className="text-sm font-medium text-gray-700">GST state code (2 digits) *
-                                <input type="text" inputMode="numeric" pattern="[0-9]{2}" maxLength={2} value={formData.state_code} onChange={(event) => setFormData({ ...formData, state_code: event.target.value.replace(/\D/g, '').slice(0, 2) })} className={`${inputClass} mt-1`} placeholder="e.g. 27" />
+                                <GSTJurisdictionSelect value={formData.state_code} onChange={(stateCode) => setFormData({ ...formData, state_code: stateCode })} className={`${inputClass} mt-1`} required />
                             </label>
                             <label className="text-sm font-medium text-gray-700">Pincode *
                                 <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={formData.pincode} onChange={(event) => setFormData({ ...formData, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })} className={`${inputClass} mt-1`} />

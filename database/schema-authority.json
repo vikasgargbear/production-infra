@@ -43,6 +43,9 @@
     "backend/alembic/sql/20260825_0011_sales_delivery_address_authority.sql",
     "backend/alembic/versions/20260825_0012_canonical_command_definitions.py",
     "backend/alembic/sql/20260825_0012_canonical_command_definitions.sql",
+    "backend/alembic/versions/20260825_0013_gst_jurisdiction_authority.py",
+    "backend/alembic/sql/20260825_0013_gst_jurisdiction_authority.sql",
+    "backend/alembic/sql/20260825_0013_gst_jurisdiction_authority.manifest.json",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

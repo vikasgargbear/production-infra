@@ -16,6 +16,7 @@ import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
+import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
 
 // ==================== TYPES ====================
 
@@ -515,16 +516,12 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     </div>
                                     <div>
                                         <label htmlFor="customer-state-code" className={labelClass}>GST state code (2 digits) *</label>
-                                        <input
+                                        <GSTJurisdictionSelect
                                             id="customer-state-code"
-                                            type="text"
-                                            inputMode="numeric"
-                                            pattern="[0-9]{2}"
-                                            maxLength={2}
                                             value={formData.address.state_code}
-                                            onChange={(e) => updateAddress('state_code', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                                            onChange={(stateCode) => updateAddress('state_code', stateCode)}
                                             className={inputNoIconClass}
-                                            placeholder="e.g. 27"
+                                            required
                                         />
                                     </div>
                                     <div>
