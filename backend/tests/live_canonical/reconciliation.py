@@ -354,6 +354,84 @@ class CanonicalReconciler:
         else:
             projection = {"touched_count": 0, "mismatch_count": 0}
 
+        destruction_evidence: list[dict[str, Any]] = []
+        if operation == "inventory.destruction":
+            destruction_evidence = self.query(
+                """
+                SELECT destruction.created_by_membership_id,
+                       destruction.approved_by_membership_id,
+                       destruction.posted_by_membership_id,
+                       destruction.method_code,
+                       destruction.certificate_attachment_id,
+                       document.total_abs_base_quantity,
+                       document.total_value,
+                       sum(line.base_quantity) AS line_quantity,
+                       sum(line.extended_cost) AS line_value,
+                       sum(-ledger.quantity_delta) AS ledger_quantity,
+                       sum(-ledger.value_delta) AS ledger_value,
+                       count(*) FILTER (
+                           WHERE balance.on_hand_quantity <> 0
+                              OR balance.inventory_value <> 0
+                       )::integer AS nonzero_balance_count,
+                       journal.status AS journal_status,
+                       journal.transaction_debit_total,
+                       journal.transaction_credit_total
+                  FROM compliance.destructions destruction
+                  JOIN inventory.inventory_documents document
+                    ON document.org_id=destruction.org_id
+                   AND document.destruction_id=destruction.id
+                  JOIN inventory.inventory_document_lines line
+                    ON line.org_id=document.org_id
+                   AND line.inventory_document_id=document.id
+                  JOIN inventory.stock_ledger_entries ledger
+                    ON ledger.org_id=line.org_id
+                   AND ledger.inventory_document_line_id=line.id
+                   AND ledger.entry_kind='issue'
+                  JOIN inventory.stock_balances balance
+                    ON balance.org_id=ledger.org_id
+                   AND balance.branch_id=ledger.branch_id
+                   AND balance.location_id=ledger.location_id
+                   AND balance.product_id=ledger.product_id
+                   AND balance.batch_id=ledger.batch_id
+                  JOIN finance.accounting_events event
+                    ON event.org_id=document.org_id
+                   AND event.inventory_document_id=document.id
+                   AND event.event_type='inventory_valuation'
+                  JOIN finance.journal_entries journal
+                    ON journal.org_id=event.org_id
+                   AND journal.id=event.journal_entry_id
+                 WHERE destruction.org_id=%s::uuid AND destruction.id=%s::uuid
+                   AND destruction.status='posted' AND document.status='posted'
+                 GROUP BY destruction.created_by_membership_id,
+                          destruction.approved_by_membership_id,
+                          destruction.posted_by_membership_id,
+                          destruction.method_code,
+                          destruction.certificate_attachment_id,
+                          document.total_abs_base_quantity,document.total_value,
+                          journal.status,journal.transaction_debit_total,
+                          journal.transaction_credit_total
+                """,
+                (self.org_id, resource_id),
+            )
+            assert len(destruction_evidence) == 1
+            destruction = destruction_evidence[0]
+            assert destruction["approved_by_membership_id"] != destruction[
+                "created_by_membership_id"
+            ]
+            assert destruction["method_code"] == "licensed_incineration"
+            assert destruction["certificate_attachment_id"] is not None
+            assert destruction["line_quantity"] == destruction[
+                "total_abs_base_quantity"
+            ] == destruction["ledger_quantity"]
+            assert destruction["line_value"] == destruction["total_value"] == destruction[
+                "ledger_value"
+            ]
+            assert destruction["nonzero_balance_count"] == 0
+            assert destruction["journal_status"] == "posted"
+            assert destruction["transaction_debit_total"] == destruction[
+                "total_value"
+            ] == destruction["transaction_credit_total"]
+
         tax_documents = self.query(
             """
             SELECT td.*
@@ -439,6 +517,7 @@ class CanonicalReconciler:
             "journal": journal,
             "stock": stock,
             "stock_projection": projection,
+            "destruction_evidence": destruction_evidence,
             "tax_documents": tax_documents,
             "adjustment_notes": adjustment_notes,
             "open_items": open_items,

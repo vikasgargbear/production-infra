@@ -64,7 +64,6 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
     assert set(planned_operator_action_tool_names()) & set(live_tools) == published
     assert EXPECTED_PREPARES - set(PUBLISHED_PREPARE_TOOL_NAMES) == {
         "erp_inventory_transfer_prepare",
-        "erp_inventory_destruction_prepare",
     }
     assert require_operator_action_publication_ready() is None
     assert all(value is True for value in RELEASE_GATES.values())

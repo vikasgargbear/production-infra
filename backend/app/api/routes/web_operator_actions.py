@@ -141,6 +141,46 @@ class InventoryAdjustmentReadback(StrictDTO):
     lines: list[InventoryAdjustmentReadbackLine]
 
 
+class InventoryDestructionReadbackLine(StrictDTO):
+    inventory_document_line_id: UUID
+    product_id: UUID
+    batch_id: UUID
+    destroyed_base_quantity: Decimal
+    unit_cost: Decimal
+    destroyed_value: Decimal
+    ledger_entry_id: UUID
+    ledger_quantity_delta: Decimal
+    ledger_value_delta: Decimal
+    remaining_on_hand_quantity: Decimal
+    remaining_inventory_value: Decimal
+
+
+class InventoryDestructionReadback(StrictDTO):
+    command_request_id: UUID
+    destruction_id: UUID
+    destruction_number: str
+    status: Literal["posted"]
+    destruction_date: date
+    method_code: Literal["licensed_incineration"]
+    reason_code: Literal["expired", "damaged", "quality_rejected"]
+    certificate_attachment_id: UUID
+    created_by_membership_id: UUID
+    approved_by_membership_id: UUID
+    posted_by_membership_id: UUID
+    inventory_document_id: UUID
+    inventory_document_number: str
+    branch_id: UUID
+    location_id: UUID
+    total_destroyed_base_quantity: Decimal
+    total_destroyed_value: Decimal
+    journal_entry_id: UUID
+    journal_status: Literal["posted"]
+    journal_debit_total: Decimal
+    journal_credit_total: Decimal
+    accounting_event_id: UUID
+    lines: list[InventoryDestructionReadbackLine]
+
+
 async def _web_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(WEB_BEARER),
 ) -> dict[str, Any]:
@@ -617,6 +657,176 @@ def inventory_adjustment_readback(
                 current_on_hand_quantity=row["current_on_hand_quantity"],
             )
             for row in line_values
+        ],
+    )
+
+
+@router.get(
+    "/inventory-destruction/commands/{command_request_id}/readback",
+    response_model=InventoryDestructionReadback,
+)
+def inventory_destruction_readback(
+    command_request_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> InventoryDestructionReadback:
+    """Reconcile certified evidence, exact stock/value issue, and loss journal."""
+
+    context = _command_context(
+        db, user, "automation.command.execute", command_request_id
+    )
+    rows = db.execute(
+        text(
+            """
+            SELECT command.id AS command_request_id,
+                   destruction.id AS destruction_id,
+                   destruction.destruction_number,
+                   destruction.status,
+                   destruction.destruction_date,
+                   destruction.method_code,
+                   destruction.reason_code,
+                   destruction.certificate_attachment_id,
+                   destruction.created_by_membership_id,
+                   destruction.approved_by_membership_id,
+                   destruction.posted_by_membership_id,
+                   document.id AS inventory_document_id,
+                   document.document_number AS inventory_document_number,
+                   document.branch_id,
+                   document.total_abs_base_quantity AS total_destroyed_base_quantity,
+                   document.total_value AS total_destroyed_value,
+                   journal.id AS journal_entry_id,
+                   journal.status AS journal_status,
+                   journal.transaction_debit_total AS journal_debit_total,
+                   journal.transaction_credit_total AS journal_credit_total,
+                   event.id AS accounting_event_id,
+                   document_line.id AS inventory_document_line_id,
+                   document_line.from_location_id AS location_id,
+                   document_line.product_id,
+                   document_line.batch_id,
+                   document_line.base_quantity AS destroyed_base_quantity,
+                   document_line.unit_cost,
+                   document_line.extended_cost AS destroyed_value,
+                   ledger.id AS ledger_entry_id,
+                   ledger.quantity_delta AS ledger_quantity_delta,
+                   ledger.value_delta AS ledger_value_delta,
+                   balance.on_hand_quantity AS remaining_on_hand_quantity,
+                   balance.inventory_value AS remaining_inventory_value
+              FROM automation.command_requests AS command
+              JOIN compliance.destructions AS destruction
+                ON destruction.org_id=command.org_id
+               AND destruction.id=command.target_resource_id
+              JOIN inventory.inventory_documents AS document
+                ON document.org_id=destruction.org_id
+               AND document.id=destruction.inventory_document_id
+               AND document.destruction_id=destruction.id
+              JOIN inventory.inventory_document_lines AS document_line
+                ON document_line.org_id=document.org_id
+               AND document_line.inventory_document_id=document.id
+              JOIN inventory.stock_ledger_entries AS ledger
+                ON ledger.org_id=document_line.org_id
+               AND ledger.inventory_document_id=document.id
+               AND ledger.inventory_document_line_id=document_line.id
+               AND ledger.entry_kind='issue'
+              JOIN inventory.stock_balances AS balance
+                ON balance.org_id=ledger.org_id
+               AND balance.branch_id=ledger.branch_id
+               AND balance.location_id=ledger.location_id
+               AND balance.product_id=ledger.product_id
+               AND balance.batch_id=ledger.batch_id
+              JOIN finance.accounting_events AS event
+                ON event.org_id=document.org_id
+               AND event.inventory_document_id=document.id
+               AND event.event_type='inventory_valuation'
+              JOIN finance.journal_entries AS journal
+                ON journal.org_id=event.org_id
+               AND journal.id=event.journal_entry_id
+             WHERE command.org_id=:org_id
+               AND command.id=:command_request_id
+               AND command.capability_code='inventory.destruction.prepare'
+               AND command.operation='compliance.destruction.post'
+               AND command.status='succeeded'
+               AND destruction.status='posted'
+               AND document.status='posted'
+               AND journal.status='posted'
+             ORDER BY document_line.line_number, document_line.id
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "command_request_id": command_request_id,
+        },
+    ).fetchall()
+    if not rows:
+        raise HTTPException(
+            status_code=409,
+            detail=_detail(
+                ActionErrorCode.POLICY_BLOCKED,
+                "Posted destruction evidence, stock ledger, or loss journal is incomplete",
+            ),
+        )
+    header = rows[0]._mapping
+    values = [row._mapping for row in rows]
+    if (
+        any(
+            row["ledger_quantity_delta"] != -row["destroyed_base_quantity"]
+            or row["ledger_value_delta"] != -row["destroyed_value"]
+            or row["remaining_on_hand_quantity"] != 0
+            or row["remaining_inventory_value"] != 0
+            for row in values
+        )
+        or sum((row["destroyed_base_quantity"] for row in values), Decimal("0"))
+        != header["total_destroyed_base_quantity"]
+        or sum((row["destroyed_value"] for row in values), Decimal("0"))
+        != header["total_destroyed_value"]
+        or header["journal_debit_total"] != header["total_destroyed_value"]
+        or header["journal_credit_total"] != header["total_destroyed_value"]
+        or any(row["location_id"] != header["location_id"] for row in values)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=_detail(
+                ActionErrorCode.STALE_VERSION,
+                "Posted destruction readback does not match its exact stock or valuation evidence",
+            ),
+        )
+    return InventoryDestructionReadback(
+        command_request_id=header["command_request_id"],
+        destruction_id=header["destruction_id"],
+        destruction_number=header["destruction_number"],
+        status=header["status"],
+        destruction_date=header["destruction_date"],
+        method_code=header["method_code"],
+        reason_code=header["reason_code"],
+        certificate_attachment_id=header["certificate_attachment_id"],
+        created_by_membership_id=header["created_by_membership_id"],
+        approved_by_membership_id=header["approved_by_membership_id"],
+        posted_by_membership_id=header["posted_by_membership_id"],
+        inventory_document_id=header["inventory_document_id"],
+        inventory_document_number=header["inventory_document_number"],
+        branch_id=header["branch_id"],
+        location_id=header["location_id"],
+        total_destroyed_base_quantity=header["total_destroyed_base_quantity"],
+        total_destroyed_value=header["total_destroyed_value"],
+        journal_entry_id=header["journal_entry_id"],
+        journal_status=header["journal_status"],
+        journal_debit_total=header["journal_debit_total"],
+        journal_credit_total=header["journal_credit_total"],
+        accounting_event_id=header["accounting_event_id"],
+        lines=[
+            InventoryDestructionReadbackLine(
+                inventory_document_line_id=row["inventory_document_line_id"],
+                product_id=row["product_id"],
+                batch_id=row["batch_id"],
+                destroyed_base_quantity=row["destroyed_base_quantity"],
+                unit_cost=row["unit_cost"],
+                destroyed_value=row["destroyed_value"],
+                ledger_entry_id=row["ledger_entry_id"],
+                ledger_quantity_delta=row["ledger_quantity_delta"],
+                ledger_value_delta=row["ledger_value_delta"],
+                remaining_on_hand_quantity=row["remaining_on_hand_quantity"],
+                remaining_inventory_value=row["remaining_inventory_value"],
+            )
+            for row in values
         ],
     )
 

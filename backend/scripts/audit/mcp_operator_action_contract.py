@@ -52,7 +52,6 @@ EXPECTED_BASE_READ_TOOLS = {
 }
 EXPECTED_UNAVAILABLE_PREPARE_TOOLS = {
     "erp_inventory_transfer_prepare",
-    "erp_inventory_destruction_prepare",
 }
 EXPECTED_RESOLUTION_TOOLS = {
     "erp_customer_search",
@@ -851,7 +850,7 @@ def main() -> int:
         "MCP operator action contract: OK "
         f"({len(EXPECTED_RESOLUTION_TOOLS)} resolution reads, "
         f"{len(EXPECTED_PREPARE_TOOLS) - len(EXPECTED_UNAVAILABLE_PREPARE_TOOLS)} "
-        "published prepares, 2 unavailable prepares, 3 shared tools)"
+        "published prepares, 1 unavailable prepare, 3 shared tools)"
     )
     return 0
 

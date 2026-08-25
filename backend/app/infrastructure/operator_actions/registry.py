@@ -137,8 +137,12 @@ _PREPARE_BINDINGS = {
         execute_function="erp_automation_commands.execute_approved_command:inventory_count_gain",
         unavailable_reason=None,
     ),
-    "inventory.destruction.prepare": _missing_action_resolver(
-        "inventory.destruction.prepare", "erp_compliance_commands.post_destruction"
+    "inventory.destruction.prepare": ActionAdapterBinding(
+        operation_key="inventory.destruction.prepare",
+        available=True,
+        prepare_function="erp_automation_commands.persist_inventory_destruction_prepare",
+        execute_function="erp_automation_commands.execute_inventory_destruction_command",
+        unavailable_reason=None,
     ),
 }
 

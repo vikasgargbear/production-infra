@@ -90,6 +90,11 @@ from .inventory_transfer import (
     PERSIST_INVENTORY_TRANSFER_SQL,
     RESOLVE_INVENTORY_TRANSFER_SQL,
 )
+from .inventory_destruction import (
+    EXECUTE_INVENTORY_DESTRUCTION_SQL,
+    PERSIST_INVENTORY_DESTRUCTION_SQL,
+    RESOLVE_INVENTORY_DESTRUCTION_SQL,
+)
 from .runtime_database import (
     assert_runtime_principal,
     runtime_database_configured,
@@ -661,6 +666,13 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "inventory.adjustment.prepare":
             return self._prepare_inventory_adjustment(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key == "inventory.destruction.prepare":
+            return self._prepare_inventory_destruction(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -3035,6 +3047,197 @@ class SqlAlchemyOperatorActionService:
                     required_approvals=({"policy": policy.approval_policy, "count": 1},),
                 )
 
+    def _prepare_inventory_destruction(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"inventory.destruction.prepare:{idempotency_key}"
+        )
+        identifiers = {
+            name: uuid5(NAMESPACE_URL, identity + f":{name}")
+            for name in (
+                "destruction_id",
+                "inventory_document_id",
+                "command_request_id",
+                "journal_id",
+                "event_id",
+            )
+        }
+        normalized = {key: _json_value(value) for key, value in payload.items()}
+        normalized.update(
+            {
+                "destruction_id": str(identifiers["destruction_id"]),
+                "inventory_document_id": str(identifiers["inventory_document_id"]),
+                "journal_id": str(identifiers["journal_id"]),
+                "event_id": str(identifiers["event_id"]),
+            }
+        )
+        normalized["lines"] = []
+        line_number = 0
+        for product_line in payload["lines"]:
+            normalized_line = {
+                key: _json_value(value)
+                for key, value in dict(product_line).items()
+                if key != "batch_allocations"
+            }
+            allocations = []
+            for allocation in product_line["batch_allocations"]:
+                line_number += 1
+                allocations.append(
+                    {
+                        **{
+                            key: _json_value(value)
+                            for key, value in dict(allocation).items()
+                        },
+                        "inventory_document_line_id": str(
+                            uuid5(NAMESPACE_URL, identity + f":line:{line_number}")
+                        ),
+                    }
+                )
+            normalized_line["batch_allocations"] = allocations
+            normalized["lines"].append(normalized_line)
+        request_bytes = canonical_json_bytes(normalized)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "membership_id": context.membership_id,
+            "auth_user_id": context.auth_user_id,
+            "user_id": context.user_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
+            **identifiers,
+            "idempotency_key_hash": hashlib.sha256(
+                idempotency_key.encode("utf-8")
+            ).digest(),
+            "destruction_sequence_key_hash": hashlib.sha256(
+                (idempotency_key + ":destruction-number").encode("utf-8")
+            ).digest(),
+            "journal_sequence_key_hash": hashlib.sha256(
+                (idempotency_key + ":destruction-journal").encode("utf-8")
+            ).digest(),
+            "request_json": request_bytes.decode("utf-8"),
+            "request_bytes": request_bytes,
+            "expires_at": expires_at,
+        }
+        with self._session_factory() as session:
+            with session.begin():
+                assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "inventory.destruction.prepare"
+                )
+                rows = _mapping_rows(
+                    session.execute(RESOLVE_INVENTORY_DESTRUCTION_SQL, params)
+                )
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical inventory destruction resolution is unavailable",
+                    )
+                resolution = _json_document(rows[0]["resolution"])
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {
+                        key: value
+                        for key, value in source.items()
+                        if key in {"resource_type", "id", "role"}
+                    }
+                    for source in source_versions
+                    if source.get("id") is not None
+                )
+                inventory_impact = tuple(
+                    {
+                        "location_id": resolution["location_id"],
+                        "product_id": line["product_id"],
+                        "batch_id": line["batch_id"],
+                        "destroyed_base_quantity": line["base_quantity"],
+                        "moving_weighted_average": line["unit_cost"],
+                        "inventory_value_removed": line["extended_cost"],
+                    }
+                    for line in resolution["lines"]
+                )
+                financial_impact = (
+                    {
+                        "currency_code": "INR",
+                        "debit_account_id": resolution[
+                            "inventory_destruction_loss_account_id"
+                        ],
+                        "credit_account_id": resolution["inventory_asset_account_id"],
+                        "amount": resolution["total_value"],
+                    },
+                )
+                tax_impact = (
+                    {
+                        "supply_created": False,
+                        "gst_amount": "0.00",
+                        "itc_treatment": "not_applicable_unregistered",
+                    },
+                )
+                preview = {
+                    "branch_id": resolution["branch_id"],
+                    "calculation_ruleset": [],
+                    "capability_code": "inventory.destruction.prepare",
+                    "command_request_id": str(identifiers["command_request_id"]),
+                    "destination_branch_id": None,
+                    "financial_impact": list(financial_impact),
+                    "inventory_impact": list(inventory_impact),
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": "compliance.destruction.post",
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(identifiers["destruction_id"]),
+                    "target_resource_type": "destruction",
+                    "tax_impact": list(tax_impact),
+                }
+                params.update(
+                    {
+                        "resolved_bytes": canonical_json_bytes(resolution),
+                        "preview_bytes": canonical_json_bytes(preview),
+                    }
+                )
+                persisted = _mapping_rows(
+                    session.execute(PERSIST_INVENTORY_DESTRUCTION_SQL, params)
+                )
+                if len(persisted) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical inventory destruction did not persist exactly once",
+                    )
+                result = _json_document(persisted[0]["command_request_id"])
+                if UUID(str(result["command_request_id"])) != identifiers[
+                    "command_request_id"
+                ]:
+                    raise OperatorActionError(
+                        ActionErrorCode.IDEMPOTENCY_CONFLICT,
+                        "Canonical inventory destruction idempotency replay differs",
+                    )
+                return PreparedCommand(
+                    command_request_id=identifiers["command_request_id"],
+                    command_type="compliance.destruction.post",
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=datetime.fromisoformat(
+                        str(result["expires_at"]).replace("Z", "+00:00")
+                    ),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=(),
+                    inventory_impact=inventory_impact,
+                    financial_impact=financial_impact,
+                    tax_impact=tax_impact,
+                    required_approvals=(
+                        {"policy": policy.approval_policy, "count": 1},
+                    ),
+                )
+
     def _prepare_sales_dispatch(
         self,
         *,
@@ -3280,7 +3483,12 @@ class SqlAlchemyOperatorActionService:
                     )
                 replayed = before["status"] == "succeeded"
                 session.execute(_SET_COMMAND_CONTEXT_SQL, params)
-                session.execute(_EXECUTE_COMMAND_SQL, params)
+                session.execute(
+                    EXECUTE_INVENTORY_DESTRUCTION_SQL
+                    if before["operation"] == "compliance.destruction.post"
+                    else _EXECUTE_COMMAND_SQL,
+                    params,
+                )
                 after_rows = _mapping_rows(
                     session.execute(_EXECUTION_SNAPSHOT_SQL, params)
                 )

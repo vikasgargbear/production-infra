@@ -516,11 +516,11 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
     assert {step["operation"] for step in steps} | {
         probe["operation"] for probe in probes if probe["phase"] == "readiness"
     } == set(RESOURCE_TABLES)
-    assert len(steps) == 18
-    assert len(probes) == 17
-    assert sum(probe["phase"] == "readiness" for probe in probes) == 1
-    assert sum(probe["phase"] == "prepare" for probe in probes) == 16
-    assert len(steps) + sum(probe["phase"] == "prepare" for probe in probes) == 34
+    assert len(steps) == 19
+    assert len(probes) == 19
+    assert sum(probe["phase"] == "readiness" for probe in probes) == 0
+    assert sum(probe["phase"] == "prepare" for probe in probes) == 19
+    assert len(steps) + sum(probe["phase"] == "prepare" for probe in probes) == 38
     assert len({step["id"] for step in steps}) == len(steps)
     assert len({probe["id"] for probe in probes}) == len(probes)
     assert {
@@ -532,6 +532,7 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         "procurement.purchase_return",
         "finance.supplier_advance",
         "inventory.adjustment",
+        "inventory.destruction",
     }
 
     manifest = json.loads(AUTOMATION_MANIFEST.read_text())["dispatcher"]

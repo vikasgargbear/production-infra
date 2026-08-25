@@ -117,6 +117,16 @@ class FakeSession:
                 }
             )
             return FakeResult(({"response_bytes": b"{}"},))
+        if "erp_automation_commands.execute_inventory_destruction_command" in sql:
+            self.command_row.update(
+                {
+                    "status": "succeeded",
+                    "result_resource_type": "destruction",
+                    "result_resource_id": uuid4(),
+                    "completed_at": datetime.now(timezone.utc),
+                }
+            )
+            return FakeResult(({"response_bytes": b"{}"},))
         raise AssertionError(f"Unexpected SQL: {sql}")
 
 
@@ -1335,6 +1345,90 @@ class FakeInventoryAdjustmentSession:
         raise AssertionError(f"Unexpected inventory adjustment SQL: {sql}")
 
 
+class FakeInventoryDestructionSession:
+    def __init__(self, *, fail_persist=False):
+        self.fail_persist = fail_persist
+        self.executions = []
+        self.transaction_entries = 0
+        self.transaction_exits = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return None
+
+    def begin(self):
+        return FakeTransaction(self)
+
+    def execute(self, statement, parameters=None):
+        sql = str(statement)
+        params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
+        self.executions.append((sql, params))
+        if "FROM pg_catalog.pg_roles AS role" in sql:
+            return FakeResult(({
+                "role_name": "erp_runtime",
+                "rolsuper": False,
+                "rolbypassrls": False,
+            },))
+        if "resolve_inventory_destruction_prepare" in sql:
+            request = json.loads(params["request_json"])
+            destruction_loss = str(uuid4())
+            inventory_asset = str(uuid4())
+            lines = []
+            sources = [{
+                "resource_type": "destruction_certificate",
+                "id": request["certificate_attachment_id"],
+                "status": "verified",
+            }]
+            for product_line in request["lines"]:
+                for allocation in product_line["batch_allocations"]:
+                    lines.append({
+                        "line_number": len(lines) + 1,
+                        "inventory_document_line_id": allocation[
+                            "inventory_document_line_id"
+                        ],
+                        "product_id": product_line["product_id"],
+                        "batch_id": allocation["batch_id"],
+                        "base_quantity": allocation["entered_quantity"],
+                        "unit_cost": "10.0000",
+                        "extended_cost": "30.00",
+                    })
+                    sources.append({
+                        "resource_type": "stock_balance",
+                        "id": str(uuid4()),
+                        "batch_id": allocation["batch_id"],
+                        "row_version": 4,
+                    })
+            return FakeResult(({"resolution": {
+                "branch_id": request["branch_id"],
+                "location_id": request["location_id"],
+                "inventory_asset_account_id": inventory_asset,
+                "inventory_destruction_loss_account_id": destruction_loss,
+                "lines": lines,
+                "total_base_quantity": "3.000000",
+                "total_value": "30.00",
+                "source_versions": sources,
+                "legal_scope": {
+                    "approval_policy": "separate_approver",
+                    "gst_scope": "organization_has_no_active_gst_registration",
+                    "supported_quantity": "full_batch_location_balance_only",
+                },
+            }},))
+        if "persist_inventory_destruction_prepare" in sql:
+            if self.fail_persist:
+                raise RuntimeError("inventory destruction persistence failed")
+            return FakeResult(({"command_request_id": {
+                "command_request_id": str(params["command_request_id"]),
+                "expires_at": params["expires_at"].isoformat(),
+                "preview_hash": hashlib.sha256(params["preview_bytes"]).hexdigest(),
+                "replayed": False,
+            }},))
+        raise AssertionError(f"Unexpected inventory destruction SQL: {sql}")
+
+
 class FakeSupplierAdvanceSession:
     def __init__(self, *, fail_persist=False):
         self.fail_persist = fail_persist
@@ -1790,6 +1884,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_payment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.adjustment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["inventory.destruction.prepare"].available is True
     assert all(
         not ACTION_ADAPTER_BINDINGS[key].available
         for key in prepare_keys
@@ -1807,6 +1902,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "finance.supplier_payment.prepare",
             "inventory.adjustment.prepare",
             "inventory.transfer.prepare",
+            "inventory.destruction.prepare",
         }
     )
     assert all(
@@ -1827,6 +1923,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "finance.supplier_payment.prepare",
             "inventory.adjustment.prepare",
             "inventory.transfer.prepare",
+            "inventory.destruction.prepare",
         }
     )
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].prepare_function == (
@@ -1853,6 +1950,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS[
         "inventory.adjustment.prepare"
     ].prepare_function == "erp_automation_commands.persist_inventory_adjustment_prepare"
+    assert ACTION_ADAPTER_BINDINGS[
+        "inventory.destruction.prepare"
+    ].prepare_function == "erp_automation_commands.persist_inventory_destruction_prepare"
     assert ACTION_ADAPTER_BINDINGS["automation.command.approve"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.execute"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.status.get"].available is True
@@ -3063,6 +3163,94 @@ def test_inventory_adjustment_prepare_failure_rolls_back_the_only_transaction():
     assert session.transaction_failures == 1
 
 
+def _inventory_destruction_service_payload():
+    confirmed_at = datetime.now(timezone.utc)
+    return {
+        "branch_id": uuid4(),
+        "destruction_date": confirmed_at.date(),
+        "physical_destruction_confirmed_at": confirmed_at,
+        "location_id": uuid4(),
+        "method_code": "licensed_incineration",
+        "reason_code": "damaged",
+        "reason": "Irreparably damaged quarantined stock.",
+        "authority_reference": "PCB-AUTH-2026-001",
+        "witness_name": "Licensed Disposal Witness",
+        "witness_credential": "PCB-WITNESS-001",
+        "certificate_attachment_id": uuid4(),
+        "itc_treatment": "not_applicable_unregistered",
+        "lines": [{
+            "product_id": uuid4(),
+            "uom_conversion_id": uuid4(),
+            "batch_allocations": [
+                {"batch_id": uuid4(), "entered_quantity": "3.000000"}
+            ],
+        }],
+    }
+
+
+def test_inventory_destruction_prepare_is_one_runtime_transaction_with_exact_loss_preview():
+    session = FakeInventoryDestructionSession()
+    payload = _inventory_destruction_service_payload()
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["branch_id"],)).__dict__,
+            "operation_key": "inventory.destruction.prepare",
+            "permission": "inventory.destruction.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(
+        lambda: session, runtime_principal_configured=True
+    )
+
+    prepared = service.prepare(
+        policy=ACTION_POLICIES["inventory.destruction.prepare"],
+        payload=payload,
+        idempotency_key="prepare:inventory-destruction:0001",
+        context=context,
+    )
+
+    assert prepared.command_type == "compliance.destruction.post"
+    assert prepared.inventory_impact[0]["destroyed_base_quantity"] == "3.000000"
+    assert prepared.inventory_impact[0]["inventory_value_removed"] == "30.00"
+    assert prepared.financial_impact[0]["amount"] == "30.00"
+    assert prepared.required_approvals == ({"policy": "separate_approver", "count": 1},)
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert len(session.executions) == 3
+    request = json.loads(session.executions[1][1]["request_json"])
+    assert request["lines"][0]["batch_allocations"][0][
+        "inventory_document_line_id"
+    ]
+    preview = json.loads(session.executions[2][1]["preview_bytes"])
+    assert preview["operation"] == "compliance.destruction.post"
+    assert preview["legal_scope"]["supported_quantity"] == (
+        "full_batch_location_balance_only"
+    )
+
+
+def test_inventory_destruction_prepare_failure_rolls_back_the_only_transaction():
+    session = FakeInventoryDestructionSession(fail_persist=True)
+    payload = _inventory_destruction_service_payload()
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["branch_id"],)).__dict__,
+            "operation_key": "inventory.destruction.prepare",
+            "permission": "inventory.destruction.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(
+        lambda: session, runtime_principal_configured=True
+    )
+    with pytest.raises(RuntimeError, match="inventory destruction persistence failed"):
+        service.prepare(
+            policy=ACTION_POLICIES["inventory.destruction.prepare"],
+            payload=payload,
+            idempotency_key="prepare:inventory-destruction:rollback",
+            context=context,
+        )
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert session.transaction_failures == 1
+
+
 def _supplier_advance_service_payload():
     return {
         "branch_id": uuid4(),
@@ -3438,6 +3626,27 @@ def test_execute_locks_exact_preview_and_calls_only_closed_dispatcher():
     assert "UPDATE automation.command_requests" not in sql
 
 
+def test_execute_routes_destruction_only_to_the_reviewed_custom_dispatcher():
+    command_request_id = uuid4()
+    command_row = _command_row(command_request_id)
+    command_row["operation"] = "compliance.destruction.post"
+    session = FakeSession(authority_branch=None, command_row=command_row)
+    service = SqlAlchemyOperatorActionService(lambda: session)
+
+    result = service.execute(
+        command_request_id=command_request_id,
+        preview_hash="sha256:" + "ab" * 32,
+        idempotency_key="execute:destruction:0001",
+        context=_context(organization_scope=True),
+    )
+
+    assert result.status == "succeeded"
+    assert result.resource_type == "destruction"
+    sql = "\n".join(statement for statement, _ in session.executions)
+    assert "erp_automation_commands.execute_inventory_destruction_command" in sql
+    assert "erp_automation_commands.execute_approved_command" not in sql
+
+
 def test_execute_rejects_preview_mismatch_before_dispatch():
     command_request_id = uuid4()
     session = FakeSession(
@@ -3484,7 +3693,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 14
+    assert source.count("_lock_prepare_idempotency(") == 15
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):

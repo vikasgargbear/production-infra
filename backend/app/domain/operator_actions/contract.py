@@ -185,6 +185,23 @@ def validate_prepare_payload_semantics(
                 if batch_id in seen_batches:
                     raise ValueError("each batch may appear only once in a transfer")
                 seen_batches.add(batch_id)
+    if operation_key == "inventory.destruction.prepare":
+        if not values.get("authority_reference"):
+            raise ValueError("destruction requires authority_reference")
+        if not values.get("witness_credential"):
+            raise ValueError("destruction requires witness_credential")
+        seen_batches: set[UUID] = set()
+        for line in values["lines"]:
+            for allocation in line["batch_allocations"]:
+                quantity = Decimal(allocation["entered_quantity"])
+                if quantity <= 0 or quantity != quantity.quantize(Decimal("0.000001")):
+                    raise ValueError(
+                        "destruction quantities must be positive with at most six decimals"
+                    )
+                batch_id = allocation["batch_id"]
+                if batch_id in seen_batches:
+                    raise ValueError("each batch may appear only once in a destruction")
+                seen_batches.add(batch_id)
     if operation_key in {
         "finance.customer_receipt.prepare",
         "finance.supplier_payment.prepare",

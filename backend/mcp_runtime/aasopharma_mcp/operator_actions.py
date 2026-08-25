@@ -36,6 +36,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_supplier_payment_prepare": "Prepare an INR supplier payment with an exact bank reference and payable allocations.",
     "erp_supplier_advance_prepare": "Prepare an INR supplier advance allocated to one approved purchase-order line.",
     "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
+    "erp_inventory_destruction_prepare": "Prepare a certified same-day destruction of exact non-regulated stock with no GST ITC consequence.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
     "erp_operation_status_get": "Read immutable status, result, failure, and audit references for one authorized command.",
@@ -54,6 +55,7 @@ PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
         "erp_supplier_payment_prepare",
         "erp_supplier_advance_prepare",
         "erp_inventory_adjustment_prepare",
+        "erp_inventory_destruction_prepare",
     }
 )
 
@@ -891,9 +893,14 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     inventory_destruction.update(
         {
             "location_id": _uuid("Canonical source quarantine or destruction location."),
-            "method_code": _string("Controlled physical destruction method code."),
+            "physical_destruction_confirmed_at": _datetime(
+                "Timestamp at which the witnessed physical destruction was completed."
+            ),
+            "method_code": _string(
+                "Reviewed physical destruction method.", enum=["licensed_incineration"]
+            ),
             "reason_code": _string(
-                "Controlled destruction reason.", enum=["expired", "damaged", "recalled", "quality_rejected"]
+                "Controlled destruction reason.", enum=["expired", "damaged", "quality_rejected"]
             ),
             "reason": _string("Exact business and compliance reason recorded on the destruction evidence."),
             "authority_reference": _string("Regulator, committee, or approval reference."),
@@ -901,6 +908,10 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "witness_credential": _string("Optional witness role, licence, or credential reference."),
             "certificate_attachment_id": _uuid(
                 "Verified retained attachment containing the destruction certificate."
+            ),
+            "itc_treatment": _string(
+                "GST treatment. The bounded operation supports only organizations with no active GST registration.",
+                enum=["not_applicable_unregistered"],
             ),
             "lines": _array(
                 _object(

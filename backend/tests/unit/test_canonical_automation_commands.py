@@ -66,13 +66,15 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
         for capability, (operation, _) in sorted(_module().OPERATOR_COMMANDS.items())
     }
     assert "inventory.adjustment.prepare" in executable
+    assert "inventory.destruction.prepare" in executable
     assert "inventory.transfer.prepare" in executable
+    assert "compliance.destruction.post" in dispatcher["execution_operations"]
     assert "inventory.document.post" in dispatcher["execution_operations"]
     assert dispatcher["inventory_adjustment_pilot_scope"]["supported_effect"] == (
         "same_day_positive_cycle_count_gain_only"
     )
-    assert dispatcher["inventory_destruction_blockers"]["status"] == (
-        "unavailable_fail_closed"
+    assert dispatcher["inventory_destruction_pilot_scope"]["status"] == (
+        "available_reviewed_certified_full_balance_non_gst"
     )
     assert dispatcher["inventory_transfer_pilot_scope"]["status"] == (
         "available_reviewed_atomic_interbranch"
@@ -350,7 +352,7 @@ def test_postgres_fixture_is_rollback_only() -> None:
     assert fixture.rstrip().endswith("ROLLBACK;")
     assert "has_function_privilege" in fixture
     assert "execution_scopes" in fixture
-    assert "runtime_count<>21" in fixture
+    assert "runtime_count<>24" in fixture
     assert "calculator_count<>12" in fixture
     assert "calculator can execute an unreviewed automation helper" in fixture
 
