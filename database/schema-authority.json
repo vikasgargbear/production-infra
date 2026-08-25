@@ -53,6 +53,8 @@
     "backend/alembic/sql/20260825_0015_gst_reporting_release_dates.manifest.json",
     "backend/alembic/versions/20260825_0016_sales_invoice_auto_fefo.py",
     "backend/alembic/sql/20260825_0016_sales_invoice_auto_fefo.sql",
+    "backend/alembic/versions/20260825_0017_runtime_deployment_readiness.py",
+    "backend/alembic/sql/20260825_0017_runtime_deployment_readiness.sql",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

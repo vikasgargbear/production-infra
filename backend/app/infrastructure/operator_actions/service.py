@@ -118,6 +118,7 @@ from .runtime_database import (
     assert_runtime_principal,
     runtime_database_configured,
 )
+from .deployment_contract import EXPECTED_CANONICAL_ALEMBIC_HEAD
 
 
 _ACTIVATE_CONTEXT_SQL = text(
@@ -127,15 +128,7 @@ _ACTIVATE_CONTEXT_SQL = text(
 _DEPLOYMENT_READINESS_SQL = text(
     """
     SELECT
-      (SELECT count(*)=110
-         FROM pg_catalog.pg_class relation
-         JOIN pg_catalog.pg_namespace namespace
-           ON namespace.oid=relation.relnamespace
-        WHERE namespace.nspname IN (
-              'core','parties','catalog','hr','inventory','sales',
-              'procurement','finance','tax','compliance','automation','calculation'
-            )
-          AND relation.relkind='r')
+      erp_security.deployed_canonical_revision()=:expected_revision
       AND pg_catalog.to_regprocedure(
             'erp_security.activate_context(uuid,uuid)'
           ) IS NOT NULL
@@ -572,7 +565,10 @@ class SqlAlchemyOperatorActionService:
             with self._session_factory() as session:
                 with session.begin():
                     assert_runtime_principal(session)
-                    row = session.execute(_DEPLOYMENT_READINESS_SQL).mappings().one()
+                    row = session.execute(
+                        _DEPLOYMENT_READINESS_SQL,
+                        {"expected_revision": EXPECTED_CANONICAL_ALEMBIC_HEAD},
+                    ).mappings().one()
                     return row["ready"] is True
         except Exception:
             return False

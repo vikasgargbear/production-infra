@@ -52,6 +52,8 @@ test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gst_jurisd
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'tax.assert_effective_gst_jurisdiction(text,date,text,text)', 'EXECUTE')")" = "f"
 test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass")" = "true|true"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
+test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'erp_security.deployed_canonical_revision()', 'EXECUTE')")" = "t"
+test "$(psql -X -Atqc "SELECT has_function_privilege('erp_app', 'erp_security.deployed_canonical_revision()', 'EXECUTE')")" = "f"
 test "$(psql -X -Atqc "
   SELECT
     EXISTS (
@@ -145,3 +147,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_expense_claim_lifecycle_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_gst_jurisdiction_runtime_role.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_runtime_deployment_readiness.py
