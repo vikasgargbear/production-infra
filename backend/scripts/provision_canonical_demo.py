@@ -1104,24 +1104,35 @@ def itc_reversal_dataset_bytes(connection) -> bytes:
         return cursor.fetchone()[0].encode("utf-8")
 
 
-def demo_itc_reversal_release_exists(connection) -> bool:
+def resolve_active_itc_reversal_authority(connection) -> tuple[str, str] | None:
+    """Resolve the single canonical rule effective for this demo business date."""
+
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT count(*)
+            SELECT release.id,rule.id
               FROM tax.itc_reversal_rule_versions rule
               JOIN core.reference_data_releases release ON release.id=rule.release_id
-             WHERE release.id=%s AND rule.id=%s AND release.status='active'
+             WHERE release.dataset_kind='gst_itc_reversal_rules'
+               AND release.source_authority='cbic' AND release.status='active'
                AND rule.status='active' AND rule.legal_section='17(5)(h)'
                AND rule.event_kind='goods_destroyed'
                AND rule.gstr3b_table_code='4' AND rule.gstr3b_row_code='B(1)'
+               AND release.effective_from<=%s
+               AND (release.effective_to IS NULL OR release.effective_to>=%s)
+               AND rule.effective_from<=%s
+               AND (rule.effective_to IS NULL OR rule.effective_to>=%s)
+             ORDER BY rule.effective_from DESC,rule.id
+             LIMIT 2
             """,
-            (IDS["destruction_itc_rule_release"], IDS["destruction_itc_rule_version"]),
+            (INDIA_BUSINESS_DATE,) * 4,
         )
-        count = cursor.fetchone()[0]
-    if count not in (0, 1):
-        raise RuntimeError("demo ITC reversal release is ambiguous")
-    return count == 1
+        rows = cursor.fetchall()
+    if len(rows) > 1:
+        raise RuntimeError("active ITC reversal authority is ambiguous")
+    if not rows:
+        return None
+    return str(rows[0][0]), str(rows[0][1])
 
 
 def import_itc_reversal_release(connection, source: bytes, dataset_bytes: bytes) -> None:
@@ -5115,7 +5126,6 @@ def main() -> int:
     source = fetch_official_source(evidence_dir)
     adjustment_source = fetch_adjustment_source(evidence_dir)
     gstr1_reporting_source = fetch_gstr1_reporting_source(evidence_dir)
-    itc_reversal_source = fetch_itc_reversal_source(evidence_dir)
     expense_receipt_bytes = reviewed_expense_receipt()
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
@@ -5123,19 +5133,27 @@ def main() -> int:
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
         gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
-        itc_reversal_release_exists = demo_itc_reversal_release_exists(bootstrap)
+        active_itc_reversal_authority = resolve_active_itc_reversal_authority(
+            bootstrap
+        )
+        if active_itc_reversal_authority is not None:
+            (
+                IDS["destruction_itc_rule_release"],
+                IDS["destruction_itc_rule_version"],
+            ) = active_itc_reversal_authority
+    itc_reversal_source = (
+        fetch_itc_reversal_source(evidence_dir)
+        if active_itc_reversal_authority is None
+        else None
+    )
     with database_connection("ERP_REGULATORY_IMPORTER_DATABASE_URL") as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
         adjustment_bytes = adjustment_dataset_bytes(importer)
         gstr1_reporting_bytes = gstr1_reporting_dataset_bytes(importer)
-        itc_reversal_bytes = itc_reversal_dataset_bytes(importer)
         (evidence_dir / "hsn-481910-demo.json").write_bytes(dataset_bytes)
         (evidence_dir / "gst-adjustment-rules-demo.json").write_bytes(adjustment_bytes)
         (evidence_dir / "gstr1-reporting-rules.json").write_bytes(
             gstr1_reporting_bytes
-        )
-        (evidence_dir / "gst-itc-reversal-rules.json").write_bytes(
-            itc_reversal_bytes
         )
         if not release_exists:
             import_tax_release(importer, source, dataset_bytes)
@@ -5145,7 +5163,13 @@ def main() -> int:
             import_gstr1_reporting_release(
                 importer, gstr1_reporting_source, gstr1_reporting_bytes
             )
-        if not itc_reversal_release_exists:
+        if active_itc_reversal_authority is None:
+            if itc_reversal_source is None:
+                raise RuntimeError("ITC reversal source authority is unavailable")
+            itc_reversal_bytes = itc_reversal_dataset_bytes(importer)
+            (evidence_dir / "gst-itc-reversal-rules.json").write_bytes(
+                itc_reversal_bytes
+            )
             import_itc_reversal_release(
                 importer, itc_reversal_source, itc_reversal_bytes
             )
