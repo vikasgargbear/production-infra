@@ -207,14 +207,14 @@ BEGIN
         UPDATE core.attachments SET byte_size = 129
          WHERE id = '00000000-0000-0000-0000-000000000030';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'verified attachment mutated';
-    EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    EXCEPTION WHEN check_violation THEN
         NULL;
     END;
     BEGIN
         DELETE FROM core.attachments
          WHERE id = '00000000-0000-0000-0000-000000000030';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'legal-hold attachment deleted';
-    EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    EXCEPTION WHEN check_violation THEN
         NULL;
     END;
 END
