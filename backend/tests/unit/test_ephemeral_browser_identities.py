@@ -121,6 +121,128 @@ def test_migration_owner_scope_is_transactional_and_restores_membership(
     ]
 
 
+def test_browser_database_provision_enters_owner_on_its_own_connection(
+    monkeypatch, tmp_path
+):
+    events = []
+
+    class Cursor:
+        def execute(self, *_args, **_kwargs):
+            events.append("sql")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class OwnerBoundaryReached(RuntimeError):
+        pass
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(
+        identities, "_set_reviewer_context", lambda _cursor: events.append("context")
+    )
+
+    def enter_owner(_cursor):
+        events.append("owner")
+        raise OwnerBoundaryReached
+
+    monkeypatch.setattr(identities, "_enter_migration_owner", enter_owner)
+    state = {
+        "auth_users": [
+            {"role": "requester", "auth_user_id": str(UUID(int=1))},
+            {"role": "reviewer", "auth_user_id": str(UUID(int=2))},
+        ]
+    }
+
+    with pytest.raises(OwnerBoundaryReached):
+        identities._provision_database(
+            "management-token",
+            tmp_path / "state.json",
+            state,
+            identities.PROFILE_TWO_USER,
+        )
+
+    assert events == ["sql", "sql", "context", "owner"]
+
+
+def test_browser_database_cleanup_restores_owner_before_commit(monkeypatch):
+    events = []
+
+    class Cursor:
+        def execute(self, *_args, **_kwargs):
+            events.append("sql")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            events.append("connection-enter")
+            return self
+
+        def __exit__(self, *_args):
+            events.append("connection-exit")
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(
+        identities, "_set_reviewer_context", lambda _cursor: events.append("context")
+    )
+    monkeypatch.setattr(
+        identities,
+        "_enter_migration_owner",
+        lambda _cursor: events.append("owner-enter") or False,
+    )
+    monkeypatch.setattr(
+        identities,
+        "_leave_migration_owner",
+        lambda _cursor, _options: events.append("owner-leave"),
+    )
+
+    identities._cleanup_database(
+        "management-token",
+        {
+            "purpose": identities.TWO_USER_PURPOSE,
+            "auth_users": [],
+            "prior_bindings": [],
+            "prior_active_grants": [],
+            "temporary_grants": {},
+        },
+    )
+
+    assert events == [
+        "connection-enter",
+        "sql",
+        "sql",
+        "context",
+        "owner-enter",
+        "owner-leave",
+        "connection-exit",
+    ]
+
+
 def test_auth_deletion_retries_transient_admin_failure(monkeypatch):
     calls = []
 
@@ -708,9 +830,17 @@ def test_live18_denial_cleanup_handles_commit_before_state_flag(monkeypatch):
         def execute(self, statement, *_args, **_kwargs):
             statements.append(" ".join(statement.split()))
 
-    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
     monkeypatch.setattr(
-        identities, "_leave_migration_owner", lambda _cursor, _options: None
+        identities,
+        "_enter_migration_owner",
+        lambda _cursor: pytest.fail("denial helper must use its caller's owner scope"),
+    )
+    monkeypatch.setattr(
+        identities,
+        "_leave_migration_owner",
+        lambda _cursor, _options: pytest.fail(
+            "denial helper must not reset its caller's owner scope"
+        ),
     )
     identities._cleanup_live18_denial_database(
         Cursor(),

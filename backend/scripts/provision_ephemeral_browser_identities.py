@@ -1102,7 +1102,6 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
         raise EphemeralIdentityError(
             "Committed live18 denial state omitted its Auth UUID"
         )
-    membership_options = _enter_migration_owner(cursor)
     cursor.execute(
         "DELETE FROM automation.agent_grant_capabilities WHERE org_id=%s AND agent_grant_id=%s",
         (DENIAL_ORG_ID, denial["agent_grant_id"]),
@@ -1131,7 +1130,6 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
         "DELETE FROM core.users WHERE id=%s AND auth_user_id=%s",
         (denial["user_id"], denial["auth_user_id"]),
     )
-    _leave_migration_owner(cursor, membership_options)
 
 
 def _set_reviewer_context(cursor) -> None:
@@ -1254,6 +1252,7 @@ def _provision_database(
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_reviewer_context(cursor)
+            membership_options = _enter_migration_owner(cursor)
             cursor.execute(
                 """
                 SELECT user_row.id::text, membership.id::text,
@@ -1507,6 +1506,7 @@ def _provision_database(
                 if profile == PROFILE_CORE_OPERATOR
                 else None
             )
+            _leave_migration_owner(cursor, membership_options)
     state["database_provisioned"] = True
     _write_state(state_path, state)
     return fixture
@@ -1523,6 +1523,7 @@ def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_reviewer_context(cursor)
+            membership_options = _enter_migration_owner(cursor)
             if profile == PROFILE_LIVE18:
                 _cleanup_live18_denial_database(cursor, state)
             temporary_grants = list(state.get("temporary_grants", {}).values())
@@ -1623,6 +1624,7 @@ def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
                     raise EphemeralIdentityError(
                         "Temporary browser grants remained active after cleanup"
                     )
+            _leave_migration_owner(cursor, membership_options)
 
 
 def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
