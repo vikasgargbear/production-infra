@@ -51,6 +51,9 @@ it('rejects zero and over-source adjustments before transport', () => {
   expect(() => buildAdjustmentNotePayload(context(), {
     ...base, quantities: { [ids.line]: { billed: '3', free: '0' } },
   }, 'erp-web-adjustment-note-prepare:attempt-3')).toThrow(/exceeds/i);
+  expect(() => buildAdjustmentNotePayload(context(), {
+    ...base, quantities: { [ids.line]: { billed: '1', free: '' } },
+  }, 'erp-web-adjustment-note-prepare:attempt-blank')).toThrow(/explicit billed and free/i);
 });
 
 it('requires statutory evidence and keeps it side-specific', () => {
@@ -69,4 +72,8 @@ it('requires statutory evidence and keeps it side-specific', () => {
   }, 'erp-web-adjustment-note-prepare:attempt-5')).toEqual(expect.objectContaining({
     recipient_itc_reversal_evidence_attachment_id: ids.evidence,
   }));
+  expect(() => buildAdjustmentNotePayload(statutory, {
+    ...draft, recipientEvidenceId: ids.evidence,
+    recipientConfirmedAt: '2026-08-25T10:00:00',
+  }, 'erp-web-adjustment-note-prepare:attempt-6')).toThrow(/explicit offset/i);
 });

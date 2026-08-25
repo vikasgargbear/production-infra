@@ -45,4 +45,12 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
     expect(source).not.toContain('018f1e5a-7b2c-7abc');
     expect(source).not.toContain("batch_number || 'Default'");
   });
+
+  it('requires canonical product projection fields without compatibility aliases', () => {
+    expect(source).toContain('This product is missing its canonical name or product code.');
+    expect(source).toContain('product_name: selectedProduct.product_name');
+    expect(source).toContain('product_code: selectedProduct.product_code');
+    expect(source).not.toContain('selectedProduct.product_name || selectedProduct.name');
+    expect(source).not.toContain('selectedProduct.product_code || selectedProduct.code');
+  });
 });

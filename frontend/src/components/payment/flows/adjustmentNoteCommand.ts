@@ -55,8 +55,11 @@ export function buildAdjustmentNotePayload(
   const lines = context.lines.flatMap(line => {
     const entered = draft.quantities[line.original_line_id];
     if (!entered) return [];
-    const billed = decimal(entered.billed || '0', `${line.product_name} billed quantity`);
-    const free = decimal(entered.free || '0', `${line.product_name} free quantity`);
+    if (!entered.billed.trim() || !entered.free.trim()) {
+      throw new Error(`${line.product_name} requires explicit billed and free quantities; enter 0 when there is no adjustment.`);
+    }
+    const billed = decimal(entered.billed, `${line.product_name} billed quantity`);
+    const free = decimal(entered.free, `${line.product_name} free quantity`);
     if (!positive(billed) && !positive(free)) return [];
     if (!lte(billed, decimal(line.remaining_billed_quantity, 'Remaining billed quantity'))
       || !lte(free, decimal(line.remaining_free_quantity, 'Remaining free quantity'))) {
@@ -101,8 +104,10 @@ export function buildAdjustmentNotePayload(
     if (!isCanonicalUuid(draft.recipientEvidenceId || '')) {
       throw new Error('A canonical recipient ITC-reversal evidence attachment is required for a statutory sales credit.');
     }
-    if (!draft.recipientConfirmedAt || Number.isNaN(Date.parse(draft.recipientConfirmedAt))) {
-      throw new Error('Recipient ITC-reversal confirmation time is required for a statutory sales credit.');
+    if (!draft.recipientConfirmedAt
+      || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(draft.recipientConfirmedAt)
+      || Number.isNaN(Date.parse(draft.recipientConfirmedAt))) {
+      throw new Error('Recipient ITC-reversal confirmation time must be RFC 3339 with an explicit offset.');
     }
     payload.recipient_itc_reversal_evidence_attachment_id = draft.recipientEvidenceId;
     payload.recipient_itc_reversal_confirmed_at = draft.recipientConfirmedAt;

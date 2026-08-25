@@ -1,5 +1,5 @@
 import {
-  allocateSupplierFifo, buildSupplierPaymentPreparePayload, localBusinessDate,
+  allocateSupplierFifo, buildSupplierPaymentPreparePayload,
   supplierMoneyToMinor, validateSupplierPaymentPreview,
   type SupplierPaymentContext, type SupplierPaymentDraft,
 } from './supplierPaymentCommand';
@@ -55,10 +55,6 @@ test.each([
   [draft({ external_reference: ' ' }), 'reference'],
 ])('fails closed on invalid draft evidence', (candidate, message) => {
   expect(() => buildSupplierPaymentPreparePayload(candidate, context, 'stable')).toThrow(message);
-});
-
-test('uses local calendar fields rather than UTC conversion', () => {
-  expect(localBusinessDate(new Date(2026, 7, 25, 0, 15))).toBe('2026-08-25');
 });
 
 test('fails closed when the backend organization date contract is malformed', () => {

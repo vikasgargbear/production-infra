@@ -89,7 +89,8 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
   useEffect(() => { if (open && branchId) void loadContext(branchId); }, [branchId, loadContext, open]);
 
   const total = useMemo(() => {
-    try { return addExactDecimals(lines.map(line => line.claimed_amount || '0'), 'Expense total', moneyOptions); }
+    if (lines.some(line => !line.claimed_amount.trim())) return null;
+    try { return addExactDecimals(lines.map(line => line.claimed_amount), 'Expense total', moneyOptions); }
     catch { return null; }
   }, [lines]);
   const usedReceipts = useMemo(() => new Set(lines.map(line => line.receipt_attachment_id).filter(Boolean)), [lines]);

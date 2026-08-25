@@ -71,6 +71,24 @@ test('retired compatibility mappers cannot infer canonical product or batch fact
   expect(configIndex).not.toContain('fieldAliases');
 });
 
+test('core command inputs never invent zero, aliases, or browser-local evidence time', () => {
+  const expense = read('frontend/src/components/payment/flows/ExpenseClaimsFlow.tsx');
+  const adjustment = read('frontend/src/components/payment/flows/adjustmentNoteCommand.ts');
+  const adjustmentUi = read('frontend/src/components/payment/flows/CreditDebitFlow.tsx');
+  const supplierPayment = read('frontend/src/components/payment/entry/supplierPaymentCommand.ts');
+  const stockAdjustment = read('frontend/src/components/inventory/stock/StockAdjustmentFlow.tsx');
+
+  expect(expense).not.toContain("line.claimed_amount || '0'");
+  expect(adjustment).not.toContain("entered.billed || '0'");
+  expect(adjustment).not.toContain("entered.free || '0'");
+  expect(adjustmentUi).not.toContain('type="datetime-local"');
+  expect(adjustmentUi).not.toContain('new Date(event.target.value).toISOString()');
+  expect(supplierPayment).not.toContain('localBusinessDate');
+  expect(supplierPayment).not.toContain('new Date()');
+  expect(stockAdjustment).not.toContain('selectedProduct.product_name || selectedProduct.name');
+  expect(stockAdjustment).not.toContain('selectedProduct.product_code || selectedProduct.code');
+});
+
 test('financial reports fail closed without reviewed projections; sales uses exact facts', () => {
   const financialReport = read('frontend/src/components/reports/FinancialReport.tsx');
   const salesReport = read('frontend/src/components/reports/SalesReport.tsx');

@@ -83,13 +83,6 @@ export function supplierMinorToMoney(value: bigint): string {
   return `${value / 100n}.${String(value % 100n).padStart(2, '0')}`;
 }
 
-export function localBusinessDate(now: Date = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export function allocateSupplierFifo(
   amount: string,
   openItems: SupplierPaymentOpenItem[],

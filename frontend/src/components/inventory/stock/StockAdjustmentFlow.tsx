@@ -186,6 +186,11 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   // Resolve the server-owned membership, evidence, location, stock, and UOM facts.
   const handleBatchSelect = async (batch) => {
     if (!batch || !selectedProduct) return;
+    if (typeof selectedProduct.product_name !== 'string' || !selectedProduct.product_name.trim()
+      || typeof selectedProduct.product_code !== 'string' || !selectedProduct.product_code.trim()) {
+      toast.error('This product is missing its canonical name or product code.');
+      return;
+    }
     if (!adjustmentData.adjustment_date) {
       toast.error('Wait for the organization business date before selecting stock.');
       return;
@@ -220,8 +225,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       const newItem: AdjustmentItem = {
         id: `${eligibility.product_id}:${eligibility.batch_id}`,
         product_id: eligibility.product_id,
-        product_name: selectedProduct.product_name || selectedProduct.name,
-        product_code: selectedProduct.product_code || selectedProduct.code,
+        product_name: selectedProduct.product_name,
+        product_code: selectedProduct.product_code,
         batch_id: eligibility.batch_id,
         batch_number: batch.batch_number,
         branch_id: eligibility.branch_id,

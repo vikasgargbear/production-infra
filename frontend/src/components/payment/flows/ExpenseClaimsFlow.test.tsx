@@ -81,3 +81,12 @@ it('uses canonical claimant, account and receipt context to reach immutable prep
   expect(screen.queryByText('Current User')).toBeNull();
   expect(screen.queryByText(/Unavailable/)).toBeNull();
 });
+
+it('treats a blank amount as invalid rather than inventing zero', async () => {
+  render(<ExpenseClaimsFlow onClose={jest.fn()} />);
+  await waitFor(() => expect((screen.getByLabelText('Branch') as HTMLSelectElement).options.length).toBe(2));
+  fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
+  expect(await screen.findByText('Exact total: Invalid amount')).not.toBeNull();
+  expect((screen.getByRole('button', { name: 'Prepare immutable preview' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(prepareExpenseClaim).not.toHaveBeenCalled();
+});

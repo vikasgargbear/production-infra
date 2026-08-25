@@ -29,3 +29,10 @@ it('requires the actor to select the reviewed GST rule', () => {
   expect(source).toContain('Select reviewed GST rule');
   expect(source).not.toContain('setRuleId(next.rule_choices[0]');
 });
+
+it('requires an explicit-offset evidence time without browser timezone conversion', () => {
+  expect(source).toContain('RFC 3339 with offset');
+  expect(source).toContain('2026-08-25T10:00:00+05:30');
+  expect(source).not.toContain('type="datetime-local"');
+  expect(source).not.toContain('new Date(event.target.value).toISOString()');
+});
