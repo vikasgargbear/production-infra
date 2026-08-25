@@ -27,6 +27,10 @@ CONVERSION = UUID("d3000000-0000-7000-8000-000000000007")
 DOCUMENT = UUID("d3000000-0000-7000-8000-000000000008")
 MEMBERSHIP = UUID("d3000000-0000-7000-8000-000000000009")
 AUTH_USER = UUID("d3000000-0000-7000-8000-000000000010")
+LIMITED_AUTH_USER = UUID("d3000000-0000-7000-8000-000000000020")
+LIMITED_USER = UUID("d3000000-0000-7000-8000-000000000021")
+LIMITED_MEMBERSHIP = UUID("d3000000-0000-7000-8000-000000000022")
+LIMITED_GRANT = UUID("d3000000-0000-7000-8000-000000000023")
 OTHER_ORG = UUID("d4000000-0000-7000-8000-000000000001")
 
 
@@ -43,8 +47,8 @@ TABLES_WITH_USER_TRIGGERS = (
 def _seed(session: Session) -> None:
     session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
     session.execute(
-        text("INSERT INTO auth.users(id) VALUES (:auth_user)"),
-        {"auth_user": AUTH_USER},
+        text("INSERT INTO auth.users(id) VALUES (:auth_user),(:limited_auth_user)"),
+        {"auth_user": AUTH_USER, "limited_auth_user": LIMITED_AUTH_USER},
     )
     session.execute(text('SET LOCAL ROLE "erp_migration_owner"'))
     session.execute(text("""
@@ -65,10 +69,12 @@ def _seed(session: Session) -> None:
           (:other_org,'Other Runtime Org','UTC','1 Other Road','Pune','27','411001','active',:other_membership,:other_membership);
         INSERT INTO core.users(id,auth_user_id,display_name,status)
         VALUES (:user_id,:auth_user,'Transfer Runtime Actor','active'),
+               (:limited_user,:limited_auth_user,'Source-only Transfer Actor','active'),
                (:other_user,NULL,'Other Runtime Actor','active');
         INSERT INTO core.memberships(
           org_id,id,user_id,status,joined_at,created_by_membership_id,updated_by_membership_id)
         VALUES (:org,:membership,:user_id,'active',transaction_timestamp(),:membership,:membership),
+               (:org,:limited_membership,:limited_user,'active',transaction_timestamp(),:membership,:membership),
                (:other_org,:other_membership,:other_user,'active',transaction_timestamp(),:other_membership,:other_membership);
         SET CONSTRAINTS ALL IMMEDIATE;
 
@@ -83,8 +89,9 @@ def _seed(session: Session) -> None:
         INSERT INTO core.roles(org_id,id,code,name,status,created_by_membership_id,updated_by_membership_id)
         VALUES (:org,:role_id,'transfer_reader','Transfer Reader','active',:membership,:membership);
         INSERT INTO core.access_grants(
-          org_id,id,membership_id,role_id,scope_kind,valid_from_at,status,created_by_membership_id)
-        VALUES (:org,:grant_id,:membership,:role_id,'organization',transaction_timestamp(),'active',:membership);
+          org_id,id,membership_id,role_id,scope_kind,branch_id,valid_from_at,status,created_by_membership_id)
+        VALUES (:org,:grant_id,:membership,:role_id,'organization',NULL,transaction_timestamp(),'active',:membership),
+               (:org,:limited_grant,:limited_membership,:role_id,'branch',:source_branch,transaction_timestamp(),'active',:membership);
         INSERT INTO core.reference_data_releases(
           id,dataset_kind,ruleset_version,source_authority,source_uri,
           source_storage_bucket,source_storage_object_path,source_media_type,source_document_sha256,
@@ -156,6 +163,10 @@ def _seed(session: Session) -> None:
         "org": ORG, "other_org": OTHER_ORG, "membership": MEMBERSHIP,
         "other_membership": UUID("d4000000-0000-7000-8000-000000000002"),
         "user_id": UUID("d3000000-0000-7000-8000-000000000011"),
+        "limited_user": LIMITED_USER,
+        "limited_auth_user": LIMITED_AUTH_USER,
+        "limited_membership": LIMITED_MEMBERSHIP,
+        "limited_grant": LIMITED_GRANT,
         "other_user": UUID("d4000000-0000-7000-8000-000000000003"),
         "auth_user": AUTH_USER, "source_branch": SOURCE_BRANCH,
         "destination_branch": DESTINATION_BRANCH,
@@ -236,23 +247,23 @@ def main() -> None:
                 ), {"other_org": OTHER_ORG}) == 0
 
                 session.execute(text("RESET ROLE"))
-                session.execute(text("""
-                    UPDATE core.access_grants
-                       SET scope_kind='branch',branch_id=:source_branch
-                     WHERE org_id=:org AND membership_id=:membership
-                """), {"org": ORG, "membership": MEMBERSHIP, "source_branch": SOURCE_BRANCH})
-                session.execute(text("RESET ROLE"))
                 session.execute(text('SET LOCAL ROLE "erp_runtime"'))
+                limited_user = {
+                    "org_id": str(ORG),
+                    "auth_user_id": str(LIMITED_AUTH_USER),
+                }
                 denied = transfers.get_eligible_transfer_batches(
                     source_branch_id=SOURCE_BRANCH, source_location_id=SOURCE_LOCATION,
                     destination_branch_id=DESTINATION_BRANCH,
                     destination_location_id=DESTINATION_LOCATION,
                     product_id=PRODUCT, uom_conversion_id=CONVERSION,
-                    transfer_date=business_date, db=session, current_user=user,
+                    transfer_date=business_date, db=session, current_user=limited_user,
                 )
                 assert denied == []
                 try:
-                    transfers.get_transfer_readback(DOCUMENT, db=session, current_user=user)
+                    transfers.get_transfer_readback(
+                        DOCUMENT, db=session, current_user=limited_user
+                    )
                 except HTTPException as error:
                     assert error.status_code == 404
                 else:
