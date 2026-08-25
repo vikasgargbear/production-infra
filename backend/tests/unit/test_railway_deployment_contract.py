@@ -41,7 +41,7 @@ def test_each_railway_service_uses_its_dockerfile_and_plan_default_region() -> N
         assert config["build"]["builder"] == "DOCKERFILE"
         assert config["build"]["dockerfilePath"] == dockerfile
         assert config["deploy"]["startCommand"] == expected_start_commands[service]
-        assert config["deploy"]["sleepApplication"] is False
+        assert config["deploy"]["sleepApplication"] is True
         assert "multiRegionConfig" not in config["deploy"]
 
     mcp_dockerfile = (ROOT / "deploy/railway/mcp.Dockerfile").read_text(
