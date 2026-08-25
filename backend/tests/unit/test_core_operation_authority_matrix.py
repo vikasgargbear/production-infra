@@ -157,10 +157,7 @@ def test_every_business_fact_has_named_canonical_provenance() -> None:
 def test_integrated_operations_map_to_reviewed_sql_and_canonical_tables() -> None:
     functions = _sql_functions()
     for operation in _matrix()["operations"]:
-        if operation.get("integration_state"):
-            # The pending operation becomes mandatory as soon as its forward
-            # migration is merged; this avoids pretending an undeployed path exists.
-            continue
+        assert "integration_state" not in operation
         seeds = [operation["prepare_sql"], *operation["execute_sql"]]
         _, closure = _function_closure(functions, seeds)
         referenced_tables = {

@@ -238,8 +238,7 @@
       "rest_readback": "/api/web/actions/expense-claims/commands/{command_request_id}/readback",
       "prepare_sql": "erp_automation_commands.persist_expense_claim_prepare",
       "execute_sql": ["erp_automation_commands.execute_approved_expense_claim", "erp_compliance_commands.post_expense_claim"],
-      "authoritative_tables": ["finance.expense_claims", "finance.expense_claim_lines", "core.attachments", "finance.accounts", "finance.journal_entries", "finance.journal_lines", "finance.accounting_events", "automation.command_requests", "automation.command_approvals"],
-      "integration_state": "pending_20260825_0009"
+      "authoritative_tables": ["finance.expense_claims", "finance.expense_claim_lines", "core.attachments", "finance.accounts", "finance.journal_entries", "finance.journal_lines", "finance.accounting_events", "automation.command_requests", "automation.command_approvals"]
     }
   ]
 }
