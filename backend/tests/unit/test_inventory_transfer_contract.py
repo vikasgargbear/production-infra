@@ -170,3 +170,15 @@ def test_postgres_lifecycle_fixture_executes_real_command_as_runtime_role():
         assert fragment in fixture
     assert fixture.count("service.execute(") == 2
     assert fixture_name in gate
+
+
+def test_runtime_automation_privilege_contract_includes_transfer_boundary():
+    root = Path(__file__).resolve().parents[3]
+    contract = (
+        root
+        / "database/canonical/commands_automation/test_automation_commands_rollback.sql"
+    ).read_text()
+    assert contract.count("'resolve_inventory_transfer_prepare'") == 2
+    assert contract.count("'persist_inventory_transfer_prepare'") == 2
+    assert "runtime_count<>21" in contract
+    assert "expected twenty-one reviewed runtime automation commands" in contract
