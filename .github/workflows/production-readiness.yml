@@ -1023,7 +1023,8 @@ jobs:
     needs: [canonical-free-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live18 &&
-      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 180
@@ -1070,6 +1071,8 @@ jobs:
           echo "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json" >> "$GITHUB_ENV"
           echo "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH=$RUNNER_TEMP/live18-fixture-identities.json" >> "$GITHUB_ENV"
           echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json" >> "$GITHUB_ENV"
+          echo "LIVE18_REVIEWED_SCALARS_PATH=$RUNNER_TEMP/live18-reviewed-scalars.json" >> "$GITHUB_ENV"
+          echo "LIVE18_TEMPLATE_DIRECTORY=$GITHUB_WORKSPACE/frontend/e2e/live18/templates" >> "$GITHUB_ENV"
           echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence" >> "$GITHUB_ENV"
           echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright" >> "$GITHUB_ENV"
       - name: Bind live18 to the exact reviewed deployed SHA
@@ -1097,16 +1100,17 @@ jobs:
           npm ci --prefix frontend
           cd frontend
           npx playwright install --with-deps chromium ffmpeg
-      - name: Write the externally reviewed fixture outside the repository
+      - name: Write compact externally reviewed scalar choices outside the repository
         env:
-          LIVE18_REVIEWED_FIXTURE_JSON: ${{ secrets.LIVE18_REVIEWED_FIXTURE_JSON }}
+          LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
         run: |
           set -euo pipefail
-          test -n "$LIVE18_REVIEWED_FIXTURE_JSON"
+          test -n "$LIVE18_REVIEWED_SCALARS_JSON"
           umask 077
-          printf '%s' "$LIVE18_REVIEWED_FIXTURE_JSON" > "$LIVE18_FIXTURE_PATH"
-          python3 -m json.tool "$LIVE18_FIXTURE_PATH" >/dev/null
-          case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
+          printf '%s' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_PATH"
+          python3 -m json.tool "$LIVE18_REVIEWED_SCALARS_PATH" >/dev/null
+          test "$(wc -c < "$LIVE18_REVIEWED_SCALARS_PATH")" -le 32768
+          case "$LIVE18_REVIEWED_SCALARS_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
       - name: Build the masked exact erp_runtime connection
         env:
           ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
@@ -1147,6 +1151,17 @@ jobs:
           set -euo pipefail
           test "$PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID" = "$LIVE18_EXPECTED_BRANCH_ID"
           test "$PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID" = "$LIVE18_EXPECTED_DENIAL_ORG_ID"
+      - name: Compile browser fixture from canonical facts and reviewed choices
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/compile_live18_browser_fixture.py \
+            --identity-evidence "$PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH" \
+            --reviewed-scalars "$LIVE18_REVIEWED_SCALARS_PATH" \
+            --matrix backend/tests/live_acceptance/operation_matrix.json \
+            --templates "$LIVE18_TEMPLATE_DIRECTORY" \
+            --output "$LIVE18_FIXTURE_PATH"
+          python3 -m json.tool "$LIVE18_FIXTURE_PATH" >/dev/null
+          case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
       - name: Discover exactly 18 reviewed Playwright operations
         working-directory: frontend
         run: |
@@ -1182,9 +1197,9 @@ jobs:
         run: |
           python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
             --state "$RUNNER_TEMP/live18-browser-identities.json"
-      - name: Always remove the external reviewed fixture
+      - name: Always remove external reviewed choices and compiled fixture
         if: always()
-        run: rm -f "$LIVE18_FIXTURE_PATH"
+        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_PATH"
       - name: Upload live18 SHA, browser, REST, MCP, and PostgreSQL evidence
         if: always()
         uses: actions/upload-artifact@v4

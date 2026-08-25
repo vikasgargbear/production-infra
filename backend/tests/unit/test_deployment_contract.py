@@ -1066,8 +1066,12 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         'echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"'
         in live18
     )
-    assert "secrets.LIVE18_REVIEWED_FIXTURE_JSON" in live18
-    assert 'printf \'%s\' "$LIVE18_REVIEWED_FIXTURE_JSON" > "$LIVE18_FIXTURE_PATH"' in live18
+    assert "secrets.LIVE18_REVIEWED_SCALARS_JSON" in live18
+    assert 'printf \'%s\' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_PATH"' in live18
+    assert "compile_live18_browser_fixture.py" in live18
+    assert live18.index("provision_ephemeral_canonical_live.py provision") < live18.index(
+        "compile_live18_browser_fixture.py"
+    )
     assert 'case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*)' in live18
     assert "provision --profile live18" in live18
     assert "LIVE18_DENIAL_ACCESS_TOKEN" in live18
@@ -1080,7 +1084,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "provision_ephemeral_browser_identities.py cleanup"
     )
     assert live18.count("if: always()") >= 4
-    assert "rm -f \"$LIVE18_FIXTURE_PATH\"" in live18
+    assert 'rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_PATH"' in live18
     assert "secrets.LIVE18_REQUESTER" not in live18
     assert "secrets.LIVE18_REVIEWER" not in live18
     assert "secrets.LIVE18_DENIAL_ACCESS_TOKEN" not in live18
