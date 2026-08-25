@@ -30,7 +30,6 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import { usePermissions } from './hooks/usePermissions';
 import { useHashRouter } from './hooks/useHashRouter';
 
-const CalculationSmokePage = lazy(() => import('./e2e/CalculationSmokePage'));
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
 
 // ---------------------------------------------------------------------------
@@ -122,12 +121,6 @@ const AppContent = (): JSX.Element => {
     return () => window.removeEventListener('navigate', handleNavigate as EventListener);
   }, [navigate]);
 
-  if (
-    process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true'
-    && window.location.pathname === '/e2e/calculation-smoke'
-  ) {
-    return <Suspense fallback={<LoadingSpinner />}><CalculationSmokePage /></Suspense>;
-  }
   if (
     process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true'
     && window.location.pathname === '/e2e/mobile-navigation'

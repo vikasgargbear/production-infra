@@ -37,7 +37,7 @@
     "start": "craco start",
     "build": "craco build",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"src/**/*.{js,jsx,ts,tsx}\"",
-    "lint:critical": "ESLINT_USE_FLAT_CONFIG=false eslint --max-warnings 0 src/contexts/AuthContext.tsx src/contexts/CompanyContext.tsx src/services/enterpriseCalculator.ts 'src/services/auth/**/*.{ts,tsx}' 'src/services/calculations/**/*.{ts,tsx}' src/services/api/apiClient.ts src/services/api/utils/dataUtils.ts 'src/services/api/modules/{sales,purchase,finance}/*Calculations.api.ts'",
+    "lint:critical": "ESLINT_USE_FLAT_CONFIG=false eslint --max-warnings 0 src/contexts/AuthContext.tsx src/contexts/CompanyContext.tsx 'src/services/auth/**/*.{ts,tsx}' 'src/services/calculations/**/*.{ts,tsx}' src/services/api/apiClient.ts src/services/api/utils/dataUtils.ts 'src/services/api/modules/{sales,purchase,finance}/*Calculations.api.ts'",
     "lint:payment": "ESLINT_USE_FLAT_CONFIG=false eslint \"src/components/payment/**/*.{js,jsx,ts,tsx}\" \"src/utils/financialEntryNotifier.tsx\"",
     "typecheck": "tsc --noEmit",
     "validate": "npm run typecheck && npm run lint",

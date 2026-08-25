@@ -47,7 +47,7 @@ export interface InvoiceItem extends SharedInvoiceItem {
     source_billed_quantity?: string | number;
     source_free_quantity?: string | number;
     discount_percent: string | number;
-    // Calculated fields (use canonical names from enterpriseCalculator)
+    // Calculated fields use the canonical server preview names.
     subtotal?: ExactDecimalString;
     discount_amount?: ExactDecimalString;
     taxable_amount?: ExactDecimalString;

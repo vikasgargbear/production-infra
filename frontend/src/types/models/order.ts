@@ -186,7 +186,7 @@ export interface CreatedOrderData {
 }
 
 /**
- * Calculation result from EnterpriseCalculator
+ * Calculation result returned by the canonical calculation API.
  */
 export interface CalculationResult {
     success: boolean;
