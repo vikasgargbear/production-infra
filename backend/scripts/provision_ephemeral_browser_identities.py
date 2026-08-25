@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import sys
+import time
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -495,10 +496,43 @@ def _list_run_auth_user_ids(
     return matches
 
 
+def _list_purpose_auth_user_ids(service_key: str, purpose: str) -> set[str]:
+    """Find stale disposable users without depending on a lost runner state file."""
+
+    matches: set[str] = set()
+    for page in range(1, 11):
+        result = _admin_request(
+            "GET", f"users?page={page}&per_page=1000", service_key
+        )
+        users = result.get("users", []) if isinstance(result, dict) else []
+        if not isinstance(users, list):
+            raise EphemeralIdentityError("Supabase Auth user listing was malformed")
+        for user in users:
+            metadata = user.get("app_metadata", {}) if isinstance(user, dict) else {}
+            if isinstance(metadata, dict) and metadata.get("purpose") == purpose:
+                matches.add(str(UUID(str(user["id"]))))
+        if len(users) < 1000:
+            break
+    else:
+        raise EphemeralIdentityError("Supabase Auth user listing exceeded 10 pages")
+    return matches
+
+
 def _delete_auth_user(service_key: str, auth_user_id: str) -> None:
-    _admin_request(
-        "DELETE", f"users/{UUID(auth_user_id)}", service_key, allow_missing=True
-    )
+    last_error: EphemeralIdentityError | None = None
+    for attempt in range(3):
+        try:
+            _admin_request(
+                "DELETE", f"users/{UUID(auth_user_id)}", service_key,
+                allow_missing=True,
+            )
+            return
+        except EphemeralIdentityError as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2**attempt)
+    assert last_error is not None
+    raise last_error
 
 
 def _database_connection(management_token: str):
@@ -537,6 +571,173 @@ def _database_connection(management_token: str):
     )
 
 
+def _enter_migration_owner(cursor) -> bool:
+    """Borrow owner SET authority only for this transaction's staging fixture."""
+
+    cursor.execute("SHOW server_version_num")
+    supports_membership_options = int(cursor.fetchone()[0]) >= 160000
+    if supports_membership_options:
+        cursor.execute(
+            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET TRUE'
+        )
+    else:
+        cursor.execute('GRANT "erp_migration_owner" TO CURRENT_USER')
+    cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+    return supports_membership_options
+
+
+def _leave_migration_owner(cursor, supports_membership_options: bool) -> None:
+    """Restore the reviewed non-settable owner membership before commit."""
+
+    cursor.execute("RESET ROLE")
+    if supports_membership_options:
+        cursor.execute(
+            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET FALSE'
+        )
+    else:
+        cursor.execute('REVOKE "erp_migration_owner" FROM CURRENT_USER')
+
+
+def _recover_stale_live18_database(
+    management_token: str, stale_auth_user_ids: set[str]
+) -> None:
+    """Restore fixed demo bindings and remove abandoned denial identities."""
+
+    if not stale_auth_user_ids:
+        return
+    stale_ids = sorted(stale_auth_user_ids)
+    with _database_connection(management_token) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (LOCK_KEY,),
+            )
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            membership_options = _enter_migration_owner(cursor)
+            cursor.execute(
+                """
+                UPDATE core.users
+                   SET auth_user_id=CASE id
+                         WHEN %s::uuid THEN %s::uuid
+                         WHEN %s::uuid THEN %s::uuid
+                       END,
+                       updated_at=transaction_timestamp(),row_version=row_version+1
+                 WHERE id IN (%s::uuid,%s::uuid)
+                   AND auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (
+                    DEMO_OPERATOR_USER_ID,
+                    "d3000000-0000-7000-8000-000000000022",
+                    DEMO_REVIEWER_USER_ID,
+                    "d3000000-0000-7000-8000-000000000002",
+                    DEMO_OPERATOR_USER_ID,
+                    DEMO_REVIEWER_USER_ID,
+                    stale_ids,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE automation.agent_grants
+                   SET status='suspended',suspended_at=transaction_timestamp(),
+                       updated_at=transaction_timestamp(),row_version=row_version+1
+                 WHERE org_id=%s AND client_id=%s
+                   AND subject_membership_id IN (%s::uuid,%s::uuid)
+                   AND consent_version='browser-e2e-v1' AND status='active'
+                """,
+                (
+                    DEMO_ORG_ID,
+                    WEB_CLIENT_ID,
+                    DEMO_OPERATOR_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE automation.agent_grants
+                   SET status='active',suspended_at=NULL,
+                       updated_at=transaction_timestamp(),
+                       updated_by_membership_id=%s,row_version=row_version+1
+                 WHERE org_id=%s AND client_id=%s
+                   AND id IN (%s::uuid,%s::uuid)
+                   AND consent_version IN ('demo-v2','demo-v2-approver')
+                   AND status='suspended' AND expires_at>transaction_timestamp()
+                """,
+                (
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DEMO_ORG_ID,
+                    WEB_CLIENT_ID,
+                    "d3000000-0000-7000-8000-000000000021",
+                    "d3000000-0000-7000-8000-000000000020",
+                ),
+            )
+            cursor.execute(
+                """
+                DELETE FROM automation.agent_grant_capabilities AS capability
+                 USING automation.agent_grants AS grant_row,core.memberships AS membership,
+                       core.users AS user_row
+                 WHERE capability.org_id=grant_row.org_id
+                   AND capability.agent_grant_id=grant_row.id
+                   AND grant_row.org_id=%s
+                   AND membership.org_id=grant_row.org_id
+                   AND membership.id=grant_row.subject_membership_id
+                   AND user_row.id=membership.user_id
+                   AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (DENIAL_ORG_ID, stale_ids),
+            )
+            cursor.execute(
+                """
+                DELETE FROM automation.agent_grants AS grant_row
+                 USING core.memberships AS membership,core.users AS user_row
+                 WHERE grant_row.org_id=%s
+                   AND membership.org_id=grant_row.org_id
+                   AND membership.id=grant_row.subject_membership_id
+                   AND user_row.id=membership.user_id
+                   AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (DENIAL_ORG_ID, stale_ids),
+            )
+            cursor.execute(
+                """
+                DELETE FROM core.role_permissions AS permission
+                 USING core.roles AS role
+                 WHERE permission.org_id=role.org_id AND permission.role_id=role.id
+                   AND role.org_id=%s AND role.code LIKE 'live18_denial_%%'
+                """,
+                (DENIAL_ORG_ID,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM core.access_grants AS access_grant
+                 USING core.memberships AS membership,core.users AS user_row
+                 WHERE access_grant.org_id=%s
+                   AND membership.org_id=access_grant.org_id
+                   AND membership.id=access_grant.membership_id
+                   AND user_row.id=membership.user_id
+                   AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (DENIAL_ORG_ID, stale_ids),
+            )
+            cursor.execute(
+                "DELETE FROM core.roles WHERE org_id=%s AND code LIKE 'live18_denial_%%'",
+                (DENIAL_ORG_ID,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM core.memberships AS membership
+                 USING core.users AS user_row
+                 WHERE membership.org_id=%s AND user_row.id=membership.user_id
+                   AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (DENIAL_ORG_ID, stale_ids),
+            )
+            cursor.execute(
+                "DELETE FROM core.users WHERE auth_user_id=ANY(CAST(%s AS uuid[]))",
+                (stale_ids,),
+            )
+            _leave_migration_owner(cursor, membership_options)
+
+
 def _provision_live18_denial_database(
     management_token: str,
     state_path: Path,
@@ -550,7 +751,7 @@ def _provision_live18_denial_database(
                 (LOCK_KEY,),
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-            cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+            membership_options = _enter_migration_owner(cursor)
             cursor.execute(
                 "SELECT status FROM core.organizations WHERE id=%s FOR SHARE",
                 (DENIAL_ORG_ID,),
@@ -716,6 +917,7 @@ def _provision_live18_denial_database(
                 "automation.command.status.get",
             )]:
                 raise EphemeralIdentityError("Disposable denial authority did not reconcile exactly")
+            _leave_migration_owner(cursor, membership_options)
     state["denial_database_provisioned"] = True
     _write_state(state_path, state)
 
@@ -767,7 +969,7 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
     denial = state.get("denial_identity")
     if not isinstance(denial, dict):
         return
-    cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+    membership_options = _enter_migration_owner(cursor)
     cursor.execute(
         "DELETE FROM automation.agent_grant_capabilities WHERE org_id=%s AND agent_grant_id=%s",
         (DENIAL_ORG_ID, denial["agent_grant_id"]),
@@ -796,6 +998,7 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
         "DELETE FROM core.users WHERE id=%s AND auth_user_id=%s",
         (denial["user_id"], denial["auth_user_id"]),
     )
+    _leave_migration_owner(cursor, membership_options)
 
 
 def _set_reviewer_context(cursor) -> None:
@@ -1300,6 +1503,16 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
     _validate_target(management_token)
     service_key = _service_role_key(management_token)
     _mask(service_key)
+    if profile == PROFILE_LIVE18:
+        stale_auth_user_ids = _list_purpose_auth_user_ids(service_key, purpose)
+        if stale_auth_user_ids:
+            _recover_stale_live18_database(management_token, stale_auth_user_ids)
+            for auth_user_id in sorted(stale_auth_user_ids):
+                _delete_auth_user(service_key, auth_user_id)
+            if _list_purpose_auth_user_ids(service_key, purpose):
+                raise EphemeralIdentityError(
+                    "Stale disposable live18 Auth identities remained after recovery"
+                )
     run_token = str(uuid4())
     state: dict[str, Any] = {
         "version": STATE_VERSION,

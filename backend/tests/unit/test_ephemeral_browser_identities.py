@@ -80,6 +80,65 @@ def test_auth_creation_requires_confirmed_identity(monkeypatch):
         )
 
 
+@pytest.mark.parametrize(
+    ("server_version", "enter_sql", "leave_sql"),
+    [
+        (
+            "170000",
+            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET TRUE',
+            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET FALSE',
+        ),
+        (
+            "150000",
+            'GRANT "erp_migration_owner" TO CURRENT_USER',
+            'REVOKE "erp_migration_owner" FROM CURRENT_USER',
+        ),
+    ],
+)
+def test_migration_owner_scope_is_transactional_and_restores_membership(
+    server_version, enter_sql, leave_sql
+):
+    class Cursor:
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, statement, params=None):
+            self.statements.append(statement)
+
+        def fetchone(self):
+            return (server_version,)
+
+    cursor = Cursor()
+    membership_options = identities._enter_migration_owner(cursor)
+    identities._leave_migration_owner(cursor, membership_options)
+
+    assert cursor.statements == [
+        "SHOW server_version_num",
+        enter_sql,
+        'SET LOCAL ROLE "erp_migration_owner"',
+        "RESET ROLE",
+        leave_sql,
+    ]
+
+
+def test_auth_deletion_retries_transient_admin_failure(monkeypatch):
+    calls = []
+
+    def admin(*args, **kwargs):
+        calls.append(args)
+        if len(calls) < 3:
+            raise identities.EphemeralIdentityError("HTTP 500")
+
+    monkeypatch.setattr(identities, "_admin_request", admin)
+    monkeypatch.setattr(identities.time, "sleep", lambda seconds: None)
+
+    identities._delete_auth_user(
+        "service-key", "d4000000-0000-7000-8000-000000000001"
+    )
+
+    assert len(calls) == 3
+
+
 def test_error_annotations_redact_management_and_database_secrets(monkeypatch):
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "private-management-token")
     monkeypatch.setenv("SUPABASE_DB_PASSWORD", "private-database-password")
@@ -486,6 +545,9 @@ def test_live18_profile_exports_only_run_scoped_three_identity_credentials(
     monkeypatch.setattr(
         identities, "_create_auth_user", lambda *args, **kwargs: next(created)
     )
+    monkeypatch.setattr(
+        identities, "_list_purpose_auth_user_ids", lambda *args: set()
+    )
 
     def provision_database(token, path, state, profile):
         assert profile == identities.PROFILE_LIVE18
@@ -527,3 +589,47 @@ def test_live18_profile_exports_only_run_scoped_three_identity_credentials(
     ):
         assert exported.count(f"{name}=") == 1
     assert "masked-denial-jwt" not in state_path.read_text(encoding="utf-8")
+
+
+def test_live18_recovers_stale_purpose_users_before_creating_new_ones(
+    monkeypatch, tmp_path
+):
+    state_path, _ = _environment(monkeypatch, tmp_path)
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "anon-key")
+    stale = {"d4000000-0000-7000-8000-000000000099"}
+    listings = iter((stale, set()))
+    monkeypatch.setattr(
+        identities, "_list_purpose_auth_user_ids", lambda *args: next(listings)
+    )
+    recovered = []
+    deleted = []
+    monkeypatch.setattr(
+        identities,
+        "_recover_stale_live18_database",
+        lambda token, values: recovered.append((token, values)),
+    )
+    monkeypatch.setattr(
+        identities, "_delete_auth_user", lambda key, value: deleted.append(value)
+    )
+    created = iter(
+        (
+            "d4000000-0000-7000-8000-000000000001",
+            "d4000000-0000-7000-8000-000000000002",
+            "d4000000-0000-7000-8000-000000000003",
+        )
+    )
+    monkeypatch.setattr(
+        identities, "_create_auth_user", lambda *args, **kwargs: next(created)
+    )
+    monkeypatch.setattr(identities, "_provision_database", lambda *args: None)
+    monkeypatch.setattr(
+        identities, "_provision_live18_denial_database", lambda *args: None
+    )
+    monkeypatch.setattr(
+        identities, "_exchange_live18_denial_token", lambda *args: "denial-token"
+    )
+
+    identities.provision(state_path, identities.PROFILE_LIVE18)
+
+    assert recovered == [("management-token", stale)]
+    assert deleted == sorted(stale)
