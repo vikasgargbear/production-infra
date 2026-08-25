@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from .config import Live18GateError, load_live18_config
-from .contract import load_operation_matrix, load_ready_operation_matrix
+from .contract import (
+    REQUIRED_DATABASE_RELATIONS,
+    load_operation_matrix,
+    load_ready_operation_matrix,
+)
 from .mcp_readback import mcp_readback_arguments
 from .scope import out_of_scope_paths
 
@@ -72,6 +76,10 @@ def test_matrix_cannot_drift_from_the_central_core_authority_matrix() -> None:
         assert contract.prepare_tool == row["mcp_prepare_tool"]
         assert contract.rest_readback == row["rest_readback"]
         assert set(contract.database_relations) <= set(row["authoritative_tables"])
+        assert REQUIRED_DATABASE_RELATIONS[contract.id] <= set(
+            contract.database_relations
+        ), f"{contract.id} omitted required persisted effects"
+    assert set(REQUIRED_DATABASE_RELATIONS) == {contract.id for contract in contracts}
 
 
 def test_every_claimed_scenario_is_present_and_owned_by_the_same_command() -> None:
@@ -110,6 +118,7 @@ def test_all_18_operations_now_have_published_authority() -> None:
 
 def test_every_declared_mcp_readback_has_an_exact_argument_contract() -> None:
     for operation in load_operation_matrix():
+        assert operation.mcp_readback_tool != "erp_operation_status_get", operation.id
         arguments = mcp_readback_arguments(
             operation.mcp_readback_tool or "",
             branch_id="branch-id",
@@ -117,6 +126,28 @@ def test_every_declared_mcp_readback_has_an_exact_argument_contract() -> None:
             resource_id="resource-id",
         )
         assert arguments
+
+
+def test_command_bound_mcp_readbacks_receive_only_the_exact_command() -> None:
+    command_bound = {
+        "erp_sales_dispatch_readback",
+        "erp_supplier_advance_readback",
+        "erp_customer_receipt_readback",
+        "erp_supplier_payment_readback",
+        "erp_sales_return_readback",
+        "erp_purchase_return_readback",
+        "erp_inventory_adjustment_readback",
+        "erp_inventory_transfer_readback",
+        "erp_bank_reconciliation_get",
+        "erp_expense_claim_readback",
+    }
+    for tool_name in command_bound:
+        assert mcp_readback_arguments(
+            tool_name,
+            branch_id="branch-id",
+            command_id="command-id",
+            resource_id="resource-id",
+        ) == {"command_request_id": "command-id"}
 
 
 def test_scope_gate_rejects_product_edits() -> None:

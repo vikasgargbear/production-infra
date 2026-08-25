@@ -20,6 +20,105 @@ RELATION_RE = re.compile(
 APPROVAL_POLICIES = {"actor_confirmation", "separate_approver"}
 AVAILABILITY = {"published", "blocked"}
 
+# Minimum persisted effects that Live18 must reconcile for each operation.  This
+# is deliberately narrower than the authority matrix (which also includes
+# locked inputs and command metadata), but it may never be weakened by merely
+# omitting an expected downstream relation from operation_matrix.json.
+REQUIRED_DATABASE_RELATIONS: dict[str, frozenset[str]] = {
+    "sales_invoice": frozenset({
+        "sales.invoices", "sales.invoice_lines", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "tax.documents", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+    }),
+    "sales_order": frozenset({"sales.orders", "sales.order_lines"}),
+    "delivery_challan": frozenset({
+        "sales.dispatches", "sales.dispatch_lines", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "finance.accounting_events",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "purchase_order": frozenset({
+        "procurement.purchase_orders", "procurement.purchase_order_lines",
+    }),
+    "supplier_advance": frozenset({
+        "finance.payments", "procurement.purchase_order_advance_allocations",
+        "finance.open_items", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines",
+    }),
+    "goods_receipt": frozenset({
+        "procurement.goods_receipts", "procurement.goods_receipt_lines",
+        "inventory.batches", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances",
+    }),
+    "supplier_invoice": frozenset({
+        "procurement.supplier_invoices", "procurement.supplier_invoice_lines",
+        "procurement.supplier_invoice_receipt_allocations", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+        "tax.documents",
+    }),
+    "customer_receipt": frozenset({
+        "finance.payments", "finance.allocations", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+    }),
+    "supplier_payment": frozenset({
+        "finance.payments", "finance.allocations", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+    }),
+    "sales_return": frozenset({
+        "sales.returns", "sales.return_lines", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "finance.adjustment_notes",
+        "finance.adjustment_note_lines", "finance.accounting_events",
+        "finance.journal_entries", "finance.journal_lines", "finance.allocations",
+        "finance.open_items", "tax.documents",
+    }),
+    "purchase_return": frozenset({
+        "procurement.purchase_returns", "procurement.purchase_return_lines",
+        "inventory.inventory_documents", "inventory.inventory_document_lines",
+        "inventory.stock_ledger_entries", "inventory.stock_balances",
+        "finance.adjustment_notes", "finance.adjustment_note_lines",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+        "finance.allocations", "finance.open_items", "tax.documents",
+    }),
+    "stock_adjustment": frozenset({
+        "inventory.inventory_documents", "inventory.inventory_document_lines",
+        "inventory.stock_ledger_entries", "inventory.stock_balances",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "stock_transfer": frozenset({
+        "inventory.inventory_documents", "inventory.inventory_document_lines",
+        "inventory.stock_balances",
+    }),
+    "destruction": frozenset({
+        "compliance.destructions", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "tax.input_credit_applications",
+        "tax.input_credit_reversal_events", "finance.accounting_events",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "customer_credit_note": frozenset({
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.open_items",
+        "finance.allocations", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines", "tax.documents",
+    }),
+    "supplier_debit_note": frozenset({
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.open_items",
+        "finance.allocations", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines", "tax.documents",
+    }),
+    "bank_reconciliation": frozenset({
+        "finance.reconciliation_matches", "finance.bank_statement_lines",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "expense_claim": frozenset({
+        "finance.expense_claims", "finance.expense_claim_lines", "core.attachments",
+        "finance.accounts", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines",
+    }),
+}
+
 
 class MatrixContractError(ValueError):
     """The checked-in live-acceptance matrix is incomplete or ambiguous."""

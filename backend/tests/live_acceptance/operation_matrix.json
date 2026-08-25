@@ -40,8 +40,8 @@
       "prepare_tool": "erp_sales_dispatch_prepare",
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/canonical/sales-dispatches/{resource_id}/acceptance-readback",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["sales.dispatches", "sales.dispatch_lines"],
+      "mcp_readback_tool": "erp_sales_dispatch_readback",
+      "database_relations": ["sales.dispatches", "sales.dispatch_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["sales_dispatch_mixed"],
       "availability": "published"
     },
@@ -62,8 +62,8 @@
       "prepare_tool": "erp_supplier_advance_prepare",
       "approval_policy": "separate_approver",
       "rest_readback": "/api/canonical/supplier-advances/{resource_id}",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["finance.payments", "procurement.purchase_order_advance_allocations", "finance.journal_entries", "finance.journal_lines"],
+      "mcp_readback_tool": "erp_supplier_advance_readback",
+      "database_relations": ["finance.payments", "procurement.purchase_order_advance_allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["supplier_advance_no_withholding"],
       "availability": "published"
     },
@@ -74,7 +74,7 @@
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/canonical/goods-receipts/{resource_id}",
       "mcp_readback_tool": "erp_goods_receipt_get",
-      "database_relations": ["procurement.goods_receipts", "procurement.goods_receipt_lines"],
+      "database_relations": ["procurement.goods_receipts", "procurement.goods_receipt_lines", "inventory.batches", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances"],
       "scenario_steps": ["goods_receipt_mixed"],
       "availability": "published"
     },
@@ -85,7 +85,7 @@
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/canonical/supplier-invoices/{resource_id}",
       "mcp_readback_tool": "erp_supplier_invoice_get",
-      "database_relations": ["procurement.supplier_invoices", "procurement.supplier_invoice_lines"],
+      "database_relations": ["procurement.supplier_invoices", "procurement.supplier_invoice_lines", "procurement.supplier_invoice_receipt_allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "tax.documents"],
       "scenario_steps": ["supplier_invoice_mixed"],
       "availability": "published"
     },
@@ -95,8 +95,8 @@
       "prepare_tool": "erp_customer_receipt_prepare",
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/payment-allocation/payment/{resource_id}/readback",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["finance.payments", "finance.allocations", "finance.journal_entries", "finance.journal_lines"],
+      "mcp_readback_tool": "erp_customer_receipt_readback",
+      "database_relations": ["finance.payments", "finance.allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["customer_receipt_partial"],
       "availability": "published"
     },
@@ -106,8 +106,8 @@
       "prepare_tool": "erp_supplier_payment_prepare",
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/canonical/supplier-payments/{resource_id}",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["finance.payments", "finance.allocations", "finance.journal_entries", "finance.journal_lines"],
+      "mcp_readback_tool": "erp_supplier_payment_readback",
+      "database_relations": ["finance.payments", "finance.allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["supplier_payment_balance_no_withholding"],
       "availability": "published"
     },
@@ -117,8 +117,8 @@
       "prepare_tool": "erp_sales_return_prepare",
       "approval_policy": "separate_approver",
       "rest_readback": "/api/canonical/returns/sales/{resource_id}",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["sales.returns", "sales.return_lines", "inventory.stock_ledger_entries"],
+      "mcp_readback_tool": "erp_sales_return_readback",
+      "database_relations": ["sales.returns", "sales.return_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.allocations", "finance.open_items", "tax.documents"],
       "scenario_steps": ["sales_return_partial", "sales_return_final", "sales_return_commercial_only"],
       "availability": "published"
     },
@@ -128,8 +128,8 @@
       "prepare_tool": "erp_purchase_return_prepare",
       "approval_policy": "separate_approver",
       "rest_readback": "/api/canonical/returns/purchases/{resource_id}",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["procurement.purchase_returns", "procurement.purchase_return_lines", "inventory.stock_ledger_entries"],
+      "mcp_readback_tool": "erp_purchase_return_readback",
+      "database_relations": ["procurement.purchase_returns", "procurement.purchase_return_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.allocations", "finance.open_items", "tax.documents"],
       "scenario_steps": ["purchase_return_partial", "purchase_return_final"],
       "availability": "published"
     },
@@ -139,8 +139,8 @@
       "prepare_tool": "erp_inventory_adjustment_prepare",
       "approval_policy": "separate_approver",
       "rest_readback": "/api/web/actions/inventory-adjustment/commands/{command_request_id}/readback",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances"],
+      "mcp_readback_tool": "erp_inventory_adjustment_readback",
+      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["inventory_adjustment_cycle_count_gain"],
       "availability": "published"
     },
@@ -150,7 +150,7 @@
       "prepare_tool": "erp_inventory_transfer_prepare",
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/canonical/inventory-transfers/{resource_id}",
-      "mcp_readback_tool": "erp_operation_status_get",
+      "mcp_readback_tool": "erp_inventory_transfer_readback",
       "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_balances"],
       "scenario_steps": ["inventory_transfer_inter_branch_fefo"],
       "availability": "published"
@@ -162,7 +162,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/web/actions/inventory-destruction/commands/{command_request_id}/readback",
       "mcp_readback_tool": "erp_inventory_destruction_readback_get",
-      "database_relations": ["compliance.destructions", "inventory.inventory_documents", "inventory.stock_ledger_entries", "tax.input_credit_lots", "tax.input_credit_applications", "tax.input_credit_reversal_events", "tax.returns", "finance.journal_entries"],
+      "database_relations": ["compliance.destructions", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "tax.input_credit_lots", "tax.input_credit_applications", "tax.input_credit_reversal_events", "tax.returns", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["inventory_destruction_certified_full_balance"],
       "availability": "published"
     },
@@ -195,7 +195,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/web/actions/bank-reconciliation/commands/{command_request_id}/readback",
       "mcp_readback_tool": "erp_bank_reconciliation_get",
-      "database_relations": ["finance.reconciliation_matches", "finance.bank_statement_lines", "finance.journal_entries"],
+      "database_relations": ["finance.reconciliation_matches", "finance.bank_statement_lines", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["bank_reconciliation_exact_full_match"],
       "availability": "published"
     },

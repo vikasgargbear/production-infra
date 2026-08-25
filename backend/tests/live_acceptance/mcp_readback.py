@@ -14,7 +14,15 @@ RESOURCE_ID_ARGUMENTS = {
 COMMAND_ID_READBACKS = {
     "erp_operation_status_get",
     "erp_bank_reconciliation_get",
+    "erp_customer_receipt_readback",
     "erp_expense_claim_readback",
+    "erp_inventory_adjustment_readback",
+    "erp_inventory_transfer_readback",
+    "erp_purchase_return_readback",
+    "erp_sales_dispatch_readback",
+    "erp_sales_return_readback",
+    "erp_supplier_advance_readback",
+    "erp_supplier_payment_readback",
 }
 
 

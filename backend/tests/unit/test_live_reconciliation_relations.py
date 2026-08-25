@@ -1,5 +1,7 @@
 from tests.live_canonical.reconciliation import (
     HEADER_OWNED_DETAIL_RELATIONS,
+    JOURNAL_EFFECT_OPERATIONS,
+    STOCK_EFFECT_OPERATIONS,
     CanonicalReconciler,
 )
 
@@ -52,3 +54,18 @@ def test_bank_reconciliation_relation_is_explicit_and_fails_closed() -> None:
         assert "omitted reviewed relation bank_statement_line_id" in str(error)
     else:
         raise AssertionError("missing bank-statement-line identity must fail closed")
+
+
+def test_stock_and_journal_effect_sets_cover_posting_operations() -> None:
+    assert {
+        "sales.dispatch", "sales.invoice", "sales.return",
+        "procurement.goods_receipt", "procurement.purchase_return",
+        "inventory.transfer", "inventory.adjustment", "inventory.destruction",
+    } == STOCK_EFFECT_OPERATIONS
+    assert {
+        "sales.dispatch", "sales.invoice", "sales.return",
+        "procurement.supplier_invoice", "procurement.purchase_return",
+        "finance.customer_receipt", "finance.supplier_payment",
+        "finance.supplier_advance", "finance.adjustment_note",
+        "finance.expense_claim", "inventory.adjustment", "inventory.destruction",
+    } == JOURNAL_EFFECT_OPERATIONS

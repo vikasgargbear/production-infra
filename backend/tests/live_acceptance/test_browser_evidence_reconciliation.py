@@ -17,6 +17,7 @@ from app.domain.operator_actions.contract import (
 
 from .contract import load_ready_operation_matrix
 from .mcp_readback import mcp_readback_arguments
+from .readback_consistency import assert_canonical_projection_consistency
 
 
 pytestmark = pytest.mark.integration
@@ -199,10 +200,18 @@ def test_preview_ignores_a_prior_missing_required_422() -> None:
     }) == {"customer_id": "canonical-customer"}
 
 
-def _assert_mcp_identity(payload: Any, *, command_id: str, resource_id: str) -> None:
+def _assert_mcp_identity(
+    payload: Any,
+    *,
+    command_id: str,
+    resource_id: str,
+    require_command_id: bool = False,
+) -> None:
     encoded = json.dumps(payload, sort_keys=True)
     assert resource_id in encoded, "MCP readback omitted the canonical resource UUID"
     discovered_command = _find(payload, "command_request_id")
+    if require_command_id:
+        assert discovered_command is not None, "MCP command status omitted command_request_id"
     if discovered_command is not None:
         assert str(discovered_command) == command_id
 
@@ -211,7 +220,13 @@ def _assert_mcp_identity(payload: Any, *, command_id: str, resource_id: str) -> 
     os.environ.get("LIVE18_REQUIRED") != "true",
     reason="exact-SHA live18 reconciliation was not requested",
 )
-def test_all_browser_resources_reconcile_through_mcp_and_postgresql(
+@pytest.mark.parametrize(
+    "contract",
+    load_ready_operation_matrix(),
+    ids=lambda contract: contract.id,
+)
+def test_browser_resource_reconciles_through_mcp_and_postgresql(
+    contract,
     canonical_live_config,
     mcp_client,
     reconciler,
@@ -220,58 +235,68 @@ def test_all_browser_resources_reconcile_through_mcp_and_postgresql(
     evidence_value = os.environ.get("LIVE18_EVIDENCE_DIR", "").strip()
     assert evidence_value, "LIVE18_EVIDENCE_DIR is required"
     evidence_dir = Path(evidence_value)
-    contracts = load_ready_operation_matrix()
-    assert all(item.availability == "published" for item in contracts), (
-        "every template-ready operation must be published before live certification"
-    )
+    assert contract.availability == "published", contract.id
 
     expected_sha = os.environ.get("LIVE18_EXPECTED_DEPLOYED_SHA", "").strip().lower()
     assert len(expected_sha) == 40
-    for contract in contracts:
-        evidence_path = evidence_dir / f"{contract.id}.json"
-        assert evidence_path.is_file(), f"missing desktop evidence: {evidence_path}"
-        evidence = json.loads(evidence_path.read_text())
-        assert evidence["operation_id"] == contract.id
-        assert evidence["tested_sha"] == expected_sha
-        assert evidence["organization_id"] == str(canonical_live_config.test_org_id)
-        assert evidence["branch_id"] == str(canonical_live_config.test_branch_id)
-        assert evidence["requester_user_id"] != evidence["reviewer_user_id"]
-        command_id = str(uuid.UUID(evidence["command_request_id"]))
-        resource_id = str(uuid.UUID(evidence["resource_id"]))
+    evidence_path = evidence_dir / f"{contract.id}.json"
+    assert evidence_path.is_file(), f"missing desktop evidence: {evidence_path}"
+    evidence = json.loads(evidence_path.read_text())
+    assert evidence["operation_id"] == contract.id
+    assert evidence["tested_sha"] == expected_sha
+    assert evidence["organization_id"] == str(canonical_live_config.test_org_id)
+    assert evidence["branch_id"] == str(canonical_live_config.test_branch_id)
+    assert evidence["requester_user_id"] != evidence["reviewer_user_id"]
+    command_id = str(uuid.UUID(evidence["command_request_id"]))
+    resource_id = str(uuid.UUID(evidence["resource_id"]))
 
-        mcp_status = mcp_client.call(
-            "erp_operation_status_get", {"command_request_id": command_id}
-        )
-        _assert_mcp_identity(mcp_status, command_id=command_id, resource_id=resource_id)
-        declared_tool = contract.mcp_readback_tool
-        assert declared_tool
-        if declared_tool == "erp_operation_status_get":
-            declared_readback = mcp_status
-        else:
-            declared_readback = mcp_client.call(
-                declared_tool,
-                mcp_readback_arguments(
-                    declared_tool,
-                    branch_id=evidence["branch_id"],
-                    command_id=command_id,
-                    resource_id=resource_id,
-                ),
-            )
-        _assert_mcp_identity(
-            declared_readback,
+    mcp_status = mcp_client.call(
+        "erp_operation_status_get", {"command_request_id": command_id}
+    )
+    _assert_mcp_identity(
+        mcp_status,
+        command_id=command_id,
+        resource_id=resource_id,
+        require_command_id=True,
+    )
+    assert _find(mcp_status, "status") == "succeeded", (
+        f"{contract.id} MCP command status is not succeeded"
+    )
+    declared_tool = contract.mcp_readback_tool
+    assert declared_tool and declared_tool != "erp_operation_status_get", (
+        f"{contract.id} must use an operation-specific MCP readback"
+    )
+    declared_readback = mcp_client.call(
+        declared_tool,
+        mcp_readback_arguments(
+            declared_tool,
+            branch_id=evidence["branch_id"],
             command_id=command_id,
             resource_id=resource_id,
-        )
-        database = reconciler.reconcile(
-            command_id,
-            contract.command_operation.removesuffix(".prepare"),
-            resource_id,
-            _preview(evidence),
-            _validated_prepare_request(evidence),
-        )
-        reconciler.assert_cross_tenant_denied(
-            contract.command_operation.removesuffix(".prepare"),
-            resource_id,
-            denial_db_query,
-        )
-        assert database, f"{contract.id} produced no database reconciliation evidence"
+        ),
+    )
+    _assert_mcp_identity(
+        declared_readback,
+        command_id=command_id,
+        resource_id=resource_id,
+    )
+    operation = contract.command_operation.removesuffix(".prepare")
+    database = reconciler.reconcile(
+        command_id,
+        operation,
+        resource_id,
+        _preview(evidence),
+        _validated_prepare_request(evidence),
+    )
+    assert database, f"{contract.id} produced no database reconciliation evidence"
+    assert_canonical_projection_consistency(
+        operation,
+        rest=evidence["rest_readback"],
+        mcp=declared_readback,
+        database=database,
+    )
+    reconciler.assert_cross_tenant_denied(
+        operation,
+        resource_id,
+        denial_db_query,
+    )

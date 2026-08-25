@@ -121,6 +121,30 @@ PAYMENT_OPERATIONS = {
     "finance.supplier_payment",
     "finance.supplier_advance",
 }
+STOCK_EFFECT_OPERATIONS = {
+    "sales.dispatch",
+    "sales.invoice",
+    "sales.return",
+    "procurement.goods_receipt",
+    "procurement.purchase_return",
+    "inventory.transfer",
+    "inventory.adjustment",
+    "inventory.destruction",
+}
+JOURNAL_EFFECT_OPERATIONS = {
+    "sales.dispatch",
+    "sales.invoice",
+    "sales.return",
+    "procurement.supplier_invoice",
+    "procurement.purchase_return",
+    "finance.customer_receipt",
+    "finance.supplier_payment",
+    "finance.supplier_advance",
+    "finance.adjustment_note",
+    "finance.expense_claim",
+    "inventory.adjustment",
+    "inventory.destruction",
+}
 
 
 def _qualified(identifier: str) -> str:
@@ -340,24 +364,73 @@ class CanonicalReconciler:
 
         journal = self.query(
             """
-            SELECT count(*)::integer AS entry_count,
-                   COALESCE(sum(je.transaction_debit_total), 0) AS debit_total,
-                   COALESCE(sum(je.transaction_credit_total), 0) AS credit_total,
-                   COALESCE(sum(je.functional_debit_total), 0) AS functional_debit_total,
-                   COALESCE(sum(je.functional_credit_total), 0) AS functional_credit_total
-              FROM finance.accounting_events ae
-              JOIN finance.journal_entries je
-                ON je.org_id = ae.org_id AND je.id = ae.journal_entry_id
-             WHERE ae.org_id = %s::uuid
-               AND (ae.sales_invoice_id = %s::uuid OR ae.supplier_invoice_id = %s::uuid
-                    OR ae.payment_id = %s::uuid OR ae.inventory_document_id = %s::uuid
-                    OR ae.expense_claim_id = %s::uuid OR ae.adjustment_note_id = %s::uuid)
+            WITH related_inventory AS (
+                SELECT id
+                  FROM inventory.inventory_documents
+                 WHERE org_id=%s::uuid
+                   AND (id=%s::uuid OR sales_dispatch_id=%s::uuid
+                        OR sales_invoice_id=%s::uuid OR sales_return_id=%s::uuid
+                        OR goods_receipt_id=%s::uuid OR supplier_invoice_id=%s::uuid
+                        OR purchase_return_id=%s::uuid OR destruction_id=%s::uuid)
+            ), related_adjustments AS (
+                SELECT id
+                  FROM finance.adjustment_notes
+                 WHERE org_id=%s::uuid
+                   AND (sales_return_id=%s::uuid OR purchase_return_id=%s::uuid)
+            ), entries AS (
+                SELECT DISTINCT je.id,je.transaction_debit_total,
+                       je.transaction_credit_total,je.functional_debit_total,
+                       je.functional_credit_total
+                  FROM finance.accounting_events ae
+                  JOIN finance.journal_entries je
+                    ON je.org_id=ae.org_id AND je.id=ae.journal_entry_id
+                 WHERE ae.org_id=%s::uuid
+                   AND (ae.sales_invoice_id=%s::uuid OR ae.supplier_invoice_id=%s::uuid
+                        OR ae.payment_id=%s::uuid
+                        OR ae.inventory_document_id IN (SELECT id FROM related_inventory)
+                        OR ae.expense_claim_id=%s::uuid
+                        OR ae.adjustment_note_id=%s::uuid
+                        OR ae.adjustment_note_id IN (SELECT id FROM related_adjustments))
+            ), line_totals AS (
+                SELECT count(line.id)::integer AS line_count,
+                       COALESCE(sum(line.transaction_debit),0) AS line_debit_total,
+                       COALESCE(sum(line.transaction_credit),0) AS line_credit_total,
+                       COALESCE(sum(line.functional_debit),0) AS line_functional_debit_total,
+                       COALESCE(sum(line.functional_credit),0) AS line_functional_credit_total
+                  FROM entries
+                  JOIN finance.journal_lines line ON line.org_id=%s::uuid
+                   AND line.journal_entry_id=entries.id
+            )
+            SELECT (SELECT count(*)::integer FROM entries) AS entry_count,
+                   (SELECT COALESCE(sum(transaction_debit_total),0) FROM entries)
+                     AS debit_total,
+                   (SELECT COALESCE(sum(transaction_credit_total),0) FROM entries)
+                     AS credit_total,
+                   (SELECT COALESCE(sum(functional_debit_total),0) FROM entries)
+                     AS functional_debit_total,
+                   (SELECT COALESCE(sum(functional_credit_total),0) FROM entries)
+                     AS functional_credit_total,
+                   line_totals.line_count,line_totals.line_debit_total,
+                   line_totals.line_credit_total,line_totals.line_functional_debit_total,
+                   line_totals.line_functional_credit_total
+              FROM line_totals
             """,
-            (self.org_id,) + (resource_id,) * 6,
+            (self.org_id,)
+            + (resource_id,) * 8
+            + (self.org_id, resource_id, resource_id, self.org_id)
+            + (resource_id,) * 5
+            + (self.org_id,),
         )[0]
+        if operation in JOURNAL_EFFECT_OPERATIONS:
+            assert journal["entry_count"] > 0, f"{operation} posted without accounting evidence"
+            assert journal["line_count"] > 0, f"{operation} posted without journal lines"
         if journal["entry_count"]:
             assert journal["debit_total"] == journal["credit_total"]
             assert journal["functional_debit_total"] == journal["functional_credit_total"]
+            assert journal["line_debit_total"] == journal["debit_total"]
+            assert journal["line_credit_total"] == journal["credit_total"]
+            assert journal["line_functional_debit_total"] == journal["functional_debit_total"]
+            assert journal["line_functional_credit_total"] == journal["functional_credit_total"]
 
         stock = self.query(
             """
@@ -375,6 +448,8 @@ class CanonicalReconciler:
             """,
             (self.org_id,) + (resource_id,) * 8,
         )[0]
+        if operation in STOCK_EFFECT_OPERATIONS:
+            assert stock["entry_count"] > 0, f"{operation} posted without stock-ledger evidence"
         if stock["entry_count"]:
             projection = self.query(
                 """
@@ -810,6 +885,8 @@ class CanonicalReconciler:
             """,
             (self.org_id, resource_id, resource_id, resource_id),
         )
+        if operation in {"sales.invoice", "procurement.supplier_invoice"}:
+            assert len(open_items) == 1, f"{operation} posted without one authoritative open item"
         sales_invoice_evidence: dict[str, Any] = {}
         if operation == "sales.invoice":
             coverage = self.query(
@@ -1021,6 +1098,11 @@ class CanonicalReconciler:
             )
             if operation != "finance.supplier_advance":
                 assert allocations, "settlement payment posted without typed allocations"
+                assert sum(
+                    (Decimal(str(row["amount"])) for row in allocations), Decimal("0")
+                ) == Decimal(str(header[0]["amount"])), (
+                    f"{operation} allocations do not reconcile to its payment amount"
+                )
 
         withholdings = self.query(
             """
