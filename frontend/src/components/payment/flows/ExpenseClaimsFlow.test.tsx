@@ -84,6 +84,7 @@ it('uses canonical claimant, account and receipt context to reach immutable prep
 
 it('treats a blank amount as invalid rather than inventing zero', async () => {
   render(<ExpenseClaimsFlow onClose={jest.fn()} />);
+  expect(screen.getByText('Required: select a branch, exact claim period, reimbursement liability, verified unused receipt, expense account, merchant, description, amount, and business purpose.')).not.toBeNull();
   await waitFor(() => expect((screen.getByLabelText('Branch') as HTMLSelectElement).options.length).toBe(2));
   fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
   expect(await screen.findByText('Exact total: Invalid amount')).not.toBeNull();

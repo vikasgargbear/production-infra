@@ -206,6 +206,7 @@ REQUIRED_PERMISSIONS = (
     "finance.supplier_advance.create",
     "finance.supplier_payment.create",
     "finance.adjustment_note.manage",
+    "finance.expense.manage",
     "finance.journal.post",
     "inventory.adjustment.create",
     "inventory.transfer.create",

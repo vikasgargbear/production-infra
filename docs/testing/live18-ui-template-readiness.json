@@ -1,6 +1,6 @@
 {
   "schema": "aasopharma.live18.ui-template-readiness.v1",
-  "ready_count": 16,
+  "ready_count": 17,
   "operations": [
     {"id":"sales_invoice","status":"ready","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts","frontend/src/components/sales/invoice/utils/canonicalInvoiceCommand.ts","frontend/src/components/sales/invoice/steps/InvoiceItemsStep.tsx","frontend/src/components/sales/invoice/steps/InvoiceDetailsStep.tsx","frontend/src/components/global/ui/AddressForm.tsx","frontend/src/components/global/selector/BatchSelector.tsx","frontend/e2e/live18/templates/sales_invoice.json"],"missing":[]},
     {"id":"sales_order","status":"ready","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts","frontend/src/components/sales/order/SalesOrderFlow.tsx","frontend/src/components/sales/order/steps/OrderItemsStep.tsx","frontend/e2e/live18/templates/sales_order.json"],"missing":[]},
@@ -19,6 +19,6 @@
     {"id":"customer_credit_note","status":"ready","evidence_sources":["backend/scripts/compile_live18_browser_fixture.py","frontend/src/components/payment/flows/CreditDebitFlow.tsx","frontend/e2e/live18/templates/customer_credit_note.json"],"missing":[]},
     {"id":"supplier_debit_note","status":"ready","evidence_sources":["backend/scripts/compile_live18_browser_fixture.py","frontend/src/components/payment/flows/CreditDebitFlow.tsx","frontend/e2e/live18/templates/supplier_debit_note.json"],"missing":[]},
     {"id":"bank_reconciliation","status":"ready","evidence_sources":["backend/scripts/provision_canonical_demo.py","backend/scripts/compile_live18_browser_fixture.py","frontend/src/components/payment/flows/BankReconciliationFlow.tsx","frontend/e2e/live18/templates/bank_reconciliation.json"],"missing":[]},
-    {"id":"expense_claim","status":"blocked","evidence_sources":["frontend/src/components/payment/flows/ExpenseClaimsFlow.tsx"],"missing":["visible live selector proof","authoritative claimant/account/verified-unused-receipt evidence","reviewed amount/description/attestation","independent approval/resume selectors"]}
+    {"id":"expense_claim","status":"ready","evidence_sources":["backend/scripts/provision_canonical_demo.py","backend/scripts/compile_live18_browser_fixture.py","frontend/src/components/payment/flows/ExpenseClaimsFlow.tsx","frontend/e2e/live18/templates/expense_claim.json"],"missing":[]}
   ]
 }

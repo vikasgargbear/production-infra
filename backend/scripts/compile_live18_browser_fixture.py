@@ -450,6 +450,68 @@ def resolve_authoritative_facts(
        ORDER BY attachment.verified_at DESC,attachment.id
        LIMIT 2
     """
+    expense_claim_sql = """
+      SELECT membership.id::text,membership.row_version,
+             COALESCE(employee.display_name,user_row.display_name),
+             expense.id::text,expense.code,expense.name,
+             reimbursement.id::text,reimbursement.code,reimbursement.name,
+             receipt.id::text,receipt.original_filename,
+             to_char(receipt.document_date,'YYYY-MM-DD'),receipt.status,
+             to_char(receipt.verified_at AT TIME ZONE 'UTC',
+                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+             to_char(receipt.retention_until,'YYYY-MM-DD'),
+             pg_catalog.encode(receipt.sha256,'hex')
+        FROM core.memberships membership
+        JOIN core.users user_row
+          ON user_row.id=membership.user_id
+         AND user_row.auth_user_id=%s AND user_row.status='active'
+        LEFT JOIN hr.employees employee
+          ON employee.org_id=membership.org_id
+         AND employee.membership_id=membership.id
+         AND employee.status='active'
+         AND employee.branch_id=%s
+        JOIN finance.accounts expense
+          ON expense.org_id=membership.org_id AND expense.status='active'
+         AND expense.account_type='expense' AND expense.currency_code='INR'
+         AND NOT expense.allows_party_posting AND expense.code=%s
+        JOIN core.settings reimbursement_role
+          ON reimbursement_role.org_id=membership.org_id
+         AND reimbursement_role.status='active'
+         AND reimbursement_role.branch_id IS NULL
+         AND reimbursement_role.namespace='finance.account_roles'
+         AND reimbursement_role.key='member_reimbursement_liability'
+         AND reimbursement_role.value_type='text'
+        JOIN finance.accounts reimbursement
+          ON reimbursement.org_id=reimbursement_role.org_id
+         AND reimbursement.id=reimbursement_role.value_text::uuid
+         AND reimbursement.status='active'
+         AND reimbursement.account_type='liability'
+         AND reimbursement.currency_code='INR'
+         AND NOT reimbursement.allows_party_posting
+         AND reimbursement.code=%s
+        JOIN core.attachments receipt
+          ON receipt.org_id=membership.org_id
+         AND receipt.evidence_kind='expense_receipt'
+         AND receipt.original_filename=%s
+         AND receipt.status IN ('verified','retained')
+         AND receipt.verified_at IS NOT NULL
+         AND receipt.verified_at<=transaction_timestamp()
+         AND receipt.document_date IS NOT NULL
+         AND receipt.retention_until>=receipt.document_date
+         AND receipt.byte_size>0
+         AND pg_catalog.octet_length(receipt.sha256)=32
+         AND NOT EXISTS (
+             SELECT 1
+               FROM finance.expense_claim_lines prior_line
+               JOIN finance.expense_claims prior_claim
+                 ON prior_claim.org_id=prior_line.org_id
+                AND prior_claim.id=prior_line.expense_claim_id
+              WHERE prior_line.org_id=receipt.org_id
+                AND prior_line.receipt_attachment_id=receipt.id
+                AND prior_claim.status NOT IN ('rejected','cancelled')
+         )
+       WHERE membership.org_id=%s AND membership.status='active'
+    """
     with psycopg2.connect(database_url) as connection:
         connection.set_session(readonly=True, autocommit=False)
         with connection.cursor() as cursor:
@@ -488,6 +550,19 @@ def resolve_authoritative_facts(
                 (org_id, identities["supplier_account_id"], f"DEMO-SUP-CN-{run_id}"),
             )
             adjustment_evidence_rows = cursor.fetchall()
+            run_attempt = run_token.split("-", 1)[1]
+            cursor.execute(
+                expense_claim_sql,
+                (
+                    auth_user_id,
+                    identities["branch_id"],
+                    f"LIVE18-EXP-{run_id}-{run_attempt}",
+                    f"LIVE18-REIMB-{run_id}-{run_attempt}",
+                    f"LIVE18-EXPENSE-{run_id}-{run_attempt}.pdf",
+                    org_id,
+                ),
+            )
+            expense_claim_rows = cursor.fetchall()
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
@@ -518,6 +593,11 @@ def resolve_authoritative_facts(
             "canonical statutory adjustment rules, retained recipient evidence, "
             "and run-scoped supplier credit-note evidence resolved "
             f"{len(adjustment_evidence_rows)} rows, expected one"
+        )
+    if len(expense_claim_rows) != 1:
+        raise FixtureCompileError(
+            "canonical expense claimant, run-scoped accounts, and exact unused "
+            f"reviewed receipt resolved {len(expense_claim_rows)} rows, expected one"
         )
     goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
@@ -553,6 +633,24 @@ def resolve_authoritative_facts(
         supplier_credit_note_number,
     ) = adjustment_evidence_rows[0]
     (
+        expense_claimant_membership_id,
+        expense_claimant_membership_row_version,
+        expense_claimant_name,
+        expense_account_id,
+        expense_account_code,
+        expense_account_name,
+        reimbursement_account_id,
+        reimbursement_account_code,
+        reimbursement_account_name,
+        expense_receipt_attachment_id,
+        expense_receipt_filename,
+        expense_receipt_document_date,
+        expense_receipt_status,
+        expense_receipt_verified_at,
+        expense_receipt_retention_until,
+        expense_receipt_sha256,
+    ) = expense_claim_rows[0]
+    (
         cycle_count_membership_id,
         cycle_count_evidence_id,
         cycle_count_completed_at,
@@ -578,6 +676,13 @@ def resolve_authoritative_facts(
             "purchase_adjustment_rule_id": purchase_adjustment_rule_id,
             "recipient_itc_evidence_attachment_id": recipient_itc_evidence_id,
             "supplier_credit_note_portal_line_id": supplier_credit_note_portal_line_id,
+            "expense_claimant_membership_id": expense_claimant_membership_id,
+            "expense_claimant_membership_row_version": (
+                expense_claimant_membership_row_version
+            ),
+            "expense_account_id": expense_account_id,
+            "expense_reimbursement_account_id": reimbursement_account_id,
+            "expense_receipt_attachment_id": expense_receipt_attachment_id,
         },
         "display": {
             **resolved,
@@ -601,12 +706,27 @@ def resolve_authoritative_facts(
                 f"{purchase_adjustment_reason_code} — statutory"
             ),
             "supplier_credit_note_number": supplier_credit_note_number,
+            "expense_claimant_name": expense_claimant_name,
+            "expense_account_label": (
+                f"{expense_account_code} — {expense_account_name}"
+            ),
+            "expense_reimbursement_account_label": (
+                f"{reimbursement_account_code} — {reimbursement_account_name}"
+            ),
+            "expense_receipt_label": (
+                f"{expense_receipt_filename} — {expense_receipt_document_date} — "
+                f"{expense_receipt_status}"
+            ),
+            "expense_receipt_sha256": expense_receipt_sha256,
         },
         "clock": {
             "business_date": rows[0][-2],
             "business_datetime_local": rows[0][-1],
             "cycle_count_completed_at_utc": cycle_count_completed_at,
             "recipient_itc_confirmed_at_utc": recipient_itc_confirmed_at,
+            "expense_receipt_document_date": expense_receipt_document_date,
+            "expense_receipt_verified_at_utc": expense_receipt_verified_at,
+            "expense_receipt_retention_until": expense_receipt_retention_until,
         },
         "choice": {
             "supplier_invoice_number": resolved_invoice_number,
@@ -655,6 +775,27 @@ def _operation_facts(
             None,
         ),
     }
+    if operation_id == "expense_claim":
+        amount = _leaf(scalars, "expense_claim_amount", "reviewed scalar")
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,17})\.[0-9]{2}", amount):
+            raise FixtureCompileError(
+                "expense_claim_amount must be an exact positive INR amount with two decimal places"
+            )
+        if Decimal(amount) <= 0:
+            raise FixtureCompileError(
+                "expense_claim_amount must be greater than zero"
+            )
+        for key, maximum in (
+            ("expense_claim_purpose", 1024),
+            ("expense_claim_merchant", 256),
+            ("expense_claim_description", 1024),
+        ):
+            value = _leaf(scalars, key, "reviewed scalar").strip()
+            if not value or len(value) > maximum:
+                raise FixtureCompileError(
+                    f"{key} must be specific non-empty text of at most {maximum} characters"
+                )
+        return facts
     if operation_id in adjustment_limits:
         (
             original_billed_key,

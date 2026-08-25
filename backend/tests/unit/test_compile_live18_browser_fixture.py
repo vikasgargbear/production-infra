@@ -542,6 +542,53 @@ def test_supplier_debit_note_reuses_portal_reconciled_return_quantities() -> Non
         )
 
 
+def test_expense_claim_targets_exact_receipt_accounts_and_reviewed_amount() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/expense_claim.json").read_text()
+    )
+    scalars = {
+        "expense_claim_amount": "168.00",
+        "expense_claim_purpose": "Reviewed customer-site visit",
+        "expense_claim_merchant": "Reviewed Taxi Private Limited",
+        "expense_claim_description": "Taxi from branch to customer site",
+    }
+    facts = {
+        "identity": {
+            "branch_id": "d3000000-0000-7000-8000-000000000005",
+            "expense_reimbursement_account_id": "d3000000-0000-7000-8000-000000000060",
+            "expense_receipt_attachment_id": "d3000000-0000-7000-8000-000000000061",
+            "expense_account_id": "d3000000-0000-7000-8000-000000000062",
+        },
+        "clock": {"expense_receipt_document_date": "2026-08-25"},
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        _operation_facts("expense_claim", facts, scalars, used),
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("expense_claim", operation, "separate_approver")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][1]["value"] == (
+        "d3000000-0000-7000-8000-000000000005"
+    )
+    assert operation["prepare_steps"][6]["value"] == (
+        "d3000000-0000-7000-8000-000000000061"
+    )
+    assert operation["prepare_steps"][7]["value"] == (
+        "d3000000-0000-7000-8000-000000000062"
+    )
+    assert operation["prepare_steps"][10]["value"] == "168.00"
+
+    with pytest.raises(FixtureCompileError, match="greater than zero"):
+        _operation_facts(
+            "expense_claim",
+            facts,
+            {**scalars, "expense_claim_amount": "0.00"},
+            set(),
+        )
 
 def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     root = Path(__file__).resolve().parents[3]
