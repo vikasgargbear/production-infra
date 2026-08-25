@@ -20,4 +20,20 @@ describe('StockTransfer governed location contract', () => {
     expect(source).toContain('Source location is not governed as transfer eligible.');
     expect(source).toContain('Select distinct branches and governed transfer-eligible locations first');
   });
+
+  it('uses server-published logistics and requires an explicit distance', () => {
+    expect(source).toContain('context.transfer_logistics_modes');
+    expect(source).toContain('No unambiguous server-supported transfer mode is available.');
+    expect(source).toContain('Enter the planned transfer distance in kilometres.');
+    expect(source).toContain('transport_mode: transferLogisticsModes[0].transport_mode');
+    expect(source).not.toContain("transport_mode: 'in_person'");
+    expect(source).not.toContain("distance_km: '0.00'");
+  });
+
+  it('requires canonical product identity fields without compatibility aliases', () => {
+    expect(source).toContain('productName: selectedProduct.product_name');
+    expect(source).toContain('productCode: selectedProduct.product_code');
+    expect(source).not.toContain('selectedProduct.product_name || selectedProduct.name');
+    expect(source).not.toContain('selectedProduct.product_code || selectedProduct.code');
+  });
 });

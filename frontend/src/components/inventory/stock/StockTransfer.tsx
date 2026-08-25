@@ -17,6 +17,7 @@ import {
 import {
   canonicalInventoryReadsApi,
   type InventoryBranch,
+  type InventoryContext,
 } from '../../../services/api/modules/inventory/canonicalInventoryReads.api';
 import {
   addExactDecimals,
@@ -56,6 +57,10 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
   const [step, setStep] = useState(1);
   const [branches, setBranches] = useState<InventoryBranch[]>([]);
   const [transferDate, setTransferDate] = useState('');
+  const [transferLogisticsModes, setTransferLogisticsModes] = useState<
+    InventoryContext['transfer_logistics_modes']
+  >([]);
+  const [distanceKm, setDistanceKm] = useState('');
   const [sourceBranchId, setSourceBranchId] = useState('');
   const [sourceLocationId, setSourceLocationId] = useState('');
   const [destinationBranchId, setDestinationBranchId] = useState('');
@@ -91,6 +96,7 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
         const context = decodeInventoryContext(data);
         setBranches(context.branches);
         setTransferDate(context.business_date);
+        setTransferLogisticsModes(context.transfer_logistics_modes);
       })
       .catch((reason) => {
         if (active) setContextError(reason?.response?.data?.detail || reason?.message || 'Transfer context failed to load.');
@@ -146,6 +152,10 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
     const productId = product?.product_id;
     const conversionId = product?.uom_conversion_id;
     if (!productId || !conversionId) return toast.error('This product has no canonical base-UOM conversion.');
+    if (typeof product?.product_name !== 'string' || !product.product_name.trim()
+      || typeof product?.product_code !== 'string' || !product.product_code.trim()) {
+      return toast.error('This product is missing its canonical name or product code.');
+    }
     if (!sourceAvailability?.eligible || !destinationAvailability?.eligible
       || sourceBranchId === destinationBranchId) {
       return toast.error('Select distinct branches and governed transfer-eligible locations first.');
@@ -225,8 +235,8 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
       }
       setItems((current) => [...current, {
         productId: selectedProduct.product_id,
-        productName: selectedProduct.product_name || selectedProduct.name,
-        productCode: selectedProduct.product_code || selectedProduct.code || '',
+        productName: selectedProduct.product_name,
+        productCode: selectedProduct.product_code,
         uomConversionId: batchChoices[0].uom_conversion_id,
         selectedUomCode: batchChoices[0].selected_uom_code,
         requestedQuantity: normalizedRequested,
@@ -253,9 +263,12 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
     else if (!destinationLocation || !destinationAvailability?.eligible) {
       message = destinationAvailability?.reasons.join('; ') || 'Destination location is not governed as transfer eligible.';
     }
+    else if (transferLogisticsModes.length !== 1) message = 'No unambiguous server-supported transfer mode is available.';
+    else if (!distanceKm.trim()) message = 'Enter the planned transfer distance in kilometres.';
     else if (!items.length) message = 'Add at least one product and FEFO batch.';
     else {
       try {
+        normalizeExactDecimal(distanceKm, 'Transfer distance', { scale: 2, maximumWholeDigits: 8 });
         for (const item of items) {
           for (const allocation of item.allocations) {
             validateTransferQuantity(
@@ -280,7 +293,7 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
   }, [
     destinationAvailability, destinationBranchId, destinationLocation,
     destinationLocationId, items, sourceAvailability, sourceBranchId,
-    sourceLocation, sourceLocationId, toast,
+    sourceLocation, sourceLocationId, toast, distanceKm, transferLogisticsModes,
   ]);
 
   const handlePrepare = async () => {
@@ -302,7 +315,14 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
             entered_quantity: exactQuantity(allocation.enteredQuantity, `${item.productName} quantity`),
           })),
         })),
-        logistics: { transport_mode: 'in_person', distance_km: '0.00' },
+        logistics: {
+          transport_mode: transferLogisticsModes[0].transport_mode,
+          distance_km: normalizeExactDecimal(
+            distanceKm,
+            'Transfer distance',
+            { scale: 2, maximumWholeDigits: 8 },
+          ),
+        },
       });
       setPrepared(data); setConfirmOpen(true);
     } catch (reason: any) {
@@ -416,6 +436,27 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
         </ul>
       </div>}
       <p className="mt-4 text-sm text-gray-600">Transfer date: <strong>{transferDate || 'Loading…'}</strong></p>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <label className="text-sm font-medium">Transport mode
+          <input
+            aria-label="Server-supported transfer mode"
+            className="mt-2 min-h-11 w-full rounded-lg border border-gray-300 bg-gray-50 px-3"
+            value={transferLogisticsModes.length === 1 ? transferLogisticsModes[0].display_name : ''}
+            placeholder="No supported mode available"
+            readOnly
+          />
+        </label>
+        <label className="text-sm font-medium">Planned distance (km)
+          <input
+            aria-label="Planned transfer distance in kilometres"
+            inputMode="decimal"
+            className="mt-2 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3"
+            value={distanceKm}
+            onChange={(event) => { setDistanceKm(event.target.value); invalidatePreparedReview(); }}
+            placeholder="For example, 12.50"
+          />
+        </label>
+      </div>
     </section>
     <section className="rounded-lg border border-gray-200 bg-white p-5" aria-labelledby="transfer-products-heading">
       <h3 id="transfer-products-heading" className="font-semibold">Products and FEFO batches</h3>

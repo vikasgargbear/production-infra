@@ -33,6 +33,10 @@ export type InventoryContext = {
   organization_id: string;
   organization_timezone: string;
   business_date: string;
+  transfer_logistics_modes: Array<{
+    transport_mode: 'in_person';
+    display_name: string;
+  }>;
   branches: InventoryBranch[];
 };
 

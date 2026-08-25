@@ -146,10 +146,27 @@ const decodeBranch = (value: unknown, label: string): InventoryBranch => {
 
 export const decodeInventoryContext = (value: unknown): InventoryContext => {
   const row = record(value, 'Inventory context');
+  const transferLogisticsModes = array(
+    row.transfer_logistics_modes,
+    'Inventory context transfer_logistics_modes',
+  ).map((value, index) => {
+    const mode = record(value, `Inventory transfer logistics mode ${index + 1}`);
+    if (mode.transport_mode !== 'in_person') {
+      throw new Error('Inventory transfer context published an unsupported logistics mode.');
+    }
+    return {
+      transport_mode: mode.transport_mode as 'in_person',
+      display_name: requiredString(mode.display_name, `Inventory transfer logistics mode ${index + 1} display_name`),
+    };
+  });
+  if (transferLogisticsModes.length !== 1) {
+    throw new Error('Inventory transfer context must publish exactly one supported logistics mode.');
+  }
   return {
     organization_id: uuid(row.organization_id, 'Inventory context organization_id'),
     organization_timezone: timeZone(row.organization_timezone, 'Inventory context timezone'),
     business_date: dateOnly(row.business_date, 'Inventory context business_date'),
+    transfer_logistics_modes: transferLogisticsModes,
     branches: array(row.branches, 'Inventory context branches').map((item, index) => (
       decodeBranch(item, `Inventory branch ${index + 1}`)
     )),

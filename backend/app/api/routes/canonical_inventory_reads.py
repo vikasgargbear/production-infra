@@ -100,11 +100,18 @@ class InventoryBranch(BaseModel):
     locations: list[InventoryLocation]
 
 
+class InventoryTransferLogisticsMode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    transport_mode: Literal["in_person"]
+    display_name: str
+
+
 class InventoryContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
     organization_id: UUID
     organization_timezone: str
     business_date: date
+    transfer_logistics_modes: list[InventoryTransferLogisticsMode]
     branches: list[InventoryBranch]
 
 
@@ -509,7 +516,12 @@ def inventory_context(user: dict = INVENTORY_USER, db: Session = Depends(get_db)
             ))
     return InventoryContext(
         organization_id=org_id, organization_timezone=timezone,
-        business_date=business_date, branches=list(branches.values()),
+        business_date=business_date,
+        transfer_logistics_modes=[InventoryTransferLogisticsMode(
+            transport_mode="in_person",
+            display_name="In person (no carrier)",
+        )],
+        branches=list(branches.values()),
     )
 
 

@@ -122,6 +122,26 @@ def test_inventory_context_exposes_exact_location_governance_facts():
         assert decimal_schema["pattern"] == r"^-?(?:0|[1-9][0-9]*)\.[0-9]{6}$"
 
 
+def test_inventory_context_publishes_only_the_supported_transfer_logistics_mode():
+    context = reads.InventoryContext(
+        organization_id=uuid4(),
+        organization_timezone="Asia/Kolkata",
+        business_date="2026-08-25",
+        transfer_logistics_modes=[reads.InventoryTransferLogisticsMode(
+            transport_mode="in_person",
+            display_name="In person (no carrier)",
+        )],
+        branches=[],
+    )
+    assert context.model_dump(mode="json")["transfer_logistics_modes"] == [{
+        "transport_mode": "in_person",
+        "display_name": "In person (no carrier)",
+    }]
+    source = inspect.getsource(reads.inventory_context)
+    assert 'transport_mode="in_person"' in source
+    assert 'display_name="In person (no carrier)"' in source
+
+
 def test_cursor_is_opaque_exact_and_rejects_wrong_shape():
     values = {"movement_id": str(uuid4()), "posted_at": "2026-08-25T10:00:00+00:00",
               "as_of": "2026-08-25T10:01:00+00:00", "business_date": "2026-08-25"}

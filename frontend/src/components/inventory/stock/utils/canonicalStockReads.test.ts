@@ -217,7 +217,9 @@ test('rejects page totals that contradict their authoritative summaries', () => 
 test('validates and uses the organization IANA timezone for movement timestamps', () => {
   expect(() => decodeInventoryContext({
     organization_id: ids.branch, organization_timezone: 'Not/AZone',
-    business_date: '2026-08-25', branches: [],
+    business_date: '2026-08-25',
+    transfer_logistics_modes: [{ transport_mode: 'in_person', display_name: 'In person' }],
+    branches: [],
   })).toThrow('IANA time zone');
   expect(displayOrganizationTimestamp('2026-08-25T20:00:00Z', 'Asia/Kolkata'))
     .toContain('26 Aug 2026');
@@ -228,6 +230,7 @@ test('decodes exact governed inventory location facts and rejects ambiguous auth
     organization_id: ids.branch,
     organization_timezone: 'Asia/Kolkata',
     business_date: '2026-08-25',
+    transfer_logistics_modes: [{ transport_mode: 'in_person', display_name: 'In person' }],
     branches: [{
       branch_id: ids.branch,
       branch_code: 'MAIN',
@@ -253,6 +256,9 @@ test('decodes exact governed inventory location facts and rejects ambiguous auth
     temperature_min_c: '-20.000000',
     temperature_max_c: '25.500000',
   });
+  expect(context.transfer_logistics_modes).toEqual([
+    { transport_mode: 'in_person', display_name: 'In person' },
+  ]);
   const location = context.branches[0].locations[0];
   for (const invalid of [
     { ...location, allows_sale: 'true' },
