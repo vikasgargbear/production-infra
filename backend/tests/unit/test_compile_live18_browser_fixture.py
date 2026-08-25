@@ -501,3 +501,46 @@ def test_delivery_challan_template_targets_prior_certified_sales_order() -> None
     assert operation["prepare_steps"][5]["value"] == "1.25"
     assert operation["approval_steps"][0]["value"] == "{{command_request_id}}"
     assert operation["execute_steps"][0]["value"] == "{{command_request_id}}"
+
+
+def test_goods_receipt_template_derives_clock_and_expiry_and_targets_prior_po() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/goods_receipt.json").read_text()
+    )
+    scalars = {
+        "goods_receipt_expiry_offset_days": "365",
+        "goods_receipt_received_quantity": "2.000000",
+        "goods_receipt_accepted_quantity": "2.000000",
+        "goods_receipt_rejected_quantity": "0.000000",
+        "goods_receipt_free_quantity": "0.000000",
+        "goods_receipt_mrp": "150.00",
+        "goods_receipt_qc_status": "accepted",
+    }
+    facts = {
+        "identity": {
+            "uom_conversion_id": "d3000000-0000-7000-8000-000000000042",
+            "saleable_location_id": "d3000000-0000-7000-8000-000000000044",
+        },
+        "clock": {
+            "business_date": "2026-08-25",
+            "business_datetime_local": "2026-08-25T14:30",
+        },
+    }
+    used: set[str] = set()
+    operation_facts = _operation_facts("goods_receipt", facts, scalars, used)
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        operation_facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("goods_receipt", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][2]["locator"]["name"] == (
+        "Record canonical receipt for purchase order {{resource_purchase_order}}"
+    )
+    assert operation["prepare_steps"][3]["value"] == "2026-08-25T14:30"
+    assert operation["prepare_steps"][6]["value"] == "2027-08-25"
+    assert operation["prepare_steps"][12]["value"] == facts["identity"]["uom_conversion_id"]
+    assert operation["prepare_steps"][13]["value"] == facts["identity"]["saleable_location_id"]

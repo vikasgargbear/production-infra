@@ -132,7 +132,8 @@ def resolve_authoritative_facts(
              destination_branch.code,destination_branch.name,
              destination.code,destination.name,bank.bank_name,bank.account_holder_name,
              ledger.code,ledger.name,
-             to_char((transaction_timestamp() AT TIME ZONE organization.timezone)::date,'YYYY-MM-DD')
+             to_char((transaction_timestamp() AT TIME ZONE organization.timezone)::date,'YYYY-MM-DD'),
+             to_char(transaction_timestamp() AT TIME ZONE organization.timezone,'YYYY-MM-DD"T"HH24:MI')
         FROM core.branches branch
         JOIN core.organizations organization ON organization.id=branch.org_id AND organization.status='active'
         JOIN parties.customer_accounts customer ON customer.org_id=branch.org_id AND customer.id=%s
@@ -252,8 +253,11 @@ def resolve_authoritative_facts(
             **identities,
             "supplier_invoice_goods_receipt_id": goods_receipt_id,
         },
-        "display": dict(zip(keys, rows[0][:-1])),
-        "clock": {"business_date": rows[0][-1]},
+        "display": dict(zip(keys, rows[0][:-2])),
+        "clock": {
+            "business_date": rows[0][-2],
+            "business_datetime_local": rows[0][-1],
+        },
         "choice": {
             "supplier_invoice_number": resolved_invoice_number,
             "supplier_invoice_date": invoice_date.isoformat(),
@@ -278,6 +282,34 @@ def _operation_facts(
             "purchase_order_expected_delivery_date",
         ),
     }
+    if operation_id == "goods_receipt":
+        offset_text = _leaf(
+            scalars, "goods_receipt_expiry_offset_days", "reviewed scalar"
+        )
+        expiry_offset = (
+            r"(?:[3-9][0-9]|[1-9][0-9]{2}|[1-2][0-9]{3}|"
+            r"3[0-5][0-9]{2}|36[0-4][0-9]|3650)"
+        )
+        if not re.fullmatch(expiry_offset, offset_text):
+            raise FixtureCompileError(
+                "goods_receipt_expiry_offset_days must be an integer from 30 through 3650"
+            )
+        try:
+            business_date = date.fromisoformat(
+                _leaf(facts, "clock.business_date", "canonical fact")
+            )
+        except ValueError as exc:
+            raise FixtureCompileError("canonical business date is invalid") from exc
+        used.add("goods_receipt_expiry_offset_days")
+        return {
+            **facts,
+            "choice": {
+                **(facts.get("choice") or {}),
+                "goods_receipt_expiry_date": (
+                    business_date + timedelta(days=int(offset_text))
+                ).isoformat(),
+            },
+        }
     if operation_id not in delivery_choices:
         return facts
     offset_key, choice_key = delivery_choices[operation_id]

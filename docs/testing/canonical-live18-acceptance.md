@@ -83,6 +83,12 @@ exact purchase-order UUID, and its sole eligible product-line UUID remain
 canonical runtime authority. The purchase order runs before its advance and
 before goods receipt so the context can prove it is still approved; ambiguous
 multi-line selection fails closed instead of selecting an arbitrary line.
+Goods receipt reviews physical quantities, MRP, QC disposition, and a bounded
+`goods_receipt_expiry_offset_days` between 30 and 3650 for the disposable test
+batch. Its batch reference is run-token-derived; receipt time comes from the
+organization-local database clock, while the exact prior PO, MRP conversion,
+and eligible destination are canonical identities. The template is strict-mode
+safe only for the single-line PO created by this run and fails on ambiguity.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

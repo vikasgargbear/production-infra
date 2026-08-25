@@ -222,6 +222,10 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
           </label>
         </div>
 
+        <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition.
+        </p>
+
         {context.lines.map((source, index) => {
           const line = draft.lines[index];
           return (

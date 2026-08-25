@@ -321,6 +321,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             canRecordCanonicalReceipt(purchase.status) && (
             <button
               onClick={() => onRecordReceipt(purchase.id)}
+              aria-label={`Record canonical receipt for purchase order ${purchase.id}`}
               className="min-h-11 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
               title={`Record canonical receipt for ${purchase.po_number}`}
             >
