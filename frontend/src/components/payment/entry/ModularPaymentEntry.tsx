@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  CreditCard, Calculator, CheckCircle, Printer,
+  CreditCard, CheckCircle, Printer,
   X, Loader2, AlertCircle, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
@@ -28,7 +28,7 @@ import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
 
 
 // Import global components
-import { GSTCalculator, ProceedToReviewComponent, ModuleHeader, Card, CustomerCreation } from '../../global';
+import { ProceedToReviewComponent, ModuleHeader, Card, CustomerCreation } from '../../global';
 
 
 interface PaymentEntryContentProps {
@@ -63,7 +63,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setOutstandingInvoices
   } = usePayment();
 
-  const [showGSTCalculator, setShowGSTCalculator] = React.useState<boolean>(false);
   const [showCustomerModal, setShowCustomerModal] = React.useState<boolean>(false);
 
   // API data states
@@ -139,11 +138,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       if (e.ctrlKey && e.key === 's' && currentStep === 2) {
         e.preventDefault();
         void requestPaymentReview();
-      }
-      // Ctrl+G for GST Calculator
-      if (e.ctrlKey && e.key === 'g') {
-        e.preventDefault();
-        setShowGSTCalculator(true);
       }
       // Esc to close/back
       if (e.key === 'Escape') {
@@ -304,8 +298,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     let allocations: ReceiptAllocation[];
     try {
       allocations = allocateReceiptByMethod(payment.amount, invoices, method as 'fifo' | 'lifo' | 'highest');
-    } catch {
-      allocations = [];
+    } catch (allocationError) {
+      setMessage(
+        allocationError instanceof Error
+          ? allocationError.message
+          : 'Authoritative outstanding amounts could not be allocated.',
+        'error',
+      );
+      return;
     }
 
     // Update payment with allocations
@@ -352,13 +352,24 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setSelectedInvoiceIds(newSelected);
     setManualAllocations(newManualAllocations);
 
-    // Update payment allocations with correct amounts
+    const missingEvidence = Array.from(newSelected).find(id => (
+      !outstandingInvoices.some(candidate => candidate.invoice_id === id)
+      || !newManualAllocations[id]
+    ));
+    if (missingEvidence) {
+      setMessage('The selected invoice lost its authoritative allocation evidence. Reload outstanding invoices and select it again.', 'error');
+      return;
+    }
+
+    // Update payment allocations only from the selected canonical invoice and
+    // the explicit amount established above. Never manufacture an empty
+    // invoice identity or a zero allocation.
     const allocations = Array.from(newSelected).map(id => {
-      const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
+      const inv = outstandingInvoices.find(candidate => candidate.invoice_id === id)!;
       return {
         invoice_id: id,
-        invoice_number: inv?.invoice_number || '',
-        amount: newManualAllocations[id] || '0.00'
+        invoice_number: inv.invoice_number,
+        amount: newManualAllocations[id]
       };
     });
 
@@ -461,19 +472,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           onClose={postedPaymentId ? () => setMessage('This receipt was posted. Reconcile its readback before leaving this screen.', 'error') : onClose}
           historyType="payment"
           showSaveDraft={false}
-          additionalActions={[
-            {
-              label: "GST Calculator",
-              onClick: () => setShowGSTCalculator(true),
-              icon: Calculator,
-              variant: "default"
-            }
-          ] as any}
         />
 
         {/* Keyboard Shortcuts Help */}
         <div className="border-b border-gray-200 bg-white px-4 py-2 text-xs text-gray-600">
-          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Esc</strong> - Close
+          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
@@ -676,14 +679,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                             setManualAllocations(newAllocations);
 
                                             // Update payment allocations
-                                            const allocations = Array.from(newSelected).map(id => {
-                                              const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
-                                              return {
-                                                invoice_id: id,
-                                                invoice_number: inv?.invoice_number || '',
-                                                amount: newAllocations[id] || '0.00'
-                                              };
-                                            });
+                                                const allocations = Array.from(newSelected).map(id => {
+                                                  const inv = outstandingInvoices.find((candidate: any) => candidate.invoice_id === id)!;
+                                                  return {
+                                                    invoice_id: id,
+                                                    invoice_number: inv.invoice_number,
+                                                    amount: newAllocations[id]
+                                                  };
+                                                });
                                             setPaymentField('allocations', allocations);
                                           } else {
                                             setSelectedInvoiceIds(new Set());
@@ -704,8 +707,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 </tr>
                               </thead>
                               <tbody>
-                                {outstandingInvoices.map((invoice: any, index: number) => {
-                                  const invoiceId = String(invoice.invoice_id || index);
+                                    {outstandingInvoices.map((invoice: any) => {
+                                      const invoiceId = String(invoice.invoice_id);
                                   const isSelected = selectedInvoiceIds.has(invoiceId);
                                   const autoAllocation = payment.allocations?.find((alloc: any) =>
                                     alloc.invoice_id === invoiceId || alloc.invoice_number === invoice.invoice_number
@@ -739,7 +742,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                       <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due}</td>
                                       <td className="text-right py-2 px-2 font-medium text-green-600">
                                         {payment.allocation_method === 'manual'
-                                          ? (isSelected ? `₹${manualAllocations[invoiceId] || '0.00'}` : '-')
+                                              ? (isSelected ? `₹${manualAllocations[invoiceId] ?? 'Unavailable'}` : '-')
                                           : (autoAllocation ? `₹${autoAllocation.amount}` : '-')
                                         }
                                       </td>
@@ -787,21 +790,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           }}
           onReset={currentStep === 1 ? resetPayment : undefined}
           totalItems={payment.allocations ? payment.allocations.length : 0}
-          totalAmount={payment.amount || '0.00'}
+              totalAmount={payment.amount}
           proceedText={currentStep === 2 ? (postedPaymentId ? 'Reconcile Receipt' : 'Review Posting') : 'Continue'}
           saving={saving}
           disabled={false}
         />
       </div>
-
-      {/* GST Calculator Modal */}
-      {showGSTCalculator && (
-        <GSTCalculator
-          orderData={undefined}
-          onClose={() => setShowGSTCalculator(false)}
-          showDetails={true}
-        />
-      )}
 
       {/* Customer Creation Modal */}
       {showCustomerModal && (

@@ -51,7 +51,14 @@ const PaymentSummaryCompact: React.FC = () => {
   const allocatedUnits = selectedInvoices.reduce<bigint>((sum, invoice, index) => (
     sum + moneyUnits(invoice.amount, `Allocation ${index + 1}`)
   ), 0n);
-  const totalUnits = moneyUnits(payment.amount || '0', 'Receipt amount');
+  if (!payment.amount) {
+    return (
+      <div role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        Enter an exact receipt amount before opening the payment summary.
+      </div>
+    );
+  }
+  const totalUnits = moneyUnits(payment.amount, 'Receipt amount');
   const unallocatedUnits = totalUnits - allocatedUnits;
   return (
     <div className="space-y-4">
@@ -128,7 +135,7 @@ const PaymentSummaryCompact: React.FC = () => {
                 {payment.allocation_method === 'highest' && 'Highest First'}
                 {payment.allocation_method === 'advance' && 'Advance'}
                 {payment.allocation_method === 'manual' && 'Manual'}
-                {!payment.allocation_method && 'FIFO'}
+                {!payment.allocation_method && 'Not selected'}
               </span>
             </div>
           </div>

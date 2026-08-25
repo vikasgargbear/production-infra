@@ -36,7 +36,6 @@ import { complianceApi } from './modules/compliance/compliance.api';
 import { ledgerApi } from './modules/finance/ledger.api';
 import { paymentsApi } from './modules/finance/payments.api';
 import { paymentAllocationApi } from './modules/finance/paymentAllocation.api';
-import { journalApi } from './modules/finance/journal.api';
 import { expensesApi } from './modules/finance/expenses.api';
 
 // =========================================================================
@@ -127,7 +126,6 @@ export {
   ledgerApi,
   paymentsApi,
   paymentAllocationApi,
-  journalApi,
   expensesApi,
 
   // Inventory
@@ -199,7 +197,7 @@ const apiModules = {
   compliance: { gst: gstApi, taxEntries: taxEntriesApi, compliance: complianceApi },
 
   // Finance
-  finance: { ledger: ledgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi, journal: journalApi, expenses: expensesApi },
+  finance: { ledger: ledgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi, expenses: expensesApi },
 
   // Inventory
   inventory: { stock: stockApi, batches: batchesApi, movements: inventoryMovementsApi, conversions: conversionsApi },

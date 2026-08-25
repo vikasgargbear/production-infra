@@ -92,7 +92,7 @@ const initialState: PaymentState = {
         receipt_no: '',
         payment_date: localBusinessDate(),
         amount: '',
-        payment_mode: 'UPI',
+        payment_mode: '',
         reference_number: '',
         bank_account_id: '',
         settlement_account_id: '',

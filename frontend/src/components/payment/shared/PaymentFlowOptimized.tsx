@@ -4,7 +4,6 @@ import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 import { CustomerSearch } from '../../global';
 import { bankAccountsApi } from '../../../services/api';
-import { localBusinessDate } from '../../../contexts/PaymentContext';
 import { moneyToCents } from '../entry/customerReceiptCommand';
 
 interface SplitPayment {
@@ -184,7 +183,7 @@ const PaymentFlowOptimized: React.FC = () => {
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="date"
-                  value={payment.payment_date || localBusinessDate()}
+                  value={payment.payment_date}
                   onChange={(e) => handleFieldChange('payment_date', e.target.value)}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -193,7 +192,7 @@ const PaymentFlowOptimized: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payment Type</label>
               <select
-                value={payment.payment_type || 'order_payment'}
+                value={payment.payment_type}
                 onChange={(e) => handleFieldChange('payment_type', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
