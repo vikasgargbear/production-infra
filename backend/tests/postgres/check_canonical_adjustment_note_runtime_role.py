@@ -172,12 +172,13 @@ def main() -> None:
             idempotency = session.execute(
                 text(
                     """
-                    SELECT indexdef FROM pg_indexes
+                    SELECT indexname, indexdef FROM pg_indexes
                      WHERE schemaname='automation' AND tablename='command_requests'
-                       AND indexdef LIKE '%agent_grant_id%capability_code%idempotency_key_hash%'
+                       AND indexname='command_requests_idempotency_uq'
+                       AND indexdef LIKE '%org_id%agent_grant_id%operation%idempotency_key_hash%'
                     """
                 )
-            ).scalars().all()
+            ).mappings().all()
             assert idempotency, "command prepare idempotency uniqueness is missing"
 
             session.execute(text('SET LOCAL ROLE "erp_app"'))
