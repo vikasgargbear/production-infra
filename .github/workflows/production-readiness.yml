@@ -1200,22 +1200,24 @@ jobs:
             --identity-evidence "$PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH" \
             --reviewed-scalars "$LIVE18_REVIEWED_SCALARS_PATH" \
             --matrix backend/tests/live_acceptance/operation_matrix.json \
+            --readiness docs/testing/live18-ui-template-readiness.json \
             --templates "$LIVE18_TEMPLATE_DIRECTORY" \
             --output "$LIVE18_FIXTURE_PATH"
           python3 -m json.tool "$LIVE18_FIXTURE_PATH" >/dev/null
           case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
-      - name: Discover exactly 18 reviewed Playwright operations
+      - name: Discover every template-ready Playwright operation
         working-directory: frontend
         run: |
           set -euo pipefail
           npx playwright test --config e2e/live18/playwright.config.ts --list \
             | tee "$RUNNER_TEMP/live18-playwright-list.txt"
           discovered=$(grep -c 'canonical-live18\.spec\.ts.*UI to REST readback' "$RUNNER_TEMP/live18-playwright-list.txt")
-          test "$discovered" -eq 18
+          expected=$(jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json)
+          test "$discovered" -eq "$expected"
       - name: Run the exact-SHA live18 desktop browser certification
         working-directory: frontend
         run: npx playwright test --config e2e/live18/playwright.config.ts
-      - name: Reconcile all 18 browser resources through MCP and PostgreSQL
+      - name: Reconcile every template-ready browser resource through MCP and PostgreSQL
         env:
           PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
         run: |

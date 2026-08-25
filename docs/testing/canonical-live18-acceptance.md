@@ -1,8 +1,12 @@
 # Canonical ERP live18 acceptance
 
-This harness certifies the 18 named desktop ERP operations without implementing
-or repairing product behavior. The checked-in matrix is
-`backend/tests/live_acceptance/operation_matrix.json`.
+This harness catalogs all 18 named desktop ERP operations without implementing
+or repairing product behavior. It executes only operations marked `ready` in
+`docs/testing/live18-ui-template-readiness.json`; the checked-in matrix remains
+`backend/tests/live_acceptance/operation_matrix.json`. A blocked operation is
+never silently skipped or represented as passing evidence. Moving it to
+`ready` automatically makes its template, browser run, and reconciliation
+mandatory.
 
 ## Non-negotiable gate
 
@@ -35,7 +39,7 @@ The harness never contains live credentials or fixture business values. Supply
 them through the `LIVE18_*` environment described by
 `backend/tests/live_acceptance/config.py`. `LIVE18_FIXTURE_PATH` is a reviewed,
 untracked JSON file outside the repository with `fixture_schema` set to
-`aasopharma.live18.fixture.v1`, exactly 18 operation keys, and non-empty
+`aasopharma.live18.fixture.v1`, exactly the registry-ready operation keys, and non-empty
 `missing_required_steps`, `prepare_steps`, `approval_steps`, and `execute_steps`
 arrays for each flow. Every missing-required phase must assert a visible error,
 must not create a prepared command, and the valid phase must restart from an
@@ -50,6 +54,9 @@ canonical prepare response. The bounded run token is
 numbers unique between retries. It must not replace reviewed canonical IDs,
 amounts, quantities, tax facts, or event dates. Unknown, malformed, or
 unavailable tokens fail fixture loading or execution.
+Every non-test-ID selector is an exact accessible locator, and every action
+must resolve exactly one element before it can run. Search results and dynamic
+rows use canonical-ID test IDs rather than display-name substring matches.
 
 Expense-claim certification additionally requires one externally reviewed
 synthetic PDF receipt. Canonical staging materializes it only from the protected

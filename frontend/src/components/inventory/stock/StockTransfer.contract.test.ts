@@ -36,4 +36,9 @@ describe('StockTransfer governed location contract', () => {
     expect(source).not.toContain('selectedProduct.product_name || selectedProduct.name');
     expect(source).not.toContain('selectedProduct.product_code || selectedProduct.code');
   });
+
+  it('publishes the exact canonical batch identity for deterministic browser selection', () => {
+    expect(source).toContain('data-testid={`transfer-fefo-batch-');
+    expect(source).toContain('batch.batch_id');
+  });
 });

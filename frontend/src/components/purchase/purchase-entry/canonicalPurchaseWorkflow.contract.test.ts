@@ -21,12 +21,15 @@ describe('canonical purchase workflow contract', () => {
   });
 
   it('keeps receipt and supplier invoice as separate reviewed commands with exact readback', () => {
+    const receiptFlow = read('components/purchase/grn/CanonicalGoodsReceiptForm.tsx');
     const receiptLifecycle = read('components/purchase/grn/canonicalReceiptLifecycle.ts');
     const receiptApi = read('services/api/modules/purchase/canonicalGoodsReceipts.api.ts');
     const invoiceFlow = read('components/purchase/purchase-entry/CanonicalSupplierInvoiceFlow.tsx');
     const invoiceApi = read('services/api/modules/purchase/canonicalSupplierInvoices.api.ts');
 
     expect(receiptLifecycle).toContain("'procurement.goods_receipt.prepare'");
+    expect(receiptFlow).toContain('data-testid={`receive-po-product-');
+    expect(receiptFlow).toContain('source.product_id');
     expect(receiptApi).toContain('/canonical/goods-receipts/');
     expect(invoiceFlow).toContain("'procurement.supplier_invoice.prepare'");
     expect(invoiceApi).toContain('/canonical/supplier-invoices/');

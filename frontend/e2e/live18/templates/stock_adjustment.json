@@ -14,7 +14,7 @@
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{fact.clock.business_date}}","exact":true},"value":"{{fact.clock.business_date}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Physical count completed at (UTC)","exact":true},"value":"{{fact.clock.cycle_count_completed_at_utc}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search and select product...","exact":true},"value":"{{fact.display.product_code}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.product_name}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Count UOM for {{fact.display.product_name}}","exact":true},"value":"{{fact.identity.count_uom_conversion_id}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"Verified physical count sheet","exact":true}},

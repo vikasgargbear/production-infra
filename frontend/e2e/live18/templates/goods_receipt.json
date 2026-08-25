@@ -14,7 +14,7 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Purchase Orders","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Physical receipt time","exact":true},"value":"{{fact.clock.business_datetime_local}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Receive this line (","exact":false}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"receive-po-product-{{fact.identity.product_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Manufacturer batch number","exact":true},"value":"LIVE18-GRN-{{run_token}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Expires on","exact":true},"value":"{{fact.choice.goods_receipt_expiry_date}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Received billed qty","exact":true},"value":"{{scalar.goods_receipt_received_quantity}}"},

@@ -8,7 +8,7 @@ import {
 
 import { loadBrowserConfig, verifyDeployedSha } from '../support/live18/config';
 import {
-  loadFixture, loadOperationMatrix, OperationContract, OperationFixture, UiStep,
+  loadFixture, loadReadyOperationMatrix, OperationContract, OperationFixture, UiStep,
 } from '../support/live18/contracts';
 import {
   interpolateUiSteps, RuntimeUiValues,
@@ -19,7 +19,7 @@ import {
 import { runUiStep } from '../support/live18/uiDriver';
 
 const requiredLiveRun = process.env.LIVE18_REQUIRED === 'true';
-const matrix = loadOperationMatrix();
+const matrix = loadReadyOperationMatrix();
 const fixture = loadFixture(requiredLiveRun);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH = /^sha256:[0-9a-f]{64}$/i;

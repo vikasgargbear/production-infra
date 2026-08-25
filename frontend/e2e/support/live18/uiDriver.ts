@@ -30,6 +30,10 @@ export async function runUiStep(page: Page, appOrigin: string, step: UiStep): Pr
     return;
   }
   const locator = locatorFor(page, step);
+  await expect(
+    locator,
+    `${step.action} must resolve exactly one deterministic desktop target`,
+  ).toHaveCount(1);
   switch (step.action) {
     case 'click': await locator.click(); break;
     case 'fill': await locator.fill(step.value ?? ''); break;

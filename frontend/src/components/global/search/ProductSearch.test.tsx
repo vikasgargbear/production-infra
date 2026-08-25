@@ -42,6 +42,9 @@ describe('ProductSearch canonical request lifecycle', () => {
         expect(productsApi.search).toHaveBeenCalledWith('Exact', { limit: 20 });
         expect(await screen.findByText('Exact Product')).toBeTruthy();
         expect(screen.getByText('Stock: 99999999999999.123456')).toBeTruthy();
+        expect(screen.getByTestId(
+            'product-search-option-d3000000-0000-7000-8000-000000000015',
+        )).toBeTruthy();
     });
 
     it('does not let an older response overwrite a newer query', async () => {

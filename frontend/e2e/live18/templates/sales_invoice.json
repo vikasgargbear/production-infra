@@ -6,9 +6,9 @@
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/sales/create-invoice"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.customer_name}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.product_name}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.sales_invoice_quantity}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.sales_invoice_rate}}"},
@@ -25,9 +25,9 @@
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/sales/create-invoice"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.customer_name}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.product_name}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.sales_invoice_quantity}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.sales_invoice_rate}}"},
