@@ -9,9 +9,18 @@ import PartyLedger from './PartyLedger';
 import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
 
+export const LEDGER_SUBPAGE_IDS = [
+  'party-statement',
+  'outstanding',
+  'collection-center',
+] as const;
+export type LedgerSubpage = typeof LEDGER_SUBPAGE_IDS[number];
+
 interface LedgerHubProps {
   open?: boolean;
   onClose?: () => void;
+  initialSubpage?: string | null;
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface LedgerModule {
@@ -24,15 +33,29 @@ interface LedgerModule {
   component: React.ComponentType<any>;
 }
 
-const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
+const LedgerHub: React.FC<LedgerHubProps> = ({
+  open = true,
+  onClose,
+  initialSubpage,
+  onSubpageChange,
+}) => {
+  const resolvedDefault: LedgerSubpage = initialSubpage
+    && (LEDGER_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
+    ? initialSubpage as LedgerSubpage
+    : 'party-statement';
   // Navigation state for switching between modules
-  const [activeModule, setActiveModule] = useState<string>('party-statement');
+  const [activeModule, setActiveModule] = useState<LedgerSubpage>(resolvedDefault);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    setActiveModule(resolvedDefault);
+  }, [resolvedDefault]);
 
   const handleCustomerClick = (customer: any) => {
     // Store customer ID and switch to Outstanding module (shows invoice-level aging)
     setSelectedCustomerId(customer.customer_id);
     setActiveModule('outstanding');
+    onSubpageChange?.('outstanding');
   };
 
   const ledgerModules: LedgerModule[] = [
@@ -85,6 +108,7 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       icon={Archive}
       modules={ledgerModules}
       defaultModule={activeModule}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

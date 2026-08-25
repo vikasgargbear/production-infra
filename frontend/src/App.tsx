@@ -200,7 +200,13 @@ const AppContent = (): JSX.Element => {
           />
         );
       case 'party-ledger':
-        return <LedgerHub onClose={goHome} />;
+        return (
+          <LedgerHub
+            onClose={goHome}
+            initialSubpage={subpage}
+            onSubpageChange={setSubpage}
+          />
+        );
       case 'credit-debit-note':
         return <CreditDebitFlow open onClose={goHome} />;
       case 'gst':
