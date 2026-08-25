@@ -3,6 +3,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import SupplierAdvance from './SupplierAdvance';
 import { canonicalSupplierAdvancesApi } from '../../../services/api/modules/finance/canonicalSupplierAdvances.api';
+import {
+  approveCanonicalAction,
+  getCanonicalCommandReview,
+} from '../../../services/api/canonicalOperatorActions';
 
 jest.mock('../../../services/api/modules/finance/canonicalSupplierAdvances.api', () => ({
   canonicalSupplierAdvancesApi: { getContext: jest.fn(), getPosted: jest.fn() },
@@ -62,4 +66,65 @@ test('exposes the complete mandatory PO-line flow and keeps prepare disabled unt
   expect((prepare as HTMLButtonElement).disabled).toBe(false);
   expect(screen.getByText(/backend-verified not applicable/i)).not.toBeNull();
   expect(screen.getByText(/required: select supplier, approved purchase order/i)).not.toBeNull();
+});
+
+const approvalReview = (commandId: string, previewHash: string, status: string) => ({
+  command_request_id: commandId,
+  preview_hash: previewHash,
+  capability_code: 'finance.supplier_advance.prepare',
+  command_type: 'finance.supplier_advance.post',
+  requested_by_membership_id: 'd3000000-0000-7000-8000-000000000011',
+  target_resource_type: 'payment',
+  target_resource_id: 'd3000000-0000-7000-8000-000000000012',
+  preview_canonical_json: '{"operation":"finance.supplier_advance.post"}',
+  approval_policy: 'separate_approver',
+  required_approval_count: 1,
+  status,
+});
+
+const openApprovalReview = async (commandId: string) => {
+  render(<SupplierAdvance />);
+  await waitFor(() => expect((screen.getByLabelText('Supplier') as HTMLSelectElement).options.length).toBe(2));
+  fireEvent.click(screen.getByRole('button', { name: '2. Independent approval' }));
+  fireEvent.change(screen.getByLabelText('Command ID'), { target: { value: commandId } });
+  fireEvent.click(screen.getByRole('button', { name: 'Load immutable review' }));
+  await screen.findByText('finance.supplier_advance.post · prepared');
+  fireEvent.click(screen.getByRole('checkbox', { name: /independently reviewed the exact PO lineage/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Approve exact preview' }));
+};
+
+test('shows approval only after authoritative review readback confirms the exact preview', async () => {
+  const commandId = 'd3000000-0000-7000-8000-000000000010';
+  const previewHash = `sha256:${'a'.repeat(64)}`;
+  (getCanonicalCommandReview as jest.Mock)
+    .mockResolvedValueOnce({ data: approvalReview(commandId, previewHash, 'prepared') })
+    .mockResolvedValueOnce({ data: approvalReview(commandId, previewHash, 'approved') });
+  (approveCanonicalAction as jest.Mock).mockResolvedValue({ data: { status: 'accepted' } });
+
+  await openApprovalReview(commandId);
+
+  await screen.findByText('finance.supplier_advance.post · approved');
+  expect(approveCanonicalAction).toHaveBeenCalledTimes(1);
+  expect(getCanonicalCommandReview).toHaveBeenLastCalledWith(commandId);
+});
+
+test.each([
+  ['command UUID', { command_request_id: 'd3000000-0000-7000-8000-000000000099' }],
+  ['preview hash', { preview_hash: `sha256:${'c'.repeat(64)}` }],
+  ['capability', { capability_code: 'finance.supplier_payment.prepare' }],
+  ['approved status', { status: 'prepared' }],
+])('fails closed when authoritative readback changes the %s', async (_label, drift) => {
+  const commandId = 'd3000000-0000-7000-8000-000000000020';
+  const previewHash = `sha256:${'b'.repeat(64)}`;
+  (getCanonicalCommandReview as jest.Mock)
+    .mockResolvedValueOnce({ data: approvalReview(commandId, previewHash, 'prepared') })
+    .mockResolvedValueOnce({
+      data: { ...approvalReview(commandId, previewHash, 'approved'), ...drift },
+    });
+  (approveCanonicalAction as jest.Mock).mockResolvedValue({ data: { status: 'accepted' } });
+
+  await openApprovalReview(commandId);
+
+  expect((await screen.findByRole('alert')).textContent).toMatch(/did not confirm the exact approved preview/i);
+  expect(screen.queryByText('finance.supplier_advance.post · approved')).toBeNull();
 });

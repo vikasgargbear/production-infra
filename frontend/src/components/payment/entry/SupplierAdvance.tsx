@@ -140,7 +140,14 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
     setBusy(true); setError('');
     try {
       await approveCanonicalAction('finance.supplier_advance.prepare', review, approveKey.current);
-      setReview({ ...review, status: 'approved' }); setConfirmed(false);
+      const verified = (await getCanonicalCommandReview(review.command_request_id)).data;
+      if (verified.command_request_id !== review.command_request_id
+        || verified.preview_hash !== review.preview_hash
+        || verified.capability_code !== 'finance.supplier_advance.prepare'
+        || verified.status !== 'approved') {
+        throw new Error('Approval returned, but authoritative command review did not confirm the exact approved preview. Nothing is shown as approved.');
+      }
+      setReview(verified); setConfirmed(false);
     } catch (requestError) { setError(messageFrom(requestError)); }
     finally { setBusy(false); }
   };
