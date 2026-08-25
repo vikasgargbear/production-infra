@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
+import jwt
 import requests
+
+from app.domain.operator_actions import policy_for
 
 from .config import CanonicalLiveConfig
 
@@ -68,11 +71,11 @@ def _json(response: requests.Response) -> dict[str, Any]:
 class RestActionClient:
     config: CanonicalLiveConfig
     session: requests.Session
-    delegated_tokens: dict[str, str]
+    oauth_claims: dict[str, dict[str, Any]]
 
     @classmethod
     def build(
-        cls, config: CanonicalLiveConfig, delegated_tokens: dict[str, str]
+        cls, config: CanonicalLiveConfig
     ) -> "RestActionClient":
         session = requests.Session()
         session.headers.update(
@@ -81,7 +84,90 @@ class RestActionClient:
                 "Content-Type": "application/json",
             }
         )
-        return cls(config, session, delegated_tokens)
+        claims = {
+            "requester": jwt.decode(
+                config.mcp_access_token, options={"verify_signature": False}
+            ),
+            "reviewer": jwt.decode(
+                config.mcp_reviewer_access_token,
+                options={"verify_signature": False},
+            ),
+        }
+        for role, identity in claims.items():
+            if not all(
+                isinstance(identity.get(name), str) and identity[name]
+                for name in ("iss", "sub", "client_id", "organization_id")
+            ):
+                raise TransportContractError(
+                    f"{role} OAuth token omitted the canonical delegation identity"
+                )
+            if identity["organization_id"] != str(config.test_org_id):
+                raise TransportContractError(
+                    f"{role} OAuth token is outside the gated organization"
+                )
+        if claims["requester"]["sub"] != str(config.test_auth_user_id):
+            raise TransportContractError(
+                "requester OAuth subject differs from the gated Auth user"
+            )
+        return cls(config, session, claims)
+
+    def _delegated_token(
+        self,
+        operation_key: str,
+        *,
+        actor: str,
+        payload: dict[str, Any] | None,
+        command_request_id: str | None,
+    ) -> str:
+        identity = self.oauth_claims[actor]
+        branch_ids: list[str] = []
+        if command_request_id is None and payload:
+            policy = policy_for(operation_key)
+            if policy is None:
+                raise TransportContractError(
+                    f"reviewed action policy is missing: {operation_key}"
+                )
+            seen_branch_ids: set[str] = set()
+            for field in policy.branch_fields:
+                value = payload.get(field)
+                if value is not None:
+                    branch_id = str(value)
+                    if branch_id not in seen_branch_ids:
+                        seen_branch_ids.add(branch_id)
+                        branch_ids.append(branch_id)
+        operation_mode = (
+            "read" if operation_key == "automation.command.status.get" else "write"
+        )
+        response = self.session.post(
+            f"{self.config.api_base_url}/api/internal/mcp/agent-grants/authorize-action",
+            json={
+                "issuer": identity["iss"],
+                "subject": identity["sub"],
+                "client_id": identity["client_id"],
+                "organization_id": identity["organization_id"],
+                "operation_key": operation_key,
+                "capability_code": operation_key,
+                "operation_mode": operation_mode,
+                "branch_ids": branch_ids,
+                "command_request_id": command_request_id,
+            },
+            timeout=self.config.timeout_seconds,
+        )
+        body = _json(response)
+        token = body.get("delegated_access_token")
+        if (
+            body.get("allowed") is not True
+            or body.get("operation_key") != operation_key
+            or body.get("subject") != identity["sub"]
+            or body.get("client_id") != identity["client_id"]
+            or body.get("command_request_id") != command_request_id
+            or not isinstance(token, str)
+            or len(token) < 32
+        ):
+            raise TransportContractError(
+                "reviewed action-grant issuer returned a drifted delegation"
+            )
+        return token
 
     def _call(
         self,
@@ -89,12 +175,16 @@ class RestActionClient:
         path: str,
         operation_key: str,
         payload: dict[str, Any] | None = None,
+        *,
+        actor: str = "requester",
+        command_request_id: str | None = None,
     ):
-        token = self.delegated_tokens.get(operation_key)
-        if not token:
-            raise TransportContractError(
-                f"delegated token bundle lacks operation: {operation_key}"
-            )
+        token = self._delegated_token(
+            operation_key,
+            actor=actor,
+            payload=payload,
+            command_request_id=command_request_id,
+        )
         return _json(
             self.session.request(
                 method,
@@ -127,7 +217,12 @@ class RestActionClient:
         return self._call("POST", path, command_type, payload)
 
     def approve(
-        self, command_request_id: str, preview_hash: str, idempotency_key: str
+        self,
+        command_request_id: str,
+        preview_hash: str,
+        idempotency_key: str,
+        *,
+        actor: str = "requester",
     ) -> dict[str, Any]:
         root = self.config.command_path.format(command_request_id=command_request_id)
         return self._call(
@@ -139,6 +234,8 @@ class RestActionClient:
                 "approval_intent": "approve",
                 "idempotency_key": idempotency_key,
             },
+            actor=actor,
+            command_request_id=command_request_id,
         )
 
     def execute(
@@ -150,33 +247,51 @@ class RestActionClient:
             f"{root}/execute",
             "automation.command.execute",
             {"preview_hash": preview_hash, "idempotency_key": idempotency_key},
+            command_request_id=command_request_id,
         )
 
     def status(self, command_request_id: str) -> dict[str, Any]:
         path = self.config.command_path.format(command_request_id=command_request_id)
-        return self._call("GET", path, "automation.command.status.get")
+        return self._call(
+            "GET",
+            path,
+            "automation.command.status.get",
+            command_request_id=command_request_id,
+        )
 
 
 @dataclass
 class McpActionClient:
     config: CanonicalLiveConfig
-    session: requests.Session
+    sessions: dict[str, requests.Session]
 
     @classmethod
     def build(cls, config: CanonicalLiveConfig) -> "McpActionClient":
-        session = requests.Session()
-        session.headers.update(
-            {
-                "Authorization": f"Bearer {config.mcp_access_token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
-            }
-        )
-        return cls(config, session)
+        sessions = {}
+        for actor, token in (
+            ("requester", config.mcp_access_token),
+            ("reviewer", config.mcp_reviewer_access_token),
+        ):
+            session = requests.Session()
+            session.headers.update(
+                {
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                }
+            )
+            sessions[actor] = session
+        return cls(config, sessions)
 
-    def call(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def call(
+        self,
+        tool: str,
+        arguments: dict[str, Any],
+        *,
+        actor: str = "requester",
+    ) -> dict[str, Any]:
         request_id = str(uuid.uuid4())
-        response = self.session.post(
+        response = self.sessions[actor].post(
             self.config.mcp_url,
             json={
                 "jsonrpc": "2.0",

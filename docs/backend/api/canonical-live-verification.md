@@ -49,11 +49,11 @@ export PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS='<comma-separated-denylist>'
 
 export PHARMA_CANONICAL_LIVE_API_BASE_URL='https://isolated-canonical-api.example'
 export PHARMA_CANONICAL_LIVE_DATABASE_URL='postgresql://erp_runtime:...@db.<project-ref>.supabase.co/postgres'
-export PHARMA_CANONICAL_LIVE_SERVICE_TOKEN='<short-lived-internal-service-token>'
-export PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH='/secure/path/operation-token-bundle.json'
+export PHARMA_CANONICAL_LIVE_SERVICE_TOKEN='<internal MCP service credential>'
 
 export PHARMA_CANONICAL_MCP_URL='https://isolated-mcp.example/mcp'
-export PHARMA_CANONICAL_MCP_ACCESS_TOKEN='<short-lived-test-user-mcp-token>'
+export PHARMA_CANONICAL_MCP_ACCESS_TOKEN='<short-lived-requester-mcp-oauth-token>'
+export PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN='<short-lived-reviewer-mcp-oauth-token>'
 
 export PHARMA_CANONICAL_LIVE_TEST_ORG_ID='<disposable-org-uuid>'
 export PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID='<disposable-supabase-auth-user-uuid>'
@@ -90,12 +90,13 @@ status     = active
 
 Every hidden REST call requires a short-lived delegated JWT whose
 `operator_operation` and `operator_permission` claims match that exact route.
-The external token bundle is a JSON object keyed by every supported prepare and
-prepare-time rejection operation key (for example `sales.invoice.prepare`) plus
-`automation.command.approve`,
-`automation.command.execute`, and `automation.command.status.get`. Generate it
-immediately before the run through the reviewed action-grant issuer. Never put
-this secret bundle in the repository or the fixture input pack.
+The harness obtains each token immediately before that call through the reviewed
+`/api/internal/mcp/agent-grants/authorize-action` issuer. This is required for
+approve, execute, and status because their delegations are bound to the newly
+created `command_request_id`; a static delegated-token bundle cannot represent
+that contract and must never be stored as a CI secret. The requester and
+independent reviewer OAuth tokens are created through PKCE for disposable Auth
+users and are masked for the lifetime of one serialized job.
 
 The harness reads the tenant marker before the first business prepare call. Missing or
 ambiguous marker evidence stops the run. Never add this marker to a real tenant.
@@ -174,12 +175,11 @@ Later payloads can refer to prior results as
 `$result.<step-id>.resource_id`. Numeric commercial input is a decimal JSON
 string. Binary floating-point JSON values are not accepted by the action API.
 
-The current matrix contains 17 supported execution steps and 17 rejection
-probes. The external pack therefore contains 32 payload entries: all supported
-steps plus the 15 rejection probes whose phase is `prepare`. The two
-`readiness` probes need no payload because the readiness response itself must
-name `inventory.transfer.prepare` and `inventory.destruction.prepare` as the
-only missing adapters.
+The current matrix contains 18 supported execution steps and 17 rejection
+probes. The external pack therefore contains 34 payload entries: all supported
+steps plus the 16 rejection probes whose phase is `prepare`. The one
+`readiness` probe needs no payload because the readiness response itself must
+name `inventory.destruction.prepare` as the only missing adapter.
 
 Each prepare rejection uses both REST and MCP, must leave the count of durable
 `automation.command_requests` unchanged, and may optionally pin a reviewed REST
@@ -202,7 +202,7 @@ matrix even when they are not separate destructive live inputs.
 
 ## What is exercised
 
-The 17-step supported run covers:
+The 18-step supported run covers:
 
 - sales order, batch/logistics dispatch, invoice, receipt and allocations;
 - multiple products, inclusive and exclusive prices, line and document
@@ -216,6 +216,8 @@ The 17-step supported run covers:
   purchase returns;
 - same-day positive cycle-count gain with exact batch, evidence, MWA valuation,
   journal, ledger, and stock-balance projection;
+- inter-branch transfer using the earliest-expiry FEFO tier, exact paired stock
+  ledger entries, unchanged total inventory value, and idempotent execution;
 - REST/MCP prepare parity with identical command ID/hash, alternating approval
   and execution transports, concurrent execute, same-key replay, and
   opposite-transport status parity;
@@ -223,7 +225,7 @@ The 17-step supported run covers:
 
 The 17 expected rejections cover:
 
-- unavailable interbranch transfer and destruction adapters at readiness;
+- unavailable destruction at readiness and later-expiry transfer rejection;
 - export sales, outward reverse charge, and SEZ supply without reviewed LUT or
   bond evidence;
 - import, SEZ, reverse-charge, composition, and unregistered-supplier purchase
@@ -263,8 +265,8 @@ dataset releases, test start/end timestamps, and pytest output. Do not record
 tokens or the database URL. A green run is evidence for that exact release; it
 does not authorize enabling production writes or MCP publication by itself.
 
-Current status: the harness contract is executable for 12 available prepares,
-with two readiness rejections and 15 prepare-time rejections. Live evidence
+Current status: the harness contract is executable for 13 available prepares,
+with one readiness rejection and 16 prepare-time rejections. Live evidence
 remains unavailable until the canonical action API and command baseline are
-deployed to a marked disposable project and the reviewed 32-entry fixture input
+deployed to a marked disposable project and the reviewed 34-entry fixture input
 pack is prepared.

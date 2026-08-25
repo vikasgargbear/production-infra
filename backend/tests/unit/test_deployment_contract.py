@@ -28,9 +28,13 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "backend/tests/live_erp" not in live_job
     assert "PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test" in live_job
     assert "PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev" in live_job
-    assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" in live_job
+    assert "provision_ephemeral_canonical_live.py provision" in live_job
+    assert "PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN" in live_job
+    assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" not in live_job
     assert "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" in live_job
     assert "environment: canonical-staging" in live_job
+    assert "needs: [canonical-free-staging]" in live_job
+    assert "needs.canonical-free-staging.result == 'success'" in live_job
     assert "environment: live-erp-test" not in live_job
     assert "Canonical live API reconciliation is securely blocked" in live_job
     assert "PHARMA_CANONICAL_LIVE_TEST_ORG_ID: d3000000-0000-7000-8000-000000000001" in live_job
@@ -43,6 +47,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" in browser_job
     assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
     assert "environment: canonical-staging" in browser_job
+    assert "needs: [canonical-free-staging]" in browser_job
     assert "environment: live-erp-test" not in browser_job
     assert "canonical-staging-live-browser-identities" in browser_job
     assert "provision --profile core-operator" in browser_job
@@ -61,9 +66,52 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
 
     two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1]
     assert "verify_render_pilot_sha.py" in two_user_job
+    assert "needs: [canonical-free-staging]" in two_user_job
     assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
     assert browser_job.count("group: canonical-staging-live-browser-identities") == 1
+    assert live_job.count("group: canonical-staging-live-browser-identities") == 1
     assert two_user_job.count("group: canonical-staging-live-browser-identities") == 1
+
+
+def test_live_api_mcp_authority_is_ephemeral_and_command_bound():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    live_job = workflow.split("\n  live-erp:", 1)[1].split(
+        "\n  live-browser-erp:", 1
+    )[0]
+    provisioner = _read("backend/scripts/provision_ephemeral_canonical_live.py")
+    demo_provisioner = _read("backend/scripts/provision_canonical_demo.py")
+    transport = _read("backend/tests/live_canonical/transport.py")
+
+    assert "secrets.PHARMA_CANONICAL_MCP_ACCESS_TOKEN" not in live_job
+    assert "secrets.PHARMA_CANONICAL_LIVE_SERVICE_TOKEN" not in live_job
+    assert "secrets.PHARMA_CANONICAL_LIVE_DATABASE_URL" not in live_job
+    assert "secrets.PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" not in live_job
+    assert "secrets.MCP_INTERNAL_SERVICE_TOKEN" in live_job
+    assert "secrets.ERP_RUNTIME_PASSWORD" in live_job
+    assert "provision --profile two-user-approvals" in live_job
+    assert "provision_ephemeral_canonical_live.py provision" in live_job
+    assert "provision_ephemeral_canonical_live.py cleanup" in live_job
+    assert live_job.index("provision_ephemeral_canonical_live.py cleanup") < live_job.index(
+        "provision_ephemeral_browser_identities.py cleanup"
+    )
+    assert live_job.count("if: always()") >= 3
+
+    assert "_reconcile_client" in provisioner
+    assert "_exchange_token" in provisioner
+    assert "_exercise_mcp(token, business_flow=False)" in provisioner
+    assert "transaction_timestamp()+interval '2 hours'" in provisioner
+    assert '"temporary_grants"' in provisioner
+    assert "state_path.unlink(missing_ok=True)" in provisioner
+    assert "tokens" not in provisioner.split("state = {", 1)[1].split(
+        "_write_state(state_path, state)", 1
+    )[0]
+
+    assert "/api/internal/mcp/agent-grants/authorize-action" in transport
+    assert '"command_request_id": command_request_id' in transport
+    assert "delegated_token_path" not in transport
+    assert '"denial_org"' in demo_provisioner
+    assert "AasoPharma Disposable RLS Denial Tenant" in demo_provisioner
+    assert '"rls_denial_organization_id": IDS["denial_org"]' in demo_provisioner
 
 
 def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():

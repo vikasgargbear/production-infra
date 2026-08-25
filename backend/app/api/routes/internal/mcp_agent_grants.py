@@ -199,7 +199,6 @@ def _validate_operator_request(
         if request.operation_key in {
             "automation.command.approve",
             "automation.command.execute",
-            "automation.command.status.get",
         } and request.command_request_id is None:
             raise HTTPException(status_code=403, detail="Shared command delegation requires command_request_id")
         if request.branch_ids:
@@ -303,7 +302,12 @@ def _operator_grant_rows(
                                 AND command.currency_code=command_capability.currency_code)))
                )
                AND (
-                   :operation_key NOT IN ('automation.command.execute','automation.command.status.get')
+                   :operation_key<>'automation.command.execute'
+                   OR command.agent_grant_id=grant_row.id
+               )
+               AND (
+                   :operation_key<>'automation.command.status.get'
+                   OR :command_request_id IS NULL
                    OR command.agent_grant_id=grant_row.id
                )
                AND (

@@ -64,6 +64,8 @@ IDS = {
     "operator_user": "d3000000-0000-7000-8000-000000000023",
     "operator_membership": "d3000000-0000-7000-8000-000000000024",
     "operator_access_grant": "d3000000-0000-7000-8000-000000000025",
+    "denial_org": "d3000000-0000-7000-8000-00000000002c",
+    "denial_membership": "d3000000-0000-7000-8000-00000000002d",
     "customer_party": "d3000000-0000-7000-8000-000000000010",
     "customer_account": "d3000000-0000-7000-8000-000000000011",
     "customer_address": "d3000000-0000-7000-8000-000000000012",
@@ -432,6 +434,38 @@ def bootstrap_identity(connection) -> None:
             (
                 IDS["org"], IDS["reviewer_membership"], IDS["reviewer_user"],
                 IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO core.organizations (
+                id, legal_name, trade_name, registered_address_line1,
+                registered_city, registered_state_code, registered_postal_code,
+                status, created_by_membership_id, updated_by_membership_id
+            ) VALUES (
+                %s, 'AasoPharma Disposable RLS Denial Tenant',
+                'AasoPharma RLS Denial', '1 Isolation Test Road',
+                'Mumbai', '27', '400001', 'active', %s, %s
+            ) ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                IDS["denial_org"],
+                IDS["denial_membership"],
+                IDS["denial_membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO core.memberships (
+                org_id, id, user_id, status, joined_at,
+                created_by_membership_id, updated_by_membership_id
+            ) VALUES (%s, %s, %s, 'active', transaction_timestamp(), %s, %s)
+            ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            (
+                IDS["denial_org"], IDS["denial_membership"],
+                IDS["operator_user"], IDS["denial_membership"],
+                IDS["denial_membership"],
             ),
         )
         cursor.execute(
@@ -4385,6 +4419,7 @@ def main() -> int:
     summary = {
         "project_ref": PROJECT_REF,
         "organization_id": IDS["org"],
+        "rls_denial_organization_id": IDS["denial_org"],
         "organization_classification": "disposable_synthetic_demo",
         "official_source_uri": SOURCE_URI,
         "official_source_sha256": hashlib.sha256(source).hexdigest(),

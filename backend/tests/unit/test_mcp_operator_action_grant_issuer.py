@@ -115,6 +115,11 @@ def test_operator_request_is_exact_and_rejects_ambiguous_scope():
         )
     assert "command_request_id" in unbound.value.detail
 
+    readiness = _request("automation.command.status.get")
+    assert mcp_agent_grants._validate_operator_request(
+        readiness, ACTION_POLICIES[readiness.operation_key]
+    ) == ("read", "none")
+
 
 def test_prepare_token_is_exact_operation_and_branch_bounded(enabled_issuer, monkeypatch):
     now = 1_800_000_000

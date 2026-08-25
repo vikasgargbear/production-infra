@@ -188,8 +188,12 @@ def _execute_step(
     approve_key = f"live-approve-{step['id']}-{uuid.uuid4()}"
     execute_key = f"live-execute-{step['id']}-{uuid.uuid4()}"
 
+    approval_actor = step.get("approval_actor", "requester")
+
     def approve_rest():
-        return rest_client.approve(rest_command_id, rest_hash, approve_key)
+        return rest_client.approve(
+            rest_command_id, rest_hash, approve_key, actor=approval_actor
+        )
 
     def approve_mcp():
         return mcp_client.call(
@@ -200,6 +204,7 @@ def _execute_step(
                 "approval_intent": "approve",
                 "idempotency_key": approve_key,
             },
+            actor=approval_actor,
         )
 
     if step.get("concurrency_probe"):

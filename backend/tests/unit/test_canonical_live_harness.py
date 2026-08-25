@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,7 @@ from tests.live_canonical.oracle import (
     calculate_withholding,
 )
 from tests.live_canonical.reconciliation import RESOURCE_TABLES
+from tests.live_canonical.transport import RestActionClient
 from app.api.routes.internal.mcp_actions import (
     ACTION_POLICIES,
     ApprovalRequest,
@@ -47,9 +49,9 @@ def valid_env():
         ),
         "PHARMA_CANONICAL_LIVE_API_BASE_URL": "https://canonical-test.example.com",
         "PHARMA_CANONICAL_LIVE_SERVICE_TOKEN": "private-service-token",
-        "PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH": "/tmp/private-tokens.json",
         "PHARMA_CANONICAL_MCP_URL": "https://mcp-test.example.com/mcp",
         "PHARMA_CANONICAL_MCP_ACCESS_TOKEN": "private-mcp-token",
+        "PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN": "private-reviewer-mcp-token",
         "PHARMA_CANONICAL_LIVE_TEST_ORG_ID": "11111111-1111-4111-8111-111111111111",
         "PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID": "33333333-3333-4333-8333-333333333333",
         "PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID": "22222222-2222-4222-8222-222222222222",
@@ -68,9 +70,9 @@ def valid_env():
         "PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS",
         "PHARMA_CANONICAL_LIVE_DATABASE_URL",
         "PHARMA_CANONICAL_LIVE_SERVICE_TOKEN",
-        "PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH",
         "PHARMA_CANONICAL_MCP_URL",
         "PHARMA_CANONICAL_MCP_ACCESS_TOKEN",
+        "PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN",
         "PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID",
         "PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID",
     ],
@@ -141,6 +143,142 @@ def test_internal_paths_cannot_drift_from_reviewed_action_registry():
     env["PHARMA_CANONICAL_LIVE_PREPARE_PATH"] = "/invented"
     with pytest.raises(LiveGateError, match="reviewed"):
         load_live_config(env)
+
+
+def test_rest_harness_issues_command_bound_delegation_per_call():
+    config = load_live_config(valid_env())
+    calls = []
+
+    class Session:
+        def post(self, url, json, timeout):
+            calls.append((url, json, timeout))
+            return SimpleNamespace(
+                ok=True,
+                status_code=200,
+                json=lambda: {
+                    "allowed": True,
+                    "operation_key": json["operation_key"],
+                    "subject": json["subject"],
+                    "client_id": json["client_id"],
+                    "command_request_id": json["command_request_id"],
+                    "delegated_access_token": "d" * 48,
+                },
+            )
+
+    client = RestActionClient(
+        config,
+        Session(),
+        {
+            "requester": {
+                "iss": "https://issuer.example",
+                "sub": str(config.test_auth_user_id),
+                "client_id": "reviewed-client",
+                "organization_id": str(config.test_org_id),
+            },
+            "reviewer": {
+                "iss": "https://issuer.example",
+                "sub": "55555555-5555-4555-8555-555555555555",
+                "client_id": "reviewed-client",
+                "organization_id": str(config.test_org_id),
+            },
+        },
+    )
+    command_id = "66666666-6666-4666-8666-666666666666"
+    token = client._delegated_token(
+        "automation.command.approve",
+        actor="reviewer",
+        payload={"branch_id": str(config.test_branch_id)},
+        command_request_id=command_id,
+    )
+
+    assert token == "d" * 48
+    assert calls[0][1]["subject"] == "55555555-5555-4555-8555-555555555555"
+    assert calls[0][1]["command_request_id"] == command_id
+    assert calls[0][1]["branch_ids"] == []
+
+
+def test_rest_harness_delegates_transfer_source_then_destination_exactly():
+    config = load_live_config(valid_env())
+    calls = []
+
+    class Session:
+        def post(self, url, json, timeout):
+            calls.append((url, json, timeout))
+            return SimpleNamespace(
+                ok=True,
+                status_code=200,
+                json=lambda: {
+                    "allowed": True,
+                    "operation_key": json["operation_key"],
+                    "subject": json["subject"],
+                    "client_id": json["client_id"],
+                    "command_request_id": json["command_request_id"],
+                    "delegated_access_token": "d" * 48,
+                },
+            )
+
+    client = RestActionClient(
+        config,
+        Session(),
+        {
+            "requester": {
+                "iss": "https://issuer.example",
+                "sub": str(config.test_auth_user_id),
+                "client_id": "reviewed-client",
+                "organization_id": str(config.test_org_id),
+            },
+            "reviewer": {
+                "iss": "https://issuer.example",
+                "sub": "55555555-5555-4555-8555-555555555555",
+                "client_id": "reviewed-client",
+                "organization_id": str(config.test_org_id),
+            },
+        },
+    )
+    source = "77777777-7777-4777-8777-777777777777"
+    destination = "88888888-8888-4888-8888-888888888888"
+
+    client._delegated_token(
+        "inventory.transfer.prepare",
+        actor="requester",
+        payload={
+            "source_branch_id": source,
+            "destination_branch_id": destination,
+        },
+        command_request_id=None,
+    )
+
+    assert calls[0][1]["branch_ids"] == [source, destination]
+
+    client._delegated_token(
+        "inventory.transfer.prepare",
+        actor="requester",
+        payload={
+            "source_branch_id": source,
+            "destination_branch_id": source,
+        },
+        command_request_id=None,
+    )
+    assert calls[1][1]["branch_ids"] == [source]
+
+
+def test_every_success_prepare_uses_the_reviewed_branch_field_shapes():
+    branch_shapes = {
+        tuple(ACTION_POLICIES[f"{step['operation']}.prepare"].branch_fields)
+        for journey in json.loads(
+            (
+                Path(__file__).resolve().parents[1]
+                / "live_canonical"
+                / "scenario_matrix.json"
+            ).read_text()
+        )["journeys"]
+        for step in journey["steps"]
+    }
+
+    assert branch_shapes == {
+        ("branch_id",),
+        ("source_branch_id", "destination_branch_id"),
+    }
 
 
 def test_harness_paths_and_envelopes_match_checked_in_action_api():
@@ -385,6 +523,16 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
     assert len(steps) + sum(probe["phase"] == "prepare" for probe in probes) == 34
     assert len({step["id"] for step in steps}) == len(steps)
     assert len({probe["id"] for probe in probes}) == len(probes)
+    assert {
+        step["operation"]
+        for step in steps
+        if step.get("approval_actor") == "reviewer"
+    } == {
+        "sales.return",
+        "procurement.purchase_return",
+        "finance.supplier_advance",
+        "inventory.adjustment",
+    }
 
     manifest = json.loads(AUTOMATION_MANIFEST.read_text())["dispatcher"]
     assert set(manifest["executable_prepare_capabilities"]) == available

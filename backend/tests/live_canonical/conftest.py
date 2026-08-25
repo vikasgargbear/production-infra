@@ -176,34 +176,8 @@ def denial_db_query(db_query_as_context, canonical_live_config):
 
 
 @pytest.fixture(scope="session")
-def delegated_tokens(canonical_live_config, scenario_matrix):
-    path = canonical_live_config.delegated_token_path
-    if not path.is_file():
-        raise AssertionError(f"delegated token bundle does not exist: {path}")
-    tokens = json.loads(path.read_text())
-    required = {
-        "automation.command.approve",
-        "automation.command.execute",
-        "automation.command.status.get",
-        *{
-            f"{entry['operation']}.prepare"
-            for entry in [
-                *_success_steps(scenario_matrix),
-                *_prepare_rejections(scenario_matrix),
-            ]
-        },
-    }
-    missing = sorted(
-        key for key in required if not isinstance(tokens.get(key), str) or not tokens[key]
-    )
-    if missing:
-        raise AssertionError(f"delegated token bundle lacks operations: {missing}")
-    return tokens
-
-
-@pytest.fixture(scope="session")
-def rest_client(canonical_live_config, delegated_tokens):
-    return RestActionClient.build(canonical_live_config, delegated_tokens)
+def rest_client(canonical_live_config):
+    return RestActionClient.build(canonical_live_config)
 
 
 @pytest.fixture(scope="session")

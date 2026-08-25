@@ -27,9 +27,9 @@ class CanonicalLiveConfig:
     api_base_url: str
     database_url: str = field(repr=False)
     service_token: str = field(repr=False)
-    delegated_token_path: Path
     mcp_url: str
     mcp_access_token: str = field(repr=False)
+    mcp_reviewer_access_token: str = field(repr=False)
     project_ref: str
     allowed_project_ref: str
     production_project_refs: frozenset[str]
@@ -155,14 +155,14 @@ def load_live_config(env: Mapping[str, str] | None = None) -> CanonicalLiveConfi
         ),
         database_url=database_url,
         service_token=_required(values, "PHARMA_CANONICAL_LIVE_SERVICE_TOKEN"),
-        delegated_token_path=Path(
-            _required(values, "PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH")
-        ),
         mcp_url=_http_origin(
             _required(values, "PHARMA_CANONICAL_MCP_URL"),
             "PHARMA_CANONICAL_MCP_URL",
         ),
         mcp_access_token=_required(values, "PHARMA_CANONICAL_MCP_ACCESS_TOKEN"),
+        mcp_reviewer_access_token=_required(
+            values, "PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN"
+        ),
         project_ref=project_ref,
         allowed_project_ref=allowed_ref,
         production_project_refs=production_refs,

@@ -696,9 +696,15 @@ jobs:
           }
 
   live-erp:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
+      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
+    concurrency:
+      group: canonical-staging-live-browser-identities
+      cancel-in-progress: false
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
@@ -708,16 +714,17 @@ jobs:
       PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
       PHARMA_CANONICAL_LIVE_API_BASE_URL: https://aasopharma-api-pilot.onrender.com
-      PHARMA_CANONICAL_LIVE_DATABASE_URL: ${{ secrets.PHARMA_CANONICAL_LIVE_DATABASE_URL }}
-      PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.PHARMA_CANONICAL_LIVE_SERVICE_TOKEN }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+      PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
       PHARMA_CANONICAL_MCP_URL: https://aasopharma-mcp-pilot.onrender.com/mcp
-      PHARMA_CANONICAL_MCP_ACCESS_TOKEN: ${{ secrets.PHARMA_CANONICAL_MCP_ACCESS_TOKEN }}
       PHARMA_CANONICAL_LIVE_TEST_ORG_ID: d3000000-0000-7000-8000-000000000001
-      PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID: ${{ vars.PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID }}
-      PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID: ${{ vars.PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID }}
-      PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID: ${{ vars.PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID }}
-      PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH: ${{ github.workspace }}/.live-secrets/delegated-tokens.json
       PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH: ${{ github.workspace }}/.live-secrets/fixture-inputs.json
+      PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH: ${{ github.workspace }}/canonical-live-fixture-identities.json
       PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
     steps:
       - uses: actions/checkout@v4
@@ -729,6 +736,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r backend/requirements.txt
+      - name: Install pinned ephemeral identity reconciler dependencies
+        run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
       - name: Bind the canonical live run to one reviewed deployed SHA
         run: |
           set -euo pipefail
@@ -736,9 +745,27 @@ jobs:
           PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
             --commit-sha "$REVIEWED_DEPLOY_SHA" \
             > render-pilot-live-sha.json
+      - name: Build the masked exact erp_runtime connection
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=15&application_name=canonical_live_reconciliation"
+          echo "::add-mask::$runtime_url"
+          echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
+      - name: Provision masked disposable requester and reviewer identities
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --profile two-user-approvals \
+            --state "$RUNNER_TEMP/canonical-live-browser-identities.json"
+      - name: Obtain real short-lived MCP OAuth and per-call delegation authority
+        run: |
+          python3 backend/scripts/provision_ephemeral_canonical_live.py provision \
+            --state "$RUNNER_TEMP/canonical-live-mcp-identities.json" \
+            --browser-state "$RUNNER_TEMP/canonical-live-browser-identities.json"
       - name: Refuse an incompletely configured canonical live run
         env:
-          PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON: ${{ secrets.PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON }}
           PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON: ${{ secrets.PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON }}
         run: |
           set -euo pipefail
@@ -747,10 +774,10 @@ jobs:
             PHARMA_CANONICAL_LIVE_DATABASE_URL \
             PHARMA_CANONICAL_LIVE_SERVICE_TOKEN \
             PHARMA_CANONICAL_MCP_ACCESS_TOKEN \
+            PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN \
             PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID \
             PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID \
             PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID \
-            PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON \
             PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON
           do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
@@ -762,13 +789,21 @@ jobs:
           test "$PHARMA_CANONICAL_LIVE_TEST_ORG_ID" = d3000000-0000-7000-8000-000000000001
           umask 077
           mkdir -p .live-secrets
-          printf '%s' "$PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" > "$PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH"
           printf '%s' "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" > "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH"
-          python3 -m json.tool "$PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH" >/dev/null
           python3 -m json.tool "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH" >/dev/null
       - run: |
           set -o pipefail
           PYTHONPATH=backend pytest -q backend/tests/live_canonical | tee canonical-live-pytest.txt
+      - name: Always suspend temporary MCP authorities
+        if: always()
+        run: |
+          python3 backend/scripts/provision_ephemeral_canonical_live.py cleanup \
+            --state "$RUNNER_TEMP/canonical-live-mcp-identities.json"
+      - name: Always restore seeded identities and delete disposable Auth users
+        if: always()
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
+            --state "$RUNNER_TEMP/canonical-live-browser-identities.json"
       - name: Upload canonical REST, MCP, database, and SHA evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -776,12 +811,16 @@ jobs:
           name: canonical-live-reconciliation-evidence
           path: |
             render-pilot-live-sha.json
+            canonical-live-fixture-identities.json
             canonical-live-pytest.txt
           if-no-files-found: error
           retention-days: 30
 
   live-browser-erp:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
+      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 60
@@ -878,7 +917,10 @@ jobs:
           retention-days: 30
 
   live-browser-erp-two-user-approvals:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals &&
+      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 45

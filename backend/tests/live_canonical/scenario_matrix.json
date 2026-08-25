@@ -30,8 +30,8 @@
         {"id": "sales_dispatch_mixed", "operation": "sales.dispatch", "prepare_tool": "erp_sales_dispatch_prepare"},
         {"id": "sales_invoice_mixed", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "oracle": "document", "concurrency_probe": true},
         {"id": "customer_receipt_partial", "operation": "finance.customer_receipt", "prepare_tool": "erp_customer_receipt_prepare"},
-        {"id": "sales_return_partial", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_mixed"},
-        {"id": "sales_return_final", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_mixed", "final_residual": true}
+        {"id": "sales_return_partial", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_mixed", "approval_actor": "reviewer"},
+        {"id": "sales_return_final", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_mixed", "final_residual": true, "approval_actor": "reviewer"}
       ]
     },
     {
@@ -40,7 +40,7 @@
       "steps": [
         {"id": "sales_invoice_inter", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "oracle": "document"},
         {"id": "sales_invoice_sez_with_igst", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "oracle": "document"},
-        {"id": "sales_return_commercial_only", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_inter", "gst_tax_treatment": "commercial_only"}
+        {"id": "sales_return_commercial_only", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_inter", "gst_tax_treatment": "commercial_only", "approval_actor": "reviewer"}
       ]
     },
     {
@@ -48,19 +48,19 @@
       "coverage": ["purchase_order", "vendor_advance_without_withholding", "goods_receipt", "manufacturer_batch", "tax_inclusive_mrp_pack", "supplier_invoice", "three_way_match", "supplier_payment_without_withholding", "payable_allocation", "purchase_return_partial", "purchase_return_final", "commercial_debit_note", "supplier_gst_credit_evidence"],
       "steps": [
         {"id": "purchase_order_mixed", "operation": "procurement.purchase_order", "prepare_tool": "erp_purchase_order_prepare", "oracle": "document"},
-        {"id": "supplier_advance_no_withholding", "operation": "finance.supplier_advance", "prepare_tool": "erp_supplier_advance_prepare"},
+        {"id": "supplier_advance_no_withholding", "operation": "finance.supplier_advance", "prepare_tool": "erp_supplier_advance_prepare", "approval_actor": "reviewer"},
         {"id": "goods_receipt_mixed", "operation": "procurement.goods_receipt", "prepare_tool": "erp_goods_receipt_prepare"},
         {"id": "supplier_invoice_mixed", "operation": "procurement.supplier_invoice", "prepare_tool": "erp_supplier_invoice_prepare", "oracle": "document"},
         {"id": "supplier_payment_balance_no_withholding", "operation": "finance.supplier_payment", "prepare_tool": "erp_supplier_payment_prepare"},
-        {"id": "purchase_return_partial", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "oracle": "reversal", "original_step": "supplier_invoice_mixed"},
-        {"id": "purchase_return_final", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "oracle": "reversal", "original_step": "supplier_invoice_mixed", "final_residual": true}
+        {"id": "purchase_return_partial", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "oracle": "reversal", "original_step": "supplier_invoice_mixed", "approval_actor": "reviewer"},
+        {"id": "purchase_return_final", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "oracle": "reversal", "original_step": "supplier_invoice_mixed", "final_residual": true, "approval_actor": "reviewer"}
       ]
     },
     {
       "id": "inventory_supported_controls",
       "coverage": ["cycle_count", "positive_gain_only", "batch_lineage", "stock_balance_projection", "moving_weighted_average", "evidence", "inter_branch_transfer", "strict_fefo_earliest_expiry_tier", "balanced_transfer_ledger"],
       "steps": [
-        {"id": "inventory_adjustment_cycle_count_gain", "operation": "inventory.adjustment", "prepare_tool": "erp_inventory_adjustment_prepare"},
+        {"id": "inventory_adjustment_cycle_count_gain", "operation": "inventory.adjustment", "prepare_tool": "erp_inventory_adjustment_prepare", "approval_actor": "reviewer"},
         {"id": "inventory_transfer_inter_branch_fefo", "operation": "inventory.transfer", "prepare_tool": "erp_inventory_transfer_prepare", "oracle": "inventory_transfer", "concurrency_probe": true}
       ]
     }
