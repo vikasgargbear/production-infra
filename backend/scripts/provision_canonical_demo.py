@@ -254,6 +254,12 @@ CALCULATION_TOTAL_FIELDS = (
     "rounding_adjustment",
     "grand_total",
 )
+PURCHASE_ORDER_RECONCILABLE_STATUSES = frozenset(
+    {"approved", "partially_received", "received"}
+)
+SALES_ORDER_RECONCILABLE_STATUSES = frozenset(
+    {"approved", "partially_fulfilled", "fulfilled"}
+)
 
 
 def required(name: str) -> str:
@@ -2002,8 +2008,82 @@ def action_context(operation: str, permission: str):
     )
 
 
+def existing_demo_command(
+    operation: str,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Load a prior run-scoped command before attempting a mutable preflight."""
+
+    idempotency_key = payload.get("idempotency_key")
+    if not isinstance(idempotency_key, str) or not idempotency_key:
+        raise RuntimeError(f"{operation} preflight lacks its exact idempotency key")
+    key_hash = hashlib.sha256(idempotency_key.encode("utf-8")).digest()
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
+        with runtime.cursor() as cursor:
+            cursor.execute(
+                "SELECT erp_security.activate_context(%s, %s)",
+                (IDS["operator_auth_user"], IDS["org"]),
+            )
+            cursor.execute(
+                """
+                SELECT id::text,status,encode(preview_hash,'hex'),
+                       result_resource_id::text
+                  FROM automation.command_requests
+                 WHERE org_id=%s AND agent_grant_id=%s
+                   AND capability_code=%s AND idempotency_key_hash=%s
+                """,
+                (
+                    IDS["org"], IDS["agent_grant"], operation,
+                    psycopg2.Binary(key_hash),
+                ),
+            )
+            rows = cursor.fetchall()
+    if len(rows) > 1:
+        raise RuntimeError(f"{operation} idempotency authority is ambiguous")
+    if not rows:
+        return None
+    command_id, status, preview_hash, resource_id = rows[0]
+    if status not in {"prepared", "approved", "succeeded"}:
+        raise RuntimeError(f"{operation} cannot resume command in {status} state")
+    if status == "succeeded" and resource_id is None:
+        raise RuntimeError(f"{operation} succeeded without a canonical resource")
+    return {
+        "command_request_id": str(command_id),
+        "status": str(status),
+        "preview_hash": f"sha256:{preview_hash}",
+        "resource_id": str(resource_id) if resource_id is not None else None,
+    }
+
+
+def resumed_command_evidence(
+    payload: dict[str, Any],
+    prepared: dict[str, Any],
+    status: dict[str, Any],
+) -> dict[str, Any]:
+    """Represent a completed replay without inventing approval or execute calls."""
+
+    return {
+        "payload": payload,
+        "prepared": prepared,
+        "prepared_replay": prepared,
+        "resumed_status": status,
+        "approved": None,
+        "approved_replay": None,
+        "executed": status,
+        "executed_replay": status,
+    }
+
+
 def preflight_action(operation: str, payload: dict[str, Any]) -> None:
     """Exercise the exact service transaction and roll back every write."""
+
+    existing = existing_demo_command(operation, payload)
+    if existing is not None:
+        print(
+            f"canonical demo {operation} rollback preflight reused "
+            f"{existing['status']} command {existing['command_request_id']}"
+        )
+        return
 
     backend_root = str(Path(__file__).resolve().parents[1])
     if backend_root not in sys.path:
@@ -2074,14 +2154,19 @@ def exercise_action(
     separate_approver: bool = False,
     evidence_label: str = "",
 ) -> dict[str, Any]:
-    prepared = api_call(
-        "POST", f"/api/internal/mcp/actions/{operation}/prepare",
-        operation, permission, payload,
-    )
-    prepared_replay = api_call(
-        "POST", f"/api/internal/mcp/actions/{operation}/prepare",
-        operation, permission, payload,
-    )
+    existing = existing_demo_command(operation, payload)
+    if existing is None:
+        prepared = api_call(
+            "POST", f"/api/internal/mcp/actions/{operation}/prepare",
+            operation, permission, payload,
+        )
+        prepared_replay = api_call(
+            "POST", f"/api/internal/mcp/actions/{operation}/prepare",
+            operation, permission, payload,
+        )
+    else:
+        prepared = existing
+        prepared_replay = existing
     command_id = str(prepared["command_request_id"])
     preview_hash = str(prepared["preview_hash"])
     if (
@@ -2089,38 +2174,65 @@ def exercise_action(
         or str(prepared_replay.get("preview_hash")) != preview_hash
     ):
         raise RuntimeError(f"{operation} prepare replay changed immutable evidence")
+    resumed_status = api_call(
+        "GET", f"/api/internal/mcp/commands/{command_id}",
+        "automation.command.status.get", "automation.command.view",
+        command_id=command_id,
+    )
+    if resumed_status.get("status") == "succeeded":
+        if (
+            str(resumed_status.get("command_request_id")) != command_id
+            or str(resumed_status.get("preview_hash")) != preview_hash
+            or not resumed_status.get("resource_id")
+        ):
+            raise RuntimeError(f"{operation} resumed status changed immutable evidence")
+        evidence = resumed_command_evidence(payload, prepared, resumed_status)
+        evidence_suffix = f"-{evidence_label}" if evidence_label else ""
+        evidence_name = operation.replace(".", "-") + evidence_suffix
+        (evidence_dir / f"canonical-demo-{evidence_name}.json").write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return evidence
+    if resumed_status.get("status") not in {"prepared", "approved"}:
+        raise RuntimeError(
+            f"{operation} cannot resume command in {resumed_status.get('status')} state"
+        )
     evidence_suffix = f"-{evidence_label}" if evidence_label else ""
     approval_key = (
         f"demo-approve-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
         f"{evidence_suffix}"
     )
-    approved = api_call(
-        "POST", f"/api/internal/mcp/commands/{command_id}/approve",
-        "automation.command.approve", "automation.command.approve",
-        {
-            "preview_hash": preview_hash,
-            "approval_intent": "approve",
-            "idempotency_key": approval_key,
-        },
-        command_id,
-        approver=separate_approver,
-    )
-    approved_replay = api_call(
-        "POST", f"/api/internal/mcp/commands/{command_id}/approve",
-        "automation.command.approve", "automation.command.approve",
-        {
-            "preview_hash": preview_hash,
-            "approval_intent": "approve",
-            "idempotency_key": approval_key,
-        },
-        command_id,
-        approver=separate_approver,
-    )
-    if (
-        str(approved_replay.get("command_request_id")) != command_id
-        or approved_replay.get("idempotency_replayed") is not True
-    ):
-        raise RuntimeError(f"{operation} approval replay was not idempotent")
+    if resumed_status.get("status") == "approved":
+        approved = resumed_status
+        approved_replay = resumed_status
+    else:
+        approved = api_call(
+            "POST", f"/api/internal/mcp/commands/{command_id}/approve",
+            "automation.command.approve", "automation.command.approve",
+            {
+                "preview_hash": preview_hash,
+                "approval_intent": "approve",
+                "idempotency_key": approval_key,
+            },
+            command_id,
+            approver=separate_approver,
+        )
+        approved_replay = api_call(
+            "POST", f"/api/internal/mcp/commands/{command_id}/approve",
+            "automation.command.approve", "automation.command.approve",
+            {
+                "preview_hash": preview_hash,
+                "approval_intent": "approve",
+                "idempotency_key": approval_key,
+            },
+            command_id,
+            approver=separate_approver,
+        )
+        if (
+            str(approved_replay.get("command_request_id")) != command_id
+            or approved_replay.get("idempotency_replayed") is not True
+        ):
+            raise RuntimeError(f"{operation} approval replay was not idempotent")
     execution_key = (
         f"demo-execute-{operation}-{os.getenv('GITHUB_RUN_ID', 'local')}"
         f"{evidence_suffix}"
@@ -2151,6 +2263,7 @@ def exercise_action(
         "payload": payload,
         "prepared": prepared,
         "prepared_replay": prepared_replay,
+        "resumed_status": resumed_status,
         "approved": approved,
         "approved_replay": approved_replay,
         "executed": executed,
@@ -2370,7 +2483,11 @@ def reconcile_purchase_order(
             (IDS["org"], resource_id),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "approved" or row[9] != expected_line_count:
+        if (
+            row is None
+            or row[2] not in PURCHASE_ORDER_RECONCILABLE_STATUSES
+            or row[9] != expected_line_count
+        ):
             raise RuntimeError("executed demo purchase order did not reconcile")
         columns = [item.name for item in cursor.description]
         result = dict(zip(columns, row))
@@ -3005,13 +3122,23 @@ def reconcile_goods_receipt(
                    line.id AS goods_receipt_line_id,line.batch_id,
                    line.base_accepted_quantity,line.base_free_quantity,
                    line.extended_cost,document.id AS inventory_document_id,
-                   balance.on_hand_quantity,balance.inventory_value,
+                   inventory_line.base_quantity AS posted_base_quantity,
+                   ledger.quantity_delta AS posted_quantity_delta,
+                   ledger.value_delta AS posted_value_delta,
                    balance.average_unit_cost AS moving_weighted_average
               FROM procurement.goods_receipts AS receipt
               JOIN procurement.goods_receipt_lines AS line
                 ON line.org_id=receipt.org_id AND line.goods_receipt_id=receipt.id
               JOIN inventory.inventory_documents AS document
                 ON document.org_id=receipt.org_id AND document.goods_receipt_id=receipt.id
+              JOIN inventory.inventory_document_lines AS inventory_line
+                ON inventory_line.org_id=document.org_id
+               AND inventory_line.inventory_document_id=document.id
+               AND inventory_line.goods_receipt_line_id=line.id
+              JOIN inventory.stock_ledger_entries AS ledger
+                ON ledger.org_id=inventory_line.org_id
+               AND ledger.inventory_document_line_id=inventory_line.id
+               AND ledger.entry_kind='receipt'
               JOIN inventory.stock_balances AS balance
                 ON balance.org_id=receipt.org_id
                AND balance.location_id=line.location_id
@@ -3028,6 +3155,8 @@ def reconcile_goods_receipt(
             or row[5] != Decimal(expected_accepted_quantity)
             or row[6] != Decimal(expected_free_quantity)
             or row[9] != row[5] + row[6]
+            or row[10] != row[9]
+            or row[11] != row[7]
         ):
             raise RuntimeError("executed demo goods receipt did not reconcile")
         columns = [item.name for item in cursor.description]
@@ -3396,6 +3525,13 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
     )
     validate_prepare_payload_semantics("sales.order.prepare", validated_payload)
     payload = validated_payload.model_dump(mode="json", exclude_none=True)
+    existing = existing_demo_command("sales.order.prepare", payload)
+    if existing is not None:
+        print(
+            "canonical demo sales.order.prepare rollback preflight reused "
+            f"{existing['status']} command {existing['command_request_id']}"
+        )
+        return
     identity = (
         f"aasopharma:{IDS['org']}:{IDS['operator_membership']}:sales.order.prepare:"
         f"{payload['idempotency_key']}"
@@ -3522,14 +3658,19 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
 def exercise_sales_order(
     evidence_dir: Path, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    prepared = api_call(
-        "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
-        "sales.order.prepare", "sales.order.create", payload,
-    )
-    prepared_replay = api_call(
-        "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
-        "sales.order.prepare", "sales.order.create", payload,
-    )
+    existing = existing_demo_command("sales.order.prepare", payload)
+    if existing is None:
+        prepared = api_call(
+            "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
+            "sales.order.prepare", "sales.order.create", payload,
+        )
+        prepared_replay = api_call(
+            "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
+            "sales.order.prepare", "sales.order.create", payload,
+        )
+    else:
+        prepared = existing
+        prepared_replay = existing
     command_id = str(prepared["command_request_id"])
     preview_hash = str(prepared["preview_hash"])
     if (
@@ -3537,30 +3678,56 @@ def exercise_sales_order(
         or str(prepared_replay.get("preview_hash")) != preview_hash
     ):
         raise RuntimeError("sales order prepare replay changed immutable evidence")
+    resumed_status = api_call(
+        "GET", f"/api/internal/mcp/commands/{command_id}",
+        "automation.command.status.get", "automation.command.view",
+        command_id=command_id,
+    )
+    if resumed_status.get("status") == "succeeded":
+        if (
+            str(resumed_status.get("command_request_id")) != command_id
+            or str(resumed_status.get("preview_hash")) != preview_hash
+            or not resumed_status.get("resource_id")
+        ):
+            raise RuntimeError("sales order resumed status changed immutable evidence")
+        evidence = resumed_command_evidence(payload, prepared, resumed_status)
+        (evidence_dir / "canonical-demo-sales-order.json").write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return evidence
+    if resumed_status.get("status") not in {"prepared", "approved"}:
+        raise RuntimeError(
+            "sales order cannot resume command in "
+            f"{resumed_status.get('status')} state"
+        )
     approval_key = f"demo-approve-{os.getenv('GITHUB_RUN_ID', 'local')}"
-    approved = api_call(
-        "POST", f"/api/internal/mcp/commands/{command_id}/approve",
-        "automation.command.approve", "automation.command.approve",
-        {
-            "preview_hash": preview_hash,
-            "approval_intent": "approve",
-            "idempotency_key": approval_key,
-        }, command_id,
-    )
-    approved_replay = api_call(
-        "POST", f"/api/internal/mcp/commands/{command_id}/approve",
-        "automation.command.approve", "automation.command.approve",
-        {
-            "preview_hash": preview_hash,
-            "approval_intent": "approve",
-            "idempotency_key": approval_key,
-        }, command_id,
-    )
-    if (
-        str(approved_replay.get("command_request_id")) != command_id
-        or approved_replay.get("idempotency_replayed") is not True
-    ):
-        raise RuntimeError("sales order approval replay was not idempotent")
+    if resumed_status.get("status") == "approved":
+        approved = resumed_status
+        approved_replay = resumed_status
+    else:
+        approved = api_call(
+            "POST", f"/api/internal/mcp/commands/{command_id}/approve",
+            "automation.command.approve", "automation.command.approve",
+            {
+                "preview_hash": preview_hash,
+                "approval_intent": "approve",
+                "idempotency_key": approval_key,
+            }, command_id,
+        )
+        approved_replay = api_call(
+            "POST", f"/api/internal/mcp/commands/{command_id}/approve",
+            "automation.command.approve", "automation.command.approve",
+            {
+                "preview_hash": preview_hash,
+                "approval_intent": "approve",
+                "idempotency_key": approval_key,
+            }, command_id,
+        )
+        if (
+            str(approved_replay.get("command_request_id")) != command_id
+            or approved_replay.get("idempotency_replayed") is not True
+        ):
+            raise RuntimeError("sales order approval replay was not idempotent")
     execution_key = f"demo-execute-{os.getenv('GITHUB_RUN_ID', 'local')}"
     executed = api_call(
         "POST", f"/api/internal/mcp/commands/{command_id}/execute",
@@ -3586,6 +3753,7 @@ def exercise_sales_order(
         "payload": payload,
         "prepared": prepared,
         "prepared_replay": prepared_replay,
+        "resumed_status": resumed_status,
         "approved": approved,
         "approved_replay": approved_replay,
         "executed": executed,
@@ -3623,7 +3791,11 @@ def reconcile(
             (IDS["org"], execution["resource_id"]),
         )
         row = cursor.fetchone()
-        if row is None or row[2] != "approved" or row[-1] != 1:
+        if (
+            row is None
+            or row[2] not in SALES_ORDER_RECONCILABLE_STATUSES
+            or row[-1] != 1
+        ):
             raise RuntimeError("executed demo sales order did not reconcile")
         columns = [item.name for item in cursor.description]
         result = {column: str(value) if value is not None else None for column, value in zip(columns, row)}
@@ -4348,12 +4520,12 @@ def reconcile_cross_table_invariants(
     connection,
     *,
     command_ids: list[str],
-    started_at: datetime,
 ) -> dict[str, Any]:
     """Reconcile the exact demo run across durable ledgers and projections."""
-    if len(command_ids) != 12 or len(set(command_ids)) != len(command_ids):
-        raise RuntimeError("demo cross-table audit requires 12 unique command requests")
-    result: dict[str, Any] = {"command_count": len(command_ids)}
+    expected_command_count = len(command_ids)
+    if expected_command_count < 1 or len(set(command_ids)) != expected_command_count:
+        raise RuntimeError("demo cross-table audit requires unique command requests")
+    result: dict[str, Any] = {"command_count": expected_command_count}
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT erp_security.activate_context(%s, %s)",
@@ -4376,14 +4548,29 @@ def reconcile_cross_table_invariants(
                        SELECT 1 FROM core.audit_events audit
                         WHERE audit.org_id=command.org_id
                           AND audit.command_request_id=command.id
-                   )) AS audited_command_count
+                   )) AS audited_command_count,
+                   count(*) FILTER (
+                       WHERE command.calculation_hash IS NOT NULL
+                   ) AS calculation_command_count,
+                   min(command.created_at) AS first_command_at
               FROM automation.command_requests command
              WHERE command.org_id=%s AND command.id=ANY(CAST(%s AS uuid[]))
             """,
             (IDS["org"], command_ids),
         )
         command_row = cursor.fetchone()
-        if command_row != (12, 12, 0, 0, 12):
+        if (
+            command_row[:5]
+            != (
+                expected_command_count,
+                expected_command_count,
+                0,
+                0,
+                expected_command_count,
+            )
+            or command_row[5] < 1
+            or command_row[6] is None
+        ):
             raise RuntimeError(
                 f"demo command, approval, and audit evidence did not reconcile: {command_row}"
             )
@@ -4393,6 +4580,7 @@ def reconcile_cross_table_invariants(
                 "audited_command_count": command_row[4],
             }
         )
+        started_at = command_row[6]
 
         cursor.execute(
             """
@@ -4408,7 +4596,7 @@ def reconcile_cross_table_invariants(
             (IDS["org"], command_ids),
         )
         artifact_row = cursor.fetchone()
-        if artifact_row[0] < 5 or artifact_row[1:] != (0, 0):
+        if artifact_row != (command_row[5], 0, 0):
             raise RuntimeError(
                 f"demo calculation authority did not reconcile: {artifact_row}"
             )
@@ -4609,9 +4797,6 @@ def main() -> int:
         party_master_reconciliation = reconcile_party_master(runtime)
         verify_fiscal_tax_fact(runtime)
         activate_demo_product(runtime)
-        with runtime.cursor() as cursor:
-            cursor.execute("SELECT transaction_timestamp()")
-            journey_started_at = cursor.fetchone()[0]
 
     purchase_payload = purchase_order_payload()
     preflight_action("procurement.purchase_order.prepare", purchase_payload)
@@ -4919,7 +5104,6 @@ def main() -> int:
                     adjustment_journey,
                 )
             ],
-            started_at=journey_started_at,
         )
     summary = {
         "project_ref": PROJECT_REF,
