@@ -113,6 +113,7 @@ TAX_DOCUMENT_OPERATIONS = {
     "sales.return",
     "procurement.supplier_invoice",
     "procurement.purchase_return",
+    "finance.adjustment_note",
 }
 RETURN_OPERATIONS = {"sales.return", "procurement.purchase_return"}
 PAYMENT_OPERATIONS = {
@@ -220,6 +221,7 @@ class CanonicalReconciler:
         operation: str,
         resource_id: str,
         preview: dict[str, Any],
+        prepare_request: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if operation not in RESOURCE_TABLES:
             raise AssertionError(f"operation has no reconciliation owner: {operation}")
@@ -349,9 +351,9 @@ class CanonicalReconciler:
              WHERE ae.org_id = %s::uuid
                AND (ae.sales_invoice_id = %s::uuid OR ae.supplier_invoice_id = %s::uuid
                     OR ae.payment_id = %s::uuid OR ae.inventory_document_id = %s::uuid
-                    OR ae.expense_claim_id = %s::uuid)
+                    OR ae.expense_claim_id = %s::uuid OR ae.adjustment_note_id = %s::uuid)
             """,
-            (self.org_id, resource_id, resource_id, resource_id, resource_id, resource_id),
+            (self.org_id,) + (resource_id,) * 6,
         )[0]
         if journal["entry_count"]:
             assert journal["debit_total"] == journal["credit_total"]
@@ -540,6 +542,160 @@ class CanonicalReconciler:
                 "approved_amount"
             ] == expense["transaction_credit_total"]
 
+            if prepare_request is None:
+                raise AssertionError("expense claim reconciliation requires its exact prepare request")
+            expected_lines = prepare_request.get("lines")
+            assert isinstance(expected_lines, list) and expected_lines
+            persisted_lines = self.query(
+                """
+                SELECT line.expense_account_id::text, line.receipt_attachment_id::text,
+                       line.claimed_amount, line.approved_amount,
+                       receipt.sha256, receipt.status, receipt.evidence_kind
+                  FROM finance.expense_claim_lines line
+                  JOIN core.attachments receipt
+                    ON receipt.org_id=line.org_id AND receipt.id=line.receipt_attachment_id
+                 WHERE line.org_id=%s::uuid AND line.expense_claim_id=%s::uuid
+                 ORDER BY line.line_number,line.id
+                """,
+                (self.org_id, resource_id),
+            )
+            assert len(persisted_lines) == len(expected_lines)
+            for persisted, expected in zip(persisted_lines, expected_lines):
+                assert persisted["expense_account_id"] == str(expected["expense_account_id"])
+                assert persisted["receipt_attachment_id"] == str(expected["receipt_attachment_id"])
+                assert persisted["claimed_amount"] == Decimal(str(expected["claimed_amount"]))
+                assert persisted["approved_amount"] == persisted["claimed_amount"]
+                assert len(bytes(persisted["sha256"])) == 32
+                assert persisted["status"] in {"verified", "retained"}
+                assert persisted["evidence_kind"] == "expense_receipt"
+            journal_accounts = self.query(
+                """
+                SELECT line.account_id::text,line.transaction_debit,line.transaction_credit
+                  FROM finance.accounting_events event
+                  JOIN finance.journal_lines line
+                    ON line.org_id=event.org_id AND line.journal_entry_id=event.journal_entry_id
+                 WHERE event.org_id=%s::uuid AND event.expense_claim_id=%s::uuid
+                 ORDER BY line.line_number,line.id
+                """,
+                (self.org_id, resource_id),
+            )
+            reimbursement_account_id = str(prepare_request["reimbursement_account_id"])
+            reimbursement_lines = [
+                row for row in journal_accounts
+                if row["account_id"] == reimbursement_account_id
+            ]
+            assert len(reimbursement_lines) == 1
+            assert reimbursement_lines[0]["transaction_credit"] == expense["approved_amount"]
+            for expected in expected_lines:
+                expense_account_id = str(expected["expense_account_id"])
+                amount = Decimal(str(expected["claimed_amount"]))
+                matching = [
+                    row for row in journal_accounts
+                    if row["account_id"] == expense_account_id
+                    and row["transaction_debit"] == amount
+                ]
+                assert len(matching) == 1
+
+        bank_reconciliation_evidence: list[dict[str, Any]] = []
+        if operation == "finance.bank_reconciliation":
+            if prepare_request is None:
+                raise AssertionError("bank reconciliation requires its exact prepare request")
+            bank_reconciliation_evidence = self.query(
+                """
+                SELECT match.bank_statement_line_id::text,match.journal_entry_id::text,
+                       match.matched_amount,match.currency_code,match.match_method,match.status,
+                       statement.amount AS statement_amount,
+                       journal.status AS journal_status,
+                       journal.transaction_debit_total,journal.transaction_credit_total,
+                       journal.functional_debit_total,journal.functional_credit_total
+                  FROM finance.reconciliation_matches match
+                  JOIN finance.bank_statement_lines statement
+                    ON statement.org_id=match.org_id
+                   AND statement.id=match.bank_statement_line_id
+                  JOIN finance.journal_entries journal
+                    ON journal.org_id=match.org_id AND journal.id=match.journal_entry_id
+                 WHERE match.org_id=%s::uuid AND match.id=%s::uuid
+                """,
+                (self.org_id, resource_id),
+            )
+            assert len(bank_reconciliation_evidence) == 1
+            match = bank_reconciliation_evidence[0]
+            assert match["bank_statement_line_id"] == str(
+                prepare_request["bank_statement_line_id"]
+            )
+            assert match["journal_entry_id"] == str(prepare_request["journal_entry_id"])
+            assert match["match_method"] == prepare_request["match_method"]
+            assert match["status"] == "matched"
+            assert match["matched_amount"] == match["statement_amount"]
+            assert match["journal_status"] == "posted"
+            assert match["transaction_debit_total"] == match["transaction_credit_total"]
+            assert match["functional_debit_total"] == match["functional_credit_total"]
+
+        adjustment_evidence: list[dict[str, Any]] = []
+        if operation == "finance.adjustment_note":
+            if prepare_request is None:
+                raise AssertionError("adjustment-note reconciliation requires its exact prepare request")
+            adjustment_evidence = self.query(
+                """
+                SELECT note.side,note.direction,note.status,
+                       note.sales_invoice_id::text,note.supplier_invoice_id::text,
+                       note.adjusts_open_item_id::text,note.counterparty_payable_amount,
+                       note.net_value_amount,note.cgst_amount,note.sgst_amount,
+                       note.igst_amount,note.cess_amount,
+                       event.journal_entry_id::text,journal.status AS journal_status,
+                       journal.transaction_debit_total,journal.transaction_credit_total,
+                       count(DISTINCT allocation.id)::integer AS allocation_count,
+                       coalesce(sum(DISTINCT allocation.amount),0) AS allocated_amount,
+                       count(DISTINCT tax_document.id)::integer AS tax_document_count
+                  FROM finance.adjustment_notes note
+                  JOIN finance.accounting_events event
+                    ON event.org_id=note.org_id AND event.adjustment_note_id=note.id
+                   AND event.event_type='adjustment_note'
+                  JOIN finance.journal_entries journal
+                    ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+                  LEFT JOIN finance.allocations allocation
+                    ON allocation.org_id=note.org_id
+                   AND allocation.adjustment_note_id=note.id
+                   AND allocation.status='posted'
+                  LEFT JOIN tax.documents tax_document
+                    ON tax_document.org_id=note.org_id
+                   AND tax_document.adjustment_note_id=note.id
+                 WHERE note.org_id=%s::uuid AND note.id=%s::uuid
+                 GROUP BY note.side,note.direction,note.status,note.sales_invoice_id,
+                          note.supplier_invoice_id,note.adjusts_open_item_id,
+                          note.counterparty_payable_amount,note.net_value_amount,
+                          note.cgst_amount,note.sgst_amount,note.igst_amount,note.cess_amount,
+                          event.journal_entry_id,journal.status,
+                          journal.transaction_debit_total,journal.transaction_credit_total
+                """,
+                (self.org_id, resource_id),
+            )
+            assert len(adjustment_evidence) == 1
+            note = adjustment_evidence[0]
+            assert note["status"] == "posted"
+            assert note["side"] == prepare_request["side"]
+            assert note["direction"] == prepare_request["direction"]
+            original_document_id = str(prepare_request["original_document_id"])
+            if note["side"] == "sales":
+                assert note["sales_invoice_id"] == original_document_id
+                assert note["supplier_invoice_id"] is None
+            else:
+                assert note["supplier_invoice_id"] == original_document_id
+                assert note["sales_invoice_id"] is None
+            assert note["adjusts_open_item_id"] is not None
+            assert note["journal_status"] == "posted"
+            assert note["transaction_debit_total"] == note["transaction_credit_total"]
+            assert note["allocation_count"] in {0, 1}
+            assert note["allocated_amount"] <= note["counterparty_payable_amount"]
+            assert note["tax_document_count"] == 1
+            for field in (
+                "counterparty_payable_amount", "net_value_amount", "cgst_amount",
+                "sgst_amount", "igst_amount", "cess_amount",
+            ):
+                expected = _find(preview, field)
+                if expected is not None:
+                    assert note[field] == Decimal(str(expected)), field
+
         tax_documents = self.query(
             """
             SELECT td.*
@@ -548,9 +704,10 @@ class CanonicalReconciler:
                 ON note.org_id = td.org_id AND note.id = td.adjustment_note_id
              WHERE td.org_id = %s::uuid
                AND (td.sales_invoice_id = %s::uuid OR td.supplier_invoice_id = %s::uuid
-                    OR note.sales_return_id = %s::uuid OR note.purchase_return_id = %s::uuid)
+                    OR note.sales_return_id = %s::uuid OR note.purchase_return_id = %s::uuid
+                    OR td.adjustment_note_id = %s::uuid)
             """,
-            (self.org_id,) + (resource_id,) * 4,
+            (self.org_id,) + (resource_id,) * 5,
         )
         commercial_only = _find(preview, "gst_tax_treatment") == "commercial_only"
         if operation in TAX_DOCUMENT_OPERATIONS and not commercial_only:
@@ -827,6 +984,8 @@ class CanonicalReconciler:
             "stock_projection": projection,
             "destruction_evidence": destruction_evidence,
             "expense_evidence": expense_evidence,
+            "bank_reconciliation_evidence": bank_reconciliation_evidence,
+            "adjustment_evidence": adjustment_evidence,
             "tax_documents": tax_documents,
             "adjustment_notes": adjustment_notes,
             "open_items": open_items,

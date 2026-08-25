@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from .contract import load_operation_matrix
+from .contract import load_ready_operation_matrix
 from .mcp_readback import mcp_readback_arguments
 
 
@@ -44,6 +44,18 @@ def _preview(evidence: dict[str, Any]) -> dict[str, Any]:
     return candidates[0].get("preview", candidates[0])
 
 
+def _prepare_request(evidence: dict[str, Any]) -> dict[str, Any]:
+    prepare_path = f"/api/web/actions/{evidence['command_operation']}/prepare"
+    candidates = [
+        row.get("requestBody") for row in evidence["http_evidence"]
+        if row["method"] == "POST" and row["path"] == prepare_path
+        and 200 <= row["status"] < 300
+    ]
+    assert len(candidates) == 1, "expected exactly one successful canonical prepare request"
+    assert isinstance(candidates[0], dict), "canonical prepare omitted its exact request body"
+    return candidates[0]
+
+
 def test_preview_ignores_a_prior_missing_required_422() -> None:
     evidence = {
         "command_operation": "sales.invoice.prepare",
@@ -64,6 +76,13 @@ def test_preview_ignores_a_prior_missing_required_422() -> None:
     }
 
     assert _preview(evidence) == {"net_amount": "168.00"}
+    assert _prepare_request({
+        **evidence,
+        "http_evidence": [
+            {**evidence["http_evidence"][0], "requestBody": {"missing": True}},
+            {**evidence["http_evidence"][1], "requestBody": {"customer_id": "canonical-customer"}},
+        ],
+    }) == {"customer_id": "canonical-customer"}
 
 
 def _assert_mcp_identity(payload: Any, *, command_id: str, resource_id: str) -> None:
@@ -87,9 +106,9 @@ def test_all_browser_resources_reconcile_through_mcp_and_postgresql(
     evidence_value = os.environ.get("LIVE18_EVIDENCE_DIR", "").strip()
     assert evidence_value, "LIVE18_EVIDENCE_DIR is required"
     evidence_dir = Path(evidence_value)
-    contracts = load_operation_matrix()
+    contracts = load_ready_operation_matrix()
     assert all(item.availability == "published" for item in contracts), (
-        "all 18 operations must be published before live certification"
+        "every template-ready operation must be published before live certification"
     )
 
     expected_sha = os.environ.get("LIVE18_EXPECTED_DEPLOYED_SHA", "").strip().lower()
@@ -134,6 +153,7 @@ def test_all_browser_resources_reconcile_through_mcp_and_postgresql(
             contract.command_operation.removesuffix(".prepare"),
             resource_id,
             _preview(evidence),
+            _prepare_request(evidence),
         )
         reconciler.assert_cross_tenant_denied(
             contract.command_operation.removesuffix(".prepare"),
