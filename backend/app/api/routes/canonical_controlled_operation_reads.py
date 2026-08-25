@@ -388,6 +388,11 @@ def inventory_destruction_context(
                AND conversion.multiplier>0 AND conversion.valid_from<=:business_date
                AND (conversion.valid_until IS NULL OR conversion.valid_until>=:business_date)
              WHERE balance.org_id=:org_id AND balance.on_hand_quantity>0
+               AND round(
+                    round(balance.on_hand_quantity/conversion.multiplier,6)
+                      * conversion.multiplier,
+                    6
+               )=balance.on_hand_quantity
                AND erp_security.has_permission(
                     'inventory.destruction.create',branch.id)
                AND erp_security.has_permission('inventory.document.post',branch.id)

@@ -46,6 +46,7 @@ def test_destruction_projection_is_evidence_and_full_balance_only() -> None:
         "attachment.status IN ('verified','retained')",
         "attachment.document_date=:business_date", "tax.registrations",
         "inventory.stock_balances",
+        "round(balance.on_hand_quantity/conversion.multiplier,6)",
         "location.location_type IN ('quarantine','damaged')",
         "NOT location.allows_sale", "NOT product.cold_chain_required",
         "product.drug_schedule", "product.ndps_regulated",
