@@ -243,6 +243,8 @@ def test_negative_sql_fixture_covers_context_spoof_branch_and_write_boundaries()
     assert all(message in fixture for message in required_evidence)
     assert 'SET LOCAL ROLE "erp_runtime";' in fixture
     assert "set_config('app.org_id'" in fixture
+    assert "extensions.digest('rls-account','sha256')" in fixture
+    assert "pg_catalog.decode('01','hex')" in fixture
     assert "set_config('app.membership_id'" in fixture
     assert "erp_security.activate_context" in fixture
     assert "INSERT INTO auth.users" in fixture

@@ -210,7 +210,8 @@ INSERT INTO finance.bank_accounts (
     '10000000-0000-7000-8000-000000000001',
     '73000000-0000-7000-8000-000000000001',
     '72000000-0000-7000-8000-000000000001',
-    'RLS Bank', 'RLS Org', decode('01','hex'), digest('rls-account','sha256'),
+    'RLS Bank', 'RLS Org', pg_catalog.decode('01','hex'),
+    extensions.digest('rls-account','sha256'),
     'TEST0000001', 'INR', 'active',
     '20000000-0000-7000-8000-000000000001',
     '20000000-0000-7000-8000-000000000001'
