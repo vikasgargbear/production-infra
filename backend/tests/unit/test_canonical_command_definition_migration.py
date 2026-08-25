@@ -58,6 +58,7 @@ def test_incremental_command_owners_are_not_reverted_to_baseline() -> None:
 
 
 def test_staging_workflow_only_verifies_migrated_definitions() -> None:
+    sql = SQL_PATH.read_text(encoding="utf-8")
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     verification = workflow.split(
         "- name: Verify Alembic-owned canonical command definitions", 1
@@ -70,3 +71,8 @@ def test_staging_workflow_only_verifies_migrated_definitions() -> None:
     assert "failed_definitions=$(jq -r" in verification
     assert "select(.value != true) | .key" in verification
     assert "Alembic head verification failed for: $failed_definitions" in verification
+    dispatch_batch_binding = (
+        "requested.requested_batch_id=eligible_lot.eligible_batch_id"
+    )
+    assert dispatch_batch_binding in sql
+    assert dispatch_batch_binding in verification
