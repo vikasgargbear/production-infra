@@ -417,6 +417,17 @@ def _json_document(value: Any) -> dict[str, Any]:
     )
 
 
+def _persisted_expiry(value: Any) -> datetime:
+    """Parse PostgreSQL ISO timestamps on every supported Python runtime."""
+    normalized = str(value).replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        # Python 3.9 only accepts selected fractional-second widths in
+        # fromisoformat(), while PostgreSQL may emit any width from 1 to 6.
+        return datetime.strptime(normalized, "%Y-%m-%dT%H:%M:%S.%f%z")
+
+
 def _lock_prepare_idempotency(
     session: Session,
     params: Mapping[str, Any],
@@ -1006,9 +1017,7 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical sales-order idempotency replay differs",
                     )
-                persisted_expiry = datetime.fromisoformat(
-                    str(persisted_result["expires_at"]).replace("Z", "+00:00")
-                )
+                persisted_expiry = _persisted_expiry(persisted_result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
                     command_type="sales.order.approve",
@@ -1229,9 +1238,7 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical supplier-invoice idempotency replay differs",
                     )
-                persisted_expiry = datetime.fromisoformat(
-                    str(result["expires_at"]).replace("Z", "+00:00")
-                )
+                persisted_expiry = _persisted_expiry(result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
                     command_type="procurement.supplier_invoice.post",
@@ -1438,9 +1445,7 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical purchase-order idempotency replay differs",
                     )
-                persisted_expiry = datetime.fromisoformat(
-                    str(result["expires_at"]).replace("Z", "+00:00")
-                )
+                persisted_expiry = _persisted_expiry(result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
                     command_type="procurement.purchase_order.approve",
@@ -1640,9 +1645,7 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical goods-receipt idempotency replay differs",
                     )
-                persisted_expiry = datetime.fromisoformat(
-                    str(result["expires_at"]).replace("Z", "+00:00")
-                )
+                persisted_expiry = _persisted_expiry(result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
                     command_type="procurement.receipt.post",
@@ -1934,9 +1937,7 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical sales-invoice idempotency replay differs",
                     )
-                persisted_expiry = datetime.fromisoformat(
-                    str(persisted_result["expires_at"]).replace("Z", "+00:00")
-                )
+                persisted_expiry = _persisted_expiry(persisted_result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
                     command_type="sales.invoice.post",
@@ -2096,7 +2097,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="sales.return.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(str(result["expires_at"]).replace("Z", "+00:00")),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=tuple(preview["calculation_ruleset"]),
@@ -2288,9 +2289,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="procurement.purchase_return.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=tuple(preview["calculation_ruleset"]),
@@ -2448,7 +2447,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="finance.adjustment_note.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(str(result["expires_at"]).replace("Z", "+00:00")),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=tuple(preview["calculation_ruleset"]),
@@ -2600,9 +2599,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="finance.payment.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -2765,9 +2762,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="finance.payment.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -2943,9 +2938,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="finance.supplier_advance.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -3106,9 +3099,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="finance.expense_claim.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -3253,7 +3244,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=command_id,
                     command_type="inventory.document.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(str(result["expires_at"]).replace("Z", "+00:00")),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -3370,9 +3361,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=command_id,
                     command_type="finance.bank_reconciliation.match",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -3543,7 +3532,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="inventory.document.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(str(result["expires_at"]).replace("Z", "+00:00")),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -3730,9 +3719,7 @@ class SqlAlchemyOperatorActionService:
                     command_request_id=identifiers["command_request_id"],
                     command_type="compliance.destruction.post",
                     preview_hash="sha256:" + str(result["preview_hash"]),
-                    expires_at=datetime.fromisoformat(
-                        str(result["expires_at"]).replace("Z", "+00:00")
-                    ),
+                    expires_at=_persisted_expiry(result["expires_at"]),
                     resolved_references=resolved_references,
                     source_versions=source_versions,
                     calculation_ruleset=(),
@@ -3863,9 +3850,7 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical sales-dispatch idempotency replay differs",
                     )
-                persisted_expiry = datetime.fromisoformat(
-                    str(persisted_result["expires_at"]).replace("Z", "+00:00")
-                )
+                persisted_expiry = _persisted_expiry(persisted_result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
                     command_type="sales.dispatch.post",
