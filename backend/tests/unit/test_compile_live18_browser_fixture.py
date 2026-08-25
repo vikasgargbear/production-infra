@@ -544,3 +544,43 @@ def test_goods_receipt_template_derives_clock_and_expiry_and_targets_prior_po() 
     assert operation["prepare_steps"][6]["value"] == "2027-08-25"
     assert operation["prepare_steps"][12]["value"] == facts["identity"]["uom_conversion_id"]
     assert operation["prepare_steps"][13]["value"] == facts["identity"]["saleable_location_id"]
+
+
+def test_purchase_return_template_targets_prior_supplier_invoice_and_split_review() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/purchase_return.json").read_text()
+    )
+    scalars = {
+        "purchase_return_billed_quantity": "0.010000",
+        "purchase_return_free_quantity": "0.000000",
+        "purchase_return_reason_label": "Damaged Goods",
+        "purchase_return_gst_treatment_label": "Commercial only (no GST adjustment)",
+        "purchase_return_transport_mode_label": "In person / hand carried",
+        "purchase_return_distance_km": "1.00",
+    }
+    facts = {
+        "display": {
+            "supplier_code": "DEMO-SUPPLIER",
+            "supplier_name": "Demo Supplier",
+            "product_name": "Demo Product",
+        },
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("purchase_return", operation, "separate_approver")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][3]["locator"]["name"] == (
+        "select-supplier-invoice-{{resource_supplier_invoice}}"
+    )
+    assert operation["approval_steps"][2]["locator"]["name"] == (
+        "review-return-{{command_request_id}}"
+    )
+    assert operation["execute_steps"][2]["locator"]["name"] == (
+        "open-return-{{command_request_id}}"
+    )

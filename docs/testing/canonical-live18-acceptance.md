@@ -89,6 +89,13 @@ batch. Its batch reference is run-token-derived; receipt time comes from the
 organization-local database clock, while the exact prior PO, MRP conversion,
 and eligible destination are canonical identities. The template is strict-mode
 safe only for the single-line PO created by this run and fails on ambiguity.
+Purchase return reviews billed/free quantities, effective reason label, GST
+treatment label, transport-mode label, and distance. It targets the exact
+supplier-invoice UUID posted earlier, then accepts only its canonical
+invoice-to-GRN allocation, batch and stock-location context. A sole verified
+supplier destination is selected automatically; zero or multiple destinations
+remain blocked. Independent reviewer approval and original-requester execution
+both target the captured command UUID.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

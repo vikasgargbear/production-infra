@@ -115,6 +115,7 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
                 type="button"
                 key={invoiceId}
                 onClick={() => handleSelect(invoice)}
+                data-testid={`select-supplier-invoice-${invoiceId}`}
                 aria-label={`Select supplier invoice ${invoiceNumber}`}
                 className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedInvoiceId === invoiceId
                   ? 'border-orange-500 bg-orange-50'

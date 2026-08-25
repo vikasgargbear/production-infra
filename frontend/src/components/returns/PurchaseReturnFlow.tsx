@@ -303,7 +303,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           return_reason: '',
           return_reason_choices: context.return_reason_choices,
           supplier_destinations: context.supplier_destinations,
-          supplier_destination_address_id: '',
+          supplier_destination_address_id: context.supplier_destinations.length === 1
+            ? context.supplier_destinations[0].id
+            : '',
           statutory_gstr2b_credit_notes: context.statutory_gstr2b_credit_notes,
           supplier_credit_note_portal_line_id: '',
           gst_tax_treatment: '',
@@ -526,6 +528,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6">
             <div className="max-w-6xl mx-auto space-y-6">
+              <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance.
+              </p>
               {/* Top Section - Date, Reason, Method - 3-column grid with consistent h-10 heights */}
               <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <StandardDatePicker
@@ -559,10 +564,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   required
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Reason <span className="text-red-500">*</span>
-                  </label>
                   <Select
+                    label="Return Reason"
+                    required
                     value={returnData.return_reason}
                     onChange={(value) => setReturnData(prev => ({
                       ...prev,
@@ -749,6 +753,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     <label className="text-sm font-medium text-gray-700">
                       Distance (km) <span className="text-red-500">*</span>
                       <input
+                        aria-label="Distance (km)"
                         inputMode="decimal"
                         min={selectedLogisticsMode.minimum_distance_km}
                         value={returnData.transport_details.distance_km}

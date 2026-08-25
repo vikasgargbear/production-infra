@@ -89,7 +89,7 @@ const ReturnApprovalInbox: React.FC = () => {
           <div className="flex min-h-44 flex-col items-center justify-center rounded-lg border border-gray-200 bg-white p-6 text-center"><Inbox className="mb-2 h-8 w-8 text-gray-400" /><p className="font-medium text-gray-900">No returns await your approval</p><p className="text-sm text-gray-600">Expired, approved, rejected and self-requested commands are not shown.</p></div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{commands.map(command => (
-            <button key={command.command_request_id} type="button" onClick={() => void openCommand(command.command_request_id)} className="min-h-11 rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-blue-400 hover:bg-blue-50">
+            <button key={command.command_request_id} type="button" data-testid={`review-return-${command.command_request_id}`} onClick={() => void openCommand(command.command_request_id)} className="min-h-11 rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-blue-400 hover:bg-blue-50">
               <span className="text-sm font-semibold text-gray-950">{command.return_kind === 'sales' ? 'Sales return' : 'Purchase return'}</span>
               <span className="mt-1 block text-sm text-gray-600">Requested by {command.requester_name}</span>
               <span className="mt-2 block break-all font-mono text-xs text-gray-500">{command.command_request_id}</span>
