@@ -201,15 +201,14 @@
     },
     {
       "id": "expense_claim",
-      "command_operation": null,
-      "prepare_tool": null,
+      "command_operation": "finance.expense_claim.prepare",
+      "prepare_tool": "erp_expense_claim_prepare",
       "approval_policy": "separate_approver",
-      "rest_readback": null,
-      "mcp_readback_tool": null,
-      "database_relations": ["finance.expense_claims", "finance.expense_claim_lines", "finance.journal_entries"],
-      "scenario_steps": [],
-      "availability": "blocked",
-      "blocker": "Canonical expense-claim prepare/approve/execute and readback contracts are not present at the checked-in base; re-audit after migration 0009 lands."
+      "rest_readback": "/api/web/actions/expense-claims/commands/{command_request_id}/readback",
+      "mcp_readback_tool": "erp_expense_claim_readback",
+      "database_relations": ["finance.expense_claims", "finance.expense_claim_lines", "core.attachments", "finance.accounts", "finance.journal_entries", "finance.journal_lines", "finance.accounting_events"],
+      "scenario_steps": ["member_expense_verified_receipt"],
+      "availability": "published"
     }
   ]
 }

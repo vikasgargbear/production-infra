@@ -70,10 +70,13 @@ def test_every_published_rest_readback_is_mounted() -> None:
             assert shape(contract.rest_readback or "") in mounted, contract.id
 
 
-def test_expense_claim_is_the_only_fail_closed_contract_at_this_base() -> None:
-    blocked = [item for item in load_operation_matrix() if item.availability == "blocked"]
-    assert [item.id for item in blocked] == ["expense_claim"]
-    assert "0009" in (blocked[0].blocker or "")
+def test_all_18_operations_now_have_published_authority() -> None:
+    contracts = load_operation_matrix()
+    assert all(item.availability == "published" for item in contracts)
+    expense = next(item for item in contracts if item.id == "expense_claim")
+    assert expense.command_operation == "finance.expense_claim.prepare"
+    assert expense.prepare_tool == "erp_expense_claim_prepare"
+    assert expense.mcp_readback_tool == "erp_expense_claim_readback"
 
 
 def test_scope_gate_rejects_product_edits() -> None:

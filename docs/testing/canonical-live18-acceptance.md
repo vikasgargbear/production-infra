@@ -22,11 +22,10 @@ A run is not live evidence unless all of the following are true:
    HTTP request IDs, screenshots, exact financial/tax/stock assertions, and a
    supported reversal or cleanup identifier where one exists.
 
-At the checked-in base, 17 business operations map to the 16 published canonical
+At the checked-in base, all 18 business operations map to 17 published canonical
 prepare commands. Customer credit note and supplier debit note are two bounded
-uses of `finance.adjustment_note.prepare`. Expense claim is the sole explicit
-blocker until canonical migration `0009`, REST/MCP adapters, and readback are
-present after rebase.
+uses of `finance.adjustment_note.prepare`; expense claim is published through
+`finance.expense_claim.prepare` and migration `0009`.
 
 ## Configuration
 
