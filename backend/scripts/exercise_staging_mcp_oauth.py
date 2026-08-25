@@ -25,8 +25,8 @@ import requests
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
 ISSUER = f"{SUPABASE_URL}/auth/v1"
-MCP_URL = "https://aasopharma-mcp-pilot.onrender.com/mcp"
-CALLBACK_URL = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
+MCP_URL = os.getenv("PHARMA_CANONICAL_MCP_URL", "").strip()
+CALLBACK_URL = os.getenv("CANONICAL_STAGING_OAUTH_CALLBACK_URL", "").strip()
 SCOPES = "openid offline_access"
 DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
 DEMO_BRANCH_ID = "d3000000-0000-7000-8000-000000000005"
@@ -44,6 +44,29 @@ def _required(name: str) -> str:
     if not value:
         raise ExerciseError(f"{name} is required")
     return value
+
+
+def _validate_provider_urls() -> None:
+    contracts = (
+        ("PHARMA_CANONICAL_MCP_URL", MCP_URL, "/mcp"),
+        (
+            "CANONICAL_STAGING_OAUTH_CALLBACK_URL",
+            CALLBACK_URL,
+            "/oauth/staging-callback",
+        ),
+    )
+    for name, value, expected_path in contracts:
+        parsed = urlparse(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc
+            or parsed.path != expected_path
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+            or parsed.hostname in {"localhost", "127.0.0.1"}
+        ):
+            raise ExerciseError(f"{name} must be one exact reviewed HTTPS endpoint")
 
 
 def _pkce() -> tuple[str, str]:
@@ -552,6 +575,7 @@ def _wait_for_mcp_readiness() -> None:
 
 
 def main() -> int:
+    _validate_provider_urls()
     if _required("CANONICAL_STAGING_PROJECT_REF") != PROJECT_REF:
         raise ExerciseError("Refusing OAuth exercise outside the reviewed staging project")
     if _required("SUPABASE_URL") != SUPABASE_URL:

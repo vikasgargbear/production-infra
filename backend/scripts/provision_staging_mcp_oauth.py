@@ -11,6 +11,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, UUID, uuid5
 import psycopg2
 import requests
@@ -22,9 +23,13 @@ CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
 WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
-TEST_CALLBACK = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
+TEST_CALLBACK = os.getenv("CANONICAL_STAGING_OAUTH_CALLBACK_URL", "").strip()
+APP_CALLBACKS = (
+    os.getenv("CANONICAL_STAGING_RENDER_OAUTH_CALLBACK_URL", "").strip(),
+    os.getenv("CANONICAL_STAGING_RAILWAY_OAUTH_CALLBACK_URL", "").strip(),
+)
 REDIRECT_URIS = (
-    TEST_CALLBACK,
+    *APP_CALLBACKS,
     "https://claude.ai/api/mcp/auth_callback",
     "https://claude.com/api/mcp/auth_callback",
 )
@@ -79,6 +84,27 @@ def _required(name: str) -> str:
     if not value:
         raise ProvisioningError(f"{name} is required")
     return value
+
+
+def _validate_test_callback() -> None:
+    for value in (TEST_CALLBACK, *APP_CALLBACKS):
+        parsed = urlparse(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc
+            or parsed.path != "/oauth/staging-callback"
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+            or parsed.hostname in {"localhost", "127.0.0.1"}
+        ):
+            raise ProvisioningError(
+                "Every canonical staging OAuth callback must be one exact reviewed HTTPS callback"
+            )
+    if len(set(APP_CALLBACKS)) != len(APP_CALLBACKS) or TEST_CALLBACK not in APP_CALLBACKS:
+        raise ProvisioningError(
+            "The selected OAuth callback must identify exactly one reviewed application provider"
+        )
 
 
 def _request_json(
@@ -146,7 +172,10 @@ def _reconcile_client(service_key: str) -> dict[str, Any]:
     matches = [
         client
         for client in clients
-        if TEST_CALLBACK in (client.get("redirect_uris") or ())
+        if any(
+            callback in (client.get("redirect_uris") or ())
+            for callback in APP_CALLBACKS
+        )
     ]
     if len(matches) > 1:
         raise ProvisioningError(
@@ -717,6 +746,7 @@ def _mode(argv: list[str] | None = None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     mode = _mode(argv)
+    _validate_test_callback()
     if _required("CANONICAL_STAGING_PROJECT_REF") != PROJECT_REF:
         raise ProvisioningError("Refusing OAuth provisioning outside the reviewed staging project")
     if _required("SUPABASE_URL") != SUPABASE_URL:

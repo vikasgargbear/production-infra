@@ -27,6 +27,14 @@ on:
         required: false
         default: true
         type: boolean
+      application_provider:
+        description: Hosted application provider whose OAuth and MCP boundary must be exercised
+        required: false
+        default: render
+        type: choice
+        options:
+          - render
+          - railway
       reset_disposable_data:
         description: Reset only canonical schemas and roles on the pinned disposable project
         required: false
@@ -68,6 +76,11 @@ on:
         required: false
         default: false
         type: boolean
+      application_provider:
+        description: Hosted application provider whose OAuth and MCP boundary must be exercised
+        required: false
+        default: render
+        type: string
       reset_disposable_data:
         description: Reset only canonical schemas and roles on the pinned disposable project
         required: false
@@ -108,7 +121,11 @@ jobs:
       JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
       MCP_INTERNAL_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
       MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
-      MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
+      MCP_ALLOWED_ORIGINS: ${{ inputs.application_provider == 'railway' && vars.RAILWAY_FRONTEND_URL || vars.MCP_ALLOWED_ORIGINS }}
+      PHARMA_CANONICAL_MCP_URL: ${{ inputs.application_provider == 'railway' && format('{0}/mcp', vars.RAILWAY_MCP_URL) || 'https://aasopharma-mcp-pilot.onrender.com/mcp' }}
+      CANONICAL_STAGING_OAUTH_CALLBACK_URL: ${{ inputs.application_provider == 'railway' && format('{0}/oauth/staging-callback', vars.RAILWAY_FRONTEND_URL) || 'https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback' }}
+      CANONICAL_STAGING_RENDER_OAUTH_CALLBACK_URL: https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback
+      CANONICAL_STAGING_RAILWAY_OAUTH_CALLBACK_URL: ${{ format('{0}/oauth/staging-callback', vars.RAILWAY_FRONTEND_URL) }}
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
@@ -138,6 +155,18 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN"
           test -n "$CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
           test -n "$SUPABASE_DB_PASSWORD"
+          case '${{ inputs.application_provider }}' in
+            render|railway) ;;
+            *) echo "unsupported canonical application provider" >&2; exit 2 ;;
+          esac
+          case "$PHARMA_CANONICAL_MCP_URL" in
+            https://*/mcp) ;;
+            *) echo "canonical MCP URL must be one exact HTTPS /mcp endpoint" >&2; exit 2 ;;
+          esac
+          case "$CANONICAL_STAGING_OAUTH_CALLBACK_URL" in
+            https://*/oauth/staging-callback) ;;
+            *) echo "canonical OAuth callback must be one exact HTTPS callback" >&2; exit 2 ;;
+          esac
           case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
             *",$CANONICAL_STAGING_PROJECT_REF,"*)
               echo "staging project appears in the production denylist" >&2

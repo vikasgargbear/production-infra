@@ -1065,15 +1065,26 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "provision_staging_mcp_oauth.py --mode bind-existing-demo" in workflow
     assert "exercise_staging_mcp_oauth.py" in workflow
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
+    assert "application_provider:" in workflow
+    assert "PHARMA_CANONICAL_MCP_URL:" in workflow
+    assert "CANONICAL_STAGING_OAUTH_CALLBACK_URL:" in workflow
+    assert "CANONICAL_STAGING_RENDER_OAUTH_CALLBACK_URL:" in workflow
+    assert "CANONICAL_STAGING_RAILWAY_OAUTH_CALLBACK_URL:" in workflow
+    assert "vars.RAILWAY_MCP_URL" in workflow
+    assert "vars.RAILWAY_FRONTEND_URL" in workflow
 
     provisioner = _read("backend/scripts/provision_staging_mcp_oauth.py")
     exercise = _read("backend/scripts/exercise_staging_mcp_oauth.py")
     assert 'PROJECT_REF = "rgihahbmkrmhitjdjvev"' in provisioner
+    assert 'os.getenv("CANONICAL_STAGING_OAUTH_CALLBACK_URL", "")' in provisioner
+    assert 'os.getenv("PHARMA_CANONICAL_MCP_URL", "")' in exercise
+    assert "aasopharma-mcp-pilot.onrender.com" not in exercise
+    assert "aasopharma-erp-pilot.onrender.com" not in exercise
     assert '"client_type": "public"' in provisioner
     assert '"token_endpoint_auth_method": "none"' in provisioner
     assert 'headers["apikey"] = token' in provisioner
     assert provisioner.count("include_api_key=True") == 6
-    assert "if TEST_CALLBACK in (client.get(\"redirect_uris\") or ())" in provisioner
+    assert "for callback in APP_CALLBACKS" in provisioner
     assert 'client.get("name")' not in provisioner
     assert '"app_metadata": {' in provisioner
     assert '"organization_id": DEMO_ORG_ID' in provisioner

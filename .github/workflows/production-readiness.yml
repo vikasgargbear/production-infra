@@ -128,6 +128,7 @@ jobs:
     uses: ./.github/workflows/canonical-staging.yml
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
+      application_provider: ${{ inputs.live18_provider }}
       deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}
       provision_demo_data: ${{ inputs.provision_canonical_demo }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}

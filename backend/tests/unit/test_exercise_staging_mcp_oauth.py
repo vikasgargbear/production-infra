@@ -13,6 +13,35 @@ exercise = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(exercise)
 
 
+def test_provider_urls_are_explicit_https_contracts(monkeypatch) -> None:
+    monkeypatch.setattr(exercise, "MCP_URL", "https://mcp.example.test/mcp")
+    monkeypatch.setattr(
+        exercise,
+        "CALLBACK_URL",
+        "https://erp.example.test/oauth/staging-callback",
+    )
+
+    exercise._validate_provider_urls()
+
+
+@pytest.mark.parametrize(
+    "mcp_url,callback_url",
+    [
+        ("", "https://erp.example.test/oauth/staging-callback"),
+        ("http://mcp.example.test/mcp", "https://erp.example.test/oauth/staging-callback"),
+        ("https://mcp.example.test/ready", "https://erp.example.test/oauth/staging-callback"),
+        ("https://mcp.example.test/mcp", "https://erp.example.test/"),
+        ("https://localhost/mcp", "https://erp.example.test/oauth/staging-callback"),
+    ],
+)
+def test_provider_urls_fail_closed(monkeypatch, mcp_url: str, callback_url: str) -> None:
+    monkeypatch.setattr(exercise, "MCP_URL", mcp_url)
+    monkeypatch.setattr(exercise, "CALLBACK_URL", callback_url)
+
+    with pytest.raises(exercise.ExerciseError, match="exact reviewed HTTPS"):
+        exercise._validate_provider_urls()
+
+
 def _documents():
     resource_id = "0198ea37-2b21-7c8d-9123-123456789abc"
     prepared = {"financial_impact": [{"currency_code": "INR", "grand_total": "1650.00"}]}
