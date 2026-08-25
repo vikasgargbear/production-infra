@@ -63,6 +63,7 @@ def test_purchase_invoice_parser_exposes_one_validated_authenticated_endpoint() 
     assert operation["security"]
     assert "/api/purchase-upload/parse-invoice" not in paths
     assert "/api/purchase-upload/parse-pdf" not in paths
+    assert "/api/purchase-upload/validate-invoice" not in paths
 
     source = (
         Path(__file__).resolve().parents[2]

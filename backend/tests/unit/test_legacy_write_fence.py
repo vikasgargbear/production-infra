@@ -115,7 +115,6 @@ LEGACY_PREFIXES = (
 )
 SAFE_POSTS = {
     "/api/purchase-upload/parse-invoice-safe",
-    "/api/purchase-upload/validate-invoice",
 }
 CALCULATION_POSTS = {
     "/api/calculations/invoice": "preview_invoice_totals",
@@ -124,9 +123,6 @@ CALCULATION_POSTS = {
 NON_PERSISTENT_POST_OWNERS = {
     "/api/purchase-upload/parse-invoice-safe": (
         "app.api.routes.purchase.upload.routes", "parse_purchase_invoice_safe"
-    ),
-    "/api/purchase-upload/validate-invoice": (
-        "app.api.routes.purchase.upload.routes", "validate_invoice_data"
     ),
     **{
         path: ("app.api.routes.calculations", endpoint)
