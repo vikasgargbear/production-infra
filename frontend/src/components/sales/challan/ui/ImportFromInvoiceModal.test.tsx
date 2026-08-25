@@ -47,7 +47,7 @@ describe('delivery challan canonical order import', () => {
 
         expect(await screen.findByText('SO-1')).toBeTruthy();
         expect(screen.queryByText(/sales invoice/i)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: /SO-1/i }));
+        fireEvent.click(screen.getByRole('button', { name: `Select canonical sales order ${id('1')}` }));
         fireEvent.click(screen.getByRole('button', { name: 'Import order to challan' }));
 
         await waitFor(() => expect(onImport).toHaveBeenCalled());
@@ -71,7 +71,7 @@ describe('delivery challan canonical order import', () => {
         } });
         const onImport = jest.fn();
         render(<ImportFromInvoiceModal isOpen onClose={jest.fn()} onImport={onImport} />);
-        fireEvent.click(await screen.findByRole('button', { name: /SO-1/i }));
+        fireEvent.click(await screen.findByRole('button', { name: `Select canonical sales order ${id('1')}` }));
         fireEvent.click(screen.getByRole('button', { name: 'Import order to challan' }));
         await waitFor(() => expect(ordersApi.getById).toHaveBeenCalled());
         expect(onImport).not.toHaveBeenCalled();

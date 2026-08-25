@@ -67,6 +67,11 @@ and `sales_order_delivery_offset_days`. The compiler combines the bounded
 date is accepted from the secret. Customer, default canonical delivery-address
 identity/row version, product, FEFO batch, GST, and document policy are resolved
 by the authenticated UI and APIs.
+Delivery challan reviews only `delivery_challan_distance_km`. It selects the
+exact certified sales-order UUID produced earlier in the run; customer, lines,
+batch allocations, address, dispatch date, and the allowed default transport
+mode are authoritative API or server-policy facts. A transporter is neither
+requested nor invented when that policy mode does not require one.
 Purchase order reviews its quantity, rate, line discount, free quantity,
 document discount, freight charge, and a bounded delivery offset. Its supplier,
 product/UOM, branch, business date, GST facts, and immutable preview remain

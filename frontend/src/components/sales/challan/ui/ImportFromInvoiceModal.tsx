@@ -209,6 +209,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                                         type="button"
                                         key={order.order_id}
                                         onClick={() => setSelectedOrder(order)}
+                                        aria-label={`Select canonical sales order ${order.order_id}`}
                                         aria-pressed={selectedOrder?.order_id === order.order_id}
                                         className={`w-full rounded-lg border p-3 text-left ${selectedOrder?.order_id === order.order_id
                                             ? 'border-blue-500 bg-blue-50'

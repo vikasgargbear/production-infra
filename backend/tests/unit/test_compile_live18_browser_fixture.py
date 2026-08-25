@@ -478,3 +478,26 @@ def test_supplier_advance_template_targets_prior_purchase_order_and_split_review
     assert operation["approval_steps"][4]["locator"]["name"] == approval
     assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
     assert operation["execute_steps"][3]["locator"]["name"] == execution
+
+
+def test_delivery_challan_template_targets_prior_certified_sales_order() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/delivery_challan.json").read_text()
+    )
+    scalars = {"delivery_challan_distance_km": "1.25"}
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        {},
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("delivery_challan", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][2]["locator"]["name"] == (
+        "Select canonical sales order {{resource_sales_order}}"
+    )
+    assert operation["prepare_steps"][5]["value"] == "1.25"
+    assert operation["approval_steps"][0]["value"] == "{{command_request_id}}"
+    assert operation["execute_steps"][0]["value"] == "{{command_request_id}}"
