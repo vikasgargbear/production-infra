@@ -195,6 +195,19 @@ def test_payment_and_invoice_conditional_schema_contracts_fail_closed() -> None:
     assert "erp_sales_invoice_prepare: fulfillment_source contract drifted" in errors
 
 
+def test_sales_invoice_batch_allocation_policy_is_explicit_and_schema_optional() -> None:
+    runtime = audit.load_runtime()
+    line = runtime.PREPARE_ACTIONS[
+        "erp_sales_invoice_prepare"
+    ].input_schema["properties"]["lines"]["items"]
+
+    assert set(line["properties"]["batch_allocation_mode"]["enum"]) == {
+        "auto_fefo", "explicit_fefo"
+    }
+    assert "batch_allocation_mode" not in line["required"]
+    assert "batch_allocations" not in line["required"]
+
+
 def test_semantic_validator_must_be_called_before_service_prepare(tmp_path, monkeypatch) -> None:
     route = tmp_path / "mcp_actions.py"
     route.write_text(

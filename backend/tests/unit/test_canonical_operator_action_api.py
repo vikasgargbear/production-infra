@@ -818,7 +818,7 @@ def test_invoice_prepare_enforces_exactly_one_physical_fulfillment_mode(enabled_
     )
     assert response.status_code == 422
     assert response.json()["detail"]["message"] == (
-        "lines[0] direct_issue requires only batch_allocations"
+        "lines[0] direct_issue forbids dispatch_allocations"
     )
     assert fake.calls == []
 
@@ -900,6 +900,58 @@ def test_invoice_prepare_accepts_each_reviewed_fulfillment_mode(
     if fulfillment_source == "dispatch_allocated":
         assert "from_location_id" not in business_payload
         assert "logistics" not in business_payload
+
+
+def test_invoice_prepare_accepts_default_auto_fefo_without_caller_batches(
+    enabled_boundary,
+):
+    fake = FakeOperatorActionService()
+    policy = ACTION_POLICIES["sales.invoice.prepare"]
+    holder = {"value": _context(policy.operation_key, policy.permission)}
+    client = TestClient(_app(fake, holder))
+    payload = _sales_invoice_payload()
+    payload["lines"][0].pop("batch_allocations")
+
+    response = client.post(
+        "/api/internal/mcp/actions/sales.invoice.prepare/prepare",
+        json=payload,
+    )
+
+    assert response.status_code == 200, response.text
+    line = fake.calls[-1][2]["lines"][0]
+    assert line["fulfillment_source"] == "direct_issue"
+    assert "batch_allocations" not in line
+    assert "batch_allocation_mode" not in line
+
+
+@pytest.mark.parametrize(
+    ("mode", "with_batches", "message"),
+    (
+        ("auto_fefo", True, "auto_fefo forbids caller batch_allocations"),
+        ("explicit_fefo", False, "explicit_fefo requires batch_allocations"),
+    ),
+)
+def test_invoice_prepare_rejects_conflicting_batch_allocation_policy(
+    enabled_boundary, mode, with_batches, message,
+):
+    fake = FakeOperatorActionService()
+    policy = ACTION_POLICIES["sales.invoice.prepare"]
+    holder = {"value": _context(policy.operation_key, policy.permission)}
+    client = TestClient(_app(fake, holder))
+    payload = _sales_invoice_payload()
+    line = payload["lines"][0]
+    line["batch_allocation_mode"] = mode
+    if not with_batches:
+        line.pop("batch_allocations")
+
+    response = client.post(
+        "/api/internal/mcp/actions/sales.invoice.prepare/prepare",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert message in response.json()["detail"]["message"]
+    assert fake.calls == []
 
 
 def test_invoice_prepare_fails_closed_for_unreviewed_sez_without_payment(

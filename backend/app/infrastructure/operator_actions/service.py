@@ -1719,6 +1719,7 @@ class SqlAlchemyOperatorActionService:
             }
         )
         normalized_lines = []
+        has_auto_fefo = False
         for line_index, source_line in enumerate(payload["lines"], start=1):
             line = {
                 key: _json_value(value) for key, value in dict(source_line).items()
@@ -1727,24 +1728,34 @@ class SqlAlchemyOperatorActionService:
                 uuid5(NAMESPACE_URL, identity + f":line:{line_index}")
             )
             if line["fulfillment_source"] == "direct_issue":
-                line["batch_allocations"] = [
-                    {
-                        **{
-                            key: _json_value(value)
-                            for key, value in dict(allocation).items()
-                        },
-                        "inventory_line_id": str(
-                            uuid5(
-                                NAMESPACE_URL,
-                                identity
-                                + f":line:{line_index}:inventory:{allocation_index}",
-                            )
-                        ),
-                    }
-                    for allocation_index, allocation in enumerate(
-                        source_line["batch_allocations"], start=1
-                    )
-                ]
+                source_allocations = source_line.get("batch_allocations")
+                allocation_mode = str(
+                    source_line.get("batch_allocation_mode")
+                    or ("explicit_fefo" if source_allocations else "auto_fefo")
+                )
+                line["batch_allocation_mode"] = allocation_mode
+                if allocation_mode == "auto_fefo":
+                    has_auto_fefo = True
+                    line.pop("batch_allocations", None)
+                else:
+                    line["batch_allocations"] = [
+                        {
+                            **{
+                                key: _json_value(value)
+                                for key, value in dict(allocation).items()
+                            },
+                            "inventory_line_id": str(
+                                uuid5(
+                                    NAMESPACE_URL,
+                                    identity
+                                    + f":line:{line_index}:inventory:{allocation_index}",
+                                )
+                            ),
+                        }
+                        for allocation_index, allocation in enumerate(
+                            source_allocations or (), start=1
+                        )
+                    ]
             else:
                 line["dispatch_allocations"] = [
                     {
@@ -1810,6 +1821,46 @@ class SqlAlchemyOperatorActionService:
                         "Canonical sales-invoice resolution is unavailable",
                     )
                 resolution = _json_document(rows[0]["resolution"])
+                if has_auto_fefo:
+                    resolved_by_line = {
+                        str(line["line_id"]): line for line in resolution["lines"]
+                    }
+                    for line_index, line in enumerate(normalized_lines, start=1):
+                        if line.get("batch_allocation_mode") != "auto_fefo":
+                            continue
+                        resolved_line = resolved_by_line[str(line["line_id"])]
+                        line["batch_allocations"] = [
+                            {
+                                "batch_id": allocation["batch_id"],
+                                "billed_quantity": allocation["billed_quantity"],
+                                "free_quantity": allocation["free_quantity"],
+                                "inventory_line_id": str(
+                                    uuid5(
+                                        NAMESPACE_URL,
+                                        identity
+                                        + f":line:{line_index}:inventory:{allocation_index}",
+                                    )
+                                ),
+                            }
+                            for allocation_index, allocation in enumerate(
+                                resolved_line["batch_allocations"], start=1
+                            )
+                        ]
+                    request_bytes = canonical_json_bytes(normalized)
+                    request_hash = hashlib.sha256(request_bytes).hexdigest()
+                    params.update(
+                        request_json=request_bytes.decode("utf-8"),
+                        request_bytes=request_bytes,
+                    )
+                    rows = _mapping_rows(
+                        session.execute(RESOLVE_SALES_INVOICE_SQL, params)
+                    )
+                    if len(rows) != 1:
+                        raise OperatorActionError(
+                            ActionErrorCode.POLICY_BLOCKED,
+                            "Canonical automatic FEFO allocation did not re-resolve exactly once",
+                        )
+                    resolution = _json_document(rows[0]["resolution"])
                 try:
                     calculation_input, calculation_output = (
                         sales_invoice_calculation_documents(

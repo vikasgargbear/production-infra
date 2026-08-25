@@ -308,9 +308,13 @@ def _sales_invoice_line() -> dict[str, Any]:
                 "Whether stock is issued directly by this invoice or was already issued by posted dispatches.",
                 enum=["direct_issue", "dispatch_allocated"],
             ),
+            "batch_allocation_mode": _string(
+                "Optional direct-issue policy. Omit with no batches for automatic FEFO, or use explicit_fefo with reviewed batches from the earliest eligible expiry tier.",
+                enum=["auto_fefo", "explicit_fefo"],
+            ),
             "batch_allocations": _array(
                 COMMERCIAL_BATCH_ALLOCATION,
-                "Required only for direct_issue; exact batches issued by this invoice.",
+                "Exact batches for explicit_fefo, or the backend-resolved immutable result for auto_fefo.",
             ),
             "dispatch_allocations": _array(
                 DISPATCH_ALLOCATION,
@@ -321,7 +325,9 @@ def _sales_invoice_line() -> dict[str, Any]:
     required = tuple(
         field
         for field in properties
-        if field not in {"batch_allocations", "dispatch_allocations"}
+        if field not in {
+            "batch_allocation_mode", "batch_allocations", "dispatch_allocations"
+        }
     )
     return _object(
         properties,

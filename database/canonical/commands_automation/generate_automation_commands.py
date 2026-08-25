@@ -2165,9 +2165,11 @@ def _sales_invoice_prepare_definition() -> list[str]:
 DECLARE
     branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
     customer_account_id uuid:=NULLIF(request_document->>'customer_account_id','')::uuid;
+    delivery_address_id uuid:=NULLIF(request_document->>'delivery_address_id','')::uuid;
+    delivery_address_row_version bigint:=NULLIF(request_document->>'delivery_address_row_version','')::bigint;
     from_location_id uuid:=NULLIF(request_document->>'from_location_id','')::uuid;
     invoice_date date:=NULLIF(request_document->>'invoice_date','')::date;
-    place_of_supply text:=request_document->>'place_of_supply_state_code';
+    place_of_supply text;
     zero_mode text:=request_document->>'zero_rated_payment_mode';
     logistics jsonb:=request_document->'logistics';
     transport_mode text:=logistics->>'transport_mode';
@@ -2198,6 +2200,7 @@ DECLARE
     dispatch_line sales.dispatch_lines%ROWTYPE;
     dispatch_header sales.dispatches%ROWTYPE;
     order_line sales.order_lines%ROWTYPE;
+    eligible record;
     requested_line jsonb;
     requested_allocation jsonb;
     resolved_line jsonb;
@@ -2206,6 +2209,8 @@ DECLARE
     source_versions jsonb:='[]'::jsonb;
     allocation_tracker jsonb:='{}'::jsonb;
     dispatch_tracker jsonb:='{}'::jsonb;
+    auto_allocations jsonb;
+    allocation_mode text;
     billed numeric(20,6);
     free numeric(20,6);
     base_billed numeric(20,6);
@@ -2222,6 +2227,11 @@ DECLARE
     extended_cost numeric(20,2);
     existing_billed numeric(20,6);
     existing_free numeric(20,6);
+    remaining_billed numeric(20,6);
+    remaining_free numeric(20,6);
+    candidate_billed numeric(20,6);
+    candidate_free numeric(20,6);
+    available_entered numeric(20,6);
     total_base numeric(20,6):=0;
     total_value numeric(20,2):=0;
     line_number integer:=0;
@@ -2233,7 +2243,9 @@ BEGIN
     IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL
        OR application_user_id IS NULL OR grant_id IS NULL OR invoice_id IS NULL
        OR branch_id IS NULL OR customer_account_id IS NULL OR invoice_date IS NULL
-       OR place_of_supply!~'^[0-9]{2}$'
+       OR delivery_address_id IS NULL OR delivery_address_row_version IS NULL
+       OR delivery_address_row_version<1 OR request_document?'place_of_supply_state_code'
+       OR request_document?'shipping_address_id'
        OR request_document->>'tax_charge_mechanism'<>'normal'
        OR zero_mode NOT IN ('not_applicable','with_igst')
        OR pg_catalog.jsonb_typeof(request_document)<>'object'
@@ -2352,16 +2364,14 @@ BEGIN
        AND address_kind='registered' AND is_primary AND status='active' AND valid_from<=invoice_date
        AND (valid_until IS NULL OR valid_until>=invoice_date) FOR SHARE;
     END IF;
-    SELECT count(*) INTO address_count FROM parties.addresses
-     WHERE org_id=organization_id AND party_id=customer.party_id AND address_kind='shipping'
-       AND is_primary AND status='active' AND valid_from<=invoice_date
-       AND (valid_until IS NULL OR valid_until>=invoice_date);
-    IF address_count>1 THEN RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='customer shipping address is ambiguous';
-    ELSIF address_count=1 THEN
-      SELECT * INTO STRICT shipping FROM parties.addresses WHERE org_id=organization_id AND party_id=customer.party_id
-       AND address_kind='shipping' AND is_primary AND status='active' AND valid_from<=invoice_date
-       AND (valid_until IS NULL OR valid_until>=invoice_date) FOR SHARE;
-    ELSE shipping:=billing; END IF;
+    SELECT * INTO STRICT shipping FROM parties.addresses
+     WHERE org_id=organization_id AND id=delivery_address_id
+       AND party_id=customer.party_id
+       AND address_kind IN ('registered','billing','shipping') AND status='active'
+       AND row_version=delivery_address_row_version
+       AND valid_from<=invoice_date AND (valid_until IS NULL OR valid_until>=invoice_date)
+     FOR SHARE;
+    place_of_supply:=shipping.state_code;
     IF billing.country_code<>'IN' OR shipping.country_code<>'IN' THEN
       RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='export sales invoices remain fail-closed in the pilot'; END IF;
     SELECT count(*) INTO registration_count FROM parties.tax_registrations
@@ -2459,6 +2469,71 @@ BEGIN
       resolved_allocations:='[]'::jsonb; allocated_billed:=0; allocated_free:=0;
       order_line.id:=NULL;
       IF requested_line->>'fulfillment_source'='direct_issue' THEN
+        allocation_mode:=COALESCE(NULLIF(requested_line->>'batch_allocation_mode',''),
+          CASE WHEN requested_line->'batch_allocations' IS NULL THEN 'auto_fefo' ELSE 'explicit_fefo' END);
+        IF allocation_mode NOT IN ('auto_fefo','explicit_fefo') THEN
+          RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='direct invoice batch allocation mode is invalid';
+        END IF;
+        source_versions:=source_versions||pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_object('resource_type','invoice_batch_allocation_policy',
+            'invoice_line_id',requested_line->>'line_id','mode',allocation_mode,
+            'algorithm_version','sales_invoice_auto_fefo_v1','later_expiry_override_supported',false));
+        IF allocation_mode='auto_fefo' THEN
+          IF requested_line->'dispatch_allocations' IS NOT NULL THEN
+            RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='automatic FEFO invoice line cannot carry dispatch allocations'; END IF;
+          auto_allocations:='[]'::jsonb;
+          remaining_billed:=billed;
+          remaining_free:=free;
+          FOR eligible IN
+            SELECT batch_row.id AS batch_id,batch_row.batch_number,batch_row.expires_on,
+                   stock.on_hand_quantity-
+                     coalesce((allocation_tracker#>>ARRAY[batch_row.id::text,'base_quantity'])::numeric,0)
+                     AS on_hand_quantity
+              FROM inventory.stock_balances stock
+              JOIN inventory.batches batch_row ON batch_row.org_id=stock.org_id
+               AND batch_row.id=stock.batch_id
+             WHERE stock.org_id=organization_id AND stock.location_id=location.id
+               AND stock.product_id=product.id
+               AND stock.on_hand_quantity-
+                     coalesce((allocation_tracker#>>ARRAY[batch_row.id::text,'base_quantity'])::numeric,0)>0
+               AND batch_row.lot_kind='manufacturer_batch' AND batch_row.status='released'
+               AND batch_row.released_at IS NOT NULL AND batch_row.expires_on IS NOT NULL
+               AND invoice_date<batch_row.expires_on
+             ORDER BY batch_row.expires_on,batch_row.batch_number,batch_row.id
+             FOR SHARE OF stock,batch_row
+          LOOP
+            available_entered:=pg_catalog.trunc(eligible.on_hand_quantity/conversion.multiplier,6);
+            candidate_billed:=LEAST(remaining_billed,available_entered);
+            available_entered:=available_entered-candidate_billed;
+            candidate_free:=LEAST(remaining_free,available_entered);
+            IF candidate_billed+candidate_free>0 THEN
+              auto_allocations:=auto_allocations||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+                'batch_id',eligible.batch_id,'billed_quantity',candidate_billed::text,
+                'free_quantity',candidate_free::text));
+              remaining_billed:=remaining_billed-candidate_billed;
+              remaining_free:=remaining_free-candidate_free;
+            END IF;
+            EXIT WHEN remaining_billed=0 AND remaining_free=0;
+          END LOOP;
+          IF remaining_billed<>0 OR remaining_free<>0 THEN
+            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='automatic FEFO allocation cannot satisfy locked stock'; END IF;
+          IF requested_line->'batch_allocations' IS NULL THEN
+            requested_line:=pg_catalog.jsonb_set(requested_line,'{batch_allocations}',auto_allocations,true);
+          ELSIF pg_catalog.jsonb_typeof(requested_line->'batch_allocations')<>'array'
+             OR pg_catalog.jsonb_array_length(requested_line->'batch_allocations')<>pg_catalog.jsonb_array_length(auto_allocations)
+             OR EXISTS (
+               WITH expected AS (
+                 SELECT value,ordinality FROM pg_catalog.jsonb_array_elements(auto_allocations) WITH ORDINALITY item(value,ordinality)
+               ), supplied AS (
+                 SELECT value,ordinality FROM pg_catalog.jsonb_array_elements(requested_line->'batch_allocations') WITH ORDINALITY item(value,ordinality)
+               )
+               SELECT 1 FROM expected FULL JOIN supplied USING(ordinality)
+                WHERE ROW(expected.value->>'batch_id',expected.value->>'billed_quantity',expected.value->>'free_quantity')
+                  IS DISTINCT FROM ROW(supplied.value->>'batch_id',supplied.value->>'billed_quantity',supplied.value->>'free_quantity')
+             ) THEN
+            RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='automatic FEFO allocation changed before persistence';
+          END IF;
+        END IF;
         IF pg_catalog.jsonb_typeof(requested_line->'batch_allocations')<>'array'
            OR pg_catalog.jsonb_array_length(requested_line->'batch_allocations')<1
            OR requested_line->'dispatch_allocations' IS NOT NULL
@@ -2469,7 +2544,8 @@ BEGIN
           allocation_billed:=NULLIF(requested_allocation->>'billed_quantity','')::numeric;
           allocation_free:=NULLIF(requested_allocation->>'free_quantity','')::numeric;
           IF allocation_billed<0 OR allocation_free<0 OR allocation_billed+allocation_free<=0
-             OR NULLIF(requested_allocation->>'inventory_line_id','')::uuid IS NULL THEN
+             OR (allocation_mode='explicit_fefo'
+                 AND NULLIF(requested_allocation->>'inventory_line_id','')::uuid IS NULL) THEN
             RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='direct invoice batch allocation is invalid'; END IF;
           SELECT * INTO STRICT batch FROM inventory.batches WHERE org_id=organization_id
            AND id=NULLIF(requested_allocation->>'batch_id','')::uuid AND product_id=product.id
@@ -2524,7 +2600,7 @@ BEGIN
            AND id=NULLIF(requested_allocation->>'dispatch_line_id','')::uuid FOR SHARE;
           SELECT * INTO STRICT dispatch_header FROM sales.dispatches WHERE org_id=organization_id
            AND id=dispatch_line.dispatch_id AND status='posted' AND branch_id=branch_id
-           AND customer_account_id=customer.id FOR SHARE;
+           AND customer_account_id=customer.id AND shipping_address_id=shipping.id FOR SHARE;
           IF order_line.id IS NULL THEN
             SELECT * INTO STRICT order_line FROM sales.order_lines WHERE org_id=organization_id
              AND id=dispatch_line.order_line_id AND line_kind='product' FOR SHARE;
@@ -2588,6 +2664,7 @@ BEGIN
         'cess_rate',CASE WHEN supply_type<>'sez' AND tax_version.taxability='taxable' THEN tax_version.cess_rate::text ELSE '0' END,
         'ruleset_version',tax_version.ruleset_version,'revenue_account_id',revenue_account.id,
         'order_line_id',order_line.id,'fulfillment_source',requested_line->>'fulfillment_source',
+        'batch_allocation_mode',CASE WHEN requested_line->>'fulfillment_source'='direct_issue' THEN allocation_mode END,
         CASE WHEN requested_line->>'fulfillment_source'='direct_issue' THEN 'batch_allocations' ELSE 'dispatch_allocations' END,
         resolved_allocations,'input',requested_line);
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(resolved_line);

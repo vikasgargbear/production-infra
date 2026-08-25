@@ -345,13 +345,26 @@ def validate_prepare_payload_semantics(
             direct = line.get("batch_allocations")
             dispatched = line.get("dispatch_allocations")
             source = line["fulfillment_source"]
-            if source == "direct_issue" and (not direct or dispatched):
-                raise ValueError(
-                    f"lines[{index}] direct_issue requires only batch_allocations"
-                )
             if source == "direct_issue":
                 uses_direct_issue = True
-            if source == "dispatch_allocated" and (not dispatched or direct):
+                mode = line.get("batch_allocation_mode") or (
+                    "explicit_fefo" if direct else "auto_fefo"
+                )
+                if dispatched:
+                    raise ValueError(
+                        f"lines[{index}] direct_issue forbids dispatch_allocations"
+                    )
+                if mode == "explicit_fefo" and not direct:
+                    raise ValueError(
+                        f"lines[{index}] explicit_fefo requires batch_allocations"
+                    )
+                if mode == "auto_fefo" and direct:
+                    raise ValueError(
+                        f"lines[{index}] auto_fefo forbids caller batch_allocations"
+                    )
+            if source == "dispatch_allocated" and (
+                not dispatched or direct or line.get("batch_allocation_mode") is not None
+            ):
                 raise ValueError(
                     f"lines[{index}] dispatch_allocated requires only dispatch_allocations"
                 )

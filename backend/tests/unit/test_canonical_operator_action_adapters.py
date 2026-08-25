@@ -248,6 +248,7 @@ class FakeSalesInvoiceSession:
         self.executions = []
         self.transaction_entries = 0
         self.transaction_exits = 0
+        self.auto_batch_id = str(uuid4())
 
     def __enter__(self):
         return self
@@ -290,7 +291,14 @@ class FakeSalesInvoiceSession:
                 }
                 if source["fulfillment_source"] == "direct_issue":
                     direct_count += 1
-                    allocation = source["batch_allocations"][0]
+                    allocation = (source.get("batch_allocations") or [{
+                        "batch_id": self.auto_batch_id,
+                        "billed_quantity": source["billed_quantity"],
+                        "free_quantity": source["free_quantity"],
+                    }])[0]
+                    product_line["batch_allocation_mode"] = source[
+                        "batch_allocation_mode"
+                    ]
                     product_line["batch_allocations"] = [{
                         **allocation,
                         "line_number": direct_count,
@@ -2529,6 +2537,9 @@ def test_sales_invoice_prepare_is_atomic_for_both_fulfillment_modes(
     assert resolution_request["lines"][0]["fulfillment_source"] == fulfillment_source
     assert "line_id" in resolution_request["lines"][0]
     if fulfillment_source == "direct_issue":
+        assert resolution_request["lines"][0]["batch_allocation_mode"] == (
+            "explicit_fefo"
+        )
         assert "inventory_line_id" in resolution_request["lines"][0][
             "batch_allocations"
         ][0]
@@ -2542,6 +2553,46 @@ def test_sales_invoice_prepare_is_atomic_for_both_fulfillment_modes(
     assert calculation_input["document"]["products"][0][
         "free_supply_tax_treatment"
     ] == "included_at_unit_rate"
+
+
+def test_sales_invoice_prepare_defaults_missing_direct_batches_to_auto_fefo():
+    session = FakeSalesInvoiceSession()
+    payload = _sales_invoice_service_payload()
+    payload["lines"][0].pop("batch_allocations")
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["branch_id"],)).__dict__,
+            "operation_key": "sales.invoice.prepare",
+            "permission": "sales.invoice.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(
+        lambda: (_ for _ in ()).throw(AssertionError("ordinary DB opened")),
+        calculator_factory=lambda: session,
+        runtime_principal_configured=True,
+    )
+
+    service.prepare(
+        policy=ACTION_POLICIES["sales.invoice.prepare"],
+        payload=payload,
+        idempotency_key="prepare:sales-invoice:auto-fefo",
+        context=context,
+    )
+
+    assert len(session.executions) == 3
+    initial = json.loads(session.executions[0][1]["request_json"])
+    resolved = json.loads(session.executions[1][1]["request_json"])
+    persisted = json.loads(session.executions[2][1]["request_bytes"])
+    assert initial["lines"][0]["batch_allocation_mode"] == "auto_fefo"
+    assert "batch_allocations" not in initial["lines"][0]
+    assert resolved["lines"][0]["batch_allocation_mode"] == "auto_fefo"
+    assert resolved["lines"][0]["batch_allocations"] == persisted["lines"][0][
+        "batch_allocations"
+    ]
+    assert resolved["lines"][0]["batch_allocations"][0]["batch_id"] == (
+        session.auto_batch_id
+    )
+    assert "inventory_line_id" in resolved["lines"][0]["batch_allocations"][0]
 
 
 def test_mixed_sales_invoice_preview_reports_direct_and_dispatch_impacts():

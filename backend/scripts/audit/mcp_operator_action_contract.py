@@ -569,8 +569,15 @@ def _validate_workflow_semantics(
         source = line_properties.get("fulfillment_source", {})
         if set(source.get("enum", ())) != {"direct_issue", "dispatch_allocated"}:
             issues.append("erp_sales_invoice_prepare: fulfillment_source contract drifted")
-        if not {"batch_allocations", "dispatch_allocations"} <= set(line_properties):
+        if not {
+            "batch_allocation_mode", "batch_allocations", "dispatch_allocations"
+        } <= set(line_properties):
             issues.append("erp_sales_invoice_prepare: exact fulfillment inputs are incomplete")
+        allocation_modes = set(
+            line_properties.get("batch_allocation_mode", {}).get("enum", ())
+        )
+        if allocation_modes != {"auto_fefo", "explicit_fefo"}:
+            issues.append("erp_sales_invoice_prepare: batch allocation policy drifted")
         line_required = set(
             sales_invoice.input_schema["properties"]["lines"]["items"].get("required", ())
         )
@@ -592,8 +599,10 @@ def _validate_semantic_validator_wiring() -> list[str]:
         "elif bank_account_id is None",
         'if method != "cash" and not external_reference',
         'if operation_key == "sales.invoice.prepare"',
-        'if source == "direct_issue" and (not direct or dispatched)',
-        'if source == "dispatch_allocated" and (not dispatched or direct)',
+        'if source == "direct_issue":',
+        'if mode == "explicit_fefo" and not direct:',
+        'if mode == "auto_fefo" and direct:',
+        'if source == "dispatch_allocated" and (',
     )
     missing = [fragment for fragment in required_contract_fragments if fragment not in contract_source]
     if missing:

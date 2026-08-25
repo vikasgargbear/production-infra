@@ -592,6 +592,206 @@ class CanonicalReconciler:
             """,
             (self.org_id, resource_id, resource_id, resource_id),
         )
+        sales_invoice_evidence: dict[str, Any] = {}
+        if operation == "sales.invoice":
+            coverage = self.query(
+                """
+                WITH product_lines AS (
+                    SELECT id,base_billed_quantity,base_free_quantity
+                      FROM sales.invoice_lines
+                     WHERE org_id=%s::uuid AND invoice_id=%s::uuid
+                       AND line_kind='product'
+                ), direct AS (
+                    SELECT sales_invoice_line_id,
+                           count(*)::integer AS allocation_count,
+                           sum(base_quantity) AS base_quantity
+                      FROM inventory.inventory_document_lines
+                     WHERE org_id=%s::uuid AND sales_invoice_line_id IN (
+                         SELECT id FROM product_lines)
+                     GROUP BY sales_invoice_line_id
+                ), dispatched AS (
+                    SELECT invoice_line_id,
+                           count(*)::integer AS allocation_count,
+                           sum(allocated_base_billed_quantity) AS base_billed_quantity,
+                           sum(allocated_base_free_quantity) AS base_free_quantity
+                      FROM sales.invoice_dispatch_allocations
+                     WHERE org_id=%s::uuid AND invoice_line_id IN (
+                         SELECT id FROM product_lines)
+                     GROUP BY invoice_line_id
+                )
+                SELECT count(*)::integer AS product_line_count,
+                       count(*) FILTER (WHERE direct.allocation_count>0)::integer
+                         AS direct_line_count,
+                       coalesce(sum(direct.allocation_count),0)::integer
+                         AS direct_inventory_line_count,
+                       count(*) FILTER (WHERE dispatched.allocation_count>0)::integer
+                         AS dispatch_line_count,
+                       count(*) FILTER (
+                         WHERE (direct.allocation_count IS NULL) =
+                               (dispatched.allocation_count IS NULL)
+                       )::integer AS ownership_mismatch_count,
+                       count(*) FILTER (
+                         WHERE direct.allocation_count IS NOT NULL
+                           AND direct.base_quantity IS DISTINCT FROM
+                               product_lines.base_billed_quantity+
+                               product_lines.base_free_quantity
+                       )::integer AS direct_quantity_mismatch_count,
+                       count(*) FILTER (
+                         WHERE dispatched.allocation_count IS NOT NULL
+                           AND (dispatched.base_billed_quantity IS DISTINCT FROM
+                                  product_lines.base_billed_quantity
+                             OR dispatched.base_free_quantity IS DISTINCT FROM
+                                  product_lines.base_free_quantity)
+                       )::integer AS dispatch_quantity_mismatch_count
+                  FROM product_lines
+                  LEFT JOIN direct ON direct.sales_invoice_line_id=product_lines.id
+                  LEFT JOIN dispatched ON dispatched.invoice_line_id=product_lines.id
+                """,
+                (self.org_id, resource_id, self.org_id, self.org_id),
+            )[0]
+            assert coverage["product_line_count"] > 0
+            assert coverage["ownership_mismatch_count"] == 0
+            assert coverage["direct_quantity_mismatch_count"] == 0
+            assert coverage["dispatch_quantity_mismatch_count"] == 0
+            assert (
+                coverage["direct_line_count"] + coverage["dispatch_line_count"]
+                == coverage["product_line_count"]
+            )
+
+            direct_inventory = self.query(
+                """
+                SELECT document.id,document.document_type,document.status,
+                       document.total_abs_base_quantity,document.total_value,
+                       count(DISTINCT line.id)::integer AS line_count,
+                       count(DISTINCT ledger.id)::integer AS ledger_count,
+                       sum(line.base_quantity) AS line_base_quantity,
+                       sum(line.extended_cost) AS line_value,
+                       sum(-ledger.quantity_delta) AS ledger_base_quantity,
+                       sum(-ledger.value_delta) AS ledger_value,
+                       count(*) FILTER (
+                         WHERE ledger.entry_kind<>'issue'
+                            OR ledger.inventory_document_line_id<>line.id
+                            OR ledger.location_id<>line.from_location_id
+                            OR ledger.product_id<>line.product_id
+                            OR ledger.batch_id<>line.batch_id
+                       )::integer AS invalid_ledger_count
+                  FROM inventory.inventory_documents document
+                  JOIN inventory.inventory_document_lines line
+                    ON line.org_id=document.org_id
+                   AND line.inventory_document_id=document.id
+                  JOIN inventory.stock_ledger_entries ledger
+                    ON ledger.org_id=line.org_id
+                   AND ledger.inventory_document_id=document.id
+                   AND ledger.inventory_document_line_id=line.id
+                 WHERE document.org_id=%s::uuid
+                   AND document.sales_invoice_id=%s::uuid
+                 GROUP BY document.id,document.document_type,document.status,
+                          document.total_abs_base_quantity,document.total_value
+                """,
+                (self.org_id, resource_id),
+            )
+            if coverage["direct_line_count"]:
+                assert len(direct_inventory) == 1
+                inventory = direct_inventory[0]
+                assert inventory["document_type"] == "sales_issue"
+                assert inventory["status"] == "posted"
+                assert inventory["line_count"] == coverage[
+                    "direct_inventory_line_count"
+                ]
+                assert inventory["line_count"] == inventory["ledger_count"] > 0
+                assert inventory["invalid_ledger_count"] == 0
+                assert inventory["line_base_quantity"] == inventory[
+                    "total_abs_base_quantity"
+                ] == inventory["ledger_base_quantity"]
+                assert inventory["line_value"] == inventory["total_value"] == inventory[
+                    "ledger_value"
+                ]
+            else:
+                assert direct_inventory == []
+
+            accounting = self.query(
+                """
+                SELECT event.event_type,journal.status,
+                       journal.transaction_debit_total,
+                       journal.transaction_credit_total,
+                       journal.functional_debit_total,
+                       journal.functional_credit_total,
+                       count(line.id)::integer AS line_count,
+                       coalesce(sum(line.transaction_debit),0) AS line_debit_total,
+                       coalesce(sum(line.transaction_credit),0) AS line_credit_total,
+                       coalesce(sum(line.functional_debit),0) AS line_functional_debit_total,
+                       coalesce(sum(line.functional_credit),0) AS line_functional_credit_total
+                  FROM finance.accounting_events event
+                  JOIN finance.journal_entries journal
+                    ON journal.org_id=event.org_id
+                   AND journal.id=event.journal_entry_id
+                  JOIN finance.journal_lines line
+                    ON line.org_id=journal.org_id
+                   AND line.journal_entry_id=journal.id
+                 WHERE event.org_id=%s::uuid
+                   AND event.sales_invoice_id=%s::uuid
+                 GROUP BY event.id,event.event_type,journal.id,journal.status,
+                          journal.transaction_debit_total,
+                          journal.transaction_credit_total,
+                          journal.functional_debit_total,
+                          journal.functional_credit_total
+                """,
+                (self.org_id, resource_id),
+            )
+            assert len(accounting) == 1
+            invoice_accounting = accounting[0]
+            assert invoice_accounting["event_type"] == "sales_invoice"
+            assert invoice_accounting["status"] == "posted"
+            assert invoice_accounting["line_count"] > 1
+            assert invoice_accounting["line_debit_total"] == invoice_accounting[
+                "transaction_debit_total"
+            ] == invoice_accounting["line_credit_total"] == invoice_accounting[
+                "transaction_credit_total"
+            ]
+            assert invoice_accounting[
+                "line_functional_debit_total"
+            ] == invoice_accounting["functional_debit_total"] == invoice_accounting[
+                "line_functional_credit_total"
+            ] == invoice_accounting["functional_credit_total"]
+
+            assert len(tax_documents) == 1
+            tax_document = tax_documents[0]
+            assert tax_document["document_class"] == "sales_invoice"
+            assert tax_document["direction"] == "outward"
+            assert tax_document["document_effect"] == "original"
+            for invoice_field, tax_field in (
+                ("net_value_total", "net_value_amount"),
+                ("gst_taxable_total", "gst_taxable_value"),
+                ("cgst_total", "cgst_amount"),
+                ("sgst_total", "sgst_amount"),
+                ("igst_total", "igst_amount"),
+                ("cess_total", "cess_amount"),
+                ("rounding_adjustment", "rounding_adjustment"),
+                ("grand_total", "counterparty_payable_amount"),
+            ):
+                assert Decimal(str(tax_document[tax_field])) == Decimal(
+                    str(header[0][invoice_field])
+                )
+
+            assert len(open_items) == 1
+            open_item = open_items[0]
+            assert open_item["item_side"] == "receivable"
+            assert open_item["status"] == "open"
+            assert open_item["document_number"] == header[0]["invoice_number"]
+            assert open_item["currency_code"] == header[0]["currency_code"]
+            assert Decimal(str(open_item["principal_amount"])) == Decimal(
+                str(header[0]["grand_total"])
+            )
+            assert Decimal(str(open_item["functional_principal_amount"])) == Decimal(
+                str(header[0]["grand_total"])
+            )
+            sales_invoice_evidence = {
+                "fulfillment_coverage": coverage,
+                "direct_inventory": direct_inventory,
+                "accounting": accounting,
+                "tax_document": tax_document,
+                "open_item": open_item,
+            }
         allocations = []
         if operation in PAYMENT_OPERATIONS:
             allocations = self.query(
@@ -630,6 +830,7 @@ class CanonicalReconciler:
             "tax_documents": tax_documents,
             "adjustment_notes": adjustment_notes,
             "open_items": open_items,
+            "sales_invoice_evidence": sales_invoice_evidence,
             "allocations": allocations,
             "withholdings": withholdings,
         }

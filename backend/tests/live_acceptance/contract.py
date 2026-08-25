@@ -12,7 +12,10 @@ from typing import Any
 MATRIX_PATH = Path(__file__).with_name("operation_matrix.json")
 OPERATION_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+\.prepare$")
 TOOL_RE = re.compile(r"^erp_[a-z0-9_]+$")
-RELATION_RE = re.compile(r"^(?:sales|procurement|finance|inventory|compliance|automation|core)\.[a-z][a-z0-9_]*$")
+RELATION_RE = re.compile(
+    r"^(?:sales|procurement|finance|inventory|tax|compliance|automation|core)"
+    r"\.[a-z][a-z0-9_]*$"
+)
 APPROVAL_POLICIES = {"actor_confirmation", "separate_approver"}
 AVAILABILITY = {"published", "blocked"}
 
