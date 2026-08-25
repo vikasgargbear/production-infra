@@ -106,7 +106,7 @@ def test_provisioner_has_no_implicit_psycopg_contexts_or_retained_preflight_pool
     # The sole driver connect is owned by database_connection(), whose finally
     # closes the client. Every call site uses that explicit-closing boundary.
     assert len(raw_connect_calls) == 1
-    assert source.count('database_connection("') == 24
+    assert source.count('database_connection("') == 25
     assert "connection.close()" in source
 
     preflight_action = source.split("def preflight_action", 1)[1].split(
@@ -141,3 +141,21 @@ def test_reviewed_staging_session_budget_stays_below_five_clients():
     assert "--host 127.0.0.1 --port 8090 --workers 1" in workflow
 
     assert api_request_peak + provisioner_preflight_peak < staging_session_capacity
+
+
+def test_bank_fixture_is_run_scoped_and_uses_canonical_parser_authority():
+    source = SCRIPT.read_text(encoding="utf-8")
+    body = source.split("def seed_bank_reconciliation_ui_fixture", 1)[1].split(
+        "\ndef preflight_sales_order", 1
+    )[0]
+
+    assert 'f"DEMO-UI-BANK-{DEMO_UI_FIXTURE_ID}"' in body
+    assert 'demo_ui_fixture_uuid("bank-statement")' in body
+    assert "erp_finance_commands.import_bank_statement_lines" in body
+    assert "finance.accounting_events" in body
+    assert "finance.journal_entries" in body
+    assert "finance.journal_lines" in body
+    assert "bank_line.account_id=%s" in body
+    assert "source.sha256=statement.source_sha256" in body
+    assert "journal.journal_number=statement_line.bank_reference" not in body
+    assert "INSERT INTO finance.reconciliation_matches" not in body

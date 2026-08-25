@@ -1,0 +1,37 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "bank_reconciliation",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/financial/bank-reconciliation"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Eligible statement and journal pair","exact":true},"value":"{{fact.identity.bank_reconciliation_statement_line_id}}:{{fact.identity.bank_reconciliation_journal_entry_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Select reviewed match method","exact":true},"value":"Select reviewed match method"}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/financial/bank-reconciliation"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Eligible statement and journal pair","exact":true},"value":"{{fact.identity.bank_reconciliation_statement_line_id}}:{{fact.identity.bank_reconciliation_journal_entry_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{fact.display.bank_reconciliation_candidate_label}}","exact":true},"value":"{{fact.display.bank_reconciliation_candidate_label}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Reviewed match method","exact":true},"value":"{{fact.choice.bank_reconciliation_match_method}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable match","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/financial/bank-reconciliation"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"2. Independent approval","exact":true}},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{command_request_id}}","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed and approve this exact match.","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"3. Execute & verify","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Check status","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"approved","exact":true},"value":"approved"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Execute this approved immutable match once.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute and verify","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Matched and reconciled","exact":true},"value":"Matched and reconciled"}
+    ]
+  }
+}

@@ -393,6 +393,50 @@ def test_stock_adjustment_template_derives_post_sales_count_from_authoritative_s
         )
 
 
+def test_bank_reconciliation_template_targets_exact_run_scoped_pair() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/bank_reconciliation.json").read_text()
+    )
+    facts = {
+        "identity": {
+            "bank_reconciliation_statement_line_id": (
+                "d3000000-0000-7000-8000-000000000041"
+            ),
+            "bank_reconciliation_journal_entry_id": (
+                "d3000000-0000-7000-8000-000000000042"
+            ),
+        },
+        "display": {
+            "bank_reconciliation_candidate_label": (
+                "2026-08-25 · Demo Bank · DEMO-UI-BANK-32840459528-1 "
+                "line 1 · JV-2026-001 · ₹1.00"
+            ),
+        },
+        "choice": {"bank_reconciliation_match_method": "reference_exact"},
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        {},
+        used,
+    )
+    _validate_compiled_steps(
+        "bank_reconciliation", operation, "separate_approver"
+    )
+    assert not used
+    exact_pair = (
+        "d3000000-0000-7000-8000-000000000041:"
+        "d3000000-0000-7000-8000-000000000042"
+    )
+    assert operation["missing_required_steps"][1]["value"] == exact_pair
+    assert operation["prepare_steps"][1]["value"] == exact_pair
+    assert operation["prepare_steps"][3]["value"] == "reference_exact"
+    assert operation["approval_steps"][2]["value"] == "{{command_request_id}}"
+    assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
+
+
 def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(

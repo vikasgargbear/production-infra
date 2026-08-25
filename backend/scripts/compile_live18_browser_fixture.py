@@ -196,6 +196,7 @@ def resolve_authoritative_facts(
         raise FixtureCompileError("live18 run token must be GitHub run-id and attempt")
     supplier_challan_number = f"DEMO-UI-CH-{run_token}"
     supplier_invoice_number = f"DEMO-UI-SUP-{run_token}"
+    bank_statement_reference = f"DEMO-UI-BANK-{run_token}"
     supplier_invoice_sql = """
       SELECT receipt.id::text, receipt.supplier_challan_date,
              portal_line.invoice_number, portal_line.invoice_date
@@ -245,6 +246,81 @@ def resolve_authoritative_facts(
        GROUP BY receipt.id, receipt.supplier_challan_date,
                 portal_line.id, portal_line.invoice_number, portal_line.invoice_date
       HAVING count(receipt_line.id)=1
+    """
+    bank_reconciliation_sql = """
+      SELECT statement.id::text,statement_line.id::text,journal.id::text,
+             statement.statement_reference,statement_line.line_number,
+             to_char(statement_line.transaction_date,'YYYY-MM-DD'),
+             bank.bank_name,journal.journal_number,
+             statement_line.amount::text,statement_line.direction
+        FROM finance.bank_statements statement
+        JOIN core.attachments source
+          ON source.org_id=statement.org_id
+         AND source.id=statement.source_attachment_id
+         AND source.storage_object_path=%s
+         AND source.evidence_kind='bank_statement_import'
+         AND source.status IN ('verified','retained')
+         AND source.verified_at IS NOT NULL
+         AND source.sha256=statement.source_sha256
+        JOIN finance.bank_accounts bank
+          ON bank.org_id=statement.org_id AND bank.id=statement.bank_account_id
+         AND bank.id=%s AND bank.status='active'
+         AND bank.currency_code=statement.currency_code
+        JOIN finance.accounts bank_ledger
+          ON bank_ledger.org_id=bank.org_id AND bank_ledger.id=bank.account_id
+         AND bank_ledger.id=%s AND bank_ledger.status='active'
+         AND bank_ledger.account_type='asset'
+         AND bank_ledger.allows_bank_reconciliation
+        JOIN finance.bank_statement_lines statement_line
+          ON statement_line.org_id=statement.org_id
+         AND statement_line.bank_statement_id=statement.id
+        JOIN finance.journal_entries journal
+          ON journal.org_id=statement.org_id AND journal.status='posted'
+         AND journal.posting_date=statement_line.transaction_date
+         AND journal.transaction_currency=statement.currency_code
+         AND journal.functional_currency='INR' AND journal.fx_rate=1
+         AND journal.transaction_debit_total=journal.transaction_credit_total
+         AND journal.functional_debit_total=journal.functional_credit_total
+         AND journal.journal_number=statement_line.bank_reference
+        JOIN finance.journal_lines bank_line
+          ON bank_line.org_id=journal.org_id
+         AND bank_line.journal_entry_id=journal.id
+         AND bank_line.account_id=bank.account_id
+         AND bank_line.transaction_debit=CASE statement_line.direction
+               WHEN 'credit' THEN statement_line.amount ELSE 0 END
+         AND bank_line.transaction_credit=CASE statement_line.direction
+               WHEN 'debit' THEN statement_line.amount ELSE 0 END
+         AND bank_line.functional_debit=bank_line.transaction_debit
+         AND bank_line.functional_credit=bank_line.transaction_credit
+        JOIN core.branches branch
+          ON branch.org_id=bank_line.org_id AND branch.id=bank_line.branch_id
+         AND branch.id=%s AND branch.status='active'
+       WHERE statement.org_id=%s AND statement.statement_reference=%s
+         AND statement.status IN ('imported','reconciling')
+         AND statement.currency_code='INR'
+         AND (SELECT count(*) FROM finance.journal_lines candidate_line
+               WHERE candidate_line.org_id=journal.org_id
+                 AND candidate_line.journal_entry_id=journal.id
+                 AND candidate_line.account_id=bank.account_id)=1
+         AND NOT EXISTS (
+               SELECT 1 FROM finance.reconciliation_matches matched
+                WHERE matched.org_id=statement_line.org_id
+                  AND matched.bank_statement_line_id=statement_line.id
+                  AND matched.status='matched'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM finance.reconciliation_matches reversal
+                     WHERE reversal.org_id=matched.org_id
+                       AND reversal.reversal_of_match_id=matched.id))
+         AND NOT EXISTS (
+               SELECT 1 FROM finance.reconciliation_matches matched
+                WHERE matched.org_id=journal.org_id
+                  AND matched.journal_entry_id=journal.id
+                  AND matched.status='matched'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM finance.reconciliation_matches reversal
+                     WHERE reversal.org_id=matched.org_id
+                       AND reversal.reversal_of_match_id=matched.id))
+       ORDER BY statement_line.id,journal.id
     """
     cycle_count_sql = """
       SELECT membership.id::text, attachment.id::text,
@@ -340,6 +416,15 @@ def resolve_authoritative_facts(
                 (supplier_invoice_number, org_id, supplier_challan_number),
             )
             supplier_invoice_rows = cursor.fetchall()
+            cursor.execute(
+                bank_reconciliation_sql,
+                (
+                    f"demo/{run_token}/bank-statement.json",
+                    identities["bank_account_id"], identities["bank_ledger_id"],
+                    identities["branch_id"], org_id, bank_statement_reference,
+                ),
+            )
+            bank_reconciliation_rows = cursor.fetchall()
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
@@ -368,6 +453,25 @@ def resolve_authoritative_facts(
     goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
+    if len(bank_reconciliation_rows) != 1:
+        raise FixtureCompileError(
+            "run-scoped exact bank-statement/journal authority resolved "
+            f"{len(bank_reconciliation_rows)} rows, expected one"
+        )
+    (
+        bank_statement_id,
+        bank_statement_line_id,
+        bank_journal_entry_id,
+        resolved_statement_reference,
+        bank_statement_line_number,
+        bank_transaction_date,
+        bank_name,
+        bank_journal_number,
+        bank_matched_amount,
+        bank_statement_direction,
+    ) = bank_reconciliation_rows[0]
+    if resolved_statement_reference != bank_statement_reference:
+        raise FixtureCompileError("run-scoped bank statement authority drifted")
     resolved = dict(zip(keys, rows[0][:-2]))
     (
         cycle_count_membership_id,
@@ -388,6 +492,9 @@ def resolve_authoritative_facts(
             "direct_issue_batch_id": resolved.pop("direct_issue_batch_id"),
             "cycle_count_evidence_attachment_id": cycle_count_evidence_id,
             "cycle_count_counted_by_membership_id": cycle_count_membership_id,
+            "bank_reconciliation_statement_id": bank_statement_id,
+            "bank_reconciliation_statement_line_id": bank_statement_line_id,
+            "bank_reconciliation_journal_entry_id": bank_journal_entry_id,
         },
         "display": {
             **resolved,
@@ -399,6 +506,11 @@ def resolve_authoritative_facts(
                 f"{cycle_count_evidence_document_date} · "
                 f"{str(cycle_count_evidence_id)[:8]}"
             ),
+            "bank_reconciliation_candidate_label": (
+                f"{bank_transaction_date} · {bank_name} · "
+                f"{resolved_statement_reference} line {bank_statement_line_number} · "
+                f"{bank_journal_number} · ₹{Decimal(bank_matched_amount):,.2f}"
+            ),
         },
         "clock": {
             "business_date": rows[0][-2],
@@ -409,6 +521,11 @@ def resolve_authoritative_facts(
             "supplier_invoice_number": resolved_invoice_number,
             "supplier_invoice_date": invoice_date.isoformat(),
             "supplier_invoice_received_date": invoice_date.isoformat(),
+            "bank_reconciliation_match_method": "reference_exact",
+            "bank_reconciliation_matched_amount": format(
+                Decimal(bank_matched_amount), ".2f"
+            ),
+            "bank_reconciliation_statement_direction": bank_statement_direction,
         },
     }
 
