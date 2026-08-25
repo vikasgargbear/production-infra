@@ -49,7 +49,9 @@ BEGIN
                                      'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
                                      'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
                                      'resolve_inventory_transfer_prepare','persist_inventory_transfer_prepare',
-                                     'resolve_inventory_adjustment_prepare','persist_inventory_adjustment_prepare')
+                                     'resolve_inventory_adjustment_prepare','persist_inventory_adjustment_prepare',
+                                     'resolve_inventory_destruction_prepare','persist_inventory_destruction_prepare',
+                                     'execute_inventory_destruction_command')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));

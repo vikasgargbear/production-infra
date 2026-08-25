@@ -97,9 +97,10 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
 
 def _routes():
     # The CORS contract intentionally reloads app.main to verify environment-
-    # derived middleware.  Resolve the router from the live module object so
-    # this fence never audits the detached pre-reload APIRouter instance.
-    return [route for route in main_module.api.routes if isinstance(route, APIRoute)]
+    # derived middleware.  Audit the effective FastAPI application rather
+    # than its construction-time APIRouter, which a reload may replace after
+    # the routes have already been mounted on the application.
+    return [route for route in main_module.app.routes if isinstance(route, APIRoute)]
 
 
 def _direct_durable_side_effects(route: APIRoute):
