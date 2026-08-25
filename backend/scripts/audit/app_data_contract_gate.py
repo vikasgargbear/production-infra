@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+from datetime import datetime
+import hashlib
 import json
 import re
 import sys
@@ -52,6 +54,17 @@ REQUIRED_SECURITY_RELATIONS = {
     "core.idempotency_keys",
     "core.audit_events",
 }
+PROMOTION_EVIDENCE_SECTIONS = {
+    "source_disposition",
+    "route_graph",
+    "migration_head",
+    "runtime_tenant_isolation",
+    "reconciliation_backup",
+    "rollback_decommission",
+    "review",
+}
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -73,6 +86,170 @@ def load_contract(path: Path = DEFAULT_CONTRACT) -> dict[str, Any]:
 
 def load_model(path: Path = DEFAULT_MODEL) -> dict[str, Any]:
     return _load_json(path)
+
+
+def _relative_file(root: Path, value: Any, label: str) -> tuple[Path | None, str | None]:
+    if not isinstance(value, str) or not value or Path(value).is_absolute():
+        return None, f"{label} must be a repository-relative file"
+    candidate = (root / value).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None, f"{label} escapes the repository"
+    if not candidate.is_file():
+        return None, f"{label} does not exist: {value}"
+    return candidate, None
+
+
+def _hash_error(path: Path, expected: Any, label: str) -> str | None:
+    if not isinstance(expected, str) or not SHA256.fullmatch(expected):
+        return f"{label} must provide a lowercase SHA-256"
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != expected:
+        return f"{label} hash differs: expected {expected}, got {actual}"
+    return None
+
+
+def _artifact_errors(
+    root: Path,
+    section: Mapping[str, Any],
+    *,
+    path_key: str = "artifact",
+    hash_key: str = "artifact_sha256",
+    label: str,
+) -> list[str]:
+    path, error = _relative_file(root, section.get(path_key), f"{label}.{path_key}")
+    if error:
+        return [error]
+    assert path is not None
+    hash_error = _hash_error(path, section.get(hash_key), f"{label}.{hash_key}")
+    return [hash_error] if hash_error else []
+
+
+def validate_promotion_evidence(
+    contract: Mapping[str, Any],
+    *,
+    root: Path = REPO_ROOT,
+    require_complete: bool | None = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Validate the hash-bound promotion manifest and typed approval predicates."""
+
+    errors: list[str] = []
+    reference = contract.get("promotion_evidence")
+    if not isinstance(reference, dict):
+        return None, ["promotion_evidence must be an object"]
+    manifest_path, path_error = _relative_file(
+        root, reference.get("manifest"), "promotion_evidence.manifest"
+    )
+    if path_error:
+        return None, [path_error]
+    assert manifest_path is not None
+    hash_error = _hash_error(
+        manifest_path,
+        reference.get("manifest_sha256"),
+        "promotion_evidence.manifest_sha256",
+    )
+    if hash_error:
+        errors.append(hash_error)
+    try:
+        evidence = _load_json(manifest_path)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return None, errors + [f"promotion evidence cannot be loaded: {exc}"]
+    if evidence.get("schema_version") != 1:
+        errors.append("promotion evidence schema_version must equal 1")
+    missing_sections = PROMOTION_EVIDENCE_SECTIONS - set(evidence)
+    for section_name in sorted(missing_sections):
+        errors.append(f"promotion evidence lacks {section_name}")
+    unexpected = set(evidence) - PROMOTION_EVIDENCE_SECTIONS - {
+        "schema_version",
+        "evidence_state",
+    }
+    for section_name in sorted(unexpected):
+        errors.append(f"promotion evidence has unknown section {section_name}")
+
+    complete = (
+        contract.get("decision_status") == "approved_app_contract_v1"
+        if require_complete is None
+        else require_complete
+    )
+    for section_name in sorted(PROMOTION_EVIDENCE_SECTIONS):
+        section = evidence.get(section_name)
+        if not isinstance(section, dict):
+            errors.append(f"promotion evidence {section_name} must be an object")
+            continue
+        state = section.get("state")
+        if state not in {"missing", "verified"}:
+            errors.append(f"promotion evidence {section_name}.state is invalid")
+            continue
+        if state != "verified":
+            if complete:
+                errors.append(f"promotion evidence {section_name} is not verified")
+            continue
+        if section_name == "review":
+            if not isinstance(section.get("reviewer"), str) or not section["reviewer"].strip():
+                errors.append("promotion evidence review.reviewer is required")
+            reviewed_at = section.get("reviewed_at")
+            try:
+                parsed = datetime.fromisoformat(str(reviewed_at).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError("timezone required")
+            except ValueError:
+                errors.append("promotion evidence review.reviewed_at must be an ISO-8601 timestamp with timezone")
+            if not isinstance(section.get("git_commit"), str) or not GIT_COMMIT.fullmatch(section["git_commit"]):
+                errors.append("promotion evidence review.git_commit must be an exact 40-character commit")
+            continue
+        if section_name == "rollback_decommission":
+            errors.extend(_artifact_errors(
+                root, section, path_key="rollback_artifact",
+                hash_key="rollback_artifact_sha256", label=section_name,
+            ))
+            errors.extend(_artifact_errors(
+                root, section, path_key="decommission_artifact",
+                hash_key="decommission_artifact_sha256", label=section_name,
+            ))
+            continue
+        errors.extend(_artifact_errors(root, section, label=section_name))
+        if section_name == "source_disposition":
+            if section.get("strategy") not in {"reset", "conversion"}:
+                errors.append("promotion evidence source_disposition.strategy must be reset or conversion")
+            if not isinstance(section.get("source_identifier"), str) or not section["source_identifier"].strip():
+                errors.append("promotion evidence source_disposition.source_identifier is required")
+        elif section_name == "route_graph":
+            if section.get("analyzer_kind") != "mounted_route_graph":
+                errors.append("promotion evidence route_graph must use the mounted route graph analyzer")
+            if section.get("reachable_retired_dependency_count") != 0:
+                errors.append("promotion evidence route_graph has reachable retired-schema dependencies")
+        elif section_name == "migration_head":
+            expected = section.get("expected_head")
+            if not isinstance(expected, str) or not expected or section.get("observed_head") != expected:
+                errors.append("promotion evidence migration_head does not reconcile exact expected and observed heads")
+        elif section_name == "runtime_tenant_isolation":
+            for predicate in (
+                "runtime_role_non_owner",
+                "runtime_role_no_bypassrls",
+                "forced_rls_verified",
+                "tenant_positive_test",
+                "cross_tenant_denial_test",
+            ):
+                if section.get(predicate) is not True:
+                    errors.append(f"promotion evidence runtime_tenant_isolation.{predicate} is not verified")
+        elif section_name == "reconciliation_backup":
+            for predicate in (
+                "source_target_counts_reconciled",
+                "exact_totals_reconciled",
+                "backup_verified",
+                "restore_tested",
+            ):
+                if section.get(predicate) is not True:
+                    errors.append(f"promotion evidence reconciliation_backup.{predicate} is not verified")
+    verified = all(
+        isinstance(evidence.get(name), dict)
+        and evidence[name].get("state") == "verified"
+        for name in PROMOTION_EVIDENCE_SECTIONS
+    )
+    if evidence.get("evidence_state") != ("verified" if verified else "incomplete"):
+        errors.append("promotion evidence evidence_state disagrees with its predicates")
+    return evidence, errors
 
 
 def relation_names(model: dict[str, Any]) -> list[str]:
@@ -120,6 +297,7 @@ def validate_contract(
     contract: dict[str, Any],
     source_root: Path | None = DEFAULT_SOURCE_ROOT,
     model: dict[str, Any] | None = None,
+    repository_root: Path = REPO_ROOT,
 ) -> list[str]:
     errors: list[str] = []
     if model is None:
@@ -127,6 +305,16 @@ def validate_contract(
             model = load_model()
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             return [f"canonical model cannot be loaded: {exc}"]
+
+    if contract.get("decision_status") not in {
+        "proposed_app_contract_v1",
+        "approved_app_contract_v1",
+    }:
+        errors.append("decision_status must be proposed_app_contract_v1 or approved_app_contract_v1")
+    _, promotion_errors = validate_promotion_evidence(
+        contract, root=repository_root
+    )
+    errors.extend(promotion_errors)
 
     authority = contract.get("data_authority")
     if not isinstance(authority, dict):

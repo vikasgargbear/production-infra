@@ -14,7 +14,14 @@ import ast
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import sys
 from typing import Any, Mapping
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from scripts.audit import app_data_contract_gate
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -46,6 +53,41 @@ def _literal_string(node: ast.AST) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     return None
+
+
+def _migration_head(root: Path) -> str:
+    versions = root / "backend/alembic/versions"
+    parents: dict[str, str | None] = {}
+    for path in sorted(versions.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        values: dict[str, Any] = {}
+        for statement in tree.body:
+            if not isinstance(statement, ast.Assign):
+                continue
+            for target in statement.targets:
+                if isinstance(target, ast.Name) and target.id in {"revision", "down_revision"}:
+                    values[target.id] = ast.literal_eval(statement.value)
+        revision = values.get("revision")
+        parent = values.get("down_revision")
+        if not isinstance(revision, str) or not revision:
+            raise ValueError(f"{path.name}: migration revision is not literal text")
+        if parent is not None and not isinstance(parent, str):
+            raise ValueError(f"{path.name}: canonical migration history is not linear")
+        if revision in parents:
+            raise ValueError(f"duplicate canonical migration revision: {revision}")
+        parents[revision] = parent
+    if not parents:
+        raise ValueError("canonical migration history is empty")
+    referenced = {parent for parent in parents.values() if parent is not None}
+    unknown = referenced - set(parents)
+    if unknown:
+        raise ValueError("canonical migration history has unknown parents")
+    heads = set(parents) - referenced
+    if len(heads) != 1:
+        raise ValueError("canonical migration history must have exactly one head")
+    return heads.pop()
 
 
 def _binding_availability(root: Path) -> dict[str, bool]:
@@ -150,6 +192,23 @@ def collect_issues(root: Path = REPOSITORY_ROOT) -> list[PromotionIssue]:
     service_contract = _json(root, "backend/mcp_runtime/service-contract.json")
 
     issues = _canonical_authority_issues(authority, classification)
+    promotion_evidence, promotion_errors = app_data_contract_gate.validate_promotion_evidence(
+        app_contract, root=root, require_complete=True
+    )
+    for error in promotion_errors:
+        issues.append(PromotionIssue(
+            "APPLICATION_PROMOTION_EVIDENCE_INVALID",
+            error,
+        ))
+    if promotion_evidence is not None:
+        migration = promotion_evidence.get("migration_head")
+        if isinstance(migration, dict) and migration.get("state") == "verified":
+            actual_head = _migration_head(root)
+            if migration.get("expected_head") != actual_head:
+                issues.append(PromotionIssue(
+                    "APPLICATION_PROMOTION_MIGRATION_HEAD_DRIFT",
+                    f"reviewed promotion head {migration.get('expected_head')!r} differs from checked-in head {actual_head!r}",
+                ))
     if app_contract.get("decision_status") != "approved_app_contract_v1":
         issues.append(PromotionIssue(
             "CANONICAL_APP_CONTRACT_UNAPPROVED",
