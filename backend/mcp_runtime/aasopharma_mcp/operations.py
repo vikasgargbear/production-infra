@@ -169,7 +169,9 @@ OPERATOR_READBACK_TOOLS: Mapping[str, tuple[str, str]] = {
     "erp_inventory_adjustment_readback": (
         "inventory_adjustment_readback", "inventory-adjustment-readback"
     ),
-    "erp_expense_claim_readback": ("readback", "expense-claim-readback"),
+    "erp_expense_claim_readback": (
+        "expense_claim_readback", "expense-claim-readback"
+    ),
 }
 OPERATOR_OPERATIONS.update(
     {

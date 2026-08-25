@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import ast
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -113,15 +111,9 @@ def test_bank_reconciliation_readback_is_shared_by_rest_and_mcp():
     assert "service.get_bank_reconciliation_readback" in web
     assert "/commands/{command_request_id}/bank-reconciliation-readback" in mcp
     assert "get_bank_reconciliation_readback" in mcp
-    assert '"erp_bank_reconciliation_get"' in operations
-    read_kinds = re.search(r"if operation\.kind in (\{.*?\})", operations, re.DOTALL)
-    assert read_kinds is not None
-    assert ast.literal_eval(read_kinds.group(1)) == {
-        "status",
-        "bank_reconciliation_readback",
-        "supplier_advance_readback",
-        "readback",
-    }
+    assert '"erp_bank_reconciliation_get": (' in operations
+    assert '"bank_reconciliation_readback", "bank-reconciliation-readback"' in operations
+    assert 'READ_ONLY_OPERATOR_KINDS = frozenset(("status", *OPERATOR_READBACK_SUFFIXES))' in operations
     assert "EXECUTE_BANK_RECONCILIATION_SQL" in service
     assert 'before["operation"] == "finance.bank_reconciliation.match"' in service
 

@@ -134,8 +134,10 @@ def test_expense_claim_database_boundary_is_runtime_only_reviewed_and_exact_once
 
 def test_expense_claim_has_mcp_posted_detail_readback_and_live_reconciliation() -> None:
     operations = (ROOT / "mcp_runtime/aasopharma_mcp/operations.py").read_text()
-    assert '"erp_expense_claim_readback", "automation.command.status.get"' in operations
-    assert 'SHARED_ACTION_SCHEMAS["erp_expense_claim_readback"], "readback"' in operations
+    assert '"erp_expense_claim_readback": (' in operations
+    assert '"expense_claim_readback", "expense-claim-readback"' in operations
+    assert '"automation.command.status.get"' in operations
+    assert 'SHARED_ACTION_SCHEMAS[tool_name]' in operations
     routes = (ROOT / "app/api/routes/internal/mcp_actions.py").read_text()
     web = (ROOT / "app/api/routes/web_operator_actions.py").read_text()
     reconciler = (ROOT / "tests/live_canonical/reconciliation.py").read_text()
