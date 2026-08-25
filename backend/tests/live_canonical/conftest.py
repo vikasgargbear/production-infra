@@ -98,6 +98,10 @@ def fixture_inputs(canonical_live_config: CanonicalLiveConfig, scenario_matrix):
 
 @pytest.fixture(scope="session")
 def db_connection(canonical_live_config: CanonicalLiveConfig):
+    if canonical_live_config.database_url is None:
+        raise AssertionError(
+            "direct database fixtures are unavailable when captured database evidence is selected"
+        )
     connection = psycopg2.connect(canonical_live_config.database_url)
     connection.set_session(readonly=True, autocommit=False)
     try:

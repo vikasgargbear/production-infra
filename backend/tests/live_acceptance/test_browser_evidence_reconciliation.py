@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import uuid
+import hashlib
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from app.domain.operator_actions.contract import (
     PREPARE_PAYLOAD_MODELS,
     validate_prepare_payload_semantics,
 )
+from scripts.live18_evidence_contract import MANDATORY_LINEAGE_PATHS
 
 from .contract import load_ready_operation_matrix
 from .mcp_readback import mcp_readback_arguments
@@ -21,80 +24,6 @@ from .readback_consistency import assert_canonical_projection_consistency
 
 
 pytestmark = pytest.mark.integration
-
-
-MANDATORY_LINEAGE_PATHS = {
-    "sales.order.prepare": (
-        "customer_account_id", "delivery_address_id", "delivery_address_row_version",
-        "lines.0.product_id", "lines.0.uom_conversion_id",
-    ),
-    "sales.dispatch.prepare": (
-        "sales_order_id", "from_location_id", "lines.0.sales_order_line_id",
-        "lines.0.batch_allocations.0.batch_id",
-    ),
-    "sales.invoice.prepare": (
-        "customer_account_id", "delivery_address_id", "delivery_address_row_version",
-        "lines.0.product_id", "lines.0.uom_conversion_id",
-    ),
-    "sales.return.prepare": (
-        "original_invoice_id", "lines.0.original_invoice_line_id",
-        "lines.0.invoice_dispatch_allocation_id", "lines.0.batch_allocation.batch_id",
-        "lines.0.to_location_id",
-    ),
-    "procurement.purchase_order.prepare": (
-        "supplier_account_id", "lines.0.product_id", "lines.0.uom_conversion_id",
-    ),
-    "procurement.goods_receipt.prepare": (
-        "purchase_order_id", "supplier_account_id", "lines.0.purchase_order_line_id",
-        "lines.0.batches.0.mrp_uom_conversion_id",
-        "lines.0.batches.0.to_location_id",
-    ),
-    "procurement.supplier_invoice.prepare": (
-        "supplier_account_id", "supplier_tax_registration_id",
-        "portal_document_line_id", "goods_receipt_ids.0",
-        "lines.0.goods_receipt_line_id",
-    ),
-    "procurement.purchase_return.prepare": (
-        "original_supplier_invoice_id", "supplier_destination_address_id",
-        "lines.0.goods_receipt_line_id",
-        "lines.0.supplier_invoice_receipt_allocation_id",
-        "lines.0.batch_allocation.batch_id", "lines.0.from_location_id",
-    ),
-    "finance.customer_receipt.prepare": (
-        "customer_account_id", "settlement_account_id", "allocations.0.open_item_id",
-    ),
-    "finance.supplier_payment.prepare": (
-        "supplier_account_id", "settlement_account_id", "allocations.0.open_item_id",
-    ),
-    "finance.supplier_advance.prepare": (
-        "supplier_account_id", "purchase_order_id", "settlement_account_id",
-        "allocations.0.purchase_order_line_id",
-    ),
-    "finance.adjustment_note.prepare": (
-        "original_document_id", "lines.0.original_line_id",
-    ),
-    "finance.bank_reconciliation.prepare": (
-        "bank_statement_id", "bank_statement_line_id", "journal_entry_id",
-    ),
-    "finance.expense_claim.prepare": (
-        "reimbursement_account_id", "lines.0.expense_account_id",
-        "lines.0.receipt_attachment_id",
-    ),
-    "inventory.adjustment.prepare": (
-        "counted_by_membership_id", "location_id", "evidence_attachment_id",
-        "lines.0.product_id", "lines.0.uom_conversion_id",
-        "lines.0.batch_counts.0.batch_id",
-    ),
-    "inventory.transfer.prepare": (
-        "source_branch_id", "destination_branch_id", "source_location_id",
-        "destination_location_id", "lines.0.product_id",
-        "lines.0.uom_conversion_id", "lines.0.batch_allocations.0.batch_id",
-    ),
-    "inventory.destruction.prepare": (
-        "location_id", "certificate_attachment_id", "lines.0.product_id",
-        "lines.0.uom_conversion_id", "lines.0.batch_allocations.0.batch_id",
-    ),
-}
 
 
 def test_live18_lineage_contract_covers_every_published_prepare_model() -> None:
@@ -171,6 +100,54 @@ def _validated_prepare_request(evidence: dict[str, Any]) -> dict[str, Any]:
     return request
 
 
+@lru_cache(maxsize=1)
+def _captured_database_evidence() -> dict[str, Any] | None:
+    value = os.environ.get(
+        "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH", ""
+    ).strip()
+    if not value:
+        return None
+    path = Path(value)
+    assert path.is_absolute(), "captured database evidence path must be absolute"
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    assert artifact.get("schema") == "aasopharma.live18.railway-database-response.v1"
+    assert artifact.get("action") == "capture-evidence"
+    expected_hash = artifact.get("content_sha256")
+    unsigned = {key: item for key, item in artifact.items() if key != "content_sha256"}
+    actual_hash = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    assert expected_hash == actual_hash, "captured database evidence hash differs"
+    assert artifact.get("expected_sha") == os.environ.get(
+        "LIVE18_EXPECTED_DEPLOYED_SHA", ""
+    ).strip().lower()
+    assert artifact.get("project_ref") == os.environ.get(
+        "PHARMA_CANONICAL_LIVE_PROJECT_REF", ""
+    ).strip()
+    assert artifact.get("run_id") == os.environ.get("GITHUB_RUN_ID", "").strip()
+    assert artifact.get("run_attempt") == os.environ.get(
+        "GITHUB_RUN_ATTEMPT", ""
+    ).strip()
+    assert artifact.get("request_nonce") == os.environ.get(
+        "LIVE18_RAILWAY_REQUEST_NONCE", ""
+    ).strip()
+    assert artifact.get("deployment_id") == os.environ.get(
+        "RAILWAY_API_DEPLOYMENT_ID", ""
+    ).strip()
+    assert artifact.get("deployment_instance_id") == os.environ.get(
+        "RAILWAY_API_DEPLOYMENT_INSTANCE_ID", ""
+    ).strip()
+    assert artifact.get("runtime_role") == {
+        "current_user": "erp_runtime",
+        "superuser": False,
+        "bypassrls": False,
+        "migration_owner_member": False,
+        "network_family": 6,
+        "transport": "supabase_direct_ipv6_from_railway",
+    }
+    return artifact
+
+
 def test_preview_ignores_a_prior_missing_required_422() -> None:
     evidence = {
         "command_operation": "sales.invoice.prepare",
@@ -229,8 +206,7 @@ def test_browser_resource_reconciles_through_mcp_and_postgresql(
     contract,
     canonical_live_config,
     mcp_client,
-    reconciler,
-    denial_db_query,
+    request,
 ) -> None:
     evidence_value = os.environ.get("LIVE18_EVIDENCE_DIR", "").strip()
     assert evidence_value, "LIVE18_EVIDENCE_DIR is required"
@@ -281,22 +257,39 @@ def test_browser_resource_reconciles_through_mcp_and_postgresql(
         resource_id=resource_id,
     )
     operation = contract.command_operation.removesuffix(".prepare")
-    database = reconciler.reconcile(
-        command_id,
-        operation,
-        resource_id,
-        _preview(evidence),
-        _validated_prepare_request(evidence),
-    )
+    captured = _captured_database_evidence()
+    if captured is None:
+        reconciler = request.getfixturevalue("reconciler")
+        denial_db_query = request.getfixturevalue("denial_db_query")
+        database = reconciler.reconcile(
+            command_id,
+            operation,
+            resource_id,
+            _preview(evidence),
+            _validated_prepare_request(evidence),
+        )
+        reconciler.assert_cross_tenant_denied(
+            operation,
+            resource_id,
+            denial_db_query,
+        )
+    else:
+        assert captured["expected_sha"] == expected_sha
+        assert captured["project_ref"] == canonical_live_config.project_ref
+        assert captured["organization_id"] == str(canonical_live_config.test_org_id)
+        assert captured["denial_organization_id"] == str(
+            canonical_live_config.denial_org_id
+        )
+        row = captured["resources"][contract.id]
+        assert row["command_operation"] == contract.command_operation
+        assert row["command_request_id"] == command_id
+        assert row["resource_id"] == resource_id
+        assert row["cross_tenant_denied"] is True
+        database = row["database"]
     assert database, f"{contract.id} produced no database reconciliation evidence"
     assert_canonical_projection_consistency(
         operation,
         rest=evidence["rest_readback"],
         mcp=declared_readback,
         database=database,
-    )
-    reconciler.assert_cross_tenant_denied(
-        operation,
-        resource_id,
-        denial_db_query,
     )

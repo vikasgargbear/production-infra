@@ -49,6 +49,8 @@ from provision_ephemeral_browser_identities import (  # noqa: E402
     PROFILE_TWO_USER,
     TWO_USER_PURPOSE,
     _database_connection,
+    _enter_migration_owner,
+    _leave_migration_owner,
     _read_state as _read_browser_state,
     _validate_target,
 )
@@ -323,7 +325,7 @@ def _provision_database(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (LOCK_KEY,)
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-            cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+            membership_options = _enter_migration_owner(cursor)
             for role in ("requester", "reviewer"):
                 cursor.execute(
                     """
@@ -511,6 +513,7 @@ def _provision_database(
                 raise CanonicalLiveIdentityError(
                     "Temporary canonical live MCP authority did not reconcile exactly"
                 )
+            _leave_migration_owner(cursor, membership_options)
     return denial_org_id, fixture_identities
 
 
@@ -623,7 +626,7 @@ def cleanup(state_path: Path) -> None:
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (LOCK_KEY,)
             )
-            cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+            membership_options = _enter_migration_owner(cursor)
             grants = list(state["temporary_grants"].values())
             cursor.execute(
                 """
@@ -680,6 +683,7 @@ def cleanup(state_path: Path) -> None:
                             "A prior MCP authority changed during the live run; "
                             "cleanup refused to overwrite it"
                         )
+            _leave_migration_owner(cursor, membership_options)
     state_path.unlink(missing_ok=True)
     print("Suspended temporary MCP grants and restored prior MCP authorities")
 

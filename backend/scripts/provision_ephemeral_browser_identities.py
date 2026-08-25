@@ -41,6 +41,7 @@ from provision_staging_mcp_oauth import (  # noqa: E402
 
 EXPECTED_PROJECT_REF = "rgihahbmkrmhitjdjvev"
 EXPECTED_POOLER_HOST = "aws-0-ap-south-1.pooler.supabase.com"
+RAILWAY_DIRECT_DATABASE_TRANSPORT = "railway_direct_ipv6"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
 DEMO_REVIEWER_USER_ID = "d3000000-0000-7000-8000-000000000003"
@@ -54,9 +55,20 @@ TWO_USER_PURPOSE = "canonical-staging-two-user-browser-e2e"
 CORE_OPERATOR_PURPOSE = "canonical-staging-core-browser-e2e"
 LIVE18_PURPOSE = "canonical-staging-live18-browser-e2e"
 STATE_VERSION = 1
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-OPERATOR_CONTRACT_PATH = REPOSITORY_ROOT / "docs/architecture/mcp-operator-actions.json"
-LIVE18_MATRIX_PATH = REPOSITORY_ROOT / "backend/tests/live_acceptance/operation_matrix.json"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+# Railway deliberately flattens backend/ into /app.  Keep runtime data under
+# that packaged backend root and copy the generated operator contract there in
+# the API image; local source checkouts continue to use the repository copy.
+_PACKAGED_OPERATOR_CONTRACT_PATH = (
+    BACKEND_ROOT / "docs" / "architecture" / "mcp-operator-actions.json"
+)
+OPERATOR_CONTRACT_PATH = (
+    _PACKAGED_OPERATOR_CONTRACT_PATH
+    if _PACKAGED_OPERATOR_CONTRACT_PATH.is_file()
+    else REPOSITORY_ROOT / "docs/architecture/mcp-operator-actions.json"
+)
+LIVE18_MATRIX_PATH = BACKEND_ROOT / "tests/live_acceptance/operation_matrix.json"
 
 REQUESTER_CAPABILITIES = (
     ("sales.return.prepare", "write", "consequential_write", "separate_approver"),
@@ -389,6 +401,7 @@ def _clear_browser_environment() -> None:
             "LIVE18_REVIEWER_EMAIL",
             "LIVE18_REVIEWER_PASSWORD",
             "LIVE18_DENIAL_ACCESS_TOKEN",
+            "LIVE18_DENIAL_AUTH_USER_ID",
             "LIVE18_EXPECTED_ORG_ID",
             "LIVE18_EXPECTED_BRANCH_ID",
             "LIVE18_EXPECTED_DENIAL_ORG_ID",
@@ -537,6 +550,23 @@ def _delete_auth_user(service_key: str, auth_user_id: str) -> None:
 
 def _database_connection(management_token: str):
     password = _required("SUPABASE_DB_PASSWORD")
+    transport = os.getenv("CANONICAL_EPHEMERAL_DATABASE_TRANSPORT", "").strip()
+    if transport:
+        if transport != RAILWAY_DIRECT_DATABASE_TRANSPORT:
+            raise EphemeralIdentityError(
+                "Unsupported ephemeral database transport; refusing an implicit fallback"
+            )
+        return psycopg2.connect(
+            host=f"db.{EXPECTED_PROJECT_REF}.supabase.co",
+            port=5432,
+            dbname="postgres",
+            user="postgres",
+            password=password,
+            sslmode="require",
+            gssencmode="disable",
+            connect_timeout=15,
+            application_name="canonical_ephemeral_browser_identities_railway_direct",
+        )
     poolers = _request_json(
         "GET",
         (
@@ -578,7 +608,8 @@ def _enter_migration_owner(cursor) -> bool:
     supports_membership_options = int(cursor.fetchone()[0]) >= 160000
     if supports_membership_options:
         cursor.execute(
-            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET TRUE'
+            'GRANT "erp_migration_owner" TO CURRENT_USER '
+            'WITH INHERIT FALSE, SET TRUE'
         )
     else:
         cursor.execute('GRANT "erp_migration_owner" TO CURRENT_USER')
@@ -592,7 +623,8 @@ def _leave_migration_owner(cursor, supports_membership_options: bool) -> None:
     cursor.execute("RESET ROLE")
     if supports_membership_options:
         cursor.execute(
-            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET FALSE'
+            'GRANT "erp_migration_owner" TO CURRENT_USER '
+            'WITH INHERIT FALSE, SET FALSE'
         )
     else:
         cursor.execute('REVOKE "erp_migration_owner" FROM CURRENT_USER')
@@ -603,8 +635,6 @@ def _recover_stale_live18_database(
 ) -> None:
     """Restore fixed demo bindings and remove abandoned denial identities."""
 
-    if not stale_auth_user_ids:
-        return
     stale_ids = sorted(stale_auth_user_ids)
     with _database_connection(management_token) as connection:
         with connection.cursor() as cursor:
@@ -640,13 +670,13 @@ def _recover_stale_live18_database(
                 UPDATE automation.agent_grants
                    SET status='suspended',suspended_at=transaction_timestamp(),
                        updated_at=transaction_timestamp(),row_version=row_version+1
-                 WHERE org_id=%s AND client_id=%s
+                 WHERE org_id=%s
                    AND subject_membership_id IN (%s::uuid,%s::uuid)
-                   AND consent_version='browser-e2e-v1' AND status='active'
+                   AND consent_version IN ('browser-e2e-v1','canonical-live-e2e-v1')
+                   AND status='active'
                 """,
                 (
                     DEMO_ORG_ID,
-                    WEB_CLIENT_ID,
                     DEMO_OPERATOR_MEMBERSHIP_ID,
                     DEMO_REVIEWER_MEMBERSHIP_ID,
                 ),
@@ -657,7 +687,7 @@ def _recover_stale_live18_database(
                    SET status='active',suspended_at=NULL,
                        updated_at=transaction_timestamp(),
                        updated_by_membership_id=%s,row_version=row_version+1
-                 WHERE org_id=%s AND client_id=%s
+                 WHERE org_id=%s
                    AND id IN (%s::uuid,%s::uuid)
                    AND consent_version IN ('demo-v2','demo-v2-approver')
                    AND status='suspended' AND expires_at>transaction_timestamp()
@@ -665,7 +695,6 @@ def _recover_stale_live18_database(
                 (
                     DEMO_REVIEWER_MEMBERSHIP_ID,
                     DEMO_ORG_ID,
-                    WEB_CLIENT_ID,
                     "d3000000-0000-7000-8000-000000000021",
                     "d3000000-0000-7000-8000-000000000020",
                 ),
@@ -736,6 +765,85 @@ def _recover_stale_live18_database(
                 (stale_ids,),
             )
             _leave_migration_owner(cursor, membership_options)
+
+
+def recover_lost_live18_state() -> dict[str, int]:
+    """Reconcile Live18 mutations even when both transient state files were lost.
+
+    Provisioning creates Auth identities before changing database bindings or
+    grants.  Their purpose metadata therefore provides a durable discovery
+    anchor across SSH disconnects and container replacement.  The workflow is
+    serialized, so every identity with this dedicated purpose belongs to the
+    one cleanup boundary.
+    """
+
+    management_token = _required("SUPABASE_ACCESS_TOKEN")
+    _validate_target(management_token)
+    service_key = _service_role_key(management_token)
+    _mask(service_key)
+    stale_auth_user_ids = _list_purpose_auth_user_ids(
+        service_key, LIVE18_PURPOSE
+    )
+    _recover_stale_live18_database(management_token, stale_auth_user_ids)
+    if stale_auth_user_ids:
+        for auth_user_id in sorted(stale_auth_user_ids):
+            _delete_auth_user(service_key, auth_user_id)
+    remaining_auth_user_ids = _list_purpose_auth_user_ids(
+        service_key, LIVE18_PURPOSE
+    )
+    if remaining_auth_user_ids:
+        raise EphemeralIdentityError(
+            "Disposable live18 Auth identities remained after crash recovery"
+        )
+
+    with _database_connection(management_token) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (LOCK_KEY,),
+            )
+            membership_options = _enter_migration_owner(cursor)
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
+                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
+                  (SELECT count(*) FROM automation.agent_grants
+                    WHERE org_id=%s::uuid
+                      AND subject_membership_id IN (%s::uuid,%s::uuid)
+                      AND consent_version IN (
+                        'browser-e2e-v1','canonical-live-e2e-v1'
+                      ) AND status='active'),
+                  (SELECT count(*) FROM core.roles
+                    WHERE org_id=%s::uuid AND code LIKE 'live18_denial_%%')
+                """,
+                (
+                    DEMO_OPERATOR_USER_ID,
+                    DEMO_REVIEWER_USER_ID,
+                    DEMO_ORG_ID,
+                    DEMO_OPERATOR_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DENIAL_ORG_ID,
+                ),
+            )
+            database_state = cursor.fetchone()
+            _leave_migration_owner(cursor, membership_options)
+    expected_state = (
+        "d3000000-0000-7000-8000-000000000022",
+        "d3000000-0000-7000-8000-000000000002",
+        0,
+        0,
+    )
+    if database_state != expected_state:
+        raise EphemeralIdentityError(
+            "Live18 crash recovery did not restore the exact seeded database boundary"
+        )
+    return {
+        "recovered_auth_identity_count": len(stale_auth_user_ids),
+        "remaining_auth_identity_count": 0,
+        "remaining_active_temporary_grant_count": 0,
+        "remaining_denial_role_count": 0,
+    }
 
 
 def _verify_live18_owner_delegation(management_token: str) -> None:
@@ -1609,6 +1717,7 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
             "LIVE18_REVIEWER_EMAIL": credentials["PLAYWRIGHT_LIVE_REVIEWER_EMAIL"],
             "LIVE18_REVIEWER_PASSWORD": credentials["PLAYWRIGHT_LIVE_REVIEWER_PASSWORD"],
             "LIVE18_DENIAL_ACCESS_TOKEN": _exchange_live18_denial_token(*denial_credentials),
+            "LIVE18_DENIAL_AUTH_USER_ID": state["denial_identity"]["auth_user_id"],
             "LIVE18_EXPECTED_ORG_ID": DEMO_ORG_ID,
             "LIVE18_EXPECTED_BRANCH_ID": "d3000000-0000-7000-8000-000000000005",
             "LIVE18_EXPECTED_DENIAL_ORG_ID": DENIAL_ORG_ID,

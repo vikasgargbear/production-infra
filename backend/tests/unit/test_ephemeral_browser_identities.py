@@ -85,8 +85,8 @@ def test_auth_creation_requires_confirmed_identity(monkeypatch):
     [
         (
             "170000",
-            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET TRUE',
-            'GRANT "erp_migration_owner" TO CURRENT_USER WITH SET FALSE',
+            'GRANT "erp_migration_owner" TO CURRENT_USER WITH INHERIT FALSE, SET TRUE',
+            'GRANT "erp_migration_owner" TO CURRENT_USER WITH INHERIT FALSE, SET FALSE',
         ),
         (
             "150000",
@@ -498,6 +498,83 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
         "automation.command.approve",
         "automation.command.execute",
         "automation.command.view",
+    }
+
+
+def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
+    monkeypatch,
+):
+    stale_ids = {
+        "d4000000-0000-7000-8000-000000000001",
+        "d4000000-0000-7000-8000-000000000002",
+        "d4000000-0000-7000-8000-000000000003",
+    }
+    listed = [stale_ids, set()]
+    recovered = []
+    deleted = []
+
+    class Cursor:
+        def execute(self, _statement, _parameters=None):
+            pass
+
+        def fetchone(self):
+            return (
+                "d3000000-0000-7000-8000-000000000022",
+                "d3000000-0000-7000-8000-000000000002",
+                0,
+                0,
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
+    monkeypatch.setattr(identities, "_validate_target", lambda _token: None)
+    monkeypatch.setattr(identities, "_service_role_key", lambda _token: "service-key")
+    monkeypatch.setattr(identities, "_mask", lambda _value: None)
+    monkeypatch.setattr(
+        identities,
+        "_list_purpose_auth_user_ids",
+        lambda _key, _purpose: listed.pop(0),
+    )
+    monkeypatch.setattr(
+        identities,
+        "_recover_stale_live18_database",
+        lambda _token, ids: recovered.append(ids),
+    )
+    monkeypatch.setattr(
+        identities,
+        "_delete_auth_user",
+        lambda _key, auth_user_id: deleted.append(auth_user_id),
+    )
+    monkeypatch.setattr(identities, "_database_connection", lambda _token: Connection())
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: True)
+    monkeypatch.setattr(
+        identities, "_leave_migration_owner", lambda _cursor, _options: None
+    )
+
+    result = identities.recover_lost_live18_state()
+
+    assert recovered == [stale_ids]
+    assert deleted == sorted(stale_ids)
+    assert result == {
+        "recovered_auth_identity_count": 3,
+        "remaining_auth_identity_count": 0,
+        "remaining_active_temporary_grant_count": 0,
+        "remaining_denial_role_count": 0,
     }
 
 

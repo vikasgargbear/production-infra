@@ -15,11 +15,13 @@ export default defineConfig({
   workers: 1,
   maxFailures: 0,
   retries: 0,
-  reporter: [['line'], ['html', { open: 'never', outputFolder: path.join(artifactRoot, 'report') }]],
+  reporter: [['line']],
   use: {
     ...devices['Desktop Chrome'],
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // Authenticated traces, screenshots, and videos can contain session state or
+    // business data. Live18 publishes a separate fixed-schema evidence manifest.
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
   },
 });

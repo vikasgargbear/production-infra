@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
-  APIRequestContext, APIResponse, Browser, expect, Page, request, Response, test, TestInfo,
+  APIRequestContext, APIResponse, Browser, expect, Page, request, Response, test,
 } from '@playwright/test';
 
 import { loadBrowserConfig, verifyDeployedSha } from '../support/live18/config';
@@ -204,7 +204,6 @@ async function runOperation(
   browser: Browser,
   contract: OperationContract,
   operationFixture: OperationFixture,
-  testInfo: TestInfo,
 ): Promise<void> {
   const config = loadBrowserConfig();
   const requesterContext = await browser.newContext();
@@ -250,10 +249,6 @@ async function runOperation(
         invalidPrepare,
         `${contract.id} missing-required-fields path must not prepare a command`,
       ).toHaveLength(0);
-      await requesterPage.screenshot({
-        path: testInfo.outputPath(`${contract.id}-missing-required.png`), fullPage: true,
-      });
-
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps,
         prePrepareRuntime, `${contract.id}.prepare_steps`,
@@ -383,10 +378,6 @@ async function runOperation(
       fs.mkdirSync(root, { recursive: true });
       const evidencePath = path.join(root, `${contract.id}.json`);
       fs.writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
-      await testInfo.attach(`${contract.id}-canonical-evidence`, {
-        body: Buffer.from(JSON.stringify(evidence, null, 2)), contentType: 'application/json',
-      });
-      await requesterPage.screenshot({ path: testInfo.outputPath(`${contract.id}-readback.png`), fullPage: true });
     } finally {
       await requesterApi.dispose();
       await reviewerApi.dispose();
@@ -406,11 +397,11 @@ test.describe('canonical ERP live18 desktop certification', () => {
   });
 
   for (const contract of matrix) {
-    test(`${contract.id}: UI to REST readback emits canonical UUID evidence`, async ({ browser }, testInfo) => {
+    test(`${contract.id}: UI to REST readback emits canonical UUID evidence`, async ({ browser }) => {
       expect(contract.availability, contract.blocker || '').toBe('published');
       const operationFixture = fixture?.operations[contract.id];
       expect(operationFixture, `${contract.id} lacks reviewed UI driver input`).toBeTruthy();
-      await runOperation(browser, contract, operationFixture!, testInfo);
+      await runOperation(browser, contract, operationFixture!);
     });
   }
 });

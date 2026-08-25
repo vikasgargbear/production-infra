@@ -1192,10 +1192,19 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json" in live18
     assert "e2e/live18/playwright.config.ts" in live18
     assert "test_browser_evidence_reconciliation.py" in live18
-    assert "${{ runner.temp }}/live18-browser-identities.json" in live18
+    assert "build_live18_artifact_manifest.py" in live18
+    assert "${{ runner.temp }}/live18-upload/live18-evidence-manifest.json" in live18
+    upload = live18.split(
+        "- name: Upload scrubbed allowlisted live18 evidence only", 1
+    )[1]
+    assert "${{ runner.temp }}/live18-browser-identities.json" not in upload
+    assert "${{ runner.temp }}/live18-playwright" not in upload
     assert "id: live18_browser" in live18
     assert "if: always() && steps.live18_browser.outcome != 'skipped'" in live18
     assert "maxFailures: 0" in playwright_config
+    assert "trace: 'off'" in playwright_config
+    assert "screenshot: 'off'" in playwright_config
+    assert "video: 'off'" in playwright_config
     assert "completed-resources.json" in browser_spec
     assert "persistCompletedResource(contract.id, resourceId)" in browser_spec
     assert "...loadCompletedResources()" in browser_spec

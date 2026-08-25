@@ -25,7 +25,7 @@ class LiveGateError(RuntimeError):
 @dataclass(frozen=True)
 class CanonicalLiveConfig:
     api_base_url: str
-    database_url: str = field(repr=False)
+    database_url: str | None = field(repr=False)
     service_token: str = field(repr=False)
     mcp_url: str
     mcp_access_token: str = field(repr=False)
@@ -129,8 +129,22 @@ def load_live_config(env: Mapping[str, str] | None = None) -> CanonicalLiveConfi
     if project_ref in production_refs:
         raise LiveGateError("refusing to run against a declared production project")
 
-    database_url = _required(values, "PHARMA_CANONICAL_LIVE_DATABASE_URL")
-    _assert_database_project(database_url, project_ref)
+    database_evidence_path = values.get(
+        "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH", ""
+    ).strip()
+    database_url = values.get("PHARMA_CANONICAL_LIVE_DATABASE_URL", "").strip()
+    if database_evidence_path:
+        if not Path(database_evidence_path).is_absolute():
+            raise LiveGateError(
+                "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH must be absolute"
+            )
+        if database_url:
+            _assert_database_project(database_url, project_ref)
+        else:
+            database_url = None
+    else:
+        database_url = _required(values, "PHARMA_CANONICAL_LIVE_DATABASE_URL")
+        _assert_database_project(database_url, project_ref)
     prepare_path, command_path, ready_path = _exact_internal_paths(values)
     fixture_path = Path(_required(values, "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH"))
     timeout = int(values.get("PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS", "30"))
