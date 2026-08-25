@@ -325,7 +325,56 @@ def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
     try:
         fixture.bootstrap_identity(connection, organization_pan="YYYYY8888Y")
         dataset_bytes = fixture.itc_reversal_dataset_bytes(connection)
-        fixture.import_itc_reversal_release(connection, source, dataset_bytes)
+        source_sha256 = hashlib.sha256(source).digest()
+        dataset_sha256 = hashlib.sha256(dataset_bytes).digest()
+        with connection.cursor() as cursor:
+            cursor.execute("RESET ROLE")
+            cursor.execute("ALTER TABLE core.reference_data_releases DISABLE TRIGGER ALL")
+            cursor.execute("ALTER TABLE tax.itc_reversal_rule_versions DISABLE TRIGGER ALL")
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO core.reference_data_releases(
+                      id,dataset_kind,ruleset_version,source_authority,source_uri,
+                      source_storage_bucket,source_storage_object_path,source_media_type,
+                      source_document_sha256,dataset_storage_bucket,
+                      dataset_storage_object_path,dataset_media_type,dataset_sha256,
+                      record_count,publication_date,effective_from,effective_to,
+                      supersedes_release_id,reviewed_by_user_id,reviewed_at,status)
+                    VALUES (%s,'gst_itc_reversal_rules',%s,'cbic',%s,
+                      'pg15-fixture','itc-source.pdf','application/pdf',%s,
+                      'pg15-fixture','itc-dataset.json','application/json',%s,
+                      1,%s,%s,NULL,NULL,%s,transaction_timestamp(),'active')
+                    """,
+                    (
+                        first_release_id,
+                        fixture.ITC_REVERSAL_RULESET_VERSION,
+                        fixture.ITC_REVERSAL_SOURCE_URI,
+                        psycopg2.Binary(source_sha256),
+                        psycopg2.Binary(dataset_sha256),
+                        fixture.ITC_REVERSAL_SOURCE_PUBLICATION_DATE,
+                        fixture.ITC_REVERSAL_EFFECTIVE_FROM,
+                        fixture.IDS["reviewer_user"],
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO tax.itc_reversal_rule_versions(
+                      id,release_id,rule_code,rule_version,legal_section,event_kind,
+                      gstr3b_table_code,gstr3b_row_code,effective_from,effective_to,status)
+                    VALUES (%s,%s,'CGST_SECTION_17_5_H_GOODS_DESTROYED',%s,
+                      '17(5)(h)','goods_destroyed','4','B(1)',%s,NULL,'active')
+                    """,
+                    (
+                        first_rule_id,
+                        first_release_id,
+                        fixture.ITC_REVERSAL_RULESET_VERSION,
+                        fixture.ITC_REVERSAL_EFFECTIVE_FROM,
+                    ),
+                )
+            finally:
+                cursor.execute("ALTER TABLE tax.itc_reversal_rule_versions ENABLE TRIGGER ALL")
+                cursor.execute("ALTER TABLE core.reference_data_releases ENABLE TRIGGER ALL")
 
         fixture.IDS["destruction_itc_rule_release"] = str(uuid4())
         fixture.IDS["destruction_itc_rule_version"] = str(uuid4())
