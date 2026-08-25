@@ -356,6 +356,20 @@ jobs:
           test "$(psql -X -Atqc "SELECT to_regclass('auth.users') IS NOT NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT to_regclass('public.alembic_version') IS NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')" "$PSYCOPG_DATABASE_URL")" = 0
+          reviewed_deploy_sha='${{ inputs.render_deploy_sha }}'
+          if [ -z "$reviewed_deploy_sha" ]; then
+            reviewed_deploy_sha="$GITHUB_SHA"
+          fi
+          python3 backend/scripts/audit/application_promotion_evidence.py \
+            reset-attestation \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$GITHUB_SHA" \
+            --reviewed-deploy-sha "$reviewed_deploy_sha" \
+            --workflow-repository "$GITHUB_REPOSITORY" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --reset-completed-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output staging-evidence/canonical-staging-reset.json
 
       - name: Apply or verify the approved canonical migration head
         run: |

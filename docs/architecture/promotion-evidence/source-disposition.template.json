@@ -5,6 +5,7 @@
   "retired_source_accessed": false,
   "disposable_staging_reset_verified": false,
   "reset_workflow_run_url": null,
+  "reset_attestation_artifact": null,
   "reset_artifact_sha256": null,
   "reset_completed_at": null,
   "reviewer": null,

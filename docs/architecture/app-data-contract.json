@@ -15,7 +15,7 @@
   },
   "promotion_evidence": {
     "manifest": "docs/architecture/canonical-application-promotion-evidence.json",
-    "manifest_sha256": "4d09254fe8e1e754e0f5504e1361182f525fe10f533699d656a92d3572cebb47"
+    "manifest_sha256": "a37dab4c4b58781576eb7c51d3c4909635cf612e92b4d683aa944676798d4b5b"
   },
   "identity_resolution_contract": {
     "steps": [

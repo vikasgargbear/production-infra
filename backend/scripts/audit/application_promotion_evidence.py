@@ -78,13 +78,61 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    path.write_bytes(_json_bytes(value))
+
+
+def _json_bytes(value: Mapping[str, Any]) -> bytes:
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def build_reset_attestation(
+    *,
+    project_ref: str,
+    git_commit: str,
+    reviewed_deploy_sha: str,
+    workflow_repository: str,
+    workflow_run_id: int,
+    workflow_run_attempt: int,
+    reset_completed_at: str,
+) -> dict[str, Any]:
+    """Build the immutable receipt for a completed disposable staging reset."""
+
+    if project_ref != CANONICAL_STAGING_PROJECT_REF:
+        raise EvidenceError("reset attestation is restricted to canonical staging")
+    git_commit = _exact_sha(git_commit, "reset git_commit")
+    reviewed_deploy_sha = _exact_sha(
+        reviewed_deploy_sha, "reset reviewed_deploy_sha"
+    )
+    if not re.fullmatch(r"[^/\s]+/[^/\s]+", workflow_repository):
+        raise EvidenceError("reset workflow repository must be owner/name")
+    if workflow_run_id <= 0 or workflow_run_attempt <= 0:
+        raise EvidenceError("reset workflow run identity must be positive")
+    completed_at = _timestamp(reset_completed_at, "reset_completed_at")
+    workflow_url = (
+        f"https://github.com/{workflow_repository}/actions/runs/{workflow_run_id}"
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "evidence_kind": "canonical_staging_reset",
+        "payload": {
+            "project_ref": project_ref,
+            "git_commit": git_commit,
+            "reviewed_deploy_sha": reviewed_deploy_sha,
+            "workflow_run_id": workflow_run_id,
+            "workflow_run_attempt": workflow_run_attempt,
+            "workflow_run_url": workflow_url,
+            "reset_completed_at": completed_at,
+            "reset_scope": "canonical_schemas_and_isolated_roles",
+            "retired_source_accessed": False,
+            "auth_schema_preserved": True,
+            "alembic_version_removed": True,
+            "canonical_schema_count_after_reset": 0,
+        },
+    }
 
 
 def _timestamp(value: Any, label: str) -> str:
@@ -162,7 +210,11 @@ def _artifact(
 
 
 def wrap_reviewed_input(
-    *, kind: str, input_path: Path, binding: Mapping[str, Any]
+    *,
+    kind: str,
+    input_path: Path,
+    binding: Mapping[str, Any],
+    repository_root: Path = REPOSITORY_ROOT,
 ) -> dict[str, Any]:
     value = _load_json(input_path)
     if value.get("state") != "reviewed":
@@ -189,6 +241,52 @@ def wrap_reviewed_input(
         if not SHA256.fullmatch(str(value.get("reset_artifact_sha256", ""))):
             raise EvidenceError("source disposition requires the reset artifact SHA-256")
         _timestamp(value.get("reset_completed_at"), "source_disposition.reset_completed_at")
+        reset_artifact_value = value.get("reset_attestation_artifact")
+        if (
+            not isinstance(reset_artifact_value, str)
+            or not reset_artifact_value
+            or Path(reset_artifact_value).is_absolute()
+        ):
+            raise EvidenceError(
+                "source disposition requires a repository-relative reset attestation"
+            )
+        reset_artifact_path = (repository_root / reset_artifact_value).resolve()
+        try:
+            reset_artifact_path.relative_to(repository_root.resolve())
+        except ValueError as exc:
+            raise EvidenceError("reset attestation escapes the repository") from exc
+        if not reset_artifact_path.is_file():
+            raise EvidenceError("source disposition reset attestation does not exist")
+        if _sha256(reset_artifact_path) != value["reset_artifact_sha256"]:
+            raise EvidenceError("source disposition reset attestation hash differs")
+        reset_attestation = _load_json(reset_artifact_path)
+        reset_payload = reset_attestation.get("payload")
+        if (
+            reset_attestation.get("schema_version") != SCHEMA_VERSION
+            or reset_attestation.get("evidence_kind") != "canonical_staging_reset"
+            or not isinstance(reset_payload, dict)
+        ):
+            raise EvidenceError("source disposition reset attestation is invalid")
+        required_reset = {
+            "project_ref": CANONICAL_STAGING_PROJECT_REF,
+            "workflow_run_url": reset_run,
+            "reset_completed_at": value.get("reset_completed_at"),
+            "reset_scope": "canonical_schemas_and_isolated_roles",
+            "retired_source_accessed": False,
+            "auth_schema_preserved": True,
+            "alembic_version_removed": True,
+            "canonical_schema_count_after_reset": 0,
+        }
+        if any(reset_payload.get(key) != expected for key, expected in required_reset.items()):
+            raise EvidenceError(
+                "source disposition disagrees with the hash-bound reset attestation"
+            )
+        _exact_sha(reset_payload.get("git_commit"), "reset attestation git_commit")
+        _exact_sha(
+            reset_payload.get("reviewed_deploy_sha"),
+            "reset attestation reviewed_deploy_sha",
+        )
+        payload_reset_attestation = reset_attestation
     elif kind == "rollback_plan":
         if not isinstance(value.get("steps"), list) or not value["steps"]:
             raise EvidenceError("rollback plan requires reviewed executable steps")
@@ -217,6 +315,8 @@ def wrap_reviewed_input(
     else:
         raise EvidenceError(f"unsupported reviewed evidence kind: {kind}")
     payload = dict(value)
+    if kind == "source_disposition":
+        payload["reset_attestation"] = payload_reset_attestation
     payload["reviewed_input_sha256"] = _sha256(input_path)
     return _artifact(kind, binding, payload)
 
@@ -434,7 +534,38 @@ def _rows(connection, query: str, parameters: Iterable[Any] = ()) -> list[tuple[
         return list(cursor.fetchall())
 
 
+def _quoted_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _table_content_sha256(connection, schema: str, table: str) -> str:
+    """Hash every row's canonical JSONB text with unambiguous length framing."""
+
+    qualified = f"{_quoted_identifier(schema)}.{_quoted_identifier(table)}"
+    digest = hashlib.sha256()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT pg_catalog.to_jsonb(row_value)::text "
+            f"FROM {qualified} AS row_value "
+            "ORDER BY (pg_catalog.to_jsonb(row_value)::text) COLLATE \"C\""
+        )
+        while True:
+            rows = cursor.fetchmany(1000)
+            if not rows:
+                break
+            for (row_json,) in rows:
+                encoded = str(row_json).encode("utf-8")
+                digest.update(len(encoded).to_bytes(8, "big"))
+                digest.update(encoded)
+    return digest.hexdigest()
+
+
 def capture_snapshot(connection) -> dict[str, Any]:
+    with connection.cursor() as cursor:
+        cursor.execute("SET LOCAL TIME ZONE 'UTC'")
+        cursor.execute("SET LOCAL DateStyle TO 'ISO, YMD'")
+        cursor.execute("SET LOCAL extra_float_digits TO 3")
+        cursor.execute("SET LOCAL bytea_output TO 'hex'")
     tables = _rows(connection, """
         SELECT namespace.nspname, relation.relname
           FROM pg_catalog.pg_class relation
@@ -444,11 +575,16 @@ def capture_snapshot(connection) -> dict[str, Any]:
     """, (list(CANONICAL_SCHEMAS),))
     counts: dict[str, int] = {}
     exact_numeric_sums: dict[str, str] = {}
+    table_content_sha256: dict[str, str] = {}
     with connection.cursor() as cursor:
         for schema, table in tables:
             qualified = f'"{schema}"."{table}"'
             cursor.execute(f"SELECT count(*) FROM {qualified}")
-            counts[f"{schema}.{table}"] = int(cursor.fetchone()[0])
+            relation_name = f"{schema}.{table}"
+            counts[relation_name] = int(cursor.fetchone()[0])
+            table_content_sha256[relation_name] = _table_content_sha256(
+                connection, schema, table
+            )
             columns = _rows(connection, """
                 SELECT attribute.attname
                   FROM pg_catalog.pg_attribute attribute
@@ -469,6 +605,7 @@ def capture_snapshot(connection) -> dict[str, Any]:
     return {
         "relation_counts": counts,
         "exact_numeric_sums": exact_numeric_sums,
+        "table_content_sha256": table_content_sha256,
     }
 
 
@@ -582,13 +719,27 @@ def reconcile_backup(
         raise EvidenceError("backup reconciliation requires two exact snapshots")
     counts_match = source_snapshot.get("relation_counts") == restored_snapshot.get("relation_counts")
     sums_match = source_snapshot.get("exact_numeric_sums") == restored_snapshot.get("exact_numeric_sums")
+    source_counts = source_snapshot.get("relation_counts")
+    restored_counts = restored_snapshot.get("relation_counts")
+    source_digests = source_snapshot.get("table_content_sha256")
+    restored_digests = restored_snapshot.get("table_content_sha256")
+    content_match = (
+        isinstance(source_counts, dict)
+        and isinstance(restored_counts, dict)
+        and isinstance(source_digests, dict)
+        and isinstance(restored_digests, dict)
+        and set(source_digests) == set(source_counts)
+        and set(restored_digests) == set(restored_counts)
+        and source_digests == restored_digests
+    )
     if not backup_file.is_file() or backup_file.stat().st_size <= 0:
         raise EvidenceError("backup artifact is missing or empty")
-    if not counts_match or not sums_match:
+    if not counts_match or not sums_match or not content_match:
         raise EvidenceError("restored database does not exactly reconcile with canonical staging")
     return _artifact("reconciliation_backup_restore", binding, {
         "source_target_counts_reconciled": counts_match,
         "exact_totals_reconciled": sums_match,
+        "table_content_digests_reconciled": content_match,
         "backup_verified": True,
         "restore_tested": True,
         "backup_sha256": _sha256(backup_file),
@@ -601,6 +752,9 @@ def reconcile_backup(
         ).hexdigest(),
         "relation_count": len(source_snapshot.get("relation_counts", {})),
         "numeric_column_count": len(source_snapshot.get("exact_numeric_sums", {})),
+        "table_content_digest_count": len(
+            source_snapshot.get("table_content_sha256", {})
+        ),
     })
 
 
@@ -680,7 +834,8 @@ def assemble_manifest(
         "reconciliation_backup": {
             "state": "verified", "source_target_counts_reconciled": True,
             "exact_totals_reconciled": True, "backup_verified": True,
-            "restore_tested": True, "artifact": reconciliation_ref,
+            "restore_tested": True, "table_content_digests_reconciled": True,
+            "artifact": reconciliation_ref,
             "artifact_sha256": reconciliation_hash,
         },
         "rollback_decommission": {
@@ -714,6 +869,36 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
     ) or not SHA256.fullmatch(str(source_payload.get("reset_artifact_sha256", ""))):
         raise EvidenceError("source disposition lacks exact hash-bound reset-run evidence")
     _timestamp(source_payload.get("reset_completed_at"), "source_disposition.reset_completed_at")
+    reset_attestation = source_payload.get("reset_attestation")
+    reset_payload = (
+        reset_attestation.get("payload", {})
+        if isinstance(reset_attestation, dict)
+        else {}
+    )
+    if (
+        not isinstance(reset_attestation, dict)
+        or reset_attestation.get("schema_version") != SCHEMA_VERSION
+        or reset_attestation.get("evidence_kind") != "canonical_staging_reset"
+        or reset_payload.get("project_ref") != CANONICAL_STAGING_PROJECT_REF
+        or reset_payload.get("workflow_run_url")
+        != source_payload.get("reset_workflow_run_url")
+        or reset_payload.get("reset_completed_at")
+        != source_payload.get("reset_completed_at")
+        or reset_payload.get("retired_source_accessed") is not False
+        or reset_payload.get("auth_schema_preserved") is not True
+        or reset_payload.get("alembic_version_removed") is not True
+        or reset_payload.get("canonical_schema_count_after_reset") != 0
+    ):
+        raise EvidenceError("source disposition reset attestation is invalid")
+    if hashlib.sha256(_json_bytes(reset_attestation)).hexdigest() != source_payload.get(
+        "reset_artifact_sha256"
+    ):
+        raise EvidenceError("source disposition reset attestation hash differs")
+    _exact_sha(reset_payload.get("git_commit"), "reset attestation git_commit")
+    _exact_sha(
+        reset_payload.get("reviewed_deploy_sha"),
+        "reset attestation reviewed_deploy_sha",
+    )
     route = artifacts["route_graph"]
     route_payload = route.get("payload", {})
     if route.get("evidence_kind") != "mounted_route_graph" or not isinstance(route_payload, dict):
@@ -739,7 +924,13 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
     rec = reconciliation.get("payload", {})
     if reconciliation.get("evidence_kind") != "reconciliation_backup_restore" or not isinstance(rec, dict):
         raise EvidenceError("backup reconciliation artifact is invalid")
-    for field in ("source_target_counts_reconciled", "exact_totals_reconciled", "backup_verified", "restore_tested"):
+    for field in (
+        "source_target_counts_reconciled",
+        "exact_totals_reconciled",
+        "table_content_digests_reconciled",
+        "backup_verified",
+        "restore_tested",
+    ):
         if rec.get(field) is not True:
             raise EvidenceError(f"backup reconciliation did not verify {field}")
     if not SHA256.fullmatch(str(rec.get("backup_sha256", ""))) or int(rec.get("backup_size_bytes", 0)) <= 0:
@@ -819,6 +1010,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    reset = subparsers.add_parser("reset-attestation")
+    reset.add_argument("--project-ref", required=True)
+    reset.add_argument("--git-commit", required=True)
+    reset.add_argument("--reviewed-deploy-sha", required=True)
+    reset.add_argument("--workflow-repository", required=True)
+    reset.add_argument("--workflow-run-id", required=True, type=int)
+    reset.add_argument("--workflow-run-attempt", required=True, type=int)
+    reset.add_argument("--reset-completed-at", required=True)
+    reset.add_argument("--output", required=True)
+
     def bound(command: str):
         item = subparsers.add_parser(command)
         item.add_argument("--project-ref", required=True)
@@ -847,6 +1048,7 @@ def main() -> int:
         required=True,
     )
     wrap.add_argument("--input", required=True)
+    wrap.add_argument("--repo-root", default=str(REPOSITORY_ROOT))
     assemble = bound("assemble")
     assemble.add_argument("--repo-root", default=str(REPOSITORY_ROOT))
     assemble.add_argument("--source-disposition", required=True)
@@ -863,6 +1065,19 @@ def main() -> int:
 
     args = parser.parse_args()
     try:
+        if args.command == "reset-attestation":
+            value = build_reset_attestation(
+                project_ref=args.project_ref,
+                git_commit=args.git_commit,
+                reviewed_deploy_sha=args.reviewed_deploy_sha,
+                workflow_repository=args.workflow_repository,
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+                reset_completed_at=args.reset_completed_at,
+            )
+            _write_json(Path(args.output), value)
+            print(f"wrote reset-attestation evidence to {args.output}")
+            return 0
         if args.command == "validate-manifest":
             errors = validate_manifest_artifacts(
                 Path(args.repo_root), _load_json(Path(args.manifest))
@@ -893,7 +1108,10 @@ def main() -> int:
             )
         elif args.command == "wrap-reviewed-input":
             value = wrap_reviewed_input(
-                kind=args.kind, input_path=Path(args.input), binding=binding
+                kind=args.kind,
+                input_path=Path(args.input),
+                binding=binding,
+                repository_root=Path(args.repo_root),
             )
         else:
             value = assemble_manifest(

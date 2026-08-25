@@ -26,6 +26,28 @@ on:
         required: true
         default: docs/architecture/promotion-evidence/decommission-plan.template.json
         type: string
+  workflow_call:
+    inputs:
+      confirmation:
+        description: Exact canonical promotion evidence confirmation
+        required: true
+        type: string
+      reviewed_sha:
+        description: Exact deployed 40-character commit to evidence
+        required: true
+        type: string
+      source_disposition:
+        description: Repository path to the reviewed reset disposition JSON
+        required: true
+        type: string
+      rollback_plan:
+        description: Repository path to the reviewed rollback plan JSON
+        required: true
+        type: string
+      decommission_plan:
+        description: Repository path to the reviewed retired-project decommission plan JSON
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -240,14 +262,17 @@ jobs:
           )
           python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
             "${common[@]}" --kind source_disposition \
+            --repo-root "$GITHUB_WORKSPACE" \
             --input '${{ inputs.source_disposition }}' \
             --output staging-evidence/source-disposition.json
           python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
             "${common[@]}" --kind rollback_plan \
+            --repo-root "$GITHUB_WORKSPACE" \
             --input '${{ inputs.rollback_plan }}' \
             --output staging-evidence/rollback-plan.json
           python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
             "${common[@]}" --kind retired_project_decommission_plan \
+            --repo-root "$GITHUB_WORKSPACE" \
             --input '${{ inputs.decommission_plan }}' \
             --output staging-evidence/decommission-plan.json
 

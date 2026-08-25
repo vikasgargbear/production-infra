@@ -49,6 +49,18 @@ def _bundle(tmp_path: Path):
         git_commit=git_commit,
         render_evidence=_render(git_commit),
     )
+    reset_attestation = evidence.build_reset_attestation(
+        project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit=git_commit,
+        reviewed_deploy_sha=git_commit,
+        workflow_repository="acme/erp",
+        workflow_run_id=123,
+        workflow_run_attempt=1,
+        reset_completed_at="2026-08-25T11:00:00+00:00",
+    )
+    reset_attestation_hash = hashlib.sha256(
+        evidence._json_bytes(reset_attestation)
+    ).hexdigest()
     paths = {
         "source": _write(tmp_path / "evidence/source.json", _artifact(
             "source_disposition", binding, {
@@ -58,8 +70,9 @@ def _bundle(tmp_path: Path):
                 "retired_source_accessed": False,
                 "disposable_staging_reset_verified": True,
                 "reset_workflow_run_url": "https://github.com/acme/erp/actions/runs/123",
-                "reset_artifact_sha256": "d" * 64,
+                "reset_artifact_sha256": reset_attestation_hash,
                 "reset_completed_at": "2026-08-25T11:00:00+00:00",
+                "reset_attestation": reset_attestation,
             },
         )),
         "route": _write(tmp_path / "evidence/route.json", _artifact(
@@ -82,13 +95,18 @@ def _bundle(tmp_path: Path):
                 "forced_rls_failures": [],
                 "tenant_positive_count": 1,
                 "cross_tenant_visible_count": 0,
-                "snapshot": {"relation_counts": {"sales.invoices": 1}, "exact_numeric_sums": {"sales.invoices.grand_total": "100.00"}},
+                "snapshot": {
+                    "relation_counts": {"sales.invoices": 1},
+                    "exact_numeric_sums": {"sales.invoices.grand_total": "100.00"},
+                    "table_content_sha256": {"sales.invoices": "c" * 64},
+                },
             },
         )),
         "reconciliation": _write(tmp_path / "evidence/reconciliation.json", _artifact(
             "reconciliation_backup_restore", binding, {
                 "source_target_counts_reconciled": True,
                 "exact_totals_reconciled": True,
+                "table_content_digests_reconciled": True,
                 "backup_verified": True,
                 "restore_tested": True,
                 "backup_sha256": "b" * 64,
@@ -133,6 +151,146 @@ def test_binding_rejects_retired_project_and_mixed_render_sha():
             project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
             git_commit=git_commit,
             render_evidence=stale,
+        )
+
+
+def test_reset_attestation_binds_exact_run_and_rejects_wrong_project():
+    attestation = evidence.build_reset_attestation(
+        project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit="a" * 40,
+        reviewed_deploy_sha="b" * 40,
+        workflow_repository="acme/erp",
+        workflow_run_id=123,
+        workflow_run_attempt=2,
+        reset_completed_at="2026-08-25T11:00:00+00:00",
+    )
+    assert attestation["payload"]["workflow_run_url"] == (
+        "https://github.com/acme/erp/actions/runs/123"
+    )
+    assert attestation["payload"]["auth_schema_preserved"] is True
+    assert attestation["payload"]["canonical_schema_count_after_reset"] == 0
+    with pytest.raises(evidence.EvidenceError, match="restricted to canonical staging"):
+        evidence.build_reset_attestation(
+            project_ref=evidence.RETIRED_SOURCE_PROJECT_REF,
+            git_commit="a" * 40,
+            reviewed_deploy_sha="b" * 40,
+            workflow_repository="acme/erp",
+            workflow_run_id=123,
+            workflow_run_attempt=2,
+            reset_completed_at="2026-08-25T11:00:00+00:00",
+        )
+
+
+def test_source_disposition_consumes_exact_reset_attestation(tmp_path: Path):
+    git_commit = "a" * 40
+    binding = evidence.build_binding(
+        project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit=git_commit,
+        render_evidence=_render(git_commit),
+    )
+    attestation_path = _write(
+        tmp_path / "evidence/reset.json",
+        evidence.build_reset_attestation(
+            project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+            git_commit=git_commit,
+            reviewed_deploy_sha=git_commit,
+            workflow_repository="acme/erp",
+            workflow_run_id=123,
+            workflow_run_attempt=1,
+            reset_completed_at="2026-08-25T11:00:00+00:00",
+        ),
+    )
+    source_path = _write(tmp_path / "source.json", {
+        "state": "reviewed",
+        "strategy": "reset",
+        "source_identifier": evidence.CANONICAL_STAGING_PROJECT_REF,
+        "retired_source_accessed": False,
+        "disposable_staging_reset_verified": True,
+        "reset_workflow_run_url": "https://github.com/acme/erp/actions/runs/123",
+        "reset_attestation_artifact": "evidence/reset.json",
+        "reset_artifact_sha256": hashlib.sha256(attestation_path.read_bytes()).hexdigest(),
+        "reset_completed_at": "2026-08-25T11:00:00+00:00",
+        "reviewer": "release-reviewer",
+        "reviewed_at": "2026-08-25T12:00:00+00:00",
+        "blockers": [],
+    })
+    wrapped = evidence.wrap_reviewed_input(
+        kind="source_disposition",
+        input_path=source_path,
+        binding=binding,
+        repository_root=tmp_path,
+    )
+    assert wrapped["payload"]["reset_attestation"]["payload"][
+        "workflow_run_id"
+    ] == 123
+
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source["reset_artifact_sha256"] = "0" * 64
+    _write(source_path, source)
+    with pytest.raises(evidence.EvidenceError, match="hash differs"):
+        evidence.wrap_reviewed_input(
+            kind="source_disposition",
+            input_path=source_path,
+            binding=binding,
+            repository_root=tmp_path,
+        )
+
+
+def test_backup_reconciliation_rejects_nonnumeric_content_drift(tmp_path: Path):
+    git_commit = "a" * 40
+    binding = evidence.build_binding(
+        project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit=git_commit,
+        render_evidence=_render(git_commit),
+    )
+    source = _artifact("canonical_database_runtime", binding, {
+        "snapshot": {
+            "relation_counts": {"sales.invoices": 1},
+            "exact_numeric_sums": {"sales.invoices.grand_total": "100.00"},
+            "table_content_sha256": {"sales.invoices": "1" * 64},
+        },
+    })
+    restored = _artifact("canonical_database_snapshot", binding, {
+        "snapshot": {
+            "relation_counts": {"sales.invoices": 1},
+            "exact_numeric_sums": {"sales.invoices.grand_total": "100.00"},
+            "table_content_sha256": {"sales.invoices": "2" * 64},
+        },
+    })
+    backup = tmp_path / "backup.sql"
+    backup.write_text("-- nonempty\n", encoding="utf-8")
+    with pytest.raises(evidence.EvidenceError, match="does not exactly reconcile"):
+        evidence.reconcile_backup(
+            source_artifact=source,
+            restored_artifact=restored,
+            backup_file=backup,
+            binding=binding,
+        )
+
+
+def test_backup_reconciliation_rejects_missing_content_digests(tmp_path: Path):
+    git_commit = "a" * 40
+    binding = evidence.build_binding(
+        project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit=git_commit,
+        render_evidence=_render(git_commit),
+    )
+    snapshot = {
+        "relation_counts": {"sales.invoices": 1},
+        "exact_numeric_sums": {"sales.invoices.grand_total": "100.00"},
+    }
+    source = _artifact("canonical_database_runtime", binding, {"snapshot": snapshot})
+    restored = _artifact(
+        "canonical_database_snapshot", binding, {"snapshot": dict(snapshot)}
+    )
+    backup = tmp_path / "backup.sql"
+    backup.write_text("-- nonempty\n", encoding="utf-8")
+    with pytest.raises(evidence.EvidenceError, match="does not exactly reconcile"):
+        evidence.reconcile_backup(
+            source_artifact=source,
+            restored_artifact=restored,
+            backup_file=backup,
+            binding=binding,
         )
 
 
@@ -209,6 +367,12 @@ def test_workflow_is_read_only_and_never_changes_readiness():
     assert "database/canonical/ci/bootstrap_supabase_auth.sql" in workflow
     assert "pg_dump --data-only --no-owner --no-privileges" in workflow
     assert "validate-manifest" in workflow
+    assert "workflow_call:" in workflow
+    readiness = (
+        REPOSITORY_ROOT / ".github/workflows/production-readiness.yml"
+    ).read_text(encoding="utf-8")
+    assert "capture_canonical_promotion_evidence:" in readiness
+    assert "uses: ./.github/workflows/canonical-application-promotion-evidence.yml" in readiness
     assert "approved_app_contract_v1" not in workflow
     assert "production_ready" not in workflow
     assert "deploy_render" not in workflow
