@@ -3889,6 +3889,27 @@ class SqlAlchemyOperatorActionService:
         idempotency_key: str,
         context: ActionContext,
     ) -> CommandExecution:
+        try:
+            return self._approve(
+                command_request_id=command_request_id,
+                preview_hash=preview_hash,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        except DBAPIError as exc:
+            translated = _database_action_error(exc, "automation.command.approve")
+            if translated is None:
+                raise
+            raise translated from exc
+
+    def _approve(
+        self,
+        *,
+        command_request_id: UUID,
+        preview_hash: str,
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> CommandExecution:
         binding = self._bindings["automation.command.approve"]
         if not binding.available:
             self._unavailable(binding.operation_key)

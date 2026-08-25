@@ -3584,6 +3584,56 @@ def test_approval_calls_only_reviewed_command_in_one_transaction():
     assert len(approve_parameters["idempotency_key_hash"]) == 32
 
 
+def test_expense_claim_self_approval_is_translated_and_rolls_back():
+    command_request_id = uuid4()
+    now = datetime.now(timezone.utc)
+
+    class SelfApprovalSession(FakeSession):
+        def execute(self, statement, parameters=None):
+            if "approve_expense_claim_command" in str(statement):
+                raise IntegrityError(
+                    str(statement),
+                    dict(parameters or {}),
+                    _PostgresPolicyFailure(
+                        "42501",
+                        "expense claim requires an unexpired exact-preview independent approval",
+                    ),
+                )
+            return super().execute(statement, parameters)
+
+    session = SelfApprovalSession(
+        authority_branch=None,
+        command_row=None,
+        approval_row={
+            "operation": "finance.expense_claim.post",
+            "status": "prepared",
+            "preview_hash": bytes.fromhex("ab" * 32),
+            "result_resource_type": "expense_claim",
+            "result_resource_id": command_request_id,
+            "approval_id": uuid4(),
+            "decided_at": now,
+        },
+    )
+    service = SqlAlchemyOperatorActionService(lambda: session)
+
+    with pytest.raises(OperatorActionError) as error:
+        service.approve(
+            command_request_id=command_request_id,
+            preview_hash="sha256:" + "ab" * 32,
+            idempotency_key="approval:self-expense:0001",
+            context=_context(organization_scope=True),
+        )
+
+    assert error.value.code is ActionErrorCode.SCOPE_DENIED
+    assert error.value.metadata == {
+        "operation_key": "automation.command.approve",
+        "reason": "CANONICAL_DATABASE_POLICY_REJECTED",
+        "sqlstate": "42501",
+    }
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert session.transaction_failures == 1
+
+
 def test_command_context_casts_uuid_to_postgres_text_setting():
     from app.infrastructure.operator_actions.service import _SET_COMMAND_CONTEXT_SQL
 
