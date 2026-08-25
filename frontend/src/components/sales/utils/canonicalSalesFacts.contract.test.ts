@@ -118,4 +118,28 @@ describe('canonical desktop sales business-fact boundaries', () => {
     expect(command).not.toContain('record?.address_id ?? record?.id');
     expect(save).toContain('documentPolicy');
   });
+
+  it('requires exact selector quantities and has no shared numeric draft fallback', () => {
+    const selectedInvoiceItem = source('invoice/utils/invoiceItemUtils.ts');
+    const invoiceTypes = source('invoice/types/invoiceTypes.ts');
+    const selectedProductType = invoiceTypes
+      .split('export interface ProductInput {', 2)[1]
+      .split('// ==================== WORKFLOW TYPES', 1)[0];
+    const sharedLogic = source('hooks/useSalesTransaction.ts');
+    expect(selectedInvoiceItem).toContain("quantity: string;");
+    expect(selectedInvoiceItem).toContain("free_quantity: string;");
+    expect(selectedInvoiceItem).not.toMatch(/quantity:\s*product\.quantity\s*\?\?/);
+    expect(selectedInvoiceItem).not.toMatch(/free_quantity:\s*product\.free_quantity\s*\?\?/);
+    expect(sharedLogic).toContain("typeof product?.quantity !== 'string'");
+    expect(sharedLogic).toContain("typeof product?.free_quantity !== 'string'");
+    expect(sharedLogic).not.toMatch(/\bparseFloat\s*\(/);
+    expect(sharedLogic).not.toMatch(/\bparseInt\s*\(/);
+    expect(sharedLogic).not.toMatch(/\bNumber\s*\(/);
+    expect(sharedLogic).not.toMatch(/\[item\.quantity,\s*1\]/);
+    expect(sharedLogic).not.toContain("product.quantity ?? '1.000000'");
+    expect(sharedLogic).not.toContain('recalculateTotals');
+    expect(selectedProductType).toContain('quantity: ExactDecimalString;');
+    expect(selectedProductType).toContain('free_quantity: ExactDecimalString;');
+    expect(selectedProductType).not.toMatch(/(?:quantity|free_quantity)\?:\s*number/);
+  });
 });

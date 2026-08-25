@@ -40,16 +40,14 @@ describe('prepareItemForInvoice free-supply treatment', () => {
         }));
     });
 
-    it('defaults quantities only at the explicit new-product selection boundary', () => {
-        const item = prepareSelectedProductForInvoice({
+    it('rejects a selected product without explicit billed and free quantities', () => {
+        expect(() => prepareSelectedProductForInvoice({
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Canonical item',
             ...selectedBatch,
-        });
-
-        expect(item.quantity).toBe('1.000000');
-        expect(item.free_quantity).toBe('0.000000');
-        expect(item.free_supply_tax_treatment).toBe('excluded_from_taxable_value');
+            quantity: undefined,
+            free_quantity: undefined,
+        } as any)).toThrow(/exact decimal strings/);
     });
 
     it('does not replace explicit selection quantities with defaults', () => {
@@ -86,6 +84,8 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             product_id: '22222222-2222-4222-8222-222222222222',
             product_name: 'Fractional stock item',
             gst_percent: '12.000000',
+            quantity: '0.100000',
+            free_quantity: '0.000000',
             ...source,
         });
 
@@ -101,6 +101,8 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             sale_price_per_unit: '100.0000',
             mrp_per_unit: '120.0000',
             gst_percent: '12.000000',
+            quantity: '0.100000',
+            free_quantity: '0.000000',
         })).toThrow(/plain decimal string/);
     });
 
@@ -110,6 +112,8 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             product_name: 'Unsafe numeric stock item',
             ...selectedBatch,
             quantity_available: 0.1,
+            quantity: '0.100000',
+            free_quantity: '0.000000',
         })).toThrow(/must remain an exact decimal string/);
     });
 

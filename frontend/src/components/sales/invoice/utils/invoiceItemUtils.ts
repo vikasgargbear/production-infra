@@ -10,8 +10,8 @@ import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import type { CanonicalImportLine } from '../../utils/documentImport';
 
 type SelectedProductInput = Omit<ProductInput, 'quantity' | 'free_quantity'> & {
-    quantity?: string | number;
-    free_quantity?: string | number;
+    quantity: string;
+    free_quantity: string;
 };
 
 /**
@@ -24,14 +24,15 @@ export const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
     return prepareItemForTransaction<InvoiceItem>(product);
 };
 
-/** New UI selections start with one billed unit and no free units. */
+/** UI selections must carry the operator's exact billed/free quantity intent. */
 export const prepareSelectedProductForInvoice = (
     product: SelectedProductInput,
-): InvoiceItem => prepareItemForInvoice({
-    ...product,
-    quantity: product.quantity ?? 1,
-    free_quantity: product.free_quantity ?? 0,
-});
+): InvoiceItem => {
+    if (typeof product.quantity !== 'string' || typeof product.free_quantity !== 'string') {
+        throw new Error('Selected product billed and free quantities must remain exact decimal strings.');
+    }
+    return prepareItemForInvoice(product);
+};
 
 /** Canonical imports must carry both quantities explicitly; no UI defaults apply. */
 export const prepareImportedItemsForInvoice = (

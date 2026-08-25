@@ -37,7 +37,7 @@ export interface UseSalesTransactionConfig<TDoc> {
 
 // ==================== RETURN TYPE ====================
 
-export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer, TItem extends BaseLineItem> {
+export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer> {
     // Document State
     document: TDoc;
     setDocument: React.Dispatch<React.SetStateAction<TDoc>>;
@@ -65,7 +65,6 @@ export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer,
     handleProductSelect: (product: unknown) => void;
     updateItem: (index: number, field: string, value: unknown) => void;
     removeItem: (indexOrId: number | string) => void;
-    recalculateTotals: (items: TItem[]) => { totalQuantity: number; totalAmount: number };
     fetchCustomerAddress: (customerId: string | number) => Promise<{ address: string; city: string; stateCode: string; pincode: string } | null>;
 
     // Utilities
@@ -80,7 +79,7 @@ export function useSalesTransaction<
     TItem extends BaseLineItem = BaseLineItem
 >(
     config: UseSalesTransactionConfig<TDoc>
-): UseSalesTransactionReturn<TDoc, TCustomer, TItem> {
+): UseSalesTransactionReturn<TDoc, TCustomer> {
 
     const { getInitialDocument, documentType, priceField = 'sale_price', includeGst = false } = config;
 
@@ -138,18 +137,6 @@ export function useSalesTransaction<
         }
     }, [documentType]);
 
-    // ==================== RECALCULATE TOTALS ====================
-    const recalculateTotals = useCallback((items: TItem[]) => {
-        const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0);
-        const totalAmount = items.reduce((sum, item) => {
-            const quantity = parseFloat(String(item.quantity)) || 0;
-            const unitPrice = parseFloat(String(item.unit_price)) || 0;
-            return sum + (quantity * unitPrice);
-        }, 0);
-
-        return { totalQuantity, totalAmount };
-    }, []);
-
     // ==================== HANDLE CUSTOMER SELECT ====================
     const handleCustomerSelect = useCallback(async (customer: TCustomer | null) => {
         setSelectedCustomer(customer);
@@ -185,16 +172,35 @@ export function useSalesTransaction<
 
     // ==================== HANDLE PRODUCT SELECT ====================
     const handleProductSelect = useCallback((product: any) => {
+        if (typeof product?.quantity !== 'string' || typeof product?.free_quantity !== 'string') {
+            throw new Error('Selected sales item requires exact billed and free decimal strings.');
+        }
+        const billedQuantity = normalizeExactDecimal(
+            product.quantity,
+            'Selected sales item billed quantity',
+            { scale: 6, maximumWholeDigits: 14 },
+        );
+        const freeQuantity = normalizeExactDecimal(
+            product.free_quantity,
+            'Selected sales item free quantity',
+            { scale: 6, maximumWholeDigits: 14 },
+        );
         const existingIndex = document.items.findIndex(item => item.product_id === product.product_id);
 
         if (existingIndex >= 0) {
-            // Increment quantity if product already exists
+            // Re-selecting the same product preserves the selector's complete
+            // billed/free intent; it never manufactures an increment.
             const updatedItems = document.items.map((item, index) =>
                 index === existingIndex ? {
                     ...item,
                     quantity: addExactDecimals(
-                        [item.quantity, 1],
-                        'Sales item quantity',
+                        [item.quantity, billedQuantity],
+                        'Sales item billed quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
+                    free_quantity: addExactDecimals(
+                        [item.free_quantity, freeQuantity],
+                        'Sales item free quantity',
                         { scale: 6, maximumWholeDigits: 14 },
                     ),
                 } : item
@@ -206,11 +212,6 @@ export function useSalesTransaction<
                 console.error(`[useSalesTransaction:${documentType}] Canonical batch price is unavailable`);
                 return;
             }
-            const quantity = normalizeExactDecimal(
-                product.quantity ?? '1.000000',
-                'Sales item quantity',
-                { scale: 6, maximumWholeDigits: 14 },
-            );
             const unitPrice = normalizeAuthoritativeDecimal(
                 product[priceField],
                 'Selected batch unit rate',
@@ -227,7 +228,9 @@ export function useSalesTransaction<
                 branch_id: product.branch_id,
                 location_id: product.location_id,
                 uom_conversion_id: product.uom_conversion_id,
-                quantity,
+                quantity: billedQuantity,
+                free_quantity: freeQuantity,
+                free_supply_tax_treatment: product.free_supply_tax_treatment,
                 unit: product.unit || product.base_uom || product.uom_code || '',
                 mrp: product.mrp,
                 unit_price: unitPrice,  // ✅ CANONICAL
@@ -252,10 +255,24 @@ export function useSalesTransaction<
             if (i === index) {
                 const updatedItem = { ...item, [field]: value };
 
-                // Recalculate line total if quantity or price changes
-                if (field === 'quantity' || field === 'unit_price') {
-                    const unitPrice = parseFloat(field === 'unit_price' ? String(value) : String(item.unit_price)) || 0;
-                    updatedItem.unit_price = unitPrice;
+                if (field === 'quantity' || field === 'free_quantity') {
+                    if (typeof value !== 'string') {
+                        throw new Error(`Sales item ${field} must remain an exact decimal string.`);
+                    }
+                    updatedItem[field] = normalizeExactDecimal(
+                        value,
+                        `Sales item ${field}`,
+                        { scale: 6, maximumWholeDigits: 14 },
+                    );
+                } else if (field === 'unit_price') {
+                    if (typeof value !== 'string') {
+                        throw new Error('Sales item unit price must remain an exact decimal string.');
+                    }
+                    updatedItem.unit_price = normalizeExactDecimal(
+                        value,
+                        'Sales item unit price',
+                        { scale: 4, maximumWholeDigits: 16 },
+                    );
                 }
                 return updatedItem;
             }
@@ -310,7 +327,6 @@ export function useSalesTransaction<
         handleProductSelect,
         updateItem,
         removeItem,
-        recalculateTotals,
         fetchCustomerAddress,
 
         // Utilities

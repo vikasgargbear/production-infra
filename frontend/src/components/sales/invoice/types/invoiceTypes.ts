@@ -15,7 +15,7 @@ import type {
     FreeSupplyTaxTreatment as SharedFreeSupplyTaxTreatment,
 } from '../../types/salesSharedTypes';
 import type { CanonicalImportLine } from '../../utils/documentImport';
-import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
+import type { EditableDecimalValue, ExactDecimalString } from '../../../../utils/exactDecimal';
 
 // ==================== BASE TYPES ====================
 
@@ -525,21 +525,21 @@ export interface ProductInput {
     expiry_date?: string;
     manufacturing_date?: string;
     // Pricing - batch level uses _per_unit suffix
-    sale_price_per_unit?: number; // Backend field - maps to unit_price
-    unit_price?: number;  // CANONICAL: selling price
-    mrp_per_unit?: number;
-    mrp?: number;
+    sale_price_per_unit?: ExactDecimalString; // Backend field - maps to unit_price
+    unit_price?: ExactDecimalString;  // CANONICAL: selling price
+    mrp_per_unit?: ExactDecimalString;
+    mrp?: ExactDecimalString;
     // Tax
-    gst_percent?: number;
+    gst_percent?: ExactDecimalString;
     hsn_code?: string;
     // Quantities
-    quantity?: number;
-    free_quantity?: number;
+    quantity: ExactDecimalString;
+    free_quantity: ExactDecimalString;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
-    quantity_available?: number;
-    available_quantity?: number;
-    total_quantity_available?: number;  // Alias from product search
-    discount_percent?: number;
+    quantity_available?: ExactDecimalString;
+    available_quantity?: ExactDecimalString;
+    total_quantity_available?: ExactDecimalString;  // Alias from product search
+    discount_percent?: ExactDecimalString;
 }
 
 // ==================== WORKFLOW TYPES ====================
