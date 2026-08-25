@@ -56,4 +56,4 @@ def test_non_sdk_report_describes_the_implemented_isolated_transport_honestly():
         "DCR" in item and "disabled" in item
         for item in report["remaining_blockers"]
     )
-    assert any("transfer and destruction" in item for item in report["remaining_blockers"])
+    assert not any("adapter" in item for item in report["remaining_blockers"])

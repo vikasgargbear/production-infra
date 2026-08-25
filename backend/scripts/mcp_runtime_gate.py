@@ -152,7 +152,6 @@ def build_report(probe_sdk: bool) -> Dict[str, object]:
         "remaining_blockers": [
             "official SDK remains isolated from the legacy FastAPI dependency pins",
             "Supabase DCR remains disabled; clients require reviewed pre-registration",
-            "inventory transfer and destruction adapters remain unavailable",
         ],
     }
 
