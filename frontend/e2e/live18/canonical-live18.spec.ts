@@ -236,10 +236,16 @@ async function runOperation(
         commandRuntime, `${contract.id}.approval_steps`,
       );
       await Promise.all([...pending]);
-      const approvals = captured.filter(item => item.method === 'POST'
+      const approvalsBeforeExecute = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/approve`);
-      expect(approvals).toHaveLength(1);
-      expect(approvals[0].actor).toBe(contract.approval_policy === 'separate_approver' ? 'reviewer' : 'requester');
+      if (operationFixture.lifecycle_mode === 'split') {
+        expect(approvalsBeforeExecute).toHaveLength(1);
+      } else {
+        expect(
+          approvalsBeforeExecute,
+          `${contract.id} combined confirmation must not approve before its reviewed execute action`,
+        ).toHaveLength(0);
+      }
 
       const staleHash = `${previewHash.slice(0, -1)}${previewHash.endsWith('0') ? '1' : '0'}`;
       const stale = await requesterApi.post(`/api/web/actions/commands/${commandId}/execute`, {
@@ -252,6 +258,10 @@ async function runOperation(
         commandRuntime, `${contract.id}.execute_steps`,
       );
       await Promise.all([...pending]);
+      const approvals = captured.filter(item => item.method === 'POST'
+        && item.path === `/api/web/actions/commands/${commandId}/approve`);
+      expect(approvals).toHaveLength(1);
+      expect(approvals[0].actor).toBe(contract.approval_policy === 'separate_approver' ? 'reviewer' : 'requester');
       const executions = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/execute` && item.status < 300);
       expect(executions, `${contract.id} must execute exactly once through visible UI`).toHaveLength(1);

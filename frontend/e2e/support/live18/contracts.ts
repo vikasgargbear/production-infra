@@ -26,6 +26,7 @@ interface OperationMatrix {
 export type LocatorKind = 'role' | 'label' | 'placeholder' | 'text' | 'testId';
 export type UiAction = 'goto' | 'click' | 'fill' | 'select' | 'press' | 'expectText';
 export type Actor = 'requester' | 'reviewer';
+export type LifecycleMode = 'split' | 'combined_actor_confirmation';
 
 export interface UiStep {
   actor: Actor;
@@ -35,6 +36,7 @@ export interface UiStep {
 }
 
 export interface OperationFixture {
+  lifecycle_mode: LifecycleMode;
   missing_required_steps: UiStep[];
   prepare_steps: UiStep[];
   approval_steps: UiStep[];
@@ -77,7 +79,8 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     || !fixture.operations || typeof fixture.operations !== 'object') {
     throw new Error('The reviewed live18 fixture has an invalid schema or operations object.');
   }
-  const expected = loadOperationMatrix().map(item => item.id).sort();
+  const operationMatrix = loadOperationMatrix();
+  const expected = operationMatrix.map(item => item.id).sort();
   const actual = Object.keys(fixture.operations).sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error('The reviewed live18 fixture must name exactly the 18 registered operations.');
@@ -87,6 +90,16 @@ export function loadFixture(required: boolean): Live18Fixture | null {
   ];
   const supportedActors: Actor[] = ['requester', 'reviewer'];
   for (const [operationId, operation] of Object.entries(fixture.operations)) {
+    const operationContract = operationMatrix.find(item => item.id === operationId)!;
+    if (!['split', 'combined_actor_confirmation'].includes(operation.lifecycle_mode)) {
+      throw new Error(`${operationId}.lifecycle_mode is unsupported.`);
+    }
+    if (operation.lifecycle_mode === 'combined_actor_confirmation'
+      && operationContract.approval_policy !== 'actor_confirmation') {
+      throw new Error(
+        `${operationId}.combined_actor_confirmation requires actor_confirmation policy.`,
+      );
+    }
     for (const phase of [
       'missing_required_steps', 'prepare_steps', 'approval_steps', 'execute_steps',
     ] as const) {

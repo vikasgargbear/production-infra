@@ -32,6 +32,7 @@ FORBIDDEN_SCALAR_KEYS = re.compile(r"(?:^|_)(?:id|uuid|row_version|hash|date|tim
 PHASES = (
     "missing_required_steps", "prepare_steps", "approval_steps", "execute_steps",
 )
+LIFECYCLE_MODES = {"split", "combined_actor_confirmation"}
 ACTORS = {"requester", "reviewer"}
 ACTIONS = {"goto", "click", "fill", "select", "press", "expectText"}
 LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
@@ -197,9 +198,22 @@ def _compile_value(value: Any, facts: dict[str, Any], scalars: dict[str, Any], u
     return rendered
 
 
-def _validate_compiled_steps(operation_id: str, steps: Any) -> None:
-    if not isinstance(steps, dict) or set(steps) != set(PHASES):
-        raise FixtureCompileError(f"{operation_id} template must define exactly {PHASES}")
+def _validate_compiled_steps(
+    operation_id: str, operation: Any, approval_policy: str
+) -> None:
+    expected_keys = {*PHASES, "lifecycle_mode"}
+    if not isinstance(operation, dict) or set(operation) != expected_keys:
+        raise FixtureCompileError(
+            f"{operation_id} template must define exactly {sorted(expected_keys)}"
+        )
+    lifecycle_mode = operation["lifecycle_mode"]
+    if lifecycle_mode not in LIFECYCLE_MODES:
+        raise FixtureCompileError(f"{operation_id} has unsupported lifecycle_mode")
+    if lifecycle_mode == "combined_actor_confirmation" and approval_policy != "actor_confirmation":
+        raise FixtureCompileError(
+            f"{operation_id} combined lifecycle requires actor_confirmation policy"
+        )
+    steps = operation
     for phase in PHASES:
         rows = steps[phase]
         if not isinstance(rows, list) or not rows:
@@ -255,9 +269,20 @@ def compile_fixture(
         template = _object(path, f"{operation_id} template")
         if template.get("template_schema") != TEMPLATE_SCHEMA or template.get("operation_id") != operation_id:
             raise FixtureCompileError(f"invalid UI template authority: {operation_id}")
-        compiled_steps = _compile_value(template.get("steps"), facts, scalars, used)
-        _validate_compiled_steps(operation_id, compiled_steps)
-        operations[operation_id] = compiled_steps
+        compiled_operation = _compile_value(
+            {
+                "lifecycle_mode": template.get("lifecycle_mode"),
+                **(template.get("steps") or {}),
+            },
+            facts,
+            scalars,
+            used,
+        )
+        matrix_row = next(row for row in matrix["operations"] if row["id"] == operation_id)
+        _validate_compiled_steps(
+            operation_id, compiled_operation, matrix_row.get("approval_policy")
+        )
+        operations[operation_id] = compiled_operation
     unused = sorted(set(scalars) - used)
     if unused:
         raise FixtureCompileError(f"unreviewed/unused scalar values are forbidden: {unused}")

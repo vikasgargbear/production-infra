@@ -14,7 +14,10 @@ from scripts.compile_live18_browser_fixture import (
 
 
 def _matrix(path: Path) -> Path:
-    operations = [{"id": f"operation_{number}"} for number in range(1, 19)]
+    operations = [
+        {"id": f"operation_{number}", "approval_policy": "actor_confirmation"}
+        for number in range(1, 19)
+    ]
     path.write_text(json.dumps({"required_operation_count": 18, "operations": operations}))
     return path
 
@@ -31,7 +34,12 @@ def _templates(root: Path) -> Path:
         }
         if number == 1:
             steps["prepare_steps"].append({"actor": "requester", "action": "fill", "locator": {"kind": "label", "name": "Quantity"}, "value": "{{scalar.quantity}}"})
-        (root / f"{operation}.json").write_text(json.dumps({"template_schema": TEMPLATE_SCHEMA, "operation_id": operation, "steps": steps}))
+        (root / f"{operation}.json").write_text(json.dumps({
+            "template_schema": TEMPLATE_SCHEMA,
+            "operation_id": operation,
+            "lifecycle_mode": "split",
+            "steps": steps,
+        }))
     return root
 
 
@@ -44,6 +52,27 @@ def test_compiles_exact_18_from_facts_and_only_used_reviewed_scalars(tmp_path: P
     assert len(fixture["operations"]) == 18
     assert fixture["operations"]["operation_1"]["prepare_steps"][1]["value"] == "1.000000"
     assert fixture["operations"]["operation_1"]["approval_steps"][0]["locator"]["name"] == "{{command_request_id}}"
+
+
+def test_combined_actor_confirmation_lifecycle_is_explicit_and_policy_bound(tmp_path: Path) -> None:
+    matrix = _matrix(tmp_path / "matrix.json")
+    templates = _templates(tmp_path / "templates")
+    path = templates / "operation_1.json"
+    template = json.loads(path.read_text())
+    template["lifecycle_mode"] = "combined_actor_confirmation"
+    path.write_text(json.dumps(template))
+    fixture = compile_fixture(
+        matrix, templates, {"display": {"branch_code": "sales"}}, {"quantity": "1.000000"},
+    )
+    assert fixture["operations"]["operation_1"]["lifecycle_mode"] == "combined_actor_confirmation"
+
+    matrix_value = json.loads(matrix.read_text())
+    matrix_value["operations"][0]["approval_policy"] = "separate_approver"
+    matrix.write_text(json.dumps(matrix_value))
+    with pytest.raises(FixtureCompileError, match="requires actor_confirmation"):
+        compile_fixture(
+            matrix, templates, {"display": {"branch_code": "sales"}}, {"quantity": "1.000000"},
+        )
 
 
 def test_missing_template_and_unused_scalar_fail_closed(tmp_path: Path) -> None:
