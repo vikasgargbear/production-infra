@@ -95,6 +95,16 @@ def test_force_deploy_markers_are_watched_and_bound_into_exact_images() -> None:
         assert markers[service].removeprefix("/") in contents
 
 
+def test_api_watches_every_packaged_migration_authority_input() -> None:
+    patterns = set(_config("api")["build"]["watchPatterns"])
+    assert {
+        "/backend/**",
+        "/database/schema-authority.json",
+        "/database/canonical/domains/_contract.json",
+        "/deploy/railway/api.*",
+    } <= patterns
+
+
 def test_frontend_container_builds_once_and_serves_spa_with_healthcheck() -> None:
     dockerfile = (ROOT / "frontend/Dockerfile").read_text(encoding="utf-8")
     caddyfile = (ROOT / "frontend/Caddyfile").read_text(encoding="utf-8")

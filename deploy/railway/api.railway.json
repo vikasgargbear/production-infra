@@ -5,6 +5,8 @@
     "dockerfilePath": "/deploy/railway/api.Dockerfile",
     "watchPatterns": [
       "/backend/**",
+      "/database/schema-authority.json",
+      "/database/canonical/domains/_contract.json",
       "/deploy/railway/api.*"
     ]
   },
