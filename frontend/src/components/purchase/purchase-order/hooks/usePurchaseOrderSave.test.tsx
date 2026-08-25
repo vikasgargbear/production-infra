@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { canonicalPurchaseOrdersApi } from '../../../../services/api/modules/purchase/canonicalPurchaseOrders.api';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
 import type { PurchaseOrderData } from './usePurchaseOrderLogic';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 jest.mock('../../../../services/api/modules/purchase/canonicalPurchaseOrders.api', () => ({
     canonicalPurchaseOrdersApi: {
@@ -22,6 +23,14 @@ const UOM_ID = 'd3000000-0000-7000-8000-000000000004';
 const LINE_ID = 'd3000000-0000-7000-8000-000000000005';
 const COMMAND_ID = 'd3000000-0000-7000-8000-000000000006';
 const PURCHASE_ORDER_ID = 'd3000000-0000-7000-8000-000000000007';
+const documentPolicy: CanonicalDocumentPolicy = {
+    allowed_rounding_policies: ['none'], default_rounding_policy: 'none',
+    allowed_zero_rated_payment_modes: ['not_applicable'], default_zero_rated_payment_mode: 'not_applicable',
+    allowed_tax_charge_mechanisms: ['normal'], default_tax_charge_mechanism: 'normal',
+    allowed_price_bases: ['tax_exclusive'], default_price_basis: 'tax_exclusive',
+    logistics_modes: [{ transport_mode: 'in_person', display_name: 'In person', requires_transporter_party: false, requires_vehicle: false, requires_transport_document: false }],
+    default_transport_mode: 'in_person',
+};
 
 const purchaseOrder: PurchaseOrderData = {
     po_no: '', po_date: '2026-08-25', expected_delivery_date: '2026-09-01',
@@ -77,6 +86,7 @@ describe('usePurchaseOrderSave terminal retry boundary', () => {
             selectedSupplier: { supplier_id: SUPPLIER_ID, supplier_name: 'Supplier' },
             branchId: BRANCH_ID,
             isOnline: true,
+            documentPolicy,
             ...setters,
         }));
 

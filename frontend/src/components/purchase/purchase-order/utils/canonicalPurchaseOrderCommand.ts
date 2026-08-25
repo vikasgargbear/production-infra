@@ -5,6 +5,7 @@ import type {
     PurchaseOrderData,
     PurchaseOrderItem,
 } from '../hooks/usePurchaseOrderLogic';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 type FreeSupplyTaxTreatment =
     | 'excluded_from_taxable_value'
@@ -155,7 +156,9 @@ export function buildCanonicalPurchaseOrderPreparePayload(
     supplier: PurchaseOrderSupplier,
     branchId: unknown,
     idempotencyKey: string,
+    policy: CanonicalDocumentPolicy | null,
 ): Record<string, unknown> {
+    if (!policy) throw new Error('Canonical commercial document policy is unavailable.');
     const validationError = canonicalPurchaseOrderValidationError(order, supplier, branchId);
     if (validationError) throw new Error(validationError);
 
@@ -173,7 +176,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
             supplier.supplier_id,
             'Supplier',
         ),
-        tax_charge_mechanism: 'normal',
+        tax_charge_mechanism: policy.default_tax_charge_mechanism,
         document_discount: exactDecimalUnits(documentDiscount, 'Document discount', { scale: 2, maximumWholeDigits: 18 }) > 0n ? {
             document_discount_kind: 'amount',
             document_discount_basis: 'price_value',
@@ -183,8 +186,8 @@ export function buildCanonicalPurchaseOrderPreparePayload(
             document_discount_basis: 'price_value',
             document_discount_value: '0',
         },
-        rounding_policy: 'none',
-        zero_rated_payment_mode: 'not_applicable',
+        rounding_policy: policy.default_rounding_policy,
+        zero_rated_payment_mode: policy.default_zero_rated_payment_mode,
         lines: order.items.map((item, index) => {
             const discount = canonicalDecimal(
                 item.discount_percent,
@@ -214,7 +217,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
                     `Item ${index + 1} quoted rate`,
                     UNIT_RATE_PATTERN,
                 ),
-                price_basis: 'tax_exclusive',
+                price_basis: policy.default_price_basis,
                 line_discount: quantityUnits(discount, 'Line discount') > 0n ? {
                     line_discount_kind: 'percent',
                     line_discount_basis: 'price_value',

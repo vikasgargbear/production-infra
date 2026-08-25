@@ -4,6 +4,16 @@ import {
     canonicalPurchaseOrderValidationError,
 } from './canonicalPurchaseOrderCommand';
 import { getInitialPurchaseOrder } from '../hooks/usePurchaseOrderLogic';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+
+const policy: CanonicalDocumentPolicy = {
+    allowed_rounding_policies: ['none'], default_rounding_policy: 'none',
+    allowed_zero_rated_payment_modes: ['not_applicable'], default_zero_rated_payment_mode: 'not_applicable',
+    allowed_tax_charge_mechanisms: ['normal'], default_tax_charge_mechanism: 'normal',
+    allowed_price_bases: ['tax_exclusive'], default_price_basis: 'tax_exclusive',
+    logistics_modes: [{ transport_mode: 'in_person', display_name: 'In person', requires_transporter_party: false, requires_vehicle: false, requires_transport_document: false }],
+    default_transport_mode: 'in_person',
+};
 
 const BRANCH = 'd3000000-0000-7000-8000-000000000002';
 const SUPPLIER = 'd3000000-0000-7000-8000-000000000003';
@@ -38,7 +48,7 @@ const supplier = { supplier_id: SUPPLIER, supplier_name: 'Canonical Supplier' };
 describe('canonical purchase-order command', () => {
     it('builds UUID-first exact payload without browser GST or pack defaults', () => {
         const payload = buildCanonicalPurchaseOrderPreparePayload(
-            order(), supplier, BRANCH, 'erp-web-purchase-order:test',
+            order(), supplier, BRANCH, 'erp-web-purchase-order:test', policy,
         ) as any;
 
         expect(payload).toMatchObject({
@@ -127,7 +137,7 @@ describe('canonical purchase-order command', () => {
         const exact = order();
         exact.items[0].quantity = '0.123456';
         const payload = buildCanonicalPurchaseOrderPreparePayload(
-            exact, supplier, BRANCH, 'erp-web-purchase-order:exact',
+            exact, supplier, BRANCH, 'erp-web-purchase-order:exact', policy,
         ) as any;
         expect(payload.lines[0].billed_quantity).toBe('0.123456');
 

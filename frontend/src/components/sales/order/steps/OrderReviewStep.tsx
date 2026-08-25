@@ -13,6 +13,7 @@ import {
 } from '../../../global';
 import type { Order, BankAccount, Customer } from '../../../../types/models';
 import { canonicalOrderPreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 // Using canonical Customer type from /types/models - no local duplicate
 
@@ -38,6 +39,7 @@ interface OrderReviewStepProps {
     message: string;
     messageType: string;
     companyInfo: CompanyInfo;
+    documentPolicy: CanonicalDocumentPolicy | null;
 }
 
 const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
@@ -48,7 +50,8 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
     setSameAsBilling,
     message,
     messageType,
-    companyInfo
+    companyInfo,
+    documentPolicy,
 }) => {
     const money = (value: unknown, label: string) => formatExactDecimal(
         value,
@@ -65,6 +68,9 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
     }
     return (
         <div className="max-w-6xl mx-auto p-6">
+            {documentPolicy && <p className="mb-4 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                Server policy: {documentPolicy.default_price_basis.replace('_', ' ')} pricing · {documentPolicy.default_rounding_policy} rounding · {documentPolicy.default_zero_rated_payment_mode.replace(/_/g, ' ')} zero-rated mode
+            </p>}
             {/* Message Display */}
             {message && (
                 <div className={`mb-4 p-3 rounded-lg flex items-center ${messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'

@@ -6,11 +6,13 @@ import { buildCanonicalSalesOrderCommand } from '../../utils/canonicalSalesChain
 import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 export interface UseSalesOrderSaveProps {
     order: Order;
     selectedCustomer: unknown;
     isOnline: boolean;
+    documentPolicy: CanonicalDocumentPolicy | null;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
     setCreatedOrderData: React.Dispatch<React.SetStateAction<CreatedOrderData | null>>;
     setShowSuccessModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -29,7 +31,7 @@ export interface UseSalesOrderSaveReturn {
 }
 
 export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderSaveReturn {
-    const { order, selectedCustomer, isOnline, setCreatedOrderData, setShowSuccessModal, setMessage, setMessageType } = props;
+    const { order, selectedCustomer, isOnline, documentPolicy, setCreatedOrderData, setShowSuccessModal, setMessage, setMessageType } = props;
     const [saving, setSaving] = useState(false);
     const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -43,14 +45,14 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
             if (!isOnline) throw new Error('Cloud API is unavailable. Nothing was saved or queued.');
             if (!selectedCustomer) throw new Error('Select a customer before preparing the order');
             setSaving(true);
-            let payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current);
+            let payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current, documentPolicy);
             let fingerprint = JSON.stringify(payload);
             if (preparedFingerprint.current && preparedFingerprint.current !== fingerprint) {
                 idempotencyKey.current = `erp-web-sales-order:${clientUuid()}`;
                 lifecycleId.current = clientUuid();
                 executedResourceId.current = null;
                 setPreparedPreview(null);
-                payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current);
+                payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current, documentPolicy);
                 fingerprint = JSON.stringify(payload);
             }
             if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
@@ -63,7 +65,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
             const message = error instanceof Error ? error.message : 'Unable to prepare the sales order';
             setMessage(message); setMessageType('error'); toast.error(message);
         } finally { setSaving(false); }
-    }, [isOnline, order, preparedPreview, saving, selectedCustomer, setMessage, setMessageType]);
+    }, [documentPolicy, isOnline, order, preparedPreview, saving, selectedCustomer, setMessage, setMessageType]);
 
     const confirmPreparedOrder = useCallback(async () => {
         if (!preparedPreview || saving) return;

@@ -41,6 +41,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
     const {
         order,
         setOrder,
+        documentPolicy,
         selectedCustomer,
         sameAsBilling,
         setSameAsBilling,
@@ -265,6 +266,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                                 message={message}
                                 messageType={messageType}
                                 companyInfo={companyInfo}
+                                documentPolicy={documentPolicy}
                             />
                         </div>
 

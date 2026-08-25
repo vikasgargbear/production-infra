@@ -36,6 +36,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   (canonicalInventoryReadsApi.context as jest.Mock).mockResolvedValue({ data: {
     organization_id: ids.org, organization_timezone: 'Asia/Kolkata', business_date: '2026-08-25',
+    transfer_logistics_modes: [{ transport_mode: 'in_person', display_name: 'In person (no carrier)' }],
     branches: [{ branch_id: ids.branch, branch_code: 'MAIN', branch_name: 'Main', locations: [] }],
   } });
   (canonicalInventoryReadsApi.batches as jest.Mock).mockResolvedValue({ data: {

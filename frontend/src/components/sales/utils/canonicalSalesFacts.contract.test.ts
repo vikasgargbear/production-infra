@@ -105,4 +105,17 @@ describe('canonical desktop sales business-fact boundaries', () => {
     expect(sharedLogic).not.toContain('Date.now()');
     expect(itemTransform).not.toContain('Date.now()');
   });
+
+  it('takes order commercial policy from authenticated server context', () => {
+    const command = source('utils/canonicalSalesChainCommand.ts');
+    const save = source('order/hooks/useSalesOrderSave.ts');
+    expect(command).toContain('policy.default_rounding_policy');
+    expect(command).toContain('policy.default_zero_rated_payment_mode');
+    expect(command).toContain('policy.default_price_basis');
+    expect(command).not.toContain("rounding_policy: 'none'");
+    expect(command).not.toContain("zero_rated_payment_mode: 'not_applicable'");
+    expect(command).not.toContain("price_basis: 'tax_exclusive'");
+    expect(command).not.toContain('record?.address_id ?? record?.id');
+    expect(save).toContain('documentPolicy');
+  });
 });

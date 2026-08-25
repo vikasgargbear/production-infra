@@ -17,6 +17,7 @@ import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
 import { clientUuid } from '../../../../utils/clientUuid';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -57,6 +58,7 @@ export interface UseSalesOrderLogicReturn {
     // State
     order: Order;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
+    documentPolicy: CanonicalDocumentPolicy | null;
     selectedCustomer: Customer | null;
     setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>;
     sameAsBilling: boolean;
@@ -141,7 +143,7 @@ const createInitialOrder = (): Order => ({
 
 export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const { companyInfo } = useCompany() as { companyInfo: CompanyInfo };
-    const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
+    const { businessDate, documentPolicy, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
     // Core state
     const [order, setOrder] = useState<Order>(createInitialOrder());
@@ -169,6 +171,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         order,
         selectedCustomer,
         isOnline,
+        documentPolicy,
         setOrder,
         setCreatedOrderData,
         setShowSuccessModal,
@@ -314,7 +317,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 if (!/^\d{2}$/.test(stateCode)) {
                     throw new Error('The customer address is missing its canonical state code.');
                 }
-                const addressId = String(address.address_id ?? address.id ?? '').trim();
+                const addressId = String(address.address_id ?? '').trim();
                 const rowVersion = String(address.row_version ?? '').trim();
                 if (!isCanonicalUuid(addressId) || !/^[1-9][0-9]*$/.test(rowVersion)) {
                     throw new Error('The customer address is missing its canonical identity or row version.');
@@ -578,6 +581,7 @@ Expected Delivery: ${order.expected_delivery_date}
     return {
         order,
         setOrder,
+        documentPolicy,
         selectedCustomer,
         setSelectedCustomer,
         sameAsBilling,

@@ -1,4 +1,14 @@
 import { buildCanonicalSalesDispatchCommand, buildCanonicalSalesOrderCommand } from './canonicalSalesChainCommand';
+import type { CanonicalDocumentPolicy } from '../../../services/api/modules/org/canonicalBusinessContext.api';
+
+const policy: CanonicalDocumentPolicy = {
+  allowed_rounding_policies: ['none'], default_rounding_policy: 'none',
+  allowed_zero_rated_payment_modes: ['not_applicable'], default_zero_rated_payment_mode: 'not_applicable',
+  allowed_tax_charge_mechanisms: ['normal'], default_tax_charge_mechanism: 'normal',
+  allowed_price_bases: ['tax_exclusive'], default_price_basis: 'tax_exclusive',
+  logistics_modes: [{ transport_mode: 'in_person', display_name: 'In person', requires_transporter_party: false, requires_vehicle: false, requires_transport_document: false }],
+  default_transport_mode: 'in_person',
+};
 
 const ids = {
   branch: 'd3000000-0000-7000-8000-000000000005',
@@ -27,7 +37,7 @@ test('sales order command preserves exact entered decimals and canonical identit
     items: [{ id: 1, product_id: ids.product, product_name: 'P', branch_id: ids.branch,
       uom_conversion_id: ids.uom, quantity: '1.125', free_quantity: '0.25', unit_price: '84.1250',
       discount_percent: '0.125', free_supply_tax_treatment: 'included_at_unit_rate', gst_percent: 12 } as any],
-  }, 'sales-order:test');
+  }, 'sales-order:test', policy);
   expect(command).toMatchObject({ branch_id: ids.branch, customer_account_id: ids.customer,
     delivery_address_id: ids.address, delivery_address_row_version: '4',
     lines: [{ product_id: ids.product, uom_conversion_id: ids.uom,
@@ -53,9 +63,9 @@ test('dispatch command requires exact order lineage and preserves explicit batch
 });
 
 test.each([
-  ['missing UOM', () => buildCanonicalSalesOrderCommand({ items: [{ branch_id: ids.branch, product_id: ids.product, quantity: 1, unit_price: 1 }] } as any, 'test')],
+  ['missing UOM', () => buildCanonicalSalesOrderCommand({ items: [{ branch_id: ids.branch, product_id: ids.product, quantity: 1, unit_price: 1 }] } as any, 'test', policy)],
   ['missing source order', () => buildCanonicalSalesDispatchCommand({ items: [{}] } as any, 'test')],
-  ['negative quantity', () => buildCanonicalSalesOrderCommand({ customer_id: ids.customer, order_date: '2026-08-25', items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom, quantity: -1, unit_price: 1 }] } as any, 'test')],
+  ['negative quantity', () => buildCanonicalSalesOrderCommand({ customer_id: ids.customer, order_date: '2026-08-25', items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom, quantity: -1, unit_price: 1 }] } as any, 'test', policy)],
 ])('%s fails closed before prepare', (_label, action) => expect(action).toThrow());
 
 test.each([
@@ -71,7 +81,7 @@ test.each([
       quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
       discount_percent: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value',
       ...lineOverride }],
-  } as any, 'test')).toThrow(/missing/i);
+  } as any, 'test', policy)).toThrow(/missing/i);
 });
 
 test.each([
@@ -85,5 +95,5 @@ test.each([
     items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
       quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
       discount_percent: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value' }],
-  } as any, 'test')).toThrow(/not supported/i);
+  } as any, 'test', policy)).toThrow(/not supported/i);
 });

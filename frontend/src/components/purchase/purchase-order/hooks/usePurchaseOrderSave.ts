@@ -19,6 +19,7 @@ import {
     type CanonicalPurchaseOrderReview,
     type PurchaseOrderSupplier,
 } from '../utils/canonicalPurchaseOrderCommand';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 export const PURCHASE_ORDER_CANONICAL_OPERATION = 'procurement.purchase_order.prepare' as const;
 
@@ -33,6 +34,7 @@ export interface UsePurchaseOrderSaveProps {
     selectedSupplier: PurchaseOrderSupplier | null;
     branchId: unknown;
     isOnline: boolean;
+    documentPolicy: CanonicalDocumentPolicy | null;
     setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
     setCreatedPOData: React.Dispatch<React.SetStateAction<CreatedPOData | null>>;
     setShowSuccessModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -75,6 +77,7 @@ export function usePurchaseOrderSave(
         selectedSupplier,
         branchId,
         isOnline,
+        documentPolicy,
         setPurchaseOrder,
         setCreatedPOData,
         setShowSuccessModal,
@@ -145,6 +148,7 @@ export function usePurchaseOrderSave(
                 selectedSupplier!,
                 branchId,
                 prepareIdentityRef.current.idempotencyKey,
+                documentPolicy,
             );
             const prepared = await canonicalPurchaseOrdersApi.prepare(payload);
             const review = canonicalPurchaseOrderReview(
@@ -168,6 +172,7 @@ export function usePurchaseOrderSave(
     }, [
         branchId,
         currentFingerprint,
+        documentPolicy,
         isOnline,
         purchaseOrder,
         selectedSupplier,

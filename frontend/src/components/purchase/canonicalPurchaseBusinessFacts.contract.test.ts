@@ -74,6 +74,18 @@ describe('active canonical purchase desktop facts', () => {
         expect(source).not.toMatch(/product_id\s*(?:\|\||\?\?)\s*[^,\n]*\.id\b/);
     });
 
+    it('takes purchase-order commercial policy from authenticated server context', () => {
+        const command = read('purchase-order/utils/canonicalPurchaseOrderCommand.ts');
+        expect(command).toContain('policy.default_tax_charge_mechanism');
+        expect(command).toContain('policy.default_rounding_policy');
+        expect(command).toContain('policy.default_zero_rated_payment_mode');
+        expect(command).toContain('policy.default_price_basis');
+        expect(command).not.toContain("tax_charge_mechanism: 'normal'");
+        expect(command).not.toContain("rounding_policy: 'none'");
+        expect(command).not.toContain("zero_rated_payment_mode: 'not_applicable'");
+        expect(command).not.toContain("price_basis: 'tax_exclusive'");
+    });
+
     it('does not use the browser clock for purchase business policy', () => {
         const source = activeSources();
         expect(source).not.toMatch(/(?:minDate|maxDate)=\{new Date\(\)\}/);

@@ -2,6 +2,7 @@ import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Order } from '../../../types/models';
 import type { Challan } from '../challan/types/challanTypes';
 import { exactDecimalUnits, normalizeExactDecimal } from '../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../services/api/modules/org/canonicalBusinessContext.api';
 
 function uuid(value: unknown, label: string): string {
     const result = String(value ?? '').trim();
@@ -40,7 +41,7 @@ function requireZero(value: unknown, label: string, scale: number, optional = fa
 
 function deliveryAddress(value: Order['shipping_address_data']): { id: string; rowVersion: string } {
     const record = value as (Record<string, unknown> | null);
-    const id = uuid(record?.address_id ?? record?.id, 'Delivery address');
+    const id = uuid(record?.address_id, 'Delivery address');
     const rowVersion = String(record?.row_version ?? '').trim();
     if (!/^[1-9][0-9]*$/.test(rowVersion)) {
         throw new Error('Delivery address is missing its canonical row version. Re-select it and try again.');
@@ -48,7 +49,12 @@ function deliveryAddress(value: Order['shipping_address_data']): { id: string; r
     return { id, rowVersion };
 }
 
-export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: string): Record<string, unknown> {
+export function buildCanonicalSalesOrderCommand(
+    order: Order,
+    idempotencyKey: string,
+    policy: CanonicalDocumentPolicy | null,
+): Record<string, unknown> {
+    if (!policy) throw new Error('Canonical commercial document policy is unavailable');
     if (!order.items.length) throw new Error('Add at least one product before preparing the order');
     requireZero(order.discount_amount, 'Order document discount', 2);
     requireZero(order.delivery_charges, 'Order delivery charges', 2, true);
@@ -79,7 +85,7 @@ export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: st
                     `Item ${index + 1} free-supply tax treatment`,
                 ),
                 quoted_unit_rate: decimal(item.unit_price, `Item ${index + 1} unit rate`, 4),
-                price_basis: 'tax_exclusive',
+                price_basis: policy.default_price_basis,
                 line_discount: {
                     line_discount_kind: /^0(?:\.0+)?$/.test(discount) ? 'none' : 'percent',
                     line_discount_basis: 'taxable_value',
@@ -93,8 +99,8 @@ export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: st
             document_discount_basis: 'taxable_value',
             document_discount_value: '0',
         },
-        rounding_policy: 'none',
-        zero_rated_payment_mode: 'not_applicable',
+        rounding_policy: policy.default_rounding_policy,
+        zero_rated_payment_mode: policy.default_zero_rated_payment_mode,
     };
 }
 

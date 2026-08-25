@@ -10,6 +10,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { clientUuid } from '../../../../utils/clientUuid';
 import { canonicalBusinessContextApi } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 import { toast } from 'react-toastify';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
 import {
@@ -83,6 +84,7 @@ export interface UsePurchaseOrderLogicReturn {
     // State
     purchaseOrder: PurchaseOrderData;
     setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
+    documentPolicy: CanonicalDocumentPolicy | null;
     selectedSupplier: any;
     setSelectedSupplier: React.Dispatch<React.SetStateAction<any>>;
     currentStep: number;
@@ -151,6 +153,7 @@ export function usePurchaseOrderLogic({
     const [selectedSupplier, setSelectedSupplier] = useState(prefilledData?.supplier_details || null);
     const [currentStep, setCurrentStep] = useState(1);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [documentPolicy, setDocumentPolicy] = useState<CanonicalDocumentPolicy | null>(null);
 
     // Modal States
     const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -162,13 +165,13 @@ export function usePurchaseOrderLogic({
 
     useEffect(() => {
         let active = true;
-        if (purchaseOrder.po_date) return undefined;
         void canonicalBusinessContextApi.get().then(context => {
             if (!active) return;
             setPurchaseOrder(previous => ({
                 ...previous,
                 po_date: previous.po_date || context.business_date,
             }));
+            setDocumentPolicy(context.document_policy);
         }).catch(error => {
             if (active) toast.error(
                 error instanceof Error
@@ -177,7 +180,7 @@ export function usePurchaseOrderLogic({
             );
         });
         return () => { active = false; };
-    }, [purchaseOrder.po_date]);
+    }, []);
 
     // Handlers
     const handleSupplierSelect = useCallback((supplier: any) => {
@@ -268,6 +271,7 @@ export function usePurchaseOrderLogic({
         selectedSupplier,
         branchId: user?.branch_id,
         isOnline,
+        documentPolicy,
         setPurchaseOrder,
         setCreatedPOData,
         setShowSuccessModal,
@@ -286,6 +290,7 @@ export function usePurchaseOrderLogic({
     return {
         purchaseOrder,
         setPurchaseOrder,
+        documentPolicy,
         selectedSupplier,
         setSelectedSupplier,
         currentStep,
