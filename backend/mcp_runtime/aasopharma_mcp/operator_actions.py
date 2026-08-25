@@ -38,7 +38,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_adjustment_note_prepare": "Prepare a standalone canonical customer credit note or supplier debit note against exact posted invoice lines and the authoritative open item.",
     "erp_inventory_transfer_prepare": "Prepare an exact canonical inter-branch stock transfer with explicit source batches and destination location.",
     "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
-    "erp_inventory_destruction_prepare": "Prepare a certified same-day destruction of exact non-regulated stock with no GST ITC consequence.",
+    "erp_inventory_destruction_prepare": "Prepare certified same-day destruction of exact non-regulated stock with a reviewed Section 17(5)(h) GST input-credit reversal.",
     "erp_bank_reconciliation_prepare": "Prepare an exact full match between one imported bank-statement line and one posted bank-ledger journal entry without changing either owner.",
     "erp_expense_claim_prepare": "Submit an INR member expense claim with verified receipts, exact expense accounts, and a separately reviewed reimbursement journal.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
@@ -1000,9 +1000,12 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "certificate_attachment_id": _uuid(
                 "Verified retained attachment containing the destruction certificate."
             ),
+            "itc_reversal_evidence_attachment_id": _uuid(
+                "Verified retained evidence supporting the exact Section 17(5)(h) component reversal."
+            ),
             "itc_treatment": _string(
-                "GST treatment. The bounded operation supports only organizations with no active GST registration.",
-                enum=["not_applicable_unregistered"],
+                "Reviewed GST treatment for goods destroyed under Section 17(5)(h).",
+                enum=["section_17_5_h_reversal"],
             ),
             "lines": _array(
                 _object(

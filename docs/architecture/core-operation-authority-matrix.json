@@ -217,7 +217,7 @@
       "rest_readback": "/api/web/actions/inventory-destruction/commands/{command_request_id}/readback",
       "prepare_sql": "erp_automation_commands.persist_inventory_destruction_prepare",
       "execute_sql": ["erp_automation_commands.execute_inventory_destruction_command"],
-      "authoritative_tables": ["compliance.destructions", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "automation.command_requests", "automation.command_approvals"]
+      "authoritative_tables": ["compliance.destructions", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "tax.input_credit_lots", "tax.input_credit_applications", "tax.input_credit_reversal_events", "tax.returns", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "automation.command_requests", "automation.command_approvals"]
     },
     {
       "id": "bank_reconciliation",

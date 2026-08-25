@@ -20,6 +20,8 @@ from mcp_runtime.aasopharma_mcp.operator_actions import (
 ROOT = Path(__file__).resolve().parents[3]
 SQL = (
     ROOT / "backend/alembic/sql/20260825_0006_inventory_destruction_command.sql"
+).read_text(encoding="utf-8") + (
+    ROOT / "backend/alembic/sql/20260825_0021_gst_registered_inventory_destruction.sql"
 ).read_text(encoding="utf-8")
 
 
@@ -37,7 +39,8 @@ def _payload(**overrides):
         "witness_name": "Licensed Disposal Witness",
         "witness_credential": "PCB-AUTH-2026-001",
         "certificate_attachment_id": uuid4(),
-        "itc_treatment": "not_applicable_unregistered",
+        "itc_reversal_evidence_attachment_id": uuid4(),
+        "itc_treatment": "section_17_5_h_reversal",
         "lines": [
             {
                 "product_id": uuid4(),
@@ -82,15 +85,14 @@ def test_destruction_schema_is_narrow_and_evidence_typed() -> None:
         "damaged",
         "quality_rejected",
     ]
-    assert properties["itc_treatment"]["enum"] == [
-        "not_applicable_unregistered"
-    ]
+    assert properties["itc_treatment"]["enum"] == ["section_17_5_h_reversal"]
     assert {
         "physical_destruction_confirmed_at",
         "authority_reference",
         "witness_name",
         "witness_credential",
         "certificate_attachment_id",
+        "itc_reversal_evidence_attachment_id",
     } <= set(properties)
     allocation = properties["lines"]["items"]["properties"][
         "batch_allocations"
@@ -127,7 +129,7 @@ def test_sql_fail_closes_unreviewed_regulatory_and_stock_variants() -> None:
         "capability.approval_policy='separate_approver'",
         "evidence_kind='inventory_destruction_certificate'",
         "request_document->>'method_code'<>'licensed_incineration'",
-        "request_document->>'itc_treatment'<>'not_applicable_unregistered'",
+        "request_document->>'itc_treatment'<>'section_17_5_h_reversal'",
         "GST-registered destruction requires a reviewed Section 17(5)(h) ITC reversal command",
         "candidate.location_type IN ('quarantine','damaged')",
         "NOT candidate.allows_sale",

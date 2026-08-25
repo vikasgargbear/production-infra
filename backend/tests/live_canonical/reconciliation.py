@@ -426,6 +426,20 @@ class CanonicalReconciler:
                        destruction.posted_by_membership_id,
                        destruction.method_code,
                        destruction.certificate_attachment_id,
+                       destruction.physical_destruction_confirmed_at,
+                       destruction.itc_treatment,
+                       reversal.registration_id,reversal.return_period_id,
+                       reversal.gstr3b_return_id,reversal.rule_version_id,
+                       reversal.evidence_attachment_id AS reversal_evidence_attachment_id,
+                       reversal.cgst_amount,reversal.sgst_amount,
+                       reversal.igst_amount,reversal.cess_amount,
+                       reversal.status AS reversal_status,
+                       applications.application_count,
+                       applications.applied_quantity,
+                       applications.applied_cgst_amount,
+                       applications.applied_sgst_amount,
+                       applications.applied_igst_amount,
+                       applications.applied_cess_amount,
                        document.total_abs_base_quantity,
                        document.total_value,
                        sum(line.base_quantity) AS line_quantity,
@@ -463,6 +477,25 @@ class CanonicalReconciler:
                   JOIN finance.journal_entries journal
                     ON journal.org_id=event.org_id
                    AND journal.id=event.journal_entry_id
+                  JOIN tax.input_credit_reversal_events reversal
+                    ON reversal.org_id=destruction.org_id
+                   AND reversal.destruction_id=destruction.id
+                   AND reversal.journal_entry_id=journal.id
+                  JOIN LATERAL (
+                    SELECT count(*)::integer AS application_count,
+                           sum(application.applied_base_quantity) AS applied_quantity,
+                           sum(application.applied_cgst_amount) AS applied_cgst_amount,
+                           sum(application.applied_sgst_amount) AS applied_sgst_amount,
+                           sum(application.applied_igst_amount) AS applied_igst_amount,
+                           sum(application.applied_cess_amount) AS applied_cess_amount
+                      FROM tax.input_credit_applications application
+                     WHERE application.org_id=reversal.org_id
+                       AND application.reversal_event_id=reversal.id
+                       AND application.destruction_id=destruction.id
+                       AND application.application_kind='destruction_reversal'
+                       AND application.application_direction='consume'
+                       AND application.status='posted'
+                  ) applications ON applications.application_count>0
                  WHERE destruction.org_id=%s::uuid AND destruction.id=%s::uuid
                    AND destruction.status='posted' AND document.status='posted'
                  GROUP BY destruction.created_by_membership_id,
@@ -470,6 +503,16 @@ class CanonicalReconciler:
                           destruction.posted_by_membership_id,
                           destruction.method_code,
                           destruction.certificate_attachment_id,
+                          destruction.physical_destruction_confirmed_at,
+                          destruction.itc_treatment,
+                          reversal.registration_id,reversal.return_period_id,
+                          reversal.gstr3b_return_id,reversal.rule_version_id,
+                          reversal.evidence_attachment_id,reversal.cgst_amount,
+                          reversal.sgst_amount,reversal.igst_amount,reversal.cess_amount,
+                          reversal.status,applications.application_count,
+                          applications.applied_quantity,applications.applied_cgst_amount,
+                          applications.applied_sgst_amount,applications.applied_igst_amount,
+                          applications.applied_cess_amount,
                           document.total_abs_base_quantity,document.total_value,
                           journal.status,journal.transaction_debit_total,
                           journal.transaction_credit_total
@@ -483,6 +526,14 @@ class CanonicalReconciler:
             ]
             assert destruction["method_code"] == "licensed_incineration"
             assert destruction["certificate_attachment_id"] is not None
+            assert destruction["physical_destruction_confirmed_at"] is not None
+            assert destruction["itc_treatment"] == "section_17_5_h_reversal"
+            assert destruction["reversal_evidence_attachment_id"] is not None
+            assert destruction["registration_id"] is not None
+            assert destruction["return_period_id"] is not None
+            assert destruction["gstr3b_return_id"] is not None
+            assert destruction["rule_version_id"] is not None
+            assert destruction["reversal_status"] == "posted"
             assert destruction["line_quantity"] == destruction[
                 "total_abs_base_quantity"
             ] == destruction["ledger_quantity"]
@@ -491,9 +542,19 @@ class CanonicalReconciler:
             ]
             assert destruction["nonzero_balance_count"] == 0
             assert destruction["journal_status"] == "posted"
-            assert destruction["transaction_debit_total"] == destruction[
-                "total_value"
-            ] == destruction["transaction_credit_total"]
+            assert destruction["applied_quantity"] == destruction["total_abs_base_quantity"]
+            for component in ("cgst", "sgst", "igst", "cess"):
+                assert destruction[f"applied_{component}_amount"] == destruction[
+                    f"{component}_amount"
+                ]
+            reversal_total = sum(
+                destruction[f"{component}_amount"]
+                for component in ("cgst", "sgst", "igst", "cess")
+            )
+            assert reversal_total > 0
+            assert destruction["transaction_debit_total"] == (
+                destruction["total_value"] + reversal_total
+            ) == destruction["transaction_credit_total"]
 
         expense_evidence: list[dict[str, Any]] = []
         if operation == "finance.expense_claim":
