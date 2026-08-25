@@ -13,6 +13,7 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   fullyParallel: false,
   workers: 1,
+  maxFailures: 0,
   retries: 0,
   reporter: [['line'], ['html', { open: 'never', outputFolder: path.join(artifactRoot, 'report') }]],
   use: {

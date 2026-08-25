@@ -1327,9 +1327,11 @@ jobs:
           expected=$(jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json)
           test "$discovered" -eq "$expected"
       - name: Run the exact-SHA live18 desktop browser certification
+        id: live18_browser
         working-directory: frontend
         run: npx playwright test --config e2e/live18/playwright.config.ts
       - name: Reconcile every template-ready browser resource through MCP and PostgreSQL
+        if: always() && steps.live18_browser.outcome != 'skipped'
         env:
           PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
         run: |

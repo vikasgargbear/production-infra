@@ -1134,6 +1134,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
 
 def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     workflow = _read(".github/workflows/production-readiness.yml")
+    browser_spec = _read("frontend/e2e/live18/canonical-live18.spec.ts")
+    playwright_config = _read("frontend/e2e/live18/playwright.config.ts")
     assert "run_live18:" in workflow
     assert "live18_provider:" in workflow
     assert "- render" in workflow
@@ -1187,6 +1189,12 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json" in live18
     assert "e2e/live18/playwright.config.ts" in live18
     assert "test_browser_evidence_reconciliation.py" in live18
+    assert "id: live18_browser" in live18
+    assert "if: always() && steps.live18_browser.outcome != 'skipped'" in live18
+    assert "maxFailures: 0" in playwright_config
+    assert "completed-resources.json" in browser_spec
+    assert "persistCompletedResource(contract.id, resourceId)" in browser_spec
+    assert "...loadCompletedResources()" in browser_spec
     assert live18.index("provision_ephemeral_canonical_live.py cleanup") < live18.index(
         "provision_ephemeral_browser_identities.py cleanup"
     )

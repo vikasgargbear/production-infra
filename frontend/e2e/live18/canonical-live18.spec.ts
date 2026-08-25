@@ -23,7 +23,48 @@ const matrix = loadReadyOperationMatrix();
 const fixture = loadFixture(requiredLiveRun);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH = /^sha256:[0-9a-f]{64}$/i;
-const completedResources: Record<`resource_${string}`, string> = {};
+
+type CompletedResources = Record<`resource_${string}`, string>;
+
+function evidenceRoot(): string {
+  const value = process.env.LIVE18_EVIDENCE_DIR?.trim();
+  if (!value) throw new Error('LIVE18_EVIDENCE_DIR is required for UUID reconciliation.');
+  return value;
+}
+
+function resourceStatePath(): string {
+  return path.join(evidenceRoot(), 'completed-resources.json');
+}
+
+function loadCompletedResources(): CompletedResources {
+  const statePath = resourceStatePath();
+  if (!fs.existsSync(statePath)) return {};
+  const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8')) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Live18 completed-resource state must be a JSON object.');
+  }
+  const state: CompletedResources = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!key.startsWith('resource_') || typeof value !== 'string' || !UUID.test(value)) {
+      throw new Error(`Invalid Live18 completed-resource state at ${key}.`);
+    }
+    state[key as `resource_${string}`] = value;
+  }
+  return state;
+}
+
+function persistCompletedResource(operationId: string, resourceId: string): void {
+  const root = evidenceRoot();
+  fs.mkdirSync(root, { recursive: true });
+  const statePath = resourceStatePath();
+  const next = {
+    ...loadCompletedResources(),
+    [`resource_${operationId}`]: resourceId,
+  } satisfies CompletedResources;
+  const temporaryPath = `${statePath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(temporaryPath, statePath);
+}
 
 interface CapturedResponse {
   actor: 'requester' | 'reviewer';
@@ -172,7 +213,7 @@ async function runOperation(
     const denialApi = await apiClient(config.apiOrigin, config.denialAccessToken);
     const prePrepareRuntime: RuntimeUiValues = {
       run_token: config.runToken,
-      ...completedResources,
+      ...loadCompletedResources(),
     };
     try {
       await runSteps(
@@ -285,7 +326,7 @@ async function runOperation(
 
       const denied = await denialApi.get(readbackPath);
       expect([403, 404]).toContain(denied.status());
-      completedResources[`resource_${contract.id}`] = resourceId;
+      persistCompletedResource(contract.id, resourceId);
 
       const evidence = {
         evidence_schema: 'aasopharma.live18.browser.v1',
@@ -306,10 +347,9 @@ async function runOperation(
         http_evidence: captured,
         cleanup_id: findDeep(executions[0].responseBody, 'reversal_command_id') || null,
       };
-      const evidenceRoot = process.env.LIVE18_EVIDENCE_DIR?.trim();
-      if (!evidenceRoot) throw new Error('LIVE18_EVIDENCE_DIR is required for UUID reconciliation.');
-      fs.mkdirSync(evidenceRoot, { recursive: true });
-      const evidencePath = path.join(evidenceRoot, `${contract.id}.json`);
+      const root = evidenceRoot();
+      fs.mkdirSync(root, { recursive: true });
+      const evidencePath = path.join(root, `${contract.id}.json`);
       fs.writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
       await testInfo.attach(`${contract.id}-canonical-evidence`, {
         body: Buffer.from(JSON.stringify(evidence, null, 2)), contentType: 'application/json',
