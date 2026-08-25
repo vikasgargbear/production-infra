@@ -71,8 +71,6 @@ from .api.routes.compliance import compliance
 
 # Reports Module (formerly Analytics)
 from .api.routes.reports import dashboard
-from .api.routes.reports import collection as collection_center
-from .api.routes.reports import outstanding as customer_outstanding
 
 # Organization Module
 from .api.routes.org import company_assets
@@ -351,10 +349,10 @@ include_legacy_read_only_router(api, compliance.router, prefix="/compliance", ta
 
 # --- Analytics ---
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
-# Aging and collection dashboards remain readable. Communication, campaign,
-# and payment-recording side effects require reviewed operator commands.
-include_legacy_read_only_router(api, collection_center.router, prefix="/collection-center", tags=["Collection Center"])
-api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
+# Authoritative aging and collection totals are mounted by canonical_erp_reads.
+# The retired collection router exposed invented follow-up, agent, campaign and
+# efficiency facts; customer-outstanding also contained an unsafe first-org
+# fallback.  Neither legacy report router is mounted.
 
 # --- Organization ---
 # Canonical company profile reads are mounted by canonical_erp_reads above.

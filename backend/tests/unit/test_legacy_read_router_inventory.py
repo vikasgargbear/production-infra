@@ -22,7 +22,7 @@ EXPECTED_LEGACY_ROUTER_REFERENCES = {
     "sales_returns_router", "purchase_returns_router", "inventory.router",
     "stock_adjustments.router", "stock_movements.router", "stock_writeoff.router",
     "payments.router", "payment_allocation.router", "credit_debit_notes.router",
-    "gst.router", "gstr2b.router", "compliance.router", "collection_center.router",
+    "gst.router", "gstr2b.router", "compliance.router",
 }
 
 
@@ -38,6 +38,8 @@ RETIRED_MODULE_PREFIXES = (
     "app.api.routes.finance.tax.",
     "app.api.routes.finance.expenses.",
     "app.api.routes.documents",
+    "app.api.routes.reports.collection",
+    "app.api.routes.reports.outstanding",
 )
 
 
@@ -136,14 +138,21 @@ LEGACY_READ_INVENTORY = {
         "/api/compliance/compliance/checklist", "/api/compliance/compliance/alerts",
         "/api/compliance/compliance/reports/regulatory",
     },
-    "app.api.routes.reports.collection": {
-        "/api/collection-center/collection/aging-data",
-        "/api/collection-center/collection/analytics/performance",
-        "/api/collection-center/collection/analytics/agent-performance",
-        "/api/collection-center/collection/customer/{customer_id}/outstanding",
-        "/api/collection-center/collection/hub-stats",
-        "/api/collection-center/collection/notifications",
-        "/api/collection-center/collection/campaigns",
+}
+
+# This router predates the read-only helper and remains directly mounted only
+# because the desktop Dashboard still calls its unique projections.  It is
+# tracked separately so the final canonical migration cannot overlook it.
+DIRECT_LEGACY_READ_INVENTORY = {
+    "app.api.routes.reports.dashboard": {
+        "/api/dashboard/", "/api/dashboard/stats", "/api/dashboard/recent-orders",
+        "/api/dashboard/revenue", "/api/dashboard/top-products",
+        "/api/dashboard/inventory-alerts", "/api/dashboard/customer-analytics",
+        "/api/dashboard/financial-summary", "/api/dashboard/kpis",
+        "/api/dashboard/sales-analytics", "/api/dashboard/inventory-summary",
+        "/api/dashboard/top-customers", "/api/dashboard/expiry-alerts",
+        "/api/dashboard/low-stock-alerts", "/api/dashboard/pending-payments",
+        "/api/dashboard/recent-activities",
     },
 }
 
@@ -180,6 +189,15 @@ def test_every_remaining_legacy_get_is_explicitly_inventoried() -> None:
     assert actual == LEGACY_READ_INVENTORY
 
 
+def test_direct_legacy_dashboard_reads_are_also_inventoried() -> None:
+    actual = {module: set() for module in DIRECT_LEGACY_READ_INVENTORY}
+    for route in _get_routes():
+        module = route.endpoint.__module__
+        if module in actual:
+            actual[module].add(route.path)
+    assert actual == DIRECT_LEGACY_READ_INVENTORY
+
+
 def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> None:
     paths = app.openapi()["paths"]
 
@@ -194,6 +212,14 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
         "/api/tax-entries/{entry_id}", "/api/tax-entries/overview",
         "/api/expense-claims", "/api/expense-claims/expense-types",
         "/api/expense-claims/{claim_id}",
+        "/api/collection-center/collection/analytics/performance",
+        "/api/collection-center/collection/analytics/agent-performance",
+        "/api/collection-center/collection/customer/{customer_id}/outstanding",
+        "/api/collection-center/collection/hub-stats",
+        "/api/collection-center/collection/notifications",
+        "/api/collection-center/collection/campaigns",
+        "/api/customer-outstanding/net-position",
+        "/api/customer-outstanding/collection-metrics",
     }:
         assert retired_path not in paths
 
@@ -227,3 +253,6 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
     assert "post" in paths["/api/purchase-upload/parse-invoice-safe"]
     assert "post" in paths["/api/purchase-upload/validate-invoice"]
     assert "post" in paths["/api/tax-entries/calculate"]
+    assert paths["/api/collection-center/collection/aging-data"]["get"][
+        "operationId"
+    ].startswith("canonical_collection_aging")
