@@ -932,7 +932,7 @@ jobs:
             .oauth_server_allow_dynamic_registration == false and
             .oauth_server_authorization_path == "/oauth/consent"
           ' <<<"$response" >/dev/null
-          python3 backend/scripts/provision_staging_mcp_oauth.py
+          python3 backend/scripts/provision_staging_mcp_oauth.py --mode client-only
 
       - name: Reconcile and deploy the free Render pilot
         if: inputs.deploy_render_pilot == true
@@ -1217,6 +1217,7 @@ jobs:
           set -euo pipefail
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          python3 backend/scripts/provision_staging_mcp_oauth.py --mode bind-existing-demo
           python3 backend/scripts/exercise_staging_mcp_oauth.py
 
       - name: Publish staging baseline evidence

@@ -1001,7 +1001,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert 'oauth_server_authorization_path: "/oauth/consent"' in workflow
     assert "for attempt in 1 2 3 4 5" in workflow
     assert "canonical-staging-oauth.json" in workflow
-    assert "provision_staging_mcp_oauth.py" in workflow
+    assert "provision_staging_mcp_oauth.py --mode client-only" in workflow
+    assert "provision_staging_mcp_oauth.py --mode bind-existing-demo" in workflow
     assert "exercise_staging_mcp_oauth.py" in workflow
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
 
@@ -1038,6 +1039,17 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "web_bindings = cursor.fetchall()" in provisioner
     assert "if len(web_bindings) != 1:" in provisioner
     assert "web_auth_user_id == auth_user_id" in provisioner
+    assert 'choices=("complete", "client-only", "bind-existing-demo")' in provisioner
+    assert "Deferred demo grant binding until canonical demo provisioning" in provisioner
+    assert "Canonical demo organization must exist before OAuth grant binding" in provisioner
+    assert "canonical-staging-web-membership:" in provisioner
+    assert "canonical-staging-web-access:" in provisioner
+    assert workflow.index("--mode client-only") < workflow.index(
+        "Provision and exercise the disposable demo organization"
+    )
+    assert workflow.index("Provision and exercise the disposable demo organization") < workflow.index(
+        "--mode bind-existing-demo"
+    )
     assert "boundary_only" in workflow
     assert "business_flow" in workflow
     assert 'exercise_mode not in {"boundary_only", "business_flow"}' in exercise

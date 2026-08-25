@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -238,6 +239,24 @@ def _bind_demo(
             f"canonical-staging-web-agent:{DEMO_ORG_ID}:{web_auth_user_id}:{run_id}",
         )
     )
+    web_user_id = str(
+        uuid5(
+            NAMESPACE_URL,
+            f"canonical-staging-web-user:{DEMO_ORG_ID}:{web_auth_user_id}",
+        )
+    )
+    web_membership_id = str(
+        uuid5(
+            NAMESPACE_URL,
+            f"canonical-staging-web-membership:{DEMO_ORG_ID}:{web_auth_user_id}",
+        )
+    )
+    web_access_grant_id = str(
+        uuid5(
+            NAMESPACE_URL,
+            f"canonical-staging-web-access:{DEMO_ORG_ID}:{web_auth_user_id}",
+        )
+    )
     with psycopg2.connect(database_url) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -249,6 +268,116 @@ def _bind_demo(
             )
             if cursor.fetchone() != (1,):
                 return False
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            for name, value in (
+                ("app.org_id", DEMO_ORG_ID),
+                ("app.auth_user_id", REVIEWER_AUTH_USER_ID),
+                ("app.membership_id", REVIEWER_MEMBERSHIP_ID),
+                ("app.request_id", TEST_REQUEST_ID),
+            ):
+                cursor.execute("SELECT set_config(%s,%s,true)", (name, value))
+            cursor.execute(
+                """
+                SELECT id::text FROM core.users
+                 WHERE auth_user_id=%s
+                 ORDER BY id
+                 LIMIT 2
+                """,
+                (web_auth_user_id,),
+            )
+            web_users = cursor.fetchall()
+            if len(web_users) > 1:
+                raise ProvisioningError(
+                    "Reviewed staging web identity resolves to multiple canonical users"
+                )
+            if web_users:
+                web_user_id = web_users[0][0]
+                cursor.execute(
+                    """
+                    UPDATE core.users
+                       SET status='active', row_version=row_version+1
+                     WHERE id=%s AND status<>'active'
+                    """,
+                    (web_user_id,),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO core.users (id,auth_user_id,display_name,status)
+                    VALUES (%s,%s,'Canonical staging web operator','active')
+                    """,
+                    (web_user_id, web_auth_user_id),
+                )
+            cursor.execute(
+                """
+                SELECT id::text FROM core.memberships
+                 WHERE org_id=%s AND user_id=%s
+                 ORDER BY id
+                 LIMIT 2
+                """,
+                (DEMO_ORG_ID, web_user_id),
+            )
+            web_memberships = cursor.fetchall()
+            if len(web_memberships) > 1:
+                raise ProvisioningError(
+                    "Reviewed staging web identity has multiple demo memberships"
+                )
+            if web_memberships:
+                web_membership_id = web_memberships[0][0]
+                cursor.execute(
+                    """
+                    UPDATE core.memberships
+                       SET status='active', row_version=row_version+1,
+                           updated_by_membership_id=%s
+                     WHERE org_id=%s AND id=%s AND status<>'active'
+                    """,
+                    (REVIEWER_MEMBERSHIP_ID, DEMO_ORG_ID, web_membership_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO core.memberships (
+                        org_id,id,user_id,status,joined_at,
+                        created_by_membership_id,updated_by_membership_id
+                    ) VALUES (%s,%s,%s,'active',transaction_timestamp(),%s,%s)
+                    """,
+                    (
+                        DEMO_ORG_ID,
+                        web_membership_id,
+                        web_user_id,
+                        REVIEWER_MEMBERSHIP_ID,
+                        REVIEWER_MEMBERSHIP_ID,
+                    ),
+                )
+            cursor.execute(
+                """
+                INSERT INTO core.access_grants (
+                    org_id,id,membership_id,role_id,scope_kind,branch_id,
+                    valid_from_at,expires_at,status,created_by_membership_id
+                ) SELECT
+                    %s,%s,%s,%s,'organization',NULL,transaction_timestamp(),
+                    transaction_timestamp()+interval '30 days','active',%s
+                 WHERE NOT EXISTS (
+                    SELECT 1 FROM core.access_grants
+                     WHERE org_id=%s AND membership_id=%s AND role_id=%s
+                       AND status='active'
+                )
+                ON CONFLICT (org_id,id) DO UPDATE SET
+                    valid_from_at=excluded.valid_from_at,
+                    expires_at=excluded.expires_at,
+                    status='active', row_version=access_grants.row_version+1
+                """,
+                (
+                    DEMO_ORG_ID,
+                    web_access_grant_id,
+                    web_membership_id,
+                    DEMO_ROLE_ID,
+                    REVIEWER_MEMBERSHIP_ID,
+                    DEMO_ORG_ID,
+                    web_membership_id,
+                    DEMO_ROLE_ID,
+                ),
+            )
             cursor.execute(
                 """
                 SELECT user_row.id::text, membership.id::text
@@ -274,14 +403,6 @@ def _bind_demo(
                     "user and membership in the demo organization"
                 )
             web_user_id, web_membership_id = web_bindings[0]
-            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-            for name, value in (
-                ("app.org_id", DEMO_ORG_ID),
-                ("app.auth_user_id", REVIEWER_AUTH_USER_ID),
-                ("app.membership_id", REVIEWER_MEMBERSHIP_ID),
-                ("app.request_id", TEST_REQUEST_ID),
-            ):
-                cursor.execute("SELECT set_config(%s,%s,true)", (name, value))
             cursor.execute(
                 """
                 INSERT INTO core.users (id,auth_user_id,display_name,status)
@@ -584,17 +705,35 @@ def _redacted_annotation(exc: BaseException) -> str:
     return detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def main() -> int:
+def _mode(argv: list[str] | None = None) -> str:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        choices=("complete", "client-only", "bind-existing-demo"),
+        default="complete",
+    )
+    return parser.parse_args(argv).mode
+
+
+def main(argv: list[str] | None = None) -> int:
+    mode = _mode(argv)
     if _required("CANONICAL_STAGING_PROJECT_REF") != PROJECT_REF:
         raise ProvisioningError("Refusing OAuth provisioning outside the reviewed staging project")
     if _required("SUPABASE_URL") != SUPABASE_URL:
         raise ProvisioningError("SUPABASE_URL does not match the reviewed staging project")
     management_token = _required("SUPABASE_ACCESS_TOKEN")
-    database_url = _required("PSYCOPG_DATABASE_URL")
+    database_url = (
+        _required("PSYCOPG_DATABASE_URL") if mode != "client-only" else ""
+    )
     service_key = _service_role_key(management_token)
     print(f"::add-mask::{service_key}")
     print("Resolved the staging project admin key")
-    password = secrets.token_urlsafe(32)
+    existing_password = os.getenv("CANONICAL_STAGING_MCP_TEST_PASSWORD", "").strip()
+    if mode == "bind-existing-demo" and not existing_password:
+        raise ProvisioningError(
+            "CANONICAL_STAGING_MCP_TEST_PASSWORD is required when binding an existing demo"
+        )
+    password = existing_password or secrets.token_urlsafe(32)
     print(f"::add-mask::{password}")
     client = _reconcile_client(service_key)
     print("Reconciled the reviewed public OAuth client")
@@ -610,13 +749,21 @@ def main() -> int:
         raise ProvisioningError(
             "The reviewed staging web identity must be distinct from the disposable MCP identity"
         )
-    demo_bound = _bind_demo(
-        database_url,
-        client["client_id"],
-        auth_user_id,
-        web_auth_user_id,
-    )
-    print("Reconciled the isolated MCP and reviewed web demo grants")
+    demo_bound = False
+    if mode != "client-only":
+        demo_bound = _bind_demo(
+            database_url,
+            client["client_id"],
+            auth_user_id,
+            web_auth_user_id,
+        )
+        if not demo_bound:
+            raise ProvisioningError(
+                "Canonical demo organization must exist before OAuth grant binding"
+            )
+        print("Reconciled the isolated MCP and reviewed web demo grants")
+    else:
+        print("Deferred demo grant binding until canonical demo provisioning")
     _write_github_env(
         {
             "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client["client_id"],
@@ -636,6 +783,7 @@ def main() -> int:
                 "token_endpoint_auth_method": "none",
                 "redirect_uris": list(REDIRECT_URIS),
                 "dynamic_client_registration": False,
+                "provisioning_mode": mode,
                 "demo_grant_bound": demo_bound,
                 "web_test_grant_bound": demo_bound,
             },
