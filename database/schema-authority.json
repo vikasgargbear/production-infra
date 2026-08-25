@@ -66,6 +66,8 @@
     "backend/alembic/sql/20260825_0020_calculation_schema_c_collation.manifest.json",
     "backend/alembic/versions/20260825_0021_gst_registered_inventory_destruction.py",
     "backend/alembic/sql/20260825_0021_gst_registered_inventory_destruction.sql",
+    "backend/alembic/versions/20260825_0022_branch_scoped_evidence_attachments.py",
+    "backend/alembic/sql/20260825_0022_branch_scoped_evidence_attachments.sql",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],
