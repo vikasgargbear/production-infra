@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date, datetime, timezone
+import hashlib
 from pathlib import Path
 from uuid import uuid4
 
@@ -149,21 +150,24 @@ def test_adjustment_calculation_is_typed_and_treatment_exact(
 
 def test_database_has_exact_resolve_prepare_dispatch_and_post_lifecycle() -> None:
     root = Path(__file__).resolve().parents[3]
-    sql = (root / "backend/alembic/sql/20260820_0001_canonical_v1.sql").read_text()
+    baseline = (root / "backend/alembic/sql/20260820_0001_canonical_v1.sql").read_text()
+    sql = (
+        root
+        / "backend/alembic/sql/20260825_0007_adjustment_note_command.sql"
+    ).read_text()
     registry = (root / "backend/app/infrastructure/operator_actions/registry.py").read_text()
 
-    assert 'CREATE FUNCTION "erp_commercial_commands"."post_adjustment_note"' in sql
-    assert "generic posting requires an approved non-return adjustment note" in sql
-    assert "adjustment journal is not balanced" in sql
-    assert "INSERT INTO finance.allocations" in sql
-    assert "INSERT INTO finance.open_items" in sql
-    assert "INSERT INTO tax.documents" in sql
-    assert "INSERT INTO finance.accounting_events" in sql
-    assert "'finance.adjustment_note.post'" in sql
+    assert 'CREATE FUNCTION "erp_commercial_commands"."post_adjustment_note"' in baseline
+    assert "generic posting requires an approved non-return adjustment note" in baseline
+    assert "adjustment journal is not balanced" in baseline
+    assert "INSERT INTO finance.allocations" in baseline
+    assert "INSERT INTO finance.open_items" in baseline
+    assert "INSERT INTO tax.documents" in baseline
+    assert "INSERT INTO finance.accounting_events" in baseline
 
     assert '"finance.adjustment_note.prepare": ActionAdapterBinding' in registry
     execute_function = sql.split(
-        'CREATE FUNCTION "erp_automation_commands"."execute_approved_command"', 1
+        'CREATE OR REPLACE FUNCTION "erp_automation_commands"."execute_approved_command"', 1
     )[1].split(
         'ALTER FUNCTION "erp_automation_commands"."execute_approved_command"', 1
     )[0]
@@ -173,6 +177,28 @@ def test_database_has_exact_resolve_prepare_dispatch_and_post_lifecycle() -> Non
     assert "sales credit quantity exceeds remaining original invoice quantity" in sql
     assert "purchase debit quantity exceeds remaining original supplier-invoice quantity" in sql
     assert "adjustment-note approval transition lost its draft state" in sql
+
+
+def test_incremental_adjustment_migration_is_hash_bound_linear_and_pg15_gated() -> None:
+    root = Path(__file__).resolve().parents[3]
+    sql_path = root / "backend/alembic/sql/20260825_0007_adjustment_note_command.sql"
+    revision_path = (
+        root / "backend/alembic/versions/20260825_0007_adjustment_note_command.py"
+    )
+    sql = sql_path.read_text()
+    revision = revision_path.read_text()
+    digest = hashlib.sha256(sql.encode()).hexdigest()
+    gate = (root / "database/canonical/ci/run_alembic_postgres15_gate.sh").read_text()
+
+    assert 'revision = "20260825_0007"' in revision
+    assert 'down_revision = "20260825_0006"' in revision
+    assert digest in revision
+    assert "CanonicalBaselineError" in revision.split("def downgrade", 1)[1]
+    assert sql.count("CREATE OR REPLACE FUNCTION") == 3
+    assert "TO \"erp_runtime\"" in sql
+    assert "TO \"erp_calculator\"" in sql
+    assert "check_canonical_adjustment_note_runtime_role.py" in gate
+    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0007\"' in gate
 
 
 def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:

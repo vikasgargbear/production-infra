@@ -45,6 +45,11 @@ OPERATOR_COMMANDS = {
     "inventory.adjustment.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.destruction.prepare": ("compliance.destruction.post", "destruction"),
 }
+BASELINE_OPERATOR_COMMANDS = {
+    capability: binding
+    for capability, binding in OPERATOR_COMMANDS.items()
+    if capability != "finance.adjustment_note.prepare"
+}
 
 
 def _sql_text_list(values: list[str]) -> str:
@@ -54,7 +59,7 @@ def _sql_text_list(values: list[str]) -> str:
 def _target_case(expression: str) -> str:
     branches = " ".join(
         f"WHEN '{capability}' THEN '{resource_type}'"
-        for capability, (_, resource_type) in OPERATOR_COMMANDS.items()
+        for capability, (_, resource_type) in BASELINE_OPERATOR_COMMANDS.items()
     )
     return f"CASE {expression} {branches} ELSE NULL END"
 
@@ -62,7 +67,7 @@ def _target_case(expression: str) -> str:
 def _operation_case(expression: str) -> str:
     branches = " ".join(
         f"WHEN '{capability}' THEN '{operation}'"
-        for capability, (operation, _) in OPERATOR_COMMANDS.items()
+        for capability, (operation, _) in BASELINE_OPERATOR_COMMANDS.items()
     )
     return f"CASE {expression} {branches} ELSE NULL END"
 
@@ -2982,7 +2987,7 @@ END
 
 
 def _request_match_definition() -> list[str]:
-    operator_capabilities = _sql_text_list(sorted(OPERATOR_COMMANDS))
+    operator_capabilities = _sql_text_list(sorted(BASELINE_OPERATOR_COMMANDS))
     trigger_target_case = _target_case("NEW.capability_code")
     trigger_operation_case = _operation_case("NEW.capability_code")
     prepare_target_case = _target_case("capability_name")
@@ -7619,9 +7624,55 @@ END
 def _definitions() -> dict[str, list[str]]:
     return {
         "automation.agent_grant_capabilities:agent_grant_capabilities_revocation": _capability_definition(),
-        "automation.command_requests:command_execution_guard": _execution_definition(),
-        "automation.command_requests:command_request_matches_grant": _request_match_definition(),
+        "automation.command_requests:command_execution_guard": _baseline_execution_definition(),
+        "automation.command_requests:command_request_matches_grant": _baseline_request_match_definition(),
     }
+
+
+def _baseline_execution_definition() -> list[str]:
+    """Keep revision 0001 immutable; adjustment execution ships in 0007."""
+    statements = _execution_definition()
+    start = "    ELSIF request_row.operation='finance.adjustment_note.post' THEN\n"
+    end = (
+        "    ELSIF request_row.operation='finance.payment.post' "
+        "AND request_row.capability_code='finance.customer_receipt.prepare' THEN\n"
+    )
+    dispatch_start = "      WHEN 'finance.adjustment_note.post' THEN\n"
+    dispatch_end = "      WHEN 'finance.payment.post' THEN\n"
+    result: list[str] = []
+    for statement in statements:
+        if not statement.startswith(
+            'CREATE FUNCTION "erp_automation_commands"."execute_approved_command"'
+        ):
+            result.append(statement)
+            continue
+        statement = statement.replace(
+            "    adjustment_note finance.adjustment_notes%ROWTYPE;\n", ""
+        )
+        prefix, separator, remainder = statement.partition(start)
+        if not separator:
+            raise ContractError("adjustment-note execute branch marker is missing")
+        _removed, separator, suffix = remainder.partition(end)
+        if not separator:
+            raise ContractError("adjustment-note execute branch end marker is missing")
+        statement = prefix + end + suffix
+        prefix, separator, remainder = statement.partition(dispatch_start)
+        if not separator:
+            raise ContractError("adjustment-note dispatcher marker is missing")
+        _removed, separator, suffix = remainder.partition(dispatch_end)
+        if not separator:
+            raise ContractError("adjustment-note dispatcher end marker is missing")
+        result.append(prefix + dispatch_end + suffix)
+    return result
+
+
+def _baseline_request_match_definition() -> list[str]:
+    """Keep adjustment prepare functions out of the immutable 0001 package."""
+    return [
+        statement
+        for statement in _request_match_definition()
+        if "adjustment_note_prepare" not in statement.splitlines()[0]
+    ]
 
 
 def generated_artifacts() -> tuple[str, str]:
