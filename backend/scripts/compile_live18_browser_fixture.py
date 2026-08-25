@@ -520,9 +520,23 @@ def resolve_authoritative_facts(
              certificate.id::text,certificate.original_filename,
              reversal.id::text,reversal.original_filename,
              registration.id::text,period.id::text,filing.id::text,rule.id::text,
-             count(DISTINCT lot.id),sum(lot.remaining_cgst_amount)::text,
-             sum(lot.remaining_sgst_amount)::text,sum(lot.remaining_igst_amount)::text,
-             sum(lot.remaining_cess_amount)::text,
+             count(DISTINCT lot.id),
+             (CASE WHEN sum(lot.remaining_base_quantity)=balance.on_hand_quantity
+               THEN sum(lot.remaining_cgst_amount)
+               ELSE round(sum(lot.remaining_cgst_amount)*balance.on_hand_quantity/
+                          sum(lot.remaining_base_quantity),2) END)::text,
+             (CASE WHEN sum(lot.remaining_base_quantity)=balance.on_hand_quantity
+               THEN sum(lot.remaining_sgst_amount)
+               ELSE round(sum(lot.remaining_sgst_amount)*balance.on_hand_quantity/
+                          sum(lot.remaining_base_quantity),2) END)::text,
+             (CASE WHEN sum(lot.remaining_base_quantity)=balance.on_hand_quantity
+               THEN sum(lot.remaining_igst_amount)
+               ELSE round(sum(lot.remaining_igst_amount)*balance.on_hand_quantity/
+                          sum(lot.remaining_base_quantity),2) END)::text,
+             (CASE WHEN sum(lot.remaining_base_quantity)=balance.on_hand_quantity
+               THEN sum(lot.remaining_cess_amount)
+               ELSE round(sum(lot.remaining_cess_amount)*balance.on_hand_quantity/
+                          sum(lot.remaining_base_quantity),2) END)::text,
              to_char(certificate.verified_at AT TIME ZONE 'UTC',
                      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
              witness.display_name,witness_membership.id::text,
@@ -610,6 +624,24 @@ def resolve_authoritative_facts(
             AND returned_ledger.quantity_delta>0
             AND returned_document.document_type='sales_return_receipt'
             AND returned_document.status='posted')
+         AND EXISTS (
+           SELECT 1
+             FROM tax.input_credit_applications restoration
+             JOIN tax.input_credit_lots source_lot
+               ON source_lot.org_id=restoration.org_id
+              AND source_lot.id=restoration.input_credit_lot_id
+             JOIN inventory.stock_ledger_entries restoration_ledger
+               ON restoration_ledger.org_id=restoration.org_id
+              AND restoration_ledger.id=restoration.stock_ledger_entry_id
+            WHERE restoration.org_id=balance.org_id
+              AND source_lot.batch_id=balance.batch_id
+              AND restoration_ledger.location_id=balance.location_id
+              AND restoration.application_kind='sales_return_restoration'
+              AND restoration.application_direction='restore'
+              AND restoration.status='posted'
+            GROUP BY source_lot.batch_id,restoration_ledger.location_id
+           HAVING sum(restoration.applied_base_quantity)>=balance.on_hand_quantity
+         )
          AND NOT EXISTS (SELECT 1 FROM automation.command_requests command
           WHERE command.org_id=certificate.org_id
             AND command.capability_code='inventory.destruction.prepare'
@@ -619,10 +651,12 @@ def resolve_authoritative_facts(
        GROUP BY balance.batch_id,batch.batch_number,batch.status,
                 balance.on_hand_quantity,balance.inventory_value,location.id,location.name,
                 conversion.id,conversion.from_uom_code,conversion.multiplier,
-                certificate.id,certificate.original_filename,reversal.id,reversal.original_filename,
+                certificate.id,certificate.original_filename,certificate.sha256,
+                reversal.id,reversal.original_filename,
                 registration.id,period.id,filing.id,rule.id,certificate.verified_at,
                 witness.display_name,witness_membership.id,returned_source.reason_code
-      HAVING sum(lot.remaining_base_quantity)=balance.on_hand_quantity
+      HAVING count(DISTINCT lot.id)=1
+         AND sum(lot.remaining_base_quantity)>=balance.on_hand_quantity
          AND sum(lot.remaining_cgst_amount+lot.remaining_sgst_amount+
                  lot.remaining_igst_amount+lot.remaining_cess_amount)>0
        ORDER BY balance.batch_id

@@ -139,8 +139,10 @@ def test_sql_fail_closes_unreviewed_regulatory_and_stock_variants() -> None:
         "COALESCE(ndps_regulated,false)=false",
         "recalled stock requires a recall-linked destruction command",
         "bounded destruction requires the full locked batch-location balance",
+        "returned_ledger.batch_id=(allocation->>'batch_id')::uuid",
         "license.license_type_code IN ('drug_wholesale_form_20b','drug_wholesale_form_21b')",
         "approver_membership_id<>request_row.requested_by_membership_id",
+        "#variable_conflict use_variable",
     ):
         assert fragment in SQL
 
@@ -173,6 +175,15 @@ def test_runtime_privilege_contract_lists_only_reviewed_destruction_functions() 
         assert contract.count(f"'{function}'") == 1
     assert "runtime_count<>3" in contract
     assert "private inventory destruction assertion exposes execute privilege" in contract
+
+
+def test_demo_provisions_destruction_sequence_and_mcp_readback_authority() -> None:
+    provisioner = (
+        ROOT / "backend/scripts/provision_canonical_demo.py"
+    ).read_text(encoding="utf-8")
+    assert '"destruction": "DEMO-DST-"' in provisioner
+    assert '"inventory.destructions.get", "read", "read_only", "none"' in provisioner
+    assert "demo cross-table audit requires unique command requests" in provisioner
 
 
 def test_rest_readback_requires_posted_destruction_ledger_and_journal() -> None:
