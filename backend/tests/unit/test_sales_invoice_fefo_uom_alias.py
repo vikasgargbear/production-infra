@@ -28,6 +28,11 @@ def test_fefo_uom_alias_migration_is_hash_bound_and_current() -> None:
     assert "requested_conversion.multiplier" in generator
     assert "fefo_eligible AS" in generator
     assert "FROM fefo_eligible JOIN totals" in generator
+    assert "definition_sha256:=pg_catalog.encode(extensions.digest(" in sql
+    assert (
+        "1c3e7b3c0be0312bf18eda68ae177604a960734ffe87a6b56a8d6331068e21e1"
+        in sql
+    )
     assert (
         "JOIN catalog.uom_conversions conversion ON "
         "conversion.org_id=organization_id"
@@ -45,6 +50,11 @@ def test_multibatch_invoice_inventory_lineage_is_hash_bound_and_aggregated() -> 
     assert "sales_invoice_multibatch_inventory_lineage_v1" in sql
     assert "sales_invoice_multibatch_inventory_lineage_v1" in generator
     assert "sibling.sales_invoice_line_id=invoice_line.id" in generator
+    assert "definition_sha256:=pg_catalog.encode(extensions.digest(" in sql
+    assert (
+        "7ded2c77a3a18d3ef9ca37d5366c16656c56ed44b12929e47fda3ba3f7be5a5b"
+        in sql
+    )
     assert (
         "invoice_line.base_billed_quantity+invoice_line.base_free_quantity="
         "line.base_quantity"

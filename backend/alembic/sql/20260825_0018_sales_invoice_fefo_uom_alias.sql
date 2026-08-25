@@ -6,6 +6,7 @@ SET LOCAL ROLE erp_migration_owner;
 DO $migration$
 DECLARE
     definition text;
+    definition_sha256 text;
     old_requested constant text := $old$      WITH requested AS (
         SELECT (line.value->>'product_id')::uuid product_id,(allocation.value->>'batch_id')::uuid batch_id,
           sum(pg_catalog.round(((allocation.value->>'billed_quantity')::numeric+(allocation.value->>'free_quantity')::numeric)*conversion.multiplier,6)) requested_base
@@ -32,8 +33,11 @@ BEGIN
     SELECT pg_catalog.pg_get_functiondef(
       'erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure
     ) INTO STRICT definition;
+    definition_sha256:=pg_catalog.encode(extensions.digest(
+      pg_catalog.convert_to(definition,'UTF8'),'sha256'),'hex');
 
-    IF pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v3')>0
+    IF definition_sha256='1c3e7b3c0be0312bf18eda68ae177604a960734ffe87a6b56a8d6331068e21e1'
+       AND pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v3')>0
        AND pg_catalog.strpos(definition,old_requested)=0 THEN
         RETURN;
     END IF;

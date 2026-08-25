@@ -6,6 +6,7 @@ SET LOCAL ROLE erp_migration_owner;
 DO $migration$
 DECLARE
     definition text;
+    definition_sha256 text;
     old_lineage constant text := $old$             (doc.sales_invoice_id IS NOT NULL AND invoice_line.invoice_id=doc.sales_invoice_id
               AND invoice_line.line_kind='product' AND invoice_line.product_id=line.product_id
               AND invoice_line.uom_code=line.uom_code
@@ -24,8 +25,11 @@ BEGIN
     SELECT pg_catalog.pg_get_functiondef(
       'erp_trade_commands.assert_inventory_document(uuid,uuid)'::regprocedure
     ) INTO STRICT definition;
+    definition_sha256:=pg_catalog.encode(extensions.digest(
+      pg_catalog.convert_to(definition,'UTF8'),'sha256'),'hex');
 
-    IF pg_catalog.strpos(definition,'sales_invoice_multibatch_inventory_lineage_v1')>0
+    IF definition_sha256='7ded2c77a3a18d3ef9ca37d5366c16656c56ed44b12929e47fda3ba3f7be5a5b'
+       AND pg_catalog.strpos(definition,'sales_invoice_multibatch_inventory_lineage_v1')>0
        AND pg_catalog.strpos(definition,old_lineage)=0 THEN
         RETURN;
     END IF;

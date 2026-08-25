@@ -9,7 +9,7 @@
   ],
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-calculation-authority-enforcements.json",
-  "mapping_sha256": "4ef50c58d26f3d6749a3407dbe1740599fe479a980979989ee7759b2070e847c",
+  "mapping_sha256": "2e42602e92c36026b7be49a8f59d9d28c6046e47d02244b0fbb34e614771835a",
   "postgresql": "15+",
   "private_boundary": {
     "function": "erp_calculation_authority.consume_artifact",
@@ -54,7 +54,7 @@
     }
   },
   "sql_file": "calculation-authority.sql",
-  "sql_sha256": "87eba26e51839a6e11896ca6a80cd01af824593eb3224353bda3f4f538acfdcd",
+  "sql_sha256": "8d010d026f5a8d96c8a6cc25ecc8e2c0e00e45d127de5b28e633ee46f4df5143",
   "status": "blocked_pending_calculator_credential_and_execution_tests",
   "supported_operations": [
     "sales.order.approve",

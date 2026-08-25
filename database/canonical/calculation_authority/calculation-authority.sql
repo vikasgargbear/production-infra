@@ -110,7 +110,7 @@ DECLARE
     field record;
 BEGIN
     IF pg_catalog.jsonb_typeof(p_document)<>'object'
-       OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document) AS keys(key)) IS DISTINCT FROM expected_top
+       OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document) AS keys(key)) IS DISTINCT FROM expected_top
        OR p_document->>'schema'<>'aasopharma.trade-calculation-output'
        OR p_document->>'schema_version'<>'1'
        OR p_document->>'serializer_version'<>'aasopharma-jcs-decimal-v1'
@@ -128,7 +128,7 @@ BEGIN
        OR pg_catalog.jsonb_typeof(p_document->'ruleset_version')<>'string' THEN
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation output top-level schema is invalid';
     END IF;
-    IF (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document->'totals') AS keys(key)) IS DISTINCT FROM expected_totals THEN
+    IF (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document->'totals') AS keys(key)) IS DISTINCT FROM expected_totals THEN
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation output totals schema is invalid';
     END IF;
     FOR field IN SELECT key,value FROM pg_catalog.jsonb_each(p_document->'totals') LOOP
@@ -138,7 +138,7 @@ BEGIN
     END LOOP;
     FOR line IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'lines') LOOP
         IF pg_catalog.jsonb_typeof(line)<>'object'
-           OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(line) AS keys(key)) IS DISTINCT FROM expected_line
+           OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(line) AS keys(key)) IS DISTINCT FROM expected_line
            OR pg_catalog.jsonb_typeof(line->'line_id')<>'string'
            OR (line->>'line_id') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
            OR line->>'line_kind' NOT IN ('product','charge')
@@ -183,7 +183,7 @@ DECLARE
     field record;
 BEGIN
     IF pg_catalog.jsonb_typeof(p_document)<>'object'
-       OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document) AS keys(key)) IS DISTINCT FROM expected_top
+       OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document) AS keys(key)) IS DISTINCT FROM expected_top
        OR p_document->>'schema'<>'aasopharma.trade-calculation-input'
        OR p_document->>'schema_version'<>'1'
        OR p_document->>'serializer_version'<>'aasopharma-jcs-decimal-v1'
@@ -197,7 +197,7 @@ BEGIN
     IF p_document->>'calculation_kind'='document' THEN
         IF pg_catalog.jsonb_typeof(p_document->'document')<>'object'
            OR p_document->'original'<>'null'::jsonb OR p_document->'reversal'<>'null'::jsonb
-           OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document->'document') AS keys(key)) IS DISTINCT FROM expected_document
+           OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document->'document') AS keys(key)) IS DISTINCT FROM expected_document
            OR pg_catalog.jsonb_typeof(p_document->'document'->'products')<>'array'
            OR pg_catalog.jsonb_array_length(p_document->'document'->'products')=0
            OR pg_catalog.jsonb_typeof(p_document->'document'->'charges')<>'array'
@@ -206,15 +206,15 @@ BEGIN
            OR pg_catalog.jsonb_typeof(p_document->'document'->'rounding_policy')<>'string'
            OR pg_catalog.jsonb_typeof(p_document->'document'->'tax_charge_mechanism')<>'string'
            OR pg_catalog.jsonb_typeof(p_document->'document'->'zero_rated_mode')<>'string'
-           OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document->'document'->'document_discount') AS keys(key)) IS DISTINCT FROM expected_discount
+           OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document->'document'->'document_discount') AS keys(key)) IS DISTINCT FROM expected_discount
            OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(p_document->'document'->'document_discount') AS member(key,value) WHERE pg_catalog.jsonb_typeof(value)<>'string')
            OR (p_document->'document'->'document_discount'->>'value') !~ decimal_pattern THEN
             RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='document calculation input schema is invalid';
         END IF;
         FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'document'->'products') LOOP
             IF pg_catalog.jsonb_typeof(item)<>'object'
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_product
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item->'line_discount') AS keys(key)) IS DISTINCT FROM expected_discount
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_product
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item->'line_discount') AS keys(key)) IS DISTINCT FROM expected_discount
                OR pg_catalog.jsonb_typeof(item->'document_discount_eligible')<>'boolean'
                OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(item) AS member(key,value) WHERE key NOT IN ('document_discount_eligible','line_discount') AND pg_catalog.jsonb_typeof(value)<>'string')
                OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(item->'line_discount') AS member(key,value) WHERE pg_catalog.jsonb_typeof(value)<>'string')
@@ -231,7 +231,7 @@ BEGIN
         END LOOP;
         FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'document'->'charges') LOOP
             IF pg_catalog.jsonb_typeof(item)<>'object'
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_charge
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_charge
                OR pg_catalog.jsonb_typeof(item->'document_discount_eligible')<>'boolean'
                OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(item) AS member(key,value) WHERE key<>'document_discount_eligible' AND pg_catalog.jsonb_typeof(value)<>'string') THEN
                 RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='charge calculation input schema is invalid';
@@ -248,13 +248,13 @@ BEGIN
         IF p_document->'document'<>'null'::jsonb
            OR pg_catalog.jsonb_typeof(p_document->'original')<>'object'
            OR pg_catalog.jsonb_typeof(p_document->'reversal')<>'object'
-           OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document->'reversal') AS keys(key)) IS DISTINCT FROM expected_reversal
+           OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document->'reversal') AS keys(key)) IS DISTINCT FROM expected_reversal
            OR p_document->'reversal'->>'gst_tax_treatment' NOT IN ('statutory','commercial_only')
            OR pg_catalog.jsonb_typeof(p_document->'reversal'->'products')<>'array'
            OR pg_catalog.jsonb_array_length(p_document->'reversal'->'products')=0
            OR pg_catalog.jsonb_typeof(p_document->'reversal'->'charges')<>'array'
            OR pg_catalog.jsonb_typeof(p_document->'reversal'->'prior_state')<>'object'
-           OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(p_document->'reversal'->'prior_state') AS keys(key)) IS DISTINCT FROM expected_prior
+           OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(p_document->'reversal'->'prior_state') AS keys(key)) IS DISTINCT FROM expected_prior
            OR pg_catalog.jsonb_typeof(p_document->'reversal'->'prior_state'->'products')<>'array'
            OR pg_catalog.jsonb_typeof(p_document->'reversal'->'prior_state'->'charges')<>'array'
            OR pg_catalog.jsonb_typeof(p_document->'reversal'->'prior_state'->'rounding_adjustment')<>'string'
@@ -264,7 +264,7 @@ BEGIN
         PERFORM erp_calculation_authority.assert_output_schema(p_document->'original');
         FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'reversal'->'products') LOOP
             IF pg_catalog.jsonb_typeof(item)<>'object'
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_product_reversal
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_product_reversal
                OR pg_catalog.jsonb_typeof(item->'final_residual')<>'boolean'
                OR item->>'value_basis' NOT IN ('billed_quantity','base_quantity')
                OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(item) AS member(key,value) WHERE key<>'final_residual' AND pg_catalog.jsonb_typeof(value)<>'string') THEN
@@ -280,7 +280,7 @@ BEGIN
         END LOOP;
         FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'reversal'->'charges') LOOP
             IF pg_catalog.jsonb_typeof(item)<>'object'
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_charge_reversal
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_charge_reversal
                OR pg_catalog.jsonb_typeof(item->'final_residual')<>'boolean'
                OR pg_catalog.jsonb_typeof(item->'line_id')<>'string'
                OR pg_catalog.jsonb_typeof(item->'ratio')<>'string'
@@ -290,7 +290,7 @@ BEGIN
         END LOOP;
         FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'reversal'->'prior_state'->'products') LOOP
             IF pg_catalog.jsonb_typeof(item)<>'object'
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_prior_product
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_prior_product
                OR item->>'value_basis' NOT IN ('billed_quantity','base_quantity')
                OR pg_catalog.jsonb_typeof(item->'line_id')<>'string'
                OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(item) member WHERE key NOT IN ('line_id','value_basis')
@@ -300,7 +300,7 @@ BEGIN
         END LOOP;
         FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_document->'reversal'->'prior_state'->'charges') LOOP
             IF pg_catalog.jsonb_typeof(item)<>'object'
-               OR (SELECT pg_catalog.array_agg(key ORDER BY key) FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_prior_charge
+               OR (SELECT pg_catalog.array_agg(key ORDER BY key COLLATE "C") FROM pg_catalog.jsonb_object_keys(item) AS keys(key)) IS DISTINCT FROM expected_prior_charge
                OR pg_catalog.jsonb_typeof(item->'line_id')<>'string'
                OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_each(item) member WHERE key<>'line_id'
                             AND (pg_catalog.jsonb_typeof(value)<>'string' OR (value #>> '{}') !~ decimal_pattern)) THEN

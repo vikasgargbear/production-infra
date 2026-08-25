@@ -23,7 +23,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.domain.operator_actions.contract import ACTION_POLICIES, PREPARE_PAYLOAD_MODELS
-from app.domain.operator_actions.models import ActionContext, OperatorActionError
+from app.domain.operator_actions.models import (
+    ActionContext,
+    ActionErrorCode,
+    OperatorActionError,
+)
 from app.infrastructure.operator_actions.service import SqlAlchemyOperatorActionService
 from scripts import provision_canonical_demo as fixture
 
@@ -324,6 +328,79 @@ def _install_failure(admin_dsn: str) -> None:
         )
 
 
+def _assert_calculation_input(admin_dsn: str, command_id: UUID) -> None:
+    expected_product_keys = {
+        "base_billed_quantity",
+        "base_free_quantity",
+        "billed_quantity",
+        "cess_rate",
+        "document_discount_eligible",
+        "free_quantity",
+        "free_supply_tax_treatment",
+        "gst_rate",
+        "line_discount",
+        "line_id",
+        "price_basis",
+        "quoted_unit_rate",
+        "tax_charge_mechanism",
+        "taxability_snapshot",
+        "uom_conversion_factor",
+    }
+    numeric_keys = {
+        "base_billed_quantity",
+        "base_free_quantity",
+        "billed_quantity",
+        "cess_rate",
+        "free_quantity",
+        "gst_rate",
+        "quoted_unit_rate",
+        "uom_conversion_factor",
+    }
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT input_bytes,input_sha256,
+                   pg_catalog.convert_from(input_bytes,'UTF8')::jsonb
+              FROM calculation.artifacts
+             WHERE org_id=%s AND command_request_id=%s
+            """,
+            (fixture.IDS["org"], command_id),
+        )
+        input_bytes, input_sha256, document = cursor.fetchone()
+
+    assert hashlib.sha256(bytes(input_bytes)).digest() == bytes(input_sha256)
+    assert set(document) == {
+        "aggregate_version",
+        "calculation_kind",
+        "document",
+        "operation",
+        "original",
+        "resource_id",
+        "resource_type",
+        "reversal",
+        "schema",
+        "schema_version",
+        "serializer_version",
+    }
+    products = document["document"]["products"]
+    assert len(products) == 1
+    product = products[0]
+    assert set(product) == expected_product_keys
+    assert isinstance(product["document_discount_eligible"], bool)
+    assert set(product["line_discount"]) == {"basis", "kind", "value"}
+    scalar_keys = expected_product_keys - {
+        "document_discount_eligible",
+        "line_discount",
+    }
+    assert all(isinstance(product[key], str) for key in scalar_keys)
+    assert all(Decimal(product[key]).is_finite() for key in numeric_keys)
+    print(
+        "sales-invoice calculation input accepted: "
+        f"sha256={hashlib.sha256(bytes(input_bytes)).hexdigest()} "
+        f"product_keys={','.join(sorted(product))}"
+    )
+
+
 def _remove_failure(admin_dsn: str) -> None:
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute("DROP TRIGGER pg15_invoice_injected_failure ON finance.journal_lines")
@@ -505,12 +582,18 @@ def main() -> None:
                     org_id=UUID(fixture.IDS["denial_org"]),
                 ),
             )
-        except OperatorActionError:
-            pass
+        except OperatorActionError as error:
+            assert error.code is ActionErrorCode.SCOPE_DENIED
+            assert error.metadata == {
+                "operation_key": "sales.invoice.prepare",
+                "reason": "CANONICAL_DATABASE_POLICY_REJECTED",
+                "sqlstate": "42501",
+            }
         else:
             raise AssertionError("cross-tenant sales-invoice prepare was not denied")
 
         prepared = _prepare(service, payload, prepare_key)
+        _assert_calculation_input(admin_dsn, prepared.command_request_id)
         replay = _prepare(service, payload, prepare_key)
         assert replay.command_request_id == prepared.command_request_id
         assert replay.preview_hash == prepared.preview_hash

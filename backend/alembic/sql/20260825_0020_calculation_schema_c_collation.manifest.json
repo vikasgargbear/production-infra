@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "revision": "20260825_0020",
+  "source_sql_sha256": "5590b967ba7f7f56032e47fadc95a68cba244c4263deb65e13f3948a8e220dd4",
+  "authority_change": "calculation_schema_c_collation_v1",
+  "scope": "calculation_input_and_output_schema_validators_only",
+  "seed_policy": "no_data_or_business_defaults"
+}

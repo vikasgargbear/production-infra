@@ -61,6 +61,9 @@
     "backend/alembic/versions/20260825_0019_sales_invoice_multibatch_inventory.py",
     "backend/alembic/sql/20260825_0019_sales_invoice_multibatch_inventory.sql",
     "backend/alembic/sql/20260825_0019_sales_invoice_multibatch_inventory.manifest.json",
+    "backend/alembic/versions/20260825_0020_calculation_schema_c_collation.py",
+    "backend/alembic/sql/20260825_0020_calculation_schema_c_collation.sql",
+    "backend/alembic/sql/20260825_0020_calculation_schema_c_collation.manifest.json",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],
