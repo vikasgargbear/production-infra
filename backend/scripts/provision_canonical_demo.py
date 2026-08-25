@@ -1342,6 +1342,85 @@ def seed_business_master(connection) -> None:
         )
 
 
+def reconcile_reviewed_expense_receipt_metadata(cursor, receipt_bytes: bytes) -> str:
+    """Create or reuse the one content-addressed receipt metadata row."""
+
+    receipt_sha256 = hashlib.sha256(receipt_bytes).digest()
+    requested_id = IDS["expense_receipt_evidence"]
+    cursor.execute(
+        """
+        SELECT id,media_type,byte_size,sha256,evidence_kind,status
+          FROM core.attachments
+         WHERE org_id=%s
+           AND (
+             id=%s OR
+             (sha256=%s AND byte_size=%s AND status IN ('verified','retained'))
+           )
+         ORDER BY CASE WHEN id=%s THEN 0 ELSE 1 END
+         FOR UPDATE
+        """,
+        (
+            IDS["org"],
+            requested_id,
+            psycopg2.Binary(receipt_sha256),
+            len(receipt_bytes),
+            requested_id,
+        ),
+    )
+    existing = cursor.fetchall()
+    if len(existing) > 1:
+        raise RuntimeError(
+            "reviewed expense receipt ID and content hash resolve different attachments"
+        )
+    if existing:
+        (
+            attachment_id,
+            media_type,
+            byte_size,
+            stored_sha256,
+            evidence_kind,
+            status,
+        ) = existing[0]
+        if (
+            media_type != "application/pdf"
+            or byte_size != len(receipt_bytes)
+            or bytes(stored_sha256) != receipt_sha256
+            or evidence_kind != "expense_receipt"
+            or status != "retained"
+        ):
+            raise RuntimeError(
+                "reviewed expense receipt metadata contradicts the retained content identity"
+            )
+        resolved_id = str(attachment_id)
+        IDS["expense_receipt_evidence"] = resolved_id
+        return resolved_id
+
+    cursor.execute(
+        """
+        INSERT INTO core.attachments (
+            org_id,id,storage_bucket,storage_object_path,original_filename,
+            media_type,byte_size,sha256,evidence_kind,document_date,
+            retention_until,status,verified_at,created_by_membership_id
+        ) VALUES (
+            %s,%s,'canonical-demo-evidence',%s,%s,'application/pdf',%s,%s,
+            'expense_receipt',%s,%s,'retained',transaction_timestamp(),%s
+        )
+        """,
+        (
+            IDS["org"],
+            requested_id,
+            f"live18/{DEMO_RUN_ID}/{DEMO_RUN_ATTEMPT}/expense-receipt.pdf",
+            f"LIVE18-EXPENSE-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}.pdf",
+            len(receipt_bytes),
+            psycopg2.Binary(receipt_sha256),
+            INDIA_BUSINESS_DATE,
+            INDIA_BUSINESS_DATE + timedelta(days=3650),
+            IDS["operator_membership"],
+        ),
+    )
+    return requested_id
+
+
 def seed_end_to_end_master(
     connection,
     *,
@@ -1413,40 +1492,7 @@ def seed_end_to_end_master(
             ],
         )
         if expense_receipt_bytes is not None:
-            cursor.execute(
-                """
-                INSERT INTO core.attachments (
-                    org_id,id,storage_bucket,storage_object_path,original_filename,
-                    media_type,byte_size,sha256,evidence_kind,document_date,
-                    retention_until,status,verified_at,created_by_membership_id
-                ) VALUES (
-                    %s,%s,'canonical-demo-evidence',%s,%s,'application/pdf',%s,%s,
-                    'expense_receipt',%s,%s,'retained',transaction_timestamp(),%s
-                )
-                ON CONFLICT (org_id,id) DO UPDATE SET
-                    storage_object_path=EXCLUDED.storage_object_path,
-                    original_filename=EXCLUDED.original_filename,
-                    media_type=EXCLUDED.media_type,
-                    byte_size=EXCLUDED.byte_size,
-                    sha256=EXCLUDED.sha256,
-                    evidence_kind=EXCLUDED.evidence_kind,
-                    document_date=EXCLUDED.document_date,
-                    retention_until=EXCLUDED.retention_until,
-                    status=EXCLUDED.status,
-                    verified_at=EXCLUDED.verified_at
-                """,
-                (
-                    IDS["org"],
-                    IDS["expense_receipt_evidence"],
-                    f"live18/{DEMO_RUN_ID}/{DEMO_RUN_ATTEMPT}/expense-receipt.pdf",
-                    f"LIVE18-EXPENSE-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}.pdf",
-                    len(expense_receipt_bytes),
-                    psycopg2.Binary(hashlib.sha256(expense_receipt_bytes).digest()),
-                    INDIA_BUSINESS_DATE,
-                    INDIA_BUSINESS_DATE + timedelta(days=3650),
-                    IDS["operator_membership"],
-                ),
-            )
+            reconcile_reviewed_expense_receipt_metadata(cursor, expense_receipt_bytes)
 
         cursor.execute(
             """

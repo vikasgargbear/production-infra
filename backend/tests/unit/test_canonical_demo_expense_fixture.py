@@ -58,6 +58,64 @@ def test_expense_fixture_ids_are_run_scoped_and_canonical(
     assert all(UUID(value).version == 5 for value in values)
 
 
+class _ReceiptCursor:
+    def __init__(self, rows: list[tuple]) -> None:
+        self.rows = rows
+        self.statements: list[str] = []
+
+    def execute(self, statement: str, _parameters: tuple) -> None:
+        self.statements.append(statement)
+
+    def fetchall(self) -> list[tuple]:
+        return self.rows
+
+
+def test_reviewed_expense_receipt_reuses_exact_retained_content() -> None:
+    module = _module()
+    value = b"%PDF-1.7\nreviewed-replay-safe-receipt"
+    digest = hashlib.sha256(value).digest()
+    existing_id = UUID("d3000000-0000-5000-8000-000000000099")
+    cursor = _ReceiptCursor(
+        [
+            (
+                existing_id,
+                "application/pdf",
+                len(value),
+                memoryview(digest),
+                "expense_receipt",
+                "retained",
+            )
+        ]
+    )
+
+    assert module.reconcile_reviewed_expense_receipt_metadata(cursor, value) == str(
+        existing_id
+    )
+    assert module.IDS["expense_receipt_evidence"] == str(existing_id)
+    assert len(cursor.statements) == 1
+
+
+def test_reviewed_expense_receipt_rejects_contradictory_existing_metadata() -> None:
+    module = _module()
+    value = b"%PDF-1.7\nreviewed-conflicting-receipt"
+    digest = hashlib.sha256(value).digest()
+    cursor = _ReceiptCursor(
+        [
+            (
+                UUID(module.IDS["expense_receipt_evidence"]),
+                "application/pdf",
+                len(value),
+                memoryview(digest),
+                "other",
+                "retained",
+            )
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="metadata contradicts"):
+        module.reconcile_reviewed_expense_receipt_metadata(cursor, value)
+
+
 def test_expense_prerequisites_use_only_canonical_evidence_accounts_and_role() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
