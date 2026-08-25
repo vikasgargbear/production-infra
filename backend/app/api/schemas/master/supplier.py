@@ -170,7 +170,7 @@ class CanonicalSupplierCreate(BaseModel):
     address_line1: Optional[str] = Field(default=None, max_length=255)
     address_line2: Optional[str] = Field(default=None, max_length=255)
     city: Optional[str] = Field(default=None, max_length=100)
-    state: Optional[str] = Field(default=None, max_length=100)
+    state_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{2}$")
     pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
     gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
     pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
@@ -188,9 +188,9 @@ class CanonicalSupplierCreate(BaseModel):
 
     @model_validator(mode="after")
     def require_complete_address(self):
-        address = (self.address_line1, self.city, self.state, self.pincode)
+        address = (self.address_line1, self.city, self.state_code, self.pincode)
         if any(address) and not all(address):
-            raise ValueError("Address line, city, state, and pincode must be supplied together")
+            raise ValueError("Address line, city, state code, and pincode must be supplied together")
         return self
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)

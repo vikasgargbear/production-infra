@@ -179,35 +179,26 @@ def canonical_business_context(
         )
     return CanonicalBusinessContext.model_validate(rows[0])
 
-INDIAN_STATE_CODES = {
-    "Andaman and Nicobar Islands": "35", "Andhra Pradesh": "37",
-    "Arunachal Pradesh": "12", "Assam": "18", "Bihar": "10",
-    "Chandigarh": "04", "Chhattisgarh": "22",
-    "Dadra and Nagar Haveli and Daman and Diu": "26", "Delhi": "07",
-    "Goa": "30", "Gujarat": "24", "Haryana": "06",
-    "Himachal Pradesh": "02", "Jammu and Kashmir": "01", "Jharkhand": "20",
-    "Karnataka": "29", "Kerala": "32", "Ladakh": "38",
-    "Lakshadweep": "31", "Madhya Pradesh": "23", "Maharashtra": "27",
-    "Manipur": "14", "Meghalaya": "17", "Mizoram": "15", "Nagaland": "13",
-    "Odisha": "21", "Puducherry": "34", "Punjab": "03",
-    "Rajasthan": "08", "Sikkim": "11", "Tamil Nadu": "33",
-    "Telangana": "36", "Tripura": "16", "Uttar Pradesh": "09",
-    "Uttarakhand": "05", "West Bengal": "19",
-}
+def _validated_state_code(
+    state_code: Optional[str], gstin: Optional[str]
+) -> Optional[str]:
+    """Keep the supplied canonical code consistent with its GSTIN authority.
 
-
-def _state_code(state_name: Optional[str], gstin: Optional[str]) -> Optional[str]:
+    State-name conversion is intentionally absent.  The canonical schema does
+    not yet contain a reviewed, versioned geography release, so accepting a
+    human label and translating it in application code would make the API an
+    untracked statutory authority.  GSTIN supplies its own state code; other
+    addresses must supply the exact two-character code.
+    """
     if gstin:
         gst_state = gstin[:2]
-        if state_name and INDIAN_STATE_CODES.get(state_name) != gst_state:
-            raise HTTPException(status_code=422, detail="GSTIN state does not match the address state")
+        if state_code and state_code != gst_state:
+            raise HTTPException(
+                status_code=422,
+                detail="GSTIN state code does not match the address state code",
+            )
         return gst_state
-    if not state_name:
-        return None
-    code = INDIAN_STATE_CODES.get(state_name)
-    if code is None:
-        raise HTTPException(status_code=422, detail=f"Unsupported Indian state: {state_name}")
-    return code
+    return state_code
 
 
 def _party_posting_account(db: Session, org_id: UUID, account_type: str) -> UUID:
@@ -246,7 +237,7 @@ class CanonicalCustomerAddressWrite(BaseModel):
     address_line2: Optional[str] = Field(default=None, max_length=255)
     landmark: Optional[str] = Field(default=None, max_length=255)
     city: str = Field(min_length=1, max_length=128)
-    state: str = Field(min_length=1, max_length=128)
+    state_code: str = Field(pattern=r"^[0-9]{2}$")
     pincode: str = Field(pattern=r"^[0-9]{6}$")
     address_type: Literal["billing", "shipping", "other"]
     is_default: bool
@@ -679,7 +670,7 @@ def _insert_party_contact_address_and_tax(
     address_line1: Optional[str],
     address_line2: Optional[str],
     city: Optional[str],
-    state_name: Optional[str],
+    state_code: Optional[str],
     postal_code: Optional[str],
     gstin: Optional[str],
 ) -> UUID:
@@ -713,13 +704,13 @@ def _insert_party_contact_address_and_tax(
             "email": str(email) if email else None, "phone": phone,
         })
 
-    address_values = [address_line1, city, state_name, postal_code]
+    address_values = [address_line1, city, state_code, postal_code]
     if any(address_values) and not all(address_values):
         raise HTTPException(
             status_code=422,
-            detail="Address line, city, state, and pincode must be supplied together",
+            detail="Address line, city, state code, and pincode must be supplied together",
         )
-    state_code = _state_code(state_name, gstin)
+    state_code = _validated_state_code(state_code, gstin)
     if all(address_values):
         db.execute(text("""
             INSERT INTO "parties"."addresses" (
@@ -785,7 +776,7 @@ def create_customer(
             address_line1=customer.address_line1,
             address_line2=customer.address_line2,
             city=customer.city,
-            state_name=customer.state,
+            state_code=customer.state_code,
             postal_code=customer.pincode,
             gstin=customer.gst_number,
         )
@@ -852,7 +843,7 @@ def create_supplier(
             address_line1=supplier.address_line1,
             address_line2=supplier.address_line2,
             city=supplier.city,
-            state_name=supplier.state,
+            state_code=supplier.state_code,
             postal_code=supplier.pincode,
             gstin=supplier.gst_number,
         )
@@ -1095,7 +1086,7 @@ def create_customer_address(
 ):
     org_id = _activate(db, user)
     party_id = _customer_party_id(db, org_id, customer_id)
-    state_code = _state_code(address.state, None)
+    state_code = _validated_state_code(address.state_code, None)
     try:
         if address.is_default:
             db.execute(text("""
@@ -1146,7 +1137,7 @@ def update_customer_address(
 ):
     org_id = _activate(db, user)
     party_id = _customer_party_id(db, org_id, customer_id)
-    state_code = _state_code(address.state, None)
+    state_code = _validated_state_code(address.state_code, None)
     try:
         if address.is_default:
             db.execute(text("""

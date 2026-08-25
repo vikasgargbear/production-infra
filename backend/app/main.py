@@ -45,7 +45,6 @@ from .api.routes.finance.tax import routes as tax_entries_routes
 from .api.routes.org import company_assets
 
 # Standalone utilities (remain at root level)
-from .api.routes import metadata
 from .api.routes import calculations
 from .api.routes import schema as schema_router  # Live database schema documentation
 from .api.routes import (
@@ -331,7 +330,11 @@ api.include_router(company_assets.router, prefix="/company", tags=["Company"])
 # differs across FastAPI router implementations and they are not authoritative.
 
 # --- Utilities ---
-api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
+# The retired metadata router published unversioned statutory and commercial
+# choices (tax rates, state-name mappings, credit plans, payment terms and UOM
+# labels), and silently substituted hard-coded data after database failures.
+# Canonical workflows resolve these facts from their owning rows or reviewed
+# reference-data releases.  Unsupported choice catalogs remain unavailable.
 include_explicit_non_persistent_post_utilities(
     api,
     calculations.router,

@@ -598,7 +598,7 @@ def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> No
         "primary_email": "buyer@example.com",
         "address_line1": "Test Lane 1",
         "city": "Mumbai",
-        "state": "Maharashtra",
+        "state_code": "27",
         "pincode": "400001",
         "credit_limit": 5000,
         "credit_days": 30,
@@ -612,7 +612,7 @@ def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> No
         "primary_email": "buyer@example.com",
         "address_line1": "Test Lane 1",
         "city": "Mumbai",
-        "state": "Maharashtra",
+        "state_code": "27",
         "pincode": "400001",
         "credit_limit": customer.credit_limit,
         "credit_days": 30,
@@ -1505,7 +1505,7 @@ def test_master_write_classifications_have_no_hidden_business_defaults() -> None
         canonical_erp_reads.CanonicalCustomerAddressWrite(
             address_line1="202 Synthetic Retail Lane",
             city="Pune",
-            state="Maharashtra",
+            state_code="27",
             pincode="411001",
         )
     assert {error["loc"] for error in address_error.value.errors()} == {
@@ -1529,6 +1529,32 @@ def test_master_write_classifications_have_no_hidden_business_defaults() -> None
     assert {error["loc"] for error in supplier_error.value.errors()} == {
         ("payment_days",),
     }
+
+
+def test_party_address_state_code_has_no_application_owned_name_mapping() -> None:
+    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+    assert "INDIAN_STATE_CODES" not in source
+    assert "Unsupported Indian state" not in source
+
+    assert canonical_erp_reads._validated_state_code("27", None) == "27"
+    assert canonical_erp_reads._validated_state_code(None, "27AAPFU0939F1ZV") == "27"
+
+    with pytest.raises(HTTPException) as error:
+        canonical_erp_reads._validated_state_code("29", "27AAPFU0939F1ZV")
+    assert error.value.status_code == 422
+    assert error.value.detail == (
+        "GSTIN state code does not match the address state code"
+    )
+
+    with pytest.raises(ValidationError):
+        canonical_erp_reads.CanonicalCustomerAddressWrite(
+            address_line1="202 Synthetic Retail Lane",
+            city="Pune",
+            state_code="Maharashtra",
+            pincode="411001",
+            address_type="billing",
+            is_default=True,
+        )
 
 
 class ProductDraftDeleteDatabase:
