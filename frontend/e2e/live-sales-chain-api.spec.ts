@@ -8,7 +8,7 @@ const email = process.env.PLAYWRIGHT_LIVE_EMAIL || '';
 const password = process.env.PLAYWRIGHT_LIVE_PASSWORD || '';
 const writes = process.env.PLAYWRIGHT_LIVE_WRITES === 'true';
 const fixtureText = process.env.PLAYWRIGHT_SALES_CHAIN_FIXTURE || '';
-const enabled = /^https:\/\//.test(baseURL) && Boolean(email && password && fixtureText) && writes;
+const enabled = /^https:\/\//.test(baseURL) && Boolean(email && password) && writes;
 type Json = Record<string, any>;
 
 const exact = (value: unknown, label: string): string => {
@@ -52,16 +52,43 @@ async function lifecycle(page: Page, api: string, operation: string, payload: Js
   return { prepared, executed };
 }
 
+function requiredFixture(): Json {
+  if (!fixtureText.trim()) {
+    throw new Error(
+      'PLAYWRIGHT_SALES_CHAIN_FIXTURE is required when PLAYWRIGHT_LIVE_WRITES=true. '
+      + 'Supply the provisioned disposable-org sales-chain JSON; this acceptance test must not skip.',
+    );
+  }
+  try {
+    const fixture = JSON.parse(fixtureText) as Json;
+    const required = [
+      'branch_id', 'customer_account_id', 'product_id', 'uom_conversion_id',
+      'expected_fefo_batch_id', 'billed_quantity', 'free_quantity', 'unit_rate',
+      'place_of_supply_state_code',
+    ];
+    const missing = required.filter(key => fixture[key] === undefined || fixture[key] === null || fixture[key] === '');
+    if (missing.length) throw new Error(`missing required fields: ${missing.join(', ')}`);
+    return fixture;
+  } catch (error) {
+    throw new Error(`PLAYWRIGHT_SALES_CHAIN_FIXTURE is invalid: ${String(error)}`);
+  }
+}
+
 test.describe('live desktop sales-chain API acceptance', () => {
-  test.skip(!enabled, 'Requires HTTPS credentials, explicit writes, and PLAYWRIGHT_SALES_CHAIN_FIXTURE JSON');
+  test.skip(!enabled, 'Requires HTTPS credentials and explicit PLAYWRIGHT_LIVE_WRITES=true');
   test.use({ baseURL, viewport: { width: 1440, height: 1000 } });
+  test.beforeAll(() => { requiredFixture(); });
   test.beforeEach(async ({ page }) => loginToLiveErp(page, email, password));
 
   test('order -> FEFO reservation -> dispatch -> invoice reconciles exact canonical effects', async ({ page }, testInfo) => {
     test.setTimeout(240_000);
-    const f = JSON.parse(fixtureText) as Json;
+    const f = requiredFixture();
     for (const key of ['branch_id','customer_account_id','product_id','uom_conversion_id','expected_fefo_batch_id']) uuid(f[key], key);
-    const api = await origin(page); const run = Date.now(); const date = f.document_date;
+    const api = await origin(page);
+    const businessContext = await call(page, api, 'GET', '/canonical/business-context');
+    expect(businessContext.business_date, 'authoritative organization business date').toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(businessContext.organization_timezone, 'authoritative organization timezone').toEqual(expect.any(String));
+    const run = Date.now(); const date = businessContext.business_date;
     const line = { product_id: f.product_id, uom_conversion_id: f.uom_conversion_id,
       billed_quantity: exact(f.billed_quantity, 'fixture billed'), free_quantity: exact(f.free_quantity, 'fixture free'),
       free_supply_tax_treatment: 'excluded_from_taxable_value', quoted_unit_rate: exact(f.unit_rate, 'fixture rate'),

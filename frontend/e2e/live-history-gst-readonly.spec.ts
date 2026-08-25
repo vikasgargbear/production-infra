@@ -45,6 +45,23 @@ const formatMoney = (value: string): string => {
   return `${sign}₹${leading ? `${leading},` : ''}${lastThree}.${fraction}`;
 };
 
+const gstResponseFor = (
+  page: Page,
+  report: 'gstr1' | 'gstr3b',
+  range: { from: string; to: string },
+) => page.waitForResponse((response) => {
+  const url = new URL(response.url());
+  return response.request().method() === 'GET'
+    && url.pathname === `/api/gst/reports/${report}`
+    && url.searchParams.get('date_from') === range.from
+    && url.searchParams.get('date_to') === range.to;
+});
+
+const expectSummaryMoney = async (page: Page, label: string, value: string) => {
+  const card = page.getByText(label, { exact: true }).locator('..');
+  await expect(card).toContainText(formatMoney(value));
+};
+
 const assertExactHistoryRow = (kind: HistoryKind, row: HistoryItem) => {
   expect(row.document_id, `${kind} UUID`).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   expect(row.total_quantity, `${kind} quantity`).toMatch(/^-?(?:0|[1-9]\d*)\.\d{6}$/);
@@ -174,27 +191,58 @@ test.describe('live read-only History and GST cross-projection', () => {
     exactMoney(gstr1.summary.totalTax, 'Current GSTR-1 tax');
     exactMoney(gstr3b.outputTax.total, 'Current GSTR-3B output');
     exactMoney(gstr3b.inputCredit.total, 'Current GSTR-3B input');
+    exactMoney(previousGstr1.summary.totalTaxableValue, 'Previous GSTR-1 taxable');
+    exactMoney(previousGstr1.summary.totalTax, 'Previous GSTR-1 tax');
+    exactMoney(previousGstr3b.outputTax.total, 'Previous GSTR-3B output');
+    exactMoney(previousGstr3b.inputCredit.total, 'Previous GSTR-3B input');
+    exactMoney(previousGstr3b.netPayable, 'Previous GSTR-3B net payable');
+
+    const currentSignature = JSON.stringify({
+      gstr1: gstr1.summary,
+      gstr3b: { outputTax: gstr3b.outputTax, inputCredit: gstr3b.inputCredit, netPayable: gstr3b.netPayable },
+    });
+    const previousSignature = JSON.stringify({
+      gstr1: previousGstr1.summary,
+      gstr3b: {
+        outputTax: previousGstr3b.outputTax,
+        inputCredit: previousGstr3b.inputCredit,
+        netPayable: previousGstr3b.netPayable,
+      },
+    });
+    expect(
+      previousSignature,
+      `Provisioned GST evidence must make current ${ranges.current.from}..${ranges.current.to} `
+        + `and previous ${ranges.previous.from}..${ranges.previous.to} observably different.`,
+    ).not.toBe(currentSignature);
+
     await returnHome(page);
     await openHomeAction(page, 'GST Management');
     await chooseHubModule(page, 'GST', 'Reports');
-    await expect(page.getByText(formatMoney(gstr1.summary.totalTaxableValue), { exact: true }).first()).toBeVisible();
-    await expect(page.getByText(formatMoney(gstr1.summary.totalTax), { exact: true }).first()).toBeVisible();
+    await expectSummaryMoney(page, 'Taxable Value', gstr1.summary.totalTaxableValue);
+    await expectSummaryMoney(page, 'Total GST', gstr1.summary.totalTax);
     await page.getByRole('navigation', { name: 'GST report tabs' }).getByRole('button', { name: /GSTR-3B/ }).click();
-    await expect(page.getByText(formatMoney(gstr3b.outputTax.total), { exact: true }).first()).toBeVisible();
-    await expect(page.getByText(formatMoney(gstr3b.inputCredit.total), { exact: true }).first()).toBeVisible();
+    await expectSummaryMoney(page, 'Total Output Tax', gstr3b.outputTax.total);
+    await expectSummaryMoney(page, 'Total Input Credit', gstr3b.inputCredit.total);
 
-    const currentSignature = `${gstr1.summary.totalTaxableValue}|${gstr1.summary.totalTax}|${gstr3b.inputCredit.total}`;
-    const previousSignature = `${previousGstr1.summary.totalTaxableValue}|${previousGstr1.summary.totalTax}|${previousGstr3b.inputCredit.total}`;
-    if (currentSignature !== previousSignature) {
-      await page.getByRole('button', { name: 'Previous', exact: true }).click();
-      await expect(page.getByText(formatMoney(previousGstr3b.outputTax.total), { exact: true }).first()).toBeVisible();
-      expect(previousSignature).not.toBe(currentSignature);
-    }
+    const previous3bResponse = gstResponseFor(page, 'gstr3b', ranges.previous);
+    await page.getByRole('button', { name: 'Previous', exact: true }).click();
+    expect((await previous3bResponse).status(), 'Previous-period GSTR-3B UI request').toBe(200);
+    await expect(page.getByRole('button', { name: 'Previous', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expectSummaryMoney(page, 'Total Output Tax', previousGstr3b.outputTax.total);
+    await expectSummaryMoney(page, 'Total Input Credit', previousGstr3b.inputCredit.total);
+
+    const previous1Response = gstResponseFor(page, 'gstr1', ranges.previous);
+    await page.getByRole('navigation', { name: 'GST report tabs' }).getByRole('button', { name: /GSTR-1/ }).click();
+    expect((await previous1Response).status(), 'Previous-period GSTR-1 UI request').toBe(200);
+    await expectSummaryMoney(page, 'Taxable Value', previousGstr1.summary.totalTaxableValue);
+    await expectSummaryMoney(page, 'Total GST', previousGstr1.summary.totalTax);
+    await expect(page.getByText('Total Invoices', { exact: true }).locator('..'))
+      .toContainText(String(previousGstr1.summary.totalInvoices));
     await testInfo.attach('history-gst-cross-projection.json', {
       body: JSON.stringify({ ranges, historyCounts: Object.fromEntries(historyKinds.map(kind => [kind, histories[kind].total])),
         salesInvoice, supplierInvoice, gstr1: gstr1.summary,
         gstr3b: { outputTax: gstr3b.outputTax, inputCredit: gstr3b.inputCredit },
-        previousPeriodDifferent: currentSignature !== previousSignature }, null, 2),
+        previousPeriodDifferent: true }, null, 2),
       contentType: 'application/json',
     });
   });

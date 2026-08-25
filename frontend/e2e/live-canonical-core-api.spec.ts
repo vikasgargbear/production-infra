@@ -32,12 +32,6 @@ function moneyMinor(value: unknown, label: string): bigint {
   return BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0'));
 }
 
-function todayIst(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
-}
-
 function suffix(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
@@ -109,6 +103,21 @@ async function ok(
   return response.body;
 }
 
+async function organizationBusinessContext(
+  page: Page,
+  origin: string,
+  evidence: ApiEvidence[],
+): Promise<{ businessDate: string; organizationTimezone: string }> {
+  const context = await ok(page, origin, evidence, 'GET', '/canonical/business-context');
+  expect(context.business_date, 'authoritative organization business date').toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(context.organization_timezone, 'authoritative organization timezone').toEqual(expect.any(String));
+  expect(context.organization_timezone.length, 'organization timezone cannot be blank').toBeGreaterThan(0);
+  return {
+    businessDate: context.business_date,
+    organizationTimezone: context.organization_timezone,
+  };
+}
+
 async function lifecycle(
   page: Page,
   origin: string,
@@ -175,13 +184,14 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     test.setTimeout(180_000);
     const evidence: ApiEvidence[] = [];
     const origin = await apiOrigin(page);
+    const business = await organizationBusinessContext(page, origin, evidence);
 
     const run = suffix();
     const branchId = 'd3000000-0000-7000-8000-000000000005';
     const supplierId = 'd3200000-0000-7000-8000-000000000002';
     const productId = 'd3000000-0000-7000-8000-000000000015';
     const uomId = 'd3000000-0000-7000-8000-000000000016';
-    const date = todayIst();
+    const date = business.businessDate;
     const po = await lifecycle(page, origin, evidence, 'procurement.purchase_order.prepare', {
       idempotency_key: `${PREFIX}-PO-${run}`,
       branch_id: branchId, order_date: date, expected_on: date,
@@ -206,7 +216,7 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     const grn = await lifecycle(page, origin, evidence, 'procurement.goods_receipt.prepare', {
       idempotency_key: `${PREFIX}-GRN-${run}`,
       branch_id: context.branch_id,
-      received_at: `${date}T12:00:00+05:30`,
+      received_at: new Date().toISOString(),
       purchase_order_id: po.executed.resource_id,
       supplier_account_id: context.supplier_account_id,
       supplier_challan_number: `${PREFIX}-CH-${run}`,
@@ -233,6 +243,7 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     test.setTimeout(120_000);
     const evidence: ApiEvidence[] = [];
     const origin = await apiOrigin(page);
+    const business = await organizationBusinessContext(page, origin, evidence);
     const customerId = 'd3000000-0000-7000-8000-000000000011';
     const openItems = await ok(page, origin, evidence, 'GET', `/payment-allocation/unpaid-invoices?customer_id=${customerId}`);
     const item = (openItems.invoices || openItems.items || openItems)[0];
@@ -241,7 +252,7 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     const run = suffix();
     const receipt = await lifecycle(page, origin, evidence, 'finance.customer_receipt.prepare', {
       idempotency_key: `${PREFIX}-RCPT-${run}`,
-      branch_id: 'd3000000-0000-7000-8000-000000000005', payment_date: todayIst(),
+      branch_id: 'd3000000-0000-7000-8000-000000000005', payment_date: business.businessDate,
       customer_account_id: customerId,
       settlement_account_id: 'd3210000-0000-7000-8000-000000000001',
       bank_account_id: 'd3200000-0000-7000-8000-000000000008',
@@ -378,12 +389,13 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     test.setTimeout(120_000);
     const evidence: ApiEvidence[] = [];
     const origin = await apiOrigin(page);
+    const business = await organizationBusinessContext(page, origin, evidence);
     const branchId = 'd3000000-0000-7000-8000-000000000005';
     const locationId = 'd3200000-0000-7000-8000-000000000006';
     const batches = await ok(page, origin, evidence, 'GET', '/inventory/batches/?limit=200');
     let row: Json | null = null;
     for (const batch of (batches.items || batches).filter((item: Json) => item.status === 'released' && exact(item.quantity, 'batch quantity') !== '0')) {
-      const candidate = await call(page, origin, evidence, 'GET', `/web/actions/inventory-adjustment/eligibility?branch_id=${branchId}&location_id=${locationId}&batch_id=${batch.batch_id}&adjustment_date=${todayIst()}`);
+      const candidate = await call(page, origin, evidence, 'GET', `/web/actions/inventory-adjustment/eligibility?branch_id=${branchId}&location_id=${locationId}&batch_id=${batch.batch_id}&adjustment_date=${business.businessDate}`);
       if (candidate.status === 200) { row = candidate.body; break; }
     }
     expect(row, 'demo requires unused retained cycle-count evidence').toBeTruthy();
@@ -395,7 +407,7 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     );
     await assertSeparateApproval(page, origin, evidence, 'inventory.adjustment.prepare', {
       idempotency_key: `${PREFIX}-COUNT-${suffix()}`,
-      branch_id: eligible.branch_id, adjustment_date: todayIst(), counted_at: `${todayIst()}T12:00:00+05:30`,
+      branch_id: eligible.branch_id, adjustment_date: business.businessDate, counted_at: new Date().toISOString(),
       counted_by_membership_id: eligible.counted_by_membership_id, location_id: eligible.location_id,
       reason_code: 'cycle_count', evidence_attachment_id: eligible.evidence[0].evidence_attachment_id,
       lines: [{ product_id: eligible.product_id, uom_conversion_id: conversion.uom_conversion_id, batch_counts: [{ batch_id: eligible.batch_id, counted_quantity: counted }] }],
@@ -407,12 +419,13 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     test.setTimeout(120_000);
     const evidence: ApiEvidence[] = [];
     const origin = await apiOrigin(page);
+    const business = await organizationBusinessContext(page, origin, evidence);
     const invoices = await ok(page, origin, evidence, 'GET', '/invoices/?limit=50');
     const candidates = invoices.invoices || invoices.items || invoices;
     let context: Json | null = null;
     for (const candidate of candidates.slice(0, 20)) {
       const invoiceId = candidate.invoice_id || candidate.id;
-      const response = await call(page, origin, evidence, 'GET', `/canonical/returns/sales-invoices/${invoiceId}/context?return_date=${todayIst()}`);
+      const response = await call(page, origin, evidence, 'GET', `/canonical/returns/sales-invoices/${invoiceId}/context?return_date=${business.businessDate}`);
       if (response.status === 200 && response.body.lines?.length && response.body.quarantine_locations?.length) {
         context = response.body;
         break;
@@ -425,7 +438,7 @@ test.describe('live canonical desktop API acceptance through the authenticated b
     const free = billed === '0.000000' ? '1.000000' : '0.000000';
     await assertSeparateApproval(page, origin, evidence, 'sales.return.prepare', {
       idempotency_key: `${PREFIX}-SRET-${suffix()}`,
-      branch_id: context!.branch_id, return_date: todayIst(), original_invoice_id: context!.invoice_id,
+      branch_id: context!.branch_id, return_date: business.businessDate, original_invoice_id: context!.invoice_id,
       reason_code: 'customer_rejection', gst_tax_treatment: 'commercial_only',
       lines: [{ original_invoice_line_id: source.original_invoice_line_id, invoice_dispatch_allocation_id: source.invoice_dispatch_allocation_id, billed_quantity: billed, free_quantity: free, batch_allocation: { batch_id: source.batch_id, billed_quantity: billed, free_quantity: free }, to_location_id: context!.quarantine_locations[0].id, return_condition: 'damaged' }],
     }, id => `/canonical/returns/commands/${id}/review`);

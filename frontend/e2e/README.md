@@ -17,8 +17,15 @@ export PLAYWRIGHT_LIVE_BASE_URL="https://the-live-erp.example.com"
 export PLAYWRIGHT_LIVE_EMAIL="existing-disposable-demo-user@example.com"
 export PLAYWRIGHT_LIVE_PASSWORD="..."
 export PLAYWRIGHT_LIVE_WRITES=true
+export PLAYWRIGHT_SALES_CHAIN_FIXTURE='{"branch_id":"...","customer_account_id":"...","product_id":"...","uom_conversion_id":"...","expected_fefo_batch_id":"...","billed_quantity":"1.000000","free_quantity":"0.000000","unit_rate":"84.0000","place_of_supply_state_code":"27"}'
 npm run test:e2e:live:core
 ```
+
+The unified `test:e2e:live:writes` gate fails configuration when the sales-chain
+fixture is absent or malformed. It does not silently skip that API lifecycle in
+an explicitly enabled live-write run. Document dates come from the authenticated
+organization business-context API; the fixture must identify data identities and
+expected FEFO behavior, not a workstation-calendar date.
 
 The suite is desktop-only and single-worker. It never invokes communication
 CTAs. Created records use `CODEX-E2E-20260825` where the form/API exposes an
