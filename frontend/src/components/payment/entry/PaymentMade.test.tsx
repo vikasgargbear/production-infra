@@ -50,7 +50,7 @@ test('defaults to FIFO while preserving exact manual per-invoice allocation', as
   expect((screen.getByRole('radio', { name: 'Manual per invoice' }) as HTMLInputElement).checked).toBe(false);
   fireEvent.click(screen.getByRole('radio', { name: 'Manual per invoice' }));
 
-  const allocation = screen.getByLabelText('Allocation for INV-1');
+  const allocation = screen.getByLabelText(/Allocation for INV-1/);
   fireEvent.change(allocation, { target: { value: '100.01' } });
   expect((allocation as HTMLInputElement).value).toBe('100.01');
   expect(screen.getByText('Allocated ₹100.01')).not.toBeNull();
