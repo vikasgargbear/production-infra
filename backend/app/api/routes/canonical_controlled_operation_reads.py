@@ -314,6 +314,29 @@ def inventory_destruction_context(
             detail="The active organization has no authoritative destruction clock",
         )
     clock = clock_rows[0]
+    authorized = _rows(
+        db,
+        """
+        SELECT EXISTS (
+          SELECT 1 FROM core.branches branch
+           WHERE branch.org_id=:org_id AND branch.status='active'
+             AND erp_security.can_access_branch(branch.id)
+             AND erp_security.has_permission(
+                  'inventory.destruction.create',branch.id)
+             AND erp_security.has_permission('inventory.document.post',branch.id)
+             AND erp_security.has_permission('finance.journal.post',branch.id)
+             AND erp_security.has_permission(
+                  'compliance.destruction.manage',NULL::uuid)
+             AND erp_security.has_permission('automation.command.execute',branch.id)
+        ) AS allowed
+        """,
+        {"org_id": org_id},
+    )[0]["allowed"]
+    if not authorized:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Certified destruction candidate access requires its exact cross-domain authority",
+        )
     candidates: list[dict[str, Any]] = []
     if not clock["has_active_gst_registration"]:
         candidates = _rows(
@@ -447,11 +470,9 @@ def inventory_destruction_context(
             """,
             {"org_id": org_id, "business_date": clock["business_date"]},
         )
-    certificates: list[dict[str, Any]] = []
-    if candidates:
-        certificates = _rows(
-            db,
-            """
+    certificates = _rows(
+        db,
+        """
             SELECT attachment.id AS certificate_attachment_id,
                    attachment.original_filename, attachment.document_date,
                    attachment.verified_at, attachment.retention_until
@@ -473,13 +494,13 @@ def inventory_destruction_context(
                     AND convert_from(command.request_bytes,'UTF8')::jsonb
                           ->>'certificate_attachment_id'=attachment.id::text)
              ORDER BY attachment.verified_at DESC, attachment.id
-            """,
-            {
-                "org_id": org_id,
-                "as_of": clock["as_of"],
-                "business_date": clock["business_date"],
-            },
-        )
+        """,
+        {
+            "org_id": org_id,
+            "as_of": clock["as_of"],
+            "business_date": clock["business_date"],
+        },
+    )
     blockers: list[str] = []
     if clock["has_active_gst_registration"]:
         blockers.append(
