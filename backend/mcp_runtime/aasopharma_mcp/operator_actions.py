@@ -59,6 +59,7 @@ PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
         "erp_supplier_payment_prepare",
         "erp_supplier_advance_prepare",
         "erp_adjustment_note_prepare",
+        "erp_inventory_transfer_prepare",
         "erp_inventory_adjustment_prepare",
         "erp_inventory_destruction_prepare",
         "erp_bank_reconciliation_prepare",

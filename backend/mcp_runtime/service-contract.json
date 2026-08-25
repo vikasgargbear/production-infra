@@ -44,6 +44,7 @@
     "erp_inventory_destruction_readback_get",
     "erp_inventory_destruction_prepare",
     "erp_inventory_location_search",
+    "erp_inventory_transfer_prepare",
     "erp_open_item_search",
     "erp_operation_approve",
     "erp_operation_execute",
@@ -80,6 +81,7 @@
       "erp_goods_receipt_prepare",
       "erp_inventory_adjustment_prepare",
       "erp_inventory_destruction_prepare",
+      "erp_inventory_transfer_prepare",
       "erp_operation_approve",
       "erp_operation_execute",
       "erp_operation_review_get",
@@ -94,9 +96,7 @@
       "erp_supplier_invoice_prepare",
       "erp_supplier_payment_prepare"
     ],
-    "unavailable_tools": [
-      "erp_inventory_transfer_prepare"
-    ],
+    "unavailable_tools": [],
     "published_resolution_tools": [
       "erp_adjustment_note_readback_get",
       "erp_customer_search",

@@ -15,6 +15,7 @@
       "finance.supplier_payment.prepare",
       "inventory.adjustment.prepare",
       "inventory.destruction.prepare",
+      "inventory.transfer.prepare",
       "procurement.goods_receipt.prepare",
       "procurement.purchase_order.prepare",
       "procurement.purchase_return.prepare",
@@ -24,9 +25,7 @@
       "sales.order.prepare",
       "sales.return.prepare"
     ],
-    "unavailable_prepare_operations": [
-      "inventory.transfer.prepare"
-    ],
+    "unavailable_prepare_operations": [],
     "release_gates": {
       "canonical_api_command_boundary_verified": true,
       "canonical_database_commands_deployed_verified": true,

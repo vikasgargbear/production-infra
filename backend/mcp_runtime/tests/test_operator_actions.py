@@ -32,6 +32,7 @@ EXPECTED_PREPARES = {
     "erp_supplier_payment_prepare",
     "erp_supplier_advance_prepare",
     "erp_adjustment_note_prepare",
+    "erp_bank_reconciliation_prepare",
     "erp_inventory_transfer_prepare",
     "erp_inventory_adjustment_prepare",
     "erp_inventory_destruction_prepare",
@@ -60,13 +61,12 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
         "erp_operation_review_get",
         "erp_operation_execute",
         "erp_operation_status_get",
+        "erp_bank_reconciliation_get",
     }
     assert OPERATOR_ACTIONS_EXPORTED is True
     published = set(PUBLISHED_PREPARE_TOOL_NAMES) | set(SHARED_ACTION_SCHEMAS)
     assert set(planned_operator_action_tool_names()) & set(live_tools) == published
-    assert EXPECTED_PREPARES - set(PUBLISHED_PREPARE_TOOL_NAMES) == {
-        "erp_inventory_transfer_prepare",
-    }
+    assert EXPECTED_PREPARES == set(PUBLISHED_PREPARE_TOOL_NAMES)
     assert require_operator_action_publication_ready() is None
     assert all(value is True for value in RELEASE_GATES.values())
 

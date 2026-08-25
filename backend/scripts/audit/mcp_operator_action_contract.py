@@ -54,9 +54,7 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_supplier_search",
     "erp_gst_settings_get",
 }
-EXPECTED_UNAVAILABLE_PREPARE_TOOLS = {
-    "erp_inventory_transfer_prepare",
-}
+EXPECTED_UNAVAILABLE_PREPARE_TOOLS = set()
 EXPECTED_RESOLUTION_TOOLS = {
     "erp_customer_search",
     "erp_inventory_location_search",
