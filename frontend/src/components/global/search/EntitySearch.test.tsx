@@ -77,6 +77,7 @@ describe('EntitySearch request ownership', () => {
         expect(searchFn).toHaveBeenCalledTimes(1);
         expect(searchFn).toHaveBeenCalledWith('one');
         expect(screen.getByText('One result')).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'One result' })).toBeTruthy();
     });
 
     it('cancels superseded debounce work during rapid query changes', async () => {
