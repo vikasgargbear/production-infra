@@ -221,3 +221,5 @@ REVOKE ALL ON FUNCTION erp_automation_commands.resolve_adjustment_note_prepare(
 GRANT EXECUTE ON FUNCTION erp_automation_commands.resolve_adjustment_note_prepare(
   uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb
 ) TO erp_runtime, erp_calculator;
+
+RESET ROLE;

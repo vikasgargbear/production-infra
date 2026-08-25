@@ -301,9 +301,15 @@ def validate_module(module_path: Path) -> Dict[str, any]:
     
     content = module_path.read_text()
     schema_override = None
-    if module_path.name == "canonical_erp_reads.py":
-        # This deliberately isolated compatibility router reads the canonical
-        # catalogs while the remaining legacy route modules are retired.
+    if (
+        module_path.name == "canonical_erp_reads.py"
+        or "CANONICAL_SCHEMA_CATALOGS = True" in content
+    ):
+        # Declared canonical routers read the reviewed domain catalogs. Keep
+        # legacy documentation only as a union while remaining route modules
+        # are retired. The declaration is explicit because some older modules
+        # named canonical_* still contain compatibility queries whose aliasing
+        # exceeds this static validator's parser.
         schema_override = {
             table: set(columns) for table, columns in parse_schema_doc().items()
         }

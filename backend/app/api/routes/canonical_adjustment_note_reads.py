@@ -22,6 +22,7 @@ router = APIRouter(
     tags=["Canonical Adjustment Note Reads"],
     dependencies=[Security(HTTPBearer(auto_error=False))],
 )
+CANONICAL_SCHEMA_CATALOGS = True
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
 Side = Literal["sales", "purchase"]
 

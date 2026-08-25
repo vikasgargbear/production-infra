@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260825_0014_adjustment_note_source_authority.sql"
 )
-EXPECTED_SQL_SHA256 = "407c9932b0f462e28c19f7c6c696bb9a6df2d708cdd8e3130c440068a4bf6614"
+EXPECTED_SQL_SHA256 = "d22ec729086768acc26b9d37e91abfe7801349ff7782999b697ab398a84e754d"
 
 
 def _reviewed_sql() -> str:

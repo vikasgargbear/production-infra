@@ -67,6 +67,27 @@ def test_live_verified_query_contract_clears_historical_failures_only():
     assert actual == Counter()
 
 
+def test_split_canonical_routers_use_canonical_domain_catalogs(tmp_path, monkeypatch):
+    canonical_router = tmp_path / "canonical_adjustment_note_reads.py"
+    canonical_router.write_text(
+        'CANONICAL_SCHEMA_CATALOGS = True\n'
+        'QUERY = """SELECT invoice.id, invoice.rounding_policy '
+        'FROM sales.invoices invoice"""\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        schema_validator,
+        "_default_canonical_domain_paths",
+        lambda: [REPO_ROOT / "database/canonical/domains/sales.json"],
+    )
+
+    result = schema_validator.validate_module(canonical_router)
+
+    assert result["total_queries"] == 1
+    assert result["valid_queries"] == 1
+    assert result["errors"] == []
+
+
 def test_live_schema_evidence_is_narrow_and_does_not_claim_baseline():
     evidence = json.loads(
         (REPO_ROOT / "database/live-schema-evidence.json").read_text(encoding="utf-8")
