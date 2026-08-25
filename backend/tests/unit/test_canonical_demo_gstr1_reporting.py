@@ -95,6 +95,73 @@ def test_official_pdf_bytes_must_attest_both_transition_boundaries(
         module.fetch_gstr1_reporting_source(tmp_path)
 
 
+def test_pdf_authority_releases_each_parsed_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_script()
+    closed = []
+
+    class _Page:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def extract_text(self):
+            return self.text
+
+        def close(self):
+            closed.append(self.text)
+
+    pages = [_Page("first reviewed   "), _Page("  fragment second"), _Page("unused")]
+
+    class _Document:
+        metadata = {"CreationDate": "reviewed"}
+
+        def __init__(self):
+            self.pages = pages
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(module.pdfplumber, "open", lambda *_args: _Document())
+    metadata, missing = module.attest_pdf_fragments(
+        b"%PDF", ("reviewed fragment",)
+    )
+
+    assert metadata == {"CreationDate": "reviewed"}
+    assert missing == ()
+    assert closed == ["first reviewed   ", "  fragment second"]
+
+
+def test_pdf_authority_releases_a_page_when_extraction_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    closed = []
+
+    class _Page:
+        def extract_text(self):
+            raise ValueError("malformed page")
+
+        def close(self):
+            closed.append(True)
+
+    class _Document:
+        metadata = {}
+        pages = [_Page()]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(module.pdfplumber, "open", lambda *_args: _Document())
+    with pytest.raises(ValueError, match="malformed page"):
+        module.attest_pdf_fragments(b"%PDF", ("reviewed",))
+    assert closed == [True]
+
+
 def test_dataset_is_one_contiguous_exact_set_canonicalized_by_postgres() -> None:
     module = _load_script()
     canonical = "canonical-jsonb-text"

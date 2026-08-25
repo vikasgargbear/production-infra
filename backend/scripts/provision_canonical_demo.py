@@ -400,6 +400,42 @@ def assert_target() -> None:
         raise RuntimeError("refusing to provision demo data in a production project")
 
 
+def attest_pdf_fragments(
+    source: bytes, required_fragments: tuple[str, ...]
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Scan one PDF page at a time without retaining its full parsed document.
+
+    pdfplumber caches page layouts after extraction. Large regulatory PDFs can
+    otherwise exceed the bounded staging worker memory even though the source
+    bytes themselves are small. A short overlap preserves phrases split across
+    page boundaries while each parsed page is released immediately.
+    """
+
+    missing = {fragment.casefold(): fragment for fragment in required_fragments}
+    overlap = ""
+    with pdfplumber.open(BytesIO(source)) as document:
+        metadata = dict(document.metadata or {})
+        for page in document.pages:
+            try:
+                page_text = re.sub(
+                    r"\s+", " ", page.extract_text() or ""
+                ).strip().casefold()
+                searchable = f"{overlap} {page_text}".strip()
+                missing = {
+                    folded: original
+                    for folded, original in missing.items()
+                    if folded not in searchable
+                }
+                if not missing:
+                    break
+                overlap = searchable[-4096:]
+            finally:
+                close = getattr(page, "close", None)
+                if callable(close):
+                    close()
+    return metadata, tuple(missing.values())
+
+
 def fetch_official_source(evidence_dir: Path) -> bytes:
     response = requests.get(
         SOURCE_URI,
@@ -412,8 +448,6 @@ def fetch_official_source(evidence_dir: Path) -> bytes:
         raise RuntimeError("CBIC rate source has an unexpected size")
     if not source.startswith(b"%PDF"):
         raise RuntimeError("GST Council source is not a PDF")
-    with pdfplumber.open(BytesIO(source)) as document:
-        text = re.sub(r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages))
     required_fragments = (
         "Notification No. 02/2024-Central Tax (Rate)",
         "4819 10",
@@ -421,7 +455,8 @@ def fetch_official_source(evidence_dir: Path) -> bytes:
         "Cartons, boxes and cases",
         "15th day of July, 2024",
     )
-    if any(fragment.lower() not in text.lower() for fragment in required_fragments):
+    _, missing = attest_pdf_fragments(source, required_fragments)
+    if missing:
         raise RuntimeError("GST Council notification lacks the reviewed HSN 4819 rate evidence")
     path = evidence_dir / "gst-council-notification-02-2024.pdf"
     path.write_bytes(source)
@@ -440,17 +475,14 @@ def fetch_adjustment_source(evidence_dir: Path) -> bytes:
     source = response.content
     if not 10_000 <= len(source) <= 100 * 1024 * 1024 or not source.startswith(b"%PDF"):
         raise RuntimeError("GST Council return authority has an unexpected envelope")
-    with pdfplumber.open(BytesIO(source)) as document:
-        text = re.sub(
-            r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages)
-        )
     required_fragments = (
         "Section 34(1)",
         "return of goods on which GST was paid",
         "may issue a credit note for the full value",
         "has reversed his ITC",
     )
-    if any(fragment.casefold() not in text.casefold() for fragment in required_fragments):
+    _, missing = attest_pdf_fragments(source, required_fragments)
+    if missing:
         raise RuntimeError("GST Council return authority lacks reviewed Section 34 fragments")
     (evidence_dir / "gst-council-return-of-goods-faq.pdf").write_bytes(source)
     return source
@@ -468,16 +500,13 @@ def fetch_itc_reversal_source(evidence_dir: Path) -> bytes:
     source = response.content
     if not 10_000 <= len(source) <= 100 * 1024 * 1024 or not source.startswith(b"%PDF"):
         raise RuntimeError("CBIC Section 17(5)(h) source has an unexpected envelope")
-    with pdfplumber.open(BytesIO(source)) as document:
-        text = re.sub(
-            r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages)
-        )
     required_fragments = (
         "CHAPTER V INPUT TAX CREDIT",
         "goods lost, stolen, destroyed, written off",
         "disposed of by way of gift or free samples",
     )
-    if any(fragment.casefold() not in text.casefold() for fragment in required_fragments):
+    _, missing = attest_pdf_fragments(source, required_fragments)
+    if missing:
         raise RuntimeError("CBIC Act source lacks reviewed Section 17(5)(h) fragments")
     (evidence_dir / "cbic-cgst-act-section-17-5-h.pdf").write_bytes(source)
     return source
@@ -500,21 +529,15 @@ def fetch_gstr1_reporting_source(evidence_dir: Path) -> bytes:
         or hashlib.sha256(source).hexdigest() != GSTR1_REPORTING_SOURCE_SHA256
     ):
         raise RuntimeError("GSTN Returns Offline Tool source has an unexpected envelope")
-    with pdfplumber.open(BytesIO(source)) as document:
-        creation_date = str((document.metadata or {}).get("CreationDate", ""))
-        text = re.sub(
-            r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages)
-        )
     required_fragments = (
         "As per amended rules from August 2024 tax return period onwards",
         "invoice value is more than Rs. 1 lakh",
         "up to July 2024 tax return period",
         "invoice value should be more than Rs. 2.5 lakhs",
     )
-    if (
-        not creation_date.startswith("D:20251229")
-        or any(fragment.casefold() not in text.casefold() for fragment in required_fragments)
-    ):
+    metadata, missing = attest_pdf_fragments(source, required_fragments)
+    creation_date = str(metadata.get("CreationDate", ""))
+    if not creation_date.startswith("D:20251229") or missing:
         raise RuntimeError(
             "GSTN Returns Offline Tool lacks the reviewed GSTR-1 B2CL transition evidence"
         )
