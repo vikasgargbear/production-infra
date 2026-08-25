@@ -196,7 +196,7 @@
       "risk": "consequential_write",
       "approval_policy": "actor_confirmation",
       "schema_profile": "commercial_lines",
-      "description": "Prepare a customer sales order with an effective UOM conversion, separate billed/free quantities, four-decimal quoted rate, price basis, explicit line/document discounts, and rounding policy."
+      "description": "Prepare a customer sales order with an exact versioned delivery-address identity, backend-derived place of supply, effective UOM conversion, separate billed/free quantities, four-decimal quoted rate, price basis, explicit line/document discounts, and rounding policy."
     },
     {
       "tool": "erp_sales_dispatch_prepare",
@@ -216,7 +216,7 @@
       "risk": "consequential_write",
       "approval_policy": "actor_confirmation",
       "schema_profile": "batched_commercial_lines",
-      "description": "Prepare a sales invoice for the India wholesale pilot. Supports normal-charge intra-state, inter-state, and evidenced SEZ supplies; export, outward reverse charge, and SEZ without-payment supplies remain fail-closed. Direct issue requires an exact logistics snapshot, while dispatch allocation never issues stock twice."
+      "description": "Prepare a sales invoice for the India wholesale pilot from an exact versioned delivery-address identity whose state and place of supply are backend-resolved. Supports normal-charge intra-state, inter-state, and evidenced SEZ supplies; export, outward reverse charge, and SEZ without-payment supplies remain fail-closed. Direct issue requires an exact logistics snapshot, while dispatch allocation must use the same address as its posted dispatch and never issues stock twice."
     },
     {
       "tool": "erp_sales_return_prepare",

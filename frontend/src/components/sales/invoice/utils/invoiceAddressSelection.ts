@@ -1,4 +1,5 @@
 import type { Invoice } from '../types/invoiceTypes';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 
 type SavedAddress = Record<string, unknown>;
 
@@ -13,12 +14,19 @@ export const applySelectedDeliveryAddress = (
   invoice: Invoice,
   address: SavedAddress,
 ): Invoice => {
+  const addressId = text(address.address_id ?? address.id);
+  const rowVersion = text(address.row_version);
+  if (!isCanonicalUuid(addressId) || !/^[1-9][0-9]*$/.test(rowVersion)) {
+    throw new Error('The selected delivery address is missing its canonical identity or row version.');
+  }
   const stateCode = text(address.state_code);
   if (!/^\d{2}$/.test(stateCode)) {
     throw new Error('The selected delivery address is missing its canonical state code.');
   }
   const normalizedAddress = {
     ...address,
+    address_id: addressId,
+    row_version: rowVersion,
     state_code: stateCode,
   };
   const displayAddress = [

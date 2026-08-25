@@ -16,6 +16,7 @@ import type { CanonicalCommandPreview } from '../../../../services/api/canonical
 import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
 import { clientUuid } from '../../../../utils/clientUuid';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -313,7 +314,15 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 if (!/^\d{2}$/.test(stateCode)) {
                     throw new Error('The customer address is missing its canonical state code.');
                 }
+                const addressId = String(address.address_id ?? address.id ?? '').trim();
+                const rowVersion = String(address.row_version ?? '').trim();
+                if (!isCanonicalUuid(addressId) || !/^[1-9][0-9]*$/.test(rowVersion)) {
+                    throw new Error('The customer address is missing its canonical identity or row version.');
+                }
                 return {
+                    address_id: addressId,
+                    row_version: rowVersion,
+                    address_type: address.address_type as Address['address_type'],
                     address_line1: String(address.address_line1 ?? '').trim(),
                     address_line2: String(address.address_line2 ?? '').trim(),
                     city: String(address.city ?? '').trim(),

@@ -79,6 +79,10 @@ export interface OrderItem {
  * Address structure
  */
 export interface Address {
+    address_id?: string;
+    id?: string;
+    row_version?: string | number;
+    address_type?: 'registered' | 'billing' | 'shipping';
     address_line1?: string;
     address_line2?: string;
     city?: string;

@@ -9,6 +9,7 @@ const ids = {
   batch: 'd3000000-0000-7000-8000-000000000017',
   order: 'd3900000-0000-7000-8000-000000000001',
   line: 'd3900000-0000-7000-8000-000000000002',
+  address: 'd3900000-0000-7000-8000-000000000003',
 };
 
 beforeAll(() => {
@@ -19,7 +20,7 @@ test('sales order command preserves exact entered decimals and canonical identit
   const command = buildCanonicalSalesOrderCommand({
     order_id: '', order_number: '', order_date: '2026-08-25', customer_id: ids.customer,
     customer_name: 'Test', customer_details: {} as any, billing_address: 'A', shipping_address: 'A',
-    billing_address_data: null, shipping_address_data: null, subtotal_amount: 0, discount_amount: 0,
+    billing_address_data: null, shipping_address_data: { address_id: ids.address, row_version: 4 }, subtotal_amount: 0, discount_amount: 0,
     tax_amount: 0, cgst_amount: 0, sgst_amount: 0, igst_amount: 0, round_off: 0, total_amount: 0,
     other_charges: 0, total_quantity: 1, gst_type: 'CGST/SGST', place_of_supply: '27', payment_terms: '',
     reference_no: '', sales_person: '', created_by: null, terms_conditions: '', notes: '',
@@ -28,6 +29,7 @@ test('sales order command preserves exact entered decimals and canonical identit
       discount_percent: '0.125', free_supply_tax_treatment: 'included_at_unit_rate', gst_percent: 12 } as any],
   }, 'sales-order:test');
   expect(command).toMatchObject({ branch_id: ids.branch, customer_account_id: ids.customer,
+    delivery_address_id: ids.address, delivery_address_row_version: '4',
     lines: [{ product_id: ids.product, uom_conversion_id: ids.uom,
       billed_quantity: '1.125000', free_quantity: '0.250000', quoted_unit_rate: '84.1250',
       line_discount: { line_discount_value: '0.125000' } }] });
@@ -63,6 +65,7 @@ test.each([
 ])('sales order rejects a missing exact %s', (_label, lineOverride) => {
   expect(() => buildCanonicalSalesOrderCommand({
     order_date: '2026-08-25', customer_id: ids.customer,
+    shipping_address_data: { address_id: ids.address, row_version: 4 },
     discount_amount: 0, other_charges: 0,
     items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
       quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
@@ -78,6 +81,7 @@ test.each([
 ])('sales order rejects unsupported nonzero %s', (_label, documentOverride) => {
   expect(() => buildCanonicalSalesOrderCommand({
     order_date: '2026-08-25', customer_id: ids.customer, ...documentOverride,
+    shipping_address_data: { address_id: ids.address, row_version: 4 },
     items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
       quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
       discount_percent: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value' }],

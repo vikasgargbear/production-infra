@@ -314,6 +314,7 @@ def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances(
     invoice_id, line_id, allocation_id = uuid4(), uuid4(), uuid4()
     header = _row(
         sales_invoice_id=invoice_id, branch_id=uuid4(), customer_account_id=uuid4(),
+        delivery_address_id=uuid4(), delivery_address_row_version=3,
         seller_tax_registration_id=uuid4(), customer_tax_registration_id=None,
         invoice_number="INV-1", fiscal_year=2026, invoice_date=date(2026, 8, 20),
         due_date=None, invoice_type="tax_invoice", supply_type="intra_state",
@@ -370,6 +371,7 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     invoice_id, line_id = uuid4(), uuid4()
     header = _row(
         sales_invoice_id=invoice_id, branch_id=uuid4(), customer_account_id=uuid4(),
+        delivery_address_id=uuid4(), delivery_address_row_version=3,
         seller_tax_registration_id=uuid4(), customer_tax_registration_id=None,
         invoice_number="INV-DIRECT-1", fiscal_year=2026,
         invoice_date=date(2026, 8, 24), due_date=date(2026, 8, 24),

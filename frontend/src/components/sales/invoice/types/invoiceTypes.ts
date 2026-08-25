@@ -52,6 +52,10 @@ export interface BankAccount {
 
 /** Customer address structure - used in Customer and elsewhere */
 export interface CustomerAddress {
+    address_id?: string | number;
+    id?: string | number;
+    row_version?: string | number;
+    address_type?: string;
     address_line1?: string;
     address_line2?: string;
     street?: string;

@@ -168,6 +168,8 @@ def _sales_order_payload():
         "branch_id": str(BRANCH_ID),
         "order_date": "2026-08-20",
         "customer_account_id": str(uuid4()),
+        "delivery_address_id": str(uuid4()),
+        "delivery_address_row_version": "3",
         "lines": [
             {
                 "product_id": str(uuid4()),
@@ -201,7 +203,6 @@ def _sales_invoice_payload():
         {
             "idempotency_key": "sales-invoice:test:0001",
             "invoice_date": payload.pop("order_date"),
-            "place_of_supply_state_code": "27",
             "tax_charge_mechanism": "normal",
             "from_location_id": str(uuid4()),
             "logistics": {
@@ -270,6 +271,8 @@ def _purchase_order_payload():
         }
     )
     payload.pop("customer_account_id")
+    payload.pop("delivery_address_id")
+    payload.pop("delivery_address_row_version")
     return payload
 
 

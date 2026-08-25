@@ -1,6 +1,8 @@
 import { applySelectedDeliveryAddress } from './invoiceAddressSelection';
 
 const address = {
+  address_id: '10000000-0000-7000-8000-000000000014',
+  row_version: 3,
   address_line1: '101 E2E Test Lane',
   city: 'Mumbai',
   state_code: '27',
@@ -38,4 +40,11 @@ test('rejects an address without an explicit canonical state code', () => {
     { billing_address: '', shipping_address: '' } as any,
     { ...address, state_code: undefined, state: 'Maharashtra' },
   )).toThrow(/canonical state code/i);
+});
+
+test('rejects an address without immutable selection identity', () => {
+  expect(() => applySelectedDeliveryAddress(
+    { billing_address: '', shipping_address: '' } as any,
+    { ...address, row_version: undefined },
+  )).toThrow(/identity or row version/i);
 });

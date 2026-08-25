@@ -133,7 +133,7 @@ def test_bank_reconciliation_has_restricted_postgres15_concurrency_evidence():
     assert "outbox_event_count" in fixture and "audit_event_count" in fixture
     assert "bypassed the reviewed reconciliation command" in fixture
     assert RUNTIME_FIXTURE.name in gate
-    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0010\"' in gate
+    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0011\"' in gate
 
 
 class _Result:

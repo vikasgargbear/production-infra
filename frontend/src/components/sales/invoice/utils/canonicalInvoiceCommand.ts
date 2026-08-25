@@ -136,23 +136,15 @@ const freeSupplyTaxTreatment = (value: unknown): FreeSupplyTaxTreatment => {
     throw new Error('Invoice free-supply tax treatment is missing or invalid');
 };
 
-export function invoicePlaceOfSupplyStateCode(
-    invoice: Invoice,
-    customer: Customer,
-): string {
-    const deliveryAddress = invoice.shipping_address_data as {
-        state_code?: string;
-    } | undefined;
-    if (deliveryAddress) {
-        return /^\d{2}$/.test(String(deliveryAddress.state_code || '').trim())
-            ? String(deliveryAddress.state_code).trim()
-            : '';
+const selectedDeliveryAddress = (invoice: Invoice): { id: string; rowVersion: string } => {
+    const address = invoice.shipping_address_data;
+    const id = requiredUuid(address?.address_id ?? address?.id, 'Delivery address');
+    const rowVersion = String(address?.row_version ?? '').trim();
+    if (!/^[1-9][0-9]*$/.test(rowVersion)) {
+        throw new Error('Delivery address is missing its canonical row version. Re-select it and try again.');
     }
-    if (String(invoice.shipping_address || '').trim() !== String(invoice.billing_address || '').trim()) {
-        return '';
-    }
-    return String(customer.place_of_supply_state_code || '').trim();
-}
+    return { id, rowVersion };
+};
 
 export function companyInvoiceValidationError(
     company: CompanyInfo | null,
@@ -243,8 +235,10 @@ export function canonicalInvoiceValidationError(
     if (!nonEmpty(invoice.shipping_address)) {
         return 'Customer delivery address is missing. Select a saved delivery address before previewing the invoice.';
     }
-    if (!/^[0-9]{2}$/.test(invoicePlaceOfSupplyStateCode(invoice, customer))) {
-        return 'Delivery address state is missing. Select a valid delivery address before previewing the invoice.';
+    try {
+        selectedDeliveryAddress(invoice);
+    } catch (error) {
+        return error instanceof Error ? error.message : 'Select a saved delivery address before previewing the invoice.';
     }
     if (invoice.delivery_type !== 'PICKUP') {
         return 'Delivery and courier invoices need an exact transport distance. Use Pickup until distance capture is available.';
@@ -318,6 +312,7 @@ export function buildCanonicalInvoicePreparePayload(
     const firstDirectIssueItem = invoice.items.find(
         item => fulfillmentSource(item) === 'direct_issue',
     );
+    const deliveryAddress = selectedDeliveryAddress(invoice);
     const freight = rate(invoice.freight_charges, 'Invoice freight');
     return {
         idempotency_key: idempotencyKey,
@@ -335,8 +330,9 @@ export function buildCanonicalInvoicePreparePayload(
             }],
         } : {}),
         customer_account_id: requiredUuid(customer.customer_id, 'Customer'),
+        delivery_address_id: deliveryAddress.id,
+        delivery_address_row_version: deliveryAddress.rowVersion,
         tax_charge_mechanism: 'normal',
-        place_of_supply_state_code: invoicePlaceOfSupplyStateCode(invoice, customer),
         ...(firstDirectIssueItem ? {
             from_location_id: requiredUuid(firstDirectIssueItem.location_id, 'Stock location'),
             logistics: {

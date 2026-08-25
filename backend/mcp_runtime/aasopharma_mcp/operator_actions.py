@@ -448,6 +448,13 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     sales_order.update(
         {
             "customer_account_id": _uuid("Canonical active customer account; the backend derives its party."),
+            "delivery_address_id": _uuid(
+                "Explicit effective customer delivery address; the backend derives place of supply from it."
+            ),
+            "delivery_address_row_version": _string(
+                "Exact selected delivery-address row version; stale selections fail closed.",
+                pattern=r"^[1-9][0-9]*$",
+            ),
             "lines": _array(_commercial_line(), "Requested sales order lines."),
         }
     )
@@ -492,13 +499,16 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     sales_invoice.update(
         {
             "customer_account_id": _uuid("Canonical active customer account; the backend derives its party."),
+            "delivery_address_id": _uuid(
+                "Explicit effective customer delivery address; the backend derives place of supply from it."
+            ),
+            "delivery_address_row_version": _string(
+                "Exact selected delivery-address row version; stale selections fail closed.",
+                pattern=r"^[1-9][0-9]*$",
+            ),
             "tax_charge_mechanism": _string(
                 "Explicit tax charge mechanism. Only normal is accepted; reverse charge remains fail-closed until an effective reviewed legal authority exists.",
                 enum=["normal"],
-            ),
-            "place_of_supply_state_code": _string(
-                "Two-digit Indian state code used with registration and address facts to derive GST.",
-                pattern=r"^[0-9]{2}$",
             ),
             "from_location_id": _uuid("Source location for the invoice's posted stock issue."),
             "logistics": LOGISTICS,

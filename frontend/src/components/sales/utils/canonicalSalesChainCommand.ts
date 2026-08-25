@@ -38,6 +38,16 @@ function requireZero(value: unknown, label: string, scale: number, optional = fa
     }
 }
 
+function deliveryAddress(value: Order['shipping_address_data']): { id: string; rowVersion: string } {
+    const record = value as (Record<string, unknown> | null);
+    const id = uuid(record?.address_id ?? record?.id, 'Delivery address');
+    const rowVersion = String(record?.row_version ?? '').trim();
+    if (!/^[1-9][0-9]*$/.test(rowVersion)) {
+        throw new Error('Delivery address is missing its canonical row version. Re-select it and try again.');
+    }
+    return { id, rowVersion };
+}
+
 export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: string): Record<string, unknown> {
     if (!order.items.length) throw new Error('Add at least one product before preparing the order');
     requireZero(order.discount_amount, 'Order document discount', 2);
@@ -45,12 +55,15 @@ export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: st
     requireZero(order.other_charges, 'Order other charges', 2);
     const branchId = uuid(order.items[0].branch_id, 'Order branch');
     const customerId = uuid(order.customer_id, 'Customer');
+    const selectedDeliveryAddress = deliveryAddress(order.shipping_address_data);
     return {
         idempotency_key: idempotencyKey,
         branch_id: branchId,
         order_date: order.order_date,
         ...(order.expected_delivery_date ? { requested_delivery_date: order.expected_delivery_date } : {}),
         customer_account_id: customerId,
+        delivery_address_id: selectedDeliveryAddress.id,
+        delivery_address_row_version: selectedDeliveryAddress.rowVersion,
         lines: order.items.map((item, index) => {
             if (uuid(item.branch_id, `Item ${index + 1} branch`) !== branchId) {
                 throw new Error('All order items must belong to one branch');

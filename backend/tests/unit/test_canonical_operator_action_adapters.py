@@ -1626,8 +1626,9 @@ def _sales_invoice_service_payload(*, fulfillment_source="direct_issue"):
         "branch_id": uuid4(),
         "invoice_date": datetime(2026, 8, 20, tzinfo=timezone.utc).date(),
         "customer_account_id": uuid4(),
+        "delivery_address_id": uuid4(),
+        "delivery_address_row_version": "3",
         "tax_charge_mechanism": "normal",
-        "place_of_supply_state_code": "29",
         "document_discount": {
             "document_discount_kind": "none",
             "document_discount_basis": "price_value",
@@ -2090,6 +2091,8 @@ def test_sales_order_prepare_uses_one_isolated_calculator_transaction(
         "branch_id": branch_id,
         "order_date": datetime(2026, 8, 20, tzinfo=timezone.utc).date(),
         "customer_account_id": uuid4(),
+        "delivery_address_id": uuid4(),
+        "delivery_address_row_version": "3",
         "document_discount": {
             "document_discount_kind": "none",
             "document_discount_basis": "price_value",

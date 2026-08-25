@@ -61,6 +61,7 @@
       "mcp_prepare_tool": "erp_sales_order_prepare",
       "rest_context": [],
       "rest_readback": "/api/canonical/sales-orders/{resource_id}/acceptance-readback",
+      "input_authorities": {"delivery_address": "delivery_address_id + delivery_address_row_version; backend resolves exact state/place of supply"},
       "prepare_sql": "erp_automation_commands.persist_sales_order_prepare",
       "execute_sql": ["erp_trade_commands_v2.approve_sales_order"],
       "authoritative_tables": ["sales.orders", "sales.order_lines", "calculation.artifacts", "automation.command_requests"]
@@ -81,6 +82,7 @@
       "mcp_prepare_tool": "erp_sales_invoice_prepare",
       "rest_context": [],
       "rest_readback": "/api/canonical/sales-invoices/{resource_id}/posting-readback",
+      "input_authorities": {"delivery_address": "delivery_address_id + delivery_address_row_version; backend resolves exact state/place of supply"},
       "prepare_sql": "erp_automation_commands.persist_sales_invoice_prepare",
       "execute_sql": ["erp_commercial_commands.post_sales_invoice"],
       "authoritative_tables": ["sales.invoices", "sales.invoice_lines", "sales.invoice_dispatch_allocations", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.open_items", "tax.documents", "calculation.artifacts", "automation.command_requests"]

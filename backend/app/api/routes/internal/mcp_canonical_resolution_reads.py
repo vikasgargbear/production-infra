@@ -460,6 +460,8 @@ class SalesOrderDocument(StrictDTO):
     sales_order_id: UUID
     branch_id: UUID
     customer_account_id: UUID
+    delivery_address_id: UUID
+    delivery_address_row_version: int
     order_number: str
     fiscal_year: int
     order_date: date
@@ -668,6 +670,8 @@ class SalesInvoiceDocument(StrictDTO):
     sales_invoice_id: UUID
     branch_id: UUID
     customer_account_id: UUID
+    delivery_address_id: UUID
+    delivery_address_row_version: int
     seller_tax_registration_id: UUID
     customer_tax_registration_id: Optional[UUID]
     invoice_number: str
@@ -712,17 +716,33 @@ def canonical_sales_order_get(
     rows = db.execute(
         text(
             """
-            SELECT id AS sales_order_id, branch_id, customer_account_id,
+            SELECT document.id AS sales_order_id, document.branch_id,
+                   document.customer_account_id,
+                   document.shipping_address_id AS delivery_address_id,
+                   (command.resolution->>'shipping_address_row_version')::bigint
+                     AS delivery_address_row_version,
                    order_number, fiscal_year, order_date, status, currency_code,
                    grand_total, calculation_ruleset_version, row_version
-              FROM sales.orders
-             WHERE org_id=:org_id AND branch_id=:branch_id AND status<>'cancelled'
+              FROM sales.orders document
+              JOIN LATERAL (
+                  SELECT pg_catalog.convert_from(request.resolved_bytes,'UTF8')::jsonb
+                           AS resolution
+                    FROM automation.command_requests request
+                   WHERE request.org_id=document.org_id
+                     AND request.target_resource_type='sales_order'
+                     AND request.target_resource_id=document.id
+                     AND request.capability_code='sales.order.prepare'
+                     AND request.status='succeeded'
+                   ORDER BY request.completed_at DESC,request.id DESC LIMIT 1
+              ) command ON true
+             WHERE document.org_id=:org_id AND document.branch_id=:branch_id
+               AND document.status<>'cancelled'
                AND ((CAST(:document_id AS uuid) IS NOT NULL
-                     AND id=CAST(:document_id AS uuid))
+                     AND document.id=CAST(:document_id AS uuid))
                     OR (CAST(:document_id AS uuid) IS NULL
                         AND order_number=:document_number
                         AND (:fiscal_year IS NULL OR fiscal_year=:fiscal_year)))
-             ORDER BY fiscal_year DESC, id LIMIT 2
+             ORDER BY fiscal_year DESC, document.id LIMIT 2
             """
         ),
         params,
@@ -794,19 +814,36 @@ def canonical_sales_invoice_get(
     rows = db.execute(
         text(
             """
-            SELECT id AS sales_invoice_id, branch_id, customer_account_id,
+            SELECT document.id AS sales_invoice_id, document.branch_id,
+                   document.customer_account_id,
+                   (command.resolution->>'shipping_address_id')::uuid
+                     AS delivery_address_id,
+                   (command.resolution->>'shipping_address_row_version')::bigint
+                     AS delivery_address_row_version,
                    seller_tax_registration_id, customer_tax_registration_id,
                    invoice_number, fiscal_year, invoice_date, due_date, invoice_type,
                    supply_type, place_of_supply_state_code, currency_code, grand_total,
                    calculation_ruleset_version, posted_at, row_version
-              FROM sales.invoices
-             WHERE org_id=:org_id AND branch_id=:branch_id AND status='posted'
+              FROM sales.invoices document
+              JOIN LATERAL (
+                  SELECT pg_catalog.convert_from(request.resolved_bytes,'UTF8')::jsonb
+                           AS resolution
+                    FROM automation.command_requests request
+                   WHERE request.org_id=document.org_id
+                     AND request.target_resource_type='sales_invoice'
+                     AND request.target_resource_id=document.id
+                     AND request.capability_code='sales.invoice.prepare'
+                     AND request.status='succeeded'
+                   ORDER BY request.completed_at DESC,request.id DESC LIMIT 1
+              ) command ON true
+             WHERE document.org_id=:org_id AND document.branch_id=:branch_id
+               AND document.status='posted'
                AND ((CAST(:document_id AS uuid) IS NOT NULL
-                     AND id=CAST(:document_id AS uuid))
+                     AND document.id=CAST(:document_id AS uuid))
                     OR (CAST(:document_id AS uuid) IS NULL
                         AND invoice_number=:document_number
                         AND (:fiscal_year IS NULL OR fiscal_year=:fiscal_year)))
-             ORDER BY fiscal_year DESC, id LIMIT 2
+             ORDER BY fiscal_year DESC, document.id LIMIT 2
             """
         ),
         params,

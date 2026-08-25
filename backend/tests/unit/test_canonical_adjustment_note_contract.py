@@ -214,7 +214,7 @@ def test_incremental_adjustment_migration_is_hash_bound_linear_and_pg15_gated() 
     assert "TO \"erp_runtime\"" in sql
     assert "TO \"erp_calculator\"" in sql
     assert "check_canonical_adjustment_note_runtime_role.py" in gate
-    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0010\"' in gate
+    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0011\"' in gate
 
 
 def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:

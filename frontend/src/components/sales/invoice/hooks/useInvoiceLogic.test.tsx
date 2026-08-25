@@ -44,6 +44,7 @@ const ids = {
     product: '10000000-0000-7000-8000-000000000004',
     batch: '10000000-0000-7000-8000-000000000005',
     uom: '10000000-0000-7000-8000-000000000006',
+    deliveryAddress: '10000000-0000-7000-8000-000000000007',
 };
 
 const customer = {
@@ -139,6 +140,11 @@ describe('useInvoiceLogic selected quantity boundary', () => {
                 ...result.current.invoice,
                 billing_address: '1 Canonical Customer Road',
                 shipping_address: '1 Canonical Customer Road',
+                shipping_address_data: {
+                    address_id: ids.deliveryAddress,
+                    row_version: 3,
+                    state_code: '27',
+                },
                 delivery_type: 'PICKUP',
             }, customer, `erp-web-invoice:${billed}:${free}`);
         expect(payload.lines[0]).toEqual(expect.objectContaining({
