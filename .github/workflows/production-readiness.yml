@@ -1268,12 +1268,22 @@ jobs:
       - name: Build the masked exact erp_runtime connection
         env:
           ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
           encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=15&application_name=canonical_live18"
           echo "::add-mask::$runtime_url"
           echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
+          owner_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
+          owner_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${owner_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=15&application_name=canonical_live18_identity_owner"
+          echo "::add-mask::$owner_url"
+          echo "CANONICAL_LIVE18_OWNER_DATABASE_URL=$owner_url" >> "$GITHUB_ENV"
+      - name: Temporarily delegate migration-owner identity reconciliation
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 "$CANONICAL_LIVE18_OWNER_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE' >/dev/null
       - name: Provision disposable live18 requester, reviewer, and denial identities
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -1355,6 +1365,12 @@ jobs:
         run: |
           python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
             --state "$RUNNER_TEMP/live18-browser-identities.json"
+      - name: Always revoke migration-owner identity reconciliation
+        if: always()
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 "$CANONICAL_LIVE18_OWNER_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres WITH SET FALSE' >/dev/null
       - name: Always remove external reviewed choices and compiled fixture
         if: always()
         run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH"

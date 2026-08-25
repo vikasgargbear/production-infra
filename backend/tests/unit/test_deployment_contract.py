@@ -1198,7 +1198,17 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert live18.index("provision_ephemeral_canonical_live.py cleanup") < live18.index(
         "provision_ephemeral_browser_identities.py cleanup"
     )
-    assert live18.count("if: always()") >= 4
+    assert "CANONICAL_LIVE18_OWNER_DATABASE_URL=$owner_url" in live18
+    assert 'echo "::add-mask::$owner_url"' in live18
+    grant_owner = "GRANT erp_migration_owner TO postgres WITH SET TRUE"
+    revoke_owner = "GRANT erp_migration_owner TO postgres WITH SET FALSE"
+    assert live18.count(grant_owner) == 1
+    assert live18.count(revoke_owner) == 1
+    assert live18.index(grant_owner) < live18.index("provision --profile live18")
+    assert live18.index("provision_ephemeral_browser_identities.py cleanup") < (
+        live18.index(revoke_owner)
+    )
+    assert live18.count("if: always()") >= 5
     assert 'rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH"' in live18
     assert "secrets.LIVE18_REQUESTER" not in live18
     assert "secrets.LIVE18_REVIEWER" not in live18
