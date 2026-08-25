@@ -831,7 +831,10 @@ jobs:
       run:
         working-directory: frontend
     env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
       PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
+      PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
@@ -844,6 +847,8 @@ jobs:
       PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -854,6 +859,14 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Bind two-user approvals to one reviewed deployed SHA
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
+          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+            --commit-sha "$REVIEWED_DEPLOY_SHA" \
+            > render-pilot-two-user-sha.json
       - name: Refuse any browser target except reviewed canonical staging
         run: |
           set -euo pipefail

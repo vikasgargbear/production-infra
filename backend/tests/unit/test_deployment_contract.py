@@ -39,6 +39,10 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" in browser_job
     assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
 
+    two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1]
+    assert "verify_render_pilot_sha.py" in two_user_job
+    assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
+
 
 def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     workflow = _read(".github/workflows/production-readiness.yml")
