@@ -5,10 +5,11 @@
     "dockerfilePath": "/frontend/Dockerfile",
     "watchPatterns": [
       "/frontend/**",
-      "/deploy/railway/frontend.railway.json"
+      "/deploy/railway/frontend.*"
     ]
   },
   "deploy": {
+    "startCommand": null,
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "sleepApplication": false,
