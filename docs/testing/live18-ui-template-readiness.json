@@ -1,6 +1,6 @@
 {
   "schema": "aasopharma.live18.ui-template-readiness.v1",
-  "ready_count": 0,
+  "ready_count": 1,
   "operations": [
     {"id":"sales_invoice","status":"blocked","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts"],"missing":["current selector extraction after delivery-address/logistics authority changes","authoritative eligible FEFO batch selector","reviewed quantity/rate/free-quantity choices"]},
     {"id":"sales_order","status":"blocked","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts"],"missing":["current selector extraction after delivery-address authority changes","reviewed quantity/rate choices"]},
@@ -14,7 +14,7 @@
     {"id":"sales_return","status":"blocked","evidence_sources":["frontend/e2e/live-two-user-approval.spec.ts"],"missing":["authoritative returnable invoice lineage","reviewed return reason/quantity/GST treatment","template conversion of proven two-user selectors"]},
     {"id":"purchase_return","status":"blocked","evidence_sources":["frontend/e2e/live-two-user-approval.spec.ts"],"missing":["authoritative returnable supplier-invoice/GRN allocation lineage","reviewed return reason/quantity/GST treatment/destination","template conversion of proven two-user selectors"]},
     {"id":"stock_adjustment","status":"blocked","evidence_sources":["frontend/e2e/live-two-user-approval.spec.ts"],"missing":["authoritative eligible batch/count evidence and timestamp","reviewed positive count choice","template conversion of proven two-user selectors"]},
-    {"id":"stock_transfer","status":"blocked","evidence_sources":["frontend/e2e/live-canonical-stock-transfer.spec.ts"],"missing":["current selector proof after required logistics facts","reviewed quantity/transport mode/distance/transporter choices","authoritative FEFO eligibility"]},
+    {"id":"stock_transfer","status":"ready","evidence_sources":["frontend/e2e/live-canonical-stock-transfer.spec.ts","frontend/src/components/inventory/stock/StockTransfer.tsx","frontend/e2e/live18/templates/stock_transfer.json"],"missing":[]},
     {"id":"destruction","status":"blocked","evidence_sources":["frontend/src/components/inventory/stock/InventoryDestructionFlow.tsx"],"missing":["visible live selector proof","authoritative full-balance batch and verified certificate evidence","reviewed method/witness/reason facts","independent approval/resume selectors"]},
     {"id":"customer_credit_note","status":"blocked","evidence_sources":["frontend/src/components/payment/flows/CreditDebitFlow.tsx"],"missing":["visible live selector proof","authoritative original sales invoice/open-item lineage","reviewed reason/amount/treatment","independent approval/resume selectors"]},
     {"id":"supplier_debit_note","status":"blocked","evidence_sources":["frontend/src/components/payment/flows/CreditDebitFlow.tsx"],"missing":["visible live selector proof","authoritative original supplier invoice/open-item lineage","reviewed reason/amount/treatment","independent approval/resume selectors"]},

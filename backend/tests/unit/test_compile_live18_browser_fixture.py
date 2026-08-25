@@ -10,6 +10,8 @@ from scripts.compile_live18_browser_fixture import (
     TEMPLATE_SCHEMA,
     compile_fixture,
     load_reviewed_scalars,
+    _compile_value,
+    _validate_compiled_steps,
 )
 
 
@@ -132,8 +134,40 @@ def test_template_readiness_names_all_18_operations_without_false_ready_claims()
     assert readiness["ready_count"] == sum(
         row["status"] == "ready" for row in readiness["operations"]
     )
-    assert all(row["status"] == "blocked" and row["missing"] for row in readiness["operations"])
+    assert all(row["status"] in {"ready", "blocked"} for row in readiness["operations"])
+    assert all(
+        (row["status"] == "ready" and not row["missing"])
+        or (row["status"] == "blocked" and row["missing"])
+        for row in readiness["operations"]
+    )
     assert all(
         all((root / source).is_file() for source in row["evidence_sources"])
         for row in readiness["operations"]
     )
+
+
+def test_stock_transfer_template_compiles_only_reviewed_choices() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/stock_transfer.json").read_text()
+    )
+    facts = {
+        "identity": {
+            "branch_id": "d3000000-0000-7000-8000-000000000005",
+            "saleable_location_id": "d3200000-0000-7000-8000-000000000006",
+            "transfer_destination_branch_id": "d3000000-0000-7000-8000-000000000028",
+            "transfer_destination_location_id": "d3200000-0000-7000-8000-00000000000f",
+        },
+        "display": {"product_code": "DEMO-PRODUCT", "product_name": "Demo Product"},
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        {"stock_transfer_quantity": "1.000000", "stock_transfer_distance_km": "12.50"},
+        used,
+    )
+    _validate_compiled_steps("stock_transfer", operation, "actor_confirmation")
+    assert used == {"stock_transfer_quantity", "stock_transfer_distance_km"}
+    assert operation["prepare_steps"][5]["value"] == "12.50"
+    assert operation["prepare_steps"][9]["value"] == "1.000000"

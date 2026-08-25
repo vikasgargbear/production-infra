@@ -50,6 +50,17 @@ canonical prepare response. The bounded run token is
 numbers unique between retries. It must not replace reviewed canonical IDs,
 amounts, quantities, tax facts, or event dates. Unknown, malformed, or
 unavailable tokens fail fixture loading or execution.
+
+Actor-confirmation screens that expose one reviewed approval-and-execute CTA
+must declare `lifecycle_mode` as `combined_actor_confirmation`; the harness
+proves that no approval occurred before that CTA and then captures exactly one
+approval and one execution for the reviewed command. Other screens declare
+`split`. The first checked-in operation template is stock transfer. Its compact
+reviewed scalar pack entries are `stock_transfer_quantity` (an exact positive
+six-place quantity within the server-returned FEFO tier) and
+`stock_transfer_distance_km` (an exact positive two-place distance). Branch,
+location, product, UOM, business date, transport mode, and eligible batch facts
+remain canonical runtime facts and are forbidden in the scalar secret.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,
