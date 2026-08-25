@@ -51,4 +51,6 @@ test('inventory commands never invent a browser document number', () => {
   expect(adjustment).not.toContain('adjustment_no');
   expect(adjustment).not.toContain('ADJ-');
   expect(adjustment).not.toContain('Date.now()');
+  expect(adjustment).not.toContain('new Date(item.expiry_date)');
+  expect(adjustment).toContain("requireCalendarDate(item.expiry_date, 'Batch expiry date')");
 });

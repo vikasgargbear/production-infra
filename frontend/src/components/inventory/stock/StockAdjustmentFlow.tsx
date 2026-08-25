@@ -14,6 +14,7 @@ import type { CanonicalCommandPreview } from '../../../services/api/canonicalOpe
 import { canonicalBusinessContextApi } from '../../../services/api/modules/org/canonicalBusinessContext.api';
 import { parseStockAdjustmentCsv, type StockAdjustmentCsvResult } from './utils/stockAdjustmentCsv';
 import { clientUuid } from '../../../utils/clientUuid';
+import { formatCalendarDate, requireCalendarDate } from '../../../utils/calendarDate';
 import {
   buildCycleCountGainPayload,
   approveCycleCountReview,
@@ -866,7 +867,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                             <div>
                               <div className="font-medium">{item.batch_number || 'Batch identity unavailable'}</div>
                               {item.expiry_date && (
-                                <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
+                                <div className="text-xs text-gray-500">Exp: {formatCalendarDate(requireCalendarDate(item.expiry_date, 'Batch expiry date'))}</div>
                               )}
                             </div>
                           </td>
@@ -1079,7 +1080,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                   <td className="px-4 py-3 text-center">
                         <div className="font-medium">{item.batch_number || 'Batch identity unavailable'}</div>
                     {item.expiry_date && (
-                      <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
+                      <div className="text-xs text-gray-500">Exp: {formatCalendarDate(requireCalendarDate(item.expiry_date, 'Batch expiry date'))}</div>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">{item.quantity_available === null ? '—' : item.quantity_available}</td>
