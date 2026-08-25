@@ -328,6 +328,71 @@ def test_sales_invoice_template_compiles_exact_canonical_selectors_and_reviewed_
         _operation_facts("sales_invoice", facts, insufficient_stock, set())
 
 
+def test_stock_adjustment_template_derives_post_sales_count_from_authoritative_stock() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/stock_adjustment.json").read_text()
+    )
+    scalars = {
+        "sales_invoice_quantity": "1.000000",
+        "sales_invoice_free_quantity": "0.500000",
+        "sales_order_quantity": "2.000000",
+        "stock_adjustment_gain_quantity": "1.000000",
+    }
+    facts = {
+        "identity": {
+            "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000042",
+            "count_uom_conversion_id": "d3000000-0000-7000-8000-000000000043",
+            "cycle_count_evidence_attachment_id": "d3000000-0000-7000-8000-000000000044",
+        },
+        "display": {
+            "product_code": "DEMO-PRODUCT",
+            "product_name": "Demo Product",
+            "cycle_count_system_base_quantity": "100.000000",
+            "sales_uom_multiplier": "10.000000",
+            "cycle_count_uom_multiplier": "10.000000",
+            "cycle_count_uom_code": "PK",
+            "cycle_count_evidence_label": "retained · 2026-08-25 · d3000000",
+        },
+        "clock": {
+            "business_date": "2026-08-25",
+            "cycle_count_completed_at_utc": "2026-08-25T10:15:30.000Z",
+        },
+    }
+    used: set[str] = set()
+    operation_facts = _operation_facts(
+        "stock_adjustment", facts, scalars, used,
+    )
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        operation_facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("stock_adjustment", operation, "separate_approver")
+    assert used == {"stock_adjustment_gain_quantity"}
+    assert operation_facts["choice"] == {
+        "stock_adjustment_counted_quantity": "7.500000",
+        "stock_adjustment_expected_system_base_quantity": "65.000000",
+    }
+    assert operation["prepare_steps"][5]["locator"]["name"] == (
+        "select-batch-d3000000-0000-7000-8000-000000000042"
+    )
+    assert operation["prepare_steps"][9]["value"] == "65.000000"
+    assert operation["approval_steps"][3]["value"] == "{{command_request_id}}"
+    assert operation["execute_steps"][2]["locator"]["name"] == (
+        "Post Approved Cycle Count Once"
+    )
+
+    with pytest.raises(FixtureCompileError, match="greater than zero"):
+        _operation_facts(
+            "stock_adjustment",
+            facts,
+            {**scalars, "stock_adjustment_gain_quantity": "0.000000"},
+            set(),
+        )
+
+
 def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(

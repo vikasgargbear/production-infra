@@ -18,6 +18,7 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
     expect(source).toContain('adjustmentData.counted_at');
     expect(source).toContain('requireCanonicalUtcEventTimestamp');
     expect(source).not.toContain('const countedAt = new Date().toISOString()');
+    expect(source).toMatch(/data-testid=\{`cycle-count-system-base-\$\{item\.batch_id\}`\}/);
   });
 
   it('preserves separate approval, requester execution, and authoritative readback', () => {
@@ -26,6 +27,8 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
     expect(source).toContain('executeApprovedCycleCount');
     expect(source).toContain('loadAndVerifyCycleCountReadback');
     expect(source).not.toContain('approveAndExecuteCanonicalAction');
+    expect(source).toContain("awaitingIndependentApproval ? 'Post Approved Cycle Count Once'");
+    expect(source).not.toContain('saveDisabled={awaitingIndependentApproval}');
   });
 
   it('does not let preview-only CSV rows masquerade as resolved stock', () => {

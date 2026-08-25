@@ -110,6 +110,14 @@ label, and GST-treatment label. It selects the exact certified sales-invoice
 UUID produced earlier, then uses only its dispatch allocation, batch, and
 server-published quarantine locations. The return remains intentionally
 dependent on the sales-invoice operation; no older invoice fallback is used.
+Stock adjustment reviews only `stock_adjustment_gain_quantity`, expressed in
+the exact canonical count UOM. The compiler resolves the requester membership,
+unused retained cycle-count evidence, eligible released batch, UOM multiplier,
+evidence verification instant, and pre-run base stock from canonical staging.
+It then subtracts the earlier certified direct invoice and dispatch issues and
+derives one exactly representable physical count above the resulting system
+stock. The UI independently reloads eligibility, visibly reconciles that exact
+system balance, and requires a distinct reviewer before requester execution.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

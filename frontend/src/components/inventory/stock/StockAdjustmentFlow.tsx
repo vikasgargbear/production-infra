@@ -908,7 +908,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center">{item.quantity_available === null ? '—' : item.quantity_available}</td>
+                          <td
+                            className="px-4 py-3 text-center"
+                            data-testid={`cycle-count-system-base-${item.batch_id}`}
+                          >
+                            {item.quantity_available === null ? '—' : item.quantity_available}
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <select
                               value={item.uom_conversion_id}
@@ -1052,7 +1057,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                     <span>{awaitingIndependentApproval ? 'Executing...' : 'Submitting...'}</span>
                   </>
                 ) : (
-                  <span>{awaitingIndependentApproval ? 'Execute Approved Count' : 'Submit for Independent Approval'}</span>
+                  <span>{awaitingIndependentApproval ? 'Post Approved Cycle Count Once' : 'Submit for Independent Approval'}</span>
                 )}
               </button>
             </div>
@@ -1175,7 +1180,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
         ? () => setShowConfirmModal(true)
         : handlePrepare}
       isSaving={isPreparing || isCommitting}
-      saveDisabled={awaitingIndependentApproval}
       saveLabel={committedRef
         ? 'Adjustment Posted'
         : awaitingIndependentApproval ? 'Execute Approved Count' : 'Prepare Cycle Count'}

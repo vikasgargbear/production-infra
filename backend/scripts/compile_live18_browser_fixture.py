@@ -246,12 +246,95 @@ def resolve_authoritative_facts(
                 portal_line.id, portal_line.invoice_number, portal_line.invoice_date
       HAVING count(receipt_line.id)=1
     """
+    cycle_count_sql = """
+      SELECT membership.id::text, attachment.id::text,
+             to_char(attachment.verified_at AT TIME ZONE 'UTC',
+                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+             balance.on_hand_quantity, conversion.multiplier,
+             conversion.from_uom_code,attachment.status,
+             to_char(attachment.document_date,'YYYY-MM-DD')
+        FROM core.memberships membership
+        JOIN core.users user_row
+          ON user_row.id=membership.user_id
+         AND user_row.auth_user_id=%s AND user_row.status='active'
+        JOIN core.organizations organization
+          ON organization.id=membership.org_id AND organization.status='active'
+        JOIN inventory.stock_balances balance
+          ON balance.org_id=membership.org_id AND balance.branch_id=%s
+         AND balance.location_id=%s AND balance.batch_id=%s
+         AND balance.product_id=%s AND balance.on_hand_quantity>0
+         AND balance.inventory_value>0 AND balance.average_unit_cost>0
+        JOIN inventory.locations location
+          ON location.org_id=balance.org_id AND location.id=balance.location_id
+         AND location.branch_id=balance.branch_id AND location.status='active'
+         AND location.location_type='saleable' AND location.allows_sale
+         AND NOT location.allows_negative_stock
+         AND location.temperature_min_c IS NULL AND location.temperature_max_c IS NULL
+        JOIN inventory.batches batch
+          ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
+         AND batch.product_id=balance.product_id AND batch.status='released'
+         AND batch.released_at IS NOT NULL AND batch.released_at<=transaction_timestamp()
+         AND batch.expires_on>(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+         AND batch.mrp>0 AND batch.mrp_uom_conversion_id IS NOT NULL
+        JOIN catalog.products product
+          ON product.org_id=balance.org_id AND product.id=balance.product_id
+         AND product.status='active' AND NOT product.cold_chain_required
+         AND COALESCE(product.drug_schedule,'NONE') NOT IN ('H','H1','X')
+         AND NOT COALESCE(product.ndps_regulated,false)
+        JOIN catalog.uom_conversions conversion
+          ON conversion.org_id=product.org_id AND conversion.product_id=product.id
+         AND conversion.id=%s AND conversion.status='active'
+         AND conversion.from_uom_code<>conversion.to_uom_code
+         AND conversion.to_uom_code=product.base_uom_code AND conversion.multiplier>0
+         AND conversion.valid_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+         AND (conversion.valid_until IS NULL
+              OR conversion.valid_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+        JOIN LATERAL (
+            SELECT candidate.id,candidate.verified_at,candidate.status,
+                   candidate.document_date
+              FROM core.attachments candidate
+             WHERE candidate.org_id=membership.org_id
+               AND candidate.evidence_kind='inventory_cycle_count_sheet'
+               AND candidate.status IN ('verified','retained')
+               AND candidate.verified_at IS NOT NULL
+               AND candidate.verified_at<=transaction_timestamp()
+               AND candidate.document_date=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+               AND candidate.retention_until IS NOT NULL
+               AND candidate.retention_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+               AND candidate.sha256 IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM automation.command_requests prior
+                    WHERE prior.org_id=candidate.org_id
+                      AND prior.capability_code='inventory.adjustment.prepare'
+                      AND prior.status NOT IN ('failed','expired','cancelled')
+                      AND convert_from(prior.request_bytes,'UTF8')::jsonb
+                          ->>'evidence_attachment_id'=candidate.id::text
+               )
+             ORDER BY candidate.verified_at DESC,candidate.id
+             LIMIT 2
+        ) attachment ON true
+       WHERE membership.org_id=%s AND membership.status='active'
+       ORDER BY attachment.verified_at DESC,attachment.id
+       LIMIT 2
+    """
     with psycopg2.connect(database_url) as connection:
         connection.set_session(readonly=True, autocommit=False)
         with connection.cursor() as cursor:
             cursor.execute("SELECT erp_security.activate_context(%s::uuid,%s::uuid)", (auth_user_id, org_id))
             cursor.execute(sql, params)
             rows = cursor.fetchall()
+            cycle_count_rows: list[tuple[Any, ...]] = []
+            if len(rows) == 1:
+                cursor.execute(
+                    cycle_count_sql,
+                    (
+                        auth_user_id,
+                        identities["branch_id"], identities["saleable_location_id"],
+                        rows[0][24], identities["product_id"],
+                        identities["count_uom_conversion_id"], org_id,
+                    ),
+                )
+                cycle_count_rows = cursor.fetchall()
             cursor.execute(
                 supplier_invoice_sql,
                 (supplier_invoice_number, org_id, supplier_challan_number),
@@ -260,6 +343,11 @@ def resolve_authoritative_facts(
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
+    if len(cycle_count_rows) != 1:
+        raise FixtureCompileError(
+            "authoritative cycle-count membership, batch, UOM and evidence resolved "
+            f"{len(cycle_count_rows)} rows, expected one"
+        )
     keys = (
         "branch_code", "branch_name", "customer_code", "customer_name",
         "supplier_code", "supplier_name", "product_code", "product_name",
@@ -281,6 +369,16 @@ def resolve_authoritative_facts(
     if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
     resolved = dict(zip(keys, rows[0][:-2]))
+    (
+        cycle_count_membership_id,
+        cycle_count_evidence_id,
+        cycle_count_completed_at,
+        cycle_count_system_base_quantity,
+        cycle_count_uom_multiplier,
+        cycle_count_uom_code,
+        cycle_count_evidence_status,
+        cycle_count_evidence_document_date,
+    ) = cycle_count_rows[0]
     return {
         "identity": {
             **identities,
@@ -288,11 +386,24 @@ def resolve_authoritative_facts(
             "delivery_address_id": resolved.pop("delivery_address_id"),
             "delivery_address_row_version": resolved.pop("delivery_address_row_version"),
             "direct_issue_batch_id": resolved.pop("direct_issue_batch_id"),
+            "cycle_count_evidence_attachment_id": cycle_count_evidence_id,
+            "cycle_count_counted_by_membership_id": cycle_count_membership_id,
         },
-        "display": resolved,
+        "display": {
+            **resolved,
+            "cycle_count_system_base_quantity": cycle_count_system_base_quantity,
+            "cycle_count_uom_multiplier": cycle_count_uom_multiplier,
+            "cycle_count_uom_code": cycle_count_uom_code,
+            "cycle_count_evidence_label": (
+                f"{cycle_count_evidence_status} · "
+                f"{cycle_count_evidence_document_date} · "
+                f"{str(cycle_count_evidence_id)[:8]}"
+            ),
+        },
         "clock": {
             "business_date": rows[0][-2],
             "business_datetime_local": rows[0][-1],
+            "cycle_count_completed_at_utc": cycle_count_completed_at,
         },
         "choice": {
             "supplier_invoice_number": resolved_invoice_number,
@@ -368,6 +479,60 @@ def _operation_facts(
                 "sales_invoice reviewed billed/free quantities exceed the exact selected batch stock"
             )
         return facts
+    if operation_id == "stock_adjustment":
+        gain_text = _leaf(
+            scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
+        )
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", gain_text):
+            raise FixtureCompileError(
+                "stock_adjustment_gain_quantity must be a positive plain decimal with at most 6 fractional digits"
+            )
+        gain_quantity = Decimal(gain_text)
+        if gain_quantity <= 0:
+            raise FixtureCompileError(
+                "stock_adjustment_gain_quantity must be greater than zero"
+            )
+        initial_base = Decimal(_leaf(
+            facts, "display.cycle_count_system_base_quantity", "canonical fact"
+        ))
+        sales_multiplier = Decimal(_leaf(
+            facts, "display.sales_uom_multiplier", "canonical fact"
+        ))
+        count_multiplier = Decimal(_leaf(
+            facts, "display.cycle_count_uom_multiplier", "canonical fact"
+        ))
+        issued_sales_units = sum((
+            Decimal(_leaf(scalars, key, "reviewed scalar"))
+            for key in (
+                "sales_invoice_quantity",
+                "sales_invoice_free_quantity",
+                "sales_order_quantity",
+            )
+        ), Decimal("0"))
+        expected_system_base = initial_base - issued_sales_units * sales_multiplier
+        if expected_system_base <= 0 or count_multiplier <= 0:
+            raise FixtureCompileError(
+                "prior reviewed sales issues leave no eligible cycle-count stock"
+            )
+        counted_quantity = expected_system_base / count_multiplier + gain_quantity
+        exact_counted_quantity = counted_quantity.quantize(Decimal("0.000001"))
+        if counted_quantity != exact_counted_quantity:
+            raise FixtureCompileError(
+                "derived cycle-count quantity is not exactly representable at canonical scale 6"
+            )
+        used.add("stock_adjustment_gain_quantity")
+        return {
+            **facts,
+            "choice": {
+                **(facts.get("choice") or {}),
+                "stock_adjustment_counted_quantity": format(
+                    exact_counted_quantity, ".6f"
+                ),
+                "stock_adjustment_expected_system_base_quantity": format(
+                    expected_system_base, ".6f"
+                ),
+            },
+        }
     if operation_id == "goods_receipt":
         offset_text = _leaf(
             scalars, "goods_receipt_expiry_offset_days", "reviewed scalar"
