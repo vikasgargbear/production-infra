@@ -23,10 +23,14 @@ function decimal(value: unknown, label: string, scale: number, positive = false)
 
 function freeSupplyTaxTreatment(
     value: unknown,
+    freeQuantity: string,
     label: string,
 ): 'excluded_from_taxable_value' | 'included_at_unit_rate' {
     if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') {
         return value;
+    }
+    if (exactDecimalUnits(freeQuantity, `${label} free quantity`, { scale: 6 }) === 0n) {
+        return 'excluded_from_taxable_value';
     }
     throw new Error(`${label} is missing its explicit canonical value`);
 }
@@ -75,13 +79,15 @@ export function buildCanonicalSalesOrderCommand(
                 throw new Error('All order items must belong to one branch');
             }
             const discount = decimal(item.discount_percent, `Item ${index + 1} discount`, 6);
+            const freeQuantity = decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6);
             return {
                 product_id: uuid(item.product_id, `Item ${index + 1} product`),
                 uom_conversion_id: uuid(item.uom_conversion_id, `Item ${index + 1} UOM`),
                 billed_quantity: decimal(item.quantity, `Item ${index + 1} billed quantity`, 6, true),
-                free_quantity: decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6),
+                free_quantity: freeQuantity,
                 free_supply_tax_treatment: freeSupplyTaxTreatment(
                     item.free_supply_tax_treatment,
+                    freeQuantity,
                     `Item ${index + 1} free-supply tax treatment`,
                 ),
                 quoted_unit_rate: decimal(item.unit_price, `Item ${index + 1} unit rate`, 4),

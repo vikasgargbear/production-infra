@@ -93,7 +93,6 @@ test('dispatch rejects missing policy, exact distance, and order-line identity',
 test.each([
   ['line discount', { discount_percent: undefined }],
   ['free quantity', { free_quantity: undefined }],
-  ['free-supply tax treatment', { free_supply_tax_treatment: undefined }],
 ])('sales order rejects a missing exact %s', (_label, lineOverride) => {
   expect(() => buildCanonicalSalesOrderCommand({
     order_date: '2026-08-25', customer_id: ids.customer,
@@ -104,6 +103,22 @@ test.each([
       discount_percent: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value',
       ...lineOverride }],
   } as any, 'test', policy)).toThrow(/missing/i);
+});
+
+test('sales order derives the immaterial zero-free treatment but requires it for free supply', () => {
+  const build = (freeQuantity: string, treatment?: string) => buildCanonicalSalesOrderCommand({
+    order_date: '2026-08-25', customer_id: ids.customer,
+    shipping_address_data: { address_id: ids.address, row_version: 4 },
+    discount_amount: 0, other_charges: 0,
+    items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
+      quantity: '1.000000', free_quantity: freeQuantity, unit_price: '10.0000',
+      discount_percent: '0.000000', free_supply_tax_treatment: treatment }],
+  } as any, 'test', policy);
+
+  expect(build('0.000000')).toMatchObject({
+    lines: [{ free_quantity: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value' }],
+  });
+  expect(() => build('0.250000')).toThrow(/free-supply tax treatment.*missing/i);
 });
 
 test.each([
