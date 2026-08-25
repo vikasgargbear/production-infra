@@ -27,9 +27,6 @@ export {
     ProductEditModal
 } from './edit';
 
-// ============== UPLOAD COMPONENTS ==============
-export { BulkProductUpload } from './upload';
-
 // ============== MODAL COMPONENTS ==============
 export {
     BaseModal,

@@ -17,7 +17,6 @@ import {
 } from '../../global';
 import { PURCHASE_CONFIG } from '../../../config/purchase.config';
 import PDFUploadModal from '../../global/modals/PDFUploadModal';
-import BulkUploadInline from '../BulkUploadInline';
 import PDFVerificationFlow from '../PDFVerificationFlow';
 import PurchaseItemEditModal from '../ui/PurchaseItemEditModal';
 import { usePurchaseEntryLogic, PurchaseItem, PurchaseData } from './hooks';
@@ -90,7 +89,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
     handleSupplierSelect,
     handleAddItem,
     handleSaveItemFromModal,
-    handleBulkUpload,
     handleUpdateItem,
     handleRemoveItem,
     handleSavePurchase,
@@ -201,9 +199,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
             <h3 className="text-sm font-semibold text-gray-700">PRODUCTS</h3>
           </div>
           <div className="flex gap-2">
-            <BulkUploadInline
-              onProductsUploaded={handleBulkUpload}
-            />
             <button
               onClick={() => setShowProductModal(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"

@@ -655,13 +655,7 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
         <!-- Terms & Conditions -->
         <div class="terms-section">
             <h4 class="summary-title">Terms & Conditions</h4>
-            <ol class="terms-list">
-                <li>Goods once sold will not be taken back or exchanged</li>
-                <li>Interest @ 36% p.a will be charged if payment is not made within the stipulated time</li>
-                <li>Subject to our standard terms of credit</li>
-                <li>All disputes are subject to local jurisdiction only</li>
-                <li>E.&O.E.</li>
-            </ol>
+            <p>Only terms confirmed on the authoritative invoice record apply.</p>
         </div>
 
         <!-- Signatures -->

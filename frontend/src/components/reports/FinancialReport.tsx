@@ -521,74 +521,24 @@ const FinancialReport: React.FC = () => {
               }}
               height={400}
             />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-700">Net Cash Flow</p>
-                <p className="text-2xl font-bold text-green-900">₹3,60,000</p>
-                <p className="text-xs text-green-600 mt-1">+12.5% from last period</p>
-              </div>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-700">Operating Cash Flow</p>
-                <p className="text-2xl font-bold text-blue-900">₹4,20,000</p>
-                <p className="text-xs text-blue-600 mt-1">Healthy cash generation</p>
-              </div>
-              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-sm text-purple-700">Cash Conversion Cycle</p>
-                <p className="text-2xl font-bold text-purple-900">32 days</p>
-                <p className="text-xs text-purple-600 mt-1">-3 days improvement</p>
-              </div>
+            <div
+              className="mt-6 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600"
+              role="status"
+            >
+              Cash-flow summary metrics are unavailable until the canonical reporting API publishes
+              their exact values and comparison periods.
             </div>
           </div>
         )}
 
         {(view === 'receivables' || view === 'payables') && (
           <div className="p-6">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-start gap-2 mb-4" role="status">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               <p className="text-gray-700">
-                {view === 'receivables' 
-                  ? 'Total Outstanding Receivables: ₹3,21,450 across 45 invoices'
-                  : 'Total Outstanding Payables: ₹1,87,650 across 28 bills'
-                }
+                {view === 'receivables' ? 'Receivable' : 'Payable'} aging is unavailable until the
+                canonical ledger API publishes exact bucket balances and source-document counts.
               </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <p className="text-sm text-gray-600">Current (0-30 days)</p>
-                <p className="text-xl font-bold text-green-600">
-                  {view === 'receivables' ? '₹1,45,000' : '₹88,000'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {view === 'receivables' ? '18 invoices' : '12 bills'}
-                </p>
-              </div>
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <p className="text-sm text-gray-600">31-60 days</p>
-                <p className="text-xl font-bold text-yellow-600">
-                  {view === 'receivables' ? '₹98,450' : '₹56,650'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {view === 'receivables' ? '15 invoices' : '9 bills'}
-                </p>
-              </div>
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <p className="text-sm text-gray-600">61-90 days</p>
-                <p className="text-xl font-bold text-orange-600">
-                  {view === 'receivables' ? '₹56,000' : '₹32,000'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {view === 'receivables' ? '9 invoices' : '5 bills'}
-                </p>
-              </div>
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <p className="text-sm text-gray-600">90+ days</p>
-                <p className="text-xl font-bold text-red-600">
-                  {view === 'receivables' ? '₹22,000' : '₹11,000'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {view === 'receivables' ? '3 invoices' : '2 bills'}
-                </p>
-              </div>
             </div>
           </div>
         )}

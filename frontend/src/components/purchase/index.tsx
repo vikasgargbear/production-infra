@@ -36,4 +36,3 @@ export { default as PDFUploadModal } from './modals/PDFUploadModal';
 
 // ==================== UTILITIES ====================
 export { default as PDFVerificationFlow } from './PDFVerificationFlow';
-export { default as BulkUploadInline } from './BulkUploadInline';

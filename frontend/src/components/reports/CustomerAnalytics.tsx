@@ -395,7 +395,8 @@ const CustomerAnalytics: React.FC = () => {
           <div className="p-4 border border-gray-200 rounded-lg">
             <Award className="h-8 w-8 text-yellow-600 mb-2" />
             <p className="text-sm text-gray-600">Retention</p>
-            <p className="text-xl font-bold">87%</p>
+            <p className="text-xl font-bold" aria-label="Retention unavailable">—</p>
+            <p className="mt-1 text-xs text-gray-500">Not published by the canonical API</p>
           </div>
         </div>
 

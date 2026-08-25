@@ -269,64 +269,7 @@ describe('settings/business/export: response shape', () => {
 // 6. parse-history stub contract (known not-yet-implemented endpoint)
 // ---------------------------------------------------------------------------
 
-describe('parse-history: stub response', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it('authenticated → 200 with total=0 and items=[] (stub)', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        message: 'Parse history not yet implemented',
-        total: 0,
-        items: [],
-      },
-    });
-
-    const result = await apiHelpers.get('/purchase-upload/parse-history');
-
-    expect(result.data.total).toBe(0);
-    expect(result.data.items).toHaveLength(0);
-    // This stub must eventually be replaced with real data
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 7. Frontend component validation contract (unit-level)
-// ---------------------------------------------------------------------------
-
-describe('client-side file validation: BulkProductUpload', () => {
-  it('rejects non-Excel files before making any API call', () => {
-    // Mirrors the validation in BulkProductUpload.handleFileUpload
-    const validTypes = [
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/csv',
-    ];
-
-    const checkType = (mimeType: string, filename: string): boolean => {
-      return validTypes.includes(mimeType) || Boolean(filename.match(/\.(xlsx|xls|csv)$/));
-    };
-
-    expect(checkType('application/pdf', 'invoice.pdf')).toBe(false);
-    expect(checkType('application/octet-stream', 'malware.exe')).toBe(false);
-    expect(checkType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'data.xlsx')).toBe(true);
-    expect(checkType('text/csv', 'products.csv')).toBe(true);
-    // Filename fallback
-    expect(checkType('application/octet-stream', 'data.xlsx')).toBe(true);
-  });
-
-  it('rejects non-Excel files in BulkUploadInline before API call', () => {
-    // Mirrors the validation in BulkUploadInline.handleFileUpload
-    const checkName = (filename: string): boolean => Boolean(filename.match(/\.(xlsx|xls|csv)$/));
-
-    expect(checkName('report.pdf')).toBe(false);
-    expect(checkName('data.xlsx')).toBe(true);
-    expect(checkName('data.xls')).toBe(true);
-    expect(checkName('data.csv')).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 8. PDFUploadModal: no fake-success path — error is always surfaced
+// PDFUploadModal: no fake-success path — error is always surfaced
 // ---------------------------------------------------------------------------
 
 describe('PDFUploadModal: error surfacing contract', () => {

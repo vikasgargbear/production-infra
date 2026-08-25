@@ -359,12 +359,9 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                         <div className="grid grid-cols-2 gap-6 mt-4 pt-3 border-t border-gray-200">
                             <div>
                                 <h4 className="text-xs font-semibold text-gray-700 mb-2">Terms & Conditions</h4>
-                                <ol className="text-xs text-gray-600 list-decimal list-inside space-y-0.5">
-                                    <li>Goods once sold will not be taken back or exchanged</li>
-                                    <li>Interest @ 18% p.a. will be charged on overdue payments</li>
-                                    <li>All disputes subject to {companyInfo.city || 'local'} jurisdiction</li>
-                                    <li>E. & O.E.</li>
-                                </ol>
+                                <p className="text-xs text-gray-600">
+                                    Only terms confirmed by the canonical order preview apply.
+                                </p>
                             </div>
                             <div className="text-center">
                                 <div className="h-12 border-b border-gray-300 mb-2"></div>
