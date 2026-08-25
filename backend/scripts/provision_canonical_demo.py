@@ -449,7 +449,11 @@ def fetch_gstr1_reporting_source(evidence_dir: Path) -> bytes:
     return source
 
 
-def bootstrap_identity(connection) -> None:
+def bootstrap_identity(
+    connection, *, organization_pan: str = "ABCDE1234F"
+) -> None:
+    if re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", organization_pan) is None:
+        raise ValueError("demo organization PAN must use the canonical PAN shape")
     with connection.cursor() as cursor:
         cursor.execute(
             "INSERT INTO auth.users (id) VALUES (%s), (%s) ON CONFLICT (id) DO NOTHING",
@@ -467,11 +471,16 @@ def bootstrap_identity(connection) -> None:
                 status, created_by_membership_id, updated_by_membership_id
             ) VALUES (
                 %s, 'AasoPharma Disposable Demo Private Limited',
-                'AasoPharma Demo', 'ABCDE1234F', '101 Demo Market Road',
+                'AasoPharma Demo', %s, '101 Demo Market Road',
                 'Mumbai', '27', '400001', 'active', %s, %s
             ) ON CONFLICT (id) DO NOTHING
             """,
-            (IDS["org"], IDS["reviewer_membership"], IDS["reviewer_membership"]),
+            (
+                IDS["org"],
+                organization_pan,
+                IDS["reviewer_membership"],
+                IDS["reviewer_membership"],
+            ),
         )
         cursor.execute(
             """

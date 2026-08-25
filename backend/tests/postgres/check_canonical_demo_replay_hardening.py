@@ -230,7 +230,7 @@ def _assert_setting_replacement_replay() -> None:
     replacement_id = uuid4()
     connection = _connect()
     try:
-        fixture.bootstrap_identity(connection)
+        fixture.bootstrap_identity(connection, organization_pan="ZZZZZ9999Z")
         with connection.cursor() as cursor:
             _set_owner_context(cursor)
             cursor.execute(

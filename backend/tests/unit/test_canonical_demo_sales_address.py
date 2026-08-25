@@ -33,6 +33,13 @@ def test_sales_payloads_bind_the_exact_selected_delivery_address_version() -> No
         assert "shipping_address_id" not in payload
 
 
+def test_demo_identity_rejects_an_invalid_organization_pan_before_database_use() -> None:
+    module = _module()
+
+    with pytest.raises(ValueError, match="canonical PAN shape"):
+        module.bootstrap_identity(object(), organization_pan="NOT-A-PAN")
+
+
 @pytest.mark.parametrize("row_version", [0, -1, True])
 def test_sales_payloads_reject_invalid_delivery_address_versions(
     row_version: int,
@@ -43,4 +50,3 @@ def test_sales_payloads_reject_invalid_delivery_address_versions(
         module.sales_order_payload(row_version)
     with pytest.raises(ValueError, match="positive integer"):
         module.sales_invoice_payload([], row_version)
-
