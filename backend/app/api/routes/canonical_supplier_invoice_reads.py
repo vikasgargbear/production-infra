@@ -202,6 +202,8 @@ class SupplierInvoiceContextResponse(BaseModel):
     document_discount_basis: Literal["taxable_value", "price_value"]
     document_discount_value: Decimal
     rounding_policy: Literal["none", "nearest_rupee"]
+    zero_rated_payment_mode: Literal["not_applicable"] = "not_applicable"
+    tax_charge_mechanism: Literal["normal"] = "normal"
     goods_receipt_ids: list[UUID]
     portal_evidence: Optional[PortalEvidence]
     lines: list[SupplierInvoiceContextLine]

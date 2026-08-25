@@ -43,5 +43,9 @@ describe('canonical purchase workflow contract', () => {
     expect(builder).toContain('portal_evidence');
     expect(builder).toContain('goods_receipt_ids');
     expect(builder).not.toMatch(/gst[^\n]*(?:\|\||\?\?)\s*(?:0|5|12|18|28)\b/i);
+    expect(builder).toContain('context.zero_rated_payment_mode');
+    expect(builder).toContain('context.tax_charge_mechanism');
+    expect(builder).not.toMatch(/zero_rated_payment_mode:\s*['"]/);
+    expect(builder).not.toMatch(/tax_charge_mechanism:\s*['"]/);
   });
 });

@@ -56,6 +56,8 @@ export interface CanonicalSupplierInvoiceContext {
   document_discount_basis: 'taxable_value' | 'price_value';
   document_discount_value: string;
   rounding_policy: 'none' | 'nearest_rupee';
+  zero_rated_payment_mode: 'not_applicable';
+  tax_charge_mechanism: 'normal';
   goods_receipt_ids: string[];
   portal_evidence: null | {
     portal_document_id: string;

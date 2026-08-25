@@ -21,6 +21,8 @@ const context = (): CanonicalSupplierInvoiceContext => ({
   document_discount_basis: 'price_value',
   document_discount_value: '0.000000',
   rounding_policy: 'none',
+  zero_rated_payment_mode: 'not_applicable',
+  tax_charge_mechanism: 'normal',
   goods_receipt_ids: [id('6')],
   portal_evidence: {
     portal_document_id: id('7'),
@@ -81,6 +83,8 @@ test('builds exact canonical receipt allocation without JS numeric conversion', 
   expect(payload.supplier_invoice_number).toBe('SUP-1');
   expect(payload.goods_receipt_ids).toEqual([id('6')]);
   expect(payload.portal_document_line_id).toBe(id('8'));
+  expect(payload.zero_rated_payment_mode).toBe(context().zero_rated_payment_mode);
+  expect(payload.tax_charge_mechanism).toBe(context().tax_charge_mechanism);
   expect(payload.lines[0]).toMatchObject({
     billed_quantity: '1.234567',
     free_quantity: '0.000001',

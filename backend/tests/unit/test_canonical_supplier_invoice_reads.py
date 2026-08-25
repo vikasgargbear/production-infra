@@ -278,6 +278,8 @@ def test_ready_context_requires_exact_portal_and_grn_line_set():
         expense_charge_lines=[],
     )
     assert response.ready is True
+    assert response.model_dump(mode="json")["zero_rated_payment_mode"] == "not_applicable"
+    assert response.model_dump(mode="json")["tax_charge_mechanism"] == "normal"
     with pytest.raises(ValidationError, match="readiness is inconsistent"):
         reads.SupplierInvoiceContextResponse(**{
             **response.model_dump(),
