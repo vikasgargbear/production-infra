@@ -108,6 +108,7 @@ def resolve_authoritative_facts(
     auth_user_id: str,
     org_id: str,
     identities: dict[str, str],
+    run_token: str,
 ) -> dict[str, Any]:
     required = {
         "branch_id", "customer_account_id", "supplier_account_id", "product_id",
@@ -158,12 +159,71 @@ def resolve_authoritative_facts(
         identities["transfer_destination_location_id"], identities["bank_account_id"],
         identities["bank_ledger_id"], org_id, identities["branch_id"],
     )
+    if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
+        raise FixtureCompileError("live18 run token must be GitHub run-id and attempt")
+    supplier_challan_number = f"DEMO-UI-CH-{run_token}"
+    supplier_invoice_number = f"DEMO-UI-SUP-{run_token}"
+    supplier_invoice_sql = """
+      SELECT receipt.id::text, receipt.supplier_challan_date,
+             portal_line.invoice_number, portal_line.invoice_date
+        FROM procurement.goods_receipts AS receipt
+        JOIN procurement.goods_receipt_lines AS receipt_line
+          ON receipt_line.org_id=receipt.org_id
+         AND receipt_line.goods_receipt_id=receipt.id
+        JOIN parties.supplier_accounts AS supplier
+          ON supplier.org_id=receipt.org_id
+         AND supplier.id=receipt.supplier_account_id
+         AND supplier.status='active'
+        JOIN parties.tax_registrations AS supplier_registration
+          ON supplier_registration.org_id=supplier.org_id
+         AND supplier_registration.party_id=supplier.party_id
+         AND supplier_registration.status='active'
+        JOIN tax.portal_document_lines AS portal_line
+          ON portal_line.org_id=receipt.org_id
+         AND portal_line.document_type='invoice'
+         AND portal_line.supplier_gstin=supplier_registration.registration_number
+         AND portal_line.invoice_number=%s
+         AND portal_line.invoice_date=receipt.supplier_challan_date
+        JOIN tax.portal_documents AS portal_document
+          ON portal_document.org_id=portal_line.org_id
+         AND portal_document.id=portal_line.portal_document_id
+         AND portal_document.portal_document_type='gstr2b'
+         AND portal_document.status='parsed'
+         AND portal_document.parsed_at IS NOT NULL
+       WHERE receipt.org_id=%s
+         AND receipt.supplier_challan_number=%s
+         AND receipt.status='posted'
+         AND NOT EXISTS (
+           SELECT 1
+             FROM procurement.supplier_invoice_receipt_allocations AS allocation
+            WHERE allocation.org_id=receipt_line.org_id
+              AND allocation.goods_receipt_line_id=receipt_line.id
+         )
+         AND NOT EXISTS (
+           SELECT 1
+             FROM automation.command_requests AS command
+            WHERE command.org_id=portal_line.org_id
+              AND command.capability_code='procurement.supplier_invoice.prepare'
+              AND command.operation='procurement.supplier_invoice.post'
+              AND command.status NOT IN ('failed','expired','cancelled')
+              AND NULLIF(convert_from(command.request_bytes,'UTF8')::jsonb
+                    ->>'portal_document_line_id','')::uuid=portal_line.id
+         )
+       GROUP BY receipt.id, receipt.supplier_challan_date,
+                portal_line.id, portal_line.invoice_number, portal_line.invoice_date
+      HAVING count(receipt_line.id)=1
+    """
     with psycopg2.connect(database_url) as connection:
         connection.set_session(readonly=True, autocommit=False)
         with connection.cursor() as cursor:
             cursor.execute("SELECT erp_security.activate_context(%s::uuid,%s::uuid)", (auth_user_id, org_id))
             cursor.execute(sql, params)
             rows = cursor.fetchall()
+            cursor.execute(
+                supplier_invoice_sql,
+                (supplier_invoice_number, org_id, supplier_challan_number),
+            )
+            supplier_invoice_rows = cursor.fetchall()
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
@@ -176,10 +236,26 @@ def resolve_authoritative_facts(
         "destination_location_code", "destination_location_name",
         "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
     )
+    if len(supplier_invoice_rows) != 1:
+        raise FixtureCompileError(
+            "run-scoped supplier-invoice GRN/GSTR-2B authority resolved "
+            f"{len(supplier_invoice_rows)} rows, expected one"
+        )
+    goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
+    if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
+        raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
     return {
-        "identity": identities,
+        "identity": {
+            **identities,
+            "supplier_invoice_goods_receipt_id": goods_receipt_id,
+        },
         "display": dict(zip(keys, rows[0][:-1])),
         "clock": {"business_date": rows[0][-1]},
+        "choice": {
+            "supplier_invoice_number": resolved_invoice_number,
+            "supplier_invoice_date": invoice_date.isoformat(),
+            "supplier_invoice_received_date": invoice_date.isoformat(),
+        },
     }
 
 
@@ -351,6 +427,7 @@ def main() -> None:
         os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
         org_id,
         identities,
+        os.environ["LIVE18_RUN_TOKEN"],
     )
     fixture = compile_fixture(
         args.matrix, args.templates, facts, load_reviewed_scalars(args.reviewed_scalars)

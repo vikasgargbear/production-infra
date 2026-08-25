@@ -1088,6 +1088,10 @@ jobs:
       - name: Refuse any target except canonical disposable staging
         run: |
           set -euo pipefail
+          if [ '${{ inputs.provision_canonical_demo }}' != true ]; then
+            echo 'live18 requires a same-run canonical demo provision for run-scoped business lineage' >&2
+            exit 2
+          fi
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
           case "$LIVE18_APP_ORIGIN|$LIVE18_API_ORIGIN|$LIVE18_MCP_ORIGIN" in

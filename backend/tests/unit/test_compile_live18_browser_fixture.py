@@ -306,3 +306,37 @@ def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:
     assert operation["prepare_steps"][1]["value"] == "2026-08-28"
     assert operation["prepare_steps"][6]["value"] == "2.000000"
     assert operation["prepare_steps"][7]["value"] == "84.0000"
+
+
+def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attestation() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/supplier_invoice.json").read_text()
+    )
+    attestation = (
+        "I confirm taxable resale business use and that no Section 17 "
+        "blocked-credit condition applies to these goods."
+    )
+    scalars = {"supplier_invoice_itc_attestation": attestation}
+    facts = {
+        "identity": {
+            "supplier_invoice_goods_receipt_id": "d3000000-0000-7000-8000-000000000041",
+        },
+        "choice": {
+            "supplier_invoice_number": "DEMO-UI-SUP-32840459528-1",
+            "supplier_invoice_date": "2026-08-25",
+            "supplier_invoice_received_date": "2026-08-25",
+        },
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("supplier_invoice", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][1]["value"] == facts["identity"]["supplier_invoice_goods_receipt_id"]
+    assert operation["prepare_steps"][2]["value"] == facts["choice"]["supplier_invoice_number"]
+    assert operation["prepare_steps"][6]["locator"]["name"] == attestation

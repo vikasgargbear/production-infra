@@ -212,6 +212,9 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
           <>
             <section className="rounded-lg border border-slate-200 bg-white p-5">
               <h2 className="font-semibold text-slate-900">1. Match a posted receipt to supplier tax evidence</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date.
+              </p>
               <div className="mt-4 grid gap-4 md:grid-cols-4">
                 <label className="text-sm md:col-span-2">Posted GRN
                   <select value={selectedReceiptId} onChange={(event) => { setSelectedReceiptId(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3">

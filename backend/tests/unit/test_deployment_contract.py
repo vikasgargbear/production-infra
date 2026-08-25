@@ -1054,6 +1054,8 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "github.event_name == 'workflow_dispatch' && inputs.run_live18" in live18
     assert "needs: [canonical-free-staging]" in live18
     assert "needs.canonical-free-staging.result == 'success'" in live18
+    assert "inputs.provision_canonical_demo }}' != true" in live18
+    assert "same-run canonical demo provision" in live18
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live18
     assert "verify_render_pilot_sha.py" in live18
     assert "build-metadata.json" in live18
