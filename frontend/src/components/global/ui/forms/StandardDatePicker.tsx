@@ -1,4 +1,4 @@
-import React, { FC } from 'react';
+import React, { FC, useId } from 'react';
 import { Calendar } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -38,6 +38,7 @@ const StandardDatePicker: FC<StandardDatePickerProps> = ({
     size = 'md',
     autoFocus = false
 }) => {
+    const inputId = useId();
     const sizeClasses: Record<SizeKey, string> = {
         sm: 'h-9 pl-8 pr-3 py-1.5 text-sm',
         md: 'h-10 pl-10 pr-3 py-2 text-base',
@@ -59,7 +60,7 @@ const StandardDatePicker: FC<StandardDatePickerProps> = ({
     return (
         <div className={className}>
             {label && (
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1.5">
                     {label}
                     {required && <span className="text-red-500 ml-1">*</span>}
                 </label>
@@ -68,6 +69,7 @@ const StandardDatePicker: FC<StandardDatePickerProps> = ({
             <div className="relative">
                 <Calendar className={`absolute top-1/2 transform -translate-y-1/2 ${iconSizes[size]} text-gray-400 pointer-events-none`} />
                 <input
+                    id={inputId}
                     type="date"
                     value={value}
                     onChange={(e) => onChange?.(e.target.value)}

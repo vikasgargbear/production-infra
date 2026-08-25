@@ -341,6 +341,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         selectOnFocus={true}
                                         className="w-20"
                                         preserveDecimalString={preserveExactDecimals}
+                                        ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} quantity`}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">
@@ -365,6 +366,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         selectOnFocus={true}
                                         className="w-24"
                                         preserveDecimalString={preserveExactDecimals}
+                                        ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} rate`}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">
@@ -383,6 +385,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         selectOnFocus={true}
                                         className="w-20"
                                         preserveDecimalString={preserveExactDecimals}
+                                        ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} discount percent`}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">
@@ -401,6 +404,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         selectOnFocus={true}
                                         className="w-16"
                                         preserveDecimalString={preserveExactDecimals}
+                                        ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} free quantity`}
                                     />
                                 </td>
                                 <td className="px-3 py-2 text-center">

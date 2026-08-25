@@ -61,6 +61,10 @@ test('fractional billed and free quantities remain visible and editable at canon
   const desktopFreeQuantity = desktopInputs[3];
   expect(desktopQuantity.value).toBe('0.5');
   expect(desktopFreeQuantity.value).toBe('0.25');
+  expect(screen.getByLabelText('Fractional Carton quantity')).toBe(desktopQuantity);
+  expect(screen.getByLabelText('Fractional Carton rate')).toBe(desktopInputs[1]);
+  expect(screen.getByLabelText('Fractional Carton discount percent')).toBe(desktopInputs[2]);
+  expect(screen.getByLabelText('Fractional Carton free quantity')).toBe(desktopFreeQuantity);
 
   fireEvent.focus(desktopQuantity);
   fireEvent.change(desktopQuantity, { target: { value: '0.375001' } });

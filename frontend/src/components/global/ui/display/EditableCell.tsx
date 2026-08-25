@@ -24,6 +24,7 @@ export interface EditableCellProps {
     suffix?: string;
     prefix?: string;
     placeholder?: string;
+    ariaLabel?: string;
     className?: string;
     selectOnFocus?: boolean;
     allowNegative?: boolean;
@@ -50,6 +51,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     suffix = '',
     prefix = '',
     placeholder = '0',
+    ariaLabel,
     className = '',
     selectOnFocus = true,
     allowNegative = false,
@@ -268,6 +270,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 placeholder={placeholder}
+                aria-label={ariaLabel}
                 readOnly={readOnly}
                 step={step}
                 aria-invalid={validationError ? true : undefined}
