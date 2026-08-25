@@ -487,8 +487,17 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "verify_role_with_retry(canary_role, canary_password, session_port)" in workflow
     assert "verify_role_with_retry(canary_role, canary_password, transaction_port)" in workflow
     assert "for role, password in expected_roles.items()" in workflow
-    assert "for attempt in range(1, 3):" in workflow
-    assert "if attempt < 2:" in workflow
+    role_verification = workflow.split(
+        "Verify baseline topology and isolated role posture", 1
+    )[1].split("Diagnose bounded Supavisor role verification failure", 1)[0]
+    assert "POOLER_AUTH_RECOVERY_SECONDS = 180" in role_verification
+    assert "POOLER_AUTH_RETRY_INTERVAL_SECONDS = 10" in role_verification
+    assert '"eauthquery"' in role_verification
+    assert '"ecircuitbreaker"' in role_verification
+    assert "remaining = deadline - time.monotonic()" in role_verification
+    assert "if remaining <= 0:" in role_verification
+    assert "if not any(" in role_verification
+    assert "for attempt in range(1, 3):" not in role_verification
     assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
     assert "Transaction pooler selected after session-mode canary failed" in workflow
     assert "Diagnose bounded Supavisor role verification failure" in workflow

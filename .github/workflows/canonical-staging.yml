@@ -714,6 +714,21 @@ jobs:
               "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
               "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
+          # Supavisor documents the observed auth-query circuit as lasting up
+          # to two minutes.  Allow one additional minute for DNS, TLS and the
+          # first successful auth-query refresh, but never retry a permanent
+          # credential or authorization failure.
+          POOLER_AUTH_RECOVERY_SECONDS = 180
+          POOLER_AUTH_RETRY_INTERVAL_SECONDS = 10
+          TRANSIENT_POOLER_AUTH_MARKERS = (
+              "eauthquery",
+              "ecircuitbreaker",
+              "temporarily blocked",
+              "timed out",
+              "timeout expired",
+              "server closed the connection unexpectedly",
+              "connection refused",
+          )
           ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
           host = os.environ["SUPABASE_POOLER_HOST"]
           def verify_role(role, password, port):
@@ -731,16 +746,23 @@ jobs:
                       assert posture == (role, False, False), posture
 
           def verify_role_with_retry(role, password, port):
-              last_error = None
-              for attempt in range(1, 3):
+              deadline = time.monotonic() + POOLER_AUTH_RECOVERY_SECONDS
+              while True:
                   try:
                       verify_role(role, password, port)
                       return
                   except Exception as error:
-                      last_error = error
-                      if attempt < 2:
-                          time.sleep(5)
-              raise last_error
+                      detail = str(error).casefold()
+                      if not any(
+                          marker in detail for marker in TRANSIENT_POOLER_AUTH_MARKERS
+                      ):
+                          raise
+                      remaining = deadline - time.monotonic()
+                      if remaining <= 0:
+                          raise
+                      time.sleep(
+                          min(POOLER_AUTH_RETRY_INTERVAL_SECONDS, remaining)
+                      )
 
           session_port = os.environ["SUPABASE_SESSION_POOLER_PORT"]
           transaction_port = os.environ["SUPABASE_POOLER_PORT"]
