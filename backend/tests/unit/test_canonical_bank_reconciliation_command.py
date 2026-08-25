@@ -133,6 +133,8 @@ def test_bank_reconciliation_has_restricted_postgres15_concurrency_evidence():
     assert "connection.commit()" in fixture
     assert "def _close_runtime_connection" in fixture
     assert "ThreadPoolExecutor(max_workers=2)" in fixture
+    assert "'branch',:branch,transaction_timestamp()" in fixture
+    assert "organization_scope=checker" in fixture
     assert "changed bank-account source version executed" in fixture
     assert "partial bank reconciliation was accepted" in fixture
     assert "outbox_event_count" in fixture and "audit_event_count" in fixture

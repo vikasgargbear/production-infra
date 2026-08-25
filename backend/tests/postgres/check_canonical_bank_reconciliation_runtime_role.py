@@ -104,9 +104,9 @@ def _seed(session: Session) -> None:
         INSERT INTO core.role_permissions(org_id,role_id,permission_code,created_by_membership_id)
         VALUES(:org,:checker_role,'automation.command.approve',:maker);
         INSERT INTO core.access_grants(
-          org_id,id,membership_id,role_id,scope_kind,valid_from_at,status,created_by_membership_id)
-        VALUES(:org,:maker_access,:maker,:maker_role,'organization',transaction_timestamp(),'active',:maker),
-              (:org,:checker_access,:checker,:checker_role,'organization',transaction_timestamp(),'active',:maker);
+          org_id,id,membership_id,role_id,scope_kind,branch_id,valid_from_at,status,created_by_membership_id)
+        VALUES(:org,:maker_access,:maker,:maker_role,'branch',:branch,transaction_timestamp(),'active',:maker),
+              (:org,:checker_access,:checker,:checker_role,'organization',NULL,transaction_timestamp(),'active',:maker);
 
         INSERT INTO automation.agent_grants(
           org_id,id,subject_membership_id,client_id,client_display_name,branch_id,
@@ -198,7 +198,7 @@ def _context(*, checker: bool = False) -> ActionContext:
         operation_key="automation.command.approve" if checker else "finance.bank_reconciliation.prepare",
         permission="automation.command.approve" if checker else "finance.bank_reconcile",
         branch_ids=() if checker else (BRANCH,),
-        organization_scope=True,
+        organization_scope=checker,
     )
 
 
