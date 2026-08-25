@@ -12,6 +12,7 @@ from scripts.compile_live18_browser_fixture import (
     load_reviewed_scalars,
     _compile_value,
     _validate_compiled_steps,
+    _operation_facts,
 )
 
 
@@ -171,3 +172,23 @@ def test_stock_transfer_template_compiles_only_reviewed_choices() -> None:
     assert used == {"stock_transfer_quantity", "stock_transfer_distance_km"}
     assert operation["prepare_steps"][5]["value"] == "12.50"
     assert operation["prepare_steps"][9]["value"] == "1.000000"
+
+
+def test_sales_order_delivery_date_is_derived_from_canonical_clock_and_reviewed_offset() -> None:
+    used: set[str] = set()
+    facts = _operation_facts(
+        "sales_order",
+        {"clock": {"business_date": "2026-08-25"}},
+        {"sales_order_delivery_offset_days": "2"},
+        used,
+    )
+    assert facts["choice"]["sales_order_requested_delivery_date"] == "2026-08-27"
+    assert used == {"sales_order_delivery_offset_days"}
+
+    with pytest.raises(FixtureCompileError, match="integer from 1 through 30"):
+        _operation_facts(
+            "sales_order",
+            {"clock": {"business_date": "2026-08-25"}},
+            {"sales_order_delivery_offset_days": "0"},
+            set(),
+        )

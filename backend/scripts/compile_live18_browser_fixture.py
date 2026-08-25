@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import re
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -126,8 +127,10 @@ def resolve_authoritative_facts(
              source.code,source.name,quarantine.code,quarantine.name,
              destination_branch.code,destination_branch.name,
              destination.code,destination.name,bank.bank_name,bank.account_holder_name,
-             ledger.code,ledger.name
+             ledger.code,ledger.name,
+             to_char((transaction_timestamp() AT TIME ZONE organization.timezone)::date,'YYYY-MM-DD')
         FROM core.branches branch
+        JOIN core.organizations organization ON organization.id=branch.org_id AND organization.status='active'
         JOIN parties.customer_accounts customer ON customer.org_id=branch.org_id AND customer.id=%s
         JOIN parties.parties customer_party ON customer_party.org_id=customer.org_id AND customer_party.id=customer.party_id
         JOIN parties.supplier_accounts supplier ON supplier.org_id=branch.org_id AND supplier.id=%s
@@ -173,7 +176,41 @@ def resolve_authoritative_facts(
         "destination_location_code", "destination_location_name",
         "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
     )
-    return {"identity": identities, "display": dict(zip(keys, rows[0]))}
+    return {
+        "identity": identities,
+        "display": dict(zip(keys, rows[0][:-1])),
+        "clock": {"business_date": rows[0][-1]},
+    }
+
+
+def _operation_facts(
+    operation_id: str,
+    facts: dict[str, Any],
+    scalars: dict[str, Any],
+    used: set[str],
+) -> dict[str, Any]:
+    if operation_id != "sales_order":
+        return facts
+    offset_key = "sales_order_delivery_offset_days"
+    offset_text = _leaf(scalars, offset_key, "reviewed scalar")
+    if not re.fullmatch(r"[1-9]|[12][0-9]|30", offset_text):
+        raise FixtureCompileError(
+            "sales_order_delivery_offset_days must be an integer from 1 through 30"
+        )
+    try:
+        business_date = date.fromisoformat(_leaf(facts, "clock.business_date", "canonical fact"))
+    except ValueError as exc:
+        raise FixtureCompileError("canonical business date is invalid") from exc
+    used.add(offset_key)
+    return {
+        **facts,
+        "choice": {
+            **(facts.get("choice") or {}),
+            "sales_order_requested_delivery_date": (
+                business_date + timedelta(days=int(offset_text))
+            ).isoformat(),
+        },
+    }
 
 
 def _compile_value(value: Any, facts: dict[str, Any], scalars: dict[str, Any], used: set[str]) -> Any:
@@ -269,12 +306,13 @@ def compile_fixture(
         template = _object(path, f"{operation_id} template")
         if template.get("template_schema") != TEMPLATE_SCHEMA or template.get("operation_id") != operation_id:
             raise FixtureCompileError(f"invalid UI template authority: {operation_id}")
+        operation_facts = _operation_facts(operation_id, facts, scalars, used)
         compiled_operation = _compile_value(
             {
                 "lifecycle_mode": template.get("lifecycle_mode"),
                 **(template.get("steps") or {}),
             },
-            facts,
+            operation_facts,
             scalars,
             used,
         )
