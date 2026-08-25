@@ -543,6 +543,11 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "mapfile -t canonical_fixtures" in workflow
     assert 'test "${#canonical_fixtures[@]}" -gt 0' in workflow
     assert 'test "$fixture_count" = "${#canonical_fixtures[@]}"' in workflow
+    assert "timeout --signal=TERM 180s" in workflow
+    assert "for attempt in 1 2 3" in workflow
+    assert "SSL connection has been closed unexpectedly" in workflow
+    assert 'test "$fixture_status" = 124' in workflow
+    assert 'test "$fixture_passed" != true' in workflow
     assert (
         "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE"
         in workflow

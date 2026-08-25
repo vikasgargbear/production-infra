@@ -839,9 +839,33 @@ jobs:
               grep -q '^ROLLBACK;' "$fixture"
             fi
             echo "running live rollback fixture: $fixture"
+            fixture_passed=false
             fixture_log=$(mktemp)
-            if ! psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-              -f "$fixture" >"$fixture_log" 2>&1; then
+            for attempt in 1 2 3; do
+              : >"$fixture_log"
+              set +e
+              timeout --signal=TERM 180s \
+                psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+                  -f "$fixture" >"$fixture_log" 2>&1
+              fixture_status=$?
+              set -e
+              if test "$fixture_status" = 0; then
+                fixture_passed=true
+                break
+              fi
+              if test "$attempt" -lt 3 && {
+                test "$fixture_status" = 124 ||
+                grep -Eq \
+                  'SSL connection has been closed unexpectedly|server closed the connection unexpectedly|connection to server was lost|connection timed out|timeout expired|could not connect to server' \
+                  "$fixture_log"
+              }; then
+                echo "transient staging connection failure for $fixture; retrying attempt $((attempt + 1))/3"
+                sleep $((attempt * 5))
+                continue
+              fi
+              break
+            done
+            if test "$fixture_passed" != true; then
               cat "$fixture_log"
               python3 - "$fixture" "$fixture_log" <<'PY'
           import pathlib
