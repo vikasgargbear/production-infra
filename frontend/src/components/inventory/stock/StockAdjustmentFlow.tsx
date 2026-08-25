@@ -25,6 +25,10 @@ import {
   type CycleCountEvidence,
   type CycleCountUom,
 } from './utils/canonicalStockAdjustmentCommand';
+import {
+  isCanonicalUtcEventTimestamp,
+  requireCanonicalUtcEventTimestamp,
+} from './utils/canonicalEventTimestamp';
 
 type AdjustmentItem = {
   id: string;
@@ -59,12 +63,14 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     adjustment_type: string;
     reason: string;
     adjustment_date: string;
+    counted_at: string;
     notes: string;
     items: AdjustmentItem[];
   }>({
     adjustment_type: 'increase',
     reason: 'cycle_count',
     adjustment_date: '',
+    counted_at: '',
     notes: '',
     items: []
   });
@@ -329,6 +335,10 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       toast.error('The organization business date is unavailable.');
       return false;
     }
+    if (!isCanonicalUtcEventTimestamp(adjustmentData.counted_at)) {
+      toast.error('Enter the exact physical count time as canonical UTC: YYYY-MM-DDTHH:mm:ss.sssZ.');
+      return false;
+    }
     if (adjustmentData.items.length === 0) {
       toast.error('Please add at least one product');
       return false;
@@ -346,6 +356,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
 
   const isAdjustmentValid = () => Boolean(
     Boolean(adjustmentData.adjustment_date)
+    && isCanonicalUtcEventTimestamp(adjustmentData.counted_at)
     && adjustmentData.items.length > 0
     && Boolean(countedByMembershipId)
     && Boolean(selectedEvidenceId)
@@ -365,11 +376,13 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     setIsPreparing(true);
     setError(null);
     try {
-      const countedAt = new Date().toISOString();
       const payload = buildCycleCountGainPayload({
         idempotencyKey: `erp-web-inventory-adjustment-prepare:${prepareIdentityRef.current}`,
         adjustmentDate: adjustmentData.adjustment_date,
-        countedAt,
+        countedAt: requireCanonicalUtcEventTimestamp(
+          adjustmentData.counted_at,
+          'Physical count time',
+        ),
         countedByMembershipId,
         evidenceAttachmentId: selectedEvidenceId,
         items: adjustmentData.items.map(item => ({
@@ -589,6 +602,25 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                 {adjustmentData.adjustment_date || 'Loading…'}
               </div>
             </div>
+            <label className="block text-sm font-medium text-gray-700">
+              Physical count completed at (UTC)
+              <input
+                type="text"
+                value={adjustmentData.counted_at}
+                onChange={(event) => setAdjustmentData(prev => ({
+                  ...prev,
+                  counted_at: event.target.value,
+                }))}
+                placeholder="YYYY-MM-DDTHH:mm:ss.sssZ"
+                aria-describedby="cycle-count-time-help"
+                aria-invalid={Boolean(adjustmentData.counted_at)
+                  && !isCanonicalUtcEventTimestamp(adjustmentData.counted_at)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3 font-mono text-sm"
+              />
+              <span id="cycle-count-time-help" className="mt-1 block text-xs font-normal text-gray-500">
+                Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time.
+              </span>
+            </label>
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">Verified physical count sheet</label>
               <Select
@@ -1051,6 +1083,10 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
           <div>
             <p className="text-sm text-gray-600">Date</p>
             <p className="font-medium">{adjustmentData.adjustment_date}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Physical count time (UTC)</p>
+            <p className="break-all font-mono text-sm font-medium">{adjustmentData.counted_at}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Total Items</p>

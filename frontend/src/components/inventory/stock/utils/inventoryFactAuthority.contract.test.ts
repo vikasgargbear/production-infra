@@ -52,5 +52,17 @@ test('inventory commands never invent a browser document number', () => {
   expect(adjustment).not.toContain('ADJ-');
   expect(adjustment).not.toContain('Date.now()');
   expect(adjustment).not.toContain('new Date(item.expiry_date)');
+  expect(adjustment).not.toContain('new Date().toISOString()');
   expect(adjustment).toContain("requireCalendarDate(item.expiry_date, 'Batch expiry date')");
+});
+
+test('controlled inventory evidence times are explicit and never browser-generated', () => {
+  const source = [
+    'stock/StockAdjustmentFlow.tsx',
+    'stock/InventoryDestructionFlow.tsx',
+  ].map(relativePath => fs.readFileSync(path.join(inventoryRoot, relativePath), 'utf8')).join('\n');
+
+  expect(source).not.toContain('new Date().toISOString()');
+  expect(source).toContain('requireCanonicalUtcEventTimestamp');
+  expect(source).toContain('The browser does not supply or convert this time.');
 });

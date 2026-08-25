@@ -15,6 +15,10 @@ it('uses canonical eligibility, evidence, command lifecycle and exact readback',
   expect(source).toContain("approveCanonicalAction('inventory.destruction.prepare'");
   expect(source).toContain("executeApprovedCanonicalAction('inventory.destruction.prepare'");
   expect(source).toContain('canonicalControlledOperationsApi.destructionReadback');
+  expect(source).toContain('Physical destruction completed at (UTC)');
+  expect(source).toContain('requireCanonicalUtcEventTimestamp');
+  expect(source).toContain('physicalConfirmedAt');
+  expect(source).not.toContain('new Date().toISOString()');
 });
 
 it('does not infer evidence, partial quantities, legacy writes or fake success', () => {

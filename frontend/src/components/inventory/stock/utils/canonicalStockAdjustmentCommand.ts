@@ -5,6 +5,7 @@ import type {
 } from '../../../../services/api/canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { exactDecimalUnits } from '../../../../utils/exactDecimal';
+import { requireCanonicalUtcEventTimestamp } from './canonicalEventTimestamp';
 
 const MICRO = 1_000_000n;
 const MAX_QUANTITY_UNITS = (10n ** 20n) - 1n;
@@ -184,10 +185,7 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.adjustmentDate)) {
     throw new Error('Cycle count requires the canonical organization business date.');
   }
-  const countedAtMillis = Date.parse(input.countedAt);
-  if (!Number.isFinite(countedAtMillis) || new Date(countedAtMillis).toISOString() !== input.countedAt) {
-    throw new Error('Cycle count requires a canonical UTC count timestamp.');
-  }
+  const countedAt = requireCanonicalUtcEventTimestamp(input.countedAt, 'Physical count time');
   if (!isCanonicalUuid(input.countedByMembershipId) || !isCanonicalUuid(input.evidenceAttachmentId)) {
     throw new Error('Cycle-count membership and evidence are required from the live API.');
   }
@@ -228,7 +226,7 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
     idempotency_key: input.idempotencyKey,
     branch_id: input.items[0].branchId,
     adjustment_date: input.adjustmentDate,
-    counted_at: input.countedAt,
+    counted_at: countedAt,
     counted_by_membership_id: input.countedByMembershipId,
     location_id: input.items[0].locationId,
     reason_code: 'cycle_count',

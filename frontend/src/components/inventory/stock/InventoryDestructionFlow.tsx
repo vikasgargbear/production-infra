@@ -14,11 +14,14 @@ import {
 } from '../../../services/api/canonicalOperatorActions';
 import {
   canonicalControlledOperationsApi,
-  type DestructionStockCandidate,
   type InventoryDestructionContext,
   type InventoryDestructionReadback,
 } from '../../../services/api/modules/controlledOperations.api';
 import { compareExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
+import {
+  isCanonicalUtcEventTimestamp,
+  requireCanonicalUtcEventTimestamp,
+} from './utils/canonicalEventTimestamp';
 
 interface Props { open?: boolean; onClose?: () => void }
 type Workspace = 'prepare' | 'approve' | 'execute';
@@ -39,6 +42,7 @@ const InventoryDestructionFlow: React.FC<Props> = ({ open = true, onClose }) => 
   const [witnessName, setWitnessName] = useState('');
   const [witnessCredential, setWitnessCredential] = useState('');
   const [physicalConfirmed, setPhysicalConfirmed] = useState(false);
+  const [physicalConfirmedAt, setPhysicalConfirmedAt] = useState('');
   const [prepared, setPrepared] = useState<CanonicalCommandPreview | null>(null);
   const [commandId, setCommandId] = useState('');
   const [review, setReview] = useState<CanonicalCommandReview | null>(null);
@@ -70,13 +74,20 @@ const InventoryDestructionFlow: React.FC<Props> = ({ open = true, onClose }) => 
 
   const prepare = async () => {
     if (!context || !candidate || !certificateId || !reasonCode || !physicalConfirmed) return;
+    if (!isCanonicalUtcEventTimestamp(physicalConfirmedAt)) {
+      setError('Enter the exact physical destruction time as canonical UTC: YYYY-MM-DDTHH:mm:ss.sssZ.');
+      return;
+    }
     setBusy(true); setError('');
     try {
       const response = await prepareCanonicalAction('inventory.destruction.prepare', {
         idempotency_key: prepareKey.current,
         branch_id: candidate.branch_id,
         destruction_date: context.business_date,
-        physical_destruction_confirmed_at: new Date().toISOString(),
+        physical_destruction_confirmed_at: requireCanonicalUtcEventTimestamp(
+          physicalConfirmedAt,
+          'Physical destruction time',
+        ),
         location_id: candidate.location_id,
         method_code: context.method_code,
         reason_code: reasonCode,
@@ -172,10 +183,11 @@ const InventoryDestructionFlow: React.FC<Props> = ({ open = true, onClose }) => 
           <label className="text-sm font-medium">Authority reference<input value={authorityReference} onChange={event => { setAuthorityReference(event.target.value); invalidate(); }} maxLength={1024} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
           <label className="text-sm font-medium">Witness name<input value={witnessName} onChange={event => { setWitnessName(event.target.value); invalidate(); }} maxLength={1024} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
           <label className="text-sm font-medium">Witness credential<input value={witnessCredential} onChange={event => { setWitnessCredential(event.target.value); invalidate(); }} maxLength={1024} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
+          <label className="text-sm font-medium">Physical destruction completed at (UTC)<input type="text" value={physicalConfirmedAt} onChange={event => { setPhysicalConfirmedAt(event.target.value); invalidate(); }} placeholder="YYYY-MM-DDTHH:mm:ss.sssZ" aria-describedby="destruction-time-help" aria-invalid={Boolean(physicalConfirmedAt) && !isCanonicalUtcEventTimestamp(physicalConfirmedAt)} className="mt-1 min-h-11 w-full rounded-lg border px-3 font-mono" /><span id="destruction-time-help" className="mt-1 block text-xs font-normal text-slate-500">Enter the exact timestamp recorded by the retained certificate or witness evidence. The browser does not supply or convert this time.</span></label>
         </div>
         {candidate && <div className="mt-4 rounded-lg border p-4"><p className="font-medium">{candidate.product_name} · batch {candidate.batch_number}</p><p className="text-sm text-slate-600">Full locked balance {candidate.available_base_quantity} {candidate.base_uom_code}; value {formatExactCurrency(candidate.inventory_value, 'Inventory value')}. Partial quantity editing is intentionally unavailable.</p></div>}
-        <label className="mt-4 flex min-h-11 items-start gap-3 rounded-lg border border-red-200 p-3"><input type="checkbox" checked={physicalConfirmed} onChange={event => { setPhysicalConfirmed(event.target.checked); invalidate(); }} /><span>I confirm the physical licensed incineration has already occurred today and the selected certificate and witness details are exact.</span></label>
-        <div className="mt-5 flex justify-end"><button type="button" onClick={() => void prepare()} disabled={busy || !context?.ready || !candidate || !certificateId || !reasonCode || !reason.trim() || !authorityReference.trim() || !witnessName.trim() || !witnessCredential.trim() || !physicalConfirmed} className="min-h-11 rounded-lg bg-red-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable destruction</button></div>
+        <label className="mt-4 flex min-h-11 items-start gap-3 rounded-lg border border-red-200 p-3"><input type="checkbox" checked={physicalConfirmed} onChange={event => { setPhysicalConfirmed(event.target.checked); invalidate(); }} /><span>I confirm the physical licensed incineration occurred at the entered evidence timestamp and the selected certificate and witness details are exact.</span></label>
+        <div className="mt-5 flex justify-end"><button type="button" onClick={() => void prepare()} disabled={busy || !context?.ready || !candidate || !certificateId || !reasonCode || !reason.trim() || !authorityReference.trim() || !witnessName.trim() || !witnessCredential.trim() || !isCanonicalUtcEventTimestamp(physicalConfirmedAt) || !physicalConfirmed} className="min-h-11 rounded-lg bg-red-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable destruction</button></div>
         {prepared && <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><p className="font-medium">Prepared; no stock or journal has posted.</p><p className="break-all font-mono text-xs">{prepared.command_request_id}</p><p className="break-all font-mono text-xs">{prepared.preview_hash}</p></div>}
       </section>}
       {workspace === 'approve' && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Independent destruction approval</h2><p className="text-sm text-slate-600">A different authorized member must inspect exact stock, certificate, valuation and journal impacts.</p><div className="mt-4 flex gap-3"><label className="flex-1 text-sm font-medium">Command ID<input value={commandId} onChange={event => changeCommand(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={() => void loadReview()} disabled={busy || !commandId} className="min-h-11 self-end rounded-lg border px-5">Load review</button></div>{review && <div className="mt-4 rounded-lg border p-4"><p className="font-medium">{review.command_type} · {review.status}</p><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs">{review.preview_canonical_json}</pre>{review.status === 'prepared' && <><label className="mt-4 flex min-h-11 items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I independently reviewed and approve this exact certified destruction.</span></label><button type="button" onClick={() => void approve()} disabled={!confirmed || busy} className="mt-4 min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Approve exact preview</button></>}</div>}</section>}
