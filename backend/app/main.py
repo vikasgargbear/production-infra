@@ -43,21 +43,10 @@ from .api.routes.master import departments
 from .api.routes.master import employees
 from .api.routes.master import bank_accounts
 
-# Sales Module (modular structure)
-from .api.routes.sales import (
-    orders_router,
-    invoices_router,
-    challan_router,
-    conversions_router,
-)
-
 # Returns Module (top-level, handles both sales and purchase returns)
 from .api.routes.returns import sales_returns_router, purchase_returns_router
 
 # Purchase Module
-from .api.routes.purchase import orders as purchases
-from .api.routes.purchase import supplier_invoices
-from .api.routes.purchase import grn
 from .api.routes.purchase import upload as purchase_upload
 from .api.routes.purchase.upload import routes as purchase_upload_routes
 from .api.routes import canonical_inventory_transfers
@@ -72,10 +61,8 @@ from .api.routes.inventory import writeoff as stock_writeoff
 from .api.routes.finance import payments
 from .api.routes.finance import allocation as payment_allocation
 from .api.routes.finance import ledger
-from .api.routes.finance import tax as tax_entries
 from .api.routes.finance.tax import routes as tax_entries_routes
 from .api.routes.finance import credit_notes as credit_debit_notes
-from .api.routes.finance import expenses as expense_claims
 
 # Compliance Module
 from .api.routes.compliance import gst
@@ -93,7 +80,6 @@ from .api.routes.org import company_assets
 # Standalone utilities (remain at root level)
 from .api.routes import metadata
 from .api.routes import calculations
-from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
 from .api.routes import (
     canonical_erp_reads,
@@ -288,7 +274,7 @@ api.include_router(canonical_inventory_reads.router, tags=["Canonical Inventory 
 api.include_router(canonical_adjustment_note_reads.router)
 api.include_router(canonical_controlled_operation_reads.router)
 api.include_router(canonical_inventory_transfers.router, tags=["Canonical Inventory Transfers"])
-include_legacy_read_only_router(api, canonical_party_ledger_reads.router)
+api.include_router(canonical_party_ledger_reads.router)
 api.include_router(canonical_document_history_reads.router)
 
 # --- Master Data ---
@@ -307,21 +293,17 @@ include_legacy_read_only_router(api, bank_accounts.router, prefix="/bank-account
 # this fence at registration time prevents an unused legacy frontend method or
 # a direct API caller from bypassing reviewed prepare/approve/execute commands.
 
-# --- Sales ---
-include_legacy_read_only_router(api, orders_router, tags=["Sales Orders"])
-include_legacy_read_only_router(api, invoices_router, tags=["Invoices"])
-include_legacy_read_only_router(api, challan_router, prefix="/challan", tags=["Challan"])
-include_legacy_read_only_router(api, conversions_router, prefix="/conversions", tags=["Conversions"])
+# Sales lists, UUID details, import contexts, acceptance readbacks and document
+# history are provided by the canonical routers above.  The retired integer-ID
+# sales routers are deliberately not mounted.
 
 # --- Returns (Sales & Purchase) ---
 include_legacy_read_only_router(api, sales_returns_router, prefix="/sale-returns", tags=["Sale Returns"])
 include_legacy_read_only_router(api, purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
 
-# --- Purchase ---
-include_legacy_read_only_router(api, purchases.router, prefix="/purchases", tags=["Purchases"])
-include_legacy_read_only_router(api, supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
-include_legacy_read_only_router(api, grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
-include_legacy_read_only_router(api, purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
+# Purchase-order, supplier-invoice and goods-receipt reads are provided by the
+# canonical routers above.  Only the bounded, non-persistent upload utilities
+# remain reachable from the retired upload module.
 include_explicit_non_persistent_post_utilities(
     api,
     purchase_upload.router,
@@ -343,16 +325,17 @@ include_legacy_read_only_router(api, stock_writeoff.router, tags=["Stock Write-o
 include_legacy_read_only_router(api, payments.router, prefix="/payments", tags=["Payments"])
 include_legacy_read_only_router(api, payment_allocation.router, tags=["Payment Allocation"])
 api.include_router(ledger.router, tags=["Ledger"])
-include_legacy_read_only_router(api, tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
 include_explicit_non_persistent_post_utilities(
     api,
-    tax_entries.router,
+    tax_entries_routes.router,
     prefix="/tax-entries",
     tags=["Tax Entries"],
     routes={"/calculate": tax_entries_routes.calculate_tax},
 )
 include_legacy_read_only_router(api, credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
-include_legacy_read_only_router(api, expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
+# Expense-claim eligibility, review and posted readback are canonical web
+# operator-action resources.  The legacy claim list/detail projections are not
+# mounted.
 
 # --- Compliance ---
 include_legacy_read_only_router(api, gst.router, prefix="/gst", tags=["GST"])
@@ -385,7 +368,6 @@ api.include_router(company_assets.router, prefix="/company", tags=["Company"])
 # differs across FastAPI router implementations and they are not authoritative.
 
 # --- Utilities ---
-include_legacy_read_only_router(api, documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
 include_explicit_non_persistent_post_utilities(
     api,
