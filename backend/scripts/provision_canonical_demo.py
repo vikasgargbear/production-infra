@@ -147,6 +147,50 @@ IDS["cycle_count_evidence"] = str(
         f"canonical-staging-cycle-count:{IDS['org']}:{DEMO_RUN_ID}:{INDIA_BUSINESS_DATE.isoformat()}",
     )
 )
+for resource_key in (
+    "expense_receipt_evidence",
+    "expense_claim_expense_account",
+    "expense_claim_reimbursement_account",
+):
+    IDS[resource_key] = str(
+        uuid5(
+            NAMESPACE_URL,
+            (
+                f"canonical-staging:{resource_key}:{IDS['org']}:"
+                f"{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}"
+            ),
+        )
+    )
+
+
+def reviewed_expense_receipt() -> bytes:
+    """Load one externally reviewed synthetic receipt without inventing evidence."""
+
+    path = Path(required("CANONICAL_DEMO_EXPENSE_RECEIPT_PATH"))
+    expected_sha256 = required("CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256").lower()
+    if not path.is_absolute() or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        raise RuntimeError(
+            "CANONICAL_EXPENSE_RECEIPT_AUTHORITY_MISSING: an absolute reviewed "
+            "receipt path and lowercase SHA-256 are required"
+        )
+    try:
+        value = path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(
+            "CANONICAL_EXPENSE_RECEIPT_AUTHORITY_MISSING: reviewed receipt bytes "
+            "are unavailable"
+        ) from exc
+    if not value.startswith(b"%PDF-") or len(value) < 64 or len(value) > 10 * 1024 * 1024:
+        raise RuntimeError(
+            "CANONICAL_EXPENSE_RECEIPT_AUTHORITY_INVALID: receipt must be a "
+            "non-empty PDF of at most 10 MB"
+        )
+    actual_sha256 = hashlib.sha256(value).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            "CANONICAL_EXPENSE_RECEIPT_AUTHORITY_INVALID: reviewed receipt SHA-256 differs"
+        )
+    return value
 
 REQUIRED_PERMISSIONS = (
     "sales.order.create",
@@ -1297,7 +1341,11 @@ def seed_business_master(connection) -> None:
         )
 
 
-def seed_end_to_end_master(connection) -> None:
+def seed_end_to_end_master(
+    connection,
+    *,
+    expense_receipt_bytes: bytes | None = None,
+) -> None:
     """Add the synthetic supplier, tax, inventory, banking, and ledger facts."""
 
     with connection.cursor() as cursor:
@@ -1363,6 +1411,41 @@ def seed_end_to_end_master(connection) -> None:
                 for attachment_id, evidence_kind, filename, document_date, digest_key in attachments
             ],
         )
+        if expense_receipt_bytes is not None:
+            cursor.execute(
+                """
+                INSERT INTO core.attachments (
+                    org_id,id,storage_bucket,storage_object_path,original_filename,
+                    media_type,byte_size,sha256,evidence_kind,document_date,
+                    retention_until,status,verified_at,created_by_membership_id
+                ) VALUES (
+                    %s,%s,'canonical-demo-evidence',%s,%s,'application/pdf',%s,%s,
+                    'expense_receipt',%s,%s,'retained',transaction_timestamp(),%s
+                )
+                ON CONFLICT (org_id,id) DO UPDATE SET
+                    storage_object_path=EXCLUDED.storage_object_path,
+                    original_filename=EXCLUDED.original_filename,
+                    media_type=EXCLUDED.media_type,
+                    byte_size=EXCLUDED.byte_size,
+                    sha256=EXCLUDED.sha256,
+                    evidence_kind=EXCLUDED.evidence_kind,
+                    document_date=EXCLUDED.document_date,
+                    retention_until=EXCLUDED.retention_until,
+                    status=EXCLUDED.status,
+                    verified_at=EXCLUDED.verified_at
+                """,
+                (
+                    IDS["org"],
+                    IDS["expense_receipt_evidence"],
+                    f"live18/{DEMO_RUN_ID}/{DEMO_RUN_ATTEMPT}/expense-receipt.pdf",
+                    f"LIVE18-EXPENSE-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}.pdf",
+                    len(expense_receipt_bytes),
+                    psycopg2.Binary(hashlib.sha256(expense_receipt_bytes).digest()),
+                    INDIA_BUSINESS_DATE,
+                    INDIA_BUSINESS_DATE + timedelta(days=3650),
+                    IDS["operator_membership"],
+                ),
+            )
 
         cursor.execute(
             """
@@ -1480,6 +1563,22 @@ def seed_end_to_end_master(connection) -> None:
             (IDS["inventory_count_gain_account"], "4200-DEMO-ICG", "Demo inventory count gain", "income", False, False),
             (IDS["rounding_gain_account"], "4900-DEMO-RG", "Demo rounding gain", "income", False, False),
             (IDS["rounding_loss_account"], "5900-DEMO-RL", "Demo rounding loss", "expense", False, False),
+            (
+                IDS["expense_claim_expense_account"],
+                f"LIVE18-EXP-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}",
+                "Live18 reviewed member expense",
+                "expense",
+                False,
+                False,
+            ),
+            (
+                IDS["expense_claim_reimbursement_account"],
+                f"LIVE18-REIMB-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}",
+                "Live18 member reimbursement payable",
+                "liability",
+                False,
+                False,
+            ),
         )
         cursor.executemany(
             """
@@ -1547,6 +1646,9 @@ def seed_end_to_end_master(connection) -> None:
             "cost_of_goods_sold": IDS["cogs_account"],
             "rounding_gain": IDS["rounding_gain_account"],
             "rounding_loss": IDS["rounding_loss_account"],
+            "member_reimbursement_liability": IDS[
+                "expense_claim_reimbursement_account"
+            ],
         }
         cursor.executemany(
             """
@@ -1565,6 +1667,23 @@ def seed_end_to_end_master(connection) -> None:
                 )
                 for role, account_id in sorted(role_accounts.items())
             ],
+        )
+        cursor.execute(
+            """
+            UPDATE core.settings
+               SET value_text=%s,updated_at=transaction_timestamp(),
+                   updated_by_membership_id=%s,row_version=row_version+1
+             WHERE org_id=%s AND status='active' AND branch_id IS NULL
+               AND namespace='finance.account_roles'
+               AND key='member_reimbursement_liability'
+               AND value_text IS DISTINCT FROM %s
+            """,
+            (
+                IDS["expense_claim_reimbursement_account"],
+                IDS["reviewer_membership"],
+                IDS["org"],
+                IDS["expense_claim_reimbursement_account"],
+            ),
         )
 
         cursor.execute(
@@ -4286,6 +4405,7 @@ def main() -> int:
     source = fetch_official_source(evidence_dir)
     adjustment_source = fetch_adjustment_source(evidence_dir)
     gstr1_reporting_source = fetch_gstr1_reporting_source(evidence_dir)
+    expense_receipt_bytes = reviewed_expense_receipt()
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
@@ -4315,7 +4435,10 @@ def main() -> int:
             initial_activation_replayed=not gstr1_reporting_release_exists,
         )
         seed_business_master(bootstrap)
-        seed_end_to_end_master(bootstrap)
+        seed_end_to_end_master(
+            bootstrap,
+            expense_receipt_bytes=expense_receipt_bytes,
+        )
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         party_master_reconciliation = reconcile_party_master(runtime)
         verify_fiscal_tax_fact(runtime)
@@ -4639,6 +4762,14 @@ def main() -> int:
         "reference_scope": "demo subset; not a complete production tax dataset",
         "gstr1_reporting_reconciliation": gstr1_reporting_reconciliation,
         "transaction_scope": "canonical day-to-day purchase, sales, inventory, return, and settlement actions",
+        "expense_claim_fixture": {
+            "receipt_attachment_id": IDS["expense_receipt_evidence"],
+            "receipt_sha256": hashlib.sha256(expense_receipt_bytes).hexdigest(),
+            "expense_account_id": IDS["expense_claim_expense_account"],
+            "reimbursement_account_id": IDS[
+                "expense_claim_reimbursement_account"
+            ],
+        },
         "party_master_reconciliation": party_master_reconciliation,
         "purchase_order_reconciliation": purchase_reconciliation,
         "supplier_advance_reconciliation": advance_reconciliation,

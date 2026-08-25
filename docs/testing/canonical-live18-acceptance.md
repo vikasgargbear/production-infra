@@ -51,6 +51,14 @@ numbers unique between retries. It must not replace reviewed canonical IDs,
 amounts, quantities, tax facts, or event dates. Unknown, malformed, or
 unavailable tokens fail fixture loading or execution.
 
+Expense-claim certification additionally requires one externally reviewed
+synthetic PDF receipt. Canonical staging materializes it only from the protected
+`CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64` secret and verifies the lowercase
+`CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256` secret before inserting its run-scoped
+`core.attachments` identity. Missing bytes, PDF signature, size authority, or
+hash fail with `CANONICAL_EXPENSE_RECEIPT_AUTHORITY_MISSING`/`INVALID`; the
+provisioner never generates or relabels another document as expense evidence.
+
 Actor-confirmation screens that expose one reviewed approval-and-execute CTA
 must declare `lifecycle_mode` as `combined_actor_confirmation`; the harness
 proves that no approval occurred before that CTA and then captures exactly one

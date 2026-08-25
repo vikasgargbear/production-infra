@@ -1120,9 +1120,21 @@ jobs:
         env:
           CANONICAL_DEMO_WRITE_ACK: PROVISION_DISPOSABLE_DEMO
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+          CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
         run: |
           set -euo pipefail
           test -n "$ERP_REGULATORY_IMPORTER_PASSWORD"
+          test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64"
+          test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          [[ "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          expense_receipt_path="$RUNNER_TEMP/live18-reviewed-expense-receipt.pdf"
+          umask 077
+          printf '%s' "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" \
+            | base64 --decode > "$expense_receipt_path"
+          test "$(sha256sum "$expense_receipt_path" | cut -d' ' -f1)" \
+            = "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          export CANONICAL_DEMO_EXPENSE_RECEIPT_PATH="$expense_receipt_path"
           cleanup_demo_role_membership() {
             psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
               -c 'GRANT erp_migration_owner TO postgres WITH SET FALSE' \
