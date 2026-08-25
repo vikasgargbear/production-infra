@@ -15,7 +15,8 @@
   "optional_environment": {
     "MCP_ALLOWED_ORIGINS": "",
     "MCP_BIND_HOST": "0.0.0.0",
-    "MCP_REQUEST_TIMEOUT_SECONDS": "10"
+    "MCP_REQUEST_TIMEOUT_SECONDS": "10",
+    "RENDER_GIT_COMMIT": ""
   },
   "derived_configuration": {
     "jwks_url": "${SUPABASE_OAUTH_ISSUER}/.well-known/jwks.json",
