@@ -226,6 +226,47 @@ def _set_owner_context(cursor) -> None:
         cursor.execute("SELECT set_config(%s,%s,true)", (setting, value))
 
 
+def _restore_user_triggers(control, tables: list[str]) -> None:
+    """Attempt every restoration and prove no reviewed trigger remains disabled."""
+
+    errors: list[tuple[str, BaseException]] = []
+    try:
+        with control.cursor() as cursor:
+            for table in reversed(tables):
+                try:
+                    cursor.execute(f"ALTER TABLE {table} ENABLE TRIGGER USER")
+                    cursor.execute(
+                        """
+                        SELECT count(*)
+                          FROM pg_catalog.pg_trigger
+                         WHERE tgrelid=%s::regclass
+                           AND NOT tgisinternal AND tgenabled<>'O'
+                        """,
+                        (table,),
+                    )
+                    if cursor.fetchone() != (0,):
+                        raise AssertionError(
+                            f"{table} retained a disabled user trigger"
+                        )
+                except BaseException as exc:
+                    errors.append((table, exc))
+                    # Each autocommit statement is independent, but normalize
+                    # connection state before attempting the remaining tables.
+                    try:
+                        control.rollback()
+                    except BaseException as rollback_error:
+                        errors.append((f"{table} rollback", rollback_error))
+    finally:
+        control.close()
+    if errors:
+        detail = "; ".join(
+            f"{table}: {type(error).__name__}" for table, error in errors
+        )
+        raise RuntimeError(
+            f"Could not restore PostgreSQL user triggers: {detail}"
+        ) from errors[0][1]
+
+
 def _assert_setting_replacement_replay() -> None:
     _configure_fixture_ids()
     source_id = uuid4()
@@ -322,8 +363,37 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
     """A later run issues new grants without mutating terminal evidence."""
 
     _configure_fixture_ids()
-    connection = _connect()
+    trigger_tables = (
+        "core.access_grants",
+        "automation.agent_grants",
+    )
+    control = _connect()
+    control.autocommit = True
+    disabled_trigger_tables: list[str] = []
+    connection = None
     try:
+        # Trigger state is DDL and must be established before the rollback-only
+        # fixture transaction creates deferred trigger events. Keep FK/system
+        # triggers enabled and restore every successfully changed table even if
+        # a later disable, fixture assertion, or rollback fails.
+        with control.cursor() as cursor:
+            for table in trigger_tables:
+                cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER USER")
+                disabled_trigger_tables.append(table)
+            cursor.execute(
+                """
+                SELECT count(*),bool_and(relrowsecurity),bool_and(relforcerowsecurity)
+                  FROM pg_catalog.pg_class
+                 WHERE oid=ANY(ARRAY[%s::regclass,%s::regclass])
+                """,
+                trigger_tables,
+            )
+            if cursor.fetchone() != (2, True, True):
+                raise AssertionError(
+                    "grant-window simulation requires forced RLS on both relations"
+                )
+
+        connection = _connect()
         fixture.bootstrap_identity(connection, organization_pan="XXXXX7777X")
         prior_access_ids = (
             fixture.IDS["reviewer_access_grant"],
@@ -337,37 +407,29 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
             # The lifecycle guard permits expiry only after the validity window.
             # Set the clock-bound column with triggers disabled solely to model a
             # grant whose real 30-day window elapsed between workflow attempts.
-            cursor.execute("ALTER TABLE core.access_grants DISABLE TRIGGER USER")
-            try:
-                cursor.execute(
-                    """
-                    UPDATE core.access_grants
-                       SET valid_from_at=transaction_timestamp()-interval '61 days',
-                           expires_at=transaction_timestamp()-interval '31 days',
-                           status='expired',row_version=row_version+1
-                     WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
-                    """,
-                    (fixture.IDS["org"], list(prior_access_ids)),
-                )
-                assert cursor.rowcount == 2
-            finally:
-                cursor.execute("ALTER TABLE core.access_grants ENABLE TRIGGER USER")
-            cursor.execute("ALTER TABLE automation.agent_grants DISABLE TRIGGER USER")
-            try:
-                cursor.execute(
-                    """
-                    UPDATE automation.agent_grants
-                       SET consented_at=transaction_timestamp()-interval '61 days',
-                           granted_at=transaction_timestamp()-interval '61 days',
-                           expires_at=transaction_timestamp()-interval '31 days',
-                           status='expired'
-                     WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
-                    """,
-                    (fixture.IDS["org"], list(prior_agent_ids)),
-                )
-                assert cursor.rowcount == 2
-            finally:
-                cursor.execute("ALTER TABLE automation.agent_grants ENABLE TRIGGER USER")
+            cursor.execute(
+                """
+                UPDATE core.access_grants
+                   SET valid_from_at=transaction_timestamp()-interval '61 days',
+                       expires_at=transaction_timestamp()-interval '31 days',
+                       status='expired',row_version=row_version+1
+                 WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                """,
+                (fixture.IDS["org"], list(prior_access_ids)),
+            )
+            assert cursor.rowcount == 2
+            cursor.execute(
+                """
+                UPDATE automation.agent_grants
+                   SET consented_at=transaction_timestamp()-interval '61 days',
+                       granted_at=transaction_timestamp()-interval '61 days',
+                       expires_at=transaction_timestamp()-interval '31 days',
+                       status='expired'
+                 WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                """,
+                (fixture.IDS["org"], list(prior_agent_ids)),
+            )
+            assert cursor.rowcount == 2
 
         for grant_key in (
             "reviewer_access_grant",
@@ -435,8 +497,14 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
             )
             assert cursor.fetchone() == (2, True, True)
     finally:
-        connection.rollback()
-        connection.close()
+        try:
+            if connection is not None:
+                try:
+                    connection.rollback()
+                finally:
+                    connection.close()
+        finally:
+            _restore_user_triggers(control, disabled_trigger_tables)
 
 
 def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:

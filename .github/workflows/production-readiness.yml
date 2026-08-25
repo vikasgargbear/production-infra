@@ -1276,8 +1276,14 @@ jobs:
           test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
           railway whoami >/dev/null
           umask 077
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
+          mkdir -p "$HOME/.ssh" "$HOME/.railway"
+          chmod 700 "$HOME/.ssh" "$HOME/.railway"
+          printf '%s\n' \
+            'Host ssh.railway.com' \
+            "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
+            '    StrictHostKeyChecking accept-new' \
+            > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
           ssh-keygen -q -t ed25519 -N '' \
             -C "live18-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"
@@ -1739,6 +1745,7 @@ jobs:
             railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt"
             if grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt" >/dev/null; then
               railway ssh keys remove "$fingerprint"
+              rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"
               railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"
               if grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt" >/dev/null; then
                 echo "Run-scoped Railway SSH key remained registered" >&2

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.build_live18_artifact_manifest import build_manifest
 
 
@@ -107,6 +109,83 @@ def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Pa
         "status": 200,
         "request_id": "request-1",
     }]
+
+
+def test_manifest_treats_empty_optional_demo_evidence_as_absent(tmp_path: Path) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "railway",
+        "commit_sha": SHA,
+        "services": {
+            name: {"origin": f"https://{name}.example"}
+            for name in ("api", "frontend", "mcp")
+        },
+    })
+    demo = tmp_path / "demo.json"
+    demo.touch()
+
+    manifest = build_manifest(
+        deployed_sha=deployed,
+        evidence_dir=tmp_path / "missing-evidence",
+        database_evidence=None,
+        demo_evidence=demo,
+        browser_outcome="skipped",
+        run_id="123",
+        run_attempt="1",
+    )
+
+    assert manifest["demo"] is None
+
+
+def test_manifest_treats_empty_optional_database_evidence_as_absent(tmp_path: Path) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "railway",
+        "commit_sha": SHA,
+        "services": {
+            name: {"origin": f"https://{name}.example"}
+            for name in ("api", "frontend", "mcp")
+        },
+    })
+    database = tmp_path / "database.json"
+    database.touch()
+
+    manifest = build_manifest(
+        deployed_sha=deployed,
+        evidence_dir=tmp_path / "missing-evidence",
+        database_evidence=database,
+        demo_evidence=None,
+        browser_outcome="skipped",
+        run_id="123",
+        run_attempt="1",
+    )
+
+    assert manifest["database"] is None
+
+
+def test_manifest_rejects_nonempty_malformed_optional_evidence(tmp_path: Path) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "railway",
+        "commit_sha": SHA,
+        "services": {
+            name: {"origin": f"https://{name}.example"}
+            for name in ("api", "frontend", "mcp")
+        },
+    })
+    malformed = tmp_path / "demo.json"
+    malformed.write_text("{", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        build_manifest(
+            deployed_sha=deployed,
+            evidence_dir=tmp_path / "missing-evidence",
+            database_evidence=None,
+            demo_evidence=malformed,
+            browser_outcome="skipped",
+            run_id="123",
+            run_attempt="1",
+        )
 
 
 def test_live18_workflow_uploads_only_fixed_manifest() -> None:

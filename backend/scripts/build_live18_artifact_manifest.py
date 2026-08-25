@@ -42,6 +42,12 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _optional_nonempty_file(path: Path | None) -> Path | None:
+    if path is None or not path.is_file() or path.stat().st_size == 0:
+        return None
+    return path
+
+
 def _required_text(value: dict[str, Any], key: str, pattern: re.Pattern[str]) -> str:
     item = value.get(key)
     if not isinstance(item, str) or pattern.fullmatch(item) is None:
@@ -188,7 +194,8 @@ def _database_summary(path: Path) -> dict[str, Any]:
 
 
 def _hashed_optional(path: Path | None, expected_action: str) -> dict[str, Any] | None:
-    if path is None or not path.is_file():
+    path = _optional_nonempty_file(path)
+    if path is None:
         return None
     value = _read_json(path)
     if value.get("action") != expected_action:
@@ -225,8 +232,8 @@ def build_manifest(
         "deployment": _deployment_summary(deployed_sha),
         "browser": browser,
         "database": (
-            _database_summary(database_evidence)
-            if database_evidence is not None and database_evidence.is_file()
+            _database_summary(database_path)
+            if (database_path := _optional_nonempty_file(database_evidence)) is not None
             else None
         ),
         "demo": _hashed_optional(demo_evidence, "provision-demo"),

@@ -488,9 +488,31 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     )
     assert 'mkdir -p "$HOME/.ssh"' in live18
     assert 'chmod 700 "$HOME/.ssh"' in live18
+    assert '"$HOME/.railway"' in live18
+    assert "'Host ssh.railway.com'" in live18
+    assert 'UserKnownHostsFile $HOME/.railway/known_hosts_relay' in live18
+    assert "'    StrictHostKeyChecking accept-new'" in live18
+    assert "StrictHostKeyChecking no" not in live18
+    assert "StrictHostKeyChecking=no" not in live18
+    assert "UserKnownHostsFile /dev/null" not in live18
+    assert 'chmod 600 "$HOME/.ssh/config"' in live18
+    assert live18.index('> "$HOME/.ssh/config"') < live18.index(
+        'railway ssh \\\n'
+    )
     assert '--key "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"' in live18
     assert '--identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
     assert 'rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
+    cleanup = live18.split(
+        "- name: Always remove the run-scoped Railway SSH key", 1
+    )[1]
+    remote_remove = cleanup.index('railway ssh keys remove "$fingerprint"')
+    local_remove = cleanup.index(
+        'rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"'
+    )
+    post_remove_list = cleanup.index(
+        'railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"'
+    )
+    assert remote_remove < local_remove < post_remove_list
     assert (
         "--deployment-instance \"$RAILWAY_API_DEPLOYMENT_INSTANCE_ID\"" in live18
     )
