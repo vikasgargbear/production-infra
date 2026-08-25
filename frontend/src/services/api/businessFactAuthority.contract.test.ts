@@ -41,6 +41,7 @@ test('retired browser spreadsheet parsers cannot invent product master facts', (
 test('retired compatibility mappers cannot infer canonical product or batch facts', () => {
   [
     'frontend/src/utils/productMapper.ts',
+    'frontend/src/utils/productMapper.test.ts',
     'frontend/src/utils/dataMapper.ts',
     'frontend/src/config/fieldAliases.ts',
   ].forEach(relative => expect(fs.existsSync(path.join(root, relative))).toBe(false));

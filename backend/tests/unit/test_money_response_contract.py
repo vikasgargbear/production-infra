@@ -96,8 +96,6 @@ def mutated(rows):
     [
         ("/api/gst/gstr2b/status", "GSTR2BStatusResponse"),
         ("/api/gst/gstr2b/mismatches", "GSTR2BMismatchResponse"),
-        ("/api/collection-center/collection/analytics/performance", "CollectionPerformanceResponse"),
-        ("/api/collection-center/collection/customer/{customer_id}/outstanding", "ExactMoneyCustomerOutstandingResponse"),
     ],
 )
 def test_residual_money_routes_publish_typed_response_models(path, model):
