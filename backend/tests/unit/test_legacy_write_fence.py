@@ -2,8 +2,10 @@ import ast
 import importlib
 import inspect
 import json
+import os
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import APIRouter
@@ -40,11 +42,21 @@ for route in app.routes:
     }})
 print({marker!r} + json.dumps(rows, sort_keys=True))
 """
+    backend_root = Path(__file__).resolve().parents[2]
+    probe_environment = os.environ.copy()
+    probe_environment["PYTHONPATH"] = os.pathsep.join(
+        filter(
+            None,
+            (str(backend_root), probe_environment.get("PYTHONPATH", "")),
+        )
+    )
     completed = subprocess.run(
         [sys.executable, "-c", probe],
         check=True,
         capture_output=True,
         text=True,
+        cwd=backend_root.parent,
+        env=probe_environment,
     )
     if marker not in completed.stdout:
         raise AssertionError(

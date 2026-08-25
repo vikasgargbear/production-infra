@@ -31,8 +31,8 @@
     "client_registration": "reviewed-pre-registration-only"
   },
   "tools": [
-    "erp_adjustment_note_readback_get",
     "erp_adjustment_note_prepare",
+    "erp_adjustment_note_readback_get",
     "erp_bank_reconciliation_get",
     "erp_bank_reconciliation_prepare",
     "erp_customer_receipt_prepare",
@@ -41,8 +41,8 @@
     "erp_goods_receipt_prepare",
     "erp_gst_settings_get",
     "erp_inventory_adjustment_prepare",
-    "erp_inventory_destruction_readback_get",
     "erp_inventory_destruction_prepare",
+    "erp_inventory_destruction_readback_get",
     "erp_inventory_location_search",
     "erp_inventory_transfer_prepare",
     "erp_open_item_search",
