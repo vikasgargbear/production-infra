@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
-import urllib.error
-import urllib.request
+import tempfile
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
@@ -61,24 +61,48 @@ def request_json(
     token: str,
     payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    body = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        method=method,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            value = json.load(response)
-    except urllib.error.HTTPError as error:
-        detail = error.read(2048).decode("utf-8", errors="replace")
+    body = "" if payload is None else json.dumps(payload, separators=(",", ":"))
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", prefix="supabase-auth-header-"
+    ) as header_file:
+        header_file.write(f"Authorization: Bearer {token}\n")
+        header_file.flush()
+        command = [
+            "curl",
+            "--fail-with-body",
+            "--silent",
+            "--show-error",
+            "--max-time",
+            "30",
+            "--request",
+            method,
+            "--header",
+            f"@{header_file.name}",
+            "--header",
+            "Accept: application/json",
+            "--header",
+            "Content-Type: application/json",
+        ]
+        if payload is not None:
+            command.extend(("--data-binary", "@-"))
+        command.append(url)
+        completed = subprocess.run(
+            command,
+            input=body,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if completed.returncode != 0:
+        detail = (completed.stdout or completed.stderr).strip()[:2048]
         raise RuntimeError(
-            f"Supabase Auth configuration request failed ({error.code}): {detail}"
+            f"Supabase Auth configuration request failed: {detail}"
+        )
+    try:
+        value = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "Supabase Auth configuration response must be JSON"
         ) from error
     if not isinstance(value, dict):
         raise RuntimeError("Supabase Auth configuration response must be an object")

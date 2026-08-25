@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -40,6 +41,37 @@ def test_build_update_replaces_drift_with_one_exact_reviewed_authority() -> None
         "oauth_server_allow_dynamic_registration": False,
         "oauth_server_authorization_path": "/oauth/consent",
     }
+
+
+def test_request_uses_curl_without_putting_token_in_process_arguments(
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["input"] = kwargs["input"]
+        header_path = command[command.index("--header") + 1].removeprefix("@")
+        captured["header"] = Path(header_path).read_text(encoding="utf-8")
+        return SimpleNamespace(
+            returncode=0,
+            stdout='{"site_url":"https://erp.example.com"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(redirect.subprocess, "run", fake_run)
+
+    response = redirect.request_json(
+        "PATCH",
+        "https://api.supabase.com/v1/projects/example/config/auth",
+        "secret-token",
+        {"site_url": "https://erp.example.com"},
+    )
+
+    assert response == {"site_url": "https://erp.example.com"}
+    assert "secret-token" not in " ".join(captured["command"])
+    assert captured["header"] == "Authorization: Bearer secret-token\n"
+    assert captured["input"] == '{"site_url":"https://erp.example.com"}'
 
 
 def test_reconcile_gets_then_patches_and_returns_scrubbed_evidence(monkeypatch) -> None:

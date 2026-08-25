@@ -337,7 +337,7 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
             # The lifecycle guard permits expiry only after the validity window.
             # Set the clock-bound column with triggers disabled solely to model a
             # grant whose real 30-day window elapsed between workflow attempts.
-            cursor.execute("ALTER TABLE core.access_grants DISABLE TRIGGER ALL")
+            cursor.execute("ALTER TABLE core.access_grants DISABLE TRIGGER USER")
             try:
                 cursor.execute(
                     """
@@ -351,8 +351,8 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
                 )
                 assert cursor.rowcount == 2
             finally:
-                cursor.execute("ALTER TABLE core.access_grants ENABLE TRIGGER ALL")
-            cursor.execute("ALTER TABLE automation.agent_grants DISABLE TRIGGER ALL")
+                cursor.execute("ALTER TABLE core.access_grants ENABLE TRIGGER USER")
+            cursor.execute("ALTER TABLE automation.agent_grants DISABLE TRIGGER USER")
             try:
                 cursor.execute(
                     """
@@ -367,7 +367,7 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
                 )
                 assert cursor.rowcount == 2
             finally:
-                cursor.execute("ALTER TABLE automation.agent_grants ENABLE TRIGGER ALL")
+                cursor.execute("ALTER TABLE automation.agent_grants ENABLE TRIGGER USER")
 
         for grant_key in (
             "reviewer_access_grant",
