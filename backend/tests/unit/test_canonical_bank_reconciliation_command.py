@@ -136,6 +136,7 @@ def test_bank_reconciliation_has_restricted_postgres15_concurrency_evidence():
     assert "'branch',:branch,transaction_timestamp()" in fixture
     assert "organization_scope=checker" in fixture
     assert "changed bank-account source version executed" in fixture
+    assert "ActionErrorCode.STALE_VERSION" in fixture
     assert "partial bank reconciliation was accepted" in fixture
     assert "outbox_event_count" in fixture and "audit_event_count" in fixture
     assert "bypassed the reviewed reconciliation command" in fixture

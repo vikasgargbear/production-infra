@@ -301,7 +301,7 @@ def main() -> None:
                     context=_context(),
                 )
             except OperatorActionError as error:
-                assert error.code is ActionErrorCode.VALIDATION_FAILED
+                assert error.code is ActionErrorCode.STALE_VERSION
             else:
                 raise AssertionError("changed bank-account source version executed")
         finally:

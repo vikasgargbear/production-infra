@@ -7,7 +7,7 @@ describe('return submission boundaries', () => {
 
         expect(boundary.canPrepare).toBe(false);
         expect(boundary.unavailableReason).toContain('Canonical sales return is blocked');
-        expect(boundary.unavailableReason).toContain('GST treatment');
+        expect(boundary.unavailableReason).toContain('explicit canonical reason');
     });
 
     it('blocks purchase-return prepare until its canonical identities are mapped', () => {
@@ -15,6 +15,6 @@ describe('return submission boundaries', () => {
 
         expect(boundary.canPrepare).toBe(false);
         expect(boundary.unavailableReason).toContain('Canonical purchase return is blocked');
-        expect(boundary.unavailableReason).toContain('GST treatment');
+        expect(boundary.unavailableReason).toContain('explicit canonical reason');
     });
 });
