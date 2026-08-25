@@ -2,19 +2,7 @@ import React from 'react';
 import { FileText, User, Phone, Mail, CreditCard } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { formatCurrency } from '../../../utils/formatters';
-
-// Return reasons for display
-const RETURN_REASONS = [
-  { value: 'DAMAGED', label: 'Damaged Product' },
-  { value: 'EXPIRED', label: 'Expired Product' },
-  { value: 'WRONG_ITEM', label: 'Wrong Item Delivered' },
-  { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-  { value: 'NOT_REQUIRED', label: 'Not Required' },
-  { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit' },
-  { value: 'SHORT_EXPIRY', label: 'Short Expiry' },
-  { value: 'BATCH_RECALL', label: 'Batch Recall' },
-  { value: 'OTHER', label: 'Other' }
-];
+import { formatCanonicalReasonCode } from '../utils/canonicalReturnCommand';
 
 interface CreditNotePreviewProps {
   returnData: any;
@@ -263,7 +251,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
             <div className="flex-1">
               <h4 className="font-semibold text-amber-900">Return Reason</h4>
               <p className="text-sm text-amber-700 mt-1">
-                {RETURN_REASONS.find(r => r.value === returnData.return_reason)?.label || returnData.return_reason}
+                {formatCanonicalReasonCode(returnData.return_reason)}
               </p>
               {returnData.return_reason_notes && (
                 <p className="text-sm text-amber-600 mt-2">{returnData.return_reason_notes}</p>

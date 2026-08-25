@@ -20,9 +20,12 @@ const sales = () => ({
   branch_id: ids.branch,
   invoice_id: ids.invoice,
   return_date: '2026-08-25',
-  return_reason: 'DAMAGED',
+  return_reason: 'damage',
   gst_tax_treatment: 'commercial_only',
-  supported_gst_treatments: ['commercial_only'],
+  return_reason_choices: [{
+    reason_code: 'damage',
+    supported_gst_treatments: ['commercial_only'],
+  }],
   items: [{
     selected: true,
     original_invoice_line_id: ids.line,
@@ -41,9 +44,12 @@ const purchase = () => ({
   branch_id: ids.branch,
   supplier_invoice_id: ids.invoice,
   return_date: '2026-08-25',
-  return_reason: 'EXCESS_QUANTITY',
+  return_reason: 'excess_supply',
   gst_tax_treatment: 'commercial_only',
-  supported_gst_treatments: ['commercial_only'],
+  return_reason_choices: [{
+    reason_code: 'excess_supply',
+    supported_gst_treatments: ['commercial_only'],
+  }],
   supplier_destination_address_id: ids.address,
   transport_details: { transport_mode: 'in_person', distance_km: '0' },
   items: [{
@@ -93,9 +99,27 @@ describe('canonical return command builders', () => {
   it('requires statutory evidence when statutory GST is selected', () => {
     const value: any = sales();
     value.gst_tax_treatment = 'statutory';
-    value.supported_gst_treatments = ['commercial_only', 'statutory'];
+    value.return_reason_choices[0].supported_gst_treatments = ['commercial_only', 'statutory'];
     expect(() => buildSalesReturnPreparePayload(value, 'erp-web-sales-return-prepare:test-0003'))
       .toThrow(/ITC-reversal evidence/);
+  });
+
+  it('rejects a reason and treatment pair that is absent from the effective context', () => {
+    const value = sales();
+    value.return_reason = 'expiry';
+    expect(() => buildSalesReturnPreparePayload(value, 'erp-web-sales-return-prepare:test-0004'))
+      .toThrow(/exact effective canonical rule/);
+  });
+
+  it('rejects a treatment that belongs to another effective reason', () => {
+    const value: any = sales();
+    value.gst_tax_treatment = 'statutory';
+    value.return_reason_choices.push({
+      reason_code: 'expiry',
+      supported_gst_treatments: ['statutory'],
+    });
+    expect(() => buildSalesReturnPreparePayload(value, 'erp-web-sales-return-prepare:test-0005'))
+      .toThrow(/reason and GST treatment lack exact canonical authority/);
   });
 
   it('builds an invoiced purchase return with exact receipt lineage', () => {

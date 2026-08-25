@@ -9,7 +9,7 @@ import {
   ProceedToReviewComponent, StandardDatePicker
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { purchasesApi, metadataApi } from '../../services/api';
+import { purchasesApi } from '../../services/api';
 import { canonicalReturnsApi } from '../../services/api/modules/returns/canonicalReturns.api';
 import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
@@ -20,7 +20,7 @@ import { updatePurchaseReturnItem } from './utils/purchaseReturnProjection';
 import { prepareCanonicalPurchaseReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
-import { CANONICAL_PURCHASE_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
+import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
 import {
@@ -74,7 +74,10 @@ interface PurchaseReturnData {
   include_gst: boolean;
   branch_id: string;
   gst_tax_treatment: '' | 'commercial_only' | 'statutory';
-  supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+  return_reason_choices: Array<{
+    reason_code: string;
+    supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+  }>;
   supplier_destinations: any[];
   supplier_destination_address_id: string;
   statutory_gstr2b_credit_notes: any[];
@@ -122,7 +125,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     include_gst: true,
     branch_id: '',
     gst_tax_treatment: '',
-    supported_gst_treatments: [],
+    return_reason_choices: [],
     supplier_destinations: [],
     supplier_destination_address_id: '',
     statutory_gstr2b_credit_notes: [],
@@ -161,30 +164,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     });
     return () => { active = false; };
   }, [returnData.return_date, toast]);
-
-  // Load return reasons from system settings
-  useEffect(() => {
-    const loadReturnReasons = async () => {
-      try {
-        const response = await metadataApi.getReturnReasons();
-        const fetchedReasons = (response.data?.purchase_return_reasons || []).filter(
-          (reason: { value: string }) => CANONICAL_PURCHASE_RETURN_REASON_VALUES.includes(reason.value),
-        );
-
-        if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
-          setReturnReasons(fetchedReasons);
-        } else {
-          setReturnReasons([]);
-          toast.error('The canonical API returned no purchase return reasons.');
-        }
-      } catch (error) {
-        setReturnReasons([]);
-        toast.error('Unable to load purchase return reasons from the canonical API.');
-      }
-    };
-
-    loadReturnReasons();
-  }, [toast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -233,12 +212,19 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     if (!invoice) return;
 
     setSelectedInvoice(invoice);
+    setReturnReasons([]);
     setReturnData(prev => ({
       ...prev,
       supplier_invoice_id: invoice.supplier_invoice_id || invoice.invoice_id,
       invoice_number: invoice.supplier_invoice_number || invoice.invoice_number,
       invoice_date: invoice.invoice_date,
-      original_invoice: invoice
+      original_invoice: invoice,
+      items: [],
+      return_reason: '',
+      return_reason_choices: [],
+      gst_tax_treatment: '',
+      statutory_gstr2b_credit_notes: [],
+      supplier_credit_note_portal_line_id: '',
     }));
 
     // Load invoice items if not already loaded
@@ -292,7 +278,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           invoice_number: context.supplier_invoice_number,
           invoice_date: context.supplier_invoice_date,
           items: mappedItems,
-          supported_gst_treatments: context.supported_gst_treatments,
+          return_reason: '',
+          return_reason_choices: context.return_reason_choices,
           supplier_destinations: context.supplier_destinations,
           supplier_destination_address_id: context.supplier_destinations.length === 1
             ? context.supplier_destinations[0].id
@@ -301,6 +288,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           supplier_credit_note_portal_line_id: '',
           gst_tax_treatment: '',
         }));
+        setReturnReasons(context.return_reason_choices.map(choice => ({
+          value: choice.reason_code,
+          label: formatCanonicalReasonCode(choice.reason_code),
+        })));
       }
     } catch (error) {
       toast.error('Failed to load invoice items');
@@ -505,10 +496,25 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                 <StandardDatePicker
                   label="Return Date"
                   value={returnData.return_date}
-                  onChange={(dateStr) => setReturnData(prev => ({
-                    ...prev,
-                    return_date: dateStr
-                  }))}
+                  onChange={(dateStr) => {
+                    setSelectedInvoice(null);
+                    setReturnReasons([]);
+                    setShowInvoiceSection(true);
+                    setReturnData(prev => ({
+                      ...prev,
+                      return_date: dateStr,
+                      supplier_invoice_id: '',
+                      invoice_number: '',
+                      invoice_date: '',
+                      original_invoice: null,
+                      items: [],
+                      return_reason: '',
+                      return_reason_choices: [],
+                      gst_tax_treatment: '',
+                      statutory_gstr2b_credit_notes: [],
+                      supplier_credit_note_portal_line_id: '',
+                    }));
+                  }}
                   required
                 />
                 <div>
@@ -517,7 +523,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   </label>
                   <Select
                     value={returnData.return_reason}
-                    onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value as string }))}
+                    onChange={(value) => setReturnData(prev => ({
+                      ...prev,
+                      return_reason: value as string,
+                      gst_tax_treatment: '',
+                      supplier_credit_note_portal_line_id: '',
+                    }))}
                     options={returnReasons}
                     placeholder="Select reason..."
                     className="w-full"
@@ -655,7 +666,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     required
                     value={returnData.gst_tax_treatment}
                     onChange={(value) => setReturnData(prev => ({ ...prev, gst_tax_treatment: value as any, supplier_credit_note_portal_line_id: '' }))}
-                    options={returnData.supported_gst_treatments.map(value => ({ value, label: value === 'statutory' ? 'Statutory GST debit note' : 'Commercial only (no GST adjustment)' }))}
+                    options={(returnData.return_reason_choices.find(
+                      choice => choice.reason_code === returnData.return_reason,
+                    )?.supported_gst_treatments || []).map(value => ({ value, label: value === 'statutory' ? 'Statutory GST debit note' : 'Commercial only (no GST adjustment)' }))}
                     placeholder="Choose GST treatment"
                   />
                   <Select

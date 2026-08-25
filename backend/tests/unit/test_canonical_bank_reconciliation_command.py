@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -112,7 +114,14 @@ def test_bank_reconciliation_readback_is_shared_by_rest_and_mcp():
     assert "/commands/{command_request_id}/bank-reconciliation-readback" in mcp
     assert "get_bank_reconciliation_readback" in mcp
     assert '"erp_bank_reconciliation_get"' in operations
-    assert '"read"\n            if operation.kind in {"status", "bank_reconciliation_readback", "readback"}' in operations
+    read_kinds = re.search(r"if operation\.kind in (\{.*?\})", operations, re.DOTALL)
+    assert read_kinds is not None
+    assert ast.literal_eval(read_kinds.group(1)) == {
+        "status",
+        "bank_reconciliation_readback",
+        "supplier_advance_readback",
+        "readback",
+    }
     assert "EXECUTE_BANK_RECONCILIATION_SQL" in service
     assert 'before["operation"] == "finance.bank_reconciliation.match"' in service
 
@@ -129,7 +138,7 @@ def test_bank_reconciliation_has_restricted_postgres15_concurrency_evidence():
     assert "outbox_event_count" in fixture and "audit_event_count" in fixture
     assert "bypassed the reviewed reconciliation command" in fixture
     assert RUNTIME_FIXTURE.name in gate
-    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0009\"' in gate
+    assert 'version_num FROM public.alembic_version\')\" = \"20260825_0010\"' in gate
 
 
 class _Result:

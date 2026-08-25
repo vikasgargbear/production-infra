@@ -129,6 +129,67 @@ class ReturnAttachmentEvidence(StrictRead):
     verified_at: datetime
 
 
+class ReturnReasonChoice(StrictRead):
+    reason_code: str = Field(min_length=1, max_length=64)
+    supported_gst_treatments: list[Literal["commercial_only", "statutory"]]
+
+    @model_validator(mode="after")
+    def require_distinct_treatments(self):
+        if not self.supported_gst_treatments:
+            raise ValueError("return reason has no executable GST treatment")
+        if len(set(self.supported_gst_treatments)) != len(self.supported_gst_treatments):
+            raise ValueError("return reason repeats a GST treatment")
+        return self
+
+
+def _effective_return_reason_choices(
+    db: Session,
+    *,
+    return_date: date,
+    side: Literal["sales", "purchase"],
+    statutory_evidence_available: bool,
+) -> list[ReturnReasonChoice]:
+    direction = "credit" if side == "sales" else "debit"
+    rows = _rows(
+        db,
+        """
+        WITH exact_effective_rules AS (
+            SELECT rule.reason_code, rule.tax_effect
+              FROM tax.gst_adjustment_rule_versions rule
+              JOIN core.reference_data_releases release
+                ON release.id=rule.release_id
+               AND release.dataset_kind='gst_adjustment_rules'
+               AND release.status='active'
+             WHERE rule.status='active' AND rule.side=:side
+               AND rule.direction=:direction AND rule.document_effect='decrease'
+               AND rule.effective_from<=:return_date
+               AND (rule.effective_to IS NULL OR rule.effective_to>=:return_date)
+             GROUP BY rule.reason_code, rule.tax_effect
+            HAVING count(*)=1
+        )
+        SELECT reason_code,
+               array_agg(
+                   tax_effect ORDER BY CASE tax_effect
+                       WHEN 'commercial_only' THEN 1
+                       WHEN 'statutory' THEN 2
+                   END
+               ) AS supported_gst_treatments
+          FROM exact_effective_rules
+         WHERE tax_effect='commercial_only'
+            OR (:statutory_evidence_available AND tax_effect='statutory')
+         GROUP BY reason_code
+         ORDER BY reason_code
+        """,
+        {
+            "side": side,
+            "direction": direction,
+            "return_date": return_date,
+            "statutory_evidence_available": statutory_evidence_available,
+        },
+    )
+    return [ReturnReasonChoice.model_validate(row) for row in rows]
+
+
 class SalesReturnableAllocation(StrictRead):
     original_invoice_line_id: UUID
     invoice_dispatch_allocation_id: UUID
@@ -189,7 +250,7 @@ class SalesReturnContext(StrictRead):
     lines: list[SalesReturnableAllocation]
     quarantine_locations: list[ReturnLocation]
     statutory_itc_reversal_evidence: list[ReturnAttachmentEvidence]
-    supported_gst_treatments: list[Literal["commercial_only", "statutory"]]
+    return_reason_choices: list[ReturnReasonChoice]
     approval_policy: Literal["separate_approver"] = "separate_approver"
 
     @model_validator(mode="after")
@@ -198,11 +259,16 @@ class SalesReturnContext(StrictRead):
             raise ValueError("invoice has no dispatch-allocated quantity remaining")
         if not self.quarantine_locations:
             raise ValueError("branch has no active non-saleable quarantine location")
-        expected = ["commercial_only"]
-        if self.customer_registered and self.statutory_itc_reversal_evidence:
-            expected.append("statutory")
-        if self.supported_gst_treatments != expected:
-            raise ValueError("sales return GST treatment availability is inconsistent")
+        if not self.return_reason_choices:
+            raise ValueError("sales return has no exact effective GST adjustment authority")
+        if len({choice.reason_code for choice in self.return_reason_choices}) != len(self.return_reason_choices):
+            raise ValueError("sales return repeats an effective reason code")
+        statutory_available = self.customer_registered and bool(self.statutory_itc_reversal_evidence)
+        if not statutory_available and any(
+            "statutory" in choice.supported_gst_treatments
+            for choice in self.return_reason_choices
+        ):
+            raise ValueError("sales return exposes statutory treatment without exact evidence")
         return self
 
 
@@ -306,7 +372,7 @@ class PurchaseReturnContext(StrictRead):
     lines: list[PurchaseReturnableAllocation]
     supplier_destinations: list[SupplierAddress]
     statutory_gstr2b_credit_notes: list[PortalCreditNoteEvidence]
-    supported_gst_treatments: list[Literal["commercial_only", "statutory"]]
+    return_reason_choices: list[ReturnReasonChoice]
     approval_policy: Literal["separate_approver"] = "separate_approver"
 
     @model_validator(mode="after")
@@ -315,11 +381,15 @@ class PurchaseReturnContext(StrictRead):
             raise ValueError("supplier invoice has no returnable receipt allocation")
         if not self.supplier_destinations:
             raise ValueError("supplier has no active return destination")
-        expected = ["commercial_only"]
-        if self.statutory_gstr2b_credit_notes:
-            expected.append("statutory")
-        if self.supported_gst_treatments != expected:
-            raise ValueError("purchase return GST treatment availability is inconsistent")
+        if not self.return_reason_choices:
+            raise ValueError("purchase return has no exact effective GST adjustment authority")
+        if len({choice.reason_code for choice in self.return_reason_choices}) != len(self.return_reason_choices):
+            raise ValueError("purchase return repeats an effective reason code")
+        if not self.statutory_gstr2b_credit_notes and any(
+            "statutory" in choice.supported_gst_treatments
+            for choice in self.return_reason_choices
+        ):
+            raise ValueError("purchase return exposes statutory treatment without exact evidence")
         return self
 
 
@@ -616,9 +686,17 @@ def sales_return_context(
         """,
         {"org_id": org_id},
     )
-    treatments = ["commercial_only"]
-    if header["customer_registered"] and evidence:
-        treatments.append("statutory")
+    reason_choices = _effective_return_reason_choices(
+        db,
+        return_date=return_date,
+        side="sales",
+        statutory_evidence_available=bool(header["customer_registered"] and evidence),
+    )
+    if not reason_choices:
+        raise HTTPException(
+            status_code=409,
+            detail="No exact effective GST adjustment rule permits this sales return date",
+        )
     return SalesReturnContext.model_validate(
         {
             **header,
@@ -626,7 +704,7 @@ def sales_return_context(
             "lines": lines,
             "quarantine_locations": locations,
             "statutory_itc_reversal_evidence": evidence,
-            "supported_gst_treatments": treatments,
+            "return_reason_choices": reason_choices,
         }
     )
 
@@ -862,9 +940,17 @@ def purchase_return_context(
             "place_of_supply_state_code": header["place_of_supply_state_code"],
         },
     )
-    treatments = ["commercial_only"]
-    if portal:
-        treatments.append("statutory")
+    reason_choices = _effective_return_reason_choices(
+        db,
+        return_date=return_date,
+        side="purchase",
+        statutory_evidence_available=bool(portal),
+    )
+    if not reason_choices:
+        raise HTTPException(
+            status_code=409,
+            detail="No exact effective GST adjustment rule permits this purchase return date",
+        )
     public_header = {
         key: value
         for key, value in header.items()
@@ -882,7 +968,7 @@ def purchase_return_context(
             "lines": lines,
             "supplier_destinations": addresses,
             "statutory_gstr2b_credit_notes": portal,
-            "supported_gst_treatments": treatments,
+            "return_reason_choices": reason_choices,
         }
     )
 

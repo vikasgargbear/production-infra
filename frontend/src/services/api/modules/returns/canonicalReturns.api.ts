@@ -50,6 +50,11 @@ export interface CanonicalReturnLocation {
   allows_sale: boolean;
 }
 
+export interface CanonicalReturnReasonChoice {
+  reason_code: string;
+  supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+}
+
 export interface CanonicalSalesReturnLine {
   original_invoice_line_id: string;
   invoice_dispatch_allocation_id: string;
@@ -97,7 +102,7 @@ export interface CanonicalSalesReturnContext {
     status: 'verified' | 'retained';
     verified_at: string;
   }>;
-  supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+  return_reason_choices: CanonicalReturnReasonChoice[];
   approval_policy: 'separate_approver';
 }
 
@@ -166,7 +171,7 @@ export interface CanonicalPurchaseReturnContext {
     cess_amount: DecimalString;
     total_amount: DecimalString;
   }>;
-  supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+  return_reason_choices: CanonicalReturnReasonChoice[];
   approval_policy: 'separate_approver';
 }
 

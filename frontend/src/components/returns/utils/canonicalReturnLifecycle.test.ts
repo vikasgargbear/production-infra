@@ -18,9 +18,12 @@ it('prepares only and exposes the immutable distinct-approver waiting state', as
     branch_id: 'd3000000-0000-7000-8000-000000000001',
     invoice_id: 'd3000000-0000-7000-8000-000000000002',
     return_date: '2026-08-25',
-    return_reason: 'DAMAGED',
+    return_reason: 'damage',
     gst_tax_treatment: 'commercial_only',
-    supported_gst_treatments: ['commercial_only'],
+    return_reason_choices: [{
+      reason_code: 'damage',
+      supported_gst_treatments: ['commercial_only'],
+    }],
     items: [{
       selected: true,
       original_invoice_line_id: 'd3000000-0000-7000-8000-000000000003',

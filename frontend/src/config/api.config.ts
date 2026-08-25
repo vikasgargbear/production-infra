@@ -154,7 +154,6 @@ export const API_CONFIG: APIConfig = {
       // Purchase returns (to suppliers)
       PURCHASE: '/purchase-returns/',  // Matches backend: purchase_returns_router prefix
       PURCHASE_BY_ID: (id) => `/purchase-returns/${id}/`,
-      REASONS: '/metadata/return-reasons/',  // Use metadata endpoint
     },
 
     // Party Ledger

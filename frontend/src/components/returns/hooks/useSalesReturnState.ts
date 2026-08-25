@@ -68,7 +68,7 @@ const initialReturnData: ReturnFormData = {
     return_type: 'credit_note', // Default to credit note
     withhold_gst: true,
     gst_tax_treatment: '',
-    supported_gst_treatments: [],
+    return_reason_choices: [],
     statutory_itc_reversal_evidence: [],
     recipient_itc_reversal_evidence_attachment_id: '',
     recipient_itc_reversal_confirmed_at: '',

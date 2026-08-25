@@ -42,3 +42,9 @@ inter-branch transfer resolver, immutable prepare draft, and capability-specific
 execute dispatcher. It deliberately does not seed `stock_transfer` document
 sequences; each source branch needs an active fiscal-year sequence or prepare
 fails closed.
+
+`20260825_0010_return_reason_authority.py` removes the purchase-return pilot's
+duplicated reason-code allowlist. Both return context discovery and command
+resolution now use the exact active, effective-dated
+`tax.gst_adjustment_rule_versions` reason and GST-treatment pair; missing,
+inactive, ambiguous, or evidence-ineligible authority fails closed.

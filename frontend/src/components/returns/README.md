@@ -14,7 +14,6 @@ returns/
 │   ├── useSalesReturnState.ts  # Sales return state reducer
 │   ├── usePurchaseReturnSave.ts
 │   ├── useReturnCalculations.ts
-│   ├── useReturnReasons.ts
 │   └── index.ts
 │
 ├── notes/                      # Credit/Debit notes
@@ -42,7 +41,7 @@ returns/
 ## ✅ Hooks Available
 
 ```typescript
-import { useReturnCalculations, useReturnReasons } from './hooks';
+import { useReturnCalculations } from './hooks';
 import { useSalesReturnState } from './hooks/useSalesReturnState';
 import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
 ```

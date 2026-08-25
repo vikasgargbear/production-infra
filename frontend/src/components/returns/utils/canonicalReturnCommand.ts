@@ -2,27 +2,14 @@ import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 
 type ReturnRecord = Record<string, any>;
 type GstTreatment = 'commercial_only' | 'statutory';
+type ReturnReasonChoice = {
+  reason_code: string;
+  supported_gst_treatments: GstTreatment[];
+};
 
 const DECIMAL_PATTERN = /^(?:0|[1-9][0-9]{0,13})(?:\.([0-9]{1,6}))?$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
-
-const SALES_REASON_CODES: Record<string, string> = {
-  DAMAGED: 'damage',
-  EXPIRED: 'expiry',
-  QUALITY_ISSUE: 'quality',
-  WRONG_PRODUCT: 'wrong_supply',
-  CUSTOMER_REJECTION: 'customer_rejection',
-  RECALL: 'recall',
-};
-
-const PURCHASE_REASON_CODES: Record<string, string> = {
-  EXCESS_QUANTITY: 'excess_supply',
-  WRONG_PRODUCT: 'wrong_supply',
-};
-
-export const CANONICAL_SALES_RETURN_REASON_VALUES = Object.freeze(Object.keys(SALES_REASON_CODES));
-export const CANONICAL_PURCHASE_RETURN_REASON_VALUES = Object.freeze(Object.keys(PURCHASE_REASON_CODES));
 
 export function canonicalDecimal(value: unknown, label: string): string {
   const text = String(value ?? '').trim();
@@ -65,21 +52,40 @@ function idempotencyKey(value: string, label: string): string {
   return key;
 }
 
-function reasonCode(value: unknown, mapping: Record<string, string>, label: string): string {
-  const mapped = mapping[String(value ?? '').trim().toUpperCase()];
-  if (!mapped) throw new Error(`${label} is outside the reviewed canonical return scope.`);
-  return mapped;
-}
-
-function gstTreatment(value: unknown, supported: unknown, label: string): GstTreatment {
-  const selected = String(value ?? '') as GstTreatment;
-  if (!['commercial_only', 'statutory'].includes(selected)) {
+function returnAuthority(
+  reasonValue: unknown,
+  treatmentValue: unknown,
+  choicesValue: unknown,
+  label: string,
+): { reasonCode: string; treatment: GstTreatment } {
+  const reasonCode = String(reasonValue ?? '').trim();
+  const treatment = String(treatmentValue ?? '') as GstTreatment;
+  if (!reasonCode) throw new Error(`${label} requires an explicit canonical reason.`);
+  if (!['commercial_only', 'statutory'].includes(treatment)) {
     throw new Error(`${label} requires an explicit GST treatment.`);
   }
-  if (!Array.isArray(supported) || !supported.includes(selected)) {
-    throw new Error(`${label} ${selected} lacks the required canonical evidence.`);
+  if (!Array.isArray(choicesValue)) {
+    throw new Error(`${label} lacks canonical return-reason authority.`);
   }
-  return selected;
+  const choice = (choicesValue as ReturnReasonChoice[]).find(candidate => (
+    candidate?.reason_code === reasonCode
+  ));
+  if (!choice || !Array.isArray(choice.supported_gst_treatments)) {
+    throw new Error(`${label} reason is not an exact effective canonical rule.`);
+  }
+  if (!choice.supported_gst_treatments.includes(treatment)) {
+    throw new Error(`${label} reason and GST treatment lack exact canonical authority or evidence.`);
+  }
+  return { reasonCode, treatment };
+}
+
+export function formatCanonicalReasonCode(reasonCode: unknown): string {
+  return String(reasonCode ?? '')
+    .trim()
+    .split('_')
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function selectedLines(data: ReturnRecord): ReturnRecord[] {
@@ -114,9 +120,10 @@ function quantities(item: ReturnRecord, label: string) {
 }
 
 export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: string) {
-  const treatment = gstTreatment(
+  const { reasonCode, treatment } = returnAuthority(
+    data.return_reason,
     data.gst_tax_treatment,
-    data.supported_gst_treatments,
+    data.return_reason_choices,
     'Sales return',
   );
   const seen = new Set<string>();
@@ -125,7 +132,7 @@ export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: s
     branch_id: requiredUuid(data.branch_id, 'Sales return branch'),
     return_date: requiredDate(data.return_date, 'Sales return date'),
     original_invoice_id: requiredUuid(data.invoice_id, 'Original sales invoice'),
-    reason_code: reasonCode(data.return_reason, SALES_REASON_CODES, 'Sales return reason'),
+    reason_code: reasonCode,
     gst_tax_treatment: treatment,
     lines: selectedLines(data).map((item, index) => {
       const label = `Sales return lines[${index}]`;
@@ -167,9 +174,10 @@ export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: s
 }
 
 export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey: string) {
-  const treatment = gstTreatment(
+  const { reasonCode, treatment } = returnAuthority(
+    data.return_reason,
     data.gst_tax_treatment,
-    data.supported_gst_treatments,
+    data.return_reason_choices,
     'Purchase return',
   );
   const transport = data.transport_details || {};
@@ -221,7 +229,7 @@ export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey
     return_date: requiredDate(data.return_date, 'Purchase return date'),
     return_source_kind: 'invoiced',
     original_supplier_invoice_id: requiredUuid(data.supplier_invoice_id, 'Original supplier invoice'),
-    reason_code: reasonCode(data.return_reason, PURCHASE_REASON_CODES, 'Purchase return reason'),
+    reason_code: reasonCode,
     gst_tax_treatment: treatment,
     supplier_destination_address_id: requiredUuid(
       data.supplier_destination_address_id,

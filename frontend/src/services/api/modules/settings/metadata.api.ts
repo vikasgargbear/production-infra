@@ -19,7 +19,6 @@ const ENDPOINTS = {
     MANUFACTURERS: '/metadata/manufacturers',
     UNITS: '/metadata/units',
     PAYMENT_MODES: '/metadata/payment-modes',
-    RETURN_REASONS: '/metadata/return-reasons',
     HSN_CODES: '/metadata/hsn-codes',
     GST_SLABS: '/metadata/gst-slabs'
 } as const;
@@ -61,10 +60,6 @@ export const metadataApi = {
 
     getPaymentModes: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.PAYMENT_MODES);
-    },
-
-    getReturnReasons: (returnType?: 'sales' | 'purchase'): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.RETURN_REASONS, { params: { type: returnType } });
     },
 
     getHSNCodes: (search?: string): Promise<AxiosResponse> => {

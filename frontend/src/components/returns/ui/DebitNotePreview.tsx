@@ -11,6 +11,7 @@ import {
   positiveReturnQuantity,
   RETURN_MONEY_OPTIONS,
 } from '../utils/returnDecimal';
+import { formatCanonicalReasonCode } from '../utils/canonicalReturnCommand';
 
 interface ReturnItem {
   id?: string | number;
@@ -305,7 +306,7 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
               </h3>
               <div className="text-sm">
                 <p className="font-medium text-amber-700">
-                  {PURCHASE_RETURN_REASONS.find(r => r.value === returnData.return_reason)?.label || returnData.return_reason}
+                  {formatCanonicalReasonCode(returnData.return_reason)}
                 </p>
                 {returnData.return_reason_notes && (
                   <p className="text-xs text-gray-600 mt-1 italic">{returnData.return_reason_notes}</p>
@@ -475,18 +476,5 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
     </>
   );
 };
-
-// Return reasons should be imported from parent
-const PURCHASE_RETURN_REASONS = [
-  { value: 'EXPIRED', label: 'Expired Product' },
-  { value: 'DAMAGED', label: 'Damaged/Defective Product' },
-  { value: 'WRONG_PRODUCT', label: 'Wrong Product Received' },
-  { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-  { value: 'EXCESS_ORDER', label: 'Excess Order' },
-  { value: 'NEAR_EXPIRY', label: 'Near Expiry' },
-  { value: 'RATE_DISPUTE', label: 'Rate Dispute' },
-  { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue' },
-  { value: 'OTHER', label: 'Other' }
-];
 
 export default DebitNotePreview;

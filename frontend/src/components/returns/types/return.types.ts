@@ -67,7 +67,10 @@ export interface ReturnFormData {
     withhold_gst: boolean;
     branch_id?: string;
     gst_tax_treatment?: '' | 'commercial_only' | 'statutory';
-    supported_gst_treatments?: Array<'commercial_only' | 'statutory'>;
+    return_reason_choices?: Array<{
+        reason_code: string;
+        supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+    }>;
     statutory_itc_reversal_evidence?: Array<Record<string, unknown>>;
     recipient_itc_reversal_evidence_attachment_id?: string;
     recipient_itc_reversal_confirmed_at?: string;

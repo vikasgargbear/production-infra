@@ -15,7 +15,7 @@ import {
   ModuleHeader, StandardDatePicker, Select, ProceedToReviewComponent, CustomerSearch, CustomerCreation
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { customersApi, metadataApi } from '../../services/api';
+import { customersApi } from '../../services/api';
 import { canonicalReturnsApi } from '../../services/api/modules/returns/canonicalReturns.api';
 import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import { toast } from 'react-toastify';
@@ -35,7 +35,7 @@ import { updateSalesReturnItem } from './utils/salesReturnProjection';
 import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
-import { CANONICAL_SALES_RETURN_REASON_VALUES } from './utils/canonicalReturnCommand';
+import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
 import {
@@ -102,30 +102,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     return () => { active = false; };
   }, [dispatch, returnData.return_date]);
 
-  // Load return reasons
-  useEffect(() => {
-    const loadReturnReasons = async () => {
-      try {
-        const response = await metadataApi.getReturnReasons();
-        const fetchedReasons = (response.data?.sales_return_reasons || []).filter(
-          (reason: { value: string }) => CANONICAL_SALES_RETURN_REASON_VALUES.includes(reason.value),
-        );
-
-        if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
-          dispatch({ type: 'SET_RETURN_REASONS', reasons: fetchedReasons });
-        } else {
-          dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
-          toast.error('The canonical API returned no sales return reasons.');
-        }
-      } catch (error) {
-        dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
-        toast.error('Unable to load sales return reasons from the canonical API.');
-      }
-    };
-
-    loadReturnReasons();
-  }, [dispatch]);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -173,13 +149,21 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
 
     dispatch({ type: 'SET_SELECTED_INVOICE', invoice });
+    dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
     dispatch({
       type: 'SET_RETURN_DATA',
       data: {
         invoice_id: (invoice as any).id || (invoice as any).invoice_id,
         invoice_number: invoice.invoice_number,
         invoice_date: invoice.invoice_date,
-        original_invoice: invoice
+        original_invoice: invoice,
+        items: [],
+        return_reason: '',
+        return_reason_choices: [],
+        gst_tax_treatment: '',
+        statutory_itc_reversal_evidence: [],
+        recipient_itc_reversal_evidence_attachment_id: '',
+        recipient_itc_reversal_confirmed_at: '',
       }
     });
 
@@ -241,11 +225,19 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           invoice: { ...(invoice as any), ...context } as Invoice,
         });
         dispatch({
+          type: 'SET_RETURN_REASONS',
+          reasons: context.return_reason_choices.map(choice => ({
+            value: choice.reason_code,
+            label: formatCanonicalReasonCode(choice.reason_code),
+          })),
+        });
+        dispatch({
           type: 'SET_RETURN_DATA',
           data: {
             branch_id: context.branch_id,
             items: mappedItems,
-            supported_gst_treatments: context.supported_gst_treatments,
+            return_reason: '',
+            return_reason_choices: context.return_reason_choices,
             statutory_itc_reversal_evidence: context.statutory_itc_reversal_evidence,
             gst_tax_treatment: '',
             recipient_itc_reversal_evidence_attachment_id: '',
@@ -659,7 +651,26 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                       label="Return Date"
                       value={returnData.return_date || ''}
                       onChange={(dateStr) => {
-                        dispatch({ type: 'SET_RETURN_DATA', data: { return_date: dateStr } });
+                        dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
+                        dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
+                        dispatch({
+                          type: 'SET_RETURN_DATA',
+                          data: {
+                            return_date: dateStr,
+                            invoice_id: '',
+                            invoice_number: '',
+                            invoice_date: '',
+                            original_invoice: null,
+                            items: [],
+                            return_reason: '',
+                            return_reason_choices: [],
+                            gst_tax_treatment: '',
+                            statutory_itc_reversal_evidence: [],
+                            recipient_itc_reversal_evidence_attachment_id: '',
+                            recipient_itc_reversal_confirmed_at: '',
+                          },
+                        });
+                        dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
                       }}
                       required
                     />
@@ -669,7 +680,15 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                       </label>
                       <Select
                         value={returnData.return_reason || ''}
-                        onChange={(value) => dispatch({ type: 'SET_RETURN_DATA', data: { return_reason: String(value || '') } })}
+                        onChange={(value) => dispatch({
+                          type: 'SET_RETURN_DATA',
+                          data: {
+                            return_reason: String(value || ''),
+                            gst_tax_treatment: '',
+                            recipient_itc_reversal_evidence_attachment_id: '',
+                            recipient_itc_reversal_confirmed_at: '',
+                          },
+                        })}
                         options={returnReasons}
                         placeholder="Select reason..."
                         className="w-full"
@@ -774,7 +793,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                           recipient_itc_reversal_confirmed_at: '',
                         },
                       })}
-                      options={((returnData as any).supported_gst_treatments || []).map((value: string) => ({
+                      options={((returnData.return_reason_choices || []).find(
+                        choice => choice.reason_code === returnData.return_reason,
+                      )?.supported_gst_treatments || []).map((value: string) => ({
                         value,
                         label: value === 'statutory'
                           ? 'Statutory GST credit (evidence required)'

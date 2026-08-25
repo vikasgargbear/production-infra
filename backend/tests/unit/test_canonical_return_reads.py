@@ -14,6 +14,7 @@ from app.api.routes import canonical_return_reads, web_operator_actions
 from app.api.routes.canonical_return_reads import (
     PostedReturnReadback,
     PurchaseReturnableAllocation,
+    ReturnReasonChoice,
     ReturnCommandSummary,
     SalesReturnableAllocation,
 )
@@ -156,6 +157,68 @@ def test_projection_rejects_non_reconciling_quantity():
     value["remaining_base_billed_quantity"] += Decimal("0.000001")
     with pytest.raises(ValidationError, match="do not reconcile"):
         PurchaseReturnableAllocation.model_validate(value)
+
+
+def test_return_reason_choice_rejects_empty_duplicate_or_unknown_treatments():
+    assert ReturnReasonChoice.model_validate({
+        "reason_code": "damage",
+        "supported_gst_treatments": ["commercial_only", "statutory"],
+    }).reason_code == "damage"
+    with pytest.raises(ValidationError, match="no executable GST treatment"):
+        ReturnReasonChoice.model_validate({
+            "reason_code": "damage",
+            "supported_gst_treatments": [],
+        })
+    with pytest.raises(ValidationError, match="repeats a GST treatment"):
+        ReturnReasonChoice.model_validate({
+            "reason_code": "damage",
+            "supported_gst_treatments": ["commercial_only", "commercial_only"],
+        })
+    with pytest.raises(ValidationError):
+        ReturnReasonChoice.model_validate({
+            "reason_code": "damage",
+            "supported_gst_treatments": ["invented"],
+        })
+
+
+def test_effective_return_reason_choices_are_rule_and_evidence_derived(monkeypatch):
+    observed = {}
+
+    def fake_rows(_db, sql, params):
+        observed.update({"sql": sql, "params": params})
+        return [{
+            "reason_code": "wrong_supply",
+            "supported_gst_treatments": ["commercial_only"],
+        }]
+
+    monkeypatch.setattr(canonical_return_reads, "_rows", fake_rows)
+    choices = canonical_return_reads._effective_return_reason_choices(
+        object(),
+        return_date=date(2026, 8, 25),
+        side="purchase",
+        statutory_evidence_available=False,
+    )
+    assert choices[0].reason_code == "wrong_supply"
+    assert observed["params"] == {
+        "side": "purchase",
+        "direction": "debit",
+        "return_date": date(2026, 8, 25),
+        "statutory_evidence_available": False,
+    }
+    assert "tax.gst_adjustment_rule_versions" in observed["sql"]
+    assert "release.status='active'" in observed["sql"]
+    assert "HAVING count(*)=1" in observed["sql"]
+    assert ":statutory_evidence_available" in observed["sql"]
+
+
+def test_core_return_contexts_do_not_use_legacy_reason_metadata_or_defaults():
+    source = inspect.getsource(canonical_return_reads)
+    sales = inspect.getsource(canonical_return_reads.sales_return_context)
+    purchase = inspect.getsource(canonical_return_reads.purchase_return_context)
+    assert "metadata" not in source.lower()
+    assert 'treatments = ["commercial_only"]' not in source
+    assert "_effective_return_reason_choices" in sales
+    assert "_effective_return_reason_choices" in purchase
 
 
 def test_posted_readback_reconciles_inventory_tax_journal_and_open_item():
