@@ -159,8 +159,8 @@
       "id": "supplier_advance",
       "operation_key": "finance.supplier_advance.prepare",
       "mcp_prepare_tool": "erp_supplier_advance_prepare",
-      "rest_context": ["/api/canonical/supplier-payments/context"],
-      "rest_readback": "/api/canonical/supplier-payments/{resource_id}",
+      "rest_context": ["/api/canonical/supplier-advances/context"],
+      "rest_readback": "/api/canonical/supplier-advances/{resource_id}",
       "prepare_sql": "erp_automation_commands.persist_supplier_advance_prepare",
       "execute_sql": ["erp_finance_commands.post_supplier_advance_payment"],
       "authoritative_tables": ["finance.payments", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "procurement.purchase_order_advance_allocations", "automation.command_requests"]

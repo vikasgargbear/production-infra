@@ -6,6 +6,7 @@ import {
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './entry/ModularPaymentEntry';
 import PaymentMade from './entry/PaymentMade';
+import SupplierAdvance from './entry/SupplierAdvance';
 import FinancialJournalFlow from './flows/FinancialJournalFlow';
 import ExpenseClaimsFlow from './flows/ExpenseClaimsFlow';
 import BankReconciliationFlow from './flows/BankReconciliationFlow';
@@ -38,7 +39,7 @@ interface FinancialModule {
 
 const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   /** All valid sub-module IDs for deep-linking into FinancialHub. */
-  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
+  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'supplier-advance', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
 
   const resolvedDefault =
     initialSubpage && PAYMENT_SUBPAGE_IDS.includes(initialSubpage as any)
@@ -63,6 +64,15 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initi
       icon: CreditCard,
       color: 'green',
       component: PaymentMade
+    },
+    {
+      id: 'supplier-advance',
+      label: 'Supplier Advance',
+      fullLabel: 'Supplier Advance',
+      description: 'Prepay one approved supplier PO line',
+      icon: CreditCard,
+      color: 'blue',
+      component: SupplierAdvance
     },
     {
       id: 'journal-entry',

@@ -225,6 +225,7 @@ def test_declared_context_and_readback_routes_exist_in_canonical_authority() -> 
         "/canonical/goods-receipts",
         "/canonical/supplier-invoices",
         "/canonical/supplier-payments",
+        "/canonical/supplier-advances",
         "/canonical/adjustment-notes",
         "/canonical/inventory-transfers",
         "/web/actions",
