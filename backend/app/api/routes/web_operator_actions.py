@@ -200,6 +200,42 @@ class ExpenseClaimReadback(StrictDTO):
     lines: list[ExpenseClaimReadbackLine]
 
 
+class ExpenseClaimContextAccount(StrictDTO):
+    account_id: UUID
+    account_code: str
+    account_name: str
+    account_type: Literal["expense", "liability"]
+    currency_code: Literal["INR"]
+
+
+class ExpenseClaimContextReceipt(StrictDTO):
+    receipt_attachment_id: UUID
+    original_filename: str
+    media_type: str
+    byte_size: int
+    document_date: date
+    status: Literal["verified", "retained"]
+    verified_at: datetime
+    retention_until: date
+    sha256: str
+
+
+class ExpenseClaimContext(StrictDTO):
+    organization_id: UUID
+    branch_id: UUID
+    branch_code: str
+    branch_name: str
+    claimant_membership_id: UUID
+    claimant_display_name: str
+    business_date: date
+    currency_code: Literal["INR"]
+    tax_treatment: Literal["non_creditable_gross_expense"]
+    expense_accounts: list[ExpenseClaimContextAccount]
+    reimbursement_accounts: list[ExpenseClaimContextAccount]
+    receipts: list[ExpenseClaimContextReceipt]
+    unsupported_modes: list[str]
+
+
 class InventoryDestructionReadbackLine(StrictDTO):
     inventory_document_line_id: UUID
     product_id: UUID
@@ -738,6 +774,161 @@ def inventory_adjustment_readback(
                 current_on_hand_quantity=row["current_on_hand_quantity"],
             )
             for row in line_values
+        ],
+    )
+
+
+@router.get(
+    "/expense-claims/context",
+    response_model=ExpenseClaimContext,
+)
+def expense_claim_context(
+    branch_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> ExpenseClaimContext:
+    """Return only canonical facts eligible for a new expense claim.
+
+    Receipt evidence and account identities are selected here instead of being
+    inferred from legacy category labels or browser state.  Prepare re-locks
+    and revalidates every returned row, so stale or already-consumed evidence
+    still fails closed at the write boundary.
+    """
+
+    context = _resolve_context(
+        db,
+        user,
+        "finance.expense_claim.prepare",
+        branch_ids=(branch_id,),
+    )
+    header_rows = db.execute(
+        text(
+            """
+            SELECT organization.id AS organization_id,
+                   branch.id AS branch_id,branch.code AS branch_code,
+                   branch.name AS branch_name,membership.id AS claimant_membership_id,
+                   COALESCE(employee.display_name,user_row.display_name) AS claimant_display_name,
+                   (pg_catalog.transaction_timestamp() AT TIME ZONE organization.timezone)::date AS business_date
+              FROM core.organizations organization
+              JOIN core.branches branch
+                ON branch.org_id=organization.id AND branch.id=:branch_id
+              JOIN core.memberships membership
+                ON membership.org_id=organization.id AND membership.id=:membership_id
+              JOIN core.users user_row ON user_row.id=membership.user_id
+              LEFT JOIN hr.employees employee
+                ON employee.org_id=membership.org_id
+               AND employee.membership_id=membership.id
+             WHERE organization.id=:org_id AND organization.status='active'
+               AND organization.country_code='IN'
+               AND organization.base_currency='INR'
+               AND organization.timezone='Asia/Kolkata'
+               AND branch.status='active' AND membership.status='active'
+               AND user_row.status='active'
+               AND erp_security.can_access_branch(branch.id)
+               AND erp_security.has_permission('finance.expense.manage',branch.id)
+               AND erp_security.has_permission('finance.journal.post',branch.id)
+               AND erp_security.has_permission('automation.command.execute',branch.id)
+               AND (
+                    employee.id IS NULL OR (
+                        employee.status='active'
+                        AND employee.branch_id=branch.id
+                        AND employee.employment_start_date<=
+                            (pg_catalog.transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                        AND (
+                            employee.employment_end_date IS NULL
+                            OR employee.employment_end_date>=
+                                (pg_catalog.transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                        )
+                    )
+               )
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "branch_id": branch_id,
+            "membership_id": context.membership_id,
+        },
+    ).fetchall()
+    if len(header_rows) != 1:
+        raise HTTPException(
+            status_code=404,
+            detail=_detail(
+                ActionErrorCode.SCOPE_DENIED,
+                "Exactly one active INR expense-claim context is required for this branch",
+            ),
+        )
+    header_value = header_rows[0]._mapping
+    account_rows = db.execute(
+        text(
+            """
+            SELECT account.id AS account_id,account.code AS account_code,
+                   account.name AS account_name,account.account_type,
+                   account.currency_code
+              FROM finance.accounts account
+             WHERE account.org_id=:org_id AND account.status='active'
+               AND account.currency_code='INR' AND NOT account.allows_party_posting
+               AND account.account_type IN ('expense','liability')
+             ORDER BY account.account_type,account.code,account.id
+            """
+        ),
+        {"org_id": context.organization_id},
+    ).fetchall()
+    receipt_rows = db.execute(
+        text(
+            """
+            SELECT attachment.id AS receipt_attachment_id,
+                   attachment.original_filename,attachment.media_type,
+                   attachment.byte_size,attachment.document_date,
+                   attachment.status,attachment.verified_at,
+                   attachment.retention_until,
+                   pg_catalog.encode(attachment.sha256,'hex') AS sha256
+              FROM core.attachments attachment
+             WHERE attachment.org_id=:org_id
+               AND attachment.evidence_kind='expense_receipt'
+               AND attachment.status IN ('verified','retained')
+               AND attachment.verified_at IS NOT NULL
+               AND attachment.verified_at<=pg_catalog.transaction_timestamp()
+               AND attachment.document_date IS NOT NULL
+               AND attachment.retention_until>=:business_date
+               AND attachment.byte_size>0
+               AND pg_catalog.octet_length(attachment.sha256)=32
+               AND NOT EXISTS (
+                    SELECT 1
+                      FROM finance.expense_claim_lines prior_line
+                      JOIN finance.expense_claims prior_claim
+                        ON prior_claim.org_id=prior_line.org_id
+                       AND prior_claim.id=prior_line.expense_claim_id
+                     WHERE prior_line.org_id=attachment.org_id
+                       AND prior_line.receipt_attachment_id=attachment.id
+                       AND prior_claim.status NOT IN ('rejected','cancelled')
+               )
+             ORDER BY attachment.document_date DESC,attachment.id
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "business_date": header_value["business_date"],
+        },
+    ).fetchall()
+    accounts = [ExpenseClaimContextAccount(**dict(row._mapping)) for row in account_rows]
+    return ExpenseClaimContext(
+        **dict(header_value),
+        currency_code="INR",
+        tax_treatment="non_creditable_gross_expense",
+        expense_accounts=[row for row in accounts if row.account_type == "expense"],
+        reimbursement_accounts=[row for row in accounts if row.account_type == "liability"],
+        receipts=[
+            ExpenseClaimContextReceipt(**dict(row._mapping)) for row in receipt_rows
+        ],
+        unsupported_modes=[
+            "partial_approval",
+            "gst_input_tax_credit",
+            "withholding",
+            "foreign_currency",
+            "mileage_or_per_diem",
+            "cash_advance",
+            "unverified_or_reused_receipt",
+            "backdated_submission",
         ],
     )
 

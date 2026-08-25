@@ -18,6 +18,7 @@ export type CanonicalOperationKey =
   | 'finance.supplier_advance.prepare'
   | 'finance.adjustment_note.prepare'
   | 'finance.bank_reconciliation.prepare'
+  | 'finance.expense_claim.prepare'
   | 'inventory.adjustment.prepare'
   | 'inventory.transfer.prepare'
   | 'inventory.destruction.prepare';
