@@ -2942,6 +2942,170 @@ def reconcile_payment(
         }
 
 
+def seed_bank_reconciliation_ui_fixture(
+    connection,
+    payment_id: str,
+) -> dict[str, str]:
+    """Import one run-scoped statement line for an exact posted bank journal.
+
+    The fixture is derived from the already-posted customer receipt. It uses
+    the canonical bank parser command for the immutable statement line rather
+    than inserting a reconciliation candidate directly. The live browser must
+    still prepare, independently approve, and execute the reconciliation.
+    """
+
+    attachment_id = demo_ui_fixture_uuid("bank-statement-source")
+    statement_id = demo_ui_fixture_uuid("bank-statement")
+    statement_line_id = demo_ui_fixture_uuid("bank-statement-line")
+    statement_reference = f"DEMO-UI-BANK-{DEMO_UI_FIXTURE_ID}"
+    source_digest_text = f"canonical-demo-bank-statement:{DEMO_UI_FIXTURE_ID}"
+    with connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        for setting, value in (
+            ("app.org_id", IDS["org"]),
+            ("app.membership_id", IDS["reviewer_membership"]),
+            ("app.user_id", IDS["reviewer_user"]),
+            ("app.auth_user_id", IDS["reviewer_auth_user"]),
+            ("app.request_id", IDS["request"]),
+        ):
+            cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
+        cursor.execute(
+            """
+            SELECT journal.id,journal.journal_number,journal.posting_date,
+                   bank_line.transaction_debit,bank_line.transaction_credit
+              FROM finance.accounting_events event
+              JOIN finance.journal_entries journal
+                ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+               AND journal.status='posted'
+              JOIN finance.journal_lines bank_line
+                ON bank_line.org_id=journal.org_id
+               AND bank_line.journal_entry_id=journal.id
+               AND bank_line.account_id=%s
+             WHERE event.org_id=%s AND event.payment_id=%s
+               AND journal.transaction_currency='INR'
+               AND journal.functional_currency='INR' AND journal.fx_rate=1
+               AND journal.transaction_debit_total=journal.transaction_credit_total
+               AND journal.functional_debit_total=journal.functional_credit_total
+               AND ((bank_line.transaction_debit>0 AND bank_line.transaction_credit=0)
+                 OR (bank_line.transaction_credit>0 AND bank_line.transaction_debit=0))
+            """,
+            (IDS["bank_ledger"], IDS["org"], payment_id),
+        )
+        journal_rows = cursor.fetchall()
+        if len(journal_rows) != 1:
+            raise RuntimeError(
+                "demo receipt resolved an ambiguous posted bank-ledger journal"
+            )
+        journal_id, journal_number, posting_date, debit, credit = journal_rows[0]
+        amount = Decimal(debit) if Decimal(debit) > 0 else Decimal(credit)
+        direction = "credit" if Decimal(debit) > 0 else "debit"
+        closing_balance = amount if direction == "credit" else -amount
+        cursor.execute(
+            """
+            INSERT INTO core.attachments (
+                org_id,id,storage_bucket,storage_object_path,original_filename,
+                media_type,byte_size,sha256,evidence_kind,document_date,
+                retention_until,status,verified_at,created_by_membership_id
+            ) VALUES (
+                %s,%s,'canonical-demo-evidence',%s,%s,'application/json',256,
+                extensions.digest(%s,'sha256'),'bank_statement_import',%s,%s,
+                'retained',transaction_timestamp(),%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], attachment_id,
+                f"demo/{DEMO_UI_FIXTURE_ID}/bank-statement.json",
+                f"bank-statement-{DEMO_UI_FIXTURE_ID}.json",
+                source_digest_text, posting_date,
+                posting_date + timedelta(days=3650),
+                IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO finance.bank_statements (
+                org_id,id,bank_account_id,statement_reference,period_start,
+                period_end,currency_code,opening_balance,closing_balance,
+                source_attachment_id,source_sha256,status,
+                created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,%s,%s,%s,'INR',0,%s,%s,
+                extensions.digest(%s,'sha256'),'imported',%s,%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], statement_id, IDS["bank_account"],
+                statement_reference, posting_date, posting_date,
+                closing_balance, attachment_id, source_digest_text,
+                IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            "SELECT erp_finance_commands.import_bank_statement_lines(%s,%s,%s::jsonb)",
+            (
+                IDS["org"], statement_id,
+                json.dumps(
+                    [{
+                        "id": statement_line_id,
+                        "line_number": 1,
+                        "transaction_date": posting_date.isoformat(),
+                        "value_date": posting_date.isoformat(),
+                        "direction": direction,
+                        "amount": format(amount, ".2f"),
+                        "running_balance": format(closing_balance, ".2f"),
+                        "bank_reference": journal_number,
+                        "description": (
+                            "Run-scoped canonical receipt bank statement evidence"
+                        ),
+                        "counterparty_name": "Canonical live18 customer",
+                        "counterparty_account_hash": None,
+                    }],
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            ),
+        )
+        cursor.execute(
+            """
+            SELECT statement.id,line.id,journal.id,line.amount,line.direction
+              FROM finance.bank_statements statement
+              JOIN finance.bank_statement_lines line
+                ON line.org_id=statement.org_id
+               AND line.bank_statement_id=statement.id
+              JOIN finance.journal_entries journal
+                ON journal.org_id=statement.org_id AND journal.id=%s
+             WHERE statement.org_id=%s AND statement.id=%s
+               AND statement.statement_reference=%s
+               AND statement.status='imported'
+               AND line.bank_reference=journal.journal_number
+               AND line.transaction_date=journal.posting_date
+               AND line.amount=%s AND line.direction=%s
+            """,
+            (
+                journal_id, IDS["org"], statement_id, statement_reference,
+                amount, direction,
+            ),
+        )
+        rows = cursor.fetchall()
+        if len(rows) != 1:
+            raise RuntimeError(
+                "run-scoped bank statement did not reconcile to its exact journal"
+            )
+    return {
+        "bank_statement_id": str(statement_id),
+        "bank_statement_line_id": str(statement_line_id),
+        "journal_entry_id": str(journal_id),
+        "statement_reference": statement_reference,
+        "journal_number": str(journal_number),
+        "matched_amount": format(amount, ".2f"),
+        "match_method": "reference_exact",
+    }
+
+
 def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
     """Resolve and calculate without persisting, so live failures remain diagnosable."""
     identity = (
@@ -4362,6 +4526,11 @@ def main() -> int:
             "receipt",
             customer_receipt_request["amount"],
         )
+    with database_connection("PSYCOPG_DATABASE_URL") as owner:
+        bank_reconciliation_ui_fixture = seed_bank_reconciliation_ui_fixture(
+            owner,
+            customer_receipt_reconciliation["id"],
+        )
 
     sales_return_request = sales_return_payload(
         invoice_reconciliation["id"],
@@ -4476,6 +4645,7 @@ def main() -> int:
         "sales_dispatch_reconciliation": dispatch_reconciliation,
         "sales_invoice_reconciliation": invoice_reconciliation,
         "customer_receipt_reconciliation": customer_receipt_reconciliation,
+        "bank_reconciliation_ui_fixture": bank_reconciliation_ui_fixture,
         "sales_return_reconciliation": sales_return_reconciliation,
         "purchase_return_reconciliation": purchase_return_reconciliation,
         "inventory_adjustment_reconciliation": adjustment_reconciliation,
