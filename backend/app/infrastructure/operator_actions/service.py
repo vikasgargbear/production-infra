@@ -107,6 +107,13 @@ from .bank_reconciliation import (
     READBACK_BANK_RECONCILIATION_SQL,
     RESOLVE_BANK_RECONCILIATION_SQL,
 )
+from .expense_claim import (
+    APPROVE_EXPENSE_CLAIM_SQL,
+    EXECUTE_EXPENSE_CLAIM_SQL,
+    PERSIST_EXPENSE_CLAIM_SQL,
+    READBACK_EXPENSE_CLAIM_SQL,
+    RESOLVE_EXPENSE_CLAIM_SQL,
+)
 from .runtime_database import (
     assert_runtime_principal,
     runtime_database_configured,
@@ -692,6 +699,13 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "finance.supplier_advance.prepare":
             return self._prepare_supplier_advance(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key == "finance.expense_claim.prepare":
+            return self._prepare_expense_claim(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -2942,6 +2956,169 @@ class SqlAlchemyOperatorActionService:
                     ),
                 )
 
+    def _prepare_expense_claim(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"finance.expense_claim.prepare:{idempotency_key}"
+        )
+        identifiers = {
+            name: uuid5(NAMESPACE_URL, identity + f":{name}")
+            for name in (
+                "expense_claim_id",
+                "command_request_id",
+                "journal_id",
+                "event_id",
+            )
+        }
+        normalized = {key: _json_value(value) for key, value in payload.items()}
+        normalized.update({key: str(value) for key, value in identifiers.items()})
+        normalized["lines"] = [
+            {
+                **{key: _json_value(value) for key, value in dict(line).items()},
+                "expense_claim_line_id": str(
+                    uuid5(NAMESPACE_URL, identity + f":line:{index}")
+                ),
+            }
+            for index, line in enumerate(payload["lines"], start=1)
+        ]
+        request_bytes = canonical_json_bytes(normalized)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "membership_id": context.membership_id,
+            "auth_user_id": context.auth_user_id,
+            "user_id": context.user_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
+            **identifiers,
+            "idempotency_key_hash": hashlib.sha256(
+                idempotency_key.encode("utf-8")
+            ).digest(),
+            "claim_sequence_key_hash": hashlib.sha256(
+                (idempotency_key + ":expense-claim-number").encode("utf-8")
+            ).digest(),
+            "journal_sequence_key_hash": hashlib.sha256(
+                (idempotency_key + ":expense-claim-journal").encode("utf-8")
+            ).digest(),
+            "request_json": request_bytes.decode("utf-8"),
+            "request_bytes": request_bytes,
+            "expires_at": expires_at,
+        }
+        with self._session_factory() as session:
+            with session.begin():
+                assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "finance.expense_claim.prepare"
+                )
+                rows = _mapping_rows(session.execute(RESOLVE_EXPENSE_CLAIM_SQL, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical expense-claim resolution is unavailable",
+                    )
+                resolution = _json_document(rows[0]["resolution"])
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {
+                        key: value
+                        for key, value in source.items()
+                        if key in {"resource_type", "id", "role"}
+                    }
+                    for source in source_versions
+                    if source.get("id") is not None
+                )
+                financial_impact = tuple(
+                    [
+                        {
+                            "currency_code": "INR",
+                            "debit_account_id": line["expense_account_id"],
+                            "amount": line["claimed_amount"],
+                        }
+                        for line in resolution["lines"]
+                    ]
+                    + [
+                        {
+                            "currency_code": "INR",
+                            "credit_account_id": resolution[
+                                "reimbursement_account_id"
+                            ],
+                            "amount": resolution["claimed_amount"],
+                        }
+                    ]
+                )
+                preview = {
+                    "branch_id": resolution["branch_id"],
+                    "calculation_ruleset": [],
+                    "capability_code": "finance.expense_claim.prepare",
+                    "command_request_id": str(identifiers["command_request_id"]),
+                    "destination_branch_id": None,
+                    "financial_impact": list(financial_impact),
+                    "inventory_impact": [],
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": "finance.expense_claim.post",
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(identifiers["expense_claim_id"]),
+                    "target_resource_type": "expense_claim",
+                    "tax_impact": [
+                        {
+                            "gst_input_tax_claimed": "0.00",
+                            "withholding_amount": "0.00",
+                            "treatment": "non_creditable_gross_expense",
+                        }
+                    ],
+                }
+                params.update(
+                    {
+                        "resolved_bytes": canonical_json_bytes(resolution),
+                        "preview_bytes": canonical_json_bytes(preview),
+                    }
+                )
+                persisted = _mapping_rows(
+                    session.execute(PERSIST_EXPENSE_CLAIM_SQL, params)
+                )
+                if len(persisted) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical expense-claim prepare did not persist exactly once",
+                    )
+                result = _json_document(persisted[0]["command_request_id"])
+                if UUID(str(result["command_request_id"])) != identifiers[
+                    "command_request_id"
+                ]:
+                    raise OperatorActionError(
+                        ActionErrorCode.IDEMPOTENCY_CONFLICT,
+                        "Canonical expense-claim idempotency replay differs",
+                    )
+                return PreparedCommand(
+                    command_request_id=identifiers["command_request_id"],
+                    command_type="finance.expense_claim.post",
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=datetime.fromisoformat(
+                        str(result["expires_at"]).replace("Z", "+00:00")
+                    ),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=(),
+                    inventory_impact=(),
+                    financial_impact=financial_impact,
+                    tax_impact=tuple(preview["tax_impact"]),
+                    required_approvals=(
+                        {"policy": policy.approval_policy, "count": 1},
+                    ),
+                )
+
     def _prepare_inventory_transfer(
         self,
         *,
@@ -3749,6 +3926,8 @@ class SqlAlchemyOperatorActionService:
                         "Canonical approval result is unavailable",
                     )
                 row = rows[0]
+                if row["operation"] == "finance.expense_claim.post":
+                    session.execute(APPROVE_EXPENSE_CLAIM_SQL, params)
                 return CommandExecution(
                     command_request_id=command_request_id,
                     command_type=row["operation"],
@@ -3811,14 +3990,14 @@ class SqlAlchemyOperatorActionService:
                     )
                 replayed = before["status"] == "succeeded"
                 session.execute(_SET_COMMAND_CONTEXT_SQL, params)
-                session.execute(
-                    EXECUTE_INVENTORY_DESTRUCTION_SQL
-                    if before["operation"] == "compliance.destruction.post"
-                    else EXECUTE_BANK_RECONCILIATION_SQL
-                    if before["operation"] == "finance.bank_reconciliation.match"
-                    else _EXECUTE_COMMAND_SQL,
-                    params,
-                )
+                if before["operation"] == "finance.expense_claim.post":
+                    session.execute(EXECUTE_EXPENSE_CLAIM_SQL, params)
+                elif before["operation"] == "compliance.destruction.post":
+                    session.execute(EXECUTE_INVENTORY_DESTRUCTION_SQL, params)
+                elif before["operation"] == "finance.bank_reconciliation.match":
+                    session.execute(EXECUTE_BANK_RECONCILIATION_SQL, params)
+                else:
+                    session.execute(_EXECUTE_COMMAND_SQL, params)
                 after_rows = _mapping_rows(
                     session.execute(_EXECUTION_SNAPSHOT_SQL, params)
                 )
@@ -4127,6 +4306,97 @@ class SqlAlchemyOperatorActionService:
                         "Bank reconciliation readback differs from journal, audit, or outbox evidence",
                     )
                 return row
+
+    def get_expense_claim_readback(
+        self,
+        *,
+        command_request_id: UUID,
+        context: ActionContext,
+    ) -> Mapping[str, Any]:
+        policy = ActionPolicy(
+            operation_key="automation.command.status.get",
+            permission="automation.command.view",
+            risk_class="read_only",
+            schema_profile="expense_claim_readback",
+            approval_policy="none",
+            branch_fields=(),
+        )
+        with self._session_factory() as session:
+            with session.begin():
+                self._authorize(session, context, policy)
+                params = {
+                    "org_id": context.organization_id,
+                    "command_request_id": command_request_id,
+                    "agent_grant_id": context.agent_grant_id,
+                    "membership_id": context.membership_id,
+                }
+                rows = _mapping_rows(session.execute(READBACK_EXPENSE_CLAIM_SQL, params))
+                if not rows:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Posted expense claim, receipts, journal, and event readback is incomplete",
+                    )
+                header = rows[0]
+                claimed = sum(
+                    (row["line_claimed_amount"] for row in rows), Decimal("0")
+                )
+                approved = sum(
+                    (row["line_approved_amount"] for row in rows), Decimal("0")
+                )
+                if (
+                    claimed != header["claimed_amount"]
+                    or approved != header["approved_amount"]
+                    or claimed != approved
+                    or header["approved_by_membership_id"]
+                    == header["claimant_membership_id"]
+                    or header["posted_by_membership_id"]
+                    != header["claimant_membership_id"]
+                    or header["journal_debit_total"] != approved
+                    or header["journal_credit_total"] != approved
+                    or header["journal_line_debit_total"] != approved
+                    or header["journal_line_credit_total"] != approved
+                    or header["journal_line_count"] != len(rows) + 1
+                    or any(
+                        row["line_claimed_amount"] != row["line_approved_amount"]
+                        or row["receipt_evidence_kind"] != "expense_receipt"
+                        or row["receipt_document_date"] != row["expense_date"]
+                        or row["receipt_verified_at"] is None
+                        or row["receipt_retention_until"] < header["claim_date"]
+                        or not row["receipt_sha256"]
+                        for row in rows
+                    )
+                ):
+                    raise OperatorActionError(
+                        ActionErrorCode.STALE_VERSION,
+                        "Posted expense claim readback differs from approved receipt or journal totals",
+                    )
+                fields = (
+                    "command_request_id", "branch_id", "expense_claim_id",
+                    "claim_number", "status", "claimant_membership_id", "claim_date",
+                    "period_start", "period_end", "currency_code", "claimed_amount",
+                    "approved_amount", "approved_by_membership_id",
+                    "posted_by_membership_id", "journal_entry_id", "journal_status",
+                    "journal_debit_total", "journal_credit_total", "accounting_event_id",
+                )
+                line_fields = (
+                    "expense_claim_line_id", "line_number", "expense_date",
+                    "expense_account_id", "description", "merchant_name",
+                    "receipt_attachment_id", "receipt_evidence_kind", "receipt_status",
+                    "receipt_document_date", "receipt_verified_at",
+                    "receipt_retention_until", "receipt_sha256",
+                )
+                return {
+                    **{field: header[field] for field in fields},
+                    "currency_code": str(header["currency_code"]).strip(),
+                    "lines": [
+                        {
+                            **{field: row[field] for field in line_fields},
+                            "claimed_amount": row["line_claimed_amount"],
+                            "approved_amount": row["line_approved_amount"],
+                        }
+                        for row in rows
+                    ],
+                }
 
 
 def install_sqlalchemy_operator_action_service() -> None:

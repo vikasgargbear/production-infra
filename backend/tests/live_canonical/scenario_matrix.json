@@ -6,9 +6,9 @@
       "finance.adjustment_note.prepare",
       "finance.customer_receipt.prepare",
       "finance.bank_reconciliation.prepare",
+      "finance.expense_claim.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
-      "finance.adjustment_note.prepare",
       "inventory.adjustment.prepare",
       "inventory.destruction.prepare",
       "inventory.transfer.prepare",
@@ -74,6 +74,13 @@
       ]
     },
     {
+      "id": "member_expense_supported",
+      "coverage": ["verified_receipt", "member_submission", "separate_approver", "full_claim_approval", "non_creditable_gross_expense", "balanced_journal", "accounting_event"],
+      "steps": [
+        {"id": "member_expense_verified_receipt", "operation": "finance.expense_claim", "prepare_tool": "erp_expense_claim_prepare", "approval_actor": "reviewer", "concurrency_probe": true}
+      ]
+    },
+    {
       "id": "inventory_supported_controls",
       "coverage": ["cycle_count", "positive_gain_only", "batch_lineage", "stock_balance_projection", "moving_weighted_average", "evidence", "inter_branch_transfer", "strict_fefo_earliest_expiry_tier", "balanced_transfer_ledger", "certified_destruction", "separate_approver", "full_balance_issue", "inventory_loss_journal"],
       "steps": [
@@ -87,6 +94,7 @@
     "finance.adjustment_note.prepare": {"manifest_key": "adjustment_note_pilot_scope", "unsupported_fail_closed": ["sales_debit_or_purchase_credit", "increase_reversal_or_return_linked_note", "charge_line_foreign_currency_zero_rated_or_reverse_charge"]},
     "finance.bank_reconciliation.prepare": {"manifest_key": "bank_reconciliation_pilot_scope", "unsupported_fail_closed": ["partial_match", "foreign_currency", "date_mismatch", "multi_bank_line_journal", "already_matched_owner", "reversal", "automatic_tolerance"]},
     "finance.customer_receipt.prepare": {"manifest_key": "customer_receipt_pilot_scope", "unsupported_fail_closed": ["cash_section_269st_or_cash_account_without_authority", "cheque_without_account_payee_evidence", "foreign_currency", "advance_or_unapplied_receipt", "customer_deducted_tds_without_form16a_26as_authority"]},
+    "finance.expense_claim.prepare": {"manifest_key": "expense_claim_pilot_scope", "unsupported_fail_closed": ["partial_approval", "gst_input_tax_credit", "withholding", "foreign_currency", "mileage_or_per_diem", "cash_advance", "unverified_or_reused_receipt", "backdated_submission", "inactive_or_cross_branch_employee", "expense_reversal"]},
     "finance.supplier_advance.prepare": {"manifest_key": "supplier_advance_pilot_scope", "unsupported_fail_closed": ["section_194q_or_other_withholding_applicable", "gst_tds_notified_deductor", "non_resident_or_unverified_supplier_tax_profile", "cash_cheque_card_or_foreign_currency", "multiple_po_line_allocations", "received_or_invoiced_po", "advance_application_or_reversal"]},
     "finance.supplier_payment.prepare": {"manifest_key": "supplier_payment_pilot_scope", "unsupported_fail_closed": ["section_194q_or_other_withholding_applicable", "gst_tds_notified_deductor", "charge_line_or_non_goods_invoice", "supplier_advance_withholding_adjustment_or_credit_netting", "cash_cheque_card_or_foreign_currency", "operator_payment_reversal_or_reconciled_bank_reversal"]},
     "inventory.adjustment.prepare": {"manifest_key": "inventory_adjustment_pilot_scope", "unsupported_fail_closed": ["zero_loss_or_mixed_variance", "backdated_or_stale_count", "cold_chain_h_h1_x_ndps_or_recalled_product", "unowned_zero_balance_or_pending_source_stock", "damage_expiry_theft_or_quality_loss", "stock_count_reversal"]},
@@ -103,6 +111,8 @@
     {"id": "adjustment_note_wrong_pair_rejected", "operation": "finance.adjustment_note", "prepare_tool": "erp_adjustment_note_prepare", "phase": "prepare", "scope_case": "sales_debit_or_purchase_credit", "expected_rest_code": "VALIDATION_FAILED"},
     {"id": "bank_reconciliation_partial_rejected", "operation": "finance.bank_reconciliation", "prepare_tool": "erp_bank_reconciliation_prepare", "phase": "prepare", "scope_case": "partial_match", "expected_rest_code": "VALIDATION_FAILED"},
     {"id": "inventory_transfer_later_expiry_rejected", "operation": "inventory.transfer", "prepare_tool": "erp_inventory_transfer_prepare", "phase": "prepare", "scope_case": "later_expiry_batch_when_earlier_stock_exists", "expected_rest_code": "VALIDATION_FAILED"},
+    {"id": "expense_claim_unverified_receipt_rejected", "operation": "finance.expense_claim", "prepare_tool": "erp_expense_claim_prepare", "phase": "prepare", "scope_case": "unverified_or_reused_receipt", "expected_rest_code": "POLICY_BLOCKED"},
+    {"id": "expense_claim_gst_credit_rejected", "operation": "finance.expense_claim", "prepare_tool": "erp_expense_claim_prepare", "phase": "prepare", "scope_case": "gst_input_tax_credit", "expected_rest_code": "VALIDATION_FAILED"},
     {"id": "inventory_destruction_gst_registered_rejected", "operation": "inventory.destruction", "prepare_tool": "erp_inventory_destruction_prepare", "phase": "prepare", "scope_case": "gst_registered_or_itc_reversal", "expected_rest_code": "POLICY_BLOCKED", "expected_message_contains": "Section 17(5)(h)"},
     {"id": "inventory_destruction_partial_batch_rejected", "operation": "inventory.destruction", "prepare_tool": "erp_inventory_destruction_prepare", "phase": "prepare", "scope_case": "partial_batch", "expected_rest_code": "POLICY_BLOCKED", "expected_message_contains": "full locked batch-location balance"},
     {"id": "inventory_destruction_controlled_stock_rejected", "operation": "inventory.destruction", "prepare_tool": "erp_inventory_destruction_prepare", "phase": "prepare", "scope_case": "schedule_h_h1_x_or_ndps", "expected_rest_code": "POLICY_BLOCKED"},

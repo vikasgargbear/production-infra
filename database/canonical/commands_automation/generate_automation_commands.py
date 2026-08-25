@@ -42,6 +42,7 @@ OPERATOR_COMMANDS = {
     "finance.supplier_advance.prepare": ("finance.supplier_advance.post", "payment"),
     "finance.adjustment_note.prepare": ("finance.adjustment_note.post", "adjustment_note"),
     "finance.bank_reconciliation.prepare": ("finance.bank_reconciliation.match", "reconciliation_match"),
+    "finance.expense_claim.prepare": ("finance.expense_claim.post", "expense_claim"),
     "inventory.transfer.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.adjustment.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.destruction.prepare": ("compliance.destruction.post", "destruction"),
@@ -52,6 +53,7 @@ BASELINE_OPERATOR_COMMANDS = {
     if capability not in {
         "finance.adjustment_note.prepare",
         "finance.bank_reconciliation.prepare",
+        "finance.expense_claim.prepare",
     }
 }
 
@@ -7716,6 +7718,7 @@ def generated_artifacts() -> tuple[str, str]:
                 "finance.adjustment_note.prepare",
                 "finance.bank_reconciliation.prepare",
                 "finance.customer_receipt.prepare",
+                "finance.expense_claim.prepare",
                 "finance.supplier_advance.prepare",
                 "finance.supplier_payment.prepare",
                 "inventory.adjustment.prepare",
@@ -7736,6 +7739,7 @@ def generated_artifacts() -> tuple[str, str]:
                     "finance.adjustment_note.prepare",
                     "finance.bank_reconciliation.prepare",
                     "finance.customer_receipt.prepare",
+                    "finance.expense_claim.prepare",
                     "finance.supplier_advance.prepare",
                     "finance.supplier_payment.prepare",
                     "inventory.adjustment.prepare",
@@ -7760,6 +7764,7 @@ def generated_artifacts() -> tuple[str, str]:
                 "compliance.destruction.post",
                 "finance.adjustment_note.post",
                 "finance.bank_reconciliation.match",
+                "finance.expense_claim.post",
                 "finance.payment.post",
                 "finance.supplier_advance.post",
                 "inventory.document.post",
@@ -7811,6 +7816,30 @@ def generated_artifacts() -> tuple[str, str]:
                     "already_matched_owner",
                     "reversal",
                     "automatic_tolerance",
+                ],
+            },
+            "expense_claim_pilot_scope": {
+                "supported_currency": "INR",
+                "approval_policy": "separate_approver",
+                "required_matching": [
+                    "active_claimant_membership_and_optional_active_employee",
+                    "active_branch_expense_and_reimbursement_liability_accounts",
+                    "verified_retained_unique_receipt_for_each_line",
+                    "receipt_document_date_within_claim_period",
+                    "full_line_approval_bound_to_exact_preview",
+                    "balanced_journal_and_exactly_one_accounting_event",
+                ],
+                "unsupported_fail_closed": [
+                    "partial_approval",
+                    "gst_input_tax_credit",
+                    "withholding",
+                    "foreign_currency",
+                    "mileage_or_per_diem",
+                    "cash_advance",
+                    "unverified_or_reused_receipt",
+                    "backdated_submission",
+                    "inactive_or_cross_branch_employee",
+                    "expense_reversal",
                 ],
             },
             "customer_receipt_pilot_scope": {
@@ -8077,6 +8106,9 @@ def generated_artifacts() -> tuple[str, str]:
             "runtime_commands": [
                 "approve_operator_command(uuid,uuid,uuid,bytea,bytea,timestamptz)",
                 "execute_approved_command(uuid,uuid)",
+                "approve_expense_claim_command(uuid,uuid)",
+                "execute_approved_expense_claim(uuid,uuid)",
+                "persist_expense_claim_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
                 "persist_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
                 "persist_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
                 "persist_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
@@ -8084,6 +8116,7 @@ def generated_artifacts() -> tuple[str, str]:
                 "persist_inventory_transfer_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
                 "persist_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
                 "resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+                "resolve_expense_claim_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
                 "resolve_adjustment_note_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
                 "resolve_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
                 "resolve_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",

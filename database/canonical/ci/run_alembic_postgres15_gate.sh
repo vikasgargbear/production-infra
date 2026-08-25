@@ -39,7 +39,7 @@ CANONICAL_BASELINE_APPROVED_SHA256=$(
   alembic -c alembic.ini upgrade head
 )
 
-test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260825_0008"
+test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260825_0009"
 test "$(psql -X -Atqc "SELECT to_regclass('tax.gstr1_reporting_rule_versions') IS NOT NULL")" = "t"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gstr1_reporting_rule_versions', 'SELECT')")" = "t"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_regulatory_importer', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "t"
@@ -93,3 +93,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_adjustment_note_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_bank_reconciliation_runtime_role.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_expense_claim_lifecycle_runtime_role.py

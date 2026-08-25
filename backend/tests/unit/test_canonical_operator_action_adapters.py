@@ -1869,7 +1869,7 @@ def _command_row(command_request_id):
 
 def test_registry_covers_every_contract_action_and_stays_fail_closed():
     prepare_keys = {action.operation_key for action in PREPARE_ACTIONS.values()}
-    assert len(prepare_keys) == 16
+    assert len(prepare_keys) == 17
     assert set(ACTION_ADAPTER_BINDINGS) == set(ACTION_POLICIES)
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["sales.dispatch.prepare"].available is True
@@ -1883,6 +1883,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_advance.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_payment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.expense_claim.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.adjustment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.destruction.prepare"].available is True
@@ -1903,6 +1904,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
             "finance.adjustment_note.prepare",
+            "finance.expense_claim.prepare",
             "inventory.adjustment.prepare",
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
@@ -1926,6 +1928,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
             "finance.adjustment_note.prepare",
+            "finance.expense_claim.prepare",
             "inventory.adjustment.prepare",
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
@@ -3782,7 +3785,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 17
+    assert source.count("_lock_prepare_idempotency(") == 18
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):

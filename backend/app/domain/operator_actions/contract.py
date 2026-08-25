@@ -313,6 +313,27 @@ def validate_prepare_payload_semantics(
             if billed + free <= 0:
                 raise ValueError(f"lines[{index}] requires a positive adjusted quantity")
 
+    if operation_key == "finance.expense_claim.prepare":
+        if values["period_end"] < values["period_start"]:
+            raise ValueError("expense claim period_end must not precede period_start")
+        if values["claim_date"] < values["period_end"]:
+            raise ValueError("expense claim claim_date must not precede period_end")
+        receipt_ids: set[UUID] = set()
+        for index, line in enumerate(values["lines"]):
+            if not values["period_start"] <= line["expense_date"] <= values["period_end"]:
+                raise ValueError(
+                    f"lines[{index}] expense_date must fall inside the claim period"
+                )
+            amount = Decimal(str(line["claimed_amount"]))
+            if amount <= 0 or amount != amount.quantize(Decimal("0.01")):
+                raise ValueError(
+                    f"lines[{index}] claimed_amount must be positive INR at two-decimal precision"
+                )
+            receipt_id = line["receipt_attachment_id"]
+            if receipt_id in receipt_ids:
+                raise ValueError("each expense receipt may appear only once in a claim")
+            receipt_ids.add(receipt_id)
+
     if operation_key == "sales.invoice.prepare":
         if values["zero_rated_payment_mode"] == "without_payment":
             raise ValueError(

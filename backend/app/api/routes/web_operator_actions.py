@@ -159,6 +159,47 @@ class InventoryAdjustmentReadback(StrictDTO):
     lines: list[InventoryAdjustmentReadbackLine]
 
 
+class ExpenseClaimReadbackLine(StrictDTO):
+    expense_claim_line_id: UUID
+    line_number: int
+    expense_date: date
+    expense_account_id: UUID
+    description: str
+    merchant_name: str
+    receipt_attachment_id: UUID
+    receipt_evidence_kind: Literal["expense_receipt"]
+    receipt_status: Literal["verified", "retained"]
+    receipt_document_date: date
+    receipt_verified_at: datetime
+    receipt_retention_until: date
+    receipt_sha256: str
+    claimed_amount: Decimal
+    approved_amount: Decimal
+
+
+class ExpenseClaimReadback(StrictDTO):
+    command_request_id: UUID
+    expense_claim_id: UUID
+    claim_number: str
+    status: Literal["posted"]
+    branch_id: UUID
+    claimant_membership_id: UUID
+    claim_date: date
+    period_start: date
+    period_end: date
+    currency_code: Literal["INR"]
+    claimed_amount: Decimal
+    approved_amount: Decimal
+    approved_by_membership_id: UUID
+    posted_by_membership_id: UUID
+    journal_entry_id: UUID
+    journal_status: Literal["posted"]
+    journal_debit_total: Decimal
+    journal_credit_total: Decimal
+    accounting_event_id: UUID
+    lines: list[ExpenseClaimReadbackLine]
+
+
 class InventoryDestructionReadbackLine(StrictDTO):
     inventory_document_line_id: UUID
     product_id: UUID
@@ -699,6 +740,89 @@ def inventory_adjustment_readback(
             for row in line_values
         ],
     )
+
+
+@router.get(
+    "/expense-claims/commands/{command_request_id}/review",
+    response_model=PreparedResponse,
+)
+def expense_claim_review(
+    command_request_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> PreparedResponse:
+    """Load one immutable expense preview for its distinct authorized reviewer."""
+
+    context = _command_context(db, user, "automation.command.approve", command_request_id)
+    row = db.execute(
+        text(
+            """
+            SELECT command.id,command.operation,command.expires_at,command.preview_hash,
+                   convert_from(command.preview_bytes,'UTF8')::jsonb AS preview
+              FROM automation.command_requests command
+             WHERE command.org_id=:org_id AND command.id=:command_request_id
+               AND command.capability_code='finance.expense_claim.prepare'
+               AND command.operation='finance.expense_claim.post'
+               AND command.approval_policy='separate_approver'
+               AND command.status IN ('prepared','pending_approval','approved')
+               AND command.expires_at>transaction_timestamp()
+               AND command.requested_by_membership_id<>:membership_id
+             FOR SHARE
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "command_request_id": command_request_id,
+            "membership_id": context.membership_id,
+        },
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=_detail(
+                ActionErrorCode.SCOPE_DENIED,
+                "No unexpired expense claim preview is available for independent approval",
+            ),
+        )
+    value = row._mapping
+    preview = value["preview"]
+    return PreparedResponse(
+        command_request_id=value["id"],
+        command_type=value["operation"],
+        preview_hash="sha256:" + bytes(value["preview_hash"]).hex(),
+        expires_at=value["expires_at"],
+        resolved_references=list(preview.get("resolved_references") or []),
+        source_versions=list(preview.get("source_versions") or []),
+        calculation_ruleset=list(preview.get("calculation_ruleset") or []),
+        inventory_impact=list(preview.get("inventory_impact") or []),
+        financial_impact=list(preview.get("financial_impact") or []),
+        tax_impact=list(preview.get("tax_impact") or []),
+        policy_warnings=list(preview.get("policy_warnings") or []),
+        required_approvals=[{"policy": "separate_approver", "count": 1}],
+    )
+
+
+@router.get(
+    "/expense-claims/commands/{command_request_id}/readback",
+    response_model=ExpenseClaimReadback,
+)
+def expense_claim_readback(
+    command_request_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+    service: OperatorActionService = Depends(get_operator_action_service),
+) -> ExpenseClaimReadback:
+    """Reconcile the posted claim, verified receipts, balanced journal, and event."""
+
+    context = _command_context(db, user, "automation.command.execute", command_request_id)
+    try:
+        row = service.get_expense_claim_readback(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action(exc)
+    return ExpenseClaimReadback(**dict(row))
 
 
 @router.get(

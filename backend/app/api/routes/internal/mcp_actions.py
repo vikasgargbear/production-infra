@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal, Optional
 from uuid import UUID
 
@@ -601,6 +602,27 @@ def bank_reconciliation_readback(
     except OperatorActionError as exc:
         _raise_action_error(exc)
     return BankReconciliationReadback(**dict(row))
+
+
+@router.get("/commands/{command_request_id}/expense-claim-readback")
+def expense_claim_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+) -> dict[str, Any]:
+    """Return authoritative posted expense details over the same status delegation."""
+    operation_key = "automation.command.status.get"
+    _require_release_gate(service)
+    _require_authority(context, operation_key)
+    _require_command_binding(context, command_request_id)
+    try:
+        row = service.get_expense_claim_readback(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action_error(exc)
+    return dict(row)
 
 
 @router.get("/actions/ready")

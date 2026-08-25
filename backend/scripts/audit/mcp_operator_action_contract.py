@@ -41,6 +41,7 @@ EXPECTED_PREPARE_TOOLS = {
     "erp_inventory_adjustment_prepare",
     "erp_inventory_destruction_prepare",
     "erp_bank_reconciliation_prepare",
+    "erp_expense_claim_prepare",
 }
 EXPECTED_SHARED_TOOLS = {
     "erp_operation_approve",
@@ -48,6 +49,7 @@ EXPECTED_SHARED_TOOLS = {
     "erp_operation_execute",
     "erp_operation_status_get",
     "erp_bank_reconciliation_get",
+    "erp_expense_claim_readback",
 }
 EXPECTED_BASE_READ_TOOLS = {
     "erp_product_search",
@@ -155,6 +157,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_inventory_transfer_prepare.lines",
         "erp_inventory_adjustment_prepare.lines",
         "erp_inventory_destruction_prepare.lines",
+        "erp_expense_claim_prepare.lines",
     },
     "payment_method": {
         "erp_customer_receipt_prepare.payment_method",
@@ -198,6 +201,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_operation_review_get.command_request_id",
         "erp_operation_status_get.command_request_id",
         "erp_bank_reconciliation_get.command_request_id",
+        "erp_expense_claim_readback.command_request_id",
     },
     "document_discount_eligible": {
         "erp_adjustment_note_prepare.lines[].document_discount_eligible",
@@ -356,6 +360,7 @@ EXPECTED_APPROVAL_POLICIES = {
     "erp_inventory_adjustment_prepare": "separate_approver",
     "erp_inventory_destruction_prepare": "separate_approver",
     "erp_bank_reconciliation_prepare": "separate_approver",
+    "erp_expense_claim_prepare": "separate_approver",
 }
 
 
@@ -892,7 +897,7 @@ def main() -> int:
         f"({len(EXPECTED_RESOLUTION_TOOLS)} resolution reads, "
         f"{len(EXPECTED_PREPARE_TOOLS) - len(EXPECTED_UNAVAILABLE_PREPARE_TOOLS)} "
         f"published prepares, {len(EXPECTED_UNAVAILABLE_PREPARE_TOOLS)} "
-        f"unavailable prepares, {len(EXPECTED_SHARED_TOOLS)} shared tools)"
+        f"unavailable prepare tools, {len(EXPECTED_SHARED_TOOLS)} shared tools)"
     )
     return 0
 

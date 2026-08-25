@@ -51,6 +51,11 @@ RESOURCE_TABLES = {
         "finance.bank_statement_lines",
         "bank_statement_line_id",
     ),
+    "finance.expense_claim": (
+        "finance.expense_claims",
+        "finance.expense_claim_lines",
+        "expense_claim_id",
+    ),
     "inventory.transfer": (
         "inventory.inventory_documents",
         "inventory.inventory_document_lines",
@@ -298,9 +303,10 @@ class CanonicalReconciler:
                 ON je.org_id = ae.org_id AND je.id = ae.journal_entry_id
              WHERE ae.org_id = %s::uuid
                AND (ae.sales_invoice_id = %s::uuid OR ae.supplier_invoice_id = %s::uuid
-                    OR ae.payment_id = %s::uuid OR ae.inventory_document_id = %s::uuid)
+                    OR ae.payment_id = %s::uuid OR ae.inventory_document_id = %s::uuid
+                    OR ae.expense_claim_id = %s::uuid)
             """,
-            (self.org_id, resource_id, resource_id, resource_id, resource_id),
+            (self.org_id, resource_id, resource_id, resource_id, resource_id, resource_id),
         )[0]
         if journal["entry_count"]:
             assert journal["debit_total"] == journal["credit_total"]
@@ -442,6 +448,53 @@ class CanonicalReconciler:
                 "total_value"
             ] == destruction["transaction_credit_total"]
 
+        expense_evidence: list[dict[str, Any]] = []
+        if operation == "finance.expense_claim":
+            expense_evidence = self.query(
+                """
+                SELECT claim.claimant_membership_id,claim.approved_by_membership_id,
+                       claim.claimed_amount,claim.approved_amount,claim.status,
+                       count(*)::integer AS line_count,
+                       sum(line.claimed_amount) AS line_claimed_amount,
+                       sum(line.approved_amount) AS line_approved_amount,
+                       count(*) FILTER (WHERE receipt.status NOT IN ('verified','retained')
+                         OR receipt.evidence_kind<>'expense_receipt'
+                         OR receipt.sha256 IS NULL)::integer AS invalid_receipt_count,
+                       journal.status AS journal_status,journal.transaction_debit_total,
+                       journal.transaction_credit_total
+                  FROM finance.expense_claims claim
+                  JOIN finance.expense_claim_lines line
+                    ON line.org_id=claim.org_id AND line.expense_claim_id=claim.id
+                  JOIN core.attachments receipt
+                    ON receipt.org_id=line.org_id AND receipt.id=line.receipt_attachment_id
+                  JOIN finance.accounting_events event
+                    ON event.org_id=claim.org_id AND event.expense_claim_id=claim.id
+                   AND event.event_type='expense_claim'
+                  JOIN finance.journal_entries journal
+                    ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+                 WHERE claim.org_id=%s::uuid AND claim.id=%s::uuid
+                 GROUP BY claim.claimant_membership_id,claim.approved_by_membership_id,
+                          claim.claimed_amount,claim.approved_amount,claim.status,
+                          journal.status,journal.transaction_debit_total,
+                          journal.transaction_credit_total
+                """,
+                (self.org_id, resource_id),
+            )
+            assert len(expense_evidence) == 1
+            expense = expense_evidence[0]
+            assert expense["status"] == "posted"
+            assert expense["approved_by_membership_id"] != expense[
+                "claimant_membership_id"
+            ]
+            assert expense["invalid_receipt_count"] == 0
+            assert expense["claimed_amount"] == expense["approved_amount"]
+            assert expense["line_claimed_amount"] == expense["claimed_amount"]
+            assert expense["line_approved_amount"] == expense["approved_amount"]
+            assert expense["journal_status"] == "posted"
+            assert expense["transaction_debit_total"] == expense[
+                "approved_amount"
+            ] == expense["transaction_credit_total"]
+
         tax_documents = self.query(
             """
             SELECT td.*
@@ -528,6 +581,7 @@ class CanonicalReconciler:
             "stock": stock,
             "stock_projection": projection,
             "destruction_evidence": destruction_evidence,
+            "expense_evidence": expense_evidence,
             "tax_documents": tax_documents,
             "adjustment_notes": adjustment_notes,
             "open_items": open_items,

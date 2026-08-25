@@ -130,6 +130,13 @@ _PREPARE_BINDINGS = {
         execute_function="erp_commercial_commands.post_adjustment_note",
         unavailable_reason=None,
     ),
+    "finance.expense_claim.prepare": ActionAdapterBinding(
+        operation_key="finance.expense_claim.prepare",
+        available=True,
+        prepare_function="erp_automation_commands.persist_expense_claim_prepare",
+        execute_function="erp_automation_commands.execute_approved_expense_claim",
+        unavailable_reason=None,
+    ),
     "inventory.transfer.prepare": ActionAdapterBinding(
         operation_key="inventory.transfer.prepare",
         available=True,

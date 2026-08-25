@@ -36,6 +36,7 @@ EXPECTED_PREPARES = {
     "erp_inventory_transfer_prepare",
     "erp_inventory_adjustment_prepare",
     "erp_inventory_destruction_prepare",
+    "erp_expense_claim_prepare",
 }
 
 
@@ -62,6 +63,7 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
         "erp_operation_execute",
         "erp_operation_status_get",
         "erp_bank_reconciliation_get",
+        "erp_expense_claim_readback",
     }
     assert OPERATOR_ACTIONS_EXPORTED is True
     published = set(PUBLISHED_PREPARE_TOOL_NAMES) | set(SHARED_ACTION_SCHEMAS)

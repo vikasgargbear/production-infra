@@ -67,6 +67,10 @@ class OperatorActionService(Protocol):
         self, *, command_request_id: UUID, context: ActionContext
     ) -> Mapping[str, Any]: ...
 
+    def get_expense_claim_readback(
+        self, *, command_request_id: UUID, context: ActionContext
+    ) -> Mapping[str, Any]: ...
+
 
 class UnavailableOperatorActionService:
     """Production default until reviewed canonical command adapters are wired."""
@@ -101,6 +105,9 @@ class UnavailableOperatorActionService:
         return self._unavailable("automation.command.status.get")
 
     def get_bank_reconciliation_readback(self, *, command_request_id, context):
+        return self._unavailable("automation.command.status.get")
+
+    def get_expense_claim_readback(self, *, command_request_id, context):
         return self._unavailable("automation.command.status.get")
 
 

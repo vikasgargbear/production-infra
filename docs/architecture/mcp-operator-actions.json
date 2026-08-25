@@ -11,6 +11,7 @@
       "finance.adjustment_note.prepare",
       "finance.customer_receipt.prepare",
       "finance.bank_reconciliation.prepare",
+      "finance.expense_claim.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
       "inventory.adjustment.prepare",
@@ -336,6 +337,16 @@
       "approval_policy": "separate_approver",
       "schema_profile": "controlled_batched_movement",
       "description": "Prepare same-day, certified licensed-incineration destruction of the full balance of non-cold-chain, non-controlled expired, damaged or quality-rejected stock with exact batches. GST-registered, recall, partial, controlled, cold-chain and uncertified variants fail closed."
+    },
+    {
+      "tool": "erp_expense_claim_prepare",
+      "operation_key": "finance.expense_claim.prepare",
+      "resource": "expense_claim",
+      "permission": "finance.expense.manage",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "verified_expense_receipts",
+      "description": "Submit a current-date INR member expense claim backed by unique verified receipts, then require a distinct full-claim approver before posting the exact balanced reimbursement journal."
     }
   ],
   "shared_actions": [
@@ -379,6 +390,15 @@
       "tool": "erp_bank_reconciliation_get",
       "operation_key": "automation.command.status.get",
       "resource": "reconciliation_match",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_expense_claim_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "expense_claim",
       "mode": "read",
       "risk": "read_only",
       "permission": "automation.command.view",

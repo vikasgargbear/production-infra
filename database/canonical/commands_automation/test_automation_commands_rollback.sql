@@ -35,13 +35,18 @@ BEGIN
                                  'execute_inventory_destruction_command',
                                  'resolve_adjustment_note_prepare','persist_adjustment_note_prepare',
                                  'resolve_bank_reconciliation_prepare','persist_bank_reconciliation_prepare',
-                                 'execute_bank_reconciliation_command')
+                                 'execute_bank_reconciliation_command',
+                                 'resolve_expense_claim_prepare','persist_expense_claim_prepare',
+                                 'approve_expense_claim_command','execute_approved_expense_claim')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
     expected_runtime_count:=CASE
       WHEN pg_catalog.to_regprocedure(
         'erp_automation_commands.execute_bank_reconciliation_command(uuid,uuid)'
       ) IS NULL THEN 21
-      ELSE 28
+      WHEN pg_catalog.to_regprocedure(
+        'erp_automation_commands.execute_approved_expense_claim(uuid,uuid)'
+      ) IS NULL THEN 28
+      ELSE 32
     END;
     IF runtime_count<>expected_runtime_count THEN
         RAISE EXCEPTION 'expected % reviewed runtime automation commands, found %',expected_runtime_count,runtime_count;
@@ -66,7 +71,9 @@ BEGIN
                                      'execute_inventory_destruction_command',
                                      'resolve_adjustment_note_prepare','persist_adjustment_note_prepare',
                                      'resolve_bank_reconciliation_prepare','persist_bank_reconciliation_prepare',
-                                     'execute_bank_reconciliation_command')
+                                     'execute_bank_reconciliation_command',
+                                     'resolve_expense_claim_prepare','persist_expense_claim_prepare',
+                                     'approve_expense_claim_command','execute_approved_expense_claim')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
