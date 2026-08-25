@@ -1,6 +1,12 @@
 name: Railway canonical staging pilot
 
 on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Exact reviewed application SHA to upload to all Railway pilot services
+        required: true
+        type: string
   workflow_call:
     inputs:
       reviewed_sha:
@@ -26,6 +32,8 @@ on:
         required: true
       TAX_PROVIDER_INTERNAL_HMAC_SECRET:
         required: true
+      EVIDENCE_STORAGE_SERVER_JWT:
+        required: false
 
 permissions:
   contents: read
@@ -53,6 +61,8 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
+      EVIDENCE_STORAGE_ENABLED: ${{ vars.EVIDENCE_STORAGE_ENABLED }}
+      EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.EVIDENCE_STORAGE_EXPECTED_PROJECT_REF }}
       SUPABASE_POOLER_HOST: aws-0-ap-south-1.pooler.supabase.com
       SUPABASE_SESSION_POOLER_PORT: "5432"
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
@@ -153,6 +163,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
           TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
+          EVIDENCE_STORAGE_SERVER_JWT: ${{ secrets.EVIDENCE_STORAGE_SERVER_JWT }}
         run: |
           set -euo pipefail
 
@@ -192,6 +203,42 @@ jobs:
           set_variable "$RAILWAY_API_SERVICE" MCP_INTERNAL_SERVICE_TOKEN "$MCP_INTERNAL_SERVICE_TOKEN"
           set_variable "$RAILWAY_API_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
           set_variable "$RAILWAY_API_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
+
+          evidence_storage_enabled=${EVIDENCE_STORAGE_ENABLED:-false}
+          case "$evidence_storage_enabled" in
+            false)
+              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED false
+              ;;
+            true)
+              test "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF" = "$CANONICAL_STAGING_PROJECT_REF"
+              test -n "$EVIDENCE_STORAGE_SERVER_JWT"
+              evidence_role=$(
+                printf '%s' "$EVIDENCE_STORAGE_SERVER_JWT" | python3 -c '
+          import base64, json, sys
+          parts = sys.stdin.read().strip().split(".")
+          if len(parts) != 3:
+              raise SystemExit(2)
+          payload = parts[1] + "=" * (-len(parts[1]) % 4)
+          try:
+              value = json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+          except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+              raise SystemExit(2)
+          role = value.get("role")
+          if not isinstance(role, str):
+              raise SystemExit(2)
+          print(role)
+          '
+              )
+              test "$evidence_role" = erp_evidence_storage
+              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_EXPECTED_PROJECT_REF "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
+              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_JWT "$EVIDENCE_STORAGE_SERVER_JWT"
+              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED true
+              ;;
+            *)
+              echo "EVIDENCE_STORAGE_ENABLED must be exactly true or false" >&2
+              exit 2
+              ;;
+          esac
 
           set_variable "$RAILWAY_MCP_SERVICE" SUPABASE_OAUTH_ISSUER "$SUPABASE_OAUTH_ISSUER"
           set_variable "$RAILWAY_MCP_SERVICE" MCP_RESOURCE_SERVER_URL "$RAILWAY_MCP_URL/mcp"
