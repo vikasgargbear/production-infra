@@ -13,6 +13,10 @@
     "live_capture": "artifacts/live-schema-captures/supabase-jfrairkkzxwkhbtqejnz-20260819T143728Z.json",
     "capture_time": "2026-08-19T14:37:28.293638+00:00"
   },
+  "promotion_evidence": {
+    "manifest": "docs/architecture/canonical-application-promotion-evidence.json",
+    "manifest_sha256": "4d09254fe8e1e754e0f5504e1361182f525fe10f533699d656a92d3572cebb47"
+  },
   "identity_resolution_contract": {
     "steps": [
       "Validate the Supabase JWT and take auth.users.id only from the verified sub claim.",

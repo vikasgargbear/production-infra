@@ -1,5 +1,7 @@
 import copy
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -155,3 +157,44 @@ def test_duplicate_json_keys_are_rejected(tmp_path):
         assert "duplicate JSON key" in str(exc)
     else:
         raise AssertionError("duplicate JSON key was accepted")
+
+
+def test_approved_contract_requires_every_promotion_predicate():
+    contract = _contract()
+    contract["decision_status"] = "approved_app_contract_v1"
+
+    errors = gate.validate_contract(contract, source_root=None)
+
+    for section in gate.PROMOTION_EVIDENCE_SECTIONS:
+        assert f"promotion evidence {section} is not verified" in errors
+
+
+def test_promotion_manifest_is_hash_bound(tmp_path):
+    manifest = tmp_path / "promotion.json"
+    manifest.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "evidence_state": "incomplete",
+            **{
+                section: {"state": "missing"}
+                for section in gate.PROMOTION_EVIDENCE_SECTIONS
+            },
+        }),
+        encoding="utf-8",
+    )
+    contract = {
+        "decision_status": "proposed_app_contract_v1",
+        "promotion_evidence": {
+            "manifest": "promotion.json",
+            "manifest_sha256": "0" * 64,
+        },
+    }
+
+    _, errors = gate.validate_promotion_evidence(contract, root=tmp_path)
+
+    assert any("manifest_sha256 hash differs" in error for error in errors)
+    contract["promotion_evidence"]["manifest_sha256"] = hashlib.sha256(
+        manifest.read_bytes()
+    ).hexdigest()
+    _, errors = gate.validate_promotion_evidence(contract, root=tmp_path)
+    assert errors == []

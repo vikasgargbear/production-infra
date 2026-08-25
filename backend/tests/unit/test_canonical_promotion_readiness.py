@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -21,6 +22,7 @@ def _fixture_root(
     gates_ready: bool = True,
     adapters_ready: bool = True,
     exported: bool = True,
+    promotion_evidence_ready: bool = True,
 ) -> Path:
     state = "production_ready" if production_ready else "migrating"
     authority = {
@@ -73,17 +75,63 @@ def _fixture_root(
     }
     _write_json(tmp_path, "database/schema-authority.json", authority)
     _write_json(tmp_path, authority["source_classification_file"], classification)
-    _write_json(
-        tmp_path,
-        "docs/architecture/app-data-contract.json",
-        {
-            "decision_status": (
-                "approved_app_contract_v1"
-                if app_approved
-                else "proposed_app_contract_v1"
-            )
+    evidence_artifact = tmp_path / "evidence/reviewed.json"
+    evidence_artifact.parent.mkdir(parents=True, exist_ok=True)
+    evidence_artifact.write_text('{"verified":true}\n', encoding="utf-8")
+    artifact_sha = hashlib.sha256(evidence_artifact.read_bytes()).hexdigest()
+    state = "verified" if promotion_evidence_ready else "missing"
+    evidence = {
+        "schema_version": 1,
+        "evidence_state": state if state == "verified" else "incomplete",
+        "source_disposition": {
+            "state": state, "strategy": "reset", "source_identifier": "source-test",
+            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
         },
-    )
+        "route_graph": {
+            "state": state, "analyzer_kind": "mounted_route_graph",
+            "reachable_retired_dependency_count": 0,
+            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+        },
+        "migration_head": {
+            "state": state, "expected_head": "test_head", "observed_head": "test_head",
+            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+        },
+        "runtime_tenant_isolation": {
+            "state": state, "runtime_role_non_owner": True,
+            "runtime_role_no_bypassrls": True, "forced_rls_verified": True,
+            "tenant_positive_test": True, "cross_tenant_denial_test": True,
+            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+        },
+        "reconciliation_backup": {
+            "state": state, "source_target_counts_reconciled": True,
+            "exact_totals_reconciled": True, "backup_verified": True,
+            "restore_tested": True, "artifact": "evidence/reviewed.json",
+            "artifact_sha256": artifact_sha,
+        },
+        "rollback_decommission": {
+            "state": state, "rollback_artifact": "evidence/reviewed.json",
+            "rollback_artifact_sha256": artifact_sha,
+            "decommission_artifact": "evidence/reviewed.json",
+            "decommission_artifact_sha256": artifact_sha,
+        },
+        "review": {
+            "state": state, "reviewer": "release-reviewer",
+            "reviewed_at": "2026-08-25T12:00:00+00:00",
+            "git_commit": "a" * 40,
+        },
+    }
+    evidence_path = tmp_path / "docs/architecture/canonical-application-promotion-evidence.json"
+    _write_json(tmp_path, "docs/architecture/canonical-application-promotion-evidence.json", evidence)
+    evidence_sha = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    _write_json(tmp_path, "docs/architecture/app-data-contract.json", {
+        "decision_status": (
+            "approved_app_contract_v1" if app_approved else "proposed_app_contract_v1"
+        ),
+        "promotion_evidence": {
+            "manifest": "docs/architecture/canonical-application-promotion-evidence.json",
+            "manifest_sha256": evidence_sha,
+        },
+    })
     _write_json(tmp_path, "docs/architecture/mcp-operator-actions.json", operator)
     _write_json(tmp_path, "backend/mcp_runtime/service-contract.json", service)
     registry = tmp_path / "backend/app/infrastructure/operator_actions/registry.py"
@@ -114,6 +162,11 @@ _SHARED_BINDINGS = {
 """ % invoice_binding,
         encoding="utf-8",
     )
+    revision = tmp_path / "backend/alembic/versions/0001_test_head.py"
+    revision.parent.mkdir(parents=True, exist_ok=True)
+    revision.write_text(
+        'revision = "test_head"\ndown_revision = None\n', encoding="utf-8"
+    )
     return tmp_path
 
 
@@ -133,6 +186,7 @@ def test_nonready_release_reports_live_app_adapter_and_each_evidence_gate(
         gates_ready=False,
         adapters_ready=False,
         exported=False,
+        promotion_evidence_ready=False,
     )
 
     issues = readiness.collect_issues(root)
@@ -146,6 +200,7 @@ def test_nonready_release_reports_live_app_adapter_and_each_evidence_gate(
     assert "CANONICAL_LIVE_BASELINE_UNVERIFIED" in codes
     assert "CANONICAL_APP_CONTRACT_UNAPPROVED" in codes
     assert "OPERATOR_ACTION_ADAPTERS_INCOMPLETE" in codes
+    assert "APPLICATION_PROMOTION_EVIDENCE_INVALID" in codes
     assert gate_messages == readiness.EXPECTED_RELEASE_GATES
     assert "OPERATOR_ACTIONS_PREMATURELY_EXPORTED" not in codes
 
@@ -188,4 +243,24 @@ def test_repository_stays_fail_closed_until_live_and_external_evidence_exists():
     codes = {issue.code for issue in issues}
 
     assert "CANONICAL_LIVE_BASELINE_UNVERIFIED" in codes
+    assert "APPLICATION_PROMOTION_EVIDENCE_INVALID" in codes
     assert "MCP_RELEASE_GATE_UNVERIFIED" not in codes
+
+
+def test_reviewed_migration_head_must_equal_checked_in_head(tmp_path: Path):
+    root = _fixture_root(tmp_path)
+    evidence_path = root / "docs/architecture/canonical-application-promotion-evidence.json"
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence["migration_head"]["expected_head"] = "different_head"
+    evidence["migration_head"]["observed_head"] = "different_head"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    contract_path = root / "docs/architecture/app-data-contract.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    contract["promotion_evidence"]["manifest_sha256"] = hashlib.sha256(
+        evidence_path.read_bytes()
+    ).hexdigest()
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+    codes = {issue.code for issue in readiness.collect_issues(root)}
+
+    assert "APPLICATION_PROMOTION_MIGRATION_HEAD_DRIFT" in codes
