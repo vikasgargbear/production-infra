@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.routes import canonical_inventory_transfers as transfers
@@ -201,24 +202,18 @@ def main() -> None:
                 assert eligible[0]["is_default"] is True
 
                 session.execute(text("RESET ROLE"))
-                session.execute(text("""
-                    UPDATE catalog.products SET ndps_regulated=true
-                     WHERE org_id=:org AND id=:product
-                """), {"org": ORG, "product": PRODUCT})
-                session.execute(text('SET LOCAL ROLE "erp_runtime"'))
-                regulated = transfers.get_eligible_transfer_batches(
-                    source_branch_id=SOURCE_BRANCH, source_location_id=SOURCE_LOCATION,
-                    destination_branch_id=DESTINATION_BRANCH,
-                    destination_location_id=DESTINATION_LOCATION,
-                    product_id=PRODUCT, uom_conversion_id=CONVERSION,
-                    transfer_date=business_date, db=session, current_user=user,
-                )
-                assert regulated == [], "NDPS-regulated stock entered the ordinary transfer route"
-                session.execute(text("RESET ROLE"))
-                session.execute(text("""
-                    UPDATE catalog.products SET ndps_regulated=false
-                     WHERE org_id=:org AND id=:product
-                """), {"org": ORG, "product": PRODUCT})
+                try:
+                    with session.begin_nested():
+                        session.execute(text("""
+                            UPDATE catalog.products SET ndps_regulated=true
+                             WHERE org_id=:org AND id=:product
+                        """), {"org": ORG, "product": PRODUCT})
+                except IntegrityError as error:
+                    assert "reviewed command" in str(error)
+                else:
+                    raise AssertionError(
+                        "deployed product entered NDPS scope without the reviewed command"
+                    )
                 session.execute(text('SET LOCAL ROLE "erp_runtime"'))
 
                 response = transfers.get_transfer_readback(DOCUMENT, db=session, current_user=user)
