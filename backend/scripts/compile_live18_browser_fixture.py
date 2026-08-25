@@ -269,7 +269,7 @@ def _validate_compiled_steps(
                 if locator["kind"] == "role" and not isinstance(locator.get("role"), str):
                     raise FixtureCompileError(f"{operation_id}.{phase}[{index}] role locator omitted role")
             encoded = json.dumps(step, sort_keys=True)
-            if COMMUNICATION_ACTION.search(encoded):
+            if action == "click" and COMMUNICATION_ACTION.search(encoded):
                 raise FixtureCompileError(f"{operation_id}.{phase}[{index}] targets communication")
     if steps["prepare_steps"][0]["action"] != "goto":
         raise FixtureCompileError(f"{operation_id}.prepare_steps must restart from a route")

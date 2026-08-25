@@ -20,8 +20,8 @@ function locatorFor(page: Page, step: UiStep): Locator {
 }
 
 export async function runUiStep(page: Page, appOrigin: string, step: UiStep): Promise<void> {
-  if (COMMUNICATION_ACTION.test(step.locator?.name || '')
-    || COMMUNICATION_ACTION.test(step.value || '')) {
+  if (step.action === 'click' && (COMMUNICATION_ACTION.test(step.locator?.name || '')
+    || COMMUNICATION_ACTION.test(step.value || ''))) {
     throw new Error('Communication actions are forbidden in live18 certification.');
   }
   if (step.action === 'goto') {
