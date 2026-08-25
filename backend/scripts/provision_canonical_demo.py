@@ -2012,7 +2012,11 @@ def preflight_action(operation: str, payload: dict[str, Any]) -> None:
     from sqlalchemy.orm import Session
     from sqlalchemy.pool import NullPool
 
-    from app.domain.operator_actions.contract import ACTION_POLICIES, PREPARE_PAYLOAD_MODELS
+    from app.domain.operator_actions.contract import (
+        ACTION_POLICIES,
+        PREPARE_PAYLOAD_MODELS,
+        validate_prepare_payload_semantics,
+    )
     from app.infrastructure.operator_actions.service import SqlAlchemyOperatorActionService
 
     runtime_engine = create_engine(
@@ -2037,6 +2041,7 @@ def preflight_action(operation: str, payload: dict[str, Any]) -> None:
         )
         policy = ACTION_POLICIES[operation]
         validated_payload = PREPARE_PAYLOAD_MODELS[operation].model_validate(payload)
+        validate_prepare_payload_semantics(operation, validated_payload)
         service_payload = validated_payload.model_dump(mode="python", exclude_none=True)
         prepared = service.prepare(
             policy=policy,
@@ -3378,6 +3383,19 @@ def seed_bank_reconciliation_ui_fixture(
 
 def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
     """Resolve and calculate without persisting, so live failures remain diagnosable."""
+    backend_root = str(Path(__file__).resolve().parents[1])
+    if backend_root not in sys.path:
+        sys.path.insert(0, backend_root)
+    from app.domain.operator_actions.contract import (
+        PREPARE_PAYLOAD_MODELS,
+        validate_prepare_payload_semantics,
+    )
+
+    validated_payload = PREPARE_PAYLOAD_MODELS["sales.order.prepare"].model_validate(
+        payload
+    )
+    validate_prepare_payload_semantics("sales.order.prepare", validated_payload)
+    payload = validated_payload.model_dump(mode="json", exclude_none=True)
     identity = (
         f"aasopharma:{IDS['org']}:{IDS['operator_membership']}:sales.order.prepare:"
         f"{payload['idempotency_key']}"
@@ -3424,9 +3442,6 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
             resolution = cursor.fetchone()[0]
         calculator.rollback()
 
-    backend_root = str(Path(__file__).resolve().parents[1])
-    if backend_root not in sys.path:
-        sys.path.insert(0, backend_root)
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
     from sqlalchemy.pool import NullPool

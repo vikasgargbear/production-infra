@@ -10,11 +10,94 @@ from typing import Any
 
 import pytest
 
+from app.domain.operator_actions.contract import (
+    PREPARE_PAYLOAD_MODELS,
+    validate_prepare_payload_semantics,
+)
+
 from .contract import load_ready_operation_matrix
 from .mcp_readback import mcp_readback_arguments
 
 
 pytestmark = pytest.mark.integration
+
+
+MANDATORY_LINEAGE_PATHS = {
+    "sales.order.prepare": (
+        "customer_account_id", "delivery_address_id", "delivery_address_row_version",
+        "lines.0.product_id", "lines.0.uom_conversion_id",
+    ),
+    "sales.dispatch.prepare": (
+        "sales_order_id", "from_location_id", "lines.0.sales_order_line_id",
+        "lines.0.batch_allocations.0.batch_id",
+    ),
+    "sales.invoice.prepare": (
+        "customer_account_id", "delivery_address_id", "delivery_address_row_version",
+        "lines.0.product_id", "lines.0.uom_conversion_id",
+    ),
+    "sales.return.prepare": (
+        "original_invoice_id", "lines.0.original_invoice_line_id",
+        "lines.0.invoice_dispatch_allocation_id", "lines.0.batch_allocation.batch_id",
+        "lines.0.to_location_id",
+    ),
+    "procurement.purchase_order.prepare": (
+        "supplier_account_id", "lines.0.product_id", "lines.0.uom_conversion_id",
+    ),
+    "procurement.goods_receipt.prepare": (
+        "purchase_order_id", "supplier_account_id", "lines.0.purchase_order_line_id",
+        "lines.0.batches.0.mrp_uom_conversion_id",
+        "lines.0.batches.0.to_location_id",
+    ),
+    "procurement.supplier_invoice.prepare": (
+        "supplier_account_id", "supplier_tax_registration_id",
+        "portal_document_line_id", "goods_receipt_ids.0",
+        "lines.0.goods_receipt_line_id",
+    ),
+    "procurement.purchase_return.prepare": (
+        "original_supplier_invoice_id", "supplier_destination_address_id",
+        "lines.0.goods_receipt_line_id",
+        "lines.0.supplier_invoice_receipt_allocation_id",
+        "lines.0.batch_allocation.batch_id", "lines.0.from_location_id",
+    ),
+    "finance.customer_receipt.prepare": (
+        "customer_account_id", "settlement_account_id", "allocations.0.open_item_id",
+    ),
+    "finance.supplier_payment.prepare": (
+        "supplier_account_id", "settlement_account_id", "allocations.0.open_item_id",
+    ),
+    "finance.supplier_advance.prepare": (
+        "supplier_account_id", "purchase_order_id", "settlement_account_id",
+        "allocations.0.purchase_order_line_id",
+    ),
+    "finance.adjustment_note.prepare": (
+        "original_document_id", "lines.0.original_line_id",
+    ),
+    "finance.bank_reconciliation.prepare": (
+        "bank_statement_id", "bank_statement_line_id", "journal_entry_id",
+    ),
+    "finance.expense_claim.prepare": (
+        "reimbursement_account_id", "lines.0.expense_account_id",
+        "lines.0.receipt_attachment_id",
+    ),
+    "inventory.adjustment.prepare": (
+        "counted_by_membership_id", "location_id", "evidence_attachment_id",
+        "lines.0.product_id", "lines.0.uom_conversion_id",
+        "lines.0.batch_counts.0.batch_id",
+    ),
+    "inventory.transfer.prepare": (
+        "source_branch_id", "destination_branch_id", "source_location_id",
+        "destination_location_id", "lines.0.product_id",
+        "lines.0.uom_conversion_id", "lines.0.batch_allocations.0.batch_id",
+    ),
+    "inventory.destruction.prepare": (
+        "location_id", "certificate_attachment_id", "lines.0.product_id",
+        "lines.0.uom_conversion_id", "lines.0.batch_allocations.0.batch_id",
+    ),
+}
+
+
+def test_live18_lineage_contract_covers_every_published_prepare_model() -> None:
+    assert set(MANDATORY_LINEAGE_PATHS) == set(PREPARE_PAYLOAD_MODELS)
 
 
 def _find(value: Any, key: str):
@@ -54,6 +137,37 @@ def _prepare_request(evidence: dict[str, Any]) -> dict[str, Any]:
     assert len(candidates) == 1, "expected exactly one successful canonical prepare request"
     assert isinstance(candidates[0], dict), "canonical prepare omitted its exact request body"
     return candidates[0]
+
+
+def _path_value(payload: dict[str, Any], path: str) -> Any:
+    value: Any = payload
+    for part in path.split("."):
+        value = value[int(part)] if isinstance(value, list) else value[part]
+    return value
+
+
+def _validated_prepare_request(evidence: dict[str, Any]) -> dict[str, Any]:
+    operation = evidence["command_operation"]
+    request = _prepare_request(evidence)
+    assert operation in PREPARE_PAYLOAD_MODELS, (
+        f"{operation} has no published strict prepare-payload model"
+    )
+    assert operation in MANDATORY_LINEAGE_PATHS, (
+        f"{operation} has no reviewed Live18 lineage contract"
+    )
+    validated = PREPARE_PAYLOAD_MODELS[operation].model_validate(request)
+    validate_prepare_payload_semantics(operation, validated)
+    canonical = validated.model_dump(mode="json", exclude_none=True)
+    for path in MANDATORY_LINEAGE_PATHS[operation]:
+        value = _path_value(canonical, path)
+        assert value not in (None, "", []), (
+            f"{operation} omitted mandatory canonical lineage at {path}"
+        )
+    branch_id = canonical.get("branch_id", canonical.get("source_branch_id"))
+    assert str(branch_id) == evidence["branch_id"], (
+        f"{operation} browser payload branch differs from its evidence envelope"
+    )
+    return request
 
 
 def test_preview_ignores_a_prior_missing_required_422() -> None:
@@ -153,7 +267,7 @@ def test_all_browser_resources_reconcile_through_mcp_and_postgresql(
             contract.command_operation.removesuffix(".prepare"),
             resource_id,
             _preview(evidence),
-            _prepare_request(evidence),
+            _validated_prepare_request(evidence),
         )
         reconciler.assert_cross_tenant_denied(
             contract.command_operation.removesuffix(".prepare"),
