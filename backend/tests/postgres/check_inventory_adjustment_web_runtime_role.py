@@ -81,7 +81,7 @@ def main() -> None:
             assert evidence_rows == []
             readback_rows = session.execute(
                 text(_sql(
-                    web_operator_actions.inventory_adjustment_readback,
+                    web_operator_actions.load_inventory_adjustment_readback,
                     "FROM automation.command_requests AS command",
                 )),
                 {"org_id": ORG_ID, "command_request_id": COMMAND_ID},
