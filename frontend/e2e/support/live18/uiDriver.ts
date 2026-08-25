@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { expect, Locator, Page } from '@playwright/test';
 
 import type { UiStep } from './contracts';
@@ -38,6 +40,12 @@ export async function runUiStep(page: Page, appOrigin: string, step: UiStep): Pr
     case 'click': await locator.click(); break;
     case 'fill': await locator.fill(step.value ?? ''); break;
     case 'select': await locator.selectOption(step.value ?? ''); break;
+    case 'setInputFiles':
+      if (!step.value || !path.isAbsolute(step.value)) {
+        throw new Error('setInputFiles requires an absolute reviewed artifact path.');
+      }
+      await locator.setInputFiles(step.value);
+      break;
     case 'press': await locator.press(step.value ?? ''); break;
     case 'expectText': await expect(locator).toContainText(step.value ?? ''); break;
     default: throw new Error(`Unsupported UI action: ${step.action}`);

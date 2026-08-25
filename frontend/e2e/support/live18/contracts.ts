@@ -29,7 +29,7 @@ interface TemplateReadiness {
 }
 
 export type LocatorKind = 'role' | 'label' | 'placeholder' | 'text' | 'testId';
-export type UiAction = 'goto' | 'click' | 'fill' | 'select' | 'press' | 'expectText';
+export type UiAction = 'goto' | 'click' | 'fill' | 'select' | 'setInputFiles' | 'press' | 'expectText';
 export type Actor = 'requester' | 'reviewer';
 export type LifecycleMode = 'split' | 'combined_actor_confirmation';
 
@@ -119,7 +119,7 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     throw new Error('The reviewed live18 fixture must name exactly the 18 registered operations.');
   }
   const supportedActions: UiAction[] = [
-    'goto', 'click', 'fill', 'select', 'press', 'expectText',
+    'goto', 'click', 'fill', 'select', 'setInputFiles', 'press', 'expectText',
   ];
   const supportedActors: Actor[] = ['requester', 'reviewer'];
   for (const [operationId, operation] of Object.entries(fixture.operations)) {

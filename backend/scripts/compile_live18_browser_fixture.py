@@ -39,7 +39,7 @@ PHASES = (
 )
 LIFECYCLE_MODES = {"split", "combined_actor_confirmation"}
 ACTORS = {"requester", "reviewer"}
-ACTIONS = {"goto", "click", "fill", "select", "press", "expectText"}
+ACTIONS = {"goto", "click", "fill", "select", "setInputFiles", "press", "expectText"}
 LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
 COMMUNICATION_ACTION = re.compile(r"whats?app|e-?mail|sms|text message|phone|call|tel:", re.I)
 
@@ -1018,6 +1018,23 @@ def _operation_facts(
                 raise FixtureCompileError(
                     f"{key} must be specific non-empty text of at most {maximum} characters"
                 )
+        receipt_path = Path(
+            _leaf(scalars, "expense_receipt_pdf_path", "reviewed scalar")
+        )
+        if not receipt_path.is_absolute() or not receipt_path.is_file():
+            raise FixtureCompileError(
+                "expense_receipt_pdf_path must be an existing absolute file path"
+            )
+        receipt_bytes = receipt_path.read_bytes()
+        if (
+            receipt_path.suffix.lower() != ".pdf"
+            or not receipt_bytes.startswith(b"%PDF-")
+            or b"%%EOF" not in receipt_bytes[-2048:]
+            or not 0 < len(receipt_bytes) <= 10 * 1024 * 1024
+        ):
+            raise FixtureCompileError(
+                "expense_receipt_pdf_path must identify one valid PDF no larger than 10 MiB"
+            )
         return facts
     if operation_id in adjustment_limits:
         (
