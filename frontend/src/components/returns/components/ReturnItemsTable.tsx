@@ -6,10 +6,12 @@
 
 import React, { useMemo, useRef, useCallback } from 'react';
 import { Trash2, Package } from 'lucide-react';
-import { ProductSearch, EditableCell } from '../../global';
+import { EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
 import { exactDecimalUnits } from '../../../utils/exactDecimal';
 import { formatReturnMoney } from '../utils/returnDecimal';
+
+const EDITABLE_FIELDS: string[] = ['return_paid_qty', 'return_free_qty'];
 
 const isPositiveQuantity = (value: unknown): boolean => {
     try {
@@ -22,20 +24,14 @@ const isPositiveQuantity = (value: unknown): boolean => {
 export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     items,
     selectedInvoice,
-    showManualEntry,
-    availableBatches,
     onUpdateItem,
-    onAddManualItem,
     onRemoveItem,
-    onBackToInvoice
 }) => {
     const selectedItems = useMemo(() =>
         items.filter(item => item.selected),
         [items]
     );
 
-    // Editable fields for keyboard navigation
-    const EDITABLE_FIELDS = ['return_paid_qty', 'return_free_qty', 'unit_price'];
     const fieldRefs = useRef<Record<string, any>>({});
 
     const setFieldRef = (rowIndex: number, fieldName: string, element: any): void => {
@@ -85,10 +81,9 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
 
     const displayItemTotal = (item: any): string => {
         try {
-            return formatReturnMoney(
-                item.total_amount ?? item.line_total ?? '0.00',
-                `Return total for ${item.product_name || 'item'}`,
-            );
+            const amount = item.total_amount ?? item.line_total;
+            if (amount === '' || amount === null || amount === undefined) return 'Pending canonical preview';
+            return formatReturnMoney(amount, `Return total for ${item.product_name || 'item'}`);
         } catch {
             return 'Invalid amount';
         }
@@ -111,26 +106,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                     <Package className="w-4 h-4 mr-2" />
                     RETURN ITEMS ({selectedItems.length})
                 </h3>
-                {onBackToInvoice && (
-                    <button
-                        onClick={onBackToInvoice}
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center"
-                    >
-                        ← Back to Invoice Selection
-                    </button>
-                )}
             </div>
-
-            {/* Product Search for Manual Entry */}
-            {showManualEntry && (
-                <div className="mb-4">
-                    <ProductSearch
-                        onAddItem={onAddManualItem}
-                        placeholder="Search products by name, code, or HSN..."
-                        showBatchSelection={true}
-                    />
-                </div>
-            )}
 
             {items.length > 0 ? (
                 <div className="overflow-x-auto">
@@ -161,9 +137,9 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         </thead>
                         <tbody>
                             {items.map((row, index) => {
-                                const originalPaidQty = String(row.paid_quantity || '0');
-                                const originalFreeQty = String(row.free_quantity || '0');
-                                const isFromInvoice = !row.is_manual && !!selectedInvoice;
+                                const originalPaidQty = row.paid_quantity;
+                                const originalFreeQty = row.free_quantity;
+                                const isFromInvoice = !!selectedInvoice;
                                 const total = displayItemTotal(row);
 
                                 return (
@@ -177,7 +153,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Product Info */}
                                         <td className="px-3 py-2">
                                             <div className="text-sm font-medium text-gray-900">{row.product_name}</div>
-                                            <div className="text-xs text-gray-500">{row.batch_number || 'No Batch'}</div>
+                                            <div className="text-xs text-gray-500">{row.batch_number || 'Batch unavailable'}</div>
                                             {isFromInvoice && (
                                                 <div className="mt-2 grid gap-2">
                                                     <select
@@ -192,6 +168,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                         <option value="damaged">Damaged</option>
                                                         <option value="expired">Expired</option>
                                                         <option value="recalled">Recalled</option>
+                                                        <option value="quality_hold">Quality hold</option>
                                                         <option value="quality_hold">Quality hold</option>
                                                     </select>
                                                     <select
@@ -212,7 +189,9 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Pack Info */}
                                         <td className="px-3 py-2 text-center">
                                             <div className="text-sm text-gray-700">
-                                                {`${row.packages_per_box || 1}*${row.units_per_pack || 1}`}
+                                                {row.packages_per_box !== undefined && row.units_per_pack !== undefined
+                                                    ? `${row.packages_per_box} × ${row.units_per_pack}`
+                                                    : 'Unavailable'}
                                             </div>
                                         </td>
 
@@ -225,8 +204,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {selectedInvoice && (
                                             <td className="px-3 py-2 text-center">
                                                 <div className="text-sm text-gray-900 font-medium">
-                                                    {originalPaidQty}
-                                                    {isPositiveQuantity(originalFreeQty) && (
+                                                    {originalPaidQty === '' || originalPaidQty === undefined ? 'Unavailable' : originalPaidQty}
+                                                    {originalFreeQty !== '' && originalFreeQty !== undefined && isPositiveQuantity(originalFreeQty) && (
                                                         <span className="text-green-600 ml-1">+{originalFreeQty}</span>
                                                     )}
                                                 </div>
@@ -238,7 +217,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
-                                                    value={row.return_paid_qty ?? row.return_quantity ?? '0'}
+                                                    value={row.return_paid_qty ?? ''}
                                                     type="number"
                                                     maxDecimalPlaces={6}
                                                     preserveDecimalString
@@ -255,7 +234,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
-                                                    value={row.return_free_qty ?? '0'}
+                                                    value={row.return_free_qty ?? ''}
                                                     type="number"
                                                     maxDecimalPlaces={6}
                                                     preserveDecimalString
@@ -270,19 +249,11 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Rate */}
                                         <td className="px-3 py-2">
                                             <div className="flex justify-center">
-                                                <EditableCell
-                                                    ref={(el: any) => setFieldRef(index, 'unit_price', el)}
-                                                    value={row.unit_price || '0'}
-                                                    type="number"
-                                                    min={0}
-                                                    maxDecimalPlaces={6}
-                                                    preserveDecimalString
-                                                    prefix="₹"
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'unit_price', String(val))}
-                                                    onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
-                                                    selectOnFocus={true}
-                                                    className="w-20"
-                                                />
+                                                <span className="text-sm text-gray-900">
+                                                    {row.unit_price === '' || row.unit_price === null || row.unit_price === undefined
+                                                        ? 'Unavailable'
+                                                        : `₹${row.unit_price}`}
+                                                </span>
                                             </div>
                                         </td>
 
@@ -291,7 +262,9 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Tax % (read-only) */}
                                         <td className="px-3 py-2 text-center">
                                             <span className="text-sm text-gray-900 font-medium" title="Tax from product (read-only)">
-                                                {row.tax_percent || 0}%
+                                                {row.tax_percent === '' || row.tax_percent === null || row.tax_percent === undefined
+                                                    ? 'Unavailable'
+                                                    : `${row.tax_percent}%`}
                                             </span>
                                         </td>
 
@@ -332,10 +305,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         <p className="text-sm">No items added yet</p>
                         {selectedInvoice ? (
                             <p className="text-xs text-gray-400 mt-1">Invoice items will appear here</p>
-                        ) : showManualEntry ? (
-                            <p className="text-xs text-gray-400 mt-1">Search and select products to add</p>
                         ) : (
-                            <p className="text-xs text-gray-400 mt-1">Select an invoice or use manual entry</p>
+                            <p className="text-xs text-gray-400 mt-1">Select a posted invoice with exact dispatch allocation lineage</p>
                         )}
                     </div>
                 </div>

@@ -11,9 +11,7 @@ import {
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { purchasesApi } from '../../services/api';
 import { canonicalReturnsApi } from '../../services/api/modules/returns/canonicalReturns.api';
-import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
-import DebitNotePreview from './ui/DebitNotePreview';
 import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
 import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
 import { updatePurchaseReturnItem } from './utils/purchaseReturnProjection';
@@ -23,12 +21,12 @@ import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import {
   authoritativeReturnQuantity,
   authoritativeReturnRate,
   formatReturnMoney,
   hasExactReturnPreview,
-  sameReturnMoney,
 } from './utils/returnDecimal';
 
 const purchaseQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -65,13 +63,10 @@ interface PurchaseReturnData {
   items: PurchaseReturnItem[];
   return_reason: string;
   return_reason_notes: string;
-  return_method: string;
   subtotal_amount: string;
   tax_amount: string;
   total_amount: string;
   debit_note_no: string;
-  status: string;
-  include_gst: boolean;
   branch_id: string;
   gst_tax_treatment: '' | 'commercial_only' | 'statutory';
   return_reason_choices: Array<{
@@ -101,7 +96,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   // Refs for keyboard navigation
   const supplierSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
-  const calculationRequestRef = useRef(0);
 
   // Return data state - matching sales return structure
   const [returnData, setReturnData] = useState<PurchaseReturnData>({
@@ -116,13 +110,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     items: [],
     return_reason: '',
     return_reason_notes: '',
-    return_method: 'debit_note', // Default to debit note
-    subtotal_amount: '0.00',
-    tax_amount: '0.00',
-    total_amount: '0.00',
+    subtotal_amount: '',
+    tax_amount: '',
+    total_amount: '',
     debit_note_no: '',
-    status: 'PENDING',
-    include_gst: true,
     branch_id: '',
     gst_tax_treatment: '',
     return_reason_choices: [],
@@ -131,8 +122,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     statutory_gstr2b_credit_notes: [],
     supplier_credit_note_portal_line_id: '',
     transport_details: {
-      transport_mode: 'in_person',
-      distance_km: '0'
+      transport_mode: '',
+      distance_km: ''
     }
   });
 
@@ -148,6 +139,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     isPositiveDecimalText(item.return_paid_qty)
     || isPositiveDecimalText(item.return_free_qty)
   ));
+  const hasMonetaryPreview = hasExactReturnPreview(returnData.items, returnData);
+  const displayedTotal = (() => {
+    if (!hasMonetaryPreview) return 'Pending backend preview';
+    try { return formatReturnMoney(returnData.total_amount, 'Purchase return total'); }
+    catch { return 'Invalid amount'; }
+  })();
 
   useEffect(() => {
     let active = true;
@@ -211,15 +208,24 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const handleInvoiceSelect = async (invoice) => {
     if (!invoice) return;
 
+    const invoiceId = String(invoice.supplier_invoice_id ?? invoice.invoice_id ?? '');
+    if (!isCanonicalUuid(invoiceId)) {
+      toast.error('This supplier invoice is missing its canonical UUID and cannot be returned.');
+      return;
+    }
+
     setSelectedInvoice(invoice);
     setReturnReasons([]);
     setReturnData(prev => ({
       ...prev,
-      supplier_invoice_id: invoice.supplier_invoice_id || invoice.invoice_id,
-      invoice_number: invoice.supplier_invoice_number || invoice.invoice_number,
+      supplier_invoice_id: invoiceId,
+      invoice_number: invoice.supplier_invoice_number ?? invoice.invoice_number,
       invoice_date: invoice.invoice_date,
       original_invoice: invoice,
       items: [],
+      subtotal_amount: '',
+      tax_amount: '',
+      total_amount: '',
       return_reason: '',
       return_reason_choices: [],
       gst_tax_treatment: '',
@@ -231,7 +237,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     try {
       setLoading(true);
       const response = await canonicalReturnsApi.getPurchaseContext(
-        String(invoice.supplier_invoice_id || invoice.invoice_id),
+        invoiceId,
         returnDataRef.current.return_date,
       );
       const context = response.data;
@@ -257,17 +263,15 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             ...item,
             id: item.supplier_invoice_receipt_allocation_id,
             invoice_item_id: item.supplier_invoice_line_id,
-            return_paid_qty: billed,
-            return_free_qty: free,
-            return_quantity: total,
+            return_paid_qty: '',
+            return_free_qty: '',
+            return_quantity: '',
             original_quantity: total,
-            selected: true,
+            selected: false,
             unit_price: authoritativeReturnRate(item.quoted_unit_rate, `${label}.quoted_unit_rate`),
             tax_percent: addExactDecimals(taxRates, `${label}.tax_rate`, purchaseRateOptions),
-            discount_percent: '0.000000',
+            discount_percent: '',
             max_returnable_qty: total,
-            disposition: 'RESTOCK',
-            restock: true
           } as any;
         });
 
@@ -278,12 +282,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           invoice_number: context.supplier_invoice_number,
           invoice_date: context.supplier_invoice_date,
           items: mappedItems,
+          subtotal_amount: '',
+          tax_amount: '',
+          total_amount: '',
           return_reason: '',
           return_reason_choices: context.return_reason_choices,
           supplier_destinations: context.supplier_destinations,
-          supplier_destination_address_id: context.supplier_destinations.length === 1
-            ? context.supplier_destinations[0].id
-            : '',
+          supplier_destination_address_id: '',
           statutory_gstr2b_credit_notes: context.statutory_gstr2b_credit_notes,
           supplier_credit_note_portal_line_id: '',
           gst_tax_treatment: '',
@@ -295,6 +300,17 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       }
     } catch (error) {
       toast.error('Failed to load invoice items');
+      setSelectedInvoice(null);
+      setShowInvoiceSection(true);
+      setReturnReasons([]);
+      setReturnData(prev => ({
+        ...prev,
+        supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+        items: [], subtotal_amount: '', tax_amount: '', total_amount: '',
+        return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+        supplier_destinations: [], supplier_destination_address_id: '',
+        statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+      }));
     } finally {
       setLoading(false);
     }
@@ -306,12 +322,20 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       setSelectedSupplier(null);
       setSelectedInvoice(null);
       setShowInvoiceSection(true);
+      setReturnReasons([]);
+      setReturnableInvoices([]);
       setReturnData(prev => ({
         ...prev,
         supplier_id: '',
         supplier_details: null,
-        supplier_invoice_id: '',
-        items: []
+        supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+        items: [],
+        return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        supplier_destinations: [], supplier_destination_address_id: '',
+        statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
       }));
       return;
     }
@@ -327,6 +351,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setSelectedSupplier(fullSupplier);
     setSelectedInvoice(null);
     setShowInvoiceSection(true);
+    setReturnReasons([]);
+    setReturnableInvoices([]);
 
     const supplierId = supplier.supplier_id || supplier.id || supplier.party_id;
 
@@ -334,8 +360,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       ...prev,
       supplier_id: supplierId,
       supplier_details: fullSupplier,
-      supplier_invoice_id: '',
-      items: []
+      supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+      items: [],
+      return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+      subtotal_amount: '',
+      tax_amount: '',
+      total_amount: '',
+      supplier_destinations: [], supplier_destination_address_id: '',
+      statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
     }));
 
     // Fetch returnable invoices
@@ -356,58 +388,25 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const updateReturnItem = (itemIndex, field, value) => {
     setReturnData(prev => ({
       ...prev,
-      items: updatePurchaseReturnItem(prev.items, itemIndex, field, value) as PurchaseReturnItem[]
+      items: updatePurchaseReturnItem(prev.items, itemIndex, field, value) as PurchaseReturnItem[],
+      subtotal_amount: '', tax_amount: '', total_amount: '',
     }));
   };
 
-  // Use effect to recalculate totals when items change
-  React.useEffect(() => {
-    const requestId = ++calculationRequestRef.current;
-    if (!hasPositiveReturnLine) {
-      setReturnData(prev => prev.subtotal_amount === '0.00' && prev.tax_amount === '0.00' && prev.total_amount === '0.00'
-        ? prev
-        : { ...prev, subtotal_amount: '0.00', tax_amount: '0.00', total_amount: '0.00' });
-      return;
-    }
-
-    const calculate = async () => {
-      try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase');
-        if (requestId !== calculationRequestRef.current) return;
-        const totals = calculation.totals;
-        setReturnData(prev => {
-          let calculatedIndex = 0;
-          let itemValuesChanged = false;
-          const items = prev.items.map(item => {
-            if (!item.selected || !isPositiveDecimalText(item.return_quantity)) return item;
-            const calculated = calculation.items[calculatedIndex++] || {};
-            const totalAmount = calculated.total_amount as string;
-            const taxableAmount = calculated.taxable_amount as string;
-            const taxAmount = calculated.tax_amount as string;
-            if (
-              sameReturnMoney(item.total_amount, totalAmount, 'Purchase return line total') &&
-              sameReturnMoney(item.taxable_amount, taxableAmount, 'Purchase return taxable amount') &&
-              sameReturnMoney(item.tax_amount, taxAmount, 'Purchase return tax amount')
-            ) return item;
-            itemValuesChanged = true;
-            return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
-          });
-          return {
-            ...prev,
-            items: itemValuesChanged ? items : prev.items,
-            subtotal_amount: totals.subtotal_amount,
-            tax_amount: totals.tax_amount,
-            total_amount: totals.total_amount,
-          };
-        });
-      } catch (error) {
-        if (requestId === calculationRequestRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Unable to calculate return totals.');
-        }
-      }
-    };
-    void calculate();
-  }, [returnData.items, returnData.include_gst, returnData.supplier_id, toast, hasPositiveReturnLine]);
+  const updateTransportMode = (mode: string) => {
+    setReturnData(prev => ({
+      ...prev,
+      transport_details: {
+        transport_mode: mode,
+        distance_km: '',
+        ...(mode === 'road' ? { vehicle_number: '', vehicle_type: '' } : {}),
+        ...(mode !== 'in_person' ? { transporter_party_id: '' } : {}),
+        ...(['rail', 'air', 'ship', 'multimodal'].includes(mode)
+          ? { transport_document_number: '', transport_document_date: '' }
+          : {}),
+      },
+    }));
+  };
 
   // Validate return
   const validateReturn = () => {
@@ -421,16 +420,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       return false;
     }
 
-    if (!hasExactReturnPreview(returnData.items, returnData)) {
-      toast.error('Wait for the authoritative return calculation before reviewing this return.');
-      return false;
-    }
-
     const overLimitItem = returnData.items.find(item => item.selected
       && isPositiveDecimalText(item.return_quantity)
       && compareExactDecimals(
         item.return_quantity,
-        item.max_returnable_qty ?? item.original_quantity ?? '0',
+        item.max_returnable_qty ?? item.original_quantity,
         `Purchase return quantity for ${item.product_name || 'item'}`,
         purchaseQuantityOptions,
       ) > 0);
@@ -441,6 +435,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     if (!returnData.return_reason) {
       toast.error('Please select a return reason');
+      return false;
+    }
+
+    if (!canPrepare) {
+      toast.error(unavailableReason);
       return false;
     }
 
@@ -492,7 +491,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6">
             <div className="max-w-6xl mx-auto space-y-6">
               {/* Top Section - Date, Reason, Method - 3-column grid with consistent h-10 heights */}
-              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <StandardDatePicker
                   label="Return Date"
                   value={returnData.return_date}
@@ -508,6 +507,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       invoice_date: '',
                       original_invoice: null,
                       items: [],
+                      subtotal_amount: '',
+                      tax_amount: '',
+                      total_amount: '',
                       return_reason: '',
                       return_reason_choices: [],
                       gst_tax_treatment: '',
@@ -533,20 +535,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     placeholder="Select reason..."
                     className="w-full"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Method <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={returnData.return_method || 'debit_note'}
-                    onChange={(e) => setReturnData(prev => ({ ...prev, return_method: e.target.value }))}
-                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                  >
-                    <option value="debit_note">Debit Note (Recommended)</option>
-                    <option value="replacement">Replacement</option>
-                    <option value="refund">Refund (Requires Approval)</option>
-                  </select>
                 </div>
               </div>
 
@@ -590,17 +578,29 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                           Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
                         </p>
                         <p className="text-sm text-gray-600">
-                          Amount: ₹{(selectedInvoice.total_amount || selectedInvoice.invoice_amount || 0).toLocaleString()}
+                          Amount: {(() => {
+                            const amount = selectedInvoice.total_amount ?? selectedInvoice.invoice_amount;
+                            if (amount === '' || amount === null || amount === undefined) return 'Unavailable';
+                            try { return formatReturnMoney(amount, 'Supplier invoice amount'); }
+                            catch { return 'Invalid amount'; }
+                          })()}
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedInvoice(null);
+                          setReturnReasons([]);
                           setReturnData(prev => ({
                             ...prev,
-                            supplier_invoice_id: '',
-                            items: []
+                            supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+                            items: [],
+                            return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+                            subtotal_amount: '',
+                            tax_amount: '',
+                            total_amount: '',
+                            supplier_destinations: [], supplier_destination_address_id: '',
+                            statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
                           }));
                         }}
                         className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-red-700 hover:bg-red-50"
@@ -644,8 +644,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                           <tr key={String(item.id)} className="border-b border-gray-100">
                             <td className="p-2"><input aria-label={`Return ${item.product_name}`} type="checkbox" checked={item.selected} onChange={(event) => updateReturnItem(index, 'selected', event.target.checked)} /></td>
                             <td className="p-2"><p className="font-medium">{item.product_name}</p><p className="text-xs text-gray-600">{item.batch_number}</p></td>
-                            <td className="p-2"><input aria-label={`Billed quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_paid_qty || '')} onChange={(event) => updateReturnItem(index, 'return_paid_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_billed_quantity}</p></td>
-                            <td className="p-2"><input aria-label={`Free quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_free_qty || '')} onChange={(event) => updateReturnItem(index, 'return_free_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_free_quantity}</p></td>
+                            <td className="p-2"><input aria-label={`Billed quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_paid_qty ?? '')} onChange={(event) => updateReturnItem(index, 'return_paid_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_billed_quantity}</p></td>
+                            <td className="p-2"><input aria-label={`Free quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_free_qty ?? '')} onChange={(event) => updateReturnItem(index, 'return_free_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_free_quantity}</p></td>
                             <td className="p-2 text-xs">{item.from_location_code} · {item.from_location_name}</td>
                           </tr>
                         ))}</tbody>
@@ -683,9 +683,98 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     label="Transport mode"
                     required
                     value={returnData.transport_details.transport_mode}
-                    onChange={(value) => setReturnData(prev => ({ ...prev, transport_details: { transport_mode: String(value), distance_km: '0' } }))}
-                    options={[{ value: 'in_person', label: 'In person / hand carried' }]}
+                    onChange={(value) => updateTransportMode(String(value))}
+                    options={[
+                      { value: 'in_person', label: 'In person / hand carried' },
+                      { value: 'road', label: 'Road' },
+                      { value: 'rail', label: 'Rail' },
+                      { value: 'air', label: 'Air' },
+                      { value: 'ship', label: 'Ship' },
+                      { value: 'multimodal', label: 'Multimodal' },
+                    ]}
+                    placeholder="Choose transport mode"
                   />
+                  <label className="text-sm font-medium text-gray-700">
+                    Distance (km) <span className="text-red-500">*</span>
+                    <input
+                      inputMode="decimal"
+                      value={returnData.transport_details.distance_km}
+                      onChange={(event) => setReturnData(prev => ({
+                        ...prev,
+                        transport_details: { ...prev.transport_details, distance_km: event.target.value },
+                      }))}
+                      placeholder="Enter 0 for hand-carried return"
+                      className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                    />
+                  </label>
+                  {returnData.transport_details.transport_mode !== ''
+                    && returnData.transport_details.transport_mode !== 'in_person' && (
+                    <label className="text-sm font-medium text-gray-700">
+                      Transporter party UUID <span className="text-red-500">*</span>
+                      <input
+                        value={returnData.transport_details.transporter_party_id ?? ''}
+                        onChange={(event) => setReturnData(prev => ({
+                          ...prev,
+                          transport_details: { ...prev.transport_details, transporter_party_id: event.target.value },
+                        }))}
+                        placeholder="Canonical transporter party UUID"
+                        className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                      />
+                    </label>
+                  )}
+                  {returnData.transport_details.transport_mode === 'road' && (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">
+                        Vehicle number <span className="text-red-500">*</span>
+                        <input
+                          value={returnData.transport_details.vehicle_number ?? ''}
+                          onChange={(event) => setReturnData(prev => ({
+                            ...prev,
+                            transport_details: { ...prev.transport_details, vehicle_number: event.target.value },
+                          }))}
+                          className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                        />
+                      </label>
+                      <Select
+                        label="Vehicle type"
+                        required
+                        value={returnData.transport_details.vehicle_type ?? ''}
+                        onChange={(value) => setReturnData(prev => ({
+                          ...prev,
+                          transport_details: { ...prev.transport_details, vehicle_type: String(value) },
+                        }))}
+                        options={[
+                          { value: 'regular', label: 'Regular' },
+                          { value: 'over_dimensional_cargo', label: 'Over-dimensional cargo' },
+                        ]}
+                        placeholder="Choose vehicle type"
+                      />
+                    </>
+                  )}
+                  {['rail', 'air', 'ship', 'multimodal'].includes(returnData.transport_details.transport_mode) && (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">
+                        Transport document number <span className="text-red-500">*</span>
+                        <input
+                          value={returnData.transport_details.transport_document_number ?? ''}
+                          onChange={(event) => setReturnData(prev => ({
+                            ...prev,
+                            transport_details: { ...prev.transport_details, transport_document_number: event.target.value },
+                          }))}
+                          className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                        />
+                      </label>
+                      <StandardDatePicker
+                        label="Transport document date"
+                        required
+                        value={returnData.transport_details.transport_document_date ?? ''}
+                        onChange={(date) => setReturnData(prev => ({
+                          ...prev,
+                          transport_details: { ...prev.transport_details, transport_document_date: date },
+                        }))}
+                      />
+                    </>
+                  )}
                   {returnData.gst_tax_treatment === 'statutory' && (
                     <Select
                       label="GSTR-2B supplier credit-note evidence"
@@ -720,7 +809,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   {returnData.items.filter(item => item.selected).length} items selected
                 </span>
                 <span className="text-lg font-semibold">
-                  Total: {formatReturnMoney(returnData.total_amount, 'Purchase return total')}
+                  Total: {displayedTotal}
                 </span>
               </div>
               <div className="flex gap-3">
@@ -764,11 +853,33 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto p-6">
             {/* Main Debit Note Preview */}
-            <DebitNotePreview
-              returnData={returnData}
-              supplier={selectedSupplier}
-              purchase={selectedInvoice}
-            />
+            <div className="border border-gray-200 bg-white p-6">
+                <h2 className="text-lg font-semibold text-gray-900">Canonical purchase-return review</h2>
+                <p className="mt-2 text-sm text-gray-600">
+                  Supplier-invoice, receipt-line, batch and location lineage are ready. Monetary and GST impacts appear only when an authoritative preview supplies them.
+                </p>
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b text-left text-gray-600"><th className="p-2">Product</th><th className="p-2">Batch</th><th className="p-2">Billed</th><th className="p-2">Free</th><th className="p-2">Receipt location</th><th className="p-2">Amount</th></tr></thead>
+                    <tbody>{returnData.items.filter(item => item.selected).map((item, index) => (
+                      <tr key={String(item.id ?? index)} className="border-b border-gray-100">
+                        <td className="p-2">{item.product_name}</td>
+                        <td className="p-2">{item.batch_number || 'Unavailable'}</td>
+                        <td className="p-2">{item.return_paid_qty === '' || item.return_paid_qty === undefined ? 'Unavailable' : item.return_paid_qty}</td>
+                        <td className="p-2">{item.return_free_qty === '' || item.return_free_qty === undefined ? 'Unavailable' : item.return_free_qty}</td>
+                        <td className="p-2">{item.from_location_code || 'Unavailable'}</td>
+                        <td className="p-2">{(() => {
+                          if (!hasMonetaryPreview) return 'Pending backend preview';
+                          const amount = item.total_amount ?? item.line_total;
+                          if (amount === '' || amount === null || amount === undefined) return 'Unavailable';
+                          try { return formatReturnMoney(amount, `Purchase return lines[${index}].total_amount`); }
+                          catch { return 'Invalid amount'; }
+                        })()}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
 
             {/* Return Notes Section - Below preview */}
             <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
@@ -819,7 +930,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           onProceed={handlePrepareReturn}
           onReset={undefined}
           totalItems={returnData.items.filter(item => item.selected).length}
-          totalAmount={returnData.total_amount}
+          totalAmount={hasMonetaryPreview ? returnData.total_amount : undefined}
           proceedText={preparedApproval ? 'Awaiting independent approval' : 'Prepare Immutable Return'}
           backText="Back"
           saving={preparing}

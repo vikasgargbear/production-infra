@@ -17,10 +17,7 @@ interface ReturnLocalState {
     returnData: ReturnFormData;
     selectedCustomer: Customer | null;
     selectedInvoice: Invoice | null;
-    customerDues: number;
     returnReasons: ReturnReason[];
-    manualItemCounter: number;
-    availableBatches: Record<number, any[]>;
 }
 
 // ============================================================================
@@ -30,15 +27,11 @@ interface ReturnLocalState {
 type ReturnAction =
     | { type: 'SET_STEP'; step: number }
     | { type: 'TOGGLE_CUSTOMER_MODAL' }
-    | { type: 'TOGGLE_MANUAL_ENTRY' }
     | { type: 'SET_SHOW_INVOICE_SECTION'; show: boolean }
     | { type: 'SET_RETURN_DATA'; data: Partial<ReturnFormData> }
     | { type: 'SET_SELECTED_CUSTOMER'; customer: Customer | null }
     | { type: 'SET_SELECTED_INVOICE'; invoice: Invoice | null }
-    | { type: 'SET_CUSTOMER_DUES'; dues: number }
     | { type: 'SET_RETURN_REASONS'; reasons: ReturnReason[] }
-    | { type: 'INCREMENT_MANUAL_COUNTER' }
-    | { type: 'SET_AVAILABLE_BATCHES'; productId: number; batches: any[] }
     | { type: 'RESET' };
 
 // ============================================================================
@@ -57,16 +50,10 @@ const initialReturnData: ReturnFormData = {
     items: [],
     return_reason: '',
     return_reason_notes: '',
-    return_method: 'credit_note',
-    subtotal_amount: '0.00',
-    tax_amount: '0.00',
-    total_amount: '0.00',
+    subtotal_amount: '',
+    tax_amount: '',
+    total_amount: '',
     credit_note_no: '',
-    status: 'PENDING',
-    include_gst: true,
-    credit_adjustment_type: 'future',
-    return_type: 'credit_note', // Default to credit note
-    withhold_gst: true,
     gst_tax_treatment: '',
     return_reason_choices: [],
     statutory_itc_reversal_evidence: [],
@@ -79,16 +66,12 @@ const initialState: ReturnLocalState = {
     ui: {
         currentStep: 1,
         showCustomerModal: false,
-        showManualEntry: false,
         showInvoiceSection: true
     },
     returnData: initialReturnData,
     selectedCustomer: null,
     selectedInvoice: null,
-    customerDues: 0,
     returnReasons: [],
-    manualItemCounter: 1,
-    availableBatches: {}
 };
 
 // ============================================================================
@@ -110,12 +93,6 @@ function returnReducer(
             return {
                 ...state,
                 ui: { ...state.ui, showCustomerModal: !state.ui.showCustomerModal }
-            };
-
-        case 'TOGGLE_MANUAL_ENTRY':
-            return {
-                ...state,
-                ui: { ...state.ui, showManualEntry: !state.ui.showManualEntry }
             };
 
         case 'SET_SHOW_INVOICE_SECTION':
@@ -142,31 +119,10 @@ function returnReducer(
                 selectedInvoice: action.invoice
             };
 
-        case 'SET_CUSTOMER_DUES':
-            return {
-                ...state,
-                customerDues: action.dues
-            };
-
         case 'SET_RETURN_REASONS':
             return {
                 ...state,
                 returnReasons: action.reasons
-            };
-
-        case 'INCREMENT_MANUAL_COUNTER':
-            return {
-                ...state,
-                manualItemCounter: state.manualItemCounter + 1
-            };
-
-        case 'SET_AVAILABLE_BATCHES':
-            return {
-                ...state,
-                availableBatches: {
-                    ...state.availableBatches,
-                    [action.productId]: action.batches
-                }
             };
 
         case 'RESET':
@@ -192,9 +148,6 @@ export function useSalesReturnState() {
         returnData: state.returnData,
         selectedCustomer: state.selectedCustomer,
         selectedInvoice: state.selectedInvoice,
-        customerDues: state.customerDues,
         returnReasons: state.returnReasons,
-        manualItemCounter: state.manualItemCounter,
-        availableBatches: state.availableBatches
     };
 }

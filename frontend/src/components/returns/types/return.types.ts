@@ -31,7 +31,6 @@ export interface ReturnFormItem {
     unit?: string;
     uom?: string;
     manufacturer?: string;
-    is_manual?: boolean;
     available_stock?: number | string;
     return_reason?: string;
     disposition?: string;
@@ -53,18 +52,10 @@ export interface ReturnFormData {
     items: ReturnFormItem[];
     return_reason: string;
     return_reason_notes: string;
-    return_method: string;
     subtotal_amount: string;
     tax_amount: string;
     total_amount: string;
     credit_note_no: string;
-    status: string;
-    include_gst: boolean;
-    credit_adjustment_type: 'future' | 'existing_dues';
-    /** Return resolution type */
-    return_type: 'credit_note' | 'replacement' | 'refund' | 'no_adjustment';
-    /** Whether to withhold GST from return (B2B option) */
-    withhold_gst: boolean;
     branch_id?: string;
     gst_tax_treatment?: '' | 'commercial_only' | 'statutory';
     return_reason_choices?: Array<{
@@ -95,7 +86,6 @@ export interface ReturnInvoiceSelectorProps {
     selectedCustomer: Customer | null;
     selectedInvoice: Invoice | null;
     onInvoiceSelect: (invoice: Invoice | null) => void;
-    onSkipInvoice: () => void;
     onChangeInvoice?: () => void;  // Clear selected invoice to allow re-selection
     showInvoiceSection: boolean;
     invoiceSearchRef: React.RefObject<any>;
@@ -104,19 +94,14 @@ export interface ReturnInvoiceSelectorProps {
 export interface ReturnItemsTableProps {
     items: ReturnFormItem[];
     selectedInvoice: Invoice | null;
-    showManualEntry: boolean;
-    availableBatches: Record<number, any[]>;
     onUpdateItem: (indexOrId: string | number, field: string, value: any) => void;
-    onAddManualItem: (product: any) => void;
     onRemoveItem: (itemId: string | number) => void;
-    onBackToInvoice?: () => void;
 }
 
 export interface ReturnReviewPanelProps {
     returnData: ReturnFormData;
     selectedCustomer: Customer | null;
     selectedInvoice?: any;
-    customerDues: number;
     onSave?: () => void;
     onPrint?: () => void;
     onBack: () => void;
@@ -132,7 +117,6 @@ export interface ReturnReviewPanelProps {
 export interface ReturnUIState {
     currentStep: number;
     showCustomerModal: boolean;
-    showManualEntry: boolean;
     showInvoiceSection: boolean;
 }
 
@@ -147,8 +131,5 @@ export interface ReturnState {
     returnData: ReturnFormData;
     selectedCustomer: Customer | null;
     selectedInvoice: Invoice | null;
-    customerDues: number;
     returnReasons: ReturnReason[];
-    manualItemCounter: number;
-    availableBatches: Record<number, any[]>;
 }

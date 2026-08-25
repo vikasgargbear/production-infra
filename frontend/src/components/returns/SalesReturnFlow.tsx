@@ -15,9 +15,7 @@ import {
   ModuleHeader, StandardDatePicker, Select, ProceedToReviewComponent, CustomerSearch, CustomerCreation
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { customersApi } from '../../services/api';
 import { canonicalReturnsApi } from '../../services/api/modules/returns/canonicalReturns.api';
-import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import { toast } from 'react-toastify';
 
 // Import extracted components
@@ -27,7 +25,7 @@ import { ReturnReviewPanel } from './components/ReturnReviewPanel';
 
 // Import hooks and types
 import { useSalesReturnState } from './hooks/useSalesReturnState';
-import type { SalesReturnFlowProps, ReturnFormItem } from './types/return.types';
+import type { SalesReturnFlowProps } from './types/return.types';
 import type { Customer, Invoice } from '../../types/api.types';
 
 import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBoundaries';
@@ -38,13 +36,10 @@ import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import {
   authoritativeReturnQuantity,
   authoritativeReturnRate,
-  editableReturnQuantity,
-  editableReturnRate,
-  hasExactReturnPreview,
-  sameReturnMoney,
 } from './utils/returnDecimal';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -55,7 +50,7 @@ const positiveExactQuantity = (value: unknown): boolean => {
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
-  const { dispatch, ui, returnData, selectedCustomer, selectedInvoice, customerDues, returnReasons, manualItemCounter, availableBatches } = useSalesReturnState();
+  const { dispatch, ui, returnData, selectedCustomer, selectedInvoice, returnReasons } = useSalesReturnState();
 
   // UI state for compact header mode
   const [showDetailsExpanded, setShowDetailsExpanded] = useState(true);
@@ -67,7 +62,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const headerComplete = Boolean(
     returnData.return_date &&
     returnData.return_reason &&
-    returnData.return_type &&
     selectedCustomer
   );
 
@@ -81,7 +75,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Refs
   const customerSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
-  const calculationRequestRef = useRef(0);
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
   const { canPrepare, unavailableReason } = getSalesReturnSubmissionBoundary(returnData as any);
@@ -148,16 +141,25 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       return;
     }
 
+    const invoiceId = String((invoice as any).id ?? (invoice as any).invoice_id ?? '');
+    if (!isCanonicalUuid(invoiceId)) {
+      toast.error('This invoice is missing its canonical UUID and cannot be returned.');
+      return;
+    }
+
     dispatch({ type: 'SET_SELECTED_INVOICE', invoice });
     dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
     dispatch({
       type: 'SET_RETURN_DATA',
       data: {
-        invoice_id: (invoice as any).id || (invoice as any).invoice_id,
+        invoice_id: invoiceId,
         invoice_number: invoice.invoice_number,
         invoice_date: invoice.invoice_date,
         original_invoice: invoice,
         items: [],
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
         return_reason: '',
         return_reason_choices: [],
         gst_tax_treatment: '',
@@ -170,16 +172,13 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     // Load invoice items from API
     try {
       const response = await canonicalReturnsApi.getSalesContext(
-        String((invoice as any).id || (invoice as any).invoice_id),
+        invoiceId,
         returnDataRef.current.return_date,
       );
       const context = response.data;
       const items = context.lines || [];
 
       if (items.length > 0) {
-        const onlyQuarantine = context.quarantine_locations.length === 1
-          ? context.quarantine_locations[0].id
-          : '';
         const mappedItems = items.map((item: any, index: number) => {
           const label = `Sales return context lines[${index}]`;
           const billed = authoritativeReturnQuantity(
@@ -196,27 +195,26 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
               value,
               `${label}.tax_component[${componentIndex}]`,
             ));
-          const total = addExactDecimals([billed, free], `${label}.return_quantity`, quantityOptions);
           return {
             ...item,
             id: item.invoice_dispatch_allocation_id,
             invoice_item_id: item.original_invoice_line_id,
             paid_quantity: billed,
             free_quantity: free,
-            return_paid_qty: billed,
-            return_free_qty: free,
-            return_quantity: total,
-            max_returnable_qty: total,
+            return_paid_qty: '',
+            return_free_qty: '',
+            return_quantity: '',
+            max_returnable_qty: addExactDecimals([billed, free], `${label}.return_quantity`, quantityOptions),
             max_paid_qty: billed,
             max_free_qty: free,
             unit_price: rate,
             tax_percent: addExactDecimals(taxRates, `${label}.tax_rate`, rateOptions),
+            discount_percent: '',
             batch_number: item.batch_number,
             expiry_date: item.expires_on,
-            selected: true,
-            is_manual: false,
+            selected: false,
             return_condition: '',
-            to_location_id: onlyQuarantine,
+            to_location_id: '',
             quarantine_locations: context.quarantine_locations,
           };
         });
@@ -236,6 +234,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           data: {
             branch_id: context.branch_id,
             items: mappedItems,
+            subtotal_amount: '',
+            tax_amount: '',
+            total_amount: '',
             return_reason: '',
             return_reason_choices: context.return_reason_choices,
             statutory_itc_reversal_evidence: context.statutory_itc_reversal_evidence,
@@ -254,6 +255,20 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     } catch (error) {
       console.error('Failed to load invoice items:', error);
       toast.error('Failed to load invoice items');
+      dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
+      dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
+      dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
+      dispatch({
+        type: 'SET_RETURN_DATA',
+        data: {
+          invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+          items: [], subtotal_amount: '', tax_amount: '', total_amount: '',
+          return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+          statutory_itc_reversal_evidence: [],
+          recipient_itc_reversal_evidence_attachment_id: '',
+          recipient_itc_reversal_confirmed_at: '',
+        },
+      });
     }
   }, [dispatch]);
 
@@ -263,10 +278,18 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       dispatch({ type: 'SET_SELECTED_CUSTOMER', customer: null });
       dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
       dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
-      dispatch({ type: 'TOGGLE_MANUAL_ENTRY' });
+      dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
       dispatch({
         type: 'SET_RETURN_DATA',
-        data: { customer_id: '', customer_details: null, invoice_id: '', items: [] }
+        data: {
+          customer_id: '', customer_details: null,
+          invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+          items: [], return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+          subtotal_amount: '', tax_amount: '', total_amount: '',
+          statutory_itc_reversal_evidence: [],
+          recipient_itc_reversal_evidence_attachment_id: '',
+          recipient_itc_reversal_confirmed_at: '',
+        }
       });
       return;
     }
@@ -284,122 +307,35 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       contact_person: (customer as any).contact_person || '',
       gst_number: (customer as any).gst_number || (customer as any).gst || '',
       drug_license_number: (customer as any).drug_license_number || (customer as any).drug_license || '',
-      credit_limit: (customer as any).credit_limit || 0,
-      credit_days: (customer as any).credit_days || 0
+      credit_limit: (customer as any).credit_limit,
+      credit_days: (customer as any).credit_days
     };
 
     dispatch({ type: 'SET_SELECTED_CUSTOMER', customer: fullCustomer as Customer });
     dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
     dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
+    dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
     dispatch({
       type: 'SET_RETURN_DATA',
       data: {
-        customer_id: (customer as any).id || (customer as any).customer_id || (customer as any).party_id,
+        customer_id: (customer as any).id ?? (customer as any).customer_id ?? (customer as any).party_id,
         customer_details: fullCustomer as Customer,
-        invoice_id: '',
-        items: []
+        invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+        items: [],
+        return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        statutory_itc_reversal_evidence: [],
+        recipient_itc_reversal_evidence_attachment_id: '',
+        recipient_itc_reversal_confirmed_at: '',
       }
     });
 
-    const customerId = (customer as any).id || (customer as any).customer_id || (customer as any).party_id;
-
-    try {
-      const detailResponse = await customersApi.getById(customerId);
-      if (detailResponse?.data) {
-        const detailedCustomer = {
-          ...fullCustomer,
-          ...detailResponse.data,
-          outstanding_amount: detailResponse.data.outstanding_amount || 0
-        };
-        dispatch({ type: 'SET_SELECTED_CUSTOMER', customer: detailedCustomer as Customer });
-        dispatch({ type: 'SET_CUSTOMER_DUES', dues: detailedCustomer.outstanding_amount || 0 });
-      } else {
-        dispatch({ type: 'SET_CUSTOMER_DUES', dues: 0 });
-      }
-    } catch (error) {
-      dispatch({ type: 'SET_CUSTOMER_DUES', dues: 0 });
-    }
   }, [dispatch]);
-
-  // Handle skip invoice
-  const handleSkipInvoice = useCallback(() => {
-    dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
-    dispatch({ type: 'TOGGLE_MANUAL_ENTRY' });
-    dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: false });
-    dispatch({
-      type: 'SET_RETURN_DATA',
-      data: { invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null, items: [] }
-    });
-  }, [dispatch]);
-
-  // Add manual item
-  const handleAddManualItem = useCallback((product: any) => {
-    if (!product) return;
-
-    // Batch is already selected in ProductSearch's BatchSelector modal
-    // No need for async fetch - batch data is embedded in product
-
-    const sellingPrice = editableReturnRate(
-      String(product.sale_price || product.selling_price || product.unit_price || product.mrp || '0'),
-      'Manual return unit price',
-    );
-    const gstPercent = editableReturnRate(
-      String(product.gst_percent || product.tax_rate || '0'),
-      'Manual return tax rate',
-    );
-    const available = editableReturnQuantity(
-      String(product.quantity || product.stock || '0'),
-      'Manual return available quantity',
-    );
-
-
-
-    const newItem: ReturnFormItem = {
-      id: `manual-${manualItemCounter}`,
-      product_id: product.product_id,
-      product_name: product.product_name || product.name,
-      batch_id: product.batch_id || product.selectedBatch?.batch_id || undefined,
-      batch_number: product.batch_number || product.selectedBatch?.batch_number || '',
-      manufacturing_date: product.manufacturing_date || product.selectedBatch?.manufacturing_date || undefined,
-      expiry_date: product.expiry_date || product.selectedBatch?.expiry_date || undefined,
-      // Pack info from batch
-      packages_per_box: product.packages_per_box || product.selectedBatch?.packages_per_box,
-      units_per_pack: product.units_per_pack || product.selectedBatch?.units_per_pack,
-      unit_price: sellingPrice,
-      tax_percent: gstPercent,
-      quantity: available,
-      paid_quantity: available,
-      free_quantity: '0.000000',
-      return_paid_qty: '1.000000',
-      return_free_qty: '0.000000',
-      return_quantity: '1.000000',
-      max_returnable_qty: available,
-      return_reason: '',
-      selected: true,
-      hsn_code: product.hsn_code || product.hsn || '',
-      unit: product.unit || product.uom || 'PCS',
-      manufacturer: product.manufacturer || '',
-      is_manual: true,
-      available_stock: editableReturnQuantity(
-        String(product.total_quantity_available || product.stock || '0'),
-        'Manual return stock quantity',
-      ),
-      discount_percent: '0.000000',
-      requires_approval: true,
-      verification_status: 'pending',
-      disposition: 'QUARANTINE'
-    };
-
-    const updatedItems = [...returnData.items, newItem];
-    dispatch({ type: 'SET_RETURN_DATA', data: { items: updatedItems } });
-    dispatch({ type: 'INCREMENT_MANUAL_COUNTER' });
-  }, [manualItemCounter, returnData.items, dispatch]);
 
   // Remove item
   const handleRemoveItem = useCallback((itemId: string | number) => {
-    console.log('handleRemoveItem called with:', itemId);
-    console.log('Current items:', returnData.items.map(i => ({ id: i.id, invoice_item_id: i.invoice_item_id })));
-
     const updatedItems = returnData.items.filter((item, index) => {
       // Match by id, invoice_item_id, or index
       if (item.id === itemId) return false;
@@ -407,8 +343,10 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       if (index === itemId) return false;
       return true;
     });
-    console.log('After filter, items count:', updatedItems.length);
-    dispatch({ type: 'SET_RETURN_DATA', data: { items: updatedItems } });
+    dispatch({
+      type: 'SET_RETURN_DATA',
+      data: { items: updatedItems, subtotal_amount: '', tax_amount: '', total_amount: '' },
+    });
   }, [returnData.items, dispatch]);
 
   // Update item
@@ -420,52 +358,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       return item;
     });
 
-    dispatch({ type: 'SET_RETURN_DATA', data: { items: updatedItems } });
+    dispatch({
+      type: 'SET_RETURN_DATA',
+      data: { items: updatedItems, subtotal_amount: '', tax_amount: '', total_amount: '' },
+    });
   }, [returnData.items, dispatch]);
-
-  // Calculate totals whenever items or GST setting changes
-  useEffect(() => {
-    const requestId = ++calculationRequestRef.current;
-    if (!returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity))) return;
-
-    const calculate = async () => {
-      try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales');
-        if (requestId !== calculationRequestRef.current) return;
-        const totals = calculation.totals;
-        let calculatedIndex = 0;
-        let itemValuesChanged = false;
-        const items = returnDataRef.current.items.map(item => {
-          if (!item.selected || !positiveExactQuantity(item.return_quantity)) return item;
-          const calculated = calculation.items[calculatedIndex++] || {};
-          const totalAmount = calculated.total_amount;
-          const taxableAmount = calculated.taxable_amount;
-          const taxAmount = calculated.tax_amount;
-          if (
-            sameReturnMoney((item as any).total_amount, totalAmount, 'Sales return line total') &&
-            sameReturnMoney((item as any).taxable_amount, taxableAmount, 'Sales return taxable amount') &&
-            sameReturnMoney((item as any).tax_amount, taxAmount, 'Sales return tax amount')
-          ) return item;
-          itemValuesChanged = true;
-          return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
-        });
-        dispatch({
-          type: 'SET_RETURN_DATA',
-          data: {
-            ...(itemValuesChanged ? { items } : {}),
-            subtotal_amount: totals.subtotal_amount,
-            tax_amount: totals.tax_amount,
-            total_amount: totals.total_amount,
-          }
-        });
-      } catch (error) {
-        if (requestId === calculationRequestRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Unable to calculate return totals.');
-        }
-      }
-    };
-    void calculate();
-  }, [returnData.items, returnData.withhold_gst, returnData.customer_id, dispatch]);
 
   // Validate return
   const validateReturn = (): boolean => {
@@ -474,8 +371,8 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       return false;
     }
 
-    if (!selectedInvoice && !ui.showManualEntry) {
-      toast.error('Please select an invoice or use manual entry');
+    if (!selectedInvoice) {
+      toast.error('Select a posted dispatch-allocated invoice. Manual returns are not canonical.');
       return false;
     }
 
@@ -483,22 +380,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     if (!hasSelectedItems) {
       toast.error('Please add items to return');
       return false;
-    }
-
-    if (!hasExactReturnPreview(returnData.items, returnData)) {
-      toast.error('Wait for the authoritative return calculation before reviewing this return.');
-      return false;
-    }
-
-    if (ui.showManualEntry) {
-      const itemsWithoutBatch = returnData.items.filter(item =>
-        item.selected && positiveExactQuantity(item.return_quantity) && !item.batch_id && !item.batch_number
-      );
-
-      if (itemsWithoutBatch.length > 0) {
-        toast.error(`Batch information is mandatory for pharmaceutical returns. Missing batch for: ${itemsWithoutBatch[0].product_name}`);
-        return false;
-      }
     }
 
     if (!returnData.return_reason) {
@@ -513,16 +394,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           return false;
         }
 
-        if (item.is_manual && exactDecimalUnits(
-          item.unit_price,
-          `Unit price for ${item.product_name}`,
-          rateOptions,
-        ) <= 0n) {
-          toast.error(`Please enter a valid unit price for ${item.product_name}`);
-          return false;
-        }
-
-        if (!item.is_manual && compareExactDecimals(
+        if (compareExactDecimals(
           item.return_quantity,
           item.max_returnable_qty,
           `Return quantity for ${item.product_name}`,
@@ -532,6 +404,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           return false;
         }
       }
+    }
+
+    if (!canPrepare) {
+      toast.error(unavailableReason);
+      return false;
     }
 
     return true;
@@ -618,16 +495,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                       {/* Divider */}
                       <div className="h-6 w-px bg-gray-300"></div>
 
-                      {/* Resolution */}
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <span className="text-gray-500">Resolution:</span>
-                        <span className="font-medium text-gray-900">
-                          {returnData.return_type === 'credit_note' && '📝 Credit Note'}
-                          {returnData.return_type === 'replacement' && '🔄 Replacement'}
-                          {returnData.return_type === 'refund' && '💰 Refund'}
-                          {returnData.return_type === 'no_adjustment' && '📦 No Adjustment'}
-                        </span>
-                      </div>
                     </div>
 
                     {/* Edit Button */}
@@ -646,7 +513,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 /* EXPANDED HEADER - Full form for editing */
                 <>
                   {/* Return Info - 3-column grid with consistent h-10 heights */}
-                  <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="grid grid-cols-2 gap-4 mb-6">
                     <StandardDatePicker
                       label="Return Date"
                       value={returnData.return_date || ''}
@@ -662,6 +529,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                             invoice_date: '',
                             original_invoice: null,
                             items: [],
+                            subtotal_amount: '',
+                            tax_amount: '',
+                            total_amount: '',
                             return_reason: '',
                             return_reason_choices: [],
                             gst_tax_treatment: '',
@@ -693,27 +563,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                         placeholder="Select reason..."
                         className="w-full"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Return Resolution <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={returnData.return_type || 'credit_note'}
-                        onChange={(e) => dispatch({
-                          type: 'SET_RETURN_DATA',
-                          data: {
-                            return_type: e.target.value as any,
-                            return_method: e.target.value // Keep legacy field in sync
-                          }
-                        })}
-                        className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                      >
-                        <option value="credit_note">Credit Note (Recommended)</option>
-                        <option value="replacement">Replacement</option>
-                        <option value="refund">Refund (Requires Approval)</option>
-                        <option value="no_adjustment">No Financial Adjustment</option>
-                      </select>
                     </div>
                   </div>
 
@@ -767,10 +616,20 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 selectedCustomer={selectedCustomer}
                 selectedInvoice={selectedInvoice}
                 onInvoiceSelect={handleInvoiceSelect}
-                onSkipInvoice={handleSkipInvoice}
                 onChangeInvoice={() => {
                   dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
-                  dispatch({ type: 'SET_RETURN_DATA', data: { items: [] } });
+                  dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
+                  dispatch({
+                    type: 'SET_RETURN_DATA',
+                    data: {
+                      invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+                      items: [], subtotal_amount: '', tax_amount: '', total_amount: '',
+                      return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+                      statutory_itc_reversal_evidence: [],
+                      recipient_itc_reversal_evidence_attachment_id: '',
+                      recipient_itc_reversal_confirmed_at: '',
+                    },
+                  });
                   dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
                 }}
                 showInvoiceSection={ui.showInvoiceSection}
@@ -788,7 +647,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                         type: 'SET_RETURN_DATA',
                         data: {
                           gst_tax_treatment: value as any,
-                          withhold_gst: value === 'commercial_only',
                           recipient_itc_reversal_evidence_attachment_id: '',
                           recipient_itc_reversal_confirmed_at: '',
                         },
@@ -844,16 +702,8 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
               <ReturnItemsTable
                 items={returnData.items}
                 selectedInvoice={selectedInvoice}
-                showManualEntry={ui.showManualEntry}
-                availableBatches={availableBatches}
                 onUpdateItem={handleUpdateItem}
-                onAddManualItem={handleAddManualItem}
                 onRemoveItem={handleRemoveItem}
-                onBackToInvoice={ui.showManualEntry && !ui.showInvoiceSection ? () => {
-                  dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
-                  dispatch({ type: 'TOGGLE_MANUAL_ENTRY' });
-                  dispatch({ type: 'SET_RETURN_DATA', data: { items: [] } });
-                } : undefined}
               />
             </div>
           </div>
@@ -861,7 +711,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           {/* Footer */}
           <ProceedToReviewComponent
             currentStep={1}
-            canProceed={Boolean(selectedCustomer && (selectedInvoice || ui.showManualEntry) && returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity)))}
+            canProceed={Boolean(selectedCustomer && selectedInvoice && returnData.items.some(item => item.selected && positiveExactQuantity(item.return_quantity)))}
             onBack={undefined}
             onProceed={handleProceedToReview}
             onReset={() => {
@@ -911,7 +761,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             returnData={returnData}
             selectedCustomer={selectedCustomer}
             selectedInvoice={selectedInvoice}
-            customerDues={customerDues}
             onSave={canPrepare && !preparedApproval ? handlePrepareReturn : undefined}
             onBack={preparedApproval ? () => undefined : () => dispatch({ type: 'SET_STEP', step: 1 })}
             saving={preparing}

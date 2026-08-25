@@ -12,11 +12,11 @@ interface PurchaseInvoice {
   grn_date?: string;
   grn_number?: string;
   supplier_name?: string;
-  total_amount?: number;
-  invoice_amount?: number;
+  total_amount?: number | string | null;
+  invoice_amount?: number | string | null;
   has_returns?: boolean;
   can_return?: boolean;
-  total_items?: number;
+  total_items?: number | null;
   grn_ids?: string[];
   [key: string]: unknown;
 }
@@ -60,8 +60,20 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
   });
 
   const handleSelect = (invoice: PurchaseInvoice): void => {
-    setSelectedInvoiceId(invoice.supplier_invoice_id || invoice.grn_id || null);
+    setSelectedInvoiceId(invoice.supplier_invoice_id ?? invoice.grn_id ?? null);
     onInvoiceSelect(invoice);
+  };
+
+  const formatAmount = (value: PurchaseInvoice['total_amount']): string => {
+    if (value === null || value === undefined || value === '') return 'Amount unavailable';
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numeric)) return 'Invalid amount';
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numeric);
   };
 
   return (
@@ -91,10 +103,10 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
       {!loading && filteredInvoices.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredInvoices.map((invoice) => {
-            const invoiceId = invoice.supplier_invoice_id || invoice.grn_id;
-            const invoiceNumber = invoice.supplier_invoice_number || invoice.invoice_number;
-            const invoiceDate = invoice.invoice_date || invoice.grn_date;
-            const totalAmount = invoice.total_amount || invoice.invoice_amount;
+            const invoiceId = invoice.supplier_invoice_id ?? invoice.grn_id;
+            const invoiceNumber = invoice.supplier_invoice_number ?? invoice.invoice_number;
+            const invoiceDate = invoice.invoice_date ?? invoice.grn_date;
+            const totalAmount = invoice.total_amount ?? invoice.invoice_amount;
             const hasGrn = invoice.grn_ids && invoice.grn_ids.length > 0;
 
             return (
@@ -111,7 +123,7 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2">
                     <FileText className="w-5 h-5 text-gray-600" />
-                    <h4 className="font-semibold text-gray-900">#{invoiceNumber}</h4>
+                    <h4 className="font-semibold text-gray-900">#{invoiceNumber || 'Number unavailable'}</h4>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                 </div>
@@ -123,11 +135,11 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
                   </div>
 
                   <div className="text-gray-600">
-                    <span className="font-medium">Supplier:</span> {invoice.supplier_name}
+                    <span className="font-medium">Supplier:</span> {invoice.supplier_name || 'Unavailable'}
                   </div>
 
                   <div className="text-gray-600">
-                    <span className="font-medium">Amount:</span> ₹{totalAmount?.toLocaleString() || '0'}
+                    <span className="font-medium">Amount:</span> {formatAmount(totalAmount)}
                   </div>
 
                   {hasGrn && (
@@ -148,8 +160,14 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <Package className="w-3 h-3" />
                       <span>
-                        {invoice.total_items || 0} items •
-                        {invoice.can_return !== false ? ' Returnable' : ' Non-returnable'}
+                        {invoice.total_items === null || invoice.total_items === undefined
+                          ? 'Item count unavailable'
+                          : `${invoice.total_items} items`} •
+                        {invoice.can_return === true
+                          ? ' Returnable'
+                          : invoice.can_return === false
+                            ? ' Non-returnable'
+                            : ' Return authority pending context'}
                       </span>
                     </div>
                   </div>
