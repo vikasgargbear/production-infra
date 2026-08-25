@@ -11,6 +11,15 @@ from app.core.read_only_router import (
 import app.main as main_module
 
 
+_EFFECTIVE_APP_ROUTES = tuple(
+    route
+    for route in main_module.app.routes
+    if hasattr(route, "dependant")
+    and hasattr(route, "endpoint")
+    and getattr(route, "methods", None)
+)
+
+
 MUTATION_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 LEGACY_PREFIXES = (
     "/api/sales-orders", "/api/invoices", "/api/challan", "/api/conversions",
@@ -96,17 +105,10 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
 
 
 def _routes():
-    # The CORS contract intentionally reloads app.main to verify environment-
-    # derived middleware.  Audit the effective FastAPI application rather
-    # than its construction-time APIRouter, which a reload may replace after
-    # the routes have already been mounted on the application.
-    return [
-        route
-        for route in main_module.app.routes
-        if hasattr(route, "dependant")
-        and hasattr(route, "endpoint")
-        and getattr(route, "methods", None)
-    ]
+    # Snapshot the production application at test-module import. CORS tests
+    # intentionally reload app.main later in the same pytest process; that
+    # must not replace the exact route graph this write fence is auditing.
+    return list(_EFFECTIVE_APP_ROUTES)
 
 
 def _direct_durable_side_effects(route: APIRoute):
