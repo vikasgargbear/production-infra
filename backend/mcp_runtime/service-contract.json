@@ -65,6 +65,7 @@
     "erp_settlement_choice_search",
     "erp_stock_batch_search",
     "erp_supplier_advance_prepare",
+    "erp_supplier_advance_readback",
     "erp_supplier_invoice_get",
     "erp_supplier_invoice_prepare",
     "erp_supplier_payment_prepare",
@@ -97,6 +98,7 @@
       "erp_sales_order_prepare",
       "erp_sales_return_prepare",
       "erp_supplier_advance_prepare",
+      "erp_supplier_advance_readback",
       "erp_supplier_invoice_prepare",
       "erp_supplier_payment_prepare"
     ],

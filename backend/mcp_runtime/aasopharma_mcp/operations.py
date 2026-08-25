@@ -144,6 +144,11 @@ OPERATOR_OPERATIONS.update(
             "erp_bank_reconciliation_get", "automation.command.status.get",
             SHARED_ACTION_SCHEMAS["erp_bank_reconciliation_get"], "bank_reconciliation_readback",
         ),
+        "erp_supplier_advance_readback": OperatorOperation(
+            "erp_supplier_advance_readback", "automation.command.status.get",
+            SHARED_ACTION_SCHEMAS["erp_supplier_advance_readback"],
+            "supplier_advance_readback",
+        ),
         "erp_expense_claim_readback": OperatorOperation(
             "erp_expense_claim_readback", "automation.command.status.get",
             SHARED_ACTION_SCHEMAS["erp_expense_claim_readback"], "readback",
@@ -276,7 +281,10 @@ class OperationGateway:
         claims, organization_id = _oauth_identity(access)
         operation_mode = (
             "read"
-            if operation.kind in {"status", "bank_reconciliation_readback", "readback"}
+            if operation.kind in {
+                "status", "bank_reconciliation_readback", "supplier_advance_readback",
+                "readback",
+            }
             else "write"
         )
         payload = {
@@ -382,6 +390,10 @@ class OperationGateway:
         elif operation.kind == "bank_reconciliation_readback":
             method = "GET"
             path = f"/api/internal/mcp/commands/{command_request_id}/bank-reconciliation-readback"
+            payload = None
+        elif operation.kind == "supplier_advance_readback":
+            method = "GET"
+            path = f"/api/internal/mcp/commands/{command_request_id}/supplier-advance-readback"
             payload = None
         elif operation.kind == "readback":
             method = "GET"

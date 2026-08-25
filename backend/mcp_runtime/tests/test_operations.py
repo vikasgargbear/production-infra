@@ -89,7 +89,10 @@ def _operator_grant(access: AccessToken, operation_name: str, command_id=None) -
         "client_id": access.client_id,
         "operation_key": operation.operation_key,
         "capability_code": operation.operation_key,
-        "operation_mode": "read" if operation.kind == "status" else "write",
+        "operation_mode": "read" if operation.kind in {
+            "status", "bank_reconciliation_readback", "supplier_advance_readback",
+            "readback",
+        } else "write",
         "permission_code": "automation.command.view",
         "organization_id": access.claims["organization_id"],
         "membership_id": str(uuid4()),
@@ -178,6 +181,9 @@ async def test_readiness_requires_the_app_owned_grant_authority() -> None:
         ("erp_operation_review_get", "/review", "GET"),
         ("erp_operation_execute", "/execute", "POST"),
         ("erp_operation_status_get", "", "GET"),
+        ("erp_bank_reconciliation_get", "/bank-reconciliation-readback", "GET"),
+        ("erp_supplier_advance_readback", "/supplier-advance-readback", "GET"),
+        ("erp_expense_claim_readback", "/expense-claim-readback", "GET"),
     ),
 )
 async def test_shared_operator_tools_use_action_grant_and_delegated_token(

@@ -46,6 +46,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
     "erp_operation_status_get": "Read immutable status, result, failure, and audit references for one authorized command.",
     "erp_bank_reconciliation_get": "Read authoritative bank-statement, posted-journal, audit, and outbox evidence for one succeeded reconciliation command.",
+    "erp_supplier_advance_readback": "Read one posted supplier advance with its exact purchase-order-line allocation, prepayment open item, withholding identity, and balanced journal.",
     "erp_expense_claim_readback": "Read a posted expense claim with approved lines, verified receipt hashes, balanced journal totals, and accounting-event identity.",
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
@@ -1154,6 +1155,7 @@ SHARED_ACTION_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_operation_execute": EXECUTE_INPUT_SCHEMA,
     "erp_operation_status_get": STATUS_INPUT_SCHEMA,
     "erp_bank_reconciliation_get": STATUS_INPUT_SCHEMA,
+    "erp_supplier_advance_readback": STATUS_INPUT_SCHEMA,
     "erp_expense_claim_readback": STATUS_INPUT_SCHEMA,
 }
 

@@ -49,6 +49,7 @@ EXPECTED_SHARED_TOOLS = {
     "erp_operation_execute",
     "erp_operation_status_get",
     "erp_bank_reconciliation_get",
+    "erp_supplier_advance_readback",
     "erp_expense_claim_readback",
 }
 EXPECTED_BASE_READ_TOOLS = {
@@ -201,6 +202,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_operation_review_get.command_request_id",
         "erp_operation_status_get.command_request_id",
         "erp_bank_reconciliation_get.command_request_id",
+        "erp_supplier_advance_readback.command_request_id",
         "erp_expense_claim_readback.command_request_id",
     },
     "document_discount_eligible": {

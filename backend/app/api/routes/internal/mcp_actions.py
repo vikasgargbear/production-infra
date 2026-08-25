@@ -11,7 +11,9 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jwt import InvalidTokenError as JWTError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy.orm import Session
 from ....core.auth.jwt_auth import decode_jwt
+from ....core.database import get_db
 from ....domain.operator_actions import (
     ACTION_POLICIES,
     PREPARE_PAYLOAD_MODELS,
@@ -29,6 +31,11 @@ from ....domain.operator_actions import (
     validate_prepare_payload_semantics,
 )
 from .mcp_agent_grants import _internal_auth, bearer
+from ..canonical_supplier_advance_reads import (
+    PostedSupplierAdvanceResponse,
+    posted_supplier_advance,
+)
+from ..web_operator_actions import ExpenseClaimReadback
 
 
 router = APIRouter(
@@ -604,12 +611,64 @@ def bank_reconciliation_readback(
     return BankReconciliationReadback(**dict(row))
 
 
-@router.get("/commands/{command_request_id}/expense-claim-readback")
+@router.get(
+    "/commands/{command_request_id}/supplier-advance-readback",
+    response_model=PostedSupplierAdvanceResponse,
+)
+def supplier_advance_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> PostedSupplierAdvanceResponse:
+    """Reuse the canonical REST projection for one succeeded supplier advance."""
+
+    operation_key = "automation.command.status.get"
+    _require_release_gate(service)
+    _require_authority(context, operation_key)
+    _require_command_binding(context, command_request_id)
+    try:
+        status = service.get_status(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action_error(exc)
+    if (
+        status.command_type != "finance.supplier_advance.post"
+        or status.status != "succeeded"
+        or status.resource_type != "payment"
+        or status.resource_id is None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=_error_detail(
+                ActionErrorCode.POLICY_BLOCKED,
+                "Supplier-advance readback requires one succeeded payment command",
+            ),
+        )
+    row = posted_supplier_advance(
+        payment_id=status.resource_id,
+        user={
+            "org_id": str(context.organization_id),
+            "auth_user_id": str(context.auth_user_id),
+            "is_admin": context.organization_scope,
+            "branch_ids": [str(value) for value in context.branch_ids],
+        },
+        db=db,
+    )
+    return PostedSupplierAdvanceResponse(**dict(row))
+
+
+@router.get(
+    "/commands/{command_request_id}/expense-claim-readback",
+    response_model=ExpenseClaimReadback,
+)
 def expense_claim_readback(
     command_request_id: UUID,
     context: ActionContext = Depends(get_action_context),
     service: OperatorActionService = Depends(get_operator_action_service),
-) -> dict[str, Any]:
+) -> ExpenseClaimReadback:
     """Return authoritative posted expense details over the same status delegation."""
     operation_key = "automation.command.status.get"
     _require_release_gate(service)
@@ -622,7 +681,7 @@ def expense_claim_readback(
         )
     except OperatorActionError as exc:
         _raise_action_error(exc)
-    return dict(row)
+    return ExpenseClaimReadback(**dict(row))
 
 
 @router.get("/actions/ready")
