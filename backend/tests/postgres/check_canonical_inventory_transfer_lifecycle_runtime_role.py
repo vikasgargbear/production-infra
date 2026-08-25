@@ -140,15 +140,18 @@ def _seed(session: Session) -> None:
                 'self_consent','v1',decode(repeat('32',32),'hex'),:membership,transaction_timestamp(),
                 :membership,transaction_timestamp(),transaction_timestamp()+interval '1 hour','active',:membership,:membership);
             INSERT INTO automation.agent_grant_capabilities(
-              org_id,agent_grant_id,capability_code,operation_mode,risk_class,approval_policy,created_by_membership_id)
-            SELECT :org,:agent_grant,capability_code,'write','consequential_write','actor_confirmation',:membership
+              org_id,agent_grant_id,capability_code,operation_mode,risk_class,approval_policy,
+              maximum_amount,currency_code,created_by_membership_id)
+            SELECT :org,:agent_grant,capability_code,'write','consequential_write','actor_confirmation',
+                   1000.00,'INR',:membership
               FROM unnest(ARRAY[
                 'inventory.transfer.prepare','automation.command.approve','automation.command.execute'
               ]::text[]) AS capability_code;
             INSERT INTO automation.agent_grant_capabilities(
-              org_id,agent_grant_id,capability_code,operation_mode,risk_class,approval_policy,created_by_membership_id)
+              org_id,agent_grant_id,capability_code,operation_mode,risk_class,approval_policy,
+              maximum_amount,currency_code,created_by_membership_id)
             VALUES (:org,:limited_agent_grant,'inventory.transfer.prepare','write',
-                    'consequential_write','actor_confirmation',:membership);
+                    'consequential_write','actor_confirmation',1000.00,'INR',:membership);
 
             INSERT INTO core.document_sequences(
               org_id,id,branch_id,document_type,fiscal_year_start,prefix,padding,next_value,status,

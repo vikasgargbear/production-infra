@@ -166,6 +166,8 @@ def test_postgres_lifecycle_fixture_executes_real_command_as_runtime_role():
         'Decimal("3.000000")',
         'Decimal("2.000000")',
         "source-only runtime grant prepared an inter-branch transfer",
+        "maximum_amount,currency_code",
+        "1000.00,'INR'",
         "SELECT count(*) FROM core.organizations WHERE id=:other_org",
         "outer.rollback()",
     ):
