@@ -122,6 +122,7 @@ def test_bank_reconciliation_has_restricted_postgres15_concurrency_evidence():
     gate = POSTGRES_GATE.read_text(encoding="utf-8")
     assert "SET SESSION AUTHORIZATION \"erp_runtime\"" in fixture
     assert "connection.commit()" in fixture
+    assert "def _close_runtime_connection" in fixture
     assert "ThreadPoolExecutor(max_workers=2)" in fixture
     assert "changed bank-account source version executed" in fixture
     assert "partial bank reconciliation was accepted" in fixture

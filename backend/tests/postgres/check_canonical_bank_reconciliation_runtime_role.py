@@ -214,6 +214,16 @@ def _runtime_service(engine) -> tuple[SqlAlchemyOperatorActionService, object]:
     return SqlAlchemyOperatorActionService(factory, runtime_principal_configured=True), connection
 
 
+def _close_runtime_connection(connection) -> None:
+    """Return a connection to the pool only after restoring its login authority."""
+
+    if connection.in_transaction():
+        connection.rollback()
+    connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
+    connection.commit()
+    connection.close()
+
+
 def _set_bank_row_version(engine, row_version: int) -> None:
     """Migration-only fault injection for execute-time source revalidation."""
 
@@ -277,10 +287,8 @@ def main() -> None:
             )
             assert approved.status == "approved"
         finally:
-            maker_connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
-            checker_connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
-            maker_connection.close()
-            checker_connection.close()
+            _close_runtime_connection(maker_connection)
+            _close_runtime_connection(checker_connection)
 
         _set_bank_row_version(engine, 2)
         stale_service, stale_connection = _runtime_service(engine)
@@ -297,8 +305,7 @@ def main() -> None:
             else:
                 raise AssertionError("changed bank-account source version executed")
         finally:
-            stale_connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
-            stale_connection.close()
+            _close_runtime_connection(stale_connection)
         _set_bank_row_version(engine, 1)
 
         def execute_once(key: str):
@@ -311,8 +318,7 @@ def main() -> None:
                     context=_context(),
                 )
             finally:
-                connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
-                connection.close()
+                _close_runtime_connection(connection)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(execute_once, ("pg15-bank-execute-a", "pg15-bank-execute-b")))
@@ -369,8 +375,7 @@ def main() -> None:
                 else:
                     raise AssertionError("erp_runtime bypassed the reviewed reconciliation command")
         finally:
-            read_connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
-            read_connection.close()
+            _close_runtime_connection(read_connection)
     finally:
         engine.dispose()
 
