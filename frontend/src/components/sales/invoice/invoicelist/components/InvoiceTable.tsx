@@ -14,6 +14,7 @@ import {
     salesStatusLabel,
     salesStatusTone,
 } from '../utils/salesHistoryPresentation';
+import { formatCalendarDate } from '../../../../../utils/calendarDate';
 
 export const InvoiceTable = React.memo<InvoiceTableProps>(({
     invoices,
@@ -30,11 +31,11 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
 
     const formatDate = (dateString: string) => {
         if (!dateString) return 'Not specified';
-        const date = new Date(dateString);
-        if (Number.isNaN(date.getTime())) return 'Not specified';
-        return date.toLocaleDateString('en-IN', {
-            day: '2-digit', month: 'short', year: 'numeric',
-        });
+        try {
+            return formatCalendarDate(dateString);
+        } catch {
+            return 'Not specified';
+        }
     };
 
     const createDocumentMessage = (document: Invoice) => {

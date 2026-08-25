@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Download, Package, RotateCcw,
   X, AlertCircle, RefreshCw, Users, Truck
@@ -6,6 +6,7 @@ import {
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
 import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
 import { formatExactCurrency } from '../../utils/exactDecimal';
+import { formatCalendarDate } from '../../utils/calendarDate';
 import { resolvePurchaseHistoryDates } from '../purchase/purchaselisthistory/utils/purchaseHistoryProjection';
 import {
   normalizeReturnStatus,
@@ -60,7 +61,7 @@ const BulkActionBar: React.FC<{
         <div className="flex items-center space-x-2">
           <Button variant="outline" size="sm" onClick={onExport}>
             <Download className="w-4 h-4 mr-2" />
-            Export
+            Export Selected
           </Button>
           <Button variant="ghost" size="sm" onClick={onClear}>
             <X className="w-4 h-4" />
@@ -78,6 +79,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const [selectedReturns, setSelectedReturns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchTimerRef = useRef<number | undefined>();
+  const requestSequenceRef = useRef(0);
+  const businessDateRef = useRef<string | null>(null);
   const [pagination, setPagination] = useState({
     total: 0,
     page: 1,
@@ -158,6 +162,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
   // Fetch returns from backend
   const fetchReturns = async (page = 1, filters: any = {}) => {
+    const requestSequence = ++requestSequenceRef.current;
     setLoading(true);
     setError(null);
 
@@ -189,6 +194,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         items_count: row.line_count,
       }));
 
+      if (requestSequence !== requestSequenceRef.current) return;
+      businessDateRef.current = response.business_date;
       setReturns(allReturns);
       setPagination({
         total: response.total,
@@ -197,16 +204,21 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         total_pages: Math.ceil(response.total / pagination.per_page)
       });
     } catch (error) {
+      if (requestSequence !== requestSequenceRef.current) return;
       // Log error for debugging if needed
       setError('Failed to fetch returns. Please try again.');
     } finally {
-      setLoading(false);
+      if (requestSequence === requestSequenceRef.current) setLoading(false);
     }
   };
 
   // Load returns on component mount and when return type changes
   useEffect(() => {
     fetchReturns(1, { return_type: returnType });
+    return () => {
+      if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+      requestSequenceRef.current += 1;
+    };
   }, [returnType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle return type change
@@ -218,13 +230,26 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
   // Refresh returns
   const handleRefresh = () => {
-    fetchReturns(pagination.page);
+    if (searchTimerRef.current !== undefined) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = undefined;
+    }
+    fetchReturns(pagination.page, { ...activeFilters, search: searchQuery, return_type: returnType });
   };
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
+    if (searchTimerRef.current !== undefined) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = undefined;
+    }
+    if (!businessDateRef.current) {
+      setError('Organization business date is unavailable.');
+      return;
+    }
     const preset = resolvePurchaseHistoryDates(
       String(filters.date_preset || 'all'), String(filters.dateFrom || ''), String(filters.dateTo || ''),
+      businessDateRef.current,
     );
     const resolvedFilters = {
       ...filters,
@@ -239,32 +264,42 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   // Handle search changes with auto-search
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    // Auto-search after a short delay to avoid too many API calls
-    const timeoutId = setTimeout(() => {
+    if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+    requestSequenceRef.current += 1;
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = undefined;
       fetchReturns(1, { ...activeFilters, search: query });
     }, 300);
-
-    return () => clearTimeout(timeoutId);
   };
 
-  const exportRows = (rows: ReturnsHistoryRow[]) => {
+  const exportRows = (rows: ReturnsHistoryRow[], selected: boolean) => {
     if (!rows.length) return;
     const blob = new Blob([returnsHistoryCsv(rows)], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `returns-${new Date().toISOString().slice(0, 10)}.csv`;
+    if (!businessDateRef.current) {
+      URL.revokeObjectURL(url);
+      setError('Organization business date is unavailable.');
+      return;
+    }
+    link.download = `returns-${selected ? 'selected' : 'page'}-${businessDateRef.current}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
   const handleExportSelected = () => exportRows(
     returns.filter(item => selectedReturns.includes(item.id)),
+    true,
   );
 
   const formatDate = (value: string) => {
     if (!value) return 'N/A';
-    return new Date(value).toLocaleDateString('en-IN');
+    try {
+      return formatCalendarDate(value);
+    } catch {
+      return 'N/A';
+    }
   };
 
   // Columns ordered to match Invoice History: Date, Doc #, Party, Amount, Status
@@ -388,7 +423,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             },
             {
               label: "Export Current Page",
-              onClick: () => exportRows(returns),
+              onClick: () => exportRows(returns, false),
               variant: "default",
               icon: Download,
               disabled: loading || returns.length === 0,
@@ -479,8 +514,12 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                     <Button
                       variant="outline"
                       onClick={() => {
+                        if (searchTimerRef.current !== undefined) {
+                          window.clearTimeout(searchTimerRef.current);
+                          searchTimerRef.current = undefined;
+                        }
                         setSearchQuery('');
-                        fetchReturns(1);
+                        fetchReturns(1, { ...activeFilters, search: '', return_type: returnType });
                       }}
                       className="mt-4"
                     >
@@ -511,7 +550,15 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => fetchReturns(pagination.page - 1)}
+                        onClick={() => {
+                          if (searchTimerRef.current !== undefined) {
+                            window.clearTimeout(searchTimerRef.current);
+                            searchTimerRef.current = undefined;
+                          }
+                          fetchReturns(pagination.page - 1, {
+                            ...activeFilters, search: searchQuery, return_type: returnType,
+                          });
+                        }}
                         disabled={pagination.page <= 1 || loading}
                       >
                         Previous
@@ -522,7 +569,15 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => fetchReturns(pagination.page + 1)}
+                        onClick={() => {
+                          if (searchTimerRef.current !== undefined) {
+                            window.clearTimeout(searchTimerRef.current);
+                            searchTimerRef.current = undefined;
+                          }
+                          fetchReturns(pagination.page + 1, {
+                            ...activeFilters, search: searchQuery, return_type: returnType,
+                          });
+                        }}
                         disabled={pagination.page >= pagination.total_pages || loading}
                       >
                         Next

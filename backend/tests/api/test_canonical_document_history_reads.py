@@ -153,3 +153,16 @@ def test_every_history_sql_column_exists_in_the_canonical_migration():
         assert match, f"canonical table missing: {schema}.{table}"
         actual = set(re.findall(r'^\s+"([^"]+)"\s', match.group(1), re.MULTILINE))
         assert expected <= actual, f"missing {schema}.{table} columns: {sorted(expected - actual)}"
+
+
+def test_postgres15_runtime_role_gate_executes_the_history_union():
+    root = Path(__file__).parents[3]
+    runner = (root / "database/canonical/ci/run_alembic_postgres15_gate.sh").read_text()
+    fixture_name = "check_canonical_document_history_runtime_role.py"
+    fixture = (root / "backend/tests/postgres" / fixture_name).read_text()
+    assert fixture_name in runner
+    assert "SET LOCAL ROLE \"erp_runtime\"" in fixture
+    assert "rolbypassrls" in fixture
+    assert "for kind in KINDS" in fixture
+    assert "organization_scope\": True" in fixture
+    assert "document_group\": \"returns\"" in fixture

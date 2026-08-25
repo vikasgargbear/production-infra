@@ -1,3 +1,5 @@
+import { historyPresetRange } from '../../../../utils/calendarDate';
+
 export type PurchaseDocumentType = 'supplier_invoice' | 'purchase_order' | 'grn';
 
 export interface PurchaseHistoryFilters {
@@ -8,17 +10,11 @@ export interface PurchaseHistoryFilters {
   dateTo: string;
 }
 
-const isoDate = (date: Date) => [
-  date.getFullYear(),
-  String(date.getMonth() + 1).padStart(2, '0'),
-  String(date.getDate()).padStart(2, '0'),
-].join('-');
-
 export function resolvePurchaseHistoryDates(
   preset: string,
   explicitFrom = '',
   explicitTo = '',
-  now = new Date(),
+  businessDate: string,
 ): { from_date?: string; to_date?: string } {
   if (explicitFrom || explicitTo) {
     return {
@@ -26,28 +22,14 @@ export function resolvePurchaseHistoryDates(
       to_date: explicitTo || undefined,
     };
   }
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const start = new Date(today);
-  const end = new Date(today);
-  switch (preset) {
-    case 'today': break;
-    case 'yesterday': start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); break;
-    case 'last7days': start.setDate(start.getDate() - 6); break;
-    case 'last30days': start.setDate(start.getDate() - 29); break;
-    case 'thisMonth': start.setDate(1); break;
-    case 'lastMonth':
-      start.setMonth(start.getMonth() - 1, 1);
-      end.setDate(0);
-      break;
-    case 'thisQuarter': start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1); break;
-    default: return {};
-  }
-  return { from_date: isoDate(start), to_date: isoDate(end) };
+  const range = historyPresetRange(businessDate, preset);
+  return range ? { from_date: range.from, to_date: range.to } : {};
 }
 
 export function buildPurchaseHistoryParams(
   filters: PurchaseHistoryFilters,
   documentType: PurchaseDocumentType,
+  businessDate: string,
 ): Record<string, string | undefined> {
   const status = filters.statusFilter === 'all' ? undefined : filters.statusFilter;
   return {
@@ -55,12 +37,18 @@ export function buildPurchaseHistoryParams(
     ...(documentType === 'supplier_invoice'
       ? { status }
       : { status }),
-    ...Object.fromEntries(Object.entries(resolvePurchaseHistoryDates(filters.dateFilter, filters.dateFrom, filters.dateTo))
+    ...Object.fromEntries(Object.entries(resolvePurchaseHistoryDates(
+      filters.dateFilter, filters.dateFrom, filters.dateTo, businessDate,
+    ))
       .map(([key, value]) => [key === 'from_date' ? 'date_from' : 'date_to', value])),
   };
 }
 
-const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+const csvCell = (value: unknown) => {
+  let text = String(value ?? '');
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+};
 
 export function purchaseHistoryCsv(
   rows: Array<{

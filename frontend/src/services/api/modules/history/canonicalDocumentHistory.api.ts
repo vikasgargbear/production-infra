@@ -49,6 +49,7 @@ export interface CanonicalDocumentHistoryItem {
 
 export interface CanonicalDocumentHistoryResponse {
   items: CanonicalDocumentHistoryItem[];
+  business_date: string;
   page: number;
   page_size: number;
   total: number;
@@ -169,7 +170,9 @@ export function normalizeCanonicalDocumentHistory(value: unknown): CanonicalDocu
   const pageSize = integer(response.page_size, 'Page size', 1);
   const total = integer(response.total, 'Total');
   if (items.length > pageSize || total < items.length) throw new Error('Document history pagination is inconsistent.');
-  return { items, page, page_size: pageSize, total };
+  const businessDate = string(response.business_date, 'Business date');
+  if (!DATE.test(businessDate)) throw new Error('Business date must be YYYY-MM-DD.');
+  return { items, business_date: businessDate, page, page_size: pageSize, total };
 }
 
 export const canonicalDocumentHistoryApi = {

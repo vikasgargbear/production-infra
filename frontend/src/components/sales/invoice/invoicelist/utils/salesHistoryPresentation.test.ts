@@ -34,13 +34,13 @@ test('uses authoritative lifecycle labels instead of Custom', () => {
     expect(salesStatusLabel('awaiting_carrier')).toBe('Awaiting Carrier');
 });
 
-test('exports a real CSV row and neutralizes spreadsheet formulas', () => {
-    const csv = salesHistoryDocumentCsv({ ...order, customer_name: '=HYPERLINK("bad")' });
+test('exports a real CSV row and neutralizes spreadsheet formulas after leading whitespace', () => {
+    const csv = salesHistoryDocumentCsv({ ...order, customer_name: '  =HYPERLINK("bad")' });
 
     expect(csv).toContain('"Sales Order"');
     expect(csv).toContain('"DEMO-SO-000004"');
     expect(csv).toContain('"Approved"');
-    expect(csv).toContain('"\'=HYPERLINK(""bad"")"');
+    expect(csv).toContain('"\'  =HYPERLINK(""bad"")"');
 });
 
 test('escapes stored values before opening a printable document', () => {

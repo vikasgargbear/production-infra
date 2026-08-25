@@ -113,6 +113,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const [documentType, setDocumentType] = useState<DocumentType>('invoice');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSequenceRef = useRef(0);
+  const businessDateRef = useRef<string | null>(null);
   const perPageRef = useRef(pagination.per_page);
   perPageRef.current = pagination.per_page;
 
@@ -136,6 +137,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       const total = response.total;
 
       if (requestSequence !== requestSequenceRef.current) return;
+      businessDateRef.current = response.business_date;
       dispatch({ type: 'SET_INVOICES', invoices: transformedData });
       dispatch({
         type: 'SET_PAGINATION',
@@ -211,7 +213,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     dispatch({ type: 'SET_EXPORT_SUCCESS', success: false });
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDateRef.current;
+      if (!today) throw new Error('Organization business date is unavailable.');
       downloadCSV(
         salesHistoryListCsv(documentType, invoices),
         salesHistoryExportFilename(documentType, today),
@@ -245,7 +248,11 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   const handleExportSelected = () => {
     const selected = invoices.filter(inv => selectedIds.has(inv.id));
-    const today = new Date().toISOString().split('T')[0];
+    const today = businessDateRef.current;
+    if (!today) {
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return;
+    }
     downloadCSV(
       salesHistoryListCsv(documentType, selected),
       salesHistoryExportFilename(documentType, today, true),
@@ -278,7 +285,11 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     }
 
     const preset = newFilters.date_preset || 'all';
-    const presetRange = resolveSalesHistoryDateRange(preset);
+    if (!businessDateRef.current) {
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return;
+    }
+    const presetRange = resolveSalesHistoryDateRange(preset, businessDateRef.current);
     const nextFilters: InvoiceFilters = {
       ...filters,
       statusFilter: newFilters.payment_status || 'all',
@@ -348,7 +359,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               className: loading ? "animate-spin" : ""
             },
             {
-              label: "Export All",
+              label: "Export Page",
               onClick: handleExportAll,
               className: "bg-gray-900 hover:bg-gray-800 text-white"
             }

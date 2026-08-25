@@ -71,7 +71,11 @@ export function projectReturnsHistoryRows(value: unknown, type: HistoryReturnTyp
 }
 
 export function returnsHistoryCsv(rows: ReturnsHistoryRow[]): string {
-    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const escape = (value: unknown) => {
+        let text = String(value ?? '');
+        if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+        return `"${text.replace(/"/g, '""')}"`;
+    };
     const values = [
         ['Return #', 'Date', 'Type', 'Party', 'Original Document', 'Amount', 'Status'],
         ...rows.map(item => [

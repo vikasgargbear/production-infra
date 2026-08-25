@@ -27,7 +27,7 @@ export const InvoiceBulkActions = React.memo<InvoiceBulkActionsProps>(({
                 <div className="flex items-center space-x-2">
                     <Button variant="outline" size="sm" onClick={onExport}>
                         <Download className="w-4 h-4 mr-2" />
-                        Export
+                        Export Selected
                     </Button>
                     <Button
                         variant="ghost"

@@ -16,6 +16,7 @@ import {
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
 import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
 import { formatExactCurrency } from '../../utils/exactDecimal';
+import { formatCalendarDate } from '../../utils/calendarDate';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
@@ -61,12 +62,15 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, purchases, selectedIds, filters, ui, pagination, loading } = usePurchaseListHistoryState();
   const searchTimerRef = useRef<number | undefined>();
+  const requestSequenceRef = useRef(0);
+  const businessDateRef = useRef<string | null>(null);
 
   // Document type state - default to supplier_invoice
   const [documentType, setDocumentType] = useState<DocumentType>('supplier_invoice');
 
   // Fetch documents from backend based on document type
   const fetchDocuments = useCallback(async (page = 1, searchFilters: any = {}, docType: DocumentType = documentType) => {
+    const requestSequence = ++requestSequenceRef.current;
     dispatch({ type: 'SET_LOADING', loading: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
@@ -92,17 +96,22 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
         created_at: row.created_at,
         updated_at: row.updated_at,
       }));
+      if (requestSequence !== requestSequenceRef.current) return;
+      businessDateRef.current = response.business_date;
       dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
       dispatch({ type: 'SET_PAGINATION', pagination: {
         total: response.total, page, total_pages: Math.ceil(response.total / pagination.per_page),
       } });
 
     } catch (error) {
+      if (requestSequence !== requestSequenceRef.current) return;
       console.error(`Failed to fetch ${docType}:`, error);
       dispatch({ type: 'SET_ERROR', error: `Failed to fetch ${documentTypeConfig[docType].label}. Please try again.` });
       dispatch({ type: 'SET_PURCHASES', purchases: [] });
     } finally {
-      dispatch({ type: 'SET_LOADING', loading: false });
+      if (requestSequence === requestSequenceRef.current) {
+        dispatch({ type: 'SET_LOADING', loading: false });
+      }
     }
   }, [dispatch, pagination.per_page, documentType]);
 
@@ -112,6 +121,10 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   // Load documents on mount and when document type changes
   useEffect(() => {
     fetchDocuments(1, {}, documentType);
+    return () => {
+      if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+      requestSequenceRef.current += 1;
+    };
   }, [documentType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle document type change
@@ -123,14 +136,24 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     } });
   };
 
-  const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => (
-    buildPurchaseHistoryParams({ ...filters, ...overrides }, documentType)
-  ), [filters, documentType]);
+  const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => {
+    if (!businessDateRef.current) {
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return null;
+    }
+    return buildPurchaseHistoryParams({ ...filters, ...overrides }, documentType, businessDateRef.current);
+  }, [dispatch, filters, documentType]);
 
   const handleRefresh = useCallback(async () => {
+    if (searchTimerRef.current !== undefined) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = undefined;
+    }
+    const params = buildSearchParams();
+    if (!params) return;
     dispatch({ type: 'SET_REFRESHING', refreshing: true });
     try {
-      await fetchDocuments(pagination.page, buildSearchParams(), documentType);
+      await fetchDocuments(pagination.page, params, documentType);
     } finally {
       dispatch({ type: 'SET_REFRESHING', refreshing: false });
     }
@@ -151,8 +174,11 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   const handleSearchChange = (query: string) => {
     dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
     if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+    requestSequenceRef.current += 1;
     searchTimerRef.current = window.setTimeout(() => {
-      fetchDocuments(1, buildSearchParams({ searchQuery: query }), documentType);
+      searchTimerRef.current = undefined;
+      const params = buildSearchParams({ searchQuery: query });
+      if (params) fetchDocuments(1, params, documentType);
     }, 500);
   };
 
@@ -165,23 +191,32 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     dispatch({ type: 'TOGGLE_SELECT_ALL', purchaseIds });
   };
 
-  const handleExport = () => {
-    const selected = selectedIds.size > 0
-      ? purchases.filter(p => selectedIds.has(p.id))
-      : purchases;
-    if (selected.length === 0) return;
+  const exportRows = (rows: PurchaseOrder[], selected: boolean) => {
+    if (rows.length === 0) return;
     const csvContent = purchaseHistoryCsv(
-      selected,
+      rows,
       documentTypeConfig[documentType].numberLabel,
     );
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${documentTypeConfig[documentType].label.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`;
+    if (!businessDateRef.current) {
+      URL.revokeObjectURL(url);
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return;
+    }
+    const scope = selected ? 'selected' : 'page';
+    link.download = `${documentTypeConfig[documentType].label.toLowerCase().replace(/\s+/g, '-')}-${scope}-${businessDateRef.current}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleExportPage = () => exportRows(purchases, false);
+  const handleExportSelected = () => exportRows(
+    purchases.filter(purchase => selectedIds.has(purchase.id)),
+    true,
+  );
 
   const filteredPurchases = purchases;
   const isAllSelected = filteredPurchases.length > 0 && filteredPurchases.every(p => selectedIds.has(p.id));
@@ -214,11 +249,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       header: 'Date',
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="text-gray-700">
-          {purchase.po_date ? new Date(purchase.po_date).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-          }) : '-'}
+          {purchase.po_date ? formatCalendarDate(purchase.po_date) : '-'}
         </div>
       ),
       width: '110px'
@@ -303,7 +334,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
               const amount = purchase.total_amount === null
                 ? '' : `\nAmount: ${formatExactCurrency(purchase.total_amount, 'Purchase history amount')}`;
               const message = `Dear ${purchase.supplier_name},\n\n${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}${amount}\n\nThank you!`;
-              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
             }}
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             title="Share via WhatsApp"
@@ -357,8 +388,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
               className: ui.refreshing ? "animate-spin" : ""
             },
             {
-              label: "Export All",
-              onClick: handleExport,
+              label: "Export Page",
+              onClick: handleExportPage,
               variant: "secondary",
               disabled: purchases.length === 0
             }
@@ -447,6 +478,10 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                 }
               ]}
               onFilterChange={(newFilters) => {
+                if (searchTimerRef.current !== undefined) {
+                  window.clearTimeout(searchTimerRef.current);
+                  searchTimerRef.current = undefined;
+                }
                 const nextFilters = {
                   dateFilter: String(newFilters.date_preset || 'all'),
                   statusFilter: String(newFilters.payment_status || 'all'),
@@ -454,7 +489,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                   dateTo: String(newFilters.dateTo || ''),
                 };
                 dispatch({ type: 'SET_FILTERS', filters: nextFilters });
-                fetchPurchases(1, buildSearchParams(nextFilters), documentType);
+                const params = buildSearchParams(nextFilters);
+                if (params) fetchPurchases(1, params, documentType);
               }}
               onSearchChange={handleSearchChange}
               showFilters={ui.showFilters}
@@ -468,9 +504,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                   <span className="text-sm font-medium text-blue-900">
                     {selectedCount} purchase{selectedCount > 1 ? 's' : ''} selected
                   </span>
-                  <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Button variant="outline" size="sm" onClick={handleExportSelected}>
                     <Download className="w-4 h-4 mr-2" />
-                    Export
+                    Export Selected
                   </Button>
                 </div>
               </div>
@@ -498,12 +534,24 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                 <Pagination
                   currentPage={pagination.page}
                   totalPages={pagination.total_pages}
-                  onPageChange={(page) => fetchPurchases(page, buildSearchParams())}
+                  onPageChange={(page) => {
+                    if (searchTimerRef.current !== undefined) {
+                      window.clearTimeout(searchTimerRef.current);
+                      searchTimerRef.current = undefined;
+                    }
+                    const params = buildSearchParams();
+                    if (params) fetchPurchases(page, params);
+                  }}
                   itemsPerPage={pagination.per_page}
                   totalItems={pagination.total}
                   onItemsPerPageChange={(perPage) => {
+                    if (searchTimerRef.current !== undefined) {
+                      window.clearTimeout(searchTimerRef.current);
+                      searchTimerRef.current = undefined;
+                    }
                     dispatch({ type: 'SET_PAGINATION', pagination: { per_page: perPage, page: 1 } });
-                    fetchPurchases(1, buildSearchParams());
+                    const params = buildSearchParams();
+                    if (params) fetchPurchases(1, params);
                   }}
                 />
               </div>

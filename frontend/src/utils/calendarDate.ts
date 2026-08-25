@@ -46,6 +46,34 @@ export function serializeCalendarDateInput(value: Date | string, label = 'Select
   );
 }
 
+export function formatCalendarDate(
+  value: CalendarDate,
+  locale = 'en-IN',
+): string {
+  const [year, month, day] = parts(value);
+  return new Intl.DateTimeFormat(locale, {
+    day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+export function historyPresetRange(
+  businessDate: CalendarDate,
+  preset: string,
+): { from: CalendarDate; to: CalendarDate } | null {
+  const today = requireCalendarDate(businessDate, 'Organization business date');
+  if (preset === 'today') return { from: today, to: today };
+  if (preset === 'yesterday') {
+    const yesterday = addCalendarDays(today, -1);
+    return { from: yesterday, to: yesterday };
+  }
+  if (preset === 'last7days') return { from: addCalendarDays(today, -6), to: today };
+  if (preset === 'last30days') return { from: addCalendarDays(today, -29), to: today };
+  if (preset === 'thisMonth') return organizationPeriodRange(today, 'current');
+  if (preset === 'lastMonth') return organizationPeriodRange(today, 'previous');
+  if (preset === 'thisQuarter') return organizationPeriodRange(today, 'quarter');
+  return null;
+}
+
 export type OrganizationPeriod = 'current' | 'previous' | 'quarter' | 'year';
 
 export function organizationPeriodRange(

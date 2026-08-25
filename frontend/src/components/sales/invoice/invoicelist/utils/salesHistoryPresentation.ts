@@ -68,7 +68,7 @@ export const salesStatusTone = (
 
 const csvCell = (value: unknown): string => {
     let text = String(value ?? '');
-    if (/^[=+\-@]/.test(text)) text = `'${text}`;
+    if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
     return `"${text.replace(/"/g, '""')}"`;
 };
 

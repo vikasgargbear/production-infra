@@ -33,13 +33,12 @@ test('sends the same server-side filters for orders and challans', () => {
     });
 });
 
-test('resolves presets in local calendar time', () => {
-    const now = new Date(2026, 7, 24, 23, 45);
-    expect(resolveSalesHistoryDateRange('last7days', now)).toEqual({
-        dateFrom: '2026-08-17',
+test('resolves presets from the organization date without browser-clock drift', () => {
+    expect(resolveSalesHistoryDateRange('last7days', '2026-08-24')).toEqual({
+        dateFrom: '2026-08-18',
         dateTo: '2026-08-24',
     });
-    expect(resolveSalesHistoryDateRange('lastMonth', now)).toEqual({
+    expect(resolveSalesHistoryDateRange('lastMonth', '2026-08-24')).toEqual({
         dateFrom: '2026-07-01',
         dateTo: '2026-07-31',
     });

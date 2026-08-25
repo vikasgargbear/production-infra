@@ -13,5 +13,7 @@ describe('returns history canonical presentation', () => {
         expect(normalizeReturnStatus(row.status).label).toBe('Posted');
         expect(returnsHistoryCsv([row])).toContain('"DEMO-SI-1"');
         expect(returnsHistoryCsv([row])).toContain('"Posted"');
+        expect(returnsHistoryCsv([{ ...row, return_no: '  =2+2', customer_name: '@attacker' }]))
+            .toContain('"\'  =2+2"');
     });
 });

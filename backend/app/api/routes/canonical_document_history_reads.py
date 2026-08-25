@@ -141,6 +141,7 @@ class CanonicalDocumentHistoryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     items: list[CanonicalDocumentHistoryItem]
+    business_date: date
     page: int = Field(gt=0)
     page_size: int = Field(gt=0, le=100)
     total: int = Field(ge=0)
@@ -472,4 +473,10 @@ def canonical_document_history(
         source + " SELECT * FROM authoritative_documents " + _filter_sql()
         + " ORDER BY document_date DESC, document_number DESC, document_id DESC LIMIT :limit OFFSET :offset"
     ), params).fetchall()]
-    return {"items": rows, "page": page, "page_size": page_size, "total": total}
+    return {
+        "items": rows,
+        "business_date": business_date,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+    }
