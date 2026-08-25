@@ -149,3 +149,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_gst_jurisdiction_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_runtime_deployment_readiness.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_sales_invoice_direct_issue_acceptance.py
