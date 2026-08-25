@@ -129,6 +129,16 @@ jobs:
       render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
     secrets: inherit
 
+  railway-canonical-staging:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_canonical_staging &&
+      vars.DEPLOY_RAILWAY_PILOT == 'true'
+    uses: ./.github/workflows/railway-canonical-staging.yml
+    with:
+      reviewed_sha: ${{ inputs.canonical_staging_render_sha }}
+    secrets: inherit
+
   canonical-application-promotion-evidence:
     needs: [canonical-free-staging]
     if: >-

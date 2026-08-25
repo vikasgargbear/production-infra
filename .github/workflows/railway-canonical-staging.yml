@@ -1,0 +1,205 @@
+name: Railway canonical staging pilot
+
+on:
+  workflow_call:
+    inputs:
+      reviewed_sha:
+        description: Exact application SHA to upload to all Railway pilot services
+        required: true
+        type: string
+    secrets:
+      RAILWAY_API_TOKEN:
+        required: true
+      ERP_RUNTIME_PASSWORD:
+        required: true
+      ERP_CALCULATOR_PASSWORD:
+        required: true
+      ERP_TAX_PROVIDER_PASSWORD:
+        required: true
+      JWT_SECRET_KEY:
+        required: true
+      MCP_INTERNAL_SERVICE_TOKEN:
+        required: true
+      SUPABASE_ANON_KEY:
+        required: true
+      TAX_PROVIDER_INTERNAL_SERVICE_TOKEN:
+        required: true
+      TAX_PROVIDER_INTERNAL_HMAC_SECRET:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 30
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_MCP_SERVICE: ${{ vars.RAILWAY_MCP_SERVICE }}
+      RAILWAY_FRONTEND_SERVICE: ${{ vars.RAILWAY_FRONTEND_SERVICE }}
+      RAILWAY_API_URL: ${{ vars.RAILWAY_API_URL }}
+      RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
+      RAILWAY_FRONTEND_URL: ${{ vars.RAILWAY_FRONTEND_URL }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
+      MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
+      SUPABASE_POOLER_HOST: aws-0-ap-south-1.pooler.supabase.com
+      SUPABASE_SESSION_POOLER_PORT: "5432"
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Verify the immutable source and Railway boundary
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          case "$REVIEWED_SHA" in
+            *[!0-9a-f]*|'') echo "reviewed_sha must be an exact lowercase commit SHA" >&2; exit 2 ;;
+          esac
+          test "${#REVIEWED_SHA}" = 40
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
+          test "$RAILWAY_MCP_SERVICE" = aasopharma-mcp-pilot
+          test "$RAILWAY_FRONTEND_SERVICE" = aasopharma-erp-pilot
+          test "$RAILWAY_API_URL" = https://aasopharma-api-pilot-production.up.railway.app
+          test "$RAILWAY_MCP_URL" = https://pharma-backend-production-0c09.up.railway.app
+          test "$RAILWAY_FRONTEND_URL" = https://aasopharma-erp-pilot-production.up.railway.app
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install the pinned Railway CLI
+        run: npm install --global @railway/cli@4.30.2
+
+      - name: Link the reviewed Railway project
+        run: |
+          set -euo pipefail
+          railway link \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID"
+          railway whoami >/dev/null
+
+      - name: Populate canonical service variables without triggering stale deploys
+        env:
+          ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+          ERP_CALCULATOR_PASSWORD: ${{ secrets.ERP_CALCULATOR_PASSWORD }}
+          ERP_TAX_PROVIDER_PASSWORD: ${{ secrets.ERP_TAX_PROVIDER_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          MCP_INTERNAL_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
+          TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
+        run: |
+          set -euo pipefail
+
+          set_variable() {
+            local service=$1
+            local key=$2
+            local value=$3
+            test -n "$value"
+            printf '%s' "$value" | railway variable set \
+              --service "$service" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --skip-deploys \
+              --stdin "$key" >/dev/null
+          }
+
+          encode() { jq -nr --arg value "$1" '$value|@uri'; }
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:$(encode "$ERP_RUNTIME_PASSWORD")@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_api_railway"
+          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:$(encode "$ERP_CALCULATOR_PASSWORD")@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_calculator_railway"
+          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:$(encode "$ERP_TAX_PROVIDER_PASSWORD")@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_tax_provider_railway"
+          echo "::add-mask::$runtime_url"
+          echo "::add-mask::$calculator_url"
+          echo "::add-mask::$provider_url"
+
+          set_variable "$RAILWAY_API_SERVICE" APP_ENV production
+          set_variable "$RAILWAY_API_SERVICE" LOG_LEVEL INFO
+          set_variable "$RAILWAY_API_SERVICE" LOG_FORMAT json
+          set_variable "$RAILWAY_API_SERVICE" DATABASE_URL "$runtime_url"
+          set_variable "$RAILWAY_API_SERVICE" ERP_CALCULATOR_DATABASE_URL "$calculator_url"
+          set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_DATABASE_URL "$provider_url"
+          set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_INTERNAL_SERVICE_TOKEN "$TAX_PROVIDER_INTERNAL_SERVICE_TOKEN"
+          set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_INTERNAL_HMAC_SECRET "$TAX_PROVIDER_INTERNAL_HMAC_SECRET"
+          set_variable "$RAILWAY_API_SERVICE" JWT_SECRET_KEY "$JWT_SECRET_KEY"
+          set_variable "$RAILWAY_API_SERVICE" CORS_ORIGINS "$RAILWAY_FRONTEND_URL"
+          set_variable "$RAILWAY_API_SERVICE" APP_URL "$RAILWAY_FRONTEND_URL"
+          set_variable "$RAILWAY_API_SERVICE" SUPABASE_URL "$SUPABASE_URL"
+          set_variable "$RAILWAY_API_SERVICE" SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+          set_variable "$RAILWAY_API_SERVICE" MCP_INTERNAL_SERVICE_TOKEN "$MCP_INTERNAL_SERVICE_TOKEN"
+          set_variable "$RAILWAY_API_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+
+          set_variable "$RAILWAY_MCP_SERVICE" SUPABASE_OAUTH_ISSUER "$SUPABASE_OAUTH_ISSUER"
+          set_variable "$RAILWAY_MCP_SERVICE" MCP_RESOURCE_SERVER_URL "$RAILWAY_MCP_URL/mcp"
+          set_variable "$RAILWAY_MCP_SERVICE" ERP_API_BASE_URL "$RAILWAY_API_URL"
+          set_variable "$RAILWAY_MCP_SERVICE" MCP_INTERNAL_SERVICE_TOKEN "$MCP_INTERNAL_SERVICE_TOKEN"
+          set_variable "$RAILWAY_MCP_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+          set_variable "$RAILWAY_MCP_SERVICE" MCP_ALLOWED_ORIGINS "$RAILWAY_FRONTEND_URL"
+
+          set_variable "$RAILWAY_FRONTEND_SERVICE" REACT_APP_API_BASE_URL "$RAILWAY_API_URL"
+          set_variable "$RAILWAY_FRONTEND_SERVICE" REACT_APP_SUPABASE_URL "$SUPABASE_URL"
+          set_variable "$RAILWAY_FRONTEND_SERVICE" REACT_APP_SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+
+      - name: Upload the exact source tree to all three Railway services
+        run: |
+          set -euo pipefail
+          message="canonical staging $REVIEWED_SHA"
+          railway up . --detach --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >api-deploy.log 2>&1 &
+          api_pid=$!
+          railway up . --detach --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >mcp-deploy.log 2>&1 &
+          mcp_pid=$!
+          railway up . --detach --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >frontend-deploy.log 2>&1 &
+          frontend_pid=$!
+          status=0
+          wait "$api_pid" || status=1
+          wait "$mcp_pid" || status=1
+          wait "$frontend_pid" || status=1
+          if test "$status" != 0; then
+            sed -E 's#(postgres(?:ql)?://)[^@[:space:]]+@#\1[redacted]@#g' api-deploy.log mcp-deploy.log frontend-deploy.log
+            exit 1
+          fi
+
+      - name: Verify all public services publish the reviewed SHA
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            api_health=$(curl --silent --show-error --max-time 15 "$RAILWAY_API_URL/health" || true)
+            mcp_health=$(curl --silent --show-error --max-time 15 "$RAILWAY_MCP_URL/health" || true)
+            frontend_sha=$(curl --silent --show-error --max-time 15 "$RAILWAY_FRONTEND_URL/build-metadata.json" | jq -r '.git_commit // empty' || true)
+            if jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_health" >/dev/null 2>&1 && \
+               jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_health" >/dev/null 2>&1 && \
+               test "$frontend_sha" = "$REVIEWED_SHA"; then
+              jq -n \
+                --arg git_commit "$REVIEWED_SHA" \
+                --arg api_url "$RAILWAY_API_URL" \
+                --arg mcp_url "$RAILWAY_MCP_URL" \
+                --arg frontend_url "$RAILWAY_FRONTEND_URL" \
+                '{provider:"railway",git_commit:$git_commit,services:{api:$api_url,mcp:$mcp_url,frontend:$frontend_url},status:"live"}' \
+                > railway-pilot-evidence.json
+              exit 0
+            fi
+            echo "Waiting for Railway services to publish $REVIEWED_SHA (attempt $attempt/60)"
+            sleep 10
+          done
+          railway deployment list --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --limit 3 --json || true
+          railway deployment list --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --limit 3 --json || true
+          railway deployment list --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --limit 3 --json || true
+          echo "Railway services did not converge on reviewed SHA $REVIEWED_SHA" >&2
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: railway-canonical-staging-${{ inputs.reviewed_sha }}
+          path: railway-pilot-evidence.json
+          if-no-files-found: error
+          retention-days: 14
