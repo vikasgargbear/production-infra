@@ -9,14 +9,17 @@ import { exactInvoiceResponse, exactSalesLine } from './exactCalculationFixtures
 
 const customerId = '10000000-0000-7000-8000-000000000001';
 const productId = '10000000-0000-7000-8000-000000000002';
+const branchId = '10000000-0000-7000-8000-000000000003';
 const invoice = (items = [{ product_id: productId, quantity: '1.000000', unit_price: '0.100000', gst_percent: '18.000000' }]) => ({
   customer_details: { customer_id: customerId },
+  invoice_date: '2026-08-25',
   gst_type: 'CGST/SGST',
   freight_charges: '0.00',
   discount_type: 'percentage',
   discount_percent: '0.000000',
   discount_amount: '0.00',
   items: items.map(item => ({
+    branch_id: branchId,
     free_quantity: '0.000000',
     free_supply_tax_treatment: 'excluded_from_taxable_value',
     discount_percent: '0.000000',
@@ -57,11 +60,15 @@ test('preserves six-place quantity and a rate above 2^53 in the request', async 
     gst_percent: '18.000000',
   }]), true);
   expect(invoiceCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
+    branch_id: branchId,
+    customer_id: customerId,
+    document_date: '2026-08-25',
     items: [expect.objectContaining({
       quantity: '0.123456',
       unit_price: '9007199254740993.000000',
     })],
   }));
+  expect(invoiceCalculationsApi.preview.mock.calls[0][0].items[0]).not.toHaveProperty('gst_percent');
 });
 
 test.each([

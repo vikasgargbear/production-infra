@@ -8,18 +8,26 @@ import {
 import type { Order } from '../../types/models';
 import { normalizeInvoicePreview } from './invoiceCalculationService';
 import {
-    calculationEntityId,
     inputMoney,
     inputPercent,
     inputQuantity,
     inputRate,
 } from './exactCalculationPreview';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 
 const required = <T>(value: T | null | undefined | '', label: string): T => {
     if (value === undefined || value === null || value === '') {
         throw new Error(`${label} is missing its explicit value.`);
     }
     return value;
+};
+
+const requiredCanonicalUuid = (value: unknown, label: string): string => {
+    const normalized = String(value ?? '').trim();
+    if (!isCanonicalUuid(normalized)) {
+        throw new Error(`${label} is missing its canonical UUID.`);
+    }
+    return normalized;
 };
 
 const requiredFreeSupplyTreatment = (
@@ -65,16 +73,21 @@ export interface SalesOrderPreviewResult {
 }
 
 function toRequest(order: Order): SalesOrderCalculationRequest {
+    const branchId = requiredCanonicalUuid(
+        order.items[0]?.branch_id, 'Sales order branch',
+    );
     return {
-        customer_id: calculationEntityId(order.customer_id, 'Customer', true)!,
-        gst_type: order.gst_type as 'CGST/SGST' | 'IGST',
-        order_date: order.order_date,
+        branch_id: branchId,
+        customer_id: requiredCanonicalUuid(order.customer_id, 'Customer'),
+        order_date: required(order.order_date, 'Sales order date'),
         delivery_date: order.expected_delivery_date || order.delivery_date,
         items: order.items.map((item, index) => {
             const label = `Sales order calculation items[${index}]`;
             return {
-                product_id: calculationEntityId(item.product_id, `${label}.product_id`, true)!,
-                batch_id: calculationEntityId(item.batch_id, `${label}.batch_id`),
+                product_id: requiredCanonicalUuid(item.product_id, `${label}.product_id`),
+                batch_id: item.batch_id == null
+                    ? undefined
+                    : requiredCanonicalUuid(item.batch_id, `${label}.batch_id`),
                 batch_number: item.batch_number,
                 quantity: inputQuantity(item.quantity, `${label}.quantity`),
                 free_quantity: inputQuantity(required(item.free_quantity, `${label}.free_quantity`), `${label}.free_quantity`),
@@ -82,7 +95,6 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
                 unit_price: inputRate(item.unit_price, `${label}.unit_price`),
                 mrp: inputRate(item.mrp ?? item.unit_price, `${label}.mrp`),
                 discount_percent: inputPercent(item.discount_percent, `${label}.discount_percent`),
-                tax_percent: inputPercent(item.gst_percent, `${label}.tax_percent`),
                 uom: item.uom || item.unit,
                 pack_type: item.pack_type,
             };
@@ -99,8 +111,9 @@ export function normalizeSalesOrderPreview(
     request = toRequest(order),
 ): SalesOrderPreviewResult {
     const invoiceRequest: InvoiceCalculationRequest = {
+        branch_id: request.branch_id,
         customer_id: request.customer_id,
-        gst_type: request.gst_type,
+        document_date: request.order_date,
         items: request.items,
         freight_charges: request.delivery_charges,
         insurance_charges: '0.00',

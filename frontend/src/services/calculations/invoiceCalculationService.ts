@@ -10,7 +10,6 @@ import {
 import {
     assertCalculationEnvelope,
     assertExactEqual,
-    calculationEntityId,
     calculationQuantityOptions,
     calculationSignedMoneyOptions,
     inputMoney,
@@ -25,6 +24,7 @@ import {
     sumSignedMoney,
 } from './exactCalculationPreview';
 import { subtractExactDecimals } from '../../utils/exactDecimal';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 
 const requiredInput = <T>(value: T | null | undefined | '', label: string): T => {
     if (value === undefined || value === null || value === '') {
@@ -33,9 +33,12 @@ const requiredInput = <T>(value: T | null | undefined | '', label: string): T =>
     return value;
 };
 
-const requiredGstType = (value: unknown): 'CGST/SGST' | 'IGST' => {
-    if (value === 'CGST/SGST' || value === 'IGST') return value;
-    throw new Error('Invoice GST treatment is unavailable. Re-select the delivery address.');
+const requiredCanonicalUuid = (value: unknown, label: string): string => {
+    const normalized = String(value ?? '').trim();
+    if (!isCanonicalUuid(normalized)) {
+        throw new Error(`${label} is missing its canonical UUID.`);
+    }
+    return normalized;
 };
 
 const requiredFreeSupplyTreatment = (
@@ -58,19 +61,29 @@ const unsupportedCharge = (value: unknown, label: string): string => {
 function toRequest(invoice: any): InvoiceCalculationRequest {
     const customer = invoice?.customer_details;
     const customerId = customer?.customer_id ?? customer?.id;
+    const branchIds = new Set<string>(
+        (invoice?.items || []).map((item: any, index: number) =>
+            requiredCanonicalUuid(
+                item.branch_id, `Invoice calculation items[${index}].branch_id`,
+            ),
+        ),
+    );
+    if (branchIds.size !== 1) {
+        throw new Error('Invoice items must belong to one canonical branch.');
+    }
     return {
-        customer_id: calculationEntityId(customerId, 'Customer'),
-        gst_type: requiredGstType(invoice?.gst_type),
+        branch_id: [...branchIds][0],
+        customer_id: requiredCanonicalUuid(customerId, 'Customer'),
+        document_date: requiredInput(invoice?.invoice_date, 'Invoice date'),
         items: (invoice?.items || []).map((item: any, index: number) => {
             const label = `Invoice calculation items[${index}]`;
             return {
-                product_id: calculationEntityId(item.product_id, `${label}.product_id`),
+                product_id: requiredCanonicalUuid(item.product_id, `${label}.product_id`),
                 quantity: inputQuantity(requiredInput(item.quantity, `${label}.quantity`), `${label}.quantity`),
                 free_quantity: inputQuantity(requiredInput(item.free_quantity, `${label}.free_quantity`), `${label}.free_quantity`),
                 free_supply_tax_treatment: requiredFreeSupplyTreatment(item.free_supply_tax_treatment, `${label}.free_supply_tax_treatment`),
                 unit_price: inputRate(requiredInput(item.unit_price, `${label}.unit_price`), `${label}.unit_price`),
                 discount_percent: inputPercent(requiredInput(item.discount_percent, `${label}.discount_percent`), `${label}.discount_percent`),
-                gst_percent: inputPercent(requiredInput(item.gst_percent ?? item.tax_percent, `${label}.gst_percent`), `${label}.gst_percent`),
             };
         }),
         freight_charges: inputMoney(requiredInput(invoice?.freight_charges, 'Invoice freight charges'), 'Invoice freight charges'),

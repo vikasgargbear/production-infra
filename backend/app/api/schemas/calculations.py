@@ -73,10 +73,27 @@ class CalculationLine(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class CanonicalSalesCalculationLine(BaseModel):
+    """Sales preview input without any browser-owned tax rate."""
+
+    product_id: UUID
+    quantity: Decimal = Field(ge=0)
+    free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
+    free_supply_tax_treatment: FreeSupplyTaxTreatment = (
+        "excluded_from_taxable_value"
+    )
+    unit_price: Decimal = Field(ge=0)
+    mrp: Decimal = Field(default=Decimal("0"), ge=0)
+    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
 class InvoiceCalculationRequest(BaseModel):
-    customer_id: Optional[EntityId] = None
-    gst_type: GSTType = "CGST/SGST"
-    items: List[CalculationLine] = Field(min_length=1, max_length=500)
+    branch_id: UUID
+    customer_id: UUID
+    document_date: date
+    items: List[CanonicalSalesCalculationLine] = Field(min_length=1, max_length=500)
     freight_charges: Decimal = Field(default=Decimal("0"), ge=0)
     insurance_charges: Decimal = Field(default=Decimal("0"), ge=0)
     other_charges: Decimal = Field(default=Decimal("0"), ge=0)
@@ -87,17 +104,17 @@ class InvoiceCalculationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class SalesOrderCalculationLine(CalculationLine):
-    batch_id: Optional[EntityId] = None
+class SalesOrderCalculationLine(CanonicalSalesCalculationLine):
+    batch_id: Optional[UUID] = None
     batch_number: Optional[str] = Field(default=None, max_length=128)
     uom: Optional[str] = Field(default=None, max_length=32)
     pack_type: Optional[str] = Field(default=None, max_length=32)
 
 
 class SalesOrderCalculationRequest(BaseModel):
-    customer_id: EntityId
-    gst_type: GSTType = "CGST/SGST"
-    order_date: Optional[date] = None
+    branch_id: UUID
+    customer_id: UUID
+    order_date: date
     delivery_date: Optional[date] = None
     items: List[SalesOrderCalculationLine] = Field(min_length=1, max_length=200)
     delivery_charges: Decimal = Field(default=Decimal("0"), ge=0)
@@ -151,8 +168,18 @@ class CalculationPreviewLine(BaseModel):
     sgst_percent: Optional[ExactPercent] = None
     igst_percent: Optional[ExactPercent] = None
     scheme_discount: Optional[ExactNonNegativeDecimal] = None
-
     model_config = ConfigDict(extra="forbid")
+
+
+class CanonicalSalesCalculationPreviewLine(CalculationPreviewLine):
+    hsn_code: str = Field(pattern=r"^[0-9]{4,8}$")
+    taxability: Literal["taxable", "exempt", "nil_rated", "non_gst"]
+    tax_code_version_id: UUID
+    tax_release_id: UUID
+    tax_version_number: int = Field(ge=1)
+    tax_effective_from: date
+    tax_effective_to: Optional[date] = None
+    tax_ruleset_version: str = Field(min_length=1, max_length=128)
 
 
 class InvoiceCalculationPreviewTotals(BaseModel):
@@ -190,7 +217,9 @@ class ChallanCalculationPreviewTotals(BaseModel):
 
 class InvoiceCalculationPreviewResponse(BaseModel):
     success: Literal[True]
-    line_items: List[CalculationPreviewLine] = Field(min_length=1, max_length=500)
+    line_items: List[CanonicalSalesCalculationPreviewLine] = Field(
+        min_length=1, max_length=500
+    )
     totals: InvoiceCalculationPreviewTotals
     calculation_timestamp: int = Field(ge=0)
     gst_type: GSTType

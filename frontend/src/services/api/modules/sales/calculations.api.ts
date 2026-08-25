@@ -7,7 +7,7 @@ export type CalculationDecimalString = string;
 export type CalculationEntityId = number | string;
 
 export interface InvoiceCalculationLine {
-    product_id?: CalculationEntityId;
+    product_id: string;
     quantity: CalculationDecimalString;
     free_quantity?: CalculationDecimalString;
     free_supply_tax_treatment?:
@@ -16,13 +16,12 @@ export interface InvoiceCalculationLine {
     unit_price: CalculationDecimalString;
     mrp?: CalculationDecimalString;
     discount_percent?: CalculationDecimalString;
-    gst_percent?: CalculationDecimalString;
-    tax_percent?: CalculationDecimalString;
 }
 
 export interface InvoiceCalculationRequest {
-    customer_id?: CalculationEntityId;
-    gst_type?: string;
+    branch_id: string;
+    customer_id: string;
+    document_date: string;
     items: InvoiceCalculationLine[];
     freight_charges?: CalculationDecimalString;
     insurance_charges?: CalculationDecimalString;
@@ -54,6 +53,14 @@ export interface InvoiceCalculationPreviewLine {
     sgst_percent?: CalculationDecimalString;
     igst_percent?: CalculationDecimalString;
     scheme_discount?: CalculationDecimalString;
+    hsn_code: string;
+    taxability: 'taxable' | 'exempt' | 'nil_rated' | 'non_gst';
+    tax_code_version_id: string;
+    tax_release_id: string;
+    tax_version_number: number;
+    tax_effective_from: string;
+    tax_effective_to?: string;
+    tax_ruleset_version: string;
 }
 
 export interface InvoiceCalculationPreviewTotals {
@@ -94,13 +101,13 @@ export interface InvoiceCalculationResponse {
 }
 
 export interface SalesOrderCalculationRequest {
-    customer_id: CalculationEntityId;
-    gst_type?: string;
-    order_date?: string;
+    branch_id: string;
+    customer_id: string;
+    order_date: string;
     delivery_date?: string;
     items: Array<{
-        product_id: CalculationEntityId;
-        batch_id?: CalculationEntityId;
+        product_id: string;
+        batch_id?: string;
         batch_number?: string;
         quantity: CalculationDecimalString;
         free_quantity?: CalculationDecimalString;
@@ -110,7 +117,6 @@ export interface SalesOrderCalculationRequest {
         unit_price: CalculationDecimalString;
         mrp?: CalculationDecimalString;
         discount_percent?: CalculationDecimalString;
-        tax_percent?: CalculationDecimalString;
         uom?: string;
         pack_type?: string;
     }>;

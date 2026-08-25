@@ -1,7 +1,7 @@
 """Read-only calculation previews backed by the same services as document writes."""
 
 import time
-from typing import Any, Dict, Sequence, Type, TypeVar
+from typing import Any, Dict, Optional, Sequence, Type, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,7 +18,8 @@ from ..services.compliance.gst_service import GSTService
 from ..services.purchase.calculations import PurchaseCalculator
 from ..services.returns.return_calculation import ReturnCalculator
 from ..services.finance.adjustment_note_calculation import AdjustmentNoteCalculator
-from ..services.sales.invoice.invoice_service import InvoiceService
+from ..services.sales.calculation import calculate_sales_totals
+from ..services.sales.tax_authority import resolve_sales_tax_authority
 from ..services.sales.challan.service import ChallanService
 from ..schemas.calculations import (
     InvoiceCalculationRequest,
@@ -46,6 +47,7 @@ def _preview_response(
     gst_type: str,
     response_type: Type[PreviewResponse],
     source_lines: Sequence[BaseModel],
+    tax_authority_lines: Optional[Sequence[Any]] = None,
 ) -> PreviewResponse:
     totals = dict(result)
     line_items = totals.pop("calculated_items")
@@ -60,6 +62,18 @@ def _preview_response(
         batch_id = getattr(source, "batch_id", None)
         if batch_id is not None:
             identified["batch_id"] = batch_id
+        if tax_authority_lines is not None:
+            authority = tax_authority_lines[index]
+            identified.update({
+                "hsn_code": authority.hsn_code,
+                "taxability": authority.taxability,
+                "tax_code_version_id": authority.tax_code_version_id,
+                "tax_release_id": authority.tax_release_id,
+                "tax_version_number": authority.tax_version_number,
+                "tax_effective_from": authority.tax_effective_from,
+                "tax_effective_to": authority.tax_effective_to,
+                "tax_ruleset_version": authority.tax_ruleset_version,
+            })
         identified_lines.append(identified)
     return response_type.model_validate({
         "success": True,
@@ -84,32 +98,38 @@ async def preview_invoice_totals(
 ):
     """Calculate an invoice without writing it; commit uses the same service method."""
     try:
-        customer_id = invoice_data.customer_id
-        if customer_id is not None and not isinstance(customer_id, UUID):
-            gst_type = GSTService.determine_gst_type(
-                db=db,
-                org_id=str(context.org_id),
-                branch_id=context.primary_branch_id,
-                customer_id=int(customer_id),
-            )
-        else:
-            gst_type = invoice_data.gst_type
-        result = InvoiceService.calculate_invoice_totals(
-            items=[item.model_dump() for item in invoice_data.items],
-            gst_type=gst_type,
+        authority = resolve_sales_tax_authority(
+            db,
+            org_id=context.org_id,
+            branch_id=invoice_data.branch_id,
+            customer_account_id=invoice_data.customer_id,
+            product_ids=[item.product_id for item in invoice_data.items],
+            document_date=invoice_data.document_date,
+        )
+        items = []
+        for source, resolved in zip(invoice_data.items, authority.lines):
+            item = source.model_dump()
+            item["resolved_gst_percent"] = resolved.gst_rate
+            items.append(item)
+        result = calculate_sales_totals(
+            items=items,
+            gst_type=authority.gst_type,
             freight_charges=invoice_data.freight_charges,
             insurance_charges=invoice_data.insurance_charges,
             other_charges=invoice_data.other_charges,
             discount_type=invoice_data.discount_type,
             discount_percent=invoice_data.discount_percent,
             discount_amount=invoice_data.discount_amount,
-            exact_output=True,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return _preview_response(
-        result, gst_type, InvoiceCalculationPreviewResponse, invoice_data.items
+        result,
+        authority.gst_type,
+        InvoiceCalculationPreviewResponse,
+        invoice_data.items,
+        authority.lines,
     )
 
 
@@ -127,41 +147,38 @@ async def preview_sales_order_totals(
 ):
     """Calculate a sales order without writing or allocating inventory."""
     try:
-        customer_id = order_data.customer_id
-        if not isinstance(customer_id, UUID):
-            gst_type = GSTService.determine_gst_type(
-                db=db,
-                org_id=str(context.org_id),
-                branch_id=context.primary_branch_id,
-                customer_id=int(customer_id),
-            )
-        else:
-            gst_type = order_data.gst_type
+        authority = resolve_sales_tax_authority(
+            db,
+            org_id=context.org_id,
+            branch_id=order_data.branch_id,
+            customer_account_id=order_data.customer_id,
+            product_ids=[item.product_id for item in order_data.items],
+            document_date=order_data.order_date,
+        )
         items = []
-        for item in order_data.items:
+        for item, resolved in zip(order_data.items, authority.lines):
             item_data = item.model_dump()
-            if item_data.get("tax_percent") is not None:
-                item_data["gst_percent"] = item_data["tax_percent"]
+            item_data["resolved_gst_percent"] = resolved.gst_rate
             items.append(item_data)
-        result = InvoiceService.calculate_invoice_totals(
+        result = calculate_sales_totals(
             items=items,
-            gst_type=gst_type,
+            gst_type=authority.gst_type,
             freight_charges=order_data.delivery_charges,
             insurance_charges=0,
             other_charges=order_data.other_charges,
             discount_type=order_data.discount_type,
             discount_percent=order_data.discount_percent,
             discount_amount=order_data.discount_amount,
-            exact_output=True,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return _preview_response(
         result,
-        gst_type,
+        authority.gst_type,
         InvoiceCalculationPreviewResponse,
         order_data.items,
+        authority.lines,
     )
 
 
