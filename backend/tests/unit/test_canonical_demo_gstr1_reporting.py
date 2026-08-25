@@ -192,7 +192,11 @@ def test_activation_remains_inside_explicit_demo_opt_in() -> None:
     provision_step = workflow[workflow.index("- name: Provision and exercise the disposable demo organization"):]
     provision_step = provision_step[:provision_step.index("\n      - name:", 10)]
     assert "if: inputs.provision_demo_data == true" in provision_step
-    assert "python3 backend/scripts/provision_canonical_demo.py" in provision_step
+    assert "python3 -u backend/scripts/provision_canonical_demo.py" in provision_step
+    assert "PYTHONUNBUFFERED" in provision_step
+    assert "statement_timeout=120000" in provision_step
+    assert "timeout --signal=TERM --kill-after=30s 25m" in provision_step
+    assert "--timeout-graceful-shutdown 15" in provision_step
     assert "provision_canonical_demo" not in (
         REPO_ROOT / "backend/app/main.py"
     ).read_text(encoding="utf-8")

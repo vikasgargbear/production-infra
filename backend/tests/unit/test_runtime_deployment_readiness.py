@@ -174,5 +174,5 @@ def test_postgres_and_staging_gates_prove_runtime_exact_head_before_demo() -> No
     assert 'psql -X -Atqc \\"SELECT has_table_privilege' not in provision
     assert provision.index(revision_check) < provision.index("python3 -m uvicorn")
     assert provision.index(revision_check) < provision.index(
-        "python3 backend/scripts/provision_canonical_demo.py"
+        "python3 -u backend/scripts/provision_canonical_demo.py"
     )

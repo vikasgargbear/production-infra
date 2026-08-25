@@ -1064,7 +1064,19 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "provision_staging_mcp_oauth.py --mode client-only" in workflow
     assert "provision_staging_mcp_oauth.py --mode bind-existing-demo" in workflow
     assert "exercise_staging_mcp_oauth.py" in workflow
+    assert "timeout-minutes: 35" in workflow
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
+
+    hosted_business_flow_step = workflow[
+        workflow.index("- name: Exercise hosted OAuth and MCP against the provisioned demo"):
+    ]
+    hosted_business_flow_step = hosted_business_flow_step[
+        : hosted_business_flow_step.index("\n      - name:", 10)
+    ]
+    assert (
+        "if: inputs.provision_demo_data == true && inputs.deploy_render_pilot == true"
+        in hosted_business_flow_step
+    )
 
     provisioner = _read("backend/scripts/provision_staging_mcp_oauth.py")
     exercise = _read("backend/scripts/exercise_staging_mcp_oauth.py")

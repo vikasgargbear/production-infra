@@ -94,6 +94,7 @@ concurrency:
 jobs:
   baseline:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     environment: canonical-staging
     env:
       CANONICAL_BASELINE_APPROVED_SHA256: ${{ vars.CANONICAL_BASELINE_APPROVED_SHA256 }}
@@ -1160,6 +1161,8 @@ jobs:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
           CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
           CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
+          PYTHONUNBUFFERED: "1"
+          PGOPTIONS: -c statement_timeout=120000 -c lock_timeout=15000 -c idle_in_transaction_session_timeout=180000
         run: |
           set -euo pipefail
           test -n "$ERP_REGULATORY_IMPORTER_PASSWORD"
@@ -1205,6 +1208,7 @@ jobs:
           api_log=$(mktemp)
           PYTHONPATH=backend PORT=8090 python3 -m uvicorn app.main:app \
             --host 127.0.0.1 --port 8090 --workers 1 \
+            --timeout-graceful-shutdown 15 \
             >"$api_log" 2>&1 &
           api_pid=$!
           cleanup_demo_api() {
@@ -1230,7 +1234,9 @@ jobs:
           fi
 
           demo_log=$(mktemp)
-          if ! python3 backend/scripts/provision_canonical_demo.py 2>&1 | tee "$demo_log"; then
+          if ! timeout --signal=TERM --kill-after=30s 25m \
+            python3 -u backend/scripts/provision_canonical_demo.py 2>&1 \
+            | tee "$demo_log"; then
             python3 - "$demo_log" <<'PY'
           import pathlib
           import re
@@ -1265,7 +1271,7 @@ jobs:
           trap - EXIT
 
       - name: Exercise hosted OAuth and MCP against the provisioned demo
-        if: inputs.provision_demo_data == true
+        if: inputs.provision_demo_data == true && inputs.deploy_render_pilot == true
         env:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
           CANONICAL_STAGING_MCP_EXERCISE_MODE: business_flow
