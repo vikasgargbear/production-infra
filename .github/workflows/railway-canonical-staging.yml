@@ -154,18 +154,18 @@ jobs:
         run: |
           set -euo pipefail
           message="canonical staging $REVIEWED_SHA"
-          railway up . --detach --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >api-deploy.log 2>&1 &
+          railway up --detach --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >api-deploy.log 2>&1 &
           api_pid=$!
-          railway up . --detach --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >mcp-deploy.log 2>&1 &
+          railway up --detach --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >mcp-deploy.log 2>&1 &
           mcp_pid=$!
-          railway up . --detach --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >frontend-deploy.log 2>&1 &
+          railway up --detach --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >frontend-deploy.log 2>&1 &
           frontend_pid=$!
           status=0
           wait "$api_pid" || status=1
           wait "$mcp_pid" || status=1
           wait "$frontend_pid" || status=1
           if test "$status" != 0; then
-            sed -E 's#(postgres(?:ql)?://)[^@[:space:]]+@#\1[redacted]@#g' api-deploy.log mcp-deploy.log frontend-deploy.log
+            sed -E 's#(postgres(ql)?://)[^@[:space:]]+@#\1[redacted]@#g' api-deploy.log mcp-deploy.log frontend-deploy.log
             exit 1
           fi
 
