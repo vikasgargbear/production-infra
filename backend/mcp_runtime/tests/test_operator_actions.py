@@ -31,6 +31,7 @@ EXPECTED_PREPARES = {
     "erp_customer_receipt_prepare",
     "erp_supplier_payment_prepare",
     "erp_supplier_advance_prepare",
+    "erp_adjustment_note_prepare",
     "erp_inventory_transfer_prepare",
     "erp_inventory_adjustment_prepare",
     "erp_inventory_destruction_prepare",
@@ -63,6 +64,7 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
     published = set(PUBLISHED_PREPARE_TOOL_NAMES) | set(SHARED_ACTION_SCHEMAS)
     assert set(planned_operator_action_tool_names()) & set(live_tools) == published
     assert EXPECTED_PREPARES - set(PUBLISHED_PREPARE_TOOL_NAMES) == {
+        "erp_adjustment_note_prepare",
         "erp_inventory_transfer_prepare",
     }
     assert require_operator_action_publication_ready() is None

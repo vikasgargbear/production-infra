@@ -40,6 +40,7 @@ OPERATOR_COMMANDS = {
     "finance.customer_receipt.prepare": ("finance.payment.post", "payment"),
     "finance.supplier_payment.prepare": ("finance.payment.post", "payment"),
     "finance.supplier_advance.prepare": ("finance.supplier_advance.post", "payment"),
+    "finance.adjustment_note.prepare": ("finance.adjustment_note.post", "adjustment_note"),
     "inventory.transfer.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.adjustment.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.destruction.prepare": ("compliance.destruction.post", "destruction"),

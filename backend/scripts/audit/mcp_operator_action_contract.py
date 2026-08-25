@@ -36,6 +36,7 @@ EXPECTED_PREPARE_TOOLS = {
     "erp_customer_receipt_prepare",
     "erp_supplier_payment_prepare",
     "erp_supplier_advance_prepare",
+    "erp_adjustment_note_prepare",
     "erp_inventory_transfer_prepare",
     "erp_inventory_adjustment_prepare",
     "erp_inventory_destruction_prepare",
@@ -51,6 +52,7 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_gst_settings_get",
 }
 EXPECTED_UNAVAILABLE_PREPARE_TOOLS = {
+    "erp_adjustment_note_prepare",
     "erp_inventory_transfer_prepare",
 }
 EXPECTED_RESOLUTION_TOOLS = {
@@ -139,6 +141,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_inventory_destruction_prepare.lines[].batch_allocations",
     },
     "lines": {
+        "erp_adjustment_note_prepare.lines",
         "erp_sales_order_prepare.lines",
         "erp_sales_dispatch_prepare.lines",
         "erp_sales_invoice_prepare.lines",
@@ -157,6 +160,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_supplier_advance_prepare.payment_method",
     },
     "reason_code": {
+        "erp_adjustment_note_prepare.reason_code",
         "erp_sales_return_prepare.reason_code",
         "erp_purchase_return_prepare.reason_code",
         "erp_inventory_adjustment_prepare.reason_code",
@@ -173,6 +177,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_supplier_advance_prepare.bank_account_id",
     },
     "billed_quantity": {
+        "erp_adjustment_note_prepare.lines[].billed_quantity",
         "erp_sales_order_prepare.lines[].billed_quantity",
         "erp_sales_dispatch_prepare.lines[].billed_quantity",
         "erp_sales_dispatch_prepare.lines[].batch_allocations[].billed_quantity",
@@ -191,20 +196,39 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_operation_status_get.command_request_id",
     },
     "document_discount_eligible": {
-        f"{tool}.{kind}[].document_discount_eligible"
+        "erp_adjustment_note_prepare.lines[].document_discount_eligible",
+        *(f"{tool}.{kind}[].document_discount_eligible"
         for tool in (
             "erp_sales_order_prepare", "erp_sales_invoice_prepare",
             "erp_purchase_order_prepare", "erp_supplier_invoice_prepare",
         )
         for kind in ("charge_lines", "lines")
-        if not (tool == "erp_supplier_invoice_prepare" and kind == "charge_lines")
+        if not (tool == "erp_supplier_invoice_prepare" and kind == "charge_lines"))
     },
     "external_reference": {
         "erp_customer_receipt_prepare.external_reference",
         "erp_supplier_payment_prepare.external_reference",
         "erp_supplier_advance_prepare.external_reference",
     },
+    "gst_tax_treatment": {
+        "erp_adjustment_note_prepare.gst_tax_treatment",
+        "erp_sales_return_prepare.gst_tax_treatment",
+        "erp_purchase_return_prepare.gst_tax_treatment",
+    },
+    "recipient_itc_reversal_evidence_attachment_id": {
+        "erp_adjustment_note_prepare.recipient_itc_reversal_evidence_attachment_id",
+        "erp_sales_return_prepare.recipient_itc_reversal_evidence_attachment_id",
+    },
+    "recipient_itc_reversal_confirmed_at": {
+        "erp_adjustment_note_prepare.recipient_itc_reversal_confirmed_at",
+        "erp_sales_return_prepare.recipient_itc_reversal_confirmed_at",
+    },
+    "reason": {
+        "erp_adjustment_note_prepare.reason",
+        "erp_inventory_destruction_prepare.reason",
+    },
     "free_quantity": {
+        "erp_adjustment_note_prepare.lines[].free_quantity",
         "erp_sales_order_prepare.lines[].free_quantity",
         "erp_sales_dispatch_prepare.lines[].free_quantity",
         "erp_sales_dispatch_prepare.lines[].batch_allocations[].free_quantity",
@@ -251,13 +275,14 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_supplier_advance_prepare.payment_date",
     },
     "price_basis": {
-        f"{tool}.{kind}[].price_basis"
+        "erp_adjustment_note_prepare.lines[].price_basis",
+        *(f"{tool}.{kind}[].price_basis"
         for tool in (
             "erp_sales_order_prepare", "erp_sales_invoice_prepare",
             "erp_purchase_order_prepare", "erp_supplier_invoice_prepare",
         )
         for kind in ("charge_lines", "lines")
-        if not (tool == "erp_supplier_invoice_prepare" and kind == "charge_lines")
+        if not (tool == "erp_supplier_invoice_prepare" and kind == "charge_lines"))
     },
     "product_id": {
         "erp_sales_order_prepare.lines[].product_id",
@@ -322,6 +347,7 @@ EXPECTED_APPROVAL_POLICIES = {
     "erp_customer_receipt_prepare": "actor_confirmation",
     "erp_supplier_payment_prepare": "actor_confirmation",
     "erp_supplier_advance_prepare": "separate_approver",
+    "erp_adjustment_note_prepare": "separate_approver",
     "erp_inventory_transfer_prepare": "actor_confirmation",
     "erp_inventory_adjustment_prepare": "separate_approver",
     "erp_inventory_destruction_prepare": "separate_approver",
@@ -850,7 +876,8 @@ def main() -> int:
         "MCP operator action contract: OK "
         f"({len(EXPECTED_RESOLUTION_TOOLS)} resolution reads, "
         f"{len(EXPECTED_PREPARE_TOOLS) - len(EXPECTED_UNAVAILABLE_PREPARE_TOOLS)} "
-        "published prepares, 1 unavailable prepare, 3 shared tools)"
+        f"published prepares, {len(EXPECTED_UNAVAILABLE_PREPARE_TOOLS)} "
+        f"unavailable prepares, {len(EXPECTED_SHARED_TOOLS)} shared tools)"
     )
     return 0
 

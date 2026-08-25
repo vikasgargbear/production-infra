@@ -123,6 +123,9 @@ _PREPARE_BINDINGS = {
         execute_function="erp_finance_commands.post_supplier_advance_payment",
         unavailable_reason=None,
     ),
+    "finance.adjustment_note.prepare": _missing_action_resolver(
+        "finance.adjustment_note.prepare", "erp_commercial_commands.post_adjustment_note"
+    ),
     "inventory.transfer.prepare": ActionAdapterBinding(
         operation_key="inventory.transfer.prepare",
         available=True,

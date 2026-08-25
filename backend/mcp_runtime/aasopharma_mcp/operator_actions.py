@@ -35,6 +35,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_customer_receipt_prepare": "Prepare an INR customer receipt with an exact bank reference and receivable allocations.",
     "erp_supplier_payment_prepare": "Prepare an INR supplier payment with an exact bank reference and payable allocations.",
     "erp_supplier_advance_prepare": "Prepare an INR supplier advance allocated to one approved purchase-order line.",
+    "erp_adjustment_note_prepare": "Prepare a standalone canonical customer credit note or supplier debit note against exact posted invoice lines and the authoritative open item.",
     "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
     "erp_inventory_destruction_prepare": "Prepare a certified same-day destruction of exact non-regulated stock with no GST ITC consequence.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
@@ -835,6 +836,38 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         }
     )
 
+    adjustment_note = _header("note_date", "India-local note date, not before the original invoice date.")
+    adjustment_note.update({
+        "side": _string("Original document side.", enum=["sales", "purchase"]),
+        "direction": _string("Canonical decrease direction.", enum=["credit", "debit"]),
+        "original_document_id": _uuid("Canonical posted sales or supplier invoice being adjusted."),
+        "gst_tax_treatment": _string("Explicit statutory or commercial-only GST adjustment treatment; it must match the effective reviewed rule.", enum=["statutory", "commercial_only"]),
+        "recipient_itc_reversal_evidence_attachment_id": _uuid("Verified or retained buyer ITC-reversal evidence required only for a statutory credit."),
+        "recipient_itc_reversal_confirmed_at": _datetime("Timestamp at which the registered buyer's ITC reversal was confirmed."),
+        "counterparty_portal_document_line_id": _uuid("Parsed GSTR-2B supplier credit-note line for a statutory supplier debit note."),
+        "reason_code": _string("Exact active GST adjustment-rule reason code."),
+        "reason": _string("Human-readable business reason retained on the note."),
+        "rounding_policy": _string("Canonical document rounding policy.", enum=["none", "nearest_rupee"]),
+        "document_discount": DOCUMENT_DISCOUNT,
+        "lines": _array(
+            _object(
+                {
+                    "original_line_id": _uuid("Exact line on the original posted invoice."),
+                    "billed_quantity": COMMERCIAL_LINE_PROPERTIES["billed_quantity"],
+                    "free_quantity": COMMERCIAL_LINE_PROPERTIES["free_quantity"],
+                    "free_supply_tax_treatment": COMMERCIAL_LINE_PROPERTIES["free_supply_tax_treatment"],
+                    "quoted_unit_rate": COMMERCIAL_LINE_PROPERTIES["quoted_unit_rate"],
+                    "price_basis": COMMERCIAL_LINE_PROPERTIES["price_basis"],
+                    "line_discount": LINE_DISCOUNT,
+                    "document_discount_eligible": COMMERCIAL_LINE_PROPERTIES["document_discount_eligible"],
+                },
+                ("original_line_id", "billed_quantity", "free_quantity", "free_supply_tax_treatment", "quoted_unit_rate", "price_basis", "line_discount", "document_discount_eligible"),
+                "One exact original-line adjustment; product substitution and ad-hoc charges are unavailable.",
+            ),
+            "Exact standalone adjustment-note lines.",
+        ),
+    })
+
     inventory_transfer = {
         "source_branch_id": _uuid("Authorized source branch."),
         "destination_branch_id": _uuid("Authorized, distinct destination branch."),
@@ -940,6 +973,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         ("erp_customer_receipt_prepare", "finance.customer_receipt.prepare", "finance.customer_receipt.create", "payment_allocations", "actor_confirmation", customer_receipt),
         ("erp_supplier_payment_prepare", "finance.supplier_payment.prepare", "finance.supplier_payment.create", "payment_allocations", "actor_confirmation", supplier_payment),
         ("erp_supplier_advance_prepare", "finance.supplier_advance.prepare", "finance.supplier_advance.create", "supplier_advance", "separate_approver", supplier_advance),
+        ("erp_adjustment_note_prepare", "finance.adjustment_note.prepare", "finance.adjustment_note.manage", "original_document_adjustment", "separate_approver", adjustment_note),
         ("erp_inventory_transfer_prepare", "inventory.transfer.prepare", "inventory.transfer.create", "interbranch_batched_movement", "actor_confirmation", inventory_transfer),
         ("erp_inventory_adjustment_prepare", "inventory.adjustment.prepare", "inventory.adjustment.create", "controlled_batched_movement", "separate_approver", inventory_adjustment),
         ("erp_inventory_destruction_prepare", "inventory.destruction.prepare", "inventory.destruction.create", "controlled_batched_movement", "separate_approver", inventory_destruction),
@@ -968,6 +1002,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "recipient_itc_reversal_evidence_attachment_id",
             "recipient_itc_reversal_confirmed_at",
             "supplier_credit_note_portal_line_id",
+            "counterparty_portal_document_line_id",
             "supplier_invoice_receipt_allocation_id",
         }
         if operation_key == "sales.invoice.prepare":

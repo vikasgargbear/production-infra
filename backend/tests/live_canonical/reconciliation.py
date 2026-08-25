@@ -41,6 +41,11 @@ RESOURCE_TABLES = {
         "procurement.purchase_order_advance_allocations",
         "payment_id",
     ),
+    "finance.adjustment_note": (
+        "finance.adjustment_notes",
+        "finance.adjustment_note_lines",
+        "adjustment_note_id",
+    ),
     "inventory.transfer": (
         "inventory.inventory_documents",
         "inventory.inventory_document_lines",

@@ -31,6 +31,7 @@
     "client_registration": "reviewed-pre-registration-only"
   },
   "tools": [
+    "erp_adjustment_note_prepare",
     "erp_customer_receipt_prepare",
     "erp_customer_search",
     "erp_goods_receipt_get",
@@ -67,6 +68,7 @@
     "status": "published_bounded",
     "exported": true,
     "published_tools": [
+      "erp_adjustment_note_prepare",
       "erp_customer_receipt_prepare",
       "erp_goods_receipt_prepare",
       "erp_inventory_adjustment_prepare",

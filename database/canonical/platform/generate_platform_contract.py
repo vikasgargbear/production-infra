@@ -173,6 +173,7 @@ CANONICAL_OPERATOR_PERMISSIONS = {
     "automation.command.execute",
     "automation.command.view",
     "finance.customer_receipt.create",
+    "finance.adjustment_note.manage",
     "finance.supplier_advance.create",
     "finance.supplier_payment.create",
     "inventory.adjustment.create",

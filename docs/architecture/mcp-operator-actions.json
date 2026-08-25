@@ -8,6 +8,7 @@
     "writes_exported": true,
     "fail_closed": true,
     "published_prepare_operations": [
+      "finance.adjustment_note.prepare",
       "finance.customer_receipt.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
@@ -269,6 +270,16 @@
       "approval_policy": "separate_approver",
       "schema_profile": "supplier_advance",
       "description": "Prepare a supplier advance allocated to approved product PO lines; gross basis equals net cash plus backend-derived withholding."
+    },
+    {
+      "tool": "erp_adjustment_note_prepare",
+      "operation_key": "finance.adjustment_note.prepare",
+      "resource": "adjustment_note",
+      "permission": "finance.adjustment_note.manage",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "original_document_adjustment",
+      "description": "Prepare a standalone customer credit note or supplier debit note against exact posted invoice lines. This remains unavailable until a reviewed durable prepare resolver and automation dispatcher complement the existing generic adjustment-note posting primitive."
     },
     {
       "tool": "erp_inventory_transfer_prepare",

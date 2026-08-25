@@ -266,6 +266,47 @@ def validate_prepare_payload_semantics(
                 "supplier payment allocations must exactly equal gross_amount"
             )
 
+    if operation_key == "finance.adjustment_note.prepare":
+        side = values["side"]
+        direction = values["direction"]
+        if (side, direction) not in {("sales", "credit"), ("purchase", "debit")}:
+            raise ValueError(
+                "standalone pilot supports only customer credit notes and supplier debit notes"
+            )
+        allowed_reasons = (
+            {"customer_rejection", "damage", "expiry", "quality", "recall", "wrong_supply"}
+            if side == "sales"
+            else {"wrong_supply", "excess_supply"}
+        )
+        if values["reason_code"] not in allowed_reasons:
+            raise ValueError("adjustment-note reason_code is not reviewed for the selected side")
+        treatment = values["gst_tax_treatment"]
+        sales_evidence = values.get("recipient_itc_reversal_evidence_attachment_id")
+        sales_confirmed = values.get("recipient_itc_reversal_confirmed_at")
+        purchase_evidence = values.get("counterparty_portal_document_line_id")
+        if treatment == "statutory" and side == "sales":
+            if sales_evidence is None or sales_confirmed is None or purchase_evidence is not None:
+                raise ValueError(
+                    "statutory customer credit note requires only recipient ITC-reversal evidence"
+                )
+        elif treatment == "statutory":
+            if purchase_evidence is None or sales_evidence is not None or sales_confirmed is not None:
+                raise ValueError(
+                    "statutory supplier debit note requires only parsed GSTR-2B credit-note evidence"
+                )
+        elif any(value is not None for value in (sales_evidence, sales_confirmed, purchase_evidence)):
+            raise ValueError("commercial-only adjustment note forbids statutory evidence")
+        original_line_ids = [line["original_line_id"] for line in values["lines"]]
+        if len(set(original_line_ids)) != len(original_line_ids):
+            raise ValueError("adjustment note requires unique original_line_id values")
+        for index, line in enumerate(values["lines"]):
+            billed = Decimal(str(line["billed_quantity"]))
+            free = Decimal(str(line["free_quantity"]))
+            if billed < 0 or free < 0:
+                raise ValueError(f"lines[{index}] quantities must be nonnegative")
+            if billed + free <= 0:
+                raise ValueError(f"lines[{index}] requires a positive adjusted quantity")
+
     if operation_key == "sales.invoice.prepare":
         if values["zero_rated_payment_mode"] == "without_payment":
             raise ValueError(

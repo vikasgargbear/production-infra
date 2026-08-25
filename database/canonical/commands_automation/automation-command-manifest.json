@@ -3,8 +3,11 @@
   "blocked_invariants": {},
   "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
   "dispatcher": {
-    "blocked_prepare_capabilities": [],
+    "blocked_prepare_capabilities": [
+      "finance.adjustment_note.prepare"
+    ],
     "capability_operation_map": {
+      "finance.adjustment_note.prepare": "finance.adjustment_note.post",
       "finance.customer_receipt.prepare": "finance.payment.post",
       "finance.supplier_advance.prepare": "finance.supplier_advance.post",
       "finance.supplier_payment.prepare": "finance.payment.post",
@@ -234,6 +237,7 @@
       ]
     },
     "registered_prepare_capabilities": [
+      "finance.adjustment_note.prepare",
       "finance.customer_receipt.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
@@ -383,7 +387,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "388df5bfab2032cb5ba4f93acd81f1f575c6a48e254d5a253fd68f46e2459b81",
+  "mapping_sha256": "f1d19b0a76fa606122075d7b3ee444b98506a3d11b15bc4e1a7d815e3998524d",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [
