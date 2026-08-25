@@ -29,6 +29,13 @@ UUID_RE = re.compile(
 TOKEN_RE = re.compile(r"\{\{(fact|scalar)\.([a-z][a-z0-9_.]*)\}\}")
 RUNTIME_TOKEN_RE = re.compile(r"\{\{(command_request_id|preview_hash|run_token)\}\}")
 FORBIDDEN_SCALAR_KEYS = re.compile(r"(?:^|_)(?:id|uuid|row_version|hash|date|time|timestamp)$")
+PHASES = (
+    "missing_required_steps", "prepare_steps", "approval_steps", "execute_steps",
+)
+ACTORS = {"requester", "reviewer"}
+ACTIONS = {"goto", "click", "fill", "select", "press", "expectText"}
+LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
+COMMUNICATION_ACTION = re.compile(r"whats?app|e-?mail|sms|text message|phone|call|tel:", re.I)
 
 
 class FixtureCompileError(RuntimeError):
@@ -190,6 +197,38 @@ def _compile_value(value: Any, facts: dict[str, Any], scalars: dict[str, Any], u
     return rendered
 
 
+def _validate_compiled_steps(operation_id: str, steps: Any) -> None:
+    if not isinstance(steps, dict) or set(steps) != set(PHASES):
+        raise FixtureCompileError(f"{operation_id} template must define exactly {PHASES}")
+    for phase in PHASES:
+        rows = steps[phase]
+        if not isinstance(rows, list) or not rows:
+            raise FixtureCompileError(f"{operation_id}.{phase} must be non-empty")
+        for index, step in enumerate(rows):
+            if not isinstance(step, dict) or step.get("actor") not in ACTORS or step.get("action") not in ACTIONS:
+                raise FixtureCompileError(f"{operation_id}.{phase}[{index}] has invalid actor/action")
+            action = step["action"]
+            locator = step.get("locator")
+            if action == "goto":
+                if locator is not None or not str(step.get("value", "")).startswith("/"):
+                    raise FixtureCompileError(f"{operation_id}.{phase}[{index}] has invalid goto")
+            else:
+                if not isinstance(locator, dict) or locator.get("kind") not in LOCATOR_KINDS or not isinstance(locator.get("name"), str):
+                    raise FixtureCompileError(f"{operation_id}.{phase}[{index}] requires a valid locator")
+                if locator["kind"] == "role" and not isinstance(locator.get("role"), str):
+                    raise FixtureCompileError(f"{operation_id}.{phase}[{index}] role locator omitted role")
+            encoded = json.dumps(step, sort_keys=True)
+            if COMMUNICATION_ACTION.search(encoded):
+                raise FixtureCompileError(f"{operation_id}.{phase}[{index}] targets communication")
+    if steps["prepare_steps"][0]["action"] != "goto":
+        raise FixtureCompileError(f"{operation_id}.prepare_steps must restart from a route")
+    if not any(row["action"] == "expectText" for row in steps["missing_required_steps"]):
+        raise FixtureCompileError(f"{operation_id}.missing_required_steps omitted visible assertion")
+    for phase in ("approval_steps", "execute_steps"):
+        if "{{command_request_id}}" not in json.dumps(steps[phase], sort_keys=True):
+            raise FixtureCompileError(f"{operation_id}.{phase} does not target captured command")
+
+
 def compile_fixture(
     matrix_path: Path,
     template_directory: Path,
@@ -216,7 +255,9 @@ def compile_fixture(
         template = _object(path, f"{operation_id} template")
         if template.get("template_schema") != TEMPLATE_SCHEMA or template.get("operation_id") != operation_id:
             raise FixtureCompileError(f"invalid UI template authority: {operation_id}")
-        operations[operation_id] = _compile_value(template.get("steps"), facts, scalars, used)
+        compiled_steps = _compile_value(template.get("steps"), facts, scalars, used)
+        _validate_compiled_steps(operation_id, compiled_steps)
+        operations[operation_id] = compiled_steps
     unused = sorted(set(scalars) - used)
     if unused:
         raise FixtureCompileError(f"unreviewed/unused scalar values are forbidden: {unused}")

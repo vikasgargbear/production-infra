@@ -70,3 +70,19 @@ def test_scalar_pack_rejects_identity_authority_and_size(tmp_path: Path) -> None
     path.write_bytes(b" " * (MAX_SCALAR_BYTES + 1))
     with pytest.raises(FixtureCompileError, match="exceeds"):
         load_reviewed_scalars(path)
+
+
+def test_compiler_rejects_template_that_does_not_target_exact_command(tmp_path: Path) -> None:
+    matrix = _matrix(tmp_path / "matrix.json")
+    templates = _templates(tmp_path / "templates")
+    path = templates / "operation_1.json"
+    template = json.loads(path.read_text())
+    template["steps"]["execute_steps"][0]["locator"]["name"] = "First pending"
+    path.write_text(json.dumps(template))
+    with pytest.raises(FixtureCompileError, match="does not target captured command"):
+        compile_fixture(
+            matrix,
+            templates,
+            {"display": {"branch_code": "sales"}},
+            {"quantity": "1.000000"},
+        )
