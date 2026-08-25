@@ -64,11 +64,8 @@ export const loadCustomersWithCanonicalAging = async () => {
 
 const CUSTOMER_TYPES = [
   { value: 'all', label: 'All Types' },
-  { value: 'retail', label: 'Retail' },
-  { value: 'wholesale', label: 'Wholesale' },
-  { value: 'hospital', label: 'Hospital' },
-  { value: 'clinic', label: 'Clinic' },
-  { value: 'pharmacy', label: 'Pharmacy' }
+  { value: 'individual', label: 'Individual' },
+  { value: 'organization', label: 'Organization' },
 ];
 
 // ============================================================================
@@ -135,7 +132,7 @@ const getColumns = (): Column<Customer>[] => [
       header: 'GST/License',
       render: (_, customer) => {
         if (!customer) return <div>N/A</div>;
-        const gstNumber = (customer.gst_number || (customer as unknown as Record<string, unknown>).gst_number || '') as string;
+        const gstNumber = customer.gst_number;
         return (
           <div className="text-sm">
             {gstNumber ? (

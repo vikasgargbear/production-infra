@@ -29,4 +29,11 @@ describe('master business facts have no browser-invented policy', () => {
   it('does not turn absent limits, terms, or balances into numeric zero', () => {
     expect(combined).not.toMatch(/(?:credit_limit|credit_days|payment_days|current_outstanding)\s*:\s*[^\n]*\|\|\s*0/);
   });
+
+  it('uses only the canonical individual and organization party classifications', () => {
+    const customerMaster = source('masters/CustomerMaster.tsx');
+    expect(customerMaster).toContain("{ value: 'individual', label: 'Individual' }");
+    expect(customerMaster).toContain("{ value: 'organization', label: 'Organization' }");
+    expect(customerMaster).not.toMatch(/value: '(retail|wholesale|hospital|clinic|pharmacy)'/);
+  });
 });
