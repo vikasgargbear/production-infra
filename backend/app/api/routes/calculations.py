@@ -16,8 +16,8 @@ from ...core.auth.tenant_service import (
 from ...core.security.permissions import PermissionChecker, check_permission
 from ..services.compliance.gst_service import GSTService
 from ..services.purchase.calculations import PurchaseCalculator
-from ..services.returns.return_service import ReturnService
-from ..services.finance.credit_note.service import CreditNoteService
+from ..services.returns.return_calculation import ReturnCalculator
+from ..services.finance.adjustment_note_calculation import AdjustmentNoteCalculator
 from ..services.sales.invoice.invoice_service import InvoiceService
 from ..services.sales.challan.service import ChallanService
 from ..schemas.calculations import (
@@ -285,7 +285,7 @@ async def preview_return_totals(
             if party_kwargs and return_data.include_gst
             else return_data.gst_type
         )
-        result = ReturnService.calculate_return_totals(
+        result = ReturnCalculator.calculate_return_totals(
             [item.model_dump() for item in return_data.items],
             gst_type,
             include_gst=return_data.include_gst,
@@ -332,7 +332,7 @@ async def preview_note_totals(
             if party_kwargs and note_data.include_gst
             else note_data.gst_type
         )
-        result = CreditNoteService.calculate_note_totals({
+        result = AdjustmentNoteCalculator.calculate_note_totals({
             "include_gst": note_data.include_gst,
             "items": [item.model_dump() for item in note_data.items],
         }, gst_type)

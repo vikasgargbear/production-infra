@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, TrendingUp, DollarSign, Percent, Loader2 } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import useDialogFocus from '../../../hooks/useDialogFocus';
-import { apiClient } from '../../../services/api';
+import { batchesApi } from '../../../services/api';
+import { isCanonicalUuid } from '../../../utils/canonicalUuid';
+import { normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
 // Shared Types
 import { InvoiceItem } from '../invoice/types/invoiceTypes';
@@ -31,6 +33,7 @@ interface ItemProfitModalProps {
 const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, items = [] }) => {
     const [loading, setLoading] = useState<boolean>(false);
     const [itemsWithCost, setItemsWithCost] = useState<InvoiceItem[]>([]);
+    const [error, setError] = useState<string | null>(null);
     const hasFetchedRef = useRef<boolean>(false);
     const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
 
@@ -42,67 +45,67 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
             // Reset state when modal closes
             setItemsWithCost([]);
             setLoading(false);
+            setError(null);
             hasFetchedRef.current = false;
             return;
         }
 
         if (items.length > 0 && !hasFetchedRef.current) {
-            console.log('=== ItemProfitModal OPENED ===');
-            console.log('Items received:', JSON.stringify(items, null, 2));
-            console.log('First item structure:', items[0]);
             hasFetchedRef.current = true;
             fetchCostData();
         } else if (items.length === 0) {
-            console.warn('ItemProfitModal - Modal opened but no items provided!');
             setItemsWithCost([]);
             setLoading(false);
+            setError(null);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, items.length]); // Re-fetch when modal opens or items count changes
 
     const fetchCostData = async (): Promise<void> => {
         setLoading(true);
+        setError(null);
 
         try {
-            // Fetch batch cost data for all items that have batch_id
-            const itemsWithCostData = await Promise.all(
-                items.map(async (item) => {
-                    if (!item.batch_id) {
-                        console.log(`Item ${item.product_name} has no batch_id`);
-                        return { ...item, cost_per_unit: 0, cost_source: 'none' };
-                    }
-
-                    try {
-                        // Fetch batch details to get cost_per_unit
-                        const response = await apiClient.get(`/inventory/batches/${item.batch_id}`);
-
-                        // Handle different response structures
-                        const batch = response.data?.batch || response.data?.data || response.data;
-
-                        // Parse cost from string to number (DB returns as string like "30.0000")
-                        const costPerUnit = parseFloat(batch.cost_per_unit) || 0;
-                        const weightedAvgCost = parseFloat(batch.weighted_average_cost) || 0;
-
-                        const finalCost = costPerUnit || weightedAvgCost || 0;
-
-                        console.log(`Batch ${item.batch_id} (${item.product_name}): cost = ₹${finalCost}`);
-
-                        return {
-                            ...item,
-                            cost_per_unit: finalCost,
-                            cost_source: costPerUnit > 0 ? 'batch' : (weightedAvgCost > 0 ? 'weighted_avg' : 'none')
-                        };
-                    } catch (error) {
-                        console.error(`Failed to fetch cost for batch ${item.batch_id}:`, (error as Error).message);
-                        return { ...item, cost_per_unit: 0, cost_source: 'error' };
-                    }
-                })
-            );
+            const productIds = Array.from(new Set(items.map((item, index) => {
+                if (!isCanonicalUuid(item.product_id)) {
+                    throw new Error(`Invoice line ${index + 1} is missing its canonical product UUID.`);
+                }
+                if (!isCanonicalUuid(item.batch_id)) {
+                    throw new Error(`Invoice line ${index + 1} is missing its canonical batch UUID.`);
+                }
+                return String(item.product_id);
+            })));
+            const responses = await Promise.all(productIds.map(async productId => (
+                [productId, await batchesApi.getByProduct(productId)] as const
+            )));
+            const batchesByProduct = new Map(responses.map(([productId, response]) => {
+                if (!Array.isArray(response.data?.batches)) {
+                    throw new Error(`Canonical batch response for product ${productId} is invalid.`);
+                }
+                return [productId, response.data.batches] as const;
+            }));
+            const itemsWithCostData = items.map((item, index) => {
+                const productId = String(item.product_id);
+                const batchId = String(item.batch_id);
+                const batch = batchesByProduct.get(productId)?.find(row => row.batch_id === batchId);
+                if (!batch) {
+                    throw new Error(`Invoice line ${index + 1} batch is not available in the canonical product projection.`);
+                }
+                if (batch.product_id !== productId) {
+                    throw new Error(`Invoice line ${index + 1} batch does not belong to its canonical product.`);
+                }
+                const exactCost = normalizeAuthoritativeDecimal(
+                    batch.cost_per_unit,
+                    `Invoice line ${index + 1} batch cost`,
+                    { scale: 4, maximumWholeDigits: 16 },
+                );
+                return { ...item, cost_per_unit: Number(exactCost) };
+            });
 
             setItemsWithCost(itemsWithCostData);
-        } catch (error) {
-            console.error('Failed to fetch cost data:', error);
-            setItemsWithCost(items.map(item => ({ ...item, cost_per_unit: 0, cost_source: 'error' })));
+        } catch (caught) {
+            setItemsWithCost([]);
+            setError(caught instanceof Error ? caught.message : 'Canonical batch costs are unavailable.');
         } finally {
             setLoading(false);
         }
@@ -173,8 +176,14 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
                         </div>
                     )}
 
+                    {!loading && error && (
+                        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                            {error} Profit analysis is unavailable until authoritative batch cost is present.
+                        </div>
+                    )}
+
                     {/* Overall Summary */}
-                    {!loading && (
+                    {!loading && !error && (
                         <>
                             <div className="grid grid-cols-4 gap-4">
                                 <div className="bg-blue-50 p-3 rounded-lg">
@@ -268,11 +277,6 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
                                     <DollarSign size={14} />
                                     <strong>Margin %:</strong> Profit as percentage of selling price (Profit / Selling × 100)
                                 </div>
-                                {totals.totalCost === 0 && (
-                                    <div className="mt-2 pt-2 border-t border-gray-200 text-amber-600">
-                                        ⚠️ <strong>Note:</strong> Cost prices are loaded from batch master data. Items showing ₹0.00 cost may not have purchase/cost prices set in their batch records.
-                                    </div>
-                                )}
                             </div>
 
                             {/* Close Button */}

@@ -5,11 +5,10 @@ const source = (relativePath: string) => fs.readFileSync(path.join(__dirname, re
 
 describe('displayed desktop keyboard shortcuts', () => {
   it('shows only implemented shortcuts on stock and financial report surfaces', () => {
-    const stockHistory = source('../../inventory/StockListHistory.tsx');
     const stockMovement = source('../../inventory/stock/StockMovement.tsx');
     const financialReports = source('../../payment/reports/FinancialReports.tsx');
 
-    [stockHistory, stockMovement, financialReports].forEach(component => {
+    [stockMovement, financialReports].forEach(component => {
       expect(component).not.toContain('Ctrl+F');
       expect(component).not.toContain('Ctrl+G');
       expect(component).not.toContain('Ctrl+D');

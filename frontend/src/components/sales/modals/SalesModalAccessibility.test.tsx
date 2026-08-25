@@ -16,6 +16,7 @@ jest.mock('../../../hooks/useEscapeKey', () => ({
 
 jest.mock('../../../services/api', () => ({
     apiClient: { get: jest.fn(() => new Promise(() => {})) },
+    batchesApi: { getByProduct: jest.fn(() => new Promise(() => {})) },
     invoicesApi: {
         getLastDeals: jest.fn(() => new Promise(() => {})),
         search: jest.fn(() => new Promise(() => {})),

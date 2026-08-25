@@ -40,7 +40,7 @@ describe('canonical master mutation endpoints', () => {
 
     batchesApi.getByProduct(productId);
 
-    expect(apiHelpers.get).toHaveBeenCalledWith(`/products/${productId}/batches`, { params: {} });
+    expect(apiHelpers.get).toHaveBeenCalledWith(`/products/${productId}/batches`);
   });
 
   it('keeps the complete bounded canonical master authoring set effective', () => {

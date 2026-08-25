@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   TrendingUp, TrendingDown, FileText,
-  RefreshCw, Loader2, AlertCircle, IndianRupee,
+  RefreshCw, Loader2, IndianRupee,
   BarChart3, ChevronDown, ChevronUp, Home
 } from 'lucide-react';
 import SummaryCard from '../../global/ui/display/SummaryCard';
 import ModuleHeader from '../../global/ui/ModuleHeader';
 import { gstApi } from '../../../services/api';
 import { compareExactDecimals, formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
+import { requireCalendarDate } from '../../../utils/calendarDate';
 
 interface GSTDashboardProps {
   onNavigateToReports?: () => void;
@@ -21,6 +22,7 @@ interface TaxBreakdown {
 }
 
 interface DashboardState {
+  period: { key: string; start: string; end: string };
   outputTax: TaxBreakdown;
   inputCredit: TaxBreakdown;
   netPayable: string;
@@ -51,13 +53,51 @@ interface GSTDashboardSummaryPayload {
   };
 }
 
-const EMPTY_STATE: DashboardState = {
-  outputTax: { cgst: '0.00', sgst: '0.00', igst: '0.00', total: '0.00' },
-  inputCredit: { cgst: '0.00', sgst: '0.00', igst: '0.00', total: '0.00' },
-  netPayable: '0.00',
-  totalInvoices: 0,
-  totalSuppliers: 0,
-  totalSupplierInvoices: 0,
+const requiredCount = (value: unknown, label: string): number => {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error(`GST dashboard has invalid canonical ${label}.`);
+  }
+  return Number(value);
+};
+
+export const projectGSTDashboard = (
+  payload: GSTDashboardSummaryPayload,
+  requestedPeriod: string,
+): DashboardState => {
+  if (!payload || typeof payload !== 'object' || !payload.summary || !payload.period) {
+    throw new Error('GST dashboard response is incomplete.');
+  }
+  if (payload.period.key !== requestedPeriod) {
+    throw new Error('GST dashboard returned a different reporting period.');
+  }
+  const start = requireCalendarDate(payload.period.start, 'GST period start');
+  const end = requireCalendarDate(payload.period.end, 'GST period end');
+  if (end < start) throw new Error('GST dashboard period is inverted.');
+  const money = (value: unknown, label: string) => normalizeAuthoritativeDecimal(
+    value,
+    label,
+    { scale: 2, maximumWholeDigits: 20, allowNegative: true },
+  );
+  const summary = payload.summary;
+  return {
+    period: { key: payload.period.key, start, end },
+    outputTax: {
+      cgst: money(summary.cgst_amount, 'Output CGST'),
+      sgst: money(summary.sgst_amount, 'Output SGST'),
+      igst: money(summary.igst_amount, 'Output IGST'),
+      total: money(payload.outputTax, 'Output tax'),
+    },
+    inputCredit: {
+      cgst: money(summary.purchase_cgst_amount, 'Input CGST'),
+      sgst: money(summary.purchase_sgst_amount, 'Input SGST'),
+      igst: money(summary.purchase_igst_amount, 'Input IGST'),
+      total: money(payload.inputCredit, 'Input credit'),
+    },
+    netPayable: money(payload.netPayable, 'Net GST payable'),
+    totalInvoices: requiredCount(summary.total_invoices, 'invoice count'),
+    totalSuppliers: requiredCount(summary.total_suppliers, 'supplier count'),
+    totalSupplierInvoices: requiredCount(summary.total_supplier_invoices, 'supplier invoice count'),
+  };
 };
 
 const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
@@ -65,8 +105,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<DashboardState>(EMPTY_STATE);
-  const [periodRange, setPeriodRange] = useState<{ start?: string; end?: string } | null>(null);
+  const [data, setData] = useState<DashboardState | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const requestRef = useRef(0);
 
@@ -78,36 +117,12 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
     try {
       const dashboardRes = await gstApi.dashboard.getSummary(selectedPeriod);
       const gstData: GSTDashboardSummaryPayload = dashboardRes?.data || dashboardRes;
-      const summary = gstData?.summary || {};
-
       if (requestId !== requestRef.current) return;
-      const money = (value: unknown, label: string) => normalizeAuthoritativeDecimal(value, label, {
-        scale: 2, maximumWholeDigits: 20, allowNegative: true,
-      });
-      setPeriodRange(gstData.period || null);
-      setData({
-        outputTax: {
-          cgst: money(summary.cgst_amount, 'Output CGST'),
-          sgst: money(summary.sgst_amount, 'Output SGST'),
-          igst: money(summary.igst_amount, 'Output IGST'),
-          total: money(gstData?.outputTax, 'Output tax'),
-        },
-        inputCredit: {
-          cgst: money(summary.purchase_cgst_amount, 'Input CGST'),
-          sgst: money(summary.purchase_sgst_amount, 'Input SGST'),
-          igst: money(summary.purchase_igst_amount, 'Input IGST'),
-          total: money(gstData?.inputCredit, 'Input credit'),
-        },
-        netPayable: money(gstData?.netPayable, 'Net GST payable'),
-        totalInvoices: summary.total_invoices || 0,
-        totalSuppliers: summary.total_suppliers || 0,
-        totalSupplierInvoices: summary.total_supplier_invoices || 0,
-      });
+      setData(projectGSTDashboard(gstData, selectedPeriod));
     } catch (err) {
       if (requestId !== requestRef.current) return;
-      setError(`Unable to load GST data: ${(err as Error)?.message || 'Unknown error'}`);
-      setData(EMPTY_STATE);
-      setPeriodRange(null);
+      setError(err instanceof Error ? err.message : 'Canonical GST dashboard is unavailable.');
+      setData(null);
     } finally {
       if (requestId === requestRef.current) setLoading(false);
     }
@@ -134,19 +149,6 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
   const isPositive = (amount: string, label: string) => compareExactDecimals(amount, '0.00', label, {
     scale: 2, maximumWholeDigits: 20, allowNegative: true,
   }) > 0;
-  const netIsPayable = compareExactDecimals(data.netPayable, '0.00', 'Net GST payable', {
-    scale: 2, maximumWholeDigits: 20, allowNegative: true,
-  }) >= 0;
-  const displayNet = data.netPayable.startsWith('-') ? data.netPayable.slice(1) : data.netPayable;
-
-  const selectedPeriodLabel = periodRange?.start && periodRange?.end
-    ? `${new Date(`${periodRange.start}T00:00:00`).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric'
-    })} – ${new Date(`${periodRange.end}T00:00:00`).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric'
-    })}`
-    : '';
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -155,6 +157,27 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
       </div>
     );
   }
+
+  if (error || !data) {
+    return (
+      <div role="alert" className="m-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+        <div>{error || 'Canonical GST dashboard is unavailable.'}</div>
+        <button type="button" onClick={handleRefresh} className="mt-3 min-h-11 rounded-lg border border-red-300 bg-white px-4 font-medium">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const netIsPayable = compareExactDecimals(data.netPayable, '0.00', 'Net GST payable', {
+    scale: 2, maximumWholeDigits: 20, allowNegative: true,
+  }) >= 0;
+  const displayNet = data.netPayable.startsWith('-') ? data.netPayable.slice(1) : data.netPayable;
+  const selectedPeriodLabel = `${new Date(`${data.period.start}T00:00:00`).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric'
+  })} – ${new Date(`${data.period.end}T00:00:00`).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric'
+  })}`;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -195,17 +218,6 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         </div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-            <span className="text-red-800">{error}</span>
-          </div>
-          <button onClick={() => setError(null)} className="text-sm text-red-600 hover:text-red-800 underline">Dismiss</button>
-        </div>
-      )}
-
       <div className="px-6 py-6 max-w-7xl mx-auto space-y-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -245,6 +257,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
 
         <div className="grid grid-cols-1 gap-4">
           <button
+            type="button"
             onClick={onNavigateToReports}
             className="flex min-h-11 items-center space-x-3 rounded-lg border border-gray-200 bg-white p-4 text-left transition-colors hover:border-blue-300 hover:bg-blue-50/30"
           >
@@ -253,7 +266,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
             </div>
             <div>
               <div className="font-medium text-gray-900">View Reports</div>
-              <div className="text-sm text-gray-500">Authoritative GST and HSN reports</div>
+              <div className="text-sm text-gray-500">GST reports published by the canonical API</div>
             </div>
           </button>
         </div>
@@ -261,6 +274,9 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         {/* Collapsible Tax Breakdown (for power users) */}
         <div className="rounded-lg border border-gray-200 bg-white">
           <button
+            type="button"
+            aria-expanded={showBreakdown}
+            aria-controls="gst-tax-breakdown"
             onClick={() => setShowBreakdown(!showBreakdown)}
             className="flex min-h-11 w-full items-center justify-between rounded-lg px-6 py-4 transition-colors hover:bg-gray-50"
           >
@@ -272,7 +288,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
             )}
           </button>
           {showBreakdown && (
-            <div className="px-6 pb-6 space-y-4">
+            <div id="gst-tax-breakdown" className="px-6 pb-6 space-y-4">
               {/* Output */}
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">

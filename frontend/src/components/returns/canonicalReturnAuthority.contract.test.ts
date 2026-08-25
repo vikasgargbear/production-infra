@@ -53,6 +53,18 @@ describe('canonical desktop return authority boundary', () => {
     expect(purchaseFlow).toContain('prepareCanonicalPurchaseReturn');
   });
 
+  it('does not export the retired integer-ID return client', () => {
+    const legacyClient = path.resolve(
+      __dirname, '../../services/api/modules/sales/returns.api.ts',
+    );
+    const apiIndex = read('../../services/api/index.ts');
+    const apiConfig = read('../../config/api.config.ts');
+    expect(fs.existsSync(legacyClient)).toBe(false);
+    expect(apiIndex).not.toContain('returnsApi');
+    expect(apiConfig).not.toContain("SALES: '/sale-returns/'");
+    expect(apiConfig).not.toContain("PURCHASE: '/purchase-returns/'");
+  });
+
   it('leaves return policy choices explicit instead of inferring them in initial state', () => {
     expect(purchaseFlow).toMatch(/transport_mode:\s*'',\s*\n\s*distance_km:\s*''/);
     expect(salesFlow).toMatch(/return_condition:\s*'',\s*\n\s*to_location_id:\s*''/);

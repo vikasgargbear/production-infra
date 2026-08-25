@@ -55,7 +55,6 @@ export interface AppConfig {
         DASHBOARD: string;
         INVOICE: { CREATE: string; LIST: string; VIEW: string };
         PURCHASE: { CREATE: string; LIST: string; VIEW: string };
-        INVENTORY: { PRODUCTS: string; BATCHES: string; STOCK: string };
         CUSTOMERS: string;
         SUPPLIERS: string;
         REPORTS: string;
@@ -166,11 +165,6 @@ export const APP_CONFIG: AppConfig = {
             CREATE: '/purchase/create',
             LIST: '/purchases',
             VIEW: '/purchase/:id'
-        },
-        INVENTORY: {
-            PRODUCTS: '/inventory/products',
-            BATCHES: '/inventory/batches',
-            STOCK: '/inventory/stock'
         },
         CUSTOMERS: '/customers',
         SUPPLIERS: '/suppliers',

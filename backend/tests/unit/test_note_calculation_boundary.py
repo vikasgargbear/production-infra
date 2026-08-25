@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.api.services.finance.credit_note.service import CreditNoteService
+from app.api.services.finance.adjustment_note_calculation import AdjustmentNoteCalculator
 from app.main import app
 
 
@@ -14,7 +14,7 @@ def test_note_preview_is_typed_authenticated_and_not_mcp_exported():
 
 
 def test_note_lines_reconcile_discount_and_intrastate_gst():
-    result = CreditNoteService.calculate_note_totals({
+    result = AdjustmentNoteCalculator.calculate_note_totals({
         "include_gst": True,
         "items": [{
             "quantity": "2",
@@ -35,7 +35,7 @@ def test_note_lines_reconcile_discount_and_intrastate_gst():
 
 
 def test_note_gst_exclusion_is_authoritative():
-    result = CreditNoteService.calculate_note_totals({
+    result = AdjustmentNoteCalculator.calculate_note_totals({
         "include_gst": False,
         "items": [{"quantity": 1, "unit_price": 100, "gst_percent": 18}],
     }, "IGST")
@@ -46,7 +46,7 @@ def test_note_gst_exclusion_is_authoritative():
 
 def test_note_rejects_invalid_lines():
     try:
-        CreditNoteService.calculate_note_totals({
+        AdjustmentNoteCalculator.calculate_note_totals({
             "items": [{"quantity": 0, "unit_price": 100}],
         }, "IGST")
     except ValueError as exc:

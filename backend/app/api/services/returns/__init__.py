@@ -2,6 +2,6 @@
 Returns Services Module
 Shared utilities for sales and purchase returns
 """
-from .return_service import ReturnService
+from .return_calculation import ReturnCalculator
 
-__all__ = ["ReturnService"]
+__all__ = ["ReturnCalculator"]

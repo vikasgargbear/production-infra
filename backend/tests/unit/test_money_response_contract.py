@@ -44,20 +44,6 @@ def test_money_json_openapi_type_is_an_exact_two_decimal_string():
         TypeAdapter(MoneyJSON).validate_python("1234.5")
 
 
-@pytest.mark.parametrize("method", ["get", "post"])
-def test_gst_calculation_publishes_money_strings_in_openapi(method):
-    schema = app.openapi()
-    operation = schema["paths"]["/api/gst/calculate"][method]
-    response = operation["responses"]["200"]["content"]["application/json"]["schema"]
-
-    assert response == {"$ref": "#/components/schemas/GSTCalculationResponse"}
-    properties = schema["components"]["schemas"]["GSTCalculationResponse"]["properties"]
-    for field in ("taxableAmount", "cgst", "sgst", "igst", "totalTax", "total"):
-        assert properties[field]["type"] == "string"
-        assert properties[field]["pattern"] == MONEY_JSON_PATTERN
-    assert properties["gstRate"]["type"] == "number"
-
-
 def test_contract_audit_rejects_any_return_to_binary_float_money_serialization():
     codes = {issue.code for issue in collect_issues()}
 
@@ -89,18 +75,3 @@ def mutated(rows):
     assert any(item.endswith(":5:amount") for item in evidence)
     assert any(item.endswith(":12:unit_price") for item in evidence)
     assert not any("total_amount" in item for item in evidence)
-
-
-@pytest.mark.parametrize(
-    ("path", "model"),
-    [
-        ("/api/gst/gstr2b/status", "GSTR2BStatusResponse"),
-        ("/api/gst/gstr2b/mismatches", "GSTR2BMismatchResponse"),
-    ],
-)
-def test_residual_money_routes_publish_typed_response_models(path, model):
-    response = app.openapi()["paths"][path]["get"]["responses"]["200"]
-
-    assert response["content"]["application/json"]["schema"] == {
-        "$ref": f"#/components/schemas/{model}"
-    }

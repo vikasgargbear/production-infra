@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
-from app.api.routes import canonical_erp_reads
+from app.api.routes import canonical_erp_reads, canonical_inventory_reads
 from app.core.utils import schema_validator
 from app.main import app
 
@@ -40,14 +40,9 @@ CRITICAL_UI_READS = {
     "/api/supplier-invoices/returnable/",
     "/api/purchase-returns/supplier-invoice/{invoice_id:uuid}/returnable-items",
     "/api/grn/",
-    "/api/sale-returns/",
-    "/api/purchase-returns/",
-    "/api/canonical/payment-history",
-    "/api/canonical/customer-receipts/context",
     "/api/gst/dashboard",
     "/api/ledger/aging",
     "/api/collection-center/collection/aging-data",
-    "/api/inventory/list",
     "/api/financial/summary",
     "/api/dashboard/stats",
     "/api/settings/features",
@@ -548,35 +543,6 @@ def test_challan_import_rejects_already_invoiced_or_partial_lineage(monkeypatch)
     )
 
 
-def test_return_history_reads_filter_and_project_original_documents(monkeypatch) -> None:
-    captured = []
-    org_id = uuid4()
-    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
-
-    def fake_rows(_db, sql, params):
-        captured.append((sql, params))
-        return [{"return_id": uuid4(), "filtered_total": 3}]
-
-    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
-    sales = canonical_erp_reads.sales_returns(
-        limit=25, skip=0, offset=25, search="DEMO", status="posted",
-        from_date="2026-08-01", to_date="2026-08-31", user={}, db=object(),
-    )
-    purchases = canonical_erp_reads.purchase_returns(
-        limit=25, skip=0, offset=0, search="SUPPLIER", status="approved",
-        from_date=None, to_date=None, user={}, db=object(),
-    )
-
-    assert sales["total"] == 3
-    assert purchases["total"] == 3
-    assert "invoice.invoice_number AS original_document_no" in captured[0][0]
-    assert "FROM sales.return_lines line" in captured[0][0]
-    assert captured[0][1]["offset"] == 25
-    assert captured[0][1]["status"] == "posted"
-    assert "invoice.supplier_invoice_number AS original_document_no" in captured[1][0]
-    assert "FROM procurement.purchase_return_lines line" in captured[1][0]
-
-
 def test_sales_order_search_uses_canonical_number_and_customer_fields(monkeypatch) -> None:
     captured = {}
     monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: uuid4())
@@ -867,13 +833,11 @@ def test_company_profile_projects_canonical_invoice_identity_and_settlement_deta
     assert "ledger_account.allows_bank_reconciliation=true" not in source
 
 
-def test_hsn_report_projects_complete_numeric_contract_for_selected_period() -> None:
-    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+def test_unpublished_hsn_and_gstr2a_projections_stay_unavailable() -> None:
+    paths = app.openapi()["paths"]
 
-    assert "AS tax_amount" in source
-    assert "AS tax_rate" in source
-    assert ":date_from IS NULL OR invoice.invoice_date" in source
-    assert ":date_to IS NULL OR invoice.invoice_date" in source
+    assert "/api/reports/tax/hsn" not in paths
+    assert "/api/gst/reports/tax/gstr2a" not in paths
 
 
 def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
@@ -1471,12 +1435,17 @@ def test_supplier_aging_fails_closed_instead_of_returning_a_fake_empty_success(m
     assert exc.value.status_code == 503
 
 
-def test_current_stock_projects_one_canonical_row_per_product() -> None:
+def test_legacy_inventory_aggregates_are_replaced_by_branch_scoped_authority() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
-
-    assert "SUM(balance.on_hand_quantity) AS total_quantity_available" in source
-    assert "SUM(balance.inventory_value) AS total_value" in source
-    assert "GROUP BY balance.product_id" in source
+    assert '@router.get("/inventory/stock/current")' not in source
+    assert '@router.get("/inventory/list")' not in source
+    matches = [
+        route for route in _effective_route_leaves(app.routes)
+        if route.path == "/api/canonical/inventory/current-stock"
+        and "GET" in (route.methods or set())
+    ]
+    assert len(matches) == 1
+    assert matches[0].endpoint.__module__ == "app.api.routes.canonical_inventory_reads"
 
 
 class ProductDraftDatabase:
@@ -1601,7 +1570,7 @@ def test_purchase_history_reads_apply_search_status_dates_and_real_totals() -> N
 
 
 def test_inventory_movements_are_canonical_and_uuid_filterable() -> None:
-    source = inspect.getsource(canonical_erp_reads.inventory_movements)
+    source = inspect.getsource(canonical_inventory_reads.movements)
 
     assert "product_id: Optional[UUID]" in source
     assert "batch_id: Optional[UUID]" in source
@@ -1609,6 +1578,6 @@ def test_inventory_movements_are_canonical_and_uuid_filterable() -> None:
     assert "entry.batch_id=:batch_id" in source
     assert "inventory.stock_ledger_entries" in source
     assert "inventory.batches" in source
-    assert "movement_date" in source
-    assert "movement_type" in source
-    assert "reference_number" in source
+    assert "entry.posted_at" in source
+    assert "entry.entry_kind" in source
+    assert "document.document_number" in source

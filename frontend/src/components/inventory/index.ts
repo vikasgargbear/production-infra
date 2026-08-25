@@ -7,7 +7,6 @@
 
 // ==================== MAIN COMPONENTS ====================
 export { default as StockHub } from './StockHub';
-export { default as StockListHistory } from './StockListHistory';
 
 // ==================== STOCK COMPONENTS ====================
 export {

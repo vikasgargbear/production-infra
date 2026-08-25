@@ -162,36 +162,6 @@ async def get_units_of_measure(_: dict = Depends(PermissionChecker("master", "vi
         ]
     }
 
-@router.get("/return-reasons")
-@with_tenant_context
-async def get_return_reasons(_: dict = Depends(PermissionChecker("master", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)):
-    """Get all return reason options"""
-    return {
-        "sales_return_reasons": [
-            {"value": "NOT_REQUIRED", "label": "Not Required (Restocks)", "restocks": True},
-            {"value": "EXPIRED", "label": "Expired Product (No Restock)", "restocks": False},
-            {"value": "WRONG_PRODUCT", "label": "Wrong Product Delivered (Restocks)", "restocks": True},
-            {"value": "QUALITY_ISSUE", "label": "Quality Issue (Restocks)", "restocks": True},
-            {"value": "DUPLICATE_ORDER", "label": "Duplicate Order (Restocks)", "restocks": True},
-            {"value": "PRICE_ISSUE", "label": "Price Issue (Restocks)", "restocks": True},
-            {"value": "DAMAGED", "label": "Damaged Product (No Restock)", "restocks": False},
-            {"value": "OTHER", "label": "Other Reason (Restocks)", "restocks": True}
-        ],
-        "purchase_return_reasons": [
-            {"value": "NOT_ORDERED", "label": "Product Not Ordered (Restocks)", "restocks": True},
-            {"value": "EXPIRED", "label": "Expired Product (No Restock)", "restocks": False},
-            {"value": "WRONG_PRODUCT", "label": "Wrong Product Received (Restocks)", "restocks": True},
-            {"value": "QUALITY_ISSUE", "label": "Quality Issue (Restocks)", "restocks": True},
-            {"value": "EXCESS_QUANTITY", "label": "Excess Quantity (Restocks)", "restocks": True},
-            {"value": "SHORT_EXPIRY", "label": "Short Expiry (Restocks)", "restocks": True},
-            {"value": "PRICE_MISMATCH", "label": "Price Mismatch (Restocks)", "restocks": True},
-            {"value": "DAMAGED", "label": "Damaged/Defective Product (No Restock)", "restocks": False},
-            {"value": "OTHER", "label": "Other Reason (Restocks)", "restocks": True}
-        ]
-    }
-
 @router.get("/tax-types")
 @with_tenant_context
 async def get_tax_types(_: dict = Depends(PermissionChecker("master", "view")),

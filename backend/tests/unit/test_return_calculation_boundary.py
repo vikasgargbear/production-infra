@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from app.api.routes.calculations import preview_return_totals
 from app.api.schemas.calculations import ReturnCalculationRequest
-from app.api.services.returns.return_service import ReturnService
+from app.api.services.returns.return_calculation import ReturnCalculator
 from app.core.auth.tenant_service import BranchScope
 from app.main import app
 
@@ -22,7 +22,7 @@ def test_return_preview_is_typed_authenticated_and_not_mcp_exported():
 
 
 def test_sales_return_lines_reconcile_with_free_quantity_and_gst_withheld():
-    result = ReturnService.calculate_return_totals(
+    result = ReturnCalculator.calculate_return_totals(
         [{
             "product_id": 11,
             "return_quantity": "3",

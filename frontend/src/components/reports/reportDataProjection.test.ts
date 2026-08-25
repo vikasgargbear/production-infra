@@ -1,43 +1,16 @@
-import { filterInventoryItems, projectInventoryItems, projectStockMovements } from './InventoryReport';
+import fs from 'fs';
+import path from 'path';
 import {
   formatAnalyticsMultiplier,
   formatAnalyticsPercent,
   projectAnalyticsProducts,
 } from './ProductAnalytics';
 
-test('inventory projection keeps canonical identity, quantities, and value together', () => {
-  const items = projectInventoryItems([{
-    product_id: '01994df0-52a8-7000-8000-000000000001',
-    product_name: 'Canonical Carton',
-    category: 'Packing',
-    total_quantity_available: '267',
-    stock_value: '25428.58',
-    min_stock_level: 0,
-    max_stock_level: 0,
-    turnover_rate: '14',
-  }]);
-
-  expect(items).toHaveLength(1);
-  expect(items[0]).toMatchObject({
-    id: '01994df0-52a8-7000-8000-000000000001',
-    name: 'Canonical Carton',
-    currentStock: 267,
-    value: 25428.58,
-    status: 'Optimal',
-  });
-  expect(filterInventoryItems(items, 'all', 'all', '')).toHaveLength(1);
-  expect(filterInventoryItems(items, 'Packing', 'all', 'carton')).toHaveLength(1);
-  expect(filterInventoryItems(items, 'Other', 'all', '')).toHaveLength(0);
-});
-
-test('movement projection replaces sample rows with canonical directions', () => {
-  expect(projectStockMovements([
-    { movement_date: '2026-08-24T10:00:00Z', movement_type: 'in', quantity: '5', reference_number: 'GRN-1' },
-    { movement_date: '2026-08-24T11:00:00Z', movement_type: 'out', quantity: '2', reference_number: 'INV-1' },
-  ])).toEqual([
-    { date: '2026-08-24T10:00:00Z', type: 'In', quantity: 5, reference: 'GRN-1' },
-    { date: '2026-08-24T11:00:00Z', type: 'Out', quantity: 2, reference: 'INV-1' },
-  ]);
+test('inventory analytics fails closed without an organization-wide canonical projection', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'InventoryReport.tsx'), 'utf8');
+  expect(source).toContain('authoritative organization-wide inventory report projection is not published');
+  expect(source).not.toContain('apiClient');
+  expect(source).not.toMatch(/['"]\/(inventory|stock-adjustments|stock-movements|stock-writeoff)/);
 });
 
 test('product analytics normalizes decimal strings and uses stable precision', () => {

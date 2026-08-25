@@ -25,7 +25,6 @@ import { authApi } from './modules/auth/auth.api';
 // =========================================================================
 import { gstApi } from './modules/compliance/gst.api';
 import { taxEntriesApi } from './modules/compliance/taxEntries.api';
-import { complianceApi } from './modules/compliance/compliance.api';
 
 // =========================================================================
 // FINANCE
@@ -38,9 +37,7 @@ import { expensesApi } from './modules/finance/expenses.api';
 // =========================================================================
 // INVENTORY
 // =========================================================================
-import { stockApi } from './modules/inventory/stock.api';
 import { batchesApi } from './modules/inventory/batches.api';
-import { inventoryMovementsApi } from './modules/inventory/inventoryMovements.api';
 import { conversionsApi } from './modules/inventory/conversions.api';
 
 // =========================================================================
@@ -72,7 +69,6 @@ import { supplierInvoicesApi } from './modules/purchase/supplierInvoices.api';
 import { invoicesApi } from './modules/sales/invoices.api';
 import { ordersApi } from './modules/sales/orders.api';
 import { challansApi } from './modules/sales/challans.api';
-import { returnsApi } from './modules/sales/returns.api';
 import { challanCalculationsApi, invoiceCalculationsApi, salesOrderCalculationsApi } from './modules/sales/calculations.api';
 
 // =========================================================================
@@ -113,7 +109,6 @@ export {
   // Compliance
   gstApi,
   taxEntriesApi,
-  complianceApi,
 
   // Finance
   ledgerApi,
@@ -122,9 +117,7 @@ export {
   expensesApi,
 
   // Inventory
-  stockApi,
   batchesApi,
-  inventoryMovementsApi,
   conversionsApi,
 
   // Master
@@ -148,7 +141,6 @@ export {
   invoicesApi,
   ordersApi,
   challansApi,
-  returnsApi,
   invoiceCalculationsApi,
   salesOrderCalculationsApi,
   challanCalculationsApi,
@@ -186,13 +178,13 @@ const apiModules = {
   auth: { auth: authApi },
 
   // Compliance
-  compliance: { gst: gstApi, taxEntries: taxEntriesApi, compliance: complianceApi },
+  compliance: { gst: gstApi, taxEntries: taxEntriesApi },
 
   // Finance
   finance: { ledger: ledgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi, expenses: expensesApi },
 
   // Inventory
-  inventory: { stock: stockApi, batches: batchesApi, movements: inventoryMovementsApi, conversions: conversionsApi },
+  inventory: { batches: batchesApi, conversions: conversionsApi },
 
   // Master
   master: { customers: customersApi, suppliers: suppliersApi, products: productsApi, employees: employeesApi, bankAccounts: bankAccountsApi },
@@ -204,7 +196,7 @@ const apiModules = {
   purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },
 
   // Sales
-  sales: { invoices: invoicesApi, calculations: invoiceCalculationsApi, orderCalculations: salesOrderCalculationsApi, orders: ordersApi, challans: challansApi, returns: returnsApi },
+  sales: { invoices: invoicesApi, calculations: invoiceCalculationsApi, orderCalculations: salesOrderCalculationsApi, orders: ordersApi, challans: challansApi },
 
   // Settings
   settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi },

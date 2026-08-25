@@ -15,11 +15,11 @@ Note: InvoiceService temporarily disabled - requires type schema refactoring
 """
 # Domain-organized services
 from .sales.order.order_service import OrderService
-from .returns.return_service import ReturnService
+from .returns.return_calculation import ReturnCalculator
 from .master.product.service import ProductService
 from .master.customer.service import CustomerService
 from .finance.payment.service import PaymentService
-from .finance.credit_note.service import CreditNoteService
+from .finance.adjustment_note_calculation import AdjustmentNoteCalculator
 from .inventory.inventory_service import InventoryService
 from .settings.settings_service import SettingsService, SettingsServiceSync, invalidate_settings_cache
 
@@ -31,13 +31,13 @@ from .compliance.gst_service import GSTService  # Moved to compliance/
 __all__ = [
     # Sales
     "OrderService",
-    "ReturnService",
+    "ReturnCalculator",
     # Master
     "CustomerService",
     "ProductService",
     # Finance
     "PaymentService",
-    "CreditNoteService",
+    "AdjustmentNoteCalculator",
     # Inventory
     "InventoryService",
     # Settings

@@ -1634,6 +1634,32 @@ def _ensure_gstr1_rule_coverage(
         )
 
 
+@router.get("/gst/settings")
+def canonical_gst_settings(
+    user: dict = Depends(PermissionChecker("gst", "view")),
+    db: Session = Depends(get_db),
+):
+    """Return the one effective organization GST registration, if published."""
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT id, branch_id, gstin, legal_name, trade_name, state_code,
+               registration_type, business_vertical_code, effective_from,
+               effective_to, status, row_version
+          FROM tax.registrations
+         WHERE org_id=:org_id AND status='active'
+           AND effective_from<=CURRENT_DATE
+           AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+         ORDER BY effective_from DESC, id
+         LIMIT 2
+    """, {"org_id": org_id})
+    if len(rows) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Canonical GST registration is ambiguous",
+        )
+    return rows[0] if rows else None
+
+
 @router.get("/gst/dashboard")
 def gst_dashboard(
     period: Literal["current", "previous", "quarter", "year"] = Query("current"),
@@ -3748,129 +3774,6 @@ def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, g
     return {"grns": rows, "total": total}
 
 
-@router.get("/sale-returns/")
-def sales_returns(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
-                  offset: Optional[int] = Query(None, ge=0),
-                  search: str = Query("", max_length=200),
-                  status: Optional[str] = None, from_date: Optional[str] = None,
-                  to_date: Optional[str] = None,
-                  user: dict = Depends(PermissionChecker("returns", "view")),
-                  db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    effective_offset = offset if offset is not None else skip
-    rows = _rows(db, """
-        SELECT return_row.id AS return_id, return_row.return_number,
-               return_row.return_date, return_row.status,
-               return_row.customer_account_id AS customer_id,
-               party.legal_name AS customer_name, return_row.grand_total AS total_amount,
-               return_row.reason_code AS reason,
-               invoice.invoice_number AS original_document_no,
-               invoice.invoice_number AS original_invoice_number,
-               COALESCE(lines.items_count, 0) AS items_count,
-               COUNT(*) OVER() AS filtered_total,
-               return_row.created_at, return_row.updated_at
-          FROM sales.returns return_row
-          JOIN parties.customer_accounts account
-            ON account.org_id=return_row.org_id AND account.id=return_row.customer_account_id
-          JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-          JOIN sales.invoices invoice
-            ON invoice.org_id=return_row.org_id AND invoice.id=return_row.invoice_id
-          LEFT JOIN LATERAL (
-              SELECT count(*) AS items_count FROM sales.return_lines line
-               WHERE line.org_id=return_row.org_id AND line.return_id=return_row.id
-          ) lines ON true
-         WHERE return_row.org_id=:org_id
-           AND (:status IS NULL OR return_row.status=:status)
-           AND (:from_date IS NULL OR return_row.return_date>=CAST(:from_date AS date))
-           AND (:to_date IS NULL OR return_row.return_date<=CAST(:to_date AS date))
-           AND (:search='' OR return_row.return_number ILIKE :search_pattern
-                OR invoice.invoice_number ILIKE :search_pattern
-                OR party.legal_name ILIKE :search_pattern)
-         ORDER BY return_row.return_date DESC, return_row.id DESC
-         LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": effective_offset,
-            "search": search.strip(), "search_pattern": f"%{search.strip()}%",
-            "status": status, "from_date": from_date, "to_date": to_date})
-    total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
-    for row in rows:
-        row.pop("filtered_total", None)
-    return {"returns": rows, "sales_returns": rows, "total": total}
-
-
-@router.get("/purchase-returns/")
-def purchase_returns(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
-                     offset: Optional[int] = Query(None, ge=0),
-                     search: str = Query("", max_length=200),
-                     status: Optional[str] = None, from_date: Optional[str] = None,
-                     to_date: Optional[str] = None,
-                     user: dict = Depends(PermissionChecker("returns", "view")),
-                     db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    effective_offset = offset if offset is not None else skip
-    rows = _rows(db, """
-        SELECT return_row.id AS return_id,
-               return_row.purchase_return_number AS return_number,
-               return_row.return_date, return_row.status,
-               return_row.supplier_account_id AS supplier_id,
-               party.legal_name AS supplier_name, return_row.grand_total AS total_amount,
-               return_row.reason_code AS reason,
-               invoice.supplier_invoice_number AS original_document_no,
-               invoice.supplier_invoice_number AS original_invoice_number,
-               COALESCE(lines.items_count, 0) AS items_count,
-               COUNT(*) OVER() AS filtered_total,
-               return_row.created_at, return_row.updated_at
-          FROM procurement.purchase_returns return_row
-          JOIN parties.supplier_accounts account
-            ON account.org_id=return_row.org_id AND account.id=return_row.supplier_account_id
-          JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-          LEFT JOIN procurement.supplier_invoices invoice
-            ON invoice.org_id=return_row.org_id AND invoice.id=return_row.supplier_invoice_id
-          LEFT JOIN LATERAL (
-              SELECT count(*) AS items_count FROM procurement.purchase_return_lines line
-               WHERE line.org_id=return_row.org_id AND line.purchase_return_id=return_row.id
-          ) lines ON true
-         WHERE return_row.org_id=:org_id
-           AND (:status IS NULL OR return_row.status=:status)
-           AND (:from_date IS NULL OR return_row.return_date>=CAST(:from_date AS date))
-           AND (:to_date IS NULL OR return_row.return_date<=CAST(:to_date AS date))
-           AND (:search='' OR return_row.purchase_return_number ILIKE :search_pattern
-                OR COALESCE(invoice.supplier_invoice_number, '') ILIKE :search_pattern
-                OR party.legal_name ILIKE :search_pattern)
-         ORDER BY return_row.return_date DESC, return_row.id DESC
-         LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": effective_offset,
-            "search": search.strip(), "search_pattern": f"%{search.strip()}%",
-            "status": status, "from_date": from_date, "to_date": to_date})
-    total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
-    for row in rows:
-        row.pop("filtered_total", None)
-    return {"returns": rows, "purchase_returns": rows, "total": total}
-
-
-@router.get("/gst/reports/tax/gstr2a")
-def gstr2a(user: dict = Depends(PermissionChecker("gst", "view")),
-           db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT invoice.id AS invoice_id,
-               invoice.supplier_invoice_number AS invoice_number,
-               invoice.supplier_invoice_date AS invoice_date,
-               invoice.supplier_legal_name_snapshot AS supplier_name,
-               invoice.supplier_gstin_snapshot AS supplier_gst_number,
-               invoice.gst_taxable_total AS taxable_amount,
-               invoice.cgst_total AS cgst_amount, invoice.sgst_total AS sgst_amount,
-               invoice.igst_total AS igst_amount, invoice.grand_total AS total_amount
-          FROM procurement.supplier_invoices invoice
-         WHERE invoice.org_id=:org_id AND invoice.status<>'cancelled'
-         ORDER BY invoice.supplier_invoice_date DESC, invoice.id DESC
-    """, {"org_id": org_id})
-    return {"invoices": rows, "summary": {"totalInvoices": len(rows),
-            "totalTaxableValue": sum((row["taxable_amount"] or 0) for row in rows),
-            "totalCGST": sum((row["cgst_amount"] or 0) for row in rows),
-            "totalSGST": sum((row["sgst_amount"] or 0) for row in rows),
-            "totalIGST": sum((row["igst_amount"] or 0) for row in rows)}}
-
-
 @router.get("/gst/reports/credit-debit-notes")
 def gst_adjustment_notes(
     from_date: Optional[str] = None,
@@ -3902,95 +3805,6 @@ def gst_adjustment_notes(
     """, {"org_id": org_id, "from_date": from_date, "to_date": to_date,
             "side": side, "note_type": note_type})
     return {"notes": rows, "total": len(rows)}
-
-
-@router.get("/reports/tax/hsn")
-def hsn_summary(from_date: Optional[str] = None, to_date: Optional[str] = None,
-                user: dict = Depends(PermissionChecker("gst", "view")),
-                db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT COALESCE(product.hsn_code,'N/A') AS hsn_code,
-               product.name AS description, SUM(line.billed_quantity) AS quantity,
-               SUM(line.gst_taxable_value) AS taxable_value,
-               SUM(line.cgst_amount) AS cgst, SUM(line.sgst_amount) AS sgst,
-               SUM(line.igst_amount) AS igst, SUM(line.cess_amount) AS cess,
-               SUM(line.cgst_amount + line.sgst_amount + line.igst_amount + line.cess_amount)
-                   AS tax_amount,
-               CASE WHEN SUM(line.gst_taxable_value)=0 THEN 0
-                    ELSE ROUND(
-                        SUM(line.cgst_amount + line.sgst_amount + line.igst_amount)
-                        * 100 / SUM(line.gst_taxable_value),
-                        2
-                    ) END AS tax_rate,
-               SUM(line.line_total) AS total_value
-          FROM sales.invoice_lines line
-          JOIN sales.invoices invoice ON invoice.org_id=line.org_id AND invoice.id=line.invoice_id
-          JOIN catalog.products product ON product.org_id=line.org_id AND product.id=line.product_id
-         WHERE line.org_id=:org_id AND invoice.status NOT IN ('cancelled','reversed')
-           AND (:date_from IS NULL OR invoice.invoice_date >= CAST(:date_from AS date))
-           AND (:date_to IS NULL OR invoice.invoice_date <= CAST(:date_to AS date))
-         GROUP BY product.hsn_code, product.name ORDER BY product.hsn_code, product.name
-    """, _range_params(org_id, from_date, to_date))
-    return {"hsn_summary": rows}
-
-
-@router.get("/inventory/stock/current")
-def current_stock(limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0),
-                  user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT balance.product_id, product.sku AS product_code,
-               product.name AS product_name, product.generic_name,
-               product.hsn_code, product.product_kind AS product_type,
-               product.base_uom_code AS unit,
-               category.name AS category,
-               SUM(balance.on_hand_quantity) AS total_quantity_available,
-               SUM(balance.inventory_value) AS total_value,
-               CASE WHEN SUM(balance.on_hand_quantity)=0 THEN 0
-                    ELSE ROUND(SUM(balance.inventory_value) / SUM(balance.on_hand_quantity), 4)
-                END AS cost_per_unit,
-               COUNT(DISTINCT balance.batch_id) AS total_batches,
-               COUNT(DISTINCT balance.batch_id) FILTER (
-                   WHERE batch.expires_on < CURRENT_DATE
-               ) AS expired_batches,
-               COUNT(DISTINCT balance.batch_id) FILTER (
-                   WHERE batch.expires_on BETWEEN CURRENT_DATE AND CURRENT_DATE + 90
-               ) AS near_expiry_batches,
-               product.cold_chain_required AS requires_cold_chain
-          FROM inventory.stock_balances balance
-          JOIN catalog.products product ON product.org_id=balance.org_id AND product.id=balance.product_id
-          JOIN inventory.batches batch ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
-          LEFT JOIN catalog.categories category
-            ON category.org_id=product.org_id AND category.id=product.category_id
-         WHERE balance.org_id=:org_id
-         GROUP BY balance.product_id, product.sku, product.name, product.generic_name,
-                  product.hsn_code, product.product_kind, product.base_uom_code,
-                  category.name, product.cold_chain_required
-         ORDER BY product.name, balance.product_id
-         LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": offset})
-
-
-@router.get("/inventory/batches/")
-def batches(limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0),
-            user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT batch.id AS batch_id, batch.product_id, product.name AS product_name,
-               product.sku AS product_code, batch.batch_number,
-               batch.manufactured_on AS manufacturing_date, batch.expires_on AS expiry_date,
-               batch.mrp, batch.status, batch.status IN ('released','blocked') AS is_active,
-               COALESCE(stock.quantity, 0) AS quantity
-          FROM inventory.batches batch
-          JOIN catalog.products product ON product.org_id=batch.org_id AND product.id=batch.product_id
-          LEFT JOIN LATERAL (
-              SELECT SUM(on_hand_quantity) AS quantity FROM inventory.stock_balances balance
-               WHERE balance.org_id=batch.org_id AND balance.batch_id=batch.id
-          ) stock ON true
-         WHERE batch.org_id=:org_id ORDER BY batch.expires_on NULLS LAST, product.name
-         LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "limit": limit, "offset": offset})
 
 
 @router.get("/accounts/chart")
@@ -4826,120 +4640,6 @@ def customer_analytics_acquisition(date_from: Optional[str] = None, date_to: Opt
            AND (:date_to IS NULL OR created_at::date <= CAST(:date_to AS date))
          GROUP BY date_trunc('month', created_at) ORDER BY date_trunc('month', created_at)
     """, _range_params(org_id, date_from, date_to))
-
-
-def _inventory_analytics_rows(db: Session, org_id: UUID) -> list[dict]:
-    return _rows(db, """
-        SELECT product.id AS product_id, product.id, product.name AS product_name, product.name,
-               COALESCE(category.name,'Uncategorized') AS category,
-               batch.batch_number, batch.expires_on AS expiry_date,
-               COALESCE(stock.quantity,0) AS total_quantity_available,
-               COALESCE(stock.quantity,0) AS quantity,
-               COALESCE(stock.value,0) AS stock_value,
-               COALESCE(stock.unit_price,0) AS unit_price,
-               0::numeric AS min_stock_level, 0::numeric AS max_stock_level,
-               restock.last_restocked, COALESCE(movement.turnover_rate,0) AS turnover_rate
-          FROM catalog.products product
-          LEFT JOIN catalog.categories category ON category.org_id=product.org_id AND category.id=product.category_id
-          LEFT JOIN LATERAL (
-              SELECT SUM(on_hand_quantity) quantity, SUM(inventory_value) value,
-                     MAX(average_unit_cost) unit_price
-                FROM inventory.stock_balances balance
-               WHERE balance.org_id=product.org_id AND balance.product_id=product.id
-          ) stock ON true
-          LEFT JOIN LATERAL (
-              SELECT batch_number, expires_on FROM inventory.batches
-               WHERE org_id=product.org_id AND product_id=product.id AND status='active'
-               ORDER BY expires_on NULLS LAST, id LIMIT 1
-          ) batch ON true
-          LEFT JOIN LATERAL (
-              SELECT MAX(posted_at) last_restocked FROM inventory.stock_ledger_entries entry
-               WHERE entry.org_id=product.org_id AND entry.product_id=product.id
-                 AND entry.entry_kind IN ('receipt','transfer_in','count_gain')
-          ) restock ON true
-          LEFT JOIN LATERAL (
-              SELECT ABS(SUM(quantity_delta)) turnover_rate FROM inventory.stock_ledger_entries entry
-               WHERE entry.org_id=product.org_id AND entry.product_id=product.id
-                 AND entry.entry_kind IN ('issue','transfer_out')
-                 AND entry.posted_at >= current_date - interval '30 days'
-          ) movement ON true
-         WHERE product.org_id=:org_id AND product.status='active'
-         ORDER BY product.name, product.id
-    """, {"org_id": org_id})
-
-
-@router.get("/inventory/list")
-def inventory_analytics_list(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    return _inventory_analytics_rows(db, _activate(db, user))
-
-
-@router.get("/inventory/stock-status")
-def inventory_stock_status(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    rows = _inventory_analytics_rows(db, _activate(db, user))
-    return {"total_products": len(rows),
-            "out_of_stock": sum(1 for row in rows if (row["total_quantity_available"] or 0) <= 0),
-            "stock_value": sum((row["stock_value"] or 0) for row in rows)}
-
-
-@router.get("/inventory/movements")
-def inventory_movements(
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    product_id: Optional[UUID] = None,
-    batch_id: Optional[UUID] = None,
-    user: dict = INVENTORY_USER,
-    db: Session = Depends(get_db),
-):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT entry.id, entry.posted_at AS date, entry.posted_at AS movement_date,
-               entry.entry_kind,
-               CASE WHEN entry.entry_kind IN ('receipt','transfer_in','count_gain') THEN 'In'
-                    WHEN entry.entry_kind IN ('issue','transfer_out','count_loss') THEN 'Out'
-                    ELSE 'Adjustment' END AS type,
-               CASE WHEN entry.entry_kind IN ('receipt','transfer_in','count_gain') THEN 'in'
-                    WHEN entry.entry_kind IN ('issue','transfer_out','count_loss') THEN 'out'
-                    ELSE 'adjustment' END AS movement_type,
-               ABS(entry.quantity_delta) AS quantity, entry.unit_cost,
-               entry.product_id, product.name AS product_name,
-               entry.batch_id, batch.batch_number,
-               document.document_number AS reference,
-               document.document_number AS reference_number,
-               actor.display_name AS user_name,
-               'completed' AS status
-          FROM inventory.stock_ledger_entries entry
-          JOIN catalog.products product ON product.org_id=entry.org_id AND product.id=entry.product_id
-          JOIN inventory.batches batch
-            ON batch.org_id=entry.org_id AND batch.id=entry.batch_id
-          LEFT JOIN inventory.inventory_documents document
-            ON document.org_id=entry.org_id AND document.id=entry.inventory_document_id
-          LEFT JOIN core.memberships membership
-            ON membership.org_id=entry.org_id AND membership.id=entry.posted_by_membership_id
-          LEFT JOIN core.users actor ON actor.id=membership.user_id
-         WHERE entry.org_id=:org_id
-           AND (:date_from IS NULL OR entry.posted_at::date >= CAST(:date_from AS date))
-           AND (:date_to IS NULL OR entry.posted_at::date <= CAST(:date_to AS date))
-           AND (:product_id IS NULL OR entry.product_id=:product_id)
-           AND (:batch_id IS NULL OR entry.batch_id=:batch_id)
-         ORDER BY entry.posted_at DESC, entry.id DESC LIMIT 500
-    """, {
-        **_range_params(org_id, date_from, date_to),
-        "product_id": product_id,
-        "batch_id": batch_id,
-    })
-
-
-@router.get("/inventory/categories")
-def inventory_categories(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT category.id, category.name, count(product.id) AS product_count
-          FROM catalog.categories category
-          LEFT JOIN catalog.products product
-            ON product.org_id=category.org_id AND product.category_id=category.id AND product.status='active'
-         WHERE category.org_id=:org_id AND category.status='active'
-         GROUP BY category.id, category.name ORDER BY category.name
-    """, {"org_id": org_id})
 
 
 def _product_performance_rows(db: Session, org_id: UUID) -> list[dict]:

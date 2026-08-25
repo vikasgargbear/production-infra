@@ -16,7 +16,6 @@ from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
 from .core.read_only_router import (
     include_explicit_non_persistent_post_utilities,
-    include_legacy_read_only_router,
 )
 from .middleware.error_handler import global_exception_handler
 from .middleware.security_headers import SecurityHeadersMiddleware
@@ -34,27 +33,13 @@ from .api.routes.auth import oauth as auth_oauth
 # Audit Module
 from .api.routes.audit import audit_router
 
-# Returns Module (top-level, handles both sales and purchase returns)
-from .api.routes.returns import sales_returns_router, purchase_returns_router
-
 # Purchase Module
 from .api.routes.purchase import upload as purchase_upload
 from .api.routes.purchase.upload import routes as purchase_upload_routes
 from .api.routes import canonical_inventory_transfers
 
-# Inventory Module
-from .api.routes.inventory import stock as inventory
-from .api.routes.inventory import adjustments as stock_adjustments
-from .api.routes.inventory import movements as stock_movements
-from .api.routes.inventory import writeoff as stock_writeoff
-
 # Finance Module
 from .api.routes.finance.tax import routes as tax_entries_routes
-
-# Compliance Module
-from .api.routes.compliance import gst
-from .api.routes.compliance import gstr2b
-from .api.routes.compliance import compliance
 
 # Organization Module
 from .api.routes.org import company_assets
@@ -276,9 +261,10 @@ api.include_router(canonical_document_history_reads.router)
 # history are provided by the canonical routers above.  The retired integer-ID
 # sales routers are deliberately not mounted.
 
-# --- Returns (Sales & Purchase) ---
-include_legacy_read_only_router(api, sales_returns_router, prefix="/sale-returns", tags=["Sale Returns"])
-include_legacy_read_only_router(api, purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
+# Return eligibility, reasons, reviewed lifecycle, history, and posted readback
+# are exposed only through canonical UUID resources above.  The retired
+# integer-ID routers also contained direct inventory and financial mutations
+# and are intentionally not imported or mounted.
 
 # Purchase-order, supplier-invoice and goods-receipt reads are provided by the
 # canonical routers above.  Only the bounded, non-persistent upload utilities
@@ -294,11 +280,10 @@ include_explicit_non_persistent_post_utilities(
     },
 )
 
-# --- Inventory ---
-include_legacy_read_only_router(api, inventory.router, prefix="/inventory", tags=["Inventory"])
-include_legacy_read_only_router(api, stock_adjustments.router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
-include_legacy_read_only_router(api, stock_movements.router, prefix="/stock-movements", tags=["Stock Movements"])
-include_legacy_read_only_router(api, stock_writeoff.router, tags=["Stock Write-off"])
+# Inventory reads and reviewed commands are mounted above through the canonical
+# UUID routers.  The retired inventory, adjustment, movement and write-off
+# routers used integer identifiers and pre-ledger stock tables, so none of
+# their reads or writes is reachable.
 
 # --- Finance ---
 # Posted payment history, open-item allocation context/readback, and standalone
@@ -318,16 +303,12 @@ include_explicit_non_persistent_post_utilities(
 # mounted.
 
 # --- Compliance ---
-include_legacy_read_only_router(api, gst.router, prefix="/gst", tags=["GST"])
-include_explicit_non_persistent_post_utilities(
-    api,
-    gst.router,
-    prefix="/gst",
-    tags=["GST"],
-    routes={"/calculate": gst.calculate_gst},
-)
-include_legacy_read_only_router(api, gstr2b.router, prefix="/gst", tags=["GST"])
-include_legacy_read_only_router(api, compliance.router, prefix="/compliance", tags=["Compliance"])
+# GST dashboard, filing status and statutory reports are published only by
+# canonical_erp_reads.  The retired compliance routers queried pre-canonical
+# GST/master tables, inferred filing facts, and exposed an unversioned 18%
+# calculation default.  GST settings now come from the single effective
+# tax.registrations row. Missing GSTR-2B and regulatory projections stay
+# explicitly unavailable until authoritative canonical resources exist.
 
 # --- Analytics ---
 # Dashboard and report projections are mounted by canonical_erp_reads.  The

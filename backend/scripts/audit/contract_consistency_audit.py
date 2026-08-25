@@ -521,7 +521,6 @@ def collect_issues() -> List[ConsistencyIssue]:
         ("backend/app/api/routes/finance/payments/routes.py", "generate_receipt_number"),
         ("backend/app/api/routes/finance/journal/routes.py", "generate_journal_number"),
         ("backend/app/api/routes/finance/expenses/routes.py", "generate_claim_number"),
-        ("backend/app/api/routes/returns/sales/routes.py", "generate_sales_return_number"),
     )
     mutating_gets = []
     uncommitted_reservations = []

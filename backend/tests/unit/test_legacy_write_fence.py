@@ -117,7 +117,6 @@ SAFE_POSTS = {
     "/api/purchase-upload/parse-invoice-safe",
     "/api/purchase-upload/validate-invoice",
     "/api/tax-entries/calculate",
-    "/api/gst/calculate",
 }
 CALCULATION_POSTS = {
     "/api/calculations/invoice": "preview_invoice_totals",
@@ -137,7 +136,6 @@ NON_PERSISTENT_POST_OWNERS = {
     "/api/tax-entries/calculate": (
         "app.api.routes.finance.tax.routes", "calculate_tax"
     ),
-    "/api/gst/calculate": ("app.api.routes.compliance.gst", "calculate_gst"),
     **{
         path: ("app.api.routes.calculations", endpoint)
         for path, endpoint in CALCULATION_POSTS.items()

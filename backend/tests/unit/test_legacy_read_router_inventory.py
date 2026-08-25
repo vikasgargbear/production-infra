@@ -16,11 +16,7 @@ from app.main import app
 
 ROOT = Path(__file__).resolve().parents[3]
 
-EXPECTED_LEGACY_ROUTER_REFERENCES = {
-    "sales_returns_router", "purchase_returns_router", "inventory.router",
-    "stock_adjustments.router", "stock_movements.router", "stock_writeoff.router",
-    "gst.router", "gstr2b.router", "compliance.router",
-}
+EXPECTED_LEGACY_ROUTER_REFERENCES = set()
 
 
 RETIRED_MODULE_PREFIXES = (
@@ -45,62 +41,22 @@ RETIRED_MODULE_PREFIXES = (
     "app.api.routes.finance.allocation.",
     "app.api.routes.finance.credit_notes.",
     "app.api.routes.finance.ledger.",
+    "app.api.routes.returns.sales.",
+    "app.api.routes.returns.purchase.",
     "app.api.routes.documents",
     "app.api.routes.reports.collection",
     "app.api.routes.reports.outstanding",
+    "app.api.routes.inventory.stock.",
+    "app.api.routes.inventory.adjustments.",
+    "app.api.routes.inventory.movements.",
+    "app.api.routes.inventory.writeoff.",
+    "app.api.routes.compliance.gst",
+    "app.api.routes.compliance.gstr2b",
+    "app.api.routes.compliance.compliance",
 )
 
 
-LEGACY_READ_INVENTORY = {
-    "app.api.routes.returns.sales.routes": {
-        "/api/sale-returns/", "/api/sale-returns/returnable-invoices",
-        "/api/sale-returns/invoice/{invoice_id}/returns",
-        "/api/sale-returns/invoice/{invoice_id}/returnable-items",
-        "/api/sale-returns/invoice/{invoice_id}/items", "/api/sale-returns/{return_id}",
-        "/api/sale-returns/test/verify-return/{return_id}",
-        "/api/sale-returns/test/return-methods", "/api/sale-returns/test/validate/{return_id}",
-    },
-    "app.api.routes.returns.purchase.routes": {
-        "/api/purchase-returns/", "/api/purchase-returns/{return_id}",
-        "/api/purchase-returns/supplier-invoice/{invoice_id}/returnable-items",
-        "/api/purchase-returns/test/validate/{return_id}",
-        "/api/purchase-returns/test/return-methods",
-    },
-    "app.api.routes.inventory.stock.routes": {
-        "/api/inventory/", "/api/inventory/batches/{batch_id}",
-        "/api/inventory/batches/", "/api/inventory/batches",
-        "/api/inventory/stock/current/{product_id}", "/api/inventory/stock/current",
-        "/api/inventory/movements", "/api/inventory/expiry/alerts",
-        "/api/inventory/valuation", "/api/inventory/dashboard",
-    },
-    "app.api.routes.inventory.adjustments.routes": {
-        "/api/stock-adjustments/", "/api/stock-adjustments/analytics/summary",
-    },
-    "app.api.routes.inventory.movements.routes": {
-        "/api/stock-movements/", "/api/stock-movements/reasons",
-        "/api/stock-movements/product/{product_id}/batches",
-        "/api/stock-movements/near-expiry", "/api/stock-movements/low-stock",
-    },
-    "app.api.routes.inventory.writeoff.routes": {
-        "/api/stock-writeoff/expiry-report", "/api/stock-writeoff/",
-        "/api/stock-writeoff/{writeoff_id}", "/api/stock-writeoff/itc-summary",
-    },
-    "app.api.routes.compliance.gst": {
-        "/api/gst/dashboard", "/api/gst/returns/status", "/api/gst/calculate",
-        "/api/gst/verification", "/api/gst/compliance/status", "/api/gst/settings",
-        "/api/gst/metrics", "/api/gst/reports/tax/gstr2a",
-        "/api/gst/reports/credit-debit-notes",
-    },
-    "app.api.routes.compliance.gstr2b": {
-        "/api/gst/gstr2b/status", "/api/gst/gstr2b/mismatches",
-    },
-    "app.api.routes.compliance.compliance": {
-        "/api/compliance/compliance/drug-licenses",
-        "/api/compliance/compliance/drug-licenses/expiring",
-        "/api/compliance/compliance/checklist", "/api/compliance/compliance/alerts",
-        "/api/compliance/compliance/reports/regulatory",
-    },
-}
+LEGACY_READ_INVENTORY = {}
 
 def _get_routes():
     return [
@@ -185,6 +141,35 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
         "/api/ledger/last-payment/{party_id}",
         "/api/ledger/interest-calculation/{party_id}",
         "/api/ledger/summary", "/api/ledger/top-debtors",
+        "/api/sale-returns/", "/api/sale-returns/returnable-invoices",
+        "/api/sale-returns/invoice/{invoice_id}/returns",
+        "/api/sale-returns/invoice/{invoice_id}/returnable-items",
+        "/api/sale-returns/invoice/{invoice_id}/items",
+        "/api/sale-returns/{return_id}",
+        "/api/purchase-returns/{return_id}",
+        "/api/metadata/return-reasons",
+        "/api/inventory/", "/api/inventory/batches/{batch_id}",
+        "/api/inventory/batches", "/api/inventory/batches/",
+        "/api/inventory/stock/current", "/api/inventory/list",
+        "/api/inventory/stock-status", "/api/inventory/movements",
+        "/api/inventory/categories", "/api/inventory/expiry/alerts",
+        "/api/inventory/valuation", "/api/inventory/dashboard",
+        "/api/stock-adjustments/", "/api/stock-adjustments/analytics/summary",
+        "/api/stock-movements/", "/api/stock-movements/reasons",
+        "/api/stock-movements/product/{product_id}/batches",
+        "/api/stock-movements/near-expiry", "/api/stock-movements/low-stock",
+        "/api/stock-writeoff/expiry-report", "/api/stock-writeoff/",
+        "/api/stock-writeoff/{writeoff_id}", "/api/stock-writeoff/itc-summary",
+        "/api/gst/calculate", "/api/gst/verification",
+        "/api/gst/compliance/status", "/api/gst/metrics",
+        "/api/gst/reports/tax/gstr2a", "/api/gst/gstr2b/status",
+        "/api/gst/gstr2b/mismatches",
+        "/api/reports/tax/hsn",
+        "/api/compliance/compliance/drug-licenses",
+        "/api/compliance/compliance/drug-licenses/expiring",
+        "/api/compliance/compliance/checklist",
+        "/api/compliance/compliance/alerts",
+        "/api/compliance/compliance/reports/regulatory",
     }:
         assert retired_path not in paths
 
@@ -220,6 +205,23 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
         "/api/canonical/adjustment-notes/context",
         "/api/canonical/adjustment-notes/{note_id}",
         "/api/canonical/party-ledger/{party_account_id}",
+        "/api/canonical/returns/sales-invoices/{invoice_id}/context",
+        "/api/canonical/returns/supplier-invoices/{invoice_id}/context",
+        "/api/canonical/returns/sales/{return_id}",
+        "/api/canonical/returns/purchases/{return_id}",
+        "/api/canonical/returns/approval-inbox",
+        "/api/canonical/returns/requester-inbox",
+        "/api/canonical/returns/requester/commands/{command_request_id}",
+        "/api/canonical/returns/commands/{command_request_id}/review",
+        "/api/purchase-returns/supplier-invoice/{invoice_id}/returnable-items",
+        "/api/canonical/inventory/context",
+        "/api/canonical/inventory/current-stock",
+        "/api/canonical/inventory/batches",
+        "/api/canonical/inventory/movements",
+        "/api/canonical/inventory-transfers/eligible-batches",
+        "/api/gst/dashboard", "/api/gst/returns/status",
+        "/api/gst/reports/gstr1", "/api/gst/reports/gstr3b",
+        "/api/gst/reports/credit-debit-notes", "/api/gst/settings",
     }:
         assert canonical_path in paths
 

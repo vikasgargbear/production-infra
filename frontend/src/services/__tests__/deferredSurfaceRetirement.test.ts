@@ -27,8 +27,6 @@ describe('deferred production surfaces', () => {
   });
 
   test('fabricated prescription and loyalty navigation stays retired', () => {
-    const complianceApi = read('services/api/modules/compliance/compliance.api.ts');
-
     for (const deferredId of [
       'quick-prescription',
       "Today's Prescriptions",
@@ -40,8 +38,9 @@ describe('deferred production surfaces', () => {
       expect(read('App.tsx')).not.toContain(deferredId);
     }
     expect(fs.existsSync(path.join(srcRoot, 'components/global/navigation/Sidebar.tsx'))).toBe(false);
-    expect(complianceApi).not.toContain('NarcoticEntryData');
-    expect(complianceApi).not.toContain('narcotic-register');
+    expect(fs.existsSync(path.join(
+      srcRoot, 'services/api/modules/compliance/compliance.api.ts',
+    ))).toBe(false);
     expect(fs.existsSync(path.join(srcRoot, 'components/compliance/NarcoticRegister.tsx'))).toBe(false);
   });
 

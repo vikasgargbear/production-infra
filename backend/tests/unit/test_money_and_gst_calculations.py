@@ -6,7 +6,7 @@ import pytest
 
 from app.api.services.compliance.gst_service import GSTService
 from app.api.services.purchase.calculations import PurchaseCalculator
-from app.api.services.returns.return_service import ReturnService
+from app.api.services.returns.return_calculation import ReturnCalculator
 from app.api.services.sales.invoice.invoice_service import InvoiceService
 from app.api.services.sales.order.order_repository import OrderRepository
 from app.api.services.sales.order.order_service import OrderService
@@ -430,7 +430,7 @@ def test_return_matrix_reconciles_paid_and_free_quantities():
         ["0", "5", "18", "28"],
         ["CGST/SGST", "IGST"],
     ):
-        result = ReturnService.calculate_return_totals(
+        result = ReturnCalculator.calculate_return_totals(
             [{
                 "return_quantity": quantity,
                 "paid_quantity": paid,
@@ -440,6 +440,7 @@ def test_return_matrix_reconciles_paid_and_free_quantities():
                 "tax_percent": rate,
             }],
             gst_type,
+            include_gst=True,
             cap_to_paid_quantity=True,
             exclude_free_quantity_from_taxable=True,
         )
@@ -459,8 +460,11 @@ def test_return_matrix_reconciles_paid_and_free_quantities():
     [
         (PurchaseCalculator.calculate_item, ({"quantity": -1, "unit_price": 1},), "quantity"),
         (PurchaseCalculator.calculate_item, ({"quantity": 1, "unit_price": "NaN"},), "finite"),
-        (ReturnService.calculate_return_value, (-1, 1), "quantity"),
-        (ReturnService.calculate_return_totals, ([],), "at least one"),
+        (
+            ReturnCalculator.calculate_return_totals,
+            ([], "CGST/SGST", True, False, False),
+            "at least one",
+        ),
     ],
 )
 def test_purchase_and_return_calculators_fail_closed(calculator, args, error):

@@ -3,32 +3,35 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 
 // ============================================
 // Type Definitions
 // ============================================
 
-export interface BatchParams {
-    product_id?: string;   // UUID
-    expiring_soon?: boolean;
-    expired?: boolean;
-    days?: number;
-    limit?: number;
-    offset?: number;
-}
-
-export interface BatchData {
-    product_id: string;   // UUID
+export interface CanonicalProductBatch {
+    batch_id: string;
+    product_id: string;
+    product_name: string;
     batch_number: string;
-    manufacturing_date?: string;
+    manufacturing_date: string | null;
     expiry_date: string;
-    mrp: number;
-    sale_price?: number;
-    cost_per_unit?: number;
-    quantity: number;
-    rack_location?: string;
+    mrp_per_unit: string;
+    sale_price_per_unit: string;
+    uom_conversion_id: string | null;
+    location_id: string;
+    branch_id: string;
+    location_name: string;
+    branch_name: string;
+    cost_per_unit: string | null;
+    quantity_available: string;
+    days_to_expiry: number;
+    fefo_expiry_tier: number | null;
+    has_pending_sync: false;
+    taxability: 'taxable' | 'exempt' | 'nil_rated' | 'non_gst' | null;
+    gst_percent: string | null;
+    batch_status: 'released' | 'blocked';
 }
 
 // ============================================
@@ -36,12 +39,7 @@ export interface BatchData {
 // ============================================
 
 const ENDPOINTS = {
-    /** Canonical batch list — UUID-keyed, tenant-scoped. */
-    BASE: '/inventory/batches/',
-    /** Per-product batches via canonical products router (UUID preferred). */
-    BY_PRODUCT: (id: string | number) => `/products/${id}/batches`,
-    EXPIRING: '/inventory/batches/expiring',
-    EXPIRED: '/inventory/batches/expired'
+    BY_PRODUCT: (id: string) => `/products/${id}/batches`,
 } as const;
 
 // ============================================
@@ -49,34 +47,10 @@ const ENDPOINTS = {
 // ============================================
 
 export const batchesApi = {
-    getAll: (params: BatchParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
+    getByProduct: (productId: string): Promise<AxiosResponse<{ batches: CanonicalProductBatch[] }>> => {
+        if (!isCanonicalUuid(productId)) {
+            throw new Error('Product batch lookup requires a canonical product UUID.');
+        }
+        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId));
     },
-
-    /** Fetch a single batch by its UUID. */
-    getById: (batchId: string): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}${batchId}`);
-    },
-
-    /** Fetch batches for a product by its UUID (or legacy integer ID). */
-    getByProduct: (productId: string | number, params: BatchParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), { params });
-    },
-
-    create: (_data: BatchData): Promise<AxiosResponse> =>
-        rejectCanonicalWrite('Legacy inventory-batch creation'),
-
-    update: (_batchId: string, _data: Partial<BatchData>): Promise<AxiosResponse> =>
-        rejectCanonicalWrite('Legacy inventory-batch editing'),
-
-    delete: (_batchId: string): Promise<AxiosResponse> =>
-        rejectCanonicalWrite('Legacy inventory-batch deletion'),
-
-    getExpiring: (days: number = 90): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.EXPIRING, { params: { days } });
-    },
-
-    getExpired: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.EXPIRED);
-    }
 };

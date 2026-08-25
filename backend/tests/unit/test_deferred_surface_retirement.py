@@ -45,11 +45,4 @@ def test_deferred_document_number_types_are_absent() -> None:
 
 
 def test_deferred_compliance_tables_are_not_queried_by_runtime_routes() -> None:
-    source = (BACKEND_ROOT / "app/api/routes/compliance/compliance.py").read_text()
-
-    for relation in (
-        "compliance.compliance_audits",
-        "compliance.inspector_visits",
-        "compliance.corrective_actions",
-    ):
-        assert relation not in source
+    assert not (BACKEND_ROOT / "app/api/routes/compliance/compliance.py").exists()

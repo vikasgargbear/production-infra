@@ -1,14 +1,11 @@
 import { apiHelpers } from '../api/apiClient';
 import { challansApi } from '../api/modules/sales/challans.api';
 import { ordersApi } from '../api/modules/sales/orders.api';
-import { returnsApi } from '../api/modules/sales/returns.api';
 import { purchasesApi } from '../api/modules/purchase/purchases.api';
 import { grnApi } from '../api/modules/purchase/grn.api';
 import { supplierInvoicesApi } from '../api/modules/purchase/supplierInvoices.api';
-import { batchesApi } from '../api/modules/inventory/batches.api';
 import { conversionsApi } from '../api/modules/inventory/conversions.api';
 import { taxEntriesApi } from '../api/modules/compliance/taxEntries.api';
-import { complianceApi } from '../api/modules/compliance/compliance.api';
 import { employeesApi } from '../api/modules/master/employees.api';
 import { documentsApi } from '../api/modules/system/documents.api';
 import settingsApi from '../api/modules/settings/settings.api';
@@ -34,15 +31,11 @@ describe('legacy mutation adapters fail before transport', () => {
   it.each([
     ['sales order', () => ordersApi.approve('legacy-1')],
     ['delivery challan', () => challansApi.createFromOrder('legacy-1', {})],
-    ['sales return', () => returnsApi.createSaleReturn({})],
-    ['purchase return', () => returnsApi.createPurchaseReturn({})],
     ['purchase order', () => purchasesApi.create({} as any)],
     ['goods receipt', () => grnApi.create({} as any)],
     ['supplier invoice', () => supplierInvoicesApi.create({} as any)],
-    ['inventory batch', () => batchesApi.create({} as any)],
     ['unit conversion', () => conversionsApi.create({} as any)],
     ['tax entry', () => taxEntriesApi.create({})],
-    ['drug license', () => complianceApi.updateDrugLicense({})],
     ['employee', () => employeesApi.create({})],
     ['document-number reservation', () => documentsApi.reserveNumber('INV')],
     ['stock settings update', () => settingsApi.updateStock({ allow_negative_stock: false })],

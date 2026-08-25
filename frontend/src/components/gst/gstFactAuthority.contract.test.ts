@@ -24,6 +24,10 @@ test('GST desktop reports never substitute local documents or literal policy fac
   expect(hsn).not.toContain('gstApi');
   expect(api).not.toContain('gstr2a:');
   expect(api).not.toContain('hsnSummary:');
+  expect(api).not.toContain('getMetrics');
+  expect(api).not.toContain('creditDebitNotes');
+  expect(api).not.toContain('getTaxAmount');
+  expect(api).not.toContain('reconciliation:');
   expect(taxAnalytics).toContain('Tax analytics unavailable');
   expect(taxAnalytics).toContain('Draft document totals');
   expect(taxAnalytics).not.toContain('/tax-entries/analytics/summary');
@@ -35,5 +39,9 @@ test('dead browser GST reconstructions and invented collection source stay delet
     'frontend/src/components/gst/utils/gstTransforms.ts',
     'frontend/src/components/gst/hooks/useGSTData.ts',
     'backend/app/api/routes/reports/collection.py',
+    'backend/app/api/routes/compliance/gst.py',
+    'backend/app/api/routes/compliance/gstr2b.py',
+    'backend/app/api/routes/compliance/compliance.py',
+    'frontend/src/services/api/modules/compliance/compliance.api.ts',
   ].forEach(relative => expect(fs.existsSync(path.join(root, relative))).toBe(false));
 });
