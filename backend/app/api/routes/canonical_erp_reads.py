@@ -4893,7 +4893,7 @@ def _payment_rows(db: Session, params: dict, method: Optional[str] = None,
         SELECT payment.id, payment.amount, payment.payment_method AS method,
                payment.status, payment.payment_date AS date,
                COALESCE(payment.external_reference,payment.payment_number) AS reference,
-               COALESCE(party.legal_name,'Unassigned') AS customer,
+               party.legal_name AS customer,
                CASE WHEN payment.direction='receipt' THEN 'received' ELSE 'sent' END AS type,
                payment.direction, payment.memo AS description
           FROM finance.payments payment

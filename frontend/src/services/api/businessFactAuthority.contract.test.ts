@@ -81,3 +81,18 @@ test('financial comparisons come from equal-period backend facts, never zero pla
   expect(taxAnalytics).toContain("'Unavailable'");
   expect(taxAnalytics).not.toContain('data.compliance_score || 100');
 });
+
+test('payment analytics uses the organization clock and strict canonical projections', () => {
+  const component = read('frontend/src/components/reports/PaymentAnalytics.tsx');
+  const projection = read('frontend/src/components/reports/utils/paymentAnalyticsProjection.ts');
+  const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
+
+  expect(component).toContain('useCanonicalBusinessDate');
+  expect(component).toContain('projectPaymentAnalytics');
+  expect(component).not.toContain('subDays(end, 30)');
+  expect(component).not.toContain('analytics.total_received || 0');
+  expect(component).not.toContain("['all', 'cash', 'card', 'upi', 'bank', 'check']");
+  expect(projection).toContain('must be a non-negative integer');
+  expect(canonicalReads).toContain('party.legal_name AS customer');
+  expect(canonicalReads).not.toContain("COALESCE(party.legal_name,'Unassigned') AS customer");
+});
