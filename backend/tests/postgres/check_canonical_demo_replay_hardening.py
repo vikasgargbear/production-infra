@@ -452,6 +452,12 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
             fixture.IDS["agent_grant"],
             fixture.IDS["legacy_approver_agent_grant"],
         )
+        # bootstrap_identity seeds Supabase auth as the session owner before it
+        # switches to erp_migration_owner. The first bootstrap's SET LOCAL ROLE
+        # remains active for this shared rollback-only transaction, so restore
+        # the session role before replaying the complete bootstrap boundary.
+        with connection.cursor() as cursor:
+            cursor.execute("RESET ROLE")
         fixture.bootstrap_identity(connection, organization_pan="XXXXX7777X")
         with connection.cursor() as cursor:
             _set_owner_context(cursor)
