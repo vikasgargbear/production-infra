@@ -28,11 +28,11 @@ BEGIN
                                  'resolve_customer_receipt_prepare','persist_customer_receipt_prepare',
                                  'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
                                  'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
-                                 'resolve_inventory_transfer_prepare','persist_inventory_transfer_prepare',
+                                 'persist_inventory_transfer_prepare',
                                  'resolve_inventory_adjustment_prepare','persist_inventory_adjustment_prepare')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
-    IF runtime_count<>21 THEN
-        RAISE EXCEPTION 'expected twenty-one reviewed runtime automation commands, found %',runtime_count;
+    IF runtime_count<>20 THEN
+        RAISE EXCEPTION 'expected twenty reviewed runtime automation commands, found %',runtime_count;
     END IF;
 
     SELECT count(*) INTO bad_count
@@ -48,7 +48,7 @@ BEGIN
                                      'resolve_customer_receipt_prepare','persist_customer_receipt_prepare',
                                      'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
                                      'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
-                                     'resolve_inventory_transfer_prepare','persist_inventory_transfer_prepare',
+                                     'persist_inventory_transfer_prepare',
                                      'resolve_inventory_adjustment_prepare','persist_inventory_adjustment_prepare')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
