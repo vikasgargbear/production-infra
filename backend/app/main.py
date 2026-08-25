@@ -284,7 +284,6 @@ include_explicit_non_persistent_post_utilities(
     tags=["Purchase Upload"],
     routes={
         "/parse-invoice-safe": purchase_upload_routes.parse_purchase_invoice_safe,
-        "/validate-invoice": purchase_upload_routes.validate_invoice_data,
     },
 )
 

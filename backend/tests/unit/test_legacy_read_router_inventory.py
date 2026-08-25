@@ -236,7 +236,7 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
     )
 
     assert "post" in paths["/api/purchase-upload/parse-invoice-safe"]
-    assert "post" in paths["/api/purchase-upload/validate-invoice"]
+    assert "/api/purchase-upload/validate-invoice" not in paths
     assert "/api/tax-entries/calculate" not in paths
     assert paths["/api/collection-center/collection/aging-data"]["get"][
         "operationId"
