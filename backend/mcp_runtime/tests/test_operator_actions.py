@@ -157,6 +157,35 @@ def test_commercial_discounts_are_explicit_and_tax_is_never_client_selected() ->
     assert line_discount["properties"]["line_discount_value"]["type"] == "string"
 
 
+def test_adjustment_note_mcp_forbids_duplicate_source_supply_and_tax_authority() -> None:
+    schema = PREPARE_ACTIONS["erp_adjustment_note_prepare"].input_schema
+    line = schema["properties"]["lines"]["items"]
+    forbidden_header = {
+        "currency_code",
+        "supply_type",
+        "zero_rated_payment_mode",
+        "tax_charge_mechanism",
+        "calculation_ruleset_version",
+    }
+    forbidden_line = {
+        "uom_code",
+        "uom_conversion_factor",
+        "tax_charge_mechanism",
+        "tax_classification_code_snapshot",
+        "tax_code_version_id",
+        "taxability_snapshot",
+        "cgst_rate",
+        "sgst_rate",
+        "igst_rate",
+        "cess_rate",
+    }
+
+    assert schema["additionalProperties"] is False
+    assert line["additionalProperties"] is False
+    assert not (forbidden_header & set(schema["properties"]))
+    assert not (forbidden_line & set(line["properties"]))
+
+
 def test_commercial_field_names_match_canonical_semantics() -> None:
     names = _property_names(
         PREPARE_ACTIONS["erp_sales_order_prepare"].input_schema

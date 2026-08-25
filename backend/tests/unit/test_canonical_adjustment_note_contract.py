@@ -218,6 +218,44 @@ def test_incremental_adjustment_migration_is_hash_bound_linear_and_pg15_gated() 
     assert 'version_num FROM public.alembic_version\')\" = \"$expected_alembic_head\"' in gate
 
 
+def test_source_authority_migration_is_hash_bound_and_rejects_client_policy() -> None:
+    root = Path(__file__).resolve().parents[3]
+    sql_path = (
+        root
+        / "backend/alembic/sql/20260825_0014_adjustment_note_source_authority.sql"
+    )
+    revision_path = (
+        root
+        / "backend/alembic/versions/20260825_0014_adjustment_note_source_authority.py"
+    )
+    sql = sql_path.read_text()
+    revision = revision_path.read_text()
+
+    assert 'revision = "20260825_0014"' in revision
+    assert 'down_revision = "20260825_0013"' in revision
+    assert hashlib.sha256(sql.encode()).hexdigest() in revision
+    assert "CanonicalBaselineError" in revision.split("def downgrade", 1)[1]
+    assert "resolve_adjustment_note_prepare_unchecked_v0013" in sql
+    assert (
+        "adjustment-note header calculation policy differs from the original document"
+        in sql
+    )
+    assert (
+        "adjustment-note line pricing or discount policy differs from the original sales invoice line"
+        in sql
+    )
+    assert (
+        "adjustment-note line pricing or discount policy differs from the original supplier invoice line"
+        in sql
+    )
+    assert (
+        "adjustment-note supply and tax authority must be derived from the original document"
+        in sql
+    )
+    assert "FROM PUBLIC, erp_app, erp_runtime, erp_calculator" in sql
+    assert "TO erp_runtime, erp_calculator" in sql
+
+
 def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:
     paths = {route.path for route in reads.router.routes}
     assert paths == {

@@ -52,6 +52,11 @@ def main() -> None:
             resolve = _function(
                 session, "erp_automation_commands", "resolve_adjustment_note_prepare"
             )
+            unchecked = _function(
+                session,
+                "erp_automation_commands",
+                "resolve_adjustment_note_prepare_unchecked_v0013",
+            )
             persist = _function(
                 session, "erp_automation_commands", "persist_adjustment_note_prepare"
             )
@@ -75,6 +80,10 @@ def main() -> None:
             assert resolve["runtime_execute"] is True
             assert resolve["calculator_execute"] is True
             assert resolve["app_execute"] is False
+            assert unchecked["security_definer"] is True
+            assert unchecked["runtime_execute"] is False
+            assert unchecked["calculator_execute"] is False
+            assert unchecked["app_execute"] is False
             assert persist["security_definer"] is True
             assert persist["runtime_execute"] is False
             assert persist["calculator_execute"] is True
@@ -123,6 +132,15 @@ def main() -> None:
                 "sales credit quantity exceeds remaining",
                 "purchase debit quantity exceeds remaining",
                 "gst_adjustment_rule_versions",
+            ):
+                assert fragment in unchecked["body"]
+            for fragment in (
+                "resolve_adjustment_note_prepare_unchecked_v0013",
+                "header calculation policy differs from the original document",
+                "line pricing or discount policy differs from the original sales invoice line",
+                "line pricing or discount policy differs from the original supplier invoice line",
+                "supply and tax authority must be derived from the original document",
+                "line tax authority must be derived from the original line",
             ):
                 assert fragment in resolve["body"]
             for fragment in (

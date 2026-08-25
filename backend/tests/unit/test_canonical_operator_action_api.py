@@ -360,6 +360,40 @@ def _supplier_invoice_payload():
     }
 
 
+def _adjustment_note_payload():
+    return {
+        "idempotency_key": "adjustment-note:test:source-authority",
+        "branch_id": str(BRANCH_ID),
+        "note_date": "2026-08-25",
+        "side": "sales",
+        "direction": "credit",
+        "original_document_id": str(uuid4()),
+        "gst_tax_treatment": "commercial_only",
+        "reason_code": "customer_rejection",
+        "reason": "Exact source policy correction",
+        "rounding_policy": "nearest_rupee",
+        "document_discount": {
+            "document_discount_kind": "percent",
+            "document_discount_basis": "price_value",
+            "document_discount_value": "5.000000",
+        },
+        "lines": [{
+            "original_line_id": str(uuid4()),
+            "billed_quantity": "1.000000",
+            "free_quantity": "0.000000",
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "quoted_unit_rate": "150.0000",
+            "price_basis": "tax_exclusive",
+            "line_discount": {
+                "line_discount_kind": "amount",
+                "line_discount_basis": "taxable_value",
+                "line_discount_value": "10.000000",
+            },
+            "document_discount_eligible": False,
+        }],
+    }
+
+
 def _purchase_return_payload(*, treatment: str = "statutory"):
     payload = {
         "idempotency_key": "purchase-return:test:0001",
@@ -798,6 +832,37 @@ def test_invoice_prepare_enforces_exactly_one_physical_fulfillment_mode(enabled_
     )
     assert response.status_code == 422
     assert "billed_quantity" in response.text
+
+
+@pytest.mark.parametrize(
+    ("scope", "field", "value"),
+    (
+        ("header", "supply_type", "inter_state"),
+        ("header", "zero_rated_payment_mode", "with_igst"),
+        ("header", "tax_charge_mechanism", "reverse_charge"),
+        ("line", "tax_code_version_id", "d3000000-0000-7000-8000-000000000099"),
+        ("line", "igst_rate", "12.000000"),
+    ),
+)
+def test_adjustment_note_api_rejects_caller_owned_supply_and_tax_fields(
+    enabled_boundary, scope, field, value
+):
+    fake = FakeOperatorActionService()
+    policy = ACTION_POLICIES["finance.adjustment_note.prepare"]
+    holder = {"value": _context(policy.operation_key, policy.permission)}
+    client = TestClient(_app(fake, holder))
+    payload = _adjustment_note_payload()
+    target = payload if scope == "header" else payload["lines"][0]
+    target[field] = value
+
+    response = client.post(
+        "/api/internal/mcp/actions/finance.adjustment_note.prepare/prepare",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "VALIDATION_FAILED"
+    assert fake.calls == []
 
 
 @pytest.mark.parametrize("fulfillment_source", ["direct_issue", "dispatch_allocated"])
