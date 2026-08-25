@@ -13,6 +13,10 @@ on:
         description: Exact application SHA to upload to all Railway pilot services
         required: true
         type: string
+    outputs:
+      api_deployment_id:
+        description: Exact Railway API deployment created for the reviewed SHA
+        value: ${{ jobs.deploy.outputs.api_deployment_id }}
     secrets:
       RAILWAY_API_TOKEN:
         required: true
@@ -44,6 +48,8 @@ concurrency:
 
 jobs:
   deploy:
+    outputs:
+      api_deployment_id: ${{ steps.exact_upload.outputs.api_deployment_id }}
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 45
@@ -63,8 +69,7 @@ jobs:
       MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
       EVIDENCE_STORAGE_ENABLED: ${{ vars.EVIDENCE_STORAGE_ENABLED }}
       EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.EVIDENCE_STORAGE_EXPECTED_PROJECT_REF }}
-      SUPABASE_POOLER_HOST: aws-0-ap-south-1.pooler.supabase.com
-      SUPABASE_SESSION_POOLER_PORT: "5432"
+      SUPABASE_DIRECT_DATABASE_HOST: db.rgihahbmkrmhitjdjvev.supabase.co
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +99,7 @@ jobs:
           node-version: "22"
 
       - name: Install the pinned Railway CLI
-        run: npm install --global @railway/cli@4.30.2
+        run: npm install --global @railway/cli@5.43.4
 
       - name: Link the reviewed Railway project
         run: |
@@ -103,6 +108,125 @@ jobs:
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID"
           railway whoami >/dev/null
+
+      - name: Require API outbound IPv6 without absorbing other staged changes
+        run: |
+          set -euo pipefail
+
+          ipv6_status() {
+            railway outbound-network ipv6 status \
+              --service "$RAILWAY_API_SERVICE" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --json
+          }
+          validate_status() {
+            local path=$1
+            jq -e \
+              --arg service "$RAILWAY_API_SERVICE" \
+              --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+              '.service.name == $service and
+               .environment.id == $environment and
+               (.service.id | type == "string" and length > 0) and
+               (.ipv6.enabled | type == "boolean") and
+               (.ipv6.staged | type == "boolean")' \
+              "$path" >/dev/null
+          }
+          staged_patch() {
+            # GraphQL variables are intentionally left for Railway, not the shell.
+            # shellcheck disable=SC2016
+            railway api \
+              'query ExactStaged($environmentId: String!) { environmentStagedChanges(environmentId: $environmentId) { patch } }' \
+              --raw-var environmentId="$RAILWAY_ENVIRONMENT_ID" \
+              --compact
+          }
+          normalize_staged_patch() {
+            jq '
+              def prune:
+                if type == "object" then
+                  with_entries(.value |= prune)
+                  | with_entries(select(.value != {} and .value != []))
+                elif type == "array" then map(prune)
+                else .
+                end;
+              .data.environmentStagedChanges.patch | prune
+            '
+          }
+          service_id() {
+            local service_name=$1
+            jq -er --arg name "$service_name" \
+              '[.services.edges[].node | select(.name == $name) | .id] |
+               if length == 1 then .[0]
+               else error("expected exactly one Railway service named " + $name)
+               end' railway-project-ipv6.json
+          }
+
+          railway status --json > railway-project-ipv6.json
+          api_service_id=$(service_id "$RAILWAY_API_SERVICE")
+          mcp_service_id=$(service_id "$RAILWAY_MCP_SERVICE")
+          ipv6_status > api-ipv6-before.json
+          validate_status api-ipv6-before.json
+          jq -e '.ipv6.staged == false' api-ipv6-before.json >/dev/null || {
+            echo "API outbound IPv6 has an unexpected pending state" >&2
+            exit 1
+          }
+
+          staged_patch | normalize_staged_patch > railway-staged-before.json
+          jq -e --arg id "$mcp_service_id" \
+            '. == {} or . == {services: {($id): {deploy: {startCommand: null}}}}' \
+            railway-staged-before.json >/dev/null || {
+            echo "Railway has unrelated staged configuration; refusing to absorb it into the IPv6 change" >&2
+            exit 1
+          }
+
+          cp railway-staged-before.json railway-staged-expected.json
+          if jq -e '.ipv6.enabled == false' api-ipv6-before.json >/dev/null; then
+            railway outbound-network ipv6 enable \
+              --service "$RAILWAY_API_SERVICE" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --json > api-ipv6-staged.json
+            ipv6_status > api-ipv6-pending.json
+            validate_status api-ipv6-pending.json
+            jq -e '.ipv6.enabled == false and .ipv6.staged == true' api-ipv6-pending.json >/dev/null
+            jq --arg id "$api_service_id" \
+              '. * {services: {($id): {deploy: {ipv6EgressEnabled: true}}}}' \
+              railway-staged-expected.json > railway-staged-combined.json
+            mv railway-staged-combined.json railway-staged-expected.json
+          else
+            jq -e '.ipv6.enabled == true' api-ipv6-before.json >/dev/null
+          fi
+
+          staged_patch | normalize_staged_patch > railway-staged-reviewed.json
+          jq -e --slurpfile expected railway-staged-expected.json \
+            '. == $expected[0]' railway-staged-reviewed.json >/dev/null || {
+              echo "Staged Railway patch is not the exact reviewed MCP cleanup and API IPv6 change" >&2
+              exit 1
+            }
+
+          if jq -e '. != {}' railway-staged-reviewed.json >/dev/null; then
+            # GraphQL variables are intentionally left for Railway, not the shell.
+            # shellcheck disable=SC2016
+            railway api \
+              'mutation CommitStaged($environmentId: String!, $message: String!) { environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message, skipDeploys: true) }' \
+              --raw-var environmentId="$RAILWAY_ENVIRONMENT_ID" \
+              --raw-var message="Converge MCP dashboard override and API direct IPv6 transport" \
+              --compact > api-ipv6-commit.json
+            jq -e '.data.environmentPatchCommitStaged | type == "string" and length > 0' api-ipv6-commit.json >/dev/null
+          fi
+
+          for _ in $(seq 1 12); do
+            ipv6_status > api-ipv6-after.json
+            validate_status api-ipv6-after.json
+            staged_patch | normalize_staged_patch > railway-staged-after.json
+            if jq -e '.ipv6.enabled == true and .ipv6.staged == false' api-ipv6-after.json >/dev/null && \
+               jq -e '. == {}' railway-staged-after.json >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "API outbound IPv6 did not become active" >&2
+          exit 1
 
       - name: Fail closed on Railway service configuration drift
         run: |
@@ -125,7 +249,6 @@ jobs:
           service_matches() {
             local service_name=$1
             local config_file=$2
-            local expected_start=$3
             local id
             local actual_start
             id=$(service_id "$service_name")
@@ -136,20 +259,13 @@ jobs:
                .services[$id].configFile == $config_file' \
               railway-service-config.json >/dev/null || return 1
             actual_start=$(jq -r --arg id "$id" '.services[$id].deploy.startCommand // ""' railway-service-config.json)
-            if test -z "$expected_start"; then
-              test -z "$actual_start"
-            else
-              test -z "$actual_start" || \
-                test "$actual_start" = "python start.py" || \
-                test "$actual_start" = "$expected_start"
-            fi
+            test -z "$actual_start"
           }
 
-          mcp_start_command=$(jq -er '.deploy.startCommand | strings | select(length > 0)' deploy/railway/mcp.railway.json)
-          if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json "" || \
-             ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json "$mcp_start_command" || \
-             ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json ""; then
-            echo "::error title=Railway service configuration drift::All services must use repository-root context and their exact /deploy/railway/*.railway.json config file. API/frontend start overrides must be empty; MCP may additionally have only the reviewed command or the known python start.py legacy value that this exact upload replaces. Correct any other drift separately; this workflow will not trigger an unbound intermediate deployment."
+          if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json || \
+             ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json || \
+             ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json; then
+            echo "::error title=Railway service configuration drift::All services must use repository-root context, their exact /deploy/railway/*.railway.json config file, and no dashboard start override. Correct drift separately; this workflow will not trigger an unbound intermediate deployment."
             exit 1
           fi
 
@@ -180,9 +296,10 @@ jobs:
           }
 
           encode() { jq -nr --arg value "$1" '$value|@uri'; }
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:$(encode "$ERP_RUNTIME_PASSWORD")@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_api_railway"
-          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:$(encode "$ERP_CALCULATOR_PASSWORD")@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_calculator_railway"
-          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:$(encode "$ERP_TAX_PROVIDER_PASSWORD")@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_tax_provider_railway"
+          test "$SUPABASE_DIRECT_DATABASE_HOST" = "db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
+          runtime_url="postgresql://erp_runtime:$(encode "$ERP_RUNTIME_PASSWORD")@${SUPABASE_DIRECT_DATABASE_HOST}:5432/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_api_railway"
+          calculator_url="postgresql://erp_calculator:$(encode "$ERP_CALCULATOR_PASSWORD")@${SUPABASE_DIRECT_DATABASE_HOST}:5432/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_calculator_railway"
+          provider_url="postgresql://erp_tax_provider:$(encode "$ERP_TAX_PROVIDER_PASSWORD")@${SUPABASE_DIRECT_DATABASE_HOST}:5432/postgres?sslmode=require&connect_timeout=15&application_name=aasopharma_tax_provider_railway"
           echo "::add-mask::$runtime_url"
           echo "::add-mask::$calculator_url"
           echo "::add-mask::$provider_url"
@@ -193,6 +310,9 @@ jobs:
           set_variable "$RAILWAY_API_SERVICE" DATABASE_URL "$runtime_url"
           set_variable "$RAILWAY_API_SERVICE" ERP_CALCULATOR_DATABASE_URL "$calculator_url"
           set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_DATABASE_URL "$provider_url"
+          set_variable "$RAILWAY_API_SERVICE" DATABASE_TRANSPORT_REQUIREMENT supabase_direct_ipv6
+          set_variable "$RAILWAY_API_SERVICE" DATABASE_POOL_SIZE 3
+          set_variable "$RAILWAY_API_SERVICE" DATABASE_MAX_OVERFLOW 1
           set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_INTERNAL_SERVICE_TOKEN "$TAX_PROVIDER_INTERNAL_SERVICE_TOKEN"
           set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_INTERNAL_HMAC_SECRET "$TAX_PROVIDER_INTERNAL_HMAC_SECRET"
           set_variable "$RAILWAY_API_SERVICE" JWT_SECRET_KEY "$JWT_SECRET_KEY"
@@ -254,6 +374,7 @@ jobs:
           set_variable "$RAILWAY_FRONTEND_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
 
       - name: Force-upload the exact source tree to all three Railway services
+        id: exact_upload
         env:
           DEPLOYMENT_NONCE: ${{ github.run_id }}:${{ github.run_attempt }}
         run: |
@@ -285,6 +406,7 @@ jobs:
           jq -er '.deploymentId | select(type == "string" and length > 0)' api-deploy.json > api-deployment-id
           jq -er '.deploymentId | select(type == "string" and length > 0)' mcp-deploy.json > mcp-deployment-id
           jq -er '.deploymentId | select(type == "string" and length > 0)' frontend-deploy.json > frontend-deployment-id
+          echo "api_deployment_id=$(<api-deployment-id)" >> "$GITHUB_OUTPUT"
 
       - name: Require each exact upload to become the active deployment
         run: |
@@ -393,7 +515,13 @@ jobs:
             frontend_health=$(<frontend-health.txt)
             frontend_metadata=$(<frontend-metadata.json)
             if jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_health" >/dev/null 2>&1 && \
-               jq -e '.status == "ready"' <<<"$api_ready" >/dev/null 2>&1 && \
+               jq -e '.status == "ready" and
+                      .database.transport == "supabase_direct" and
+                      .database.principal == "erp_runtime" and
+                      .database.principal_isolated == true and
+                      .database.migration_owner_member == false and
+                      .database.row_security == true and
+                      .database.ip_version == 6' <<<"$api_ready" >/dev/null 2>&1 && \
                jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_health" >/dev/null 2>&1 && \
                jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1 && \
                test "$frontend_health" = ok && \

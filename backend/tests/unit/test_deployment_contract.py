@@ -359,7 +359,10 @@ def test_render_readiness_requires_database_without_replacing_liveness():
 
     assert '@app.get("/health")' in main
     assert '@app.get("/ready", include_in_schema=False)' in main
-    assert 'text("SELECT 1")' in main
+    assert "current_user AS principal" in main
+    assert "current_setting('row_security') = 'on' AS row_security" in main
+    assert "family(inet_server_addr()) AS address_family" in main
+    assert 'DATABASE_TRANSPORT_REQUIREMENT == "supabase_direct_ipv6"' in main
     assert "READINESS_TIMEOUT_SECONDS = 5.0" in main
     assert 'content={"status": "not_ready"}' in main
     assert "/health" in dockerfile

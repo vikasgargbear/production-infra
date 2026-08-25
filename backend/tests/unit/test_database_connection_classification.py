@@ -1,4 +1,6 @@
-from app.core.database import classify_database_connection
+import pytest
+
+from app.core.database import _bounded_pool_setting, classify_database_connection
 
 
 def test_supabase_direct_connection_uses_project_host_and_5432():
@@ -51,3 +53,22 @@ def test_unrecognized_supabase_ports_fail_to_an_explicit_unknown_mode():
         )
         == "supabase_direct_unknown"
     )
+
+
+def test_pool_budget_uses_explicit_bounded_environment_values(monkeypatch):
+    monkeypatch.setenv("TEST_DATABASE_POOL_SIZE", "3")
+    assert _bounded_pool_setting(
+        "TEST_DATABASE_POOL_SIZE", default=10, minimum=1, maximum=20
+    ) == 3
+
+    monkeypatch.setenv("TEST_DATABASE_POOL_SIZE", "0")
+    with pytest.raises(RuntimeError, match="between 1 and 20"):
+        _bounded_pool_setting(
+            "TEST_DATABASE_POOL_SIZE", default=10, minimum=1, maximum=20
+        )
+
+    monkeypatch.setenv("TEST_DATABASE_POOL_SIZE", "many")
+    with pytest.raises(RuntimeError, match="must be an integer"):
+        _bounded_pool_setting(
+            "TEST_DATABASE_POOL_SIZE", default=10, minimum=1, maximum=20
+        )

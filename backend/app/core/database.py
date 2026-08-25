@@ -2,13 +2,32 @@
 Database Configuration
 """
 import os
-import socket
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import Generator
 from urllib.parse import urlparse, urlunparse
 
 from .env import is_production
+
+
+def _bounded_pool_setting(
+    name: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    """Read an explicit pool budget and reject unsafe deployment values."""
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be an integer") from error
+    if not minimum <= value <= maximum:
+        raise RuntimeError(
+            f"{name} must be between {minimum} and {maximum}, inclusive"
+        )
+    return value
 
 
 def classify_database_connection(database_url: str) -> str:
@@ -49,11 +68,11 @@ DATABASE_URL = (
     or "postgresql://postgres:password@localhost:5432/pharma"
 )
 
-# Force IPv4 by adding target_session_attrs to connection string for Supabase
+# Require a writable primary. This does not select an address family; the endpoint
+# and deployment network determine whether the connection uses IPv4 or IPv6.
 if "supabase.co" in DATABASE_URL and "target_session_attrs" not in DATABASE_URL:
     separator = "&" if "?" in DATABASE_URL else "?"
     DATABASE_URL = f"{DATABASE_URL}{separator}target_session_attrs=read-write"
-    print(f"[DATABASE] Added IPv4 preference for Supabase connection")
 
 # Supabase documents direct and session connections on 5432, and transaction
 # pooling on 6543. Host and port must be considered together.
@@ -73,13 +92,20 @@ elif DATABASE_CONNECTION_MODE.startswith("supabase_"):
 if IS_SUPABASE_POOLER:
     print(f"[DATABASE] Using aggressive connection recycling for pooler mode")
 
+DATABASE_POOL_SIZE = _bounded_pool_setting(
+    "DATABASE_POOL_SIZE", default=10, minimum=1, maximum=20
+)
+DATABASE_MAX_OVERFLOW = _bounded_pool_setting(
+    "DATABASE_MAX_OVERFLOW", default=20, minimum=0, maximum=40
+)
+
 # Create engine with connection pooling optimized for Supabase
 if IS_SUPABASE_POOLER:
     # Transaction pooler mode (port 6543) - increased pool for Railway
     engine = create_engine(
         DATABASE_URL,
-        pool_size=10,             # Increased from 5 for higher concurrency
-        max_overflow=20,          # Increased from 10
+        pool_size=DATABASE_POOL_SIZE,
+        max_overflow=DATABASE_MAX_OVERFLOW,
         pool_pre_ping=True,       # Always test connections
         pool_recycle=30,          # Recycle every 30 seconds
         pool_timeout=20,          # Increased from 10 seconds
@@ -94,8 +120,8 @@ else:
     # P1-5: Added query timeout protection (30s limit)
     engine = create_engine(
         DATABASE_URL,
-        pool_size=10,             # Increased from 5 for higher concurrency
-        max_overflow=20,          # Increased from 10
+        pool_size=DATABASE_POOL_SIZE,
+        max_overflow=DATABASE_MAX_OVERFLOW,
         pool_pre_ping=True,
         pool_recycle=3600,        # Recycle every hour
         pool_timeout=20,          # Increased from 30

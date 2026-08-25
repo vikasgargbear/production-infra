@@ -6,13 +6,24 @@ from fastapi.responses import JSONResponse
 from app import main
 
 
-def test_database_readiness_probe_executes_only_select_one(monkeypatch):
+def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
     executed = []
+    readiness_row = {
+        "principal": "erp_runtime",
+        "rolsuper": False,
+        "rolbypassrls": False,
+        "migration_owner_member": False,
+        "row_security": True,
+        "address_family": 6,
+    }
 
     class Result:
+        def mappings(self):
+            return self
+
         @staticmethod
-        def scalar_one():
-            return 1
+        def one():
+            return readiness_row
 
     class Connection:
         def __enter__(self):
@@ -31,15 +42,94 @@ def test_database_readiness_probe_executes_only_select_one(monkeypatch):
             return Connection()
 
     monkeypatch.setattr(main, "engine", Engine())
+    monkeypatch.setattr(main, "DATABASE_CONNECTION_MODE", "supabase_direct")
+    monkeypatch.setattr(
+        main, "DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv6"
+    )
 
-    assert main._database_is_ready() is True
-    assert executed == ["SELECT 1"]
+    assert main._database_readiness() == {
+        "transport": "supabase_direct",
+        "principal": "erp_runtime",
+        "principal_isolated": True,
+        "migration_owner_member": False,
+        "row_security": True,
+        "ip_version": 6,
+    }
+    assert "current_user AS principal" in executed[0]
+    assert "pg_has_role" in executed[0]
+    assert "erp_migration_owner" in executed[0]
+    assert "family(inet_server_addr())" in executed[0]
+
+    readiness_row["migration_owner_member"] = True
+    try:
+        main._database_readiness()
+    except RuntimeError as error:
+        assert str(error) == "required direct IPv6 database transport is not ready"
+    else:
+        raise AssertionError("migration-owner membership passed the isolation gate")
+
+
+def test_database_readiness_fails_closed_on_non_ipv6_transport(monkeypatch):
+    class Result:
+        def mappings(self):
+            return self
+
+        @staticmethod
+        def one():
+            return {
+                "principal": "erp_runtime",
+                "rolsuper": False,
+                "rolbypassrls": False,
+                "migration_owner_member": False,
+                "row_security": True,
+                "address_family": 4,
+            }
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        @staticmethod
+        def execute(_statement):
+            return Result()
+
+    class Engine:
+        @staticmethod
+        def connect():
+            return Connection()
+
+    monkeypatch.setattr(main, "engine", Engine())
+    monkeypatch.setattr(main, "DATABASE_CONNECTION_MODE", "supabase_direct")
+    monkeypatch.setattr(
+        main, "DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv6"
+    )
+
+    try:
+        main._database_readiness()
+    except RuntimeError as error:
+        assert str(error) == "required direct IPv6 database transport is not ready"
+    else:
+        raise AssertionError("IPv4 transport unexpectedly passed the IPv6 readiness gate")
 
 
 def test_ready_returns_success_only_after_database_probe(monkeypatch):
-    monkeypatch.setattr(main, "_database_is_ready", lambda: True)
+    database = {
+        "transport": "supabase_direct",
+        "principal": "erp_runtime",
+        "principal_isolated": True,
+        "migration_owner_member": False,
+        "row_security": True,
+        "ip_version": 6,
+    }
+    monkeypatch.setattr(main, "_database_readiness", lambda: database)
 
-    assert asyncio.run(main.readiness_check()) == {"status": "ready"}
+    assert asyncio.run(main.readiness_check()) == {
+        "status": "ready",
+        "database": database,
+    }
 
 
 def test_ready_returns_generic_503_without_exception_details(monkeypatch):
@@ -48,7 +138,7 @@ def test_ready_returns_generic_503_without_exception_details(monkeypatch):
     def fail():
         raise RuntimeError(secret)
 
-    monkeypatch.setattr(main, "_database_is_ready", fail)
+    monkeypatch.setattr(main, "_database_readiness", fail)
     response = asyncio.run(main.readiness_check())
 
     assert isinstance(response, JSONResponse)

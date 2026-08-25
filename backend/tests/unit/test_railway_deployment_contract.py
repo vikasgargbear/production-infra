@@ -125,12 +125,12 @@ def test_workflow_fails_closed_on_service_configuration_drift() -> None:
         workflow.index("Fail closed on Railway service configuration drift") :
         workflow.index("Populate canonical service variables without triggering stale deploys")
     ]
-    assert "mcp_start_command=$(jq -er" in config_step
-    assert 'test "$actual_start" = "python start.py"' in config_step
-    assert 'test "$actual_start" = "$expected_start"' in config_step
-    assert 'service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json ""' in config_step
-    assert 'service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json "$mcp_start_command"' in config_step
-    assert 'service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json ""' in config_step
+    assert "mcp_start_command=$(jq -er" not in config_step
+    assert 'test "$actual_start" = "python start.py"' not in config_step
+    assert 'test -z "$actual_start"' in config_step
+    assert 'service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json' in config_step
+    assert 'service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json' in config_step
+    assert 'service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json' in config_step
     assert "exit 1" in config_step
 
 
@@ -155,6 +155,61 @@ def test_workflow_sets_the_reviewed_sha_without_variable_deploys() -> None:
             f'set_variable "{service}" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"'
             in variable_step
         )
+
+
+def test_workflow_enables_only_api_ipv6_and_commits_the_exact_staged_patch() -> None:
+    workflow = _workflow()
+    ipv6_step = workflow[
+        workflow.index("Require API outbound IPv6 without absorbing other staged changes") :
+        workflow.index("Fail closed on Railway service configuration drift")
+    ]
+
+    assert "@railway/cli@5.43.4" in workflow
+    assert "@railway/cli@4.30.2" not in workflow
+    assert 'railway outbound-network ipv6 status \\' in ipv6_step
+    assert 'railway outbound-network ipv6 enable \\' in ipv6_step
+    assert '--service "$RAILWAY_API_SERVICE"' in ipv6_step
+    assert '--service "$RAILWAY_MCP_SERVICE"' not in ipv6_step
+    assert '--service "$RAILWAY_FRONTEND_SERVICE"' not in ipv6_step
+    assert ".service.name == $service" in ipv6_step
+    assert ".environment.id == $environment" in ipv6_step
+    assert ".ipv6.staged == false" in ipv6_step
+    assert "normalize_staged_patch" in ipv6_step
+    assert "startCommand: null" in ipv6_step
+    assert "ipv6EgressEnabled: true" in ipv6_step
+    assert "railway-staged-expected.json" in ipv6_step
+    assert "railway-staged-reviewed.json" in ipv6_step
+    assert "environmentPatchCommitStaged" in ipv6_step
+    assert "skipDeploys: true" in ipv6_step
+    assert "Converge MCP dashboard override and API direct IPv6 transport" in ipv6_step
+    assert ".ipv6.enabled == true and .ipv6.staged == false" in ipv6_step
+    assert "railway-staged-after.json" in ipv6_step
+    assert "'. == {}' railway-staged-after.json" in ipv6_step
+    assert "Railway has unrelated staged configuration" in ipv6_step
+
+
+def test_workflow_uses_direct_isolated_roles_with_a_staging_pool_budget() -> None:
+    workflow = _workflow()
+    variable_step = workflow[
+        workflow.index("Populate canonical service variables without triggering stale deploys") :
+        workflow.index("Force-upload the exact source tree")
+    ]
+
+    assert "SUPABASE_DIRECT_DATABASE_HOST: db.rgihahbmkrmhitjdjvev.supabase.co" in workflow
+    assert "SUPABASE_POOLER_HOST:" not in workflow
+    assert "SUPABASE_SESSION_POOLER_PORT:" not in workflow
+    for principal in ("erp_runtime", "erp_calculator", "erp_tax_provider"):
+        assert f'postgresql://{principal}:$(encode' in variable_step
+    assert "@${SUPABASE_DIRECT_DATABASE_HOST}:5432/postgres" in variable_step
+    assert '.${CANONICAL_STAGING_PROJECT_REF}:' not in variable_step
+    assert (
+        'set_variable "$RAILWAY_API_SERVICE" DATABASE_TRANSPORT_REQUIREMENT '
+        "supabase_direct_ipv6"
+    ) in variable_step
+    assert 'set_variable "$RAILWAY_API_SERVICE" DATABASE_POOL_SIZE 3' in variable_step
+    assert 'set_variable "$RAILWAY_API_SERVICE" DATABASE_MAX_OVERFLOW 1' in variable_step
+    assert 'set_variable "$RAILWAY_MCP_SERVICE" DATABASE_' not in variable_step
+    assert 'set_variable "$RAILWAY_FRONTEND_SERVICE" DATABASE_' not in variable_step
 
 
 def test_workflow_exposes_a_railway_only_exact_sha_dispatch() -> None:
@@ -246,6 +301,12 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
     assert '.status == "healthy" and .git_commit == $sha' in workflow
     assert '.status == "ok" and .git_commit == $sha' in workflow
     assert workflow.count('.status == "ready"') == 2
+    assert '.database.transport == "supabase_direct"' in workflow
+    assert '.database.principal == "erp_runtime"' in workflow
+    assert ".database.principal_isolated == true" in workflow
+    assert ".database.migration_owner_member == false" in workflow
+    assert ".database.row_security == true" in workflow
+    assert ".database.ip_version == 6" in workflow
     assert '.service == "aasopharma-erp" and .git_commit == $sha' in workflow
     assert "deployment_id:$api_deployment_id" in workflow
     assert "deployment_id:$mcp_deployment_id" in workflow

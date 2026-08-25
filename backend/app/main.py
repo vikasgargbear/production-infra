@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
-from .core.database import engine
+from .core.database import DATABASE_CONNECTION_MODE, engine
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
@@ -202,18 +202,67 @@ async def health_check():
 
 
 READINESS_TIMEOUT_SECONDS = 5.0
+DATABASE_TRANSPORT_REQUIREMENT = os.getenv(
+    "DATABASE_TRANSPORT_REQUIREMENT", ""
+).strip()
+if DATABASE_TRANSPORT_REQUIREMENT not in {"", "supabase_direct_ipv6"}:
+    raise RuntimeError(
+        "DATABASE_TRANSPORT_REQUIREMENT must be empty or supabase_direct_ipv6"
+    )
 
 
-def _database_is_ready() -> bool:
+def _database_readiness() -> dict:
     with engine.connect() as connection:
-        return connection.execute(text("SELECT 1")).scalar_one() == 1
+        row = connection.execute(
+            text(
+                """
+                SELECT current_user AS principal,
+                       role.rolsuper,
+                       role.rolbypassrls,
+                       pg_has_role(
+                           current_user,
+                           'erp_migration_owner',
+                           'MEMBER'
+                       ) AS migration_owner_member,
+                       current_setting('row_security') = 'on' AS row_security,
+                       family(inet_server_addr()) AS address_family
+                  FROM pg_catalog.pg_roles AS role
+                 WHERE role.rolname=current_user
+                """
+            )
+        ).mappings().one()
+
+    principal_isolated = (
+        row["principal"] == "erp_runtime"
+        and not bool(row["rolsuper"])
+        and not bool(row["rolbypassrls"])
+        and not bool(row["migration_owner_member"])
+    )
+    row_security = bool(row["row_security"])
+    ip_version = row["address_family"]
+    if DATABASE_TRANSPORT_REQUIREMENT == "supabase_direct_ipv6" and not (
+        DATABASE_CONNECTION_MODE == "supabase_direct"
+        and principal_isolated
+        and row_security
+        and ip_version == 6
+    ):
+        raise RuntimeError("required direct IPv6 database transport is not ready")
+
+    return {
+        "transport": DATABASE_CONNECTION_MODE,
+        "principal": row["principal"],
+        "principal_isolated": principal_isolated,
+        "migration_owner_member": bool(row["migration_owner_member"]),
+        "row_security": row_security,
+        "ip_version": ip_version,
+    }
 
 
 @app.get("/ready", include_in_schema=False)
 async def readiness_check():
     try:
         ready = await asyncio.wait_for(
-            run_in_threadpool(_database_is_ready),
+            run_in_threadpool(_database_readiness),
             timeout=READINESS_TIMEOUT_SECONDS,
         )
     except Exception:
@@ -221,7 +270,7 @@ async def readiness_check():
 
     if not ready:
         return JSONResponse(status_code=503, content={"status": "not_ready"})
-    return {"status": "ready"}
+    return {"status": "ready", "database": ready}
 
 # =============================================================================
 # API ROUTER REGISTRATION
