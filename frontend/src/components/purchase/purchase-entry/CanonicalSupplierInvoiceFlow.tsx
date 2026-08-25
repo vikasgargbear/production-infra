@@ -260,6 +260,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
           <section className="rounded-lg border border-slate-200 bg-white p-5">
             <button type="button" onClick={() => setPrepared(null)} disabled={Boolean(executedResourceId.current)} className="inline-flex min-h-11 items-center text-sm text-slate-700 disabled:text-slate-300"><ArrowLeft className="mr-2 h-4 w-4" />Back to evidence</button>
             <h2 className="mt-3 text-lg font-semibold">Immutable backend preview</h2>
+            <p aria-label="Canonical command ID" className="mt-1 break-all font-mono text-xs text-slate-600">Command: {prepared.command_request_id}</p>
             <p className="mt-1 break-all text-xs text-slate-500">{prepared.preview_hash}</p>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Financial impact</p><pre className="mt-2 whitespace-pre-wrap text-xs">{JSON.stringify(prepared.financial_impact, null, 2)}</pre></div>

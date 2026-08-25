@@ -259,6 +259,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             <p className="mt-1 text-sm text-blue-900">
               GST classification, tax amounts and supplier commitment below came from the immutable canonical prepare. The PO number is assigned only after approval.
             </p>
+            <p aria-label="Canonical command ID" className="mt-2 break-all font-mono text-xs text-blue-800">
+              Command: {canonicalReview.commandRequestId}
+            </p>
             {documentPolicy && <p className="mt-2 text-xs text-blue-800">
               Server policy: {documentPolicy.default_price_basis.replace('_', ' ')} pricing · {documentPolicy.default_tax_charge_mechanism.replace('_', ' ')} tax mechanism · {documentPolicy.default_rounding_policy} rounding
             </p>}
