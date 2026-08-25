@@ -84,7 +84,8 @@ BEGIN
                                      'resolve_purchase_order_prepare','persist_purchase_order_prepare',
                                      'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
                                      'resolve_sales_return_prepare','persist_sales_return_prepare',
-                                     'resolve_purchase_return_prepare','persist_purchase_return_prepare')
+                                     'resolve_purchase_return_prepare','persist_purchase_return_prepare',
+                                     'resolve_adjustment_note_prepare','persist_adjustment_note_prepare')
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
     IF bad_count<>0 THEN
         RAISE EXCEPTION 'calculator can execute an unreviewed automation helper';

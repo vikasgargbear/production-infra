@@ -9,8 +9,11 @@ they catch regressions before deploy.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
+import sys
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -27,12 +30,25 @@ DISALLOWED_ORIGIN = "https://evil.example.com"
 
 def _make_client(origins: str) -> TestClient:
     """Build a TestClient with CORS_ORIGINS set to *origins*."""
+    previous = os.environ.get("CORS_ORIGINS")
     os.environ["CORS_ORIGINS"] = origins
-    # Force re-evaluation of the module so the env var is picked up.
-    import importlib
-    import app.main as main_module
-    importlib.reload(main_module)
-    return TestClient(main_module.app, raise_server_exceptions=False)
+    module_name = f"app._cors_main_probe_{uuid4().hex}"
+    main_path = Path(__file__).resolve().parents[2] / "app" / "main.py"
+    spec = importlib.util.spec_from_file_location(module_name, main_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not construct isolated app.main CORS probe")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+        app = module.app
+    finally:
+        sys.modules.pop(module_name, None)
+        if previous is None:
+            os.environ.pop("CORS_ORIGINS", None)
+        else:
+            os.environ["CORS_ORIGINS"] = previous
+    return TestClient(app, raise_server_exceptions=False)
 
 
 # ---------------------------------------------------------------------------
