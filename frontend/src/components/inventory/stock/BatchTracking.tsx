@@ -6,7 +6,8 @@ import { InventoryScopeSelector } from './components/InventoryScopeSelector';
 import { useInventoryScope } from './hooks/useInventoryScope';
 import {
   batchItemsCsv, compareQuantity, decodeBatchPage, decodeMovementPage, displayDate, displayMoney,
-  displayOrganizationTimestamp, displayQuantity, exhaustCursorPages, movementLabel,
+  displayOrganizationTimestamp, displayQuantity, exhaustCursorPages, isNegativeMoney,
+  isNegativeQuantity, movementLabel,
   type BatchItem, type BatchSummary, type MovementItem,
 } from './utils/canonicalStockReads';
 
@@ -121,8 +122,12 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
         </div>
         <p className="mt-3 text-sm text-gray-600">Loaded {items.length} of {summary?.batch_count || 0} scoped batches</p>
         {summary && <div className="mt-3 flex flex-wrap gap-5 border-t border-gray-100 pt-3 text-sm">
-          <span>Quantity: <strong>{displayQuantity(summary.total_quantity)}</strong></span>
-          <span>Value: <strong>{displayMoney(summary.total_value)}</strong></span>
+          <span className={isNegativeQuantity(summary.total_quantity) ? 'text-red-700' : undefined}>
+            Quantity: <strong>{displayQuantity(summary.total_quantity)}</strong>
+          </span>
+          <span className={isNegativeMoney(summary.total_value) ? 'text-red-700' : undefined}>
+            Value: <strong>{displayMoney(summary.total_value)}</strong>
+          </span>
           <span>Positive stock: <strong>{summary.positive_stock_count}</strong></span>
           <span>Exhausted: <strong>{summary.exhausted_batch_count}</strong></span>
           {summary.negative_stock_count > 0 && <span className="text-red-700">Negative: <strong>{summary.negative_stock_count}</strong></span>}
@@ -135,7 +140,11 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
           <th className="px-4 py-3 text-left">Batch</th><th className="px-4 py-3 text-left">Product</th>
           <th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Value</th>
           <th className="px-4 py-3 text-left">Expiry</th><th className="px-4 py-3 text-left">State</th><th className="px-4 py-3">Action</th>
-        </tr></thead><tbody className="divide-y divide-gray-100">{visible.map(item => <tr key={item.batch_id} data-batch-id={item.batch_id}>
+        </tr></thead><tbody className="divide-y divide-gray-100">{visible.map(item => {
+          const negative = isNegativeQuantity(item.total_quantity) || isNegativeMoney(item.total_value);
+          return <tr key={item.batch_id} data-batch-id={item.batch_id}
+            data-stock-sign={negative ? 'negative' : 'nonnegative'}
+            className={negative ? 'bg-red-50 text-red-700' : undefined}>
           <td className="px-4 py-3 font-medium">{item.batch_number}</td><td className="px-4 py-3">{item.product_name}<div className="text-xs text-gray-500">{item.product_code}</div></td>
           <td className="px-4 py-3 text-right">{displayQuantity(item.total_quantity)}</td><td className="px-4 py-3 text-right">{displayMoney(item.total_value)}</td>
           <td className="px-4 py-3">{displayDate(item.expires_on)}</td><td className="px-4 py-3 capitalize">
@@ -144,7 +153,8 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
           <td className="px-4 py-3 text-center"><button aria-label={`View movements for batch ${item.batch_number}`}
             onClick={event => void openMovements(item, event.currentTarget)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-gray-300">
             <Eye className="h-4 w-4" /></button></td>
-        </tr>)}</tbody></table>
+        </tr>;
+        })}</tbody></table>
         {!loading && visible.length === 0 && <p className="p-8 text-center text-gray-500">No batches found in this scope.</p>}
       </div>
     </main>

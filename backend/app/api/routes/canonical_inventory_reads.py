@@ -114,8 +114,8 @@ class CurrentStockRow(BaseModel):
     product_type: str
     unit: str
     category: Optional[str]
-    total_quantity: ExactQuantity
-    total_value: ExactMoney
+    total_quantity: SignedQuantity
+    total_value: SignedMoney
     average_unit_cost: Optional[ExactRate]
     batch_count: int = Field(
         ge=0,
@@ -148,8 +148,8 @@ class CurrentStockRow(BaseModel):
 class CurrentStockSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
     product_count: int = Field(ge=0)
-    total_quantity: ExactQuantity
-    total_value: ExactMoney
+    total_quantity: SignedQuantity
+    total_value: SignedMoney
     batch_count: int = Field(
         ge=0,
         description="Tracked batches with at least one scoped ledger entry, including exhausted batches.",
@@ -193,8 +193,8 @@ class BatchRow(BaseModel):
     mrp: ExactRate
     status: Literal["quarantined", "released", "blocked", "recalled", "expired", "exhausted"]
     is_saleable: bool
-    total_quantity: ExactQuantity
-    total_value: ExactMoney
+    total_quantity: SignedQuantity
+    total_value: SignedMoney
     average_unit_cost: Optional[ExactRate]
 
 
@@ -207,8 +207,8 @@ class BatchSummary(BaseModel):
     positive_stock_count: int = Field(ge=0)
     exhausted_batch_count: int = Field(ge=0)
     negative_stock_count: int = Field(ge=0)
-    total_quantity: ExactQuantity
-    total_value: ExactMoney
+    total_quantity: SignedQuantity
+    total_value: SignedMoney
     expired_count: int = Field(ge=0)
     expiring_30d_count: int = Field(ge=0)
     near_expiry_90d_count: int = Field(ge=0)

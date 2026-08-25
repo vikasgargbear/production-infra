@@ -1,3 +1,4 @@
+/* eslint-disable testing-library/no-node-access */
 import React from 'react';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -18,6 +19,7 @@ const ids = {
   product: 'd3000000-0000-7000-8000-000000000004',
   batch1: 'd3000000-0000-7000-8000-000000000005',
   batch2: 'd3000000-0000-7000-8000-000000000006',
+  batch3: 'd3000000-0000-7000-8000-000000000009',
   movement: 'd3000000-0000-7000-8000-000000000007',
   document: 'd3000000-0000-7000-8000-000000000008',
 };
@@ -38,9 +40,12 @@ beforeEach(() => {
   } });
   (canonicalInventoryReadsApi.batches as jest.Mock).mockResolvedValue({ data: {
     scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
-    items: [batch(ids.batch1, 'B-1'), batch(ids.batch2, 'B-2')], total_count: 2,
-    summary: { batch_count: 2, positive_stock_count: 2, exhausted_batch_count: 0,
-      negative_stock_count: 0, total_quantity: '2.000000', total_value: '190.48',
+    items: [batch(ids.batch1, 'B-1'), batch(ids.batch2, 'B-2'), {
+      ...batch(ids.batch3, 'B-NEG'), is_saleable: false,
+      total_quantity: '-1.000000', total_value: '-95.24',
+    }], total_count: 3,
+    summary: { batch_count: 3, positive_stock_count: 2, exhausted_batch_count: 0,
+      negative_stock_count: 1, total_quantity: '1.000000', total_value: '95.24',
       expired_count: 0, expiring_30d_count: 0, near_expiry_90d_count: 0 },
     next_cursor: null,
   } });
@@ -61,6 +66,9 @@ test('Escape closes only movements and restores the exact clicked batch trigger'
   render(<BatchTracking />);
   const first = await screen.findByRole('button', { name: 'View movements for batch B-1' });
   const second = screen.getByRole('button', { name: 'View movements for batch B-2' });
+  const negative = screen.getByRole('button', { name: 'View movements for batch B-NEG' }).closest('tr');
+  expect(negative).toHaveAttribute('data-stock-sign', 'negative');
+  expect(negative).toHaveClass('text-red-700');
   fireEvent.click(second);
   expect(await screen.findByRole('dialog')).toBeVisible();
   expect(await screen.findByText('Reversal of value adjustment')).toBeVisible();

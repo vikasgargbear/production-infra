@@ -1,5 +1,5 @@
 import {
-  batchItemsCsv, decodeCurrentStockPage, decodeInventoryContext, decodeMovementPage,
+  batchItemsCsv, decodeBatchPage, decodeCurrentStockPage, decodeInventoryContext, decodeMovementPage,
   displayOrganizationTimestamp, exhaustCursorPages, movementItemsCsv, movementLabel,
 } from './canonicalStockReads';
 
@@ -86,6 +86,48 @@ test('decodes explicit tracked, positive-stock, and exhausted batch counts', () 
     batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
     negative_stock_batch_count: 0,
   });
+});
+
+test('preserves signed negative current-stock and batch aggregates', () => {
+  const current = decodeCurrentStockPage({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
+    items: [{
+      product_id: ids.product, product_code: 'NEG', product_name: 'Negative stock',
+      generic_name: null, hsn_code: '3004', product_type: 'medicine', unit: 'EA', category: null,
+      total_quantity: '-2.000000', total_value: '-40.00', average_unit_cost: '20.0000',
+      batch_count: 1, positive_stock_batch_count: 0, exhausted_batch_count: 0,
+      negative_stock_batch_count: 1, expired_batch_count: 0, near_expiry_batch_count: 0,
+      requires_cold_chain: false,
+    }],
+    total_count: 1,
+    summary: {
+      product_count: 1, total_quantity: '-2.000000', total_value: '-40.00',
+      batch_count: 1, positive_stock_batch_count: 0, exhausted_batch_count: 0,
+      negative_stock_batch_count: 1,
+    },
+    next_cursor: null,
+  });
+  const batches = decodeBatchPage({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
+    items: [{
+      batch_id: ids.batch, product_id: ids.product, product_code: 'NEG',
+      product_name: 'Negative stock', batch_number: 'B-NEG', manufactured_on: null,
+      expires_on: '2027-08-25', expiry_state: 'current', mrp: '50.0000',
+      status: 'released', is_saleable: false, total_quantity: '-2.000000',
+      total_value: '-40.00', average_unit_cost: '20.0000',
+    }],
+    total_count: 1,
+    summary: {
+      batch_count: 1, positive_stock_count: 0, exhausted_batch_count: 0,
+      negative_stock_count: 1, total_quantity: '-2.000000', total_value: '-40.00',
+      expired_count: 0, expiring_30d_count: 0, near_expiry_90d_count: 0,
+    },
+    next_cursor: null,
+  });
+  expect(current.items[0]).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
+  expect(current.summary).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
+  expect(batches.items[0]).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
+  expect(batches.summary).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
 });
 
 test('validates and uses the organization IANA timezone for movement timestamps', () => {

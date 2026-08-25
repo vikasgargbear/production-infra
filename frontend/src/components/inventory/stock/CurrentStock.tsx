@@ -8,6 +8,7 @@ import { useInventoryScope } from './hooks/useInventoryScope';
 import {
   compareMoney, compareQuantity, decodeCurrentStockPage, displayMoney,
   displayOrganizationTimestamp, displayQuantity, displayRate, exhaustCursorPages,
+  isNegativeMoney, isNegativeQuantity,
   type CurrentStockItem, type CurrentStockSummary,
 } from './utils/canonicalStockReads';
 
@@ -112,8 +113,12 @@ const CurrentStock: React.FC<Props> = ({ open = true, onClose }) => {
           </div>
           <p className="mt-3 text-sm text-gray-600">Loaded {items.length} of {summary?.product_count || 0} scoped products{asOf && scope.context ? ` • As of ${displayOrganizationTimestamp(asOf, scope.context.organization_timezone)}` : ''}</p>
           {summary && <div className="mt-3 flex flex-wrap gap-6 border-t border-gray-100 pt-3 text-sm">
-            <span>Total quantity: <strong>{displayQuantity(summary.total_quantity)}</strong></span>
-            <span>Total value: <strong>{displayMoney(summary.total_value)}</strong></span>
+            <span className={isNegativeQuantity(summary.total_quantity) ? 'text-red-700' : undefined}>
+              Total quantity: <strong>{displayQuantity(summary.total_quantity)}</strong>
+            </span>
+            <span className={isNegativeMoney(summary.total_value) ? 'text-red-700' : undefined}>
+              Total value: <strong>{displayMoney(summary.total_value)}</strong>
+            </span>
             <span>Tracked batches: <strong>{summary.batch_count}</strong></span>
             <span>With positive stock: <strong>{summary.positive_stock_batch_count}</strong></span>
             <span>Exhausted: <strong>{summary.exhausted_batch_count}</strong></span>
@@ -132,14 +137,19 @@ const CurrentStock: React.FC<Props> = ({ open = true, onClose }) => {
               <th className="px-4 py-3 text-right">Average cost</th><th className="px-4 py-3 text-right">Tracked batches</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-100">
-              {visible.map(item => <tr key={item.product_id} data-product-id={item.product_id}>
+              {visible.map(item => {
+                const negative = isNegativeQuantity(item.total_quantity) || isNegativeMoney(item.total_value);
+                return <tr key={item.product_id} data-product-id={item.product_id}
+                  data-stock-sign={negative ? 'negative' : 'nonnegative'}
+                  className={negative ? 'bg-red-50 text-red-700' : undefined}>
                 <td className="px-4 py-3"><strong>{item.product_name}</strong><div className="text-xs text-gray-500">{item.product_code}</div></td>
                 <td className="px-4 py-3">{item.hsn_code || '—'}</td>
                 <td className="px-4 py-3 text-right">{displayQuantity(item.total_quantity)} {item.unit}</td>
                 <td className="px-4 py-3 text-right">{displayMoney(item.total_value)}</td>
                 <td className="px-4 py-3 text-right">{item.average_unit_cost === null ? '—' : displayRate(item.average_unit_cost)}</td>
                 <td className="px-4 py-3 text-right">{item.batch_count}</td>
-              </tr>)}
+              </tr>;
+              })}
             </tbody>
           </table>
           {!loading && visible.length === 0 && <p className="p-8 text-center text-gray-500">No stock found in this scope.</p>}

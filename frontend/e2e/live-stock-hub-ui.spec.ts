@@ -1,4 +1,4 @@
-/* eslint-disable jest/valid-expect, jest/valid-title, testing-library/prefer-screen-queries */
+/* eslint-disable jest/valid-expect, jest/valid-title, jest/no-conditional-expect, testing-library/prefer-screen-queries */
 import { expect, Page, test } from '@playwright/test';
 import { loginToLiveErp } from './support/live-erp';
 
@@ -30,20 +30,23 @@ const money = (value: unknown): string => {
   return `${negative ? '-' : ''}₹${leading ? `${leading},` : ''}${tail}.${fraction}`;
 };
 
-async function authorizedJson(page: Page, pathAndQuery: string): Promise<JsonRecord> {
-  const result = await page.evaluate(async path => {
+async function authorizedJson(page: Page, apiOrigin: string, pathAndQuery: string): Promise<JsonRecord> {
+  const result = await page.evaluate(async ({ apiOrigin, path }) => {
     const token = localStorage.getItem('authToken');
-    const response = await fetch(`/api${path}`, {
+    if (!token) throw new Error('Authenticated ERP access token is absent');
+    const response = await fetch(`${apiOrigin}/api${path}`, {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` },
     });
     return { status: response.status, text: await response.text() };
-  }, pathAndQuery);
+  }, { apiOrigin, path: pathAndQuery });
   expect(result.status, `${pathAndQuery}: ${result.text}`).toBe(200);
   return JSON.parse(result.text);
 }
 
 async function allPages(
   page: Page,
+  apiOrigin: string,
   endpoint: string,
   params: Record<string, string>,
 ): Promise<JsonRecord> {
@@ -54,7 +57,7 @@ async function allPages(
   do {
     const query = new URLSearchParams({ ...params, limit: '200' });
     if (cursor) query.set('cursor', cursor);
-    const current = await authorizedJson(page, `${endpoint}?${query.toString()}`);
+    const current = await authorizedJson(page, apiOrigin, `${endpoint}?${query.toString()}`);
     first ||= current;
     expect(current.scope).toEqual(first.scope);
     expect(current.as_of).toBe(first.as_of);
@@ -104,13 +107,18 @@ test.describe('live desktop canonical Stock Hub visible acceptance', () => {
 
   test('Current Stock, Batches, and Movements visibly reconcile to exact canonical APIs', async ({ page }, testInfo) => {
     test.setTimeout(240_000);
+    const contextResponsePromise = page.waitForResponse(response => (
+      response.request().method() === 'GET'
+      && new URL(response.url()).pathname.endsWith('/api/canonical/inventory/context')
+    ));
     await openStockSurface(page, 'current-stock', 'Current Stock');
-    const context = await authorizedJson(page, '/canonical/inventory/context');
+    const apiOrigin = new URL((await contextResponsePromise).url()).origin;
+    const context = await authorizedJson(page, apiOrigin, '/canonical/inventory/context');
     expect(context.branches.length, 'requires at least one accessible inventory branch').toBeGreaterThan(0);
 
     let evidence: { branch: JsonRecord; movements: JsonRecord; reversal: JsonRecord } | null = null;
     for (const branch of context.branches) {
-      const movements = await allPages(page, '/canonical/inventory/movements', { branch_id: branch.branch_id });
+      const movements = await allPages(page, apiOrigin, '/canonical/inventory/movements', { branch_id: branch.branch_id });
       const reversal = movements.items.find((item: JsonRecord) => item.entry_kind === 'reversal');
       if (reversal) { evidence = { branch, movements, reversal }; break; }
     }
@@ -119,13 +127,25 @@ test.describe('live desktop canonical Stock Hub visible acceptance', () => {
     expect(reversal.reversal_reconciled).toBe(true);
 
     await selectScope(page, branch.branch_id);
-    const current = await allPages(page, '/canonical/inventory/current-stock', { branch_id: branch.branch_id });
+    const current = await allPages(page, apiOrigin, '/canonical/inventory/current-stock', { branch_id: branch.branch_id });
     expect(current.items.length, 'current-stock fixture must be non-empty').toBeGreaterThan(0);
     const product = current.items.find((item: JsonRecord) => item.product_id === reversal.product_id) || current.items[0];
     const currentControls = page.getByLabel('Current stock controls');
     await expect(currentControls.getByText(`Loaded ${current.items.length} of ${current.total_count} scoped products`)).toBeVisible();
     await expect(currentControls.getByText(`Total quantity: ${quantity(current.summary.total_quantity)}`)).toBeVisible();
     await expect(currentControls.getByText(`Total value: ${money(current.summary.total_value)}`)).toBeVisible();
+    if (current.summary.negative_stock_batch_count > 0) {
+      const negativeItems = current.items.filter((item: JsonRecord) => (
+        String(item.total_quantity).startsWith('-') || String(item.total_value).startsWith('-')
+      ));
+      for (const item of negativeItems) {
+        const row = page.locator(`[data-product-id="${item.product_id}"]`);
+        await expect(row).toHaveAttribute('data-stock-sign', 'negative');
+        await expect(row).toHaveClass(/text-red-700/);
+      }
+      await expect(currentControls.getByText(`Negative: ${current.summary.negative_stock_batch_count}`))
+        .toHaveClass(/text-red-700/);
+    }
     await expect(page.getByText(`Organization business date: ${context.business_date}`)).toHaveCount(0);
     await expect(page.getByText(/Organization business date:/)).toContainText(
       `${context.business_date.slice(8, 10)}/${context.business_date.slice(5, 7)}/${context.business_date.slice(0, 4)}`,
@@ -159,7 +179,7 @@ test.describe('live desktop canonical Stock Hub visible acceptance', () => {
 
     const locationId = reversal.location_id;
     await selectScope(page, branch.branch_id, locationId);
-    const locationCurrent = await allPages(page, '/canonical/inventory/current-stock', {
+    const locationCurrent = await allPages(page, apiOrigin, '/canonical/inventory/current-stock', {
       branch_id: branch.branch_id, location_id: locationId,
     });
     await expect(currentControls.getByText(`Loaded ${locationCurrent.items.length} of ${locationCurrent.total_count} scoped products`)).toBeVisible();
@@ -168,11 +188,18 @@ test.describe('live desktop canonical Stock Hub visible acceptance', () => {
     await page.getByRole('navigation', { name: /Stock module/ }).getByRole('button', { name: 'Batches' }).click();
     await expect(page.getByRole('heading', { name: 'Batch Tracking' })).toBeVisible();
     await selectScope(page, branch.branch_id, locationId);
-    const batches = await allPages(page, '/canonical/inventory/batches', {
+    const batches = await allPages(page, apiOrigin, '/canonical/inventory/batches', {
       branch_id: branch.branch_id, location_id: locationId,
     });
     const batch = batches.items.find((item: JsonRecord) => item.batch_id === reversal.batch_id);
     expect(batch, 'reversal batch must be visible in the selected scope').toBeTruthy();
+    for (const item of batches.items.filter((candidate: JsonRecord) => (
+      String(candidate.total_quantity).startsWith('-') || String(candidate.total_value).startsWith('-')
+    ))) {
+      const negativeRow = page.locator(`[data-batch-id="${item.batch_id}"]`);
+      await expect(negativeRow).toHaveAttribute('data-stock-sign', 'negative');
+      await expect(negativeRow).toHaveClass(/text-red-700/);
+    }
     const batchRow = page.locator(`[data-batch-id="${batch.batch_id}"]`);
     await expect(batchRow).toContainText(batch.batch_number);
     await expect(batchRow).toContainText(quantity(batch.total_quantity));
@@ -198,7 +225,7 @@ test.describe('live desktop canonical Stock Hub visible acceptance', () => {
     await movementTrigger.click();
     const dialog = page.getByRole('dialog', { name: `Batch movements — ${batch.batch_number}` });
     await expect(dialog).toBeVisible();
-    const batchMovements = await allPages(page, '/canonical/inventory/movements', {
+    const batchMovements = await allPages(page, apiOrigin, '/canonical/inventory/movements', {
       branch_id: branch.branch_id, location_id: locationId, batch_id: batch.batch_id,
     });
     await expect(dialog.locator('tbody tr')).toHaveCount(batchMovements.items.length);
@@ -212,7 +239,7 @@ test.describe('live desktop canonical Stock Hub visible acceptance', () => {
     await page.getByRole('navigation', { name: /Stock module/ }).getByRole('button', { name: 'Movements' }).click();
     await expect(page.getByRole('heading', { name: 'Stock Movements' })).toBeVisible();
     await selectScope(page, branch.branch_id, locationId);
-    const scopedMovements = await allPages(page, '/canonical/inventory/movements', {
+    const scopedMovements = await allPages(page, apiOrigin, '/canonical/inventory/movements', {
       branch_id: branch.branch_id, location_id: locationId,
     });
     await expect(page.getByText(`Loaded ${scopedMovements.items.length} of ${scopedMovements.total_count} scoped immutable ledger entries`)).toBeVisible();

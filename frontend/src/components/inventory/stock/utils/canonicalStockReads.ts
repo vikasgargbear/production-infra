@@ -286,8 +286,8 @@ const currentItem = (value: unknown, label: string): CurrentStockItem => {
     product_type: requiredString(row.product_type, `${label} product_type`),
     unit: requiredString(row.unit, `${label} unit`),
     category: nullableString(row.category, `${label} category`),
-    total_quantity: exact(row.total_quantity, `${label} total_quantity`, QUANTITY),
-    total_value: exact(row.total_value, `${label} total_value`, MONEY),
+    total_quantity: exact(row.total_quantity, `${label} total_quantity`, SIGNED_QUANTITY),
+    total_value: exact(row.total_value, `${label} total_value`, SIGNED_MONEY),
     average_unit_cost: nullableExact(row.average_unit_cost, `${label} average_unit_cost`, RATE),
     batch_count: count(row.batch_count, `${label} batch_count`),
     positive_stock_batch_count: count(row.positive_stock_batch_count, `${label} positive_stock_batch_count`),
@@ -308,8 +308,8 @@ const currentSummary = (value: unknown): CurrentStockSummary => {
   const row = record(value, 'Current stock summary');
   const result = {
     product_count: count(row.product_count, 'Current stock summary product_count'),
-    total_quantity: exact(row.total_quantity, 'Current stock summary total_quantity', QUANTITY),
-    total_value: exact(row.total_value, 'Current stock summary total_value', MONEY),
+    total_quantity: exact(row.total_quantity, 'Current stock summary total_quantity', SIGNED_QUANTITY),
+    total_value: exact(row.total_value, 'Current stock summary total_value', SIGNED_MONEY),
     batch_count: count(row.batch_count, 'Current stock summary batch_count'),
     positive_stock_batch_count: count(
       row.positive_stock_batch_count, 'Current stock summary positive_stock_batch_count',
@@ -344,8 +344,8 @@ const batchItem = (value: unknown, label: string): BatchItem => {
     mrp: exact(row.mrp, `${label} mrp`, RATE),
     status: requiredString(row.status, `${label} status`),
     is_saleable: boolean(row.is_saleable, `${label} is_saleable`),
-    total_quantity: exact(row.total_quantity, `${label} total_quantity`, QUANTITY),
-    total_value: exact(row.total_value, `${label} total_value`, MONEY),
+    total_quantity: exact(row.total_quantity, `${label} total_quantity`, SIGNED_QUANTITY),
+    total_value: exact(row.total_value, `${label} total_value`, SIGNED_MONEY),
     average_unit_cost: nullableExact(row.average_unit_cost, `${label} average_unit_cost`, RATE),
   };
 };
@@ -357,8 +357,8 @@ const batchSummary = (value: unknown): BatchSummary => {
     positive_stock_count: count(row.positive_stock_count, 'Batch summary positive_stock_count'),
     exhausted_batch_count: count(row.exhausted_batch_count, 'Batch summary exhausted_batch_count'),
     negative_stock_count: count(row.negative_stock_count, 'Batch summary negative_stock_count'),
-    total_quantity: exact(row.total_quantity, 'Batch summary total_quantity', QUANTITY),
-    total_value: exact(row.total_value, 'Batch summary total_value', MONEY),
+    total_quantity: exact(row.total_quantity, 'Batch summary total_quantity', SIGNED_QUANTITY),
+    total_value: exact(row.total_value, 'Batch summary total_value', SIGNED_MONEY),
     expired_count: count(row.expired_count, 'Batch summary expired_count'),
     expiring_30d_count: count(row.expiring_30d_count, 'Batch summary expiring_30d_count'),
     near_expiry_90d_count: count(row.near_expiry_90d_count, 'Batch summary near_expiry_90d_count'),
@@ -510,6 +510,12 @@ export const compareMoney = (left: unknown, right: unknown) => (
 );
 export const isZeroQuantity = (value: unknown) => (
   exactDecimalUnits(value, 'Stock quantity', SIGNED_QUANTITY) === 0n
+);
+export const isNegativeQuantity = (value: unknown) => (
+  exactDecimalUnits(value, 'Stock quantity', SIGNED_QUANTITY) < 0n
+);
+export const isNegativeMoney = (value: unknown) => (
+  exactDecimalUnits(value, 'Stock money', SIGNED_MONEY) < 0n
 );
 export const displayQuantity = (value: unknown) => (
   formatExactDecimal(value, 'Stock quantity', SIGNED_QUANTITY, 0)

@@ -71,6 +71,7 @@ def _seed(session: Session) -> None:
           (:org,'e3100000-0000-7000-8000-000000000021','P-1','medicine','Product One','EA','3004','NONE',false,false,'test','e3100000-0000-7000-8000-000000000091','e3100000-0000-7000-8000-000000000092','active',:member,:member),
           (:org,'e3100000-0000-7000-8000-000000000022','P-2','medicine','Product Two','EA','3004','NONE',false,false,'test','e3100000-0000-7000-8000-000000000091','e3100000-0000-7000-8000-000000000092','active',:member,:member),
           (:org,'e3100000-0000-7000-8000-000000000023','P-3','medicine','Product Three','EA','3004','NONE',false,false,'test','e3100000-0000-7000-8000-000000000091','e3100000-0000-7000-8000-000000000092','active',:member,:member),
+          (:org,'e3100000-0000-7000-8000-000000000024','P-4','medicine','Negative Product','EA','3004','NONE',false,false,'test','e3100000-0000-7000-8000-000000000091','e3100000-0000-7000-8000-000000000092','active',:member,:member),
           (:other_org,'e3200000-0000-7000-8000-000000000021','OTHER','medicine','Other Product','EA','3004','NONE',false,false,'test','e3200000-0000-7000-8000-000000000091','e3200000-0000-7000-8000-000000000092','active',:other_member,:other_member);
         INSERT INTO inventory.batches(
           org_id,id,product_id,batch_number,manufactured_on,expires_on,mrp,
@@ -80,6 +81,7 @@ def _seed(session: Session) -> None:
           (:org,'e3100000-0000-7000-8000-000000000031','e3100000-0000-7000-8000-000000000021','B-1','2026-01-01','2027-01-01',15,'e3100000-0000-7000-8000-000000000093','released','2026-01-02',:member,:member,:member),
           (:org,'e3100000-0000-7000-8000-000000000032','e3100000-0000-7000-8000-000000000022','B-2','2026-01-01','2027-01-01',25,'e3100000-0000-7000-8000-000000000094','released','2026-01-02',:member,:member,:member),
           (:org,'e3100000-0000-7000-8000-000000000033','e3100000-0000-7000-8000-000000000023','B-3','2026-01-01','2027-01-01',35,'e3100000-0000-7000-8000-000000000095','released','2026-01-02',:member,:member,:member),
+          (:org,'e3100000-0000-7000-8000-000000000034','e3100000-0000-7000-8000-000000000024','B-NEG','2026-01-01','2027-01-01',35,'e3100000-0000-7000-8000-000000000096','released','2026-01-02',:member,:member,:member),
           (:other_org,'e3200000-0000-7000-8000-000000000031','e3200000-0000-7000-8000-000000000021','OTHER-B','2026-01-01','2027-01-01',15,'e3200000-0000-7000-8000-000000000093','released','2026-01-02',:other_member,:other_member,:other_member);
         INSERT INTO inventory.inventory_documents(
           org_id,id,branch_id,document_type,document_number,fiscal_year,document_date,
@@ -87,7 +89,7 @@ def _seed(session: Session) -> None:
           approved_at,approved_by_membership_id,posted_at,posted_by_membership_id,
           created_by_membership_id,updated_by_membership_id
         ) VALUES
-          (:org,'e3100000-0000-7000-8000-000000000041',:branch,'adjustment','STOCK-1',2026,'2026-08-24','posted','test','moving_weighted_average',21,280,'2026-08-24',:member,'2026-08-24',:member,:member,:member),
+          (:org,'e3100000-0000-7000-8000-000000000041',:branch,'adjustment','STOCK-1',2026,'2026-08-24','posted','test','moving_weighted_average',23,240,'2026-08-24',:member,'2026-08-24',:member,:member,:member),
           (:other_org,'e3200000-0000-7000-8000-000000000041',:other_branch,'adjustment','OTHER-1',2026,'2026-08-24','posted','test','moving_weighted_average',1,10,'2026-08-24',:other_member,'2026-08-24',:other_member,:other_member,:other_member);
         INSERT INTO inventory.stock_ledger_entries(
           org_id,id,branch_id,inventory_document_id,inventory_document_line_id,
@@ -101,6 +103,7 @@ def _seed(session: Session) -> None:
           (:org,'e3100000-0000-7000-8000-000000000055',:branch,'e3100000-0000-7000-8000-000000000041','e3100000-0000-7000-8000-000000000065','reversal','e3100000-0000-7000-8000-000000000011','e3100000-0000-7000-8000-000000000021','e3100000-0000-7000-8000-000000000031',0,10,-5,'e3100000-0000-7000-8000-000000000054','2026-08-24 12:00Z',:member),
           (:org,'e3100000-0000-7000-8000-000000000056',:branch,'e3100000-0000-7000-8000-000000000041','e3100000-0000-7000-8000-000000000066','receipt','e3100000-0000-7000-8000-000000000011','e3100000-0000-7000-8000-000000000022','e3100000-0000-7000-8000-000000000032',3,20,60,NULL,'2026-08-24 13:00Z',:member),
           (:org,'e3100000-0000-7000-8000-000000000057',:branch,'e3100000-0000-7000-8000-000000000041','e3100000-0000-7000-8000-000000000067','receipt','e3100000-0000-7000-8000-000000000011','e3100000-0000-7000-8000-000000000023','e3100000-0000-7000-8000-000000000033',4,30,120,NULL,'2026-08-24 14:00Z',:member),
+          (:org,'e3100000-0000-7000-8000-000000000058',:branch,'e3100000-0000-7000-8000-000000000041','e3100000-0000-7000-8000-000000000068','issue','e3100000-0000-7000-8000-000000000011','e3100000-0000-7000-8000-000000000024','e3100000-0000-7000-8000-000000000034',-2,20,-40,NULL,'2026-08-24 15:00Z',:member),
           (:other_org,'e3200000-0000-7000-8000-000000000051',:other_branch,'e3200000-0000-7000-8000-000000000041','e3200000-0000-7000-8000-000000000061','receipt','e3200000-0000-7000-8000-000000000011','e3200000-0000-7000-8000-000000000021','e3200000-0000-7000-8000-000000000031',1,10,10,NULL,'2026-08-24 09:00Z',:other_member),
           (:other_org,'e3200000-0000-7000-8000-000000000052',:other_branch,'e3200000-0000-7000-8000-000000000041','e3200000-0000-7000-8000-000000000062','reversal','e3200000-0000-7000-8000-000000000011','e3200000-0000-7000-8000-000000000021','e3200000-0000-7000-8000-000000000031',-1,9,-9,'e3200000-0000-7000-8000-000000000051','2026-08-24 10:00Z',:other_member);
     """), {
@@ -146,13 +149,17 @@ def _exercise(session: Session) -> None:
             user=user, db=session, **page,
         )
     )
-    assert [row.product_code for row in products] == ["P-1", "P-2", "P-3"]
-    assert str(current.summary.total_quantity) == "17.000000"
-    assert str(current.summary.total_value) == "280.00"
-    assert current.summary.batch_count == 3
+    assert [row.product_code for row in products] == ["P-1", "P-2", "P-3", "P-4"]
+    assert str(current.summary.total_quantity) == "15.000000"
+    assert str(current.summary.total_value) == "240.00"
+    assert current.summary.batch_count == 4
     assert current.summary.positive_stock_batch_count == 3
     assert current.summary.exhausted_batch_count == 0
-    assert current.summary.negative_stock_batch_count == 0
+    assert current.summary.negative_stock_batch_count == 1
+    negative_product = next(row for row in products if row.product_code == "P-4")
+    assert str(negative_product.total_quantity) == "-2.000000"
+    assert str(negative_product.total_value) == "-40.00"
+    assert negative_product.batch_count == negative_product.negative_stock_batch_count == 1
 
     batches, batch_rows = _all_pages(
         lambda **page: reads.batches(
@@ -160,9 +167,17 @@ def _exercise(session: Session) -> None:
             user=user, db=session, **page,
         )
     )
-    assert batches.summary.batch_count == 3
-    assert all(row.is_saleable for row in batch_rows)
+    assert batches.summary.batch_count == 4
+    assert batches.summary.positive_stock_count == 3
+    assert batches.summary.negative_stock_count == 1
+    assert str(batches.summary.total_quantity) == "15.000000"
+    assert str(batches.summary.total_value) == "240.00"
+    assert all(row.is_saleable for row in batch_rows if row.batch_number != "B-NEG")
     assert str(batch_rows[0].total_value) == "100.00"
+    negative_batch = next(row for row in batch_rows if row.batch_number == "B-NEG")
+    assert str(negative_batch.total_quantity) == "-2.000000"
+    assert str(negative_batch.total_value) == "-40.00"
+    assert negative_batch.is_saleable is False
 
     _, transit_batches = _all_pages(
         lambda **page: reads.batches(
@@ -185,10 +200,10 @@ def _exercise(session: Session) -> None:
             date_from=None, date_to=None, user=user, db=session, **page,
         )
     )
-    assert movements.summary.movement_count == 7
-    assert str(movements.summary.net_quantity_delta) == "17.000000"
-    assert str(movements.summary.net_value_delta) == "280.00"
-    assert len({row.movement_id for row in movement_rows}) == 7
+    assert movements.summary.movement_count == 8
+    assert str(movements.summary.net_quantity_delta) == "15.000000"
+    assert str(movements.summary.net_value_delta) == "240.00"
+    assert len({row.movement_id for row in movement_rows}) == 8
     adjustment = next(row for row in movement_rows if row.entry_kind == "value_adjustment")
     reversal = next(row for row in movement_rows if row.entry_kind == "reversal")
     assert str(adjustment.quantity_delta) == "0.000000"

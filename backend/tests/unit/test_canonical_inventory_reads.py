@@ -2,6 +2,7 @@ import base64
 import inspect
 import json
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -200,6 +201,59 @@ def test_stock_count_models_reject_unreconciled_sign_partitions():
             expiring_30d_count=0,
             near_expiry_90d_count=0,
         )
+
+
+def test_stock_aggregate_models_preserve_negative_quantity_and_value_on_the_wire():
+    current = reads.CurrentStockSummary(
+        product_count=1,
+        total_quantity="-2.000000",
+        total_value="-40.00",
+        batch_count=1,
+        positive_stock_batch_count=0,
+        exhausted_batch_count=0,
+        negative_stock_batch_count=1,
+    )
+    batch = reads.BatchSummary(
+        batch_count=1,
+        positive_stock_count=0,
+        exhausted_batch_count=0,
+        negative_stock_count=1,
+        total_quantity="-2.000000",
+        total_value="-40.00",
+        expired_count=0,
+        expiring_30d_count=0,
+        near_expiry_90d_count=0,
+    )
+    assert json.loads(current.model_dump_json())["total_quantity"] == "-2.000000"
+    assert json.loads(current.model_dump_json())["total_value"] == "-40.00"
+    assert json.loads(batch.model_dump_json())["total_quantity"] == "-2.000000"
+    assert json.loads(batch.model_dump_json())["total_value"] == "-40.00"
+
+    for model in (
+        reads.CurrentStockRow,
+        reads.CurrentStockSummary,
+        reads.BatchRow,
+        reads.BatchSummary,
+    ):
+        properties = model.model_json_schema(mode="serialization")["properties"]
+        assert properties["total_quantity"]["pattern"].startswith("^-?")
+        assert properties["total_value"]["pattern"].startswith("^-?")
+
+
+def test_postgres_runtime_fixture_executes_real_negative_stock_pagination():
+    fixture = (
+        Path(__file__).parents[1]
+        / "postgres"
+        / "check_canonical_inventory_reads_runtime_role.py"
+    ).read_text()
+    assert "'B-NEG'" in fixture
+    assert "'issue'" in fixture
+    assert "-2,20,-40" in fixture
+    assert "limit=1" in fixture
+    assert 'negative_stock_batch_count == 1' in fixture
+    assert 'negative_stock_count == 1' in fixture
+    assert 'str(negative_product.total_quantity) == "-2.000000"' in fixture
+    assert 'str(negative_batch.total_value) == "-40.00"' in fixture
 
 
 def test_movement_date_filters_use_organization_timezone_and_full_snapshot_summary():

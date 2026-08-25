@@ -40,8 +40,19 @@ test('live core API calendar inputs use the authoritative organization clock', (
 
 test('live browser organization binding resolves the backend origin before fetching context', () => {
   const source = support('live-erp.ts');
+  const contextFetch = `fetch(\`\${origin}/api/canonical/business-context\``;
 
   expect(source).toContain("new URL((await apiReference).url()).origin");
-  expect(source).toContain('fetch(`${origin}/api/canonical/business-context`');
+  expect(source).toContain(contextFetch);
   expect(source).not.toContain("fetch('/api/canonical/business-context'");
+});
+
+test('live Stock Hub readback binds API calls to the authenticated backend origin', () => {
+  const source = e2e('live-stock-hub-ui.spec.ts');
+  const backendFetch = `fetch(\`\${apiOrigin}/api\${path}\``;
+  const relativeFetch = `fetch(\`/api\${path}\``;
+
+  expect(source).toContain('const apiOrigin = new URL((await contextResponsePromise).url()).origin;');
+  expect(source).toContain(backendFetch);
+  expect(source).not.toContain(relativeFetch);
 });

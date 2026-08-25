@@ -83,6 +83,18 @@ def test_live_stock_hub_pages_match_visible_authoritative_ledger(
         assert item["exhausted_batch_count"] == direct["exhausted_batch_count"]
         assert item["negative_stock_batch_count"] == direct["negative_stock_batch_count"]
     assert current_page["summary"]["product_count"] == len(direct_current)
+    assert current_page["summary"]["batch_count"] == sum(
+        row["batch_count"] for row in direct_current
+    )
+    assert current_page["summary"]["positive_stock_batch_count"] == sum(
+        row["positive_stock_batch_count"] for row in direct_current
+    )
+    assert current_page["summary"]["exhausted_batch_count"] == sum(
+        row["exhausted_batch_count"] for row in direct_current
+    )
+    assert current_page["summary"]["negative_stock_batch_count"] == sum(
+        row["negative_stock_batch_count"] for row in direct_current
+    )
     assert Decimal(current_page["summary"]["total_quantity"]) == sum(
         (row["quantity"] for row in direct_current), Decimal("0")
     )
