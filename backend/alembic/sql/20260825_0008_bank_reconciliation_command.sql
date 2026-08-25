@@ -232,6 +232,7 @@ BEGIN
   current_resolution:=erp_automation_commands.resolve_bank_reconciliation_prepare(
     organization_id,membership_id,auth_user_id,application_user_id,grant_id,caller_client_id,
     reconciliation_match_id,request_document);
+  PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
   IF current_resolution IS DISTINCT FROM resolved_document
      OR request_document->>'reconciliation_match_id' IS DISTINCT FROM reconciliation_match_id::text
      OR preview_document->>'operation'<>'finance.bank_reconciliation.match'

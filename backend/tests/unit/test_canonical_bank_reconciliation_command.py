@@ -74,6 +74,7 @@ def test_bank_reconciliation_migration_is_hash_bound_and_fail_closed():
         "WHEN ''finance.bank_reconciliation.prepare'' THEN ''reconciliation_match''",
         "WHEN ''finance.bank_reconciliation.prepare'' THEN ''finance.bank_reconciliation.match''",
         "PERFORM erp_automation_commands.prepare_operator_command(",
+        "set_config('app.request_id',command_id::text,true)",
         "approval.approver_membership_id<>request_row.requested_by_membership_id",
         "pg_advisory_xact_lock",
         "statement and posted bank-ledger journal are not one exact full match",
