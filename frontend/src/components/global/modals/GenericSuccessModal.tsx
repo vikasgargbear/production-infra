@@ -253,6 +253,12 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                 <div className="px-6 py-6 space-y-4">
                     {/* Document Details */}
                     <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                        {documentId && (
+                            <div className="flex items-start justify-between gap-4">
+                                <span className="text-sm font-medium text-gray-700">Canonical resource ID:</span>
+                                <span className="break-all text-right font-mono text-xs text-gray-900">{documentId}</span>
+                            </div>
+                        )}
                         {documentNumber && (
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-700">

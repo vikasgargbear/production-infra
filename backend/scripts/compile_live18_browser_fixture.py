@@ -39,7 +39,10 @@ PHASES = (
 )
 LIFECYCLE_MODES = {"split", "combined_actor_confirmation"}
 ACTORS = {"requester", "reviewer"}
-ACTIONS = {"goto", "click", "fill", "select", "setInputFiles", "press", "expectText"}
+ACTIONS = {
+    "goto", "click", "fill", "select", "setInputFiles", "press", "expectText",
+    "expectDisabled",
+}
 LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
 COMMUNICATION_ACTION = re.compile(r"whats?app|e-?mail|sms|text message|phone|call|tel:", re.I)
 
@@ -1319,6 +1322,30 @@ def _validate_compiled_steps(
         raise FixtureCompileError(f"{operation_id}.prepare_steps must restart from a route")
     if not any(row["action"] == "expectText" for row in steps["missing_required_steps"]):
         raise FixtureCompileError(f"{operation_id}.missing_required_steps omitted visible assertion")
+    missing_boundary = any(
+        row["action"] in {"click", "expectDisabled"}
+        and row.get("locator", {}).get("kind") == "role"
+        and row.get("locator", {}).get("role") == "button"
+        for row in steps["missing_required_steps"]
+    ) or any(
+        row["action"] == "press" and row.get("value") == "Control+s"
+        for row in steps["missing_required_steps"]
+    )
+    if not missing_boundary:
+        raise FixtureCompileError(
+            f"{operation_id}.missing_required_steps must activate or prove disabled a write-boundary CTA"
+        )
+    preview_assertions = [
+        row for row in steps["approval_steps"]
+        if row["action"] == "expectText"
+        and row.get("locator", {}).get("kind") == "testId"
+        and row.get("locator", {}).get("name") == "canonical-immutable-preview"
+        and row.get("value") not in {"", "{{command_request_id}}", "{{preview_hash}}"}
+    ]
+    if len(preview_assertions) != 1:
+        raise FixtureCompileError(
+            f"{operation_id}.approval_steps must assert one operation-specific immutable preview fact"
+        )
     for phase in ("approval_steps", "execute_steps"):
         if "{{command_request_id}}" not in json.dumps(steps[phase], sort_keys=True):
             raise FixtureCompileError(f"{operation_id}.{phase} does not target captured command")

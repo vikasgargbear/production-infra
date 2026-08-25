@@ -29,7 +29,7 @@ interface TemplateReadiness {
 }
 
 export type LocatorKind = 'role' | 'label' | 'placeholder' | 'text' | 'testId';
-export type UiAction = 'goto' | 'click' | 'fill' | 'select' | 'setInputFiles' | 'press' | 'expectText';
+export type UiAction = 'goto' | 'click' | 'fill' | 'select' | 'setInputFiles' | 'press' | 'expectText' | 'expectDisabled';
 export type Actor = 'requester' | 'reviewer';
 export type LifecycleMode = 'split' | 'combined_actor_confirmation';
 
@@ -119,7 +119,7 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     throw new Error('The reviewed live18 fixture must name exactly the 18 registered operations.');
   }
   const supportedActions: UiAction[] = [
-    'goto', 'click', 'fill', 'select', 'setInputFiles', 'press', 'expectText',
+    'goto', 'click', 'fill', 'select', 'setInputFiles', 'press', 'expectText', 'expectDisabled',
   ];
   const supportedActors: Actor[] = ['requester', 'reviewer'];
   for (const [operationId, operation] of Object.entries(fixture.operations)) {
@@ -171,6 +171,28 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     }
     if (!operation.missing_required_steps.some(step => step.action === 'expectText')) {
       throw new Error(`${operationId}.missing_required_steps must assert a visible validation error.`);
+    }
+    const missingBoundary = operation.missing_required_steps.some(step =>
+      (step.action === 'click' || step.action === 'expectDisabled')
+        && step.locator?.kind === 'role' && step.locator.role === 'button')
+      || operation.missing_required_steps.some(step =>
+        step.action === 'press' && step.value === 'Control+s');
+    if (!missingBoundary) {
+      throw new Error(
+        `${operationId}.missing_required_steps must activate or prove disabled a write-boundary CTA.`,
+      );
+    }
+    const previewAssertions = operation.approval_steps.filter(step =>
+      step.action === 'expectText'
+        && step.locator?.kind === 'testId'
+        && step.locator.name === 'canonical-immutable-preview'
+        && Boolean(step.value)
+        && step.value !== '{{command_request_id}}'
+        && step.value !== '{{preview_hash}}');
+    if (previewAssertions.length !== 1) {
+      throw new Error(
+        `${operationId}.approval_steps must assert one operation-specific immutable preview fact.`,
+      );
     }
     if (operation.prepare_steps[0].action !== 'goto') {
       throw new Error(`${operationId}.prepare_steps must restart from an application route.`);

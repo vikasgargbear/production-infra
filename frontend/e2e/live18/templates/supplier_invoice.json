@@ -5,7 +5,8 @@
   "steps": {
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/supplier-invoice"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date.","exact":true},"value":"Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date.","exact":true},"value":"Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Review server calculation","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/supplier-invoice"},
@@ -18,7 +19,8 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review server calculation","exact":true}}
     ],
     "approval_steps": [
-      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.product_name}}"}
     ],
     "execute_steps": [
       {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"},

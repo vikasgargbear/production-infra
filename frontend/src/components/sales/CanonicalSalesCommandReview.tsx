@@ -67,6 +67,7 @@ export default function CanonicalSalesCommandReview({ title, preview, open, post
   const warnings = Array.isArray(preview.policy_warnings) ? preview.policy_warnings : [];
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="canonical-sales-review-title"
+      data-testid="canonical-immutable-preview"
       className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl">
       <div className="border-b border-gray-200 p-5">
         <h2 id="canonical-sales-review-title" className="text-lg font-semibold text-gray-900">{title}</h2>

@@ -24,6 +24,27 @@ const fixture = loadFixture(requiredLiveRun);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH = /^sha256:[0-9a-f]{64}$/i;
 
+const POSTED_UI_HEADING: Record<string, string> = {
+  bank_reconciliation: 'Matched and reconciled',
+  customer_credit_note: 'Posted and reconciled',
+  customer_receipt: 'Receipt posted and reconciled against the authoritative invoice balance.',
+  delivery_challan: 'Challan Created Successfully!',
+  destruction: 'Posted and reconciled',
+  expense_claim: 'Posted and reconciled',
+  goods_receipt: 'Receipt UUID:',
+  purchase_order: 'Purchase Order Created!',
+  purchase_return: 'Posted reconciliation',
+  sales_invoice: 'Invoice Created!',
+  sales_order: 'Sales Order Created!',
+  sales_return: 'Posted reconciliation',
+  stock_adjustment: 'Adjustment posted',
+  stock_transfer: 'Posted and read back:',
+  supplier_advance: 'Supplier advance posted and reconciled',
+  supplier_debit_note: 'Posted and reconciled',
+  supplier_invoice: 'Supplier Invoice Posted',
+  supplier_payment: 'Supplier payment reconciled',
+};
+
 type CompletedResources = Record<`resource_${string}`, string>;
 
 function evidenceRoot(): string {
@@ -211,9 +232,10 @@ async function runOperation(
     const requesterApi = await apiClient(config.apiOrigin, requesterSession.token);
     const reviewerApi = await apiClient(config.apiOrigin, reviewerSession.token);
     const denialApi = await apiClient(config.apiOrigin, config.denialAccessToken);
+    const completedResources = loadCompletedResources();
     const prePrepareRuntime: RuntimeUiValues = {
       run_token: config.runToken,
-      ...loadCompletedResources(),
+      ...completedResources,
     };
     try {
       await runSteps(
@@ -312,6 +334,16 @@ async function runOperation(
         && item.path === `/api/web/actions/commands/${commandId}/execute` && item.status < 300);
       expect(executions, `${contract.id} must execute exactly once through visible UI`).toHaveLength(1);
       const resourceId = requireUuid(findDeep(executions[0].responseBody, 'resource_id'), 'resource UUID');
+      const postedHeading = POSTED_UI_HEADING[contract.id];
+      expect(postedHeading, `${contract.id} lacks a visible posted-state contract`).toBeTruthy();
+      await expect(
+        requesterPage.getByText(postedHeading, { exact: false }),
+        `${contract.id} must show its operation-specific posted/readback state`,
+      ).toBeVisible();
+      await expect(
+        requesterPage.getByText(resourceId, { exact: false }),
+        `${contract.id} must visibly identify the exact canonical resource it posted`,
+      ).toBeVisible();
 
       const readbackPath = resolveReadbackPath(contract, commandId, resourceId);
       const readback = await responseJson(await requesterApi.get(readbackPath));

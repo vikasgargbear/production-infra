@@ -189,6 +189,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
         <main className="mx-auto max-w-5xl space-y-4 p-6">
           <section className="rounded-lg border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold text-slate-900">Server-confirmed accounting result</h2>
+            <p className="mt-2 break-all font-mono text-xs text-slate-600">{posted.supplier_invoice_id}</p>
             <div className="mt-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
               <div><p className="text-slate-500">Payable</p><p className="font-semibold">₹{posted.open_item_principal}</p></div>
               <div><p className="text-slate-500">Grand total</p><p className="font-semibold">₹{posted.grand_total}</p></div>
@@ -236,6 +237,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
               {businessDateError && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{businessDateError} Enter both dates explicitly before continuing.</p>}
               {selectedReceipt && <p className="mt-3 text-xs text-slate-500">PO {selectedReceipt.purchase_order_number}; {selectedReceipt.remaining_line_count} unallocated line(s). The backend requires one exact parsed GSTR-2B match.</p>}
               <button type="button" onClick={loadContext} disabled={loading || businessDateLoading || !selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Load canonical evidence</button>
+              {!context && <button type="button" disabled className="ml-3 mt-4 inline-flex min-h-11 items-center rounded-md bg-slate-300 px-4 font-medium text-white">Review server calculation</button>}
             </section>
 
             {context && (
@@ -260,7 +262,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
             )}
           </>
         ) : (
-          <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <section className="rounded-lg border border-slate-200 bg-white p-5" data-testid="canonical-immutable-preview">
             <button type="button" onClick={() => setPrepared(null)} disabled={Boolean(executedResourceId.current)} className="inline-flex min-h-11 items-center text-sm text-slate-700 disabled:text-slate-300"><ArrowLeft className="mr-2 h-4 w-4" />Back to evidence</button>
             <h2 className="mt-3 text-lg font-semibold">Immutable backend preview</h2>
             <p aria-label="Canonical command ID" className="mt-1 break-all font-mono text-xs text-slate-600">Command: {prepared.command_request_id}</p>

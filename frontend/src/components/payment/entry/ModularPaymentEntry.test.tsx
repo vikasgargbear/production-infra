@@ -94,6 +94,7 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
     reviewPosting.focus();
     fireEvent.click(reviewPosting);
     const review = await screen.findByRole('dialog', { name: 'Approve customer receipt' });
+    expect(screen.getByTestId('canonical-immutable-preview')).toBe(review);
     expect(prepareCustomerReceipt).toHaveBeenCalledTimes(1);
     expect(approveCustomerReceipt).not.toHaveBeenCalled();
     expect(review.textContent).toContain('DEMO-SI-000004');

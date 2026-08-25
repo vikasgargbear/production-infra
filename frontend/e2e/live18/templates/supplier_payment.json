@@ -5,7 +5,8 @@
   "steps": {
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/payment/supplier-payment"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select supplier, branch, bank, method, reference, and at least one exact payable allocation.","exact":true},"value":"Required: select supplier, branch, bank, method, reference, and at least one exact payable allocation."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select supplier, branch, bank, method, reference, and at least one exact payable allocation.","exact":true},"value":"Required: select supplier, branch, bank, method, reference, and at least one exact payable allocation."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Review immutable preview","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/payment/supplier-payment"},
@@ -20,6 +21,7 @@
     ],
     "approval_steps": [
       {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.supplier_payment_amount}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"{{scalar.supplier_payment_posting_attestation}}","exact":true}}
     ],
     "execute_steps": [

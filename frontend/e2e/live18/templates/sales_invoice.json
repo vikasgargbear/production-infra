@@ -45,6 +45,7 @@
     ],
     "approval_steps": [
       {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact sales invoice","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.product_name}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed this exact server preview and want to post it.","exact":true}}
     ],
     "execute_steps": [

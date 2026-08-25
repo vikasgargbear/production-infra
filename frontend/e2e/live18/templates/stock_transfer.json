@@ -12,7 +12,8 @@
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search product to transfer…","exact":true},"value":"{{fact.display.product_code}}"},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Propose FEFO allocation","exact":true}},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Requested transfer quantity must be a plain decimal string.","exact":true},"value":"Requested transfer quantity must be a plain decimal string."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Requested transfer quantity must be a plain decimal string.","exact":true},"value":"Requested transfer quantity must be a plain decimal string."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/stock-management/stock-transfer"},
@@ -31,7 +32,8 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare transfer","exact":true}}
     ],
     "approval_steps": [
-      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Confirm inter-branch stock transfer","exact":true},"value":"{{command_request_id}}"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Confirm inter-branch stock transfer","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.stock_transfer_quantity}}"}
     ],
     "execute_steps": [
       {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Confirm inter-branch stock transfer","exact":true},"value":"{{command_request_id}}"},

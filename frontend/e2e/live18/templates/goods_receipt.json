@@ -7,7 +7,8 @@
       {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Purchase Orders","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition.","exact":true},"value":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition.","exact":true},"value":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition."},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review stock impact","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
@@ -28,7 +29,8 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review stock impact","exact":true}}
     ],
     "approval_steps": [
-      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve this exact stock receipt?","exact":true},"value":"{{command_request_id}}"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve this exact stock receipt?","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.goods_receipt_accepted_quantity}}"}
     ],
     "execute_steps": [
       {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve this exact stock receipt?","exact":true},"value":"{{command_request_id}}"},

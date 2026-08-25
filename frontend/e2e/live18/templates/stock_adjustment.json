@@ -31,6 +31,7 @@
       {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Cycle-count command UUID to review","exact":true},"value":"{{command_request_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load immutable preview","exact":true}},
       {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{command_request_id}}","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.identity.product_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
     ],
     "execute_steps": [

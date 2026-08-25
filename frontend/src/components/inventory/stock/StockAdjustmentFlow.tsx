@@ -529,7 +529,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
           </button>
         </div>
         {reviewPreview && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4" data-testid="canonical-immutable-preview">
             <p className="font-mono text-xs text-gray-700">{reviewPreview.command_request_id}</p>
             <p className="mt-2 text-sm text-gray-800">
               {Array.isArray(reviewPreview.inventory_impact) ? reviewPreview.inventory_impact.length : 0} stock line(s);{' '}

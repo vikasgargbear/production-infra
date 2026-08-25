@@ -6,7 +6,8 @@
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/stock-management/inventory-destruction"},
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Certificate upload unavailable","exact":true},"value":"Certificate upload unavailable"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Only already destroyed, witnessed stock with verified same-day evidence can be prepared. This UI never treats deletion or a stock adjustment as destruction.","exact":true},"value":"Only already destroyed, witnessed stock with verified same-day evidence can be prepared. This UI never treats deletion or a stock adjustment as destruction."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Only already destroyed, witnessed stock with verified same-day evidence can be prepared. This UI never treats deletion or a stock adjustment as destruction.","exact":true},"value":"Only already destroyed, witnessed stock with verified same-day evidence can be prepared. This UI never treats deletion or a stock adjustment as destruction."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable destruction","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/stock-management/inventory-destruction"},
@@ -28,6 +29,7 @@
       {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},
       {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"destruction-review-command"},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.destruction_reason}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed and approve this exact certified destruction and GST input-credit reversal.","exact":true}},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
     ],

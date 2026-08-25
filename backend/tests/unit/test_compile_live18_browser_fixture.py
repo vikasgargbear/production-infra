@@ -30,9 +30,15 @@ def _templates(root: Path) -> Path:
     for number in range(1, 19):
         operation = f"operation_{number}"
         steps = {
-            "missing_required_steps": [{"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "Required", "exact": True}}],
+            "missing_required_steps": [
+                {"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "Required", "exact": True}},
+                {"actor": "requester", "action": "expectDisabled", "locator": {"kind": "role", "role": "button", "name": "Prepare", "exact": True}},
+            ],
             "prepare_steps": [{"actor": "requester", "action": "goto", "value": "/?module={{fact.display.branch_code}}"}],
-            "approval_steps": [{"actor": "reviewer", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}", "exact": True}}],
+            "approval_steps": [
+                {"actor": "reviewer", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}", "exact": True}},
+                {"actor": "reviewer", "action": "expectText", "locator": {"kind": "testId", "name": "canonical-immutable-preview"}, "value": "{{fact.display.branch_code}}"},
+            ],
             "execute_steps": [{"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}", "exact": True}}],
         }
         if number == 1:
@@ -179,6 +185,37 @@ def test_compiler_rejects_template_that_does_not_target_exact_command(tmp_path: 
             matrix,
             templates,
             {"display": {"branch_code": "sales"}},
+            {"quantity": "1.000000"},
+        )
+
+
+def test_compiler_requires_visible_negative_boundary_and_immutable_preview_fact(
+    tmp_path: Path,
+) -> None:
+    matrix = _matrix(tmp_path / "matrix.json")
+    templates = _templates(tmp_path / "templates")
+    path = templates / "operation_1.json"
+    template = json.loads(path.read_text())
+    template["steps"]["missing_required_steps"] = [
+        template["steps"]["missing_required_steps"][0]
+    ]
+    path.write_text(json.dumps(template))
+    with pytest.raises(FixtureCompileError, match="write-boundary CTA"):
+        compile_fixture(
+            matrix, templates, {"display": {"branch_code": "sales"}},
+            {"quantity": "1.000000"},
+        )
+
+    templates = _templates(tmp_path / "other-templates")
+    path = templates / "operation_1.json"
+    template = json.loads(path.read_text())
+    template["steps"]["approval_steps"] = [
+        template["steps"]["approval_steps"][0]
+    ]
+    path.write_text(json.dumps(template))
+    with pytest.raises(FixtureCompileError, match="immutable preview fact"):
+        compile_fixture(
+            matrix, templates, {"display": {"branch_code": "sales"}},
             {"quantity": "1.000000"},
         )
 
@@ -780,6 +817,7 @@ def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attest
         "identity": {
             "supplier_invoice_goods_receipt_id": "d3000000-0000-7000-8000-000000000041",
         },
+        "display": {"product_name": "Demo Product"},
         "choice": {
             "supplier_invoice_number": "DEMO-UI-SUP-32840459528-1",
             "supplier_invoice_date": "2026-08-25",
@@ -905,7 +943,7 @@ def test_supplier_advance_template_targets_prior_purchase_order_and_split_review
     assert operation["prepare_steps"][2]["value"] == "{{resource_purchase_order}}"
     assert operation["prepare_steps"][5]["value"] == "LIVE18-SADV-{{run_token}}"
     assert operation["approval_steps"][2]["value"] == "{{command_request_id}}"
-    assert operation["approval_steps"][4]["locator"]["name"] == approval
+    assert operation["approval_steps"][5]["locator"]["name"] == approval
     assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
     assert operation["execute_steps"][3]["locator"]["name"] == execution
 

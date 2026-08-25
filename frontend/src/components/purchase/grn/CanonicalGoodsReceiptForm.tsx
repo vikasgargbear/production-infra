@@ -374,7 +374,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
 
       {preview && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-confirm-title">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6">
+          <div data-testid="canonical-immutable-preview" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-green-600" />
               <div>

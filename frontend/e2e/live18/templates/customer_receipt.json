@@ -5,7 +5,8 @@
   "steps": {
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/payment/payment-entry"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation.","exact":true},"value":"Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation.","exact":true},"value":"Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/payment/payment-entry"},
@@ -21,7 +22,8 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Post Receipt","exact":true}}
     ],
     "approval_steps": [
-      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve customer receipt","exact":true},"value":"{{command_request_id}}"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve customer receipt","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.customer_receipt_amount}}"}
     ],
     "execute_steps": [
       {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve customer receipt","exact":true},"value":"{{command_request_id}}"},

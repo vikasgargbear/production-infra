@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import CanonicalSalesCommandReview from './CanonicalSalesCommandReview';
 
 const preview = {
@@ -17,6 +18,10 @@ describe('CanonicalSalesCommandReview', () => {
       open posting={false} onBack={jest.fn()} onPost={onPost} />);
 
     expect(screen.getByRole('dialog', { name: 'Review exact sales invoice' })).toBeTruthy();
+    expect(screen.getByTestId('canonical-immutable-preview')).toHaveTextContent('168.00');
+    expect(screen.getByTestId('canonical-immutable-preview')).toHaveTextContent(
+      preview.command_request_id,
+    );
     expect(screen.getByText('₹168.00')).toBeTruthy();
     expect(screen.getByText('1 server-calculated line')).toBeTruthy();
     const post = screen.getByRole('button', { name: 'Approve & Post' }) as HTMLButtonElement;

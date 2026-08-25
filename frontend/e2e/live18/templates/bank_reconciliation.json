@@ -6,7 +6,8 @@
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/financial/bank-reconciliation"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Eligible statement and journal pair","exact":true},"value":"{{fact.identity.bank_reconciliation_statement_line_id}}:{{fact.identity.bank_reconciliation_journal_entry_id}}"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Select reviewed match method","exact":true},"value":"Select reviewed match method"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Select reviewed match method","exact":true},"value":"Select reviewed match method"},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable match","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/financial/bank-reconciliation"},
@@ -21,6 +22,7 @@
       {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},
       {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{command_request_id}}","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.choice.bank_reconciliation_match_method}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed and approve this exact match.","exact":true}},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
     ],

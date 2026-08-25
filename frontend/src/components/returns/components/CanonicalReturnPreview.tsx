@@ -11,7 +11,7 @@ const ImpactBlock = ({ title, value }: { title: string; value: unknown }) => (
 );
 
 export const CanonicalReturnPreview = ({ command }: { command: CanonicalReturnCommandDetail }) => (
-  <div className="space-y-4" aria-label="Immutable canonical return preview">
+  <div className="space-y-4" aria-label="Immutable canonical return preview" data-testid="canonical-immutable-preview">
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
       <p className="font-semibold">Immutable preview</p>
       <dl className="mt-2 grid gap-2 md:grid-cols-2">

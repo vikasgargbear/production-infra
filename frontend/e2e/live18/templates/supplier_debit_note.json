@@ -5,7 +5,8 @@
   "steps": {
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/notes"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason.","exact":true},"value":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason.","exact":true},"value":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/notes"},
@@ -24,6 +25,7 @@
       {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},
       {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{preview_hash}}","exact":true},"value":"{{preview_hash}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.supplier_debit_note_reason}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed the exact immutable preview and approve this command.","exact":true}},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
     ],

@@ -63,7 +63,7 @@ const CustomerReceiptReviewDialog: React.FC<CustomerReceiptReviewDialogProps> = 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4"
       role="presentation" onMouseDown={() => { if (!busy) onCancel(); }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true"
+      <div ref={dialogRef} role="dialog" aria-modal="true" data-testid="canonical-immutable-preview"
         aria-labelledby="customer-receipt-review-title"
         aria-describedby="customer-receipt-review-description"
         onKeyDown={handleKeyDown} onMouseDown={(event) => event.stopPropagation()}

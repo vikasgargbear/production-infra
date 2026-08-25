@@ -5,7 +5,8 @@
   "steps": {
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/returns/purchase-return"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance.","exact":true},"value":"Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance.","exact":true},"value":"Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Proceed to Review","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/returns/purchase-return"},
@@ -30,6 +31,7 @@
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Refresh","exact":true}},
       {"actor":"reviewer","action":"click","locator":{"kind":"testId","name":"review-return-{{command_request_id}}"}},
       {"actor":"reviewer","action":"expectText","locator":{"kind":"label","name":"Immutable canonical return preview","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.product_name}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed the exact source, evidence, inventory, financial and tax impacts.","exact":true}},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve — requester posts later","exact":true}}
     ],

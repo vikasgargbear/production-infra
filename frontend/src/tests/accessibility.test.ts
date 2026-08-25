@@ -205,6 +205,7 @@ describe('GenericSuccessModal accessibility', () => {
         onClose: jest.fn(),
         title: 'Invoice Created',
         documentNumber: 'INV-001',
+        documentId: '0198ea37-2b30-7c8d-9123-123456789abc',
         documentType: 'invoice',
         customerName: 'Test Customer',
         totalAmount: 1500,
@@ -218,6 +219,7 @@ describe('GenericSuccessModal accessibility', () => {
     const titleEl = document.getElementById(labelId as string);
     expect(titleEl).toBeInTheDocument();
     expect(titleEl).toHaveTextContent('Invoice Created');
+    expect(dialog).toHaveTextContent('0198ea37-2b30-7c8d-9123-123456789abc');
   });
 
   it('close button has accessible name', () => {

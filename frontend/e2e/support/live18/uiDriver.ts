@@ -48,6 +48,7 @@ export async function runUiStep(page: Page, appOrigin: string, step: UiStep): Pr
       break;
     case 'press': await locator.press(step.value ?? ''); break;
     case 'expectText': await expect(locator).toContainText(step.value ?? ''); break;
+    case 'expectDisabled': await expect(locator).toBeDisabled(); break;
     default: throw new Error(`Unsupported UI action: ${step.action}`);
   }
 }

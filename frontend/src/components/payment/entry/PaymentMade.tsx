@@ -141,7 +141,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
         <div><h1 className="text-xl font-semibold text-slate-900">Supplier Payment</h1><p className="text-sm text-slate-600">Posted invoice payables through reviewed canonical accounting</p></div>
         {onClose && <button type="button" onClick={onClose} aria-label="Close supplier payment" className="min-h-11 min-w-11 rounded-lg border border-slate-200 p-2"><X className="mx-auto h-5 w-5" /></button>}
       </header>
-      <main className="flex-1 overflow-auto p-5"><div className="mx-auto max-w-5xl space-y-4">
+      <main className="flex-1 overflow-auto p-5" data-testid="canonical-immutable-preview"><div className="mx-auto max-w-5xl space-y-4">
         {error && <div role="alert" className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
         {context && !context.ready && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900"><p className="font-medium">Posting unavailable</p><ul className="mt-2 list-disc pl-5">{context.blocking_reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div>}
         {busy && !context && <div role="status" className="flex gap-2 rounded-lg border bg-white p-5"><Loader2 className="h-5 w-5 animate-spin" />Loading canonical payables…</div>}
@@ -180,7 +180,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
           <div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => { setStep('entry'); setActorConfirmed(false); }} disabled={busy || !!postedPaymentId} className="min-h-11 rounded-lg border px-5">Back</button><button type="button" onClick={() => void postOrReconcile()} disabled={busy || !actorConfirmed} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">{busy ? 'Working…' : postedPaymentId ? 'Reconcile posted payment' : `Post ₹${preparedPayload.gross_amount}`}</button></div>
         </section>}
 
-        {step === 'posted' && posted && <section className="rounded-xl border border-green-200 bg-white p-6"><div className="flex gap-3"><CheckCircle className="h-7 w-7 text-green-600" /><div><h2 className="text-lg font-semibold">Supplier payment reconciled</h2><p className="text-slate-600">{posted.payment_number} · ₹{posted.amount} · journal {posted.journal_number}</p></div></div><div className="mt-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900">Allocations, payable residuals, and the balanced two-line journal match authoritative backend data.</div></section>}
+        {step === 'posted' && posted && <section className="rounded-xl border border-green-200 bg-white p-6"><div className="flex gap-3"><CheckCircle className="h-7 w-7 text-green-600" /><div><h2 className="text-lg font-semibold">Supplier payment reconciled</h2><p className="break-all font-mono text-xs text-slate-600">{posted.payment_id}</p><p className="text-slate-600">{posted.payment_number} · ₹{posted.amount} · journal {posted.journal_number}</p></div></div><div className="mt-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900">Allocations, payable residuals, and the balanced two-line journal match authoritative backend data.</div></section>}
       </div></main>
     </div>
   );
