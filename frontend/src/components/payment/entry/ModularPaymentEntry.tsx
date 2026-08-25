@@ -557,6 +557,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
                           {/* Allocation Method Dropdown (simplified) */}
                           <select
+                            aria-label="Customer receipt allocation method"
                             value={payment.allocation_method || 'fifo'}
                             onChange={(e) => {
                               setPaymentField('allocation_method', e.target.value);
@@ -717,6 +718,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                         {payment.allocation_method === 'manual' && (
                                           <input
                                             type="checkbox"
+                                            aria-label={`Select canonical invoice ${invoiceId}`}
                                             checked={isSelected}
                                             onChange={(e) => {
                                               handleManualInvoiceSelection(e.target.checked, invoiceId, invoice);

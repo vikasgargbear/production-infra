@@ -373,3 +373,34 @@ def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attest
     assert operation["prepare_steps"][1]["value"] == facts["identity"]["supplier_invoice_goods_receipt_id"]
     assert operation["prepare_steps"][2]["value"] == facts["choice"]["supplier_invoice_number"]
     assert operation["prepare_steps"][6]["locator"]["name"] == attestation
+
+
+def test_customer_receipt_template_targets_prior_certified_invoice() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/customer_receipt.json").read_text()
+    )
+    scalars = {
+        "customer_receipt_amount": "1.00",
+        "customer_receipt_payment_method_label": "Bank",
+    }
+    facts = {
+        "identity": {"bank_account_id": "d3000000-0000-7000-8000-000000000040"},
+        "display": {
+            "customer_code": "DEMO-CUSTOMER",
+            "customer_name": "Demo Customer",
+        },
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("customer_receipt", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][8]["locator"]["name"] == (
+        "Select canonical invoice {{resource_sales_invoice}}"
+    )
+    assert operation["prepare_steps"][6]["value"] == "LIVE18-RCPT-{{run_token}}"

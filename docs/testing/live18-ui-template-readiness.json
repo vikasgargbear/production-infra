@@ -1,6 +1,6 @@
 {
   "schema": "aasopharma.live18.ui-template-readiness.v1",
-  "ready_count": 4,
+  "ready_count": 5,
   "operations": [
     {"id":"sales_invoice","status":"blocked","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts","frontend/src/components/sales/invoice/utils/canonicalInvoiceCommand.ts"],"missing":["visible free-supply tax-treatment selector for nonzero free quantity","proven saved delivery-address selector after canonical address changes","current direct-issue logistics selector proof"]},
     {"id":"sales_order","status":"ready","evidence_sources":["frontend/e2e/live-sales-chain-ui.spec.ts","frontend/src/components/sales/order/SalesOrderFlow.tsx","frontend/src/components/sales/order/steps/OrderItemsStep.tsx","frontend/e2e/live18/templates/sales_order.json"],"missing":[]},
@@ -8,7 +8,7 @@
     {"id":"purchase_order","status":"ready","evidence_sources":["frontend/e2e/live-canonical-core-ui.spec.ts","frontend/src/components/purchase/purchase-order/PurchaseOrderFlow.tsx","frontend/e2e/live18/templates/purchase_order.json"],"missing":[]},
     {"id":"goods_receipt","status":"blocked","evidence_sources":["frontend/e2e/live-canonical-core-ui.spec.ts"],"missing":["authoritative receivable purchase-order lineage","reviewed manufacturer batch and expiry evidence","destination/MRP-UOM selector authority"]},
     {"id":"supplier_invoice","status":"ready","evidence_sources":["backend/scripts/provision_canonical_demo.py","backend/scripts/compile_live18_browser_fixture.py","frontend/e2e/live-canonical-core-ui.spec.ts","frontend/src/components/purchase/purchase-entry/CanonicalSupplierInvoiceFlow.tsx","frontend/e2e/live18/templates/supplier_invoice.json"],"missing":[]},
-    {"id":"customer_receipt","status":"blocked","evidence_sources":["frontend/src/components/payment/entry/ModularPaymentEntry.tsx"],"missing":["visible live selector proof","authoritative outstanding invoice context","reviewed amount/method/reference/allocation"]},
+    {"id":"customer_receipt","status":"ready","evidence_sources":["frontend/e2e/live-canonical-core-ui.spec.ts","frontend/src/components/payment/shared/PaymentFlowOptimized.tsx","frontend/src/components/payment/entry/ModularPaymentEntry.tsx","frontend/src/components/payment/entry/CustomerReceiptReviewDialog.tsx","frontend/e2e/live18/templates/customer_receipt.json"],"missing":[]},
     {"id":"supplier_payment","status":"blocked","evidence_sources":["frontend/e2e/live-canonical-core-ui.spec.ts"],"missing":["authoritative payable and bank context","reviewed method/reference/allocation","current selector extraction"]},
     {"id":"supplier_advance","status":"blocked","evidence_sources":["frontend/src/components/payment/entry/SupplierAdvance.tsx"],"missing":["visible live selector proof","authoritative eligible purchase-order lineage","independent approval/resume selectors","reviewed amount/method/reference"]},
     {"id":"sales_return","status":"blocked","evidence_sources":["frontend/e2e/live-two-user-approval.spec.ts"],"missing":["authoritative returnable invoice lineage","reviewed return reason/quantity/GST treatment","template conversion of proven two-user selectors"]},

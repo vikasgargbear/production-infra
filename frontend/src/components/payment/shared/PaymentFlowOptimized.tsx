@@ -110,6 +110,9 @@ const PaymentFlowOptimized: React.FC = () => {
             Create Customer
           </button>
         </div>
+        <p className="text-sm text-gray-600">
+          Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation.
+        </p>
         {/* White card wrapper - consistent with other flows */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <CustomerSearch
