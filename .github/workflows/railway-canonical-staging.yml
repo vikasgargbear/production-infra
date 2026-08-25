@@ -30,11 +30,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: railway-canonical-staging-pilot
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: canonical-staging
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
       RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
@@ -90,6 +94,45 @@ jobs:
             --environment "$RAILWAY_ENVIRONMENT_ID"
           railway whoami >/dev/null
 
+      - name: Fail closed on Railway service configuration drift
+        run: |
+          set -euo pipefail
+
+          railway status --json > railway-project.json
+          railway environment config \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json \
+            | jq '{services: (.services | with_entries(.value |= {source, configFile, build, deploy}))}' \
+            > railway-service-config.json
+
+          service_id() {
+            local service_name=$1
+            jq -er --arg name "$service_name" \
+              '[.services.edges[].node | select(.name == $name) | .id] | if length == 1 then .[0] else error("expected exactly one Railway service named " + $name) end' \
+              railway-project.json
+          }
+
+          service_matches() {
+            local service_name=$1
+            local config_file=$2
+            local id
+            id=$(service_id "$service_name")
+            jq -e \
+              --arg id "$id" \
+              --arg config_file "$config_file" \
+              '(.services[$id].source.rootDirectory // "/") == "/" and
+               .services[$id].configFile == $config_file and
+               (.services[$id].deploy.startCommand // "") == ""' \
+              railway-service-config.json >/dev/null
+          }
+
+          if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json || \
+             ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json || \
+             ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json; then
+            echo "::error title=Railway service configuration drift::All services must use repository-root context, their exact /deploy/railway/*.railway.json config file, and no dashboard start-command override. Correct Railway configuration in a separate reviewed change; this exact-SHA workflow will not trigger an unbound intermediate deployment."
+            exit 1
+          fi
+
       - name: Populate canonical service variables without triggering stale deploys
         env:
           ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
@@ -138,6 +181,7 @@ jobs:
           set_variable "$RAILWAY_API_SERVICE" SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
           set_variable "$RAILWAY_API_SERVICE" MCP_INTERNAL_SERVICE_TOKEN "$MCP_INTERNAL_SERVICE_TOKEN"
           set_variable "$RAILWAY_API_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+          set_variable "$RAILWAY_API_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
 
           set_variable "$RAILWAY_MCP_SERVICE" SUPABASE_OAUTH_ISSUER "$SUPABASE_OAUTH_ISSUER"
           set_variable "$RAILWAY_MCP_SERVICE" MCP_RESOURCE_SERVER_URL "$RAILWAY_MCP_URL/mcp"
@@ -145,20 +189,32 @@ jobs:
           set_variable "$RAILWAY_MCP_SERVICE" MCP_INTERNAL_SERVICE_TOKEN "$MCP_INTERNAL_SERVICE_TOKEN"
           set_variable "$RAILWAY_MCP_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
           set_variable "$RAILWAY_MCP_SERVICE" MCP_ALLOWED_ORIGINS "$RAILWAY_FRONTEND_URL"
+          set_variable "$RAILWAY_MCP_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
 
           set_variable "$RAILWAY_FRONTEND_SERVICE" REACT_APP_API_BASE_URL "$RAILWAY_API_URL"
           set_variable "$RAILWAY_FRONTEND_SERVICE" REACT_APP_SUPABASE_URL "$SUPABASE_URL"
           set_variable "$RAILWAY_FRONTEND_SERVICE" REACT_APP_SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+          set_variable "$RAILWAY_FRONTEND_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
 
-      - name: Upload the exact source tree to all three Railway services
+      - name: Force-upload the exact source tree to all three Railway services
+        env:
+          DEPLOYMENT_NONCE: ${{ github.run_id }}:${{ github.run_attempt }}
         run: |
           set -euo pipefail
+
+          # Railway watch paths compare changed archive paths. These provenance-only
+          # markers make an unchanged reviewed commit uploadable without modifying
+          # product code or falling back to an older Railway deployment.
+          printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/api.force-deploy
+          printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/mcp.force-deploy
+          printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/frontend.force-deploy
+
           message="canonical staging $REVIEWED_SHA"
-          railway up --detach --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >api-deploy.log 2>&1 &
+          railway up --detach --json --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >api-deploy.json 2>api-deploy.log &
           api_pid=$!
-          railway up --detach --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >mcp-deploy.log 2>&1 &
+          railway up --detach --json --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >mcp-deploy.json 2>mcp-deploy.log &
           mcp_pid=$!
-          railway up --detach --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >frontend-deploy.log 2>&1 &
+          railway up --detach --json --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >frontend-deploy.json 2>frontend-deploy.log &
           frontend_pid=$!
           status=0
           wait "$api_pid" || status=1
@@ -169,22 +225,127 @@ jobs:
             exit 1
           fi
 
+          jq -er '.deploymentId | select(type == "string" and length > 0)' api-deploy.json > api-deployment-id
+          jq -er '.deploymentId | select(type == "string" and length > 0)' mcp-deploy.json > mcp-deployment-id
+          jq -er '.deploymentId | select(type == "string" and length > 0)' frontend-deploy.json > frontend-deployment-id
+
+      - name: Require each exact upload to become the active deployment
+        run: |
+          set -euo pipefail
+
+          deployment_status() {
+            local service=$1
+            local deployment_id=$2
+            railway deployment list \
+              --service "$service" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --limit 100 \
+              --json \
+              | jq -er --arg id "$deployment_id" \
+                  '[.[] | select(.id == $id) | .status] | if length == 1 then .[0] else "NOT_FOUND" end'
+          }
+
+          require_deployment_contract() {
+            local service=$1
+            local deployment_id=$2
+            local config_file=$3
+            local dockerfile=$4
+            local healthcheck=$5
+            railway deployment list \
+              --service "$service" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --limit 100 \
+              --json \
+              | jq -e \
+                  --arg id "$deployment_id" \
+                  --arg config_file "$config_file" \
+                  --arg dockerfile "$dockerfile" \
+                  --arg healthcheck "$healthcheck" \
+                  --arg message "canonical staging $REVIEWED_SHA" \
+                  '[.[] | select(.id == $id)] |
+                   length == 1 and
+                   ((.[0].meta.rootDirectory // "/") == "/") and
+                   (.[0].meta.configFile == $config_file) and
+                   (.[0].meta.cliMessage == $message) and
+                   (.[0].meta.fileServiceManifest.build.builder == "DOCKERFILE") and
+                   (.[0].meta.fileServiceManifest.build.dockerfilePath == $dockerfile) and
+                   (.[0].meta.serviceManifest.build.builder == "DOCKERFILE") and
+                   (.[0].meta.serviceManifest.build.dockerfilePath == $dockerfile) and
+                   ((.[0].meta.serviceManifest.deploy.startCommand // "") == "") and
+                   (.[0].meta.serviceManifest.deploy.healthcheckPath == $healthcheck) and
+                   (.[0].meta.serviceManifest.deploy.sleepApplication == false)' >/dev/null
+          }
+
+          api_deployment_id=$(<api-deployment-id)
+          mcp_deployment_id=$(<mcp-deployment-id)
+          frontend_deployment_id=$(<frontend-deployment-id)
+
+          for attempt in $(seq 1 90); do
+            api_status=$(deployment_status "$RAILWAY_API_SERVICE" "$api_deployment_id")
+            mcp_status=$(deployment_status "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id")
+            frontend_status=$(deployment_status "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id")
+
+            if test "$api_status" = SUCCESS && test "$mcp_status" = SUCCESS && test "$frontend_status" = SUCCESS; then
+              break
+            fi
+
+            for service_status in "$api_status" "$mcp_status" "$frontend_status"; do
+              case "$service_status" in
+                FAILED|CRASHED|SKIPPED|REMOVED|REMOVING|CANCELLED)
+                  echo "An exact Railway upload reached terminal failure state: $service_status" >&2
+                  exit 1
+                  ;;
+              esac
+            done
+
+            if test "$attempt" = 90; then
+              echo "Exact Railway uploads did not reach SUCCESS before timeout" >&2
+              exit 1
+            fi
+            echo "Waiting for exact Railway uploads (attempt $attempt/90)"
+            sleep 10
+          done
+
+          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready
+          require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health
+          require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health
+
       - name: Verify all public services publish the reviewed SHA
         run: |
           set -euo pipefail
           for attempt in $(seq 1 60); do
-            api_health=$(curl --silent --show-error --max-time 15 "$RAILWAY_API_URL/health" || true)
-            mcp_health=$(curl --silent --show-error --max-time 15 "$RAILWAY_MCP_URL/health" || true)
-            frontend_sha=$(curl --silent --show-error --max-time 15 "$RAILWAY_FRONTEND_URL/build-metadata.json" | jq -r '.git_commit // empty' || true)
+            fetch() {
+              curl --fail-with-body --silent --show-error --max-time 15 "$1" > "$2" 2>/dev/null || :
+            }
+            fetch "$RAILWAY_API_URL/health" api-health.json &
+            fetch "$RAILWAY_API_URL/ready" api-ready.json &
+            fetch "$RAILWAY_MCP_URL/health" mcp-health.json &
+            fetch "$RAILWAY_MCP_URL/ready" mcp-ready.json &
+            fetch "$RAILWAY_FRONTEND_URL/health" frontend-health.txt &
+            fetch "$RAILWAY_FRONTEND_URL/build-metadata.json" frontend-metadata.json &
+            wait
+
+            api_health=$(<api-health.json)
+            api_ready=$(<api-ready.json)
+            mcp_health=$(<mcp-health.json)
+            mcp_ready=$(<mcp-ready.json)
+            frontend_health=$(<frontend-health.txt)
+            frontend_metadata=$(<frontend-metadata.json)
             if jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_health" >/dev/null 2>&1 && \
+               jq -e '.status == "ready"' <<<"$api_ready" >/dev/null 2>&1 && \
                jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_health" >/dev/null 2>&1 && \
-               test "$frontend_sha" = "$REVIEWED_SHA"; then
+               jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1 && \
+               test "$frontend_health" = ok && \
+               jq -e --arg sha "$REVIEWED_SHA" '.service == "aasopharma-erp" and .git_commit == $sha' <<<"$frontend_metadata" >/dev/null 2>&1; then
               jq -n \
                 --arg git_commit "$REVIEWED_SHA" \
+                --arg api_deployment_id "$(<api-deployment-id)" \
+                --arg mcp_deployment_id "$(<mcp-deployment-id)" \
+                --arg frontend_deployment_id "$(<frontend-deployment-id)" \
                 --arg api_url "$RAILWAY_API_URL" \
                 --arg mcp_url "$RAILWAY_MCP_URL" \
                 --arg frontend_url "$RAILWAY_FRONTEND_URL" \
-                '{provider:"railway",git_commit:$git_commit,services:{api:$api_url,mcp:$mcp_url,frontend:$frontend_url},status:"live"}' \
+                '{provider:"railway",git_commit:$git_commit,status:"live",services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:"ready"},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:"ready"},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
                 > railway-pilot-evidence.json
               exit 0
             fi
