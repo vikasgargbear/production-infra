@@ -1196,6 +1196,13 @@ BEGIN
 END
 $migration$;
 
+-- Replacing the function through dynamic SQL restores PostgreSQL's default
+-- PUBLIC execute grant. Reapply the reviewed runtime-only command boundary.
+REVOKE ALL ON FUNCTION erp_automation_commands.execute_inventory_destruction_command(
+  uuid,uuid) FROM PUBLIC,erp_app,erp_runtime;
+GRANT EXECUTE ON FUNCTION erp_automation_commands.execute_inventory_destruction_command(
+  uuid,uuid) TO erp_runtime;
+
 CREATE OR REPLACE FUNCTION erp_compliance_commands.create_supplier_invoice_input_credit_lots(
   organization_id uuid, supplier_invoice_id uuid, actor_id uuid)
 RETURNS integer

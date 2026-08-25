@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260825_0021_gst_registered_inventory_destruction.sql"
 )
-EXPECTED_SQL_SHA256 = "0c5870690919e0bff3c944f3200140ceb89ee537b9da1fb241e4233749907825"
+EXPECTED_SQL_SHA256 = "d5d4180deef81f9be81e5fac10b9dc8fef60dbecd0d027a8c4e4da3a3ede1fe1"
 
 
 def _reviewed_sql() -> str:

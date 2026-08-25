@@ -74,7 +74,7 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
         "same_day_positive_cycle_count_gain_only"
     )
     assert dispatcher["inventory_destruction_pilot_scope"]["status"] == (
-        "available_reviewed_certified_full_balance_non_gst"
+        "available_reviewed_certified_full_balance_gst_registered"
     )
     assert dispatcher["inventory_transfer_pilot_scope"]["status"] == (
         "available_reviewed_atomic_interbranch"
