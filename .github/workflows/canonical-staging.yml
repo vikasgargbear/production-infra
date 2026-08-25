@@ -362,6 +362,11 @@ jobs:
           export PGOPTIONS='-c statement_timeout=120000 -c lock_timeout=15000'
           package_hash=$(python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256)
           test "$package_hash" = "$CANONICAL_BASELINE_APPROVED_SHA256"
+          python3 backend/scripts/canonical_migration_contract.py
+          canonical_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          canonical_table_count=$(python3 backend/scripts/canonical_migration_contract.py --print-table-count)
+          echo "CANONICAL_ALEMBIC_HEAD=$canonical_head" >> "$GITHUB_ENV"
+          echo "CANONICAL_TABLE_COUNT=$canonical_table_count" >> "$GITHUB_ENV"
           log_file=$(mktemp)
           baseline_applied=false
           baseline_state=$(mktemp)
@@ -385,9 +390,10 @@ jobs:
                    ) AND (rolsuper OR rolcreaterole OR rolbypassrls)
                  ) AS unsafe_role_count
             FROM public.alembic_version AS revision
-           WHERE revision.version_num='20260825_0005'
+           WHERE revision.version_num='__CANONICAL_ALEMBIC_HEAD__'
           SQL
           )
+          baseline_query=${baseline_query/__CANONICAL_ALEMBIC_HEAD__/$canonical_head}
           if curl --fail --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
@@ -395,7 +401,8 @@ jobs:
             --data "$(jq -nc --arg query "$baseline_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$baseline_state" \
-            && jq -e '.. | objects | select(.version_num? == "20260825_0005" and ((.table_count? // "") | tostring) == "111" and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
+            && jq -e --arg revision "$canonical_head" --arg table_count "$canonical_table_count" \
+              '.. | objects | select(.version_num? == $revision and ((.table_count? // "") | tostring) == $table_count and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
               "$baseline_state" >/dev/null; then
             echo "Control plane verified exact canonical revision and topology; Alembic is already current"
             baseline_applied=true
@@ -1456,7 +1463,8 @@ jobs:
           mkdir -p staging-evidence
           jq -n \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --arg revision "20260825_0005" \
+            --arg revision "$CANONICAL_ALEMBIC_HEAD" \
+            --argjson canonical_table_count "$CANONICAL_TABLE_COUNT" \
             --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
             --arg commit_sha "$GITHUB_SHA" \
             --arg render_deploy_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
@@ -1468,7 +1476,7 @@ jobs:
                commit_sha: $commit_sha,
                render_deploy_sha: $render_deploy_sha,
                pooler_mode: $pooler_mode,
-              canonical_table_count: 111,
+              canonical_table_count: $canonical_table_count,
               result: "baseline_and_isolated_roles_verified"
             }' > staging-evidence/canonical-staging-baseline.json
 

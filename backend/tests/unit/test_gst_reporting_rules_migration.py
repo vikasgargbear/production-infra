@@ -40,9 +40,11 @@ def test_staging_gate_tracks_the_canonical_head_and_table_count() -> None:
     authority = json.loads((REPO_ROOT / "database/schema-authority.json").read_text(encoding="utf-8"))
     required = set(authority["required_migration_files"])
 
-    assert "revision.version_num='20260825_0005'" in workflow
-    assert 'version_num? == "20260825_0005"' in workflow
-    assert "canonical_table_count: 111" in workflow
+    assert "canonical_migration_contract.py --print-head" in workflow
+    assert "canonical_migration_contract.py --print-table-count" in workflow
+    assert "revision.version_num='__CANONICAL_ALEMBIC_HEAD__'" in workflow
+    assert ".version_num? == $revision" in workflow
+    assert "canonical_table_count: $canonical_table_count" in workflow
     assert REVISION.relative_to(REPO_ROOT).as_posix() in required
     assert SQL.relative_to(REPO_ROOT).as_posix() in required
     assert MANIFEST.relative_to(REPO_ROOT).as_posix() in required
