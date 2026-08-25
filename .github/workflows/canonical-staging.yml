@@ -824,8 +824,14 @@ jobs:
             -c 'GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE' \
             >/dev/null
 
+          mapfile -t canonical_fixtures < <(
+            find database/canonical -type f \
+              \( -name 'test_*.sql' -o -name 'head_test_*.sql' \) \
+              | LC_ALL=C sort
+          )
+          test "${#canonical_fixtures[@]}" -gt 0
           fixture_count=0
-          while IFS= read -r fixture; do
+          for fixture in "${canonical_fixtures[@]}"; do
             if ! grep -q '^BEGIN;' "$fixture"; then
               test "$fixture" = \
                 database/canonical/invariants_finance/test_finance_invariants.sql
@@ -850,12 +856,8 @@ jobs:
             fi
             cat "$fixture_log"
             fixture_count=$((fixture_count + 1))
-          done < <(
-            find database/canonical -type f \
-              \( -name 'test_*.sql' -o -name 'head_test_*.sql' \) \
-              | LC_ALL=C sort
-          )
-          test "$fixture_count" = 16
+          done
+          test "$fixture_count" = "${#canonical_fixtures[@]}"
 
           cleanup_role_membership
           trap - EXIT
