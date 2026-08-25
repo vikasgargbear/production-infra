@@ -1,4 +1,4 @@
-import importlib.util
+import json
 import re
 from datetime import date
 from decimal import Decimal
@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from app.api.services.finance.journal.service import JournalService
 from app.api.services.finance.allocation.service import AllocationService
 from app.api.services.finance.payment.service import PaymentService
+from scripts.audit import transaction_integrity_audit as transaction_audit
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -402,29 +403,65 @@ def test_posted_journal_headers_reject_edits_and_deletes():
     assert "OLD.entry_status IN ('posted', 'reversed')" in triggers
 
 
-def test_release_audit_detects_unresolved_integrity_blockers():
-    audit_path = REPOSITORY_ROOT / "backend/scripts/audit/transaction_integrity_audit.py"
-    spec = importlib.util.spec_from_file_location("transaction_integrity_audit", audit_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+def test_release_audit_distinguishes_retired_capture_from_canonical_evidence():
+    codes = {issue.code for issue in transaction_audit.collect_issues()}
+    assert codes == {"CANONICAL_TRANSACTION_LIVE_EVIDENCE_MISSING"}
 
-    codes = {issue.code for issue in module.collect_issues()}
-    assert "PAYMENT_IDEMPOTENCY_MISSING" not in codes
-    assert "PAYMENT_IDEMPOTENCY_SCHEMA_UNVERIFIED" in codes
-    assert "PAYMENT_MUTATION_IDEMPOTENCY_INCOMPLETE" not in codes
-    assert "INVOICE_STOCK_OWNERSHIP_CONFLICT" not in codes
-    assert "POSTED_JOURNAL_HEADER_MUTABLE" not in codes
-    assert "JOURNAL_REVERSAL_NOT_COMPENSATING" not in codes
-    assert "JOURNAL_MUTATION_NOT_COMMITTED" not in codes
-    assert "JOURNAL_SCHEMA_CONTRACT_MISMATCH" not in codes
-    assert "ALLOCATION_TABLE_UNBASELINED" in codes
-    assert "LIVE_ALLOCATION_PROJECTION_OWNERSHIP_CONFLICT" in codes
-    assert "ALLOCATION_TENANT_SCOPE_MISSING" not in codes
-    assert "ALLOCATION_MUTATION_NOT_COMMITTED" not in codes
-    assert "ALLOCATION_PROJECTION_RECONCILIATION_MISSING" not in codes
-    assert "BANK_RECONCILIATION_SCHEMA_UNBASELINED" in codes
-    assert "LIVE_JOURNAL_IMMUTABILITY_NOT_DEPLOYED" in codes
-    assert "LIVE_ORDER_INVOICE_OWNERSHIP_CONFLICT" in codes
-    assert "LIVE_GRN_INVENTORY_OWNERSHIP_CONFLICT" in codes
-    assert "CALCULATION_OWNER_DUPLICATED" not in codes
-    assert "STOCK_DOUBLE_MUTATION" not in codes
+
+def _canonical_live_evidence(module, git_sha: str) -> dict:
+    return {
+        "schema_version": module.EVIDENCE_SCHEMA_VERSION,
+        "project_ref": module.CANONICAL_STAGING_PROJECT_REF,
+        "git_commit": git_sha,
+        "alembic_revision": module._canonical_head_revision(REPOSITORY_ROOT),
+        "captured_at": "2026-08-25T12:00:00+00:00",
+        "runtime_role": {
+            "session_user": "erp_runtime",
+            "superuser": False,
+            "bypass_rls": False,
+            "owns_business_relations": False,
+        },
+        "transaction_checks": {
+            "payment_idempotency_unique": True,
+            "allocation_table_present": True,
+            "allocation_projection_owner": "canonical_database_invariant",
+            "bank_reconciliation_contract": "bank_statements_and_reconciliation_matches",
+            "posted_journal_immutability": True,
+            "order_invoice_generation_owner": "canonical_command_functions",
+            "grn_inventory_effect_owner": "canonical_command_functions",
+            "finance_rls_enabled_and_forced": True,
+        },
+    }
+
+
+def test_release_audit_accepts_fresh_exact_sha_canonical_evidence(tmp_path):
+    git_sha = "a" * 40
+    evidence_path = tmp_path / "transaction-integrity.json"
+    evidence_path.write_text(
+        json.dumps(_canonical_live_evidence(transaction_audit, git_sha)), encoding="utf-8"
+    )
+
+    assert transaction_audit.collect_issues(
+        live_evidence_path=evidence_path,
+        expected_git_sha=git_sha,
+    ) == []
+
+
+def test_release_audit_rejects_retired_project_and_stale_sha_evidence(tmp_path):
+    evidence = _canonical_live_evidence(transaction_audit, "b" * 40)
+    evidence["project_ref"] = transaction_audit.RETIRED_SOURCE_PROJECT_REF
+    evidence_path = tmp_path / "transaction-integrity.json"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    codes = {
+        issue.code
+        for issue in transaction_audit.collect_issues(
+            live_evidence_path=evidence_path,
+            expected_git_sha="a" * 40,
+        )
+    }
+
+    assert codes == {
+        "CANONICAL_TRANSACTION_EVIDENCE_WRONG_PROJECT",
+        "CANONICAL_TRANSACTION_EVIDENCE_STALE_SHA",
+    }

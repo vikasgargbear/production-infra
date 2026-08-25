@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
-"""Fail-closed static release audit for high-risk ERP transaction ownership."""
+"""Fail-closed release audit for the canonical transaction database boundary.
 
+The checked-in ``database/live-schema-evidence.json`` describes the retired
+legacy Supabase source project. It remains migration evidence, but it must not
+be interpreted as evidence about the isolated canonical staging project. This
+audit therefore separates the hash-bound Alembic contract from a fresh,
+external exact-SHA capture from canonical staging.
+"""
+
+from __future__ import annotations
+
+import argparse
 from dataclasses import dataclass
+from datetime import datetime
 import json
 from pathlib import Path
-from typing import List
+import re
+import subprocess
+from typing import Any, Mapping
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
+RETIRED_SOURCE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
+EVIDENCE_SCHEMA_VERSION = "1.0.0"
 
 
 @dataclass(frozen=True)
@@ -16,275 +32,319 @@ class IntegrityIssue:
     message: str
 
 
-def _read(relative_path: str) -> str:
-    return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+def _read(root: Path, relative_path: str) -> str:
+    return (root / relative_path).read_text(encoding="utf-8")
 
 
-def collect_issues() -> List[IntegrityIssue]:
-    issues: List[IntegrityIssue] = []
-    live_evidence = json.loads(_read("database/live-schema-evidence.json"))
-    live_transactions = live_evidence["transaction_safety"]
+def _json(root: Path, relative_path: str) -> dict[str, Any]:
+    value = json.loads(_read(root, relative_path))
+    if not isinstance(value, dict):
+        raise ValueError(f"{relative_path} must contain a JSON object")
+    return value
 
-    inventory_trigger = _read("database/04-triggers/02_inventory_triggers.sql")
-    movement_function = inventory_trigger.split(
-        "CREATE OR REPLACE FUNCTION track_inventory_movement()", 1
-    )[1].split("$$ LANGUAGE plpgsql;", 1)[0]
-    if (
-        "UPDATE inventory.location_wise_stock" in movement_function
-        or "INSERT INTO inventory.location_wise_stock" in movement_function
+
+def _canonical_head_revision(root: Path) -> str:
+    revisions: dict[str, str | None] = {}
+    for path in (root / "backend/alembic/versions").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        revision_match = re.search(
+            r'^revision\s*=\s*["\']([^"\']+)["\']', source, re.MULTILINE
+        )
+        parent_match = re.search(
+            r'^down_revision\s*=\s*(?:["\']([^"\']+)["\']|None)',
+            source,
+            re.MULTILINE,
+        )
+        if revision_match and parent_match:
+            revisions[revision_match.group(1)] = parent_match.group(1)
+    if not revisions:
+        raise ValueError("canonical Alembic revision chain is empty")
+    parents = {parent for parent in revisions.values() if parent is not None}
+    heads = sorted(set(revisions) - parents)
+    if len(heads) != 1:
+        raise ValueError(f"canonical Alembic chain must have one head, found {heads}")
+    return heads[0]
+
+
+def _repository_sha(root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    value = result.stdout.strip().lower()
+    return value if re.fullmatch(r"[0-9a-f]{40}", value) else None
+
+
+def _missing_tokens(source: str, tokens: tuple[str, ...]) -> list[str]:
+    return [token for token in tokens if token not in source]
+
+
+def _static_canonical_issues(root: Path) -> list[IntegrityIssue]:
+    issues: list[IntegrityIssue] = []
+    authority = _json(root, "database/schema-authority.json")
+    if authority.get("canonical_migration_root") != "backend/alembic":
+        issues.append(IntegrityIssue(
+            "CANONICAL_MIGRATION_AUTHORITY_INVALID",
+            "backend/alembic must be the canonical production migration authority",
+        ))
+
+    legacy_capture = _json(root, "database/live-schema-evidence.json")
+    if legacy_capture.get("project_ref") != RETIRED_SOURCE_PROJECT_REF:
+        issues.append(IntegrityIssue(
+            "RETIRED_SOURCE_EVIDENCE_IDENTITY_INVALID",
+            "the checked-in historical schema capture no longer identifies the retired source project",
+        ))
+
+    baseline = _read(root, "backend/alembic/sql/20260820_0001_canonical_v1.sql")
+    bank_reconciliation = _read(
+        root, "backend/alembic/sql/20260825_0008_bank_reconciliation_command.sql"
+    )
+    canonical_sql = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((root / "backend/alembic/sql").glob("*.sql"))
+    )
+
+    payment_tokens = (
+        'ALTER TABLE "automation"."command_requests" ADD CONSTRAINT "command_requests_idempotency_uq" UNIQUE',
+        'CREATE FUNCTION "erp_automation_commands"."persist_customer_receipt_prepare"',
+        'CREATE FUNCTION "erp_automation_commands"."persist_supplier_payment_prepare"',
+        "capability_code='finance.customer_receipt.prepare' AND idempotency_key_hash=key_hash FOR SHARE",
+        "capability_code='finance.supplier_payment.prepare' AND idempotency_key_hash=key_hash FOR SHARE",
+    )
+    if _missing_tokens(baseline, payment_tokens):
+        issues.append(IntegrityIssue(
+            "CANONICAL_PAYMENT_IDEMPOTENCY_MISSING",
+            "canonical receipt/payment prepare lacks a durable scoped command-key replay contract",
+        ))
+
+    allocation_tokens = (
+        'CREATE TABLE "finance"."allocations"',
+        'CREATE CONSTRAINT TRIGGER "allocations_guard_ct"',
+        'CREATE TRIGGER "finance_allocations_immutable_trg" BEFORE UPDATE OR DELETE',
+        'ALTER TABLE "finance"."allocations" ENABLE ROW LEVEL SECURITY',
+        'ALTER TABLE "finance"."allocations" FORCE ROW LEVEL SECURITY',
+        'REVOKE ALL ON TABLE "finance"."allocations" FROM PUBLIC, "erp_app", "erp_runtime"',
+    )
+    if _missing_tokens(baseline, allocation_tokens):
+        issues.append(IntegrityIssue(
+            "CANONICAL_ALLOCATION_CONTRACT_MISSING",
+            "canonical allocations are not fully owned, immutable, and tenant constrained",
+        ))
+
+    journal_tokens = (
+        'CREATE CONSTRAINT TRIGGER "journal_entries_guard_ct"',
+        'CREATE CONSTRAINT TRIGGER "journal_lines_guard_ct"',
+        "posted journal financial fields are immutable",
+        "journal lines may change only while parent is draft",
+        "journal reversal is not an exact sign inversion",
+        'ALTER TABLE "finance"."journal_entries" FORCE ROW LEVEL SECURITY',
+        'ALTER TABLE "finance"."journal_lines" FORCE ROW LEVEL SECURITY',
+    )
+    if _missing_tokens(baseline, journal_tokens):
+        issues.append(IntegrityIssue(
+            "CANONICAL_JOURNAL_IMMUTABILITY_MISSING",
+            "canonical posted journals or their lines are not immutable and tenant constrained",
+        ))
+
+    reconciliation_tokens = (
+        "finance.bank_reconciliation.prepare",
+        "finance.bank_reconciliation.match",
+        "INSERT INTO finance.reconciliation_matches",
+        "SESSION_USER<>'erp_runtime'",
+        "idempotency_key_hash=key_hash FOR SHARE",
+        "GRANT EXECUTE ON FUNCTION erp_automation_commands.execute_bank_reconciliation_command",
+        "REVOKE INSERT,UPDATE ON finance.reconciliation_matches FROM erp_app",
+    )
+    if _missing_tokens(bank_reconciliation, reconciliation_tokens):
+        issues.append(IntegrityIssue(
+            "CANONICAL_BANK_RECONCILIATION_CONTRACT_MISSING",
+            "bank reconciliation is not fully command-owned and idempotent in the canonical chain",
+        ))
+
+    ownership_tokens = (
+        'CREATE FUNCTION "erp_automation_commands"."persist_sales_invoice_prepare"',
+        'CREATE FUNCTION "erp_trade_commands"."post_goods_receipt"',
+        'CREATE FUNCTION "erp_trade_commands"."post_inventory_document"',
+        'CREATE TRIGGER "finance_accounting_events_immutable_trg"',
+    )
+    forbidden_legacy_owners = (
+        "CREATE OR REPLACE FUNCTION update_inventory_on_sale()",
+        "CREATE OR REPLACE FUNCTION generate_invoice_on_delivery()",
+        "CREATE OR REPLACE FUNCTION update_inventory_on_grn()",
+    )
+    if _missing_tokens(baseline, ownership_tokens) or any(
+        token in canonical_sql for token in forbidden_legacy_owners
     ):
         issues.append(IntegrityIssue(
-            "STOCK_DOUBLE_MUTATION",
-            "track_inventory_movement and application services both mutate location stock",
+            "CANONICAL_TRANSACTION_OWNERSHIP_CONFLICT",
+            "sales invoice or GRN effects are not exclusively owned by canonical command functions",
         ))
 
-    sales_trigger = _read("database/04-triggers/11_core_operations_triggers.sql")
-    sale_function = ""
-    if "CREATE OR REPLACE FUNCTION update_inventory_on_sale()" in sales_trigger:
-        sale_function = sales_trigger.split(
-            "CREATE OR REPLACE FUNCTION update_inventory_on_sale()", 1
-        )[1].split("$$ LANGUAGE plpgsql;", 1)[0]
-    legacy_invoice_service = (
-        REPOSITORY_ROOT
-        / "backend/app/api/services/sales/invoice/invoice_service.py"
+    runtime_tokens = (
+        'CREATE ROLE "erp_runtime" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS',
+        'REVOKE ALL ON SCHEMA "erp_automation_commands" FROM PUBLIC, "erp_app", "erp_runtime"',
+        'GRANT USAGE ON SCHEMA "erp_automation_commands" TO "erp_runtime"',
+        'GRANT EXECUTE ON FUNCTION "erp_automation_commands"."execute_approved_command"',
     )
-    if legacy_invoice_service.exists():
+    if _missing_tokens(baseline, runtime_tokens):
         issues.append(IntegrityIssue(
-            "LEGACY_INVOICE_WRITE_AUTHORITY",
-            "retired InvoiceService still competes with reviewed canonical sales commands",
+            "CANONICAL_RUNTIME_ROLE_BOUNDARY_MISSING",
+            "the canonical runtime role is not non-owner/NOBYPASSRLS with an explicit command boundary",
         ))
-    if sale_function and (
-        "UPDATE inventory.batches" in sale_function
-        or "UPDATE inventory.location_wise_stock" in sale_function
-        or "INSERT INTO inventory.inventory_movements" in sale_function
-    ):
-        issues.append(IntegrityIssue(
-            "INVOICE_STOCK_TRIGGER_AUTHORITY",
-            "legacy sale trigger still competes with reviewed canonical sales commands",
-        ))
+    return issues
 
-    payment_routes = _read("backend/app/api/routes/finance/payments/routes.py")
-    payment_service = _read("backend/app/api/services/finance/payment/service.py")
-    payment_idempotency_guards = (
-        payment_routes.count('alias="X-Idempotency-Key"') >= 3
-        and "pg_advisory_xact_lock" in payment_service
-        and "internal_notes LIKE :marker_pattern" in payment_service
-        and "claim.completed_marker(public_response)" in payment_service
-        and "IdempotencyConflictError" in payment_routes
-        and "X-Idempotency-Replayed" in payment_routes
-    )
-    if not payment_idempotency_guards:
-        issues.append(IntegrityIssue(
-            "PAYMENT_IDEMPOTENCY_MISSING",
-            "payment creation routes lack a locked, durable request key and replay contract",
-        ))
-    else:
-        schema_authority = json.loads(_read("database/schema-authority.json"))
-        if schema_authority.get("readiness_state") != "baselined":
-            issues.append(IntegrityIssue(
-                "PAYMENT_IDEMPOTENCY_SCHEMA_UNVERIFIED",
-                "live capture confirms internal_notes, but no reviewed migration baseline owns its durable idempotency contract",
-            ))
-    allocation_routes = _read("backend/app/api/routes/finance/allocation/routes.py")
-    mutation_contracts = (
-        (payment_routes, "cancel_payment", "payment.cancel"),
-        (payment_routes, "create_bank_reconciliation", "payment.reconcile"),
-        (payment_routes, "allocate_payment", "payment.allocate"),
-        (allocation_routes, "allocate_payment", "payment.allocate"),
-        (allocation_routes, "allocate_payment_bulk", "payment.allocate"),
-        (allocation_routes, "auto_allocate_payment", "payment.allocate"),
-        (allocation_routes, "delete_allocation", "payment.allocate"),
-    )
-    def mutation_is_guarded(source: str, method: str, operation: str) -> bool:
-        body = source.split(f"async def {method}", 1)[1].split("@router.", 1)[0]
-        durable_guard = (
-            f'operation="{operation}"' in body
-            or (
-                "_require_allocation_idempotency(idempotency_key)" in body
-                and f'operation="{operation}"' in source
+
+def _load_evidence(
+    root: Path,
+    evidence_path: str | Path | None,
+) -> dict[str, Any] | None:
+    if evidence_path is None:
+        configured = _json(root, "database/schema-authority.json").get(
+            "canonical_transaction_integrity_evidence"
+        )
+        if configured is None:
+            return None
+        if not isinstance(configured, str) or not configured.strip():
+            raise ValueError(
+                "canonical_transaction_integrity_evidence must be null or a repository-relative path"
             )
+        path = root / configured
+    else:
+        path = Path(evidence_path)
+        if not path.is_absolute():
+            path = root / path
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("canonical transaction evidence must contain a JSON object")
+    return value
+
+
+def _live_evidence_issues(
+    root: Path,
+    evidence: Mapping[str, Any] | None,
+    expected_git_sha: str | None,
+) -> list[IntegrityIssue]:
+    if evidence is None:
+        return [IntegrityIssue(
+            "CANONICAL_TRANSACTION_LIVE_EVIDENCE_MISSING",
+            "deploy the exact release SHA to canonical staging and capture its transaction schema using erp_runtime",
+        )]
+
+    issues: list[IntegrityIssue] = []
+    expected_sha = (expected_git_sha or _repository_sha(root) or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
+        issues.append(IntegrityIssue(
+            "CANONICAL_TRANSACTION_EXPECTED_SHA_MISSING",
+            "an exact 40-character release SHA is required to review live transaction evidence",
+        ))
+    if evidence.get("schema_version") != EVIDENCE_SCHEMA_VERSION:
+        issues.append(IntegrityIssue(
+            "CANONICAL_TRANSACTION_EVIDENCE_SCHEMA_INVALID",
+            "canonical transaction evidence does not use the reviewed schema version",
+        ))
+    if evidence.get("project_ref") != CANONICAL_STAGING_PROJECT_REF:
+        issues.append(IntegrityIssue(
+            "CANONICAL_TRANSACTION_EVIDENCE_WRONG_PROJECT",
+            "transaction evidence is not from the isolated canonical staging project",
+        ))
+    evidence_sha = str(evidence.get("git_commit", "")).lower()
+    if expected_sha and evidence_sha != expected_sha:
+        issues.append(IntegrityIssue(
+            "CANONICAL_TRANSACTION_EVIDENCE_STALE_SHA",
+            "transaction evidence was not captured from the exact reviewed release SHA",
+        ))
+    if evidence.get("alembic_revision") != _canonical_head_revision(root):
+        issues.append(IntegrityIssue(
+            "CANONICAL_TRANSACTION_EVIDENCE_STALE_REVISION",
+            "canonical staging is not at the checked-in Alembic head",
+        ))
+    try:
+        captured_at = datetime.fromisoformat(
+            str(evidence.get("captured_at", "")).replace("Z", "+00:00")
         )
-        return 'alias="X-Idempotency-Key"' in body and durable_guard
-
-    if any(
-        not mutation_is_guarded(source, method, operation)
-        for source, method, operation in mutation_contracts
-    ):
+        if captured_at.tzinfo is None:
+            raise ValueError("timezone required")
+    except ValueError:
         issues.append(IntegrityIssue(
-            "PAYMENT_MUTATION_IDEMPOTENCY_INCOMPLETE",
-            "payment cancellation, reconciliation, or allocation still lacks replayable idempotency",
+            "CANONICAL_TRANSACTION_EVIDENCE_TIME_INVALID",
+            "canonical transaction evidence needs a timezone-aware capture timestamp",
         ))
 
-    finance_triggers = _read("database/04-triggers/01_financial_triggers.sql")
-    if "trigger_protect_posted_journal_lines" not in finance_triggers:
-        issues.append(IntegrityIssue(
-            "POSTED_JOURNAL_LINES_MUTABLE",
-            "posted journal lines have no database immutability trigger",
-        ))
-    if "trigger_protect_posted_journal_entries" not in finance_triggers:
-        issues.append(IntegrityIssue(
-            "POSTED_JOURNAL_HEADER_MUTABLE",
-            "posted journal headers can still be edited or deleted directly",
-        ))
-
-    journal_service = _read("backend/app/api/services/finance/journal/service.py")
-    journal_routes = _read("backend/app/api/routes/finance/journal/routes.py")
-    reversal_method = journal_service.split("def reverse_journal_entry", 1)[1]
-    if not all(token in reversal_method for token in (
-        '"reversal_of_journal_id": journal_id',
-        '"debit_amount": line.credit_amount',
-        '"credit_amount": line.debit_amount',
-        "JournalService.post_journal_entry",
-    )):
-        issues.append(IntegrityIssue(
-            "JOURNAL_REVERSAL_NOT_COMPENSATING",
-            "journal reversal changes status without posting opposite debit and credit lines",
-        ))
-    create_journal_route = journal_routes.split(
-        "async def create_journal_entry", 1
-    )[1].split("async def get_journal_entries", 1)[0]
-    if "db.commit()" not in create_journal_route:
-        issues.append(IntegrityIssue(
-            "JOURNAL_MUTATION_NOT_COMMITTED",
-            "journal creation posts in-session but the request closes without committing",
-        ))
-
-    financial_tables = _read("database/02-tables/06_financial_tables.sql")
-    if all(token in journal_service for token in (
-        "account_level",
-        "journal_id, account_id, account_code",
-        "reversed_reason = :reason",
-    )) and all(token not in financial_tables for token in (
-        "account_level",
-        "account_id INTEGER NOT NULL REFERENCES financial.chart_of_accounts",
-        "reversed_reason TEXT",
-    )):
-        issues.append(IntegrityIssue(
-            "JOURNAL_SCHEMA_CONTRACT_MISMATCH",
-            "journal service reads or writes columns absent from checked-in financial tables",
-        ))
-
-    application_finance = "\n".join([
-        _read("backend/app/api/services/finance/payment/service.py"),
-        _read("backend/app/api/services/finance/allocation/service.py"),
-    ])
-    if (
-        "financial.allocations" in application_finance
-        and "CREATE TABLE financial.allocations" not in financial_tables
-    ):
-        issues.append(IntegrityIssue(
-            "ALLOCATION_TABLE_UNBASELINED",
-            "live financial.allocations exists, but migration history is unavailable and bootstrap DDL defines payment_allocations",
-        ))
-    if set(live_transactions.get("allocation_projection_owners", [])) == {
-        "database_triggers",
-        "application_service",
+    runtime = evidence.get("runtime_role")
+    if not isinstance(runtime, dict) or runtime != {
+        "session_user": "erp_runtime",
+        "superuser": False,
+        "bypass_rls": False,
+        "owns_business_relations": False,
     }:
         issues.append(IntegrityIssue(
-            "LIVE_ALLOCATION_PROJECTION_OWNERSHIP_CONFLICT",
-            "live allocation triggers and the application both update financial projections",
-        ))
-    allocation_service = _read("backend/app/api/services/finance/allocation/service.py")
-    unscoped_allocation_reads = (
-        "def get_payment_allocations" in allocation_service
-        and "FROM financial.allocations\n            WHERE payment_id = :payment_id" in allocation_service
-        and "def get_invoice_summary" in allocation_service
-        and "FROM sales.invoices WHERE invoice_id = :invoice_id" in allocation_service
-    )
-    if unscoped_allocation_reads:
-        issues.append(IntegrityIssue(
-            "ALLOCATION_TENANT_SCOPE_MISSING",
-            "allocation read paths accept global IDs without an org predicate or tenant-owned join",
-        ))
-    allocate_route = allocation_routes.split(
-        "async def allocate_payment", 1
-    )[1].split("async def allocate_payment_bulk", 1)[0]
-    if "db.commit()" not in allocate_route:
-        issues.append(IntegrityIssue(
-            "ALLOCATION_MUTATION_NOT_COMMITTED",
-            "manual allocation returns success but the request closes without committing",
-        ))
-    projection_reconciliation = all(
-        "AllocationService.reconcile_allocation_projections" in method
-        for method in (
-            allocation_service.split("def create_allocation", 1)[1].split(
-                "def get_payment_status", 1
-            )[0],
-            allocation_service.split("def delete_allocation", 1)[1].split(
-                "def get_unallocated_payments", 1
-            )[0],
-            payment_service.split("def allocate_payment_to_invoices", 1)[1].split(
-                "def process_bank_reconciliation", 1
-            )[0],
-        )
-    )
-    if not projection_reconciliation:
-        issues.append(IntegrityIssue(
-            "ALLOCATION_PROJECTION_RECONCILIATION_MISSING",
-            "allocation writes do not explicitly reconcile payment, invoice, and outstanding projections",
+            "CANONICAL_RUNTIME_ROLE_LIVE_UNVERIFIED",
+            "live evidence does not prove erp_runtime is non-owner, non-superuser, and NOBYPASSRLS",
         ))
 
-    reconciliation_method = payment_service.split(
-        "def process_bank_reconciliation", 1
-    )[1].split("def create_general_payment", 1)[0]
-    if all(token in reconciliation_method for token in (
-        "financial.bank_reconciliations",
-        "bank_account",
-        "opening_balance",
-        "financial.unmatched_transactions",
-    )) and not live_transactions.get(
-        "bank_reconciliation_service_contract_matches_live", True
+    required_checks = {
+        "payment_idempotency_unique": True,
+        "allocation_table_present": True,
+        "allocation_projection_owner": "canonical_database_invariant",
+        "bank_reconciliation_contract": "bank_statements_and_reconciliation_matches",
+        "posted_journal_immutability": True,
+        "order_invoice_generation_owner": "canonical_command_functions",
+        "grn_inventory_effect_owner": "canonical_command_functions",
+        "finance_rls_enabled_and_forced": True,
+    }
+    checks = evidence.get("transaction_checks")
+    if not isinstance(checks, dict) or any(
+        checks.get(name) != expected for name, expected in required_checks.items()
     ):
         issues.append(IntegrityIssue(
-            "BANK_RECONCILIATION_SCHEMA_UNBASELINED",
-            "live bank reconciliation and payment columns do not match the application service contract",
+            "CANONICAL_TRANSACTION_LIVE_CONTRACT_UNVERIFIED",
+            "live canonical transaction ownership, idempotency, immutability, or forced-RLS checks are incomplete",
         ))
+    return issues
 
-    if not live_transactions.get("live_journal_immutability_triggers_present", True):
-        issues.append(IntegrityIssue(
-            "LIVE_JOURNAL_IMMUTABILITY_NOT_DEPLOYED",
-            "live journal tables lack the checked-in posted-header and posted-line immutability triggers",
-        ))
-    if set(live_transactions.get("order_invoice_generation_owners", [])) == {
-        "database_trigger",
-        "application_service",
-    }:
-        issues.append(IntegrityIssue(
-            "LIVE_ORDER_INVOICE_OWNERSHIP_CONFLICT",
-            "live order delivery trigger and application conversion paths can both generate invoices",
-        ))
-    if set(live_transactions.get("grn_inventory_effect_owners", [])) == {
-        "database_trigger",
-        "application_service",
-    }:
-        issues.append(IntegrityIssue(
-            "LIVE_GRN_INVENTORY_OWNERSHIP_CONFLICT",
-            "live GRN trigger and application paths can both apply inventory effects",
-        ))
 
-    component_calculator_imports = []
-    for path in (REPOSITORY_ROOT / "frontend/src/components").rglob("*"):
-        if path.suffix not in {".ts", ".tsx", ".js", ".jsx"}:
-            continue
-        if "EnterpriseCalculator" in path.read_text(encoding="utf-8", errors="ignore"):
-            component_calculator_imports.append(str(path.relative_to(REPOSITORY_ROOT)))
-    if component_calculator_imports:
-        issues.append(IntegrityIssue(
-            "CALCULATION_OWNER_DUPLICATED",
-            "active frontend components bypass backend calculation previews: "
-            + ", ".join(component_calculator_imports),
-        ))
-
+def collect_issues(
+    root: Path = REPOSITORY_ROOT,
+    *,
+    live_evidence_path: str | Path | None = None,
+    expected_git_sha: str | None = None,
+) -> list[IntegrityIssue]:
+    issues = _static_canonical_issues(root)
+    evidence = _load_evidence(root, live_evidence_path)
+    issues.extend(_live_evidence_issues(root, evidence, expected_git_sha))
     return issues
 
 
 def main() -> int:
-    issues = collect_issues()
-    print("=== Transaction Integrity Audit ===")
-    if not issues:
-        print("PASS: no high-risk transaction ownership conflicts found")
-        return 0
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--live-evidence",
+        help="fresh external JSON capture from canonical staging",
+    )
+    parser.add_argument(
+        "--expected-git-sha",
+        help="exact release SHA that the staging services must expose",
+    )
+    args = parser.parse_args()
+    try:
+        issues = collect_issues(
+            live_evidence_path=args.live_evidence,
+            expected_git_sha=args.expected_git_sha,
+        )
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+        print(f"Canonical transaction integrity: BLOCKED: {error}")
+        return 2
 
+    print("=== Canonical Transaction Integrity Audit ===")
+    if not issues:
+        print("PASS: canonical static contract and exact-SHA staging evidence verified")
+        return 0
     for issue in issues:
         print(f"FAIL [{issue.code}] {issue.message}")
     print(f"\n{len(issues)} release blocker(s)")

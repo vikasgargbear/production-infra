@@ -1122,6 +1122,21 @@ jobs:
           echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url" >> "$GITHUB_ENV"
           echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
 
+      - name: Capture and audit exact-SHA transaction integrity
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          mkdir -p staging-evidence
+          python3 backend/scripts/audit/capture_transaction_integrity_evidence.py \
+            --runtime-database-url "$DATABASE_URL" \
+            --admin-database-url "$PSYCOPG_DATABASE_URL" \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$GITHUB_SHA" \
+            --output staging-evidence/canonical-transaction-integrity.json
+          python3 backend/scripts/audit/transaction_integrity_audit.py \
+            --live-evidence staging-evidence/canonical-transaction-integrity.json \
+            --expected-git-sha "$GITHUB_SHA"
+
       - name: Configure OAuth and bind the reviewed staging client
         env:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence

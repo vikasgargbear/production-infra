@@ -46,6 +46,48 @@ test "$(psql -X -Atqc "SELECT has_function_privilege('erp_regulatory_importer', 
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "f"
 test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass")" = "true|true"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
+test "$(psql -X -Atqc "
+  SELECT
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_constraint
+       WHERE conrelid='automation.command_requests'::regclass
+         AND conname='command_requests_idempotency_uq' AND contype='u'
+    ),
+    pg_catalog.to_regclass('finance.allocations') IS NOT NULL,
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_trigger
+       WHERE tgrelid='finance.allocations'::regclass
+         AND tgname='allocations_guard_ct' AND NOT tgisinternal
+    ),
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_trigger
+       WHERE tgrelid='finance.journal_entries'::regclass
+         AND tgname='journal_entries_guard_ct' AND NOT tgisinternal
+    ),
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_trigger
+       WHERE tgrelid='finance.journal_lines'::regclass
+         AND tgname='journal_lines_guard_ct' AND NOT tgisinternal
+    ),
+    pg_catalog.to_regclass('finance.bank_statements') IS NOT NULL
+      AND pg_catalog.to_regclass('finance.bank_statement_lines') IS NOT NULL
+      AND pg_catalog.to_regclass('finance.reconciliation_matches') IS NOT NULL
+      AND pg_catalog.to_regclass('finance.bank_reconciliations') IS NULL,
+    (SELECT NOT rolsuper AND NOT rolbypassrls
+       FROM pg_catalog.pg_roles WHERE rolname='erp_runtime'),
+    (SELECT count(*)=8 AND pg_catalog.bool_and(relrowsecurity AND relforcerowsecurity)
+       FROM pg_catalog.pg_class
+      WHERE oid=ANY(ARRAY[
+        'finance.payments'::regclass,
+        'finance.allocations'::regclass,
+        'finance.open_items'::regclass,
+        'finance.journal_entries'::regclass,
+        'finance.journal_lines'::regclass,
+        'finance.accounting_events'::regclass,
+        'finance.bank_statements'::regclass,
+        'finance.reconciliation_matches'::regclass
+      ]))
+")" = "t|t|t|t|t|t|t|t"
 
 fixture_count=0
 while IFS= read -r fixture; do
