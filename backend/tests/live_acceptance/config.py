@@ -15,6 +15,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Live18GateError(RuntimeError):
@@ -82,8 +83,10 @@ def load_live18_config(env: Mapping[str, str] | None = None) -> Live18Config:
         raise Live18GateError("organization and branch identities must be canonical UUIDs")
 
     fixture_path = Path(_required(values, "LIVE18_FIXTURE_PATH"))
-    if not fixture_path.is_file():
-        raise Live18GateError("LIVE18_FIXTURE_PATH must name a reviewed fixture file")
+    if not fixture_path.is_absolute() or not fixture_path.is_file():
+        raise Live18GateError("LIVE18_FIXTURE_PATH must name an absolute reviewed fixture file")
+    if REPOSITORY_ROOT == fixture_path.resolve() or REPOSITORY_ROOT in fixture_path.resolve().parents:
+        raise Live18GateError("LIVE18_FIXTURE_PATH must remain outside the repository")
 
     return Live18Config(
         expected_deployed_sha=expected_sha,

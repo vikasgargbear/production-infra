@@ -11,6 +11,8 @@ A run is not live evidence unless all of the following are true:
 1. The target is an explicitly configured disposable organization.
 2. App and API metadata both expose the full `LIVE18_EXPECTED_DEPLOYED_SHA`.
 3. The requester and reviewer are distinct authenticated users.
+   Separate-approver operations also prove that the requester receives `403`
+   when attempting to approve their own immutable preview.
 4. Every business value and identity comes from the reviewed fixture or a
    canonical authenticated resolution read. No demo UUID, GST rate, amount,
    date, stock value, or fallback row is embedded in the harness.
@@ -32,9 +34,12 @@ uses of `finance.adjustment_note.prepare`; expense claim is published through
 The harness never contains live credentials or fixture business values. Supply
 them through the `LIVE18_*` environment described by
 `backend/tests/live_acceptance/config.py`. `LIVE18_FIXTURE_PATH` is a reviewed,
-untracked JSON file with `fixture_schema` set to
+untracked JSON file outside the repository with `fixture_schema` set to
 `aasopharma.live18.fixture.v1`, exactly 18 operation keys, and non-empty
-`prepare_steps`, `approval_steps`, and `execute_steps` arrays for each flow.
+`missing_required_steps`, `prepare_steps`, `approval_steps`, and `execute_steps`
+arrays for each flow. Every missing-required phase must assert a visible error,
+must not create a prepared command, and the valid phase must restart from an
+application route so invalid form state cannot leak into the valid proof.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

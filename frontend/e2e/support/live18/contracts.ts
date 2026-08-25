@@ -33,6 +33,7 @@ export interface UiStep {
 }
 
 export interface OperationFixture {
+  missing_required_steps: UiStep[];
   prepare_steps: UiStep[];
   approval_steps: UiStep[];
   execute_steps: UiStep[];
@@ -62,6 +63,13 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     if (required) throw new Error('LIVE18_FIXTURE_PATH is required for a live run.');
     return null;
   }
+  if (!path.isAbsolute(fixturePath)) {
+    throw new Error('LIVE18_FIXTURE_PATH must be an absolute path outside the repository.');
+  }
+  const relativeFixturePath = path.relative(repositoryRoot, fixturePath);
+  if (!relativeFixturePath.startsWith('..') && !path.isAbsolute(relativeFixturePath)) {
+    throw new Error('LIVE18_FIXTURE_PATH must remain outside the repository.');
+  }
   const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8')) as Live18Fixture;
   if (fixture.fixture_schema !== 'aasopharma.live18.fixture.v1'
     || !fixture.operations || typeof fixture.operations !== 'object') {
@@ -72,11 +80,28 @@ export function loadFixture(required: boolean): Live18Fixture | null {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error('The reviewed live18 fixture must name exactly the 18 registered operations.');
   }
+  const supportedActions: UiAction[] = [
+    'goto', 'click', 'fill', 'select', 'press', 'expectText',
+  ];
+  const supportedActors: Actor[] = ['requester', 'reviewer'];
   for (const [operationId, operation] of Object.entries(fixture.operations)) {
-    for (const phase of ['prepare_steps', 'approval_steps', 'execute_steps'] as const) {
+    for (const phase of [
+      'missing_required_steps', 'prepare_steps', 'approval_steps', 'execute_steps',
+    ] as const) {
       if (!Array.isArray(operation[phase]) || operation[phase].length === 0) {
         throw new Error(`${operationId}.${phase} must contain visible UI steps.`);
       }
+      for (const step of operation[phase]) {
+        if (!supportedActors.includes(step.actor) || !supportedActions.includes(step.action)) {
+          throw new Error(`${operationId}.${phase} contains an unsupported actor or action.`);
+        }
+      }
+    }
+    if (!operation.missing_required_steps.some(step => step.action === 'expectText')) {
+      throw new Error(`${operationId}.missing_required_steps must assert a visible validation error.`);
+    }
+    if (operation.prepare_steps[0].action !== 'goto') {
+      throw new Error(`${operationId}.prepare_steps must restart from an application route.`);
     }
   }
   return fixture;

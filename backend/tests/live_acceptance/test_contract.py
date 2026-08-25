@@ -132,6 +132,8 @@ def test_browser_harness_has_no_local_or_legacy_authority() -> None:
     assert "LIVE18_FIXTURE_PATH" in source
     assert "LIVE18_EXPECTED_DEPLOYED_SHA" in source
     assert "LIVE18_DENIAL_ACCESS_TOKEN" in source
+    assert "missing_required_steps" in source
+    assert "self_approval_probe" in source
     assert re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", source, re.I) is None
 
 

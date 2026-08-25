@@ -9,14 +9,17 @@ const required = (name: string): string => {
   return value;
 };
 
-const httpsOrigin = (name: string): string => {
-  const value = required(name).replace(/\/$/, '');
-  const parsed = new URL(value);
-  if (parsed.protocol !== 'https:' || ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)) {
-    throw new Error(`${name} must be a non-local HTTPS origin.`);
+const checkedHttpsOrigin = (value: string, name: string): string => {
+  const normalized = value.replace(/\/$/, '');
+  const parsed = new URL(normalized);
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password
+    || ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)) {
+    throw new Error(`${name} must be a non-local HTTPS origin without embedded credentials.`);
   }
-  return value;
+  return normalized;
 };
+
+const httpsOrigin = (name: string): string => checkedHttpsOrigin(required(name), name);
 
 export interface Live18BrowserConfig {
   appOrigin: string;
@@ -41,11 +44,12 @@ export function loadBrowserConfig(): Live18BrowserConfig {
   if (!UUID.test(expectedOrgId) || !UUID.test(expectedBranchId)) {
     throw new Error('Canonical organization and branch UUIDs are required.');
   }
-  const metadataUrls = JSON.parse(required('LIVE18_METADATA_URLS_JSON')) as unknown;
-  if (!Array.isArray(metadataUrls) || metadataUrls.length < 2
-    || !metadataUrls.every(value => typeof value === 'string' && /^https:\/\//.test(value))) {
+  const rawMetadataUrls = JSON.parse(required('LIVE18_METADATA_URLS_JSON')) as unknown;
+  if (!Array.isArray(rawMetadataUrls) || rawMetadataUrls.length < 2
+    || !rawMetadataUrls.every(value => typeof value === 'string')) {
     throw new Error('Distinct HTTPS app and API metadata URLs are required.');
   }
+  const metadataUrls = rawMetadataUrls.map(value => checkedHttpsOrigin(value, 'metadata URL'));
   if (new Set(metadataUrls).size !== metadataUrls.length) {
     throw new Error('App and API metadata URLs must be distinct.');
   }

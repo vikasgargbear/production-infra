@@ -165,10 +165,25 @@ async function runOperation(
     const reviewerApi = await apiClient(config.apiOrigin, reviewerSession.token);
     const denialApi = await apiClient(config.apiOrigin, config.denialAccessToken);
     try {
-      await runSteps(requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps);
+      await runSteps(
+        requesterPage, reviewerPage, config.appOrigin, operationFixture.missing_required_steps,
+      );
       await Promise.all([...pending]);
       const preparePath = `/api/web/actions/${contract.command_operation}/prepare`;
-      const prepared = captured.filter(item => item.method === 'POST' && item.path === preparePath);
+      const invalidPrepare = captured.filter(item => item.method === 'POST'
+        && item.path === preparePath && item.status >= 200 && item.status < 300);
+      expect(
+        invalidPrepare,
+        `${contract.id} missing-required-fields path must not prepare a command`,
+      ).toHaveLength(0);
+      await requesterPage.screenshot({
+        path: testInfo.outputPath(`${contract.id}-missing-required.png`), fullPage: true,
+      });
+
+      await runSteps(requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps);
+      await Promise.all([...pending]);
+      const prepared = captured.filter(item => item.method === 'POST' && item.path === preparePath
+        && item.status >= 200 && item.status < 300);
       expect(prepared, `${contract.id} must prepare exactly once through its visible UI`).toHaveLength(1);
       expect(prepared[0].actor).toBe('requester');
       expect(prepared[0].status).toBeGreaterThanOrEqual(200);
@@ -180,6 +195,26 @@ async function runOperation(
       const review = await responseJson(await reviewerApi.get(`/api/web/actions/commands/${commandId}/review`));
       expect(findDeep(review, 'preview_hash')).toBe(previewHash);
       assertExactScalars(review);
+
+      let selfApprovalProbe: { status: number; body: Record<string, unknown> } | null = null;
+      if (contract.approval_policy === 'separate_approver') {
+        const selfApproval = await requesterApi.post(
+          `/api/web/actions/commands/${commandId}/approve`,
+          {
+            data: {
+              preview_hash: previewHash,
+              approval_intent: 'approve',
+              idempotency_key: `live18-self-approval-${commandId}`,
+            },
+          },
+        );
+        const selfApprovalText = await selfApproval.text();
+        expect(selfApproval.status(), selfApprovalText).toBe(403);
+        selfApprovalProbe = {
+          status: selfApproval.status(),
+          body: jsonObject(selfApprovalText) || { raw: selfApprovalText },
+        };
+      }
 
       await runSteps(requesterPage, reviewerPage, config.appOrigin, operationFixture.approval_steps);
       await Promise.all([...pending]);
@@ -228,6 +263,9 @@ async function runOperation(
         organization_id: config.expectedOrgId,
         branch_id: config.expectedBranchId,
         rest_readback: readback,
+        self_approval_probe: selfApprovalProbe,
+        missing_required_http_evidence: captured.filter(item => item.method === 'POST'
+          && item.path === preparePath && item.status >= 400),
         http_evidence: captured,
         cleanup_id: findDeep(executions[0].responseBody, 'reversal_command_id') || null,
       };
