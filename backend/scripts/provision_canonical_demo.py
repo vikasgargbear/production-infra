@@ -826,6 +826,10 @@ def bootstrap_identity(
                 "automation.command.status.get", "read", "read_only", "none",
                 None, None,
             ),
+            (
+                "inventory.destructions.get", "read", "read_only", "none",
+                None, None,
+            ),
         )
         cursor.executemany(
             """
@@ -1960,6 +1964,7 @@ def seed_end_to_end_master(
             "journal_entry": "DEMO-JE-",
             "stock_count": "DEMO-SC-",
             "stock_transfer": "DEMO-ST-",
+            "destruction": "DEMO-DST-",
         }
         cursor.executemany(
             """
@@ -3361,7 +3366,8 @@ def seed_inventory_destruction_ui_fixture(
                    count(DISTINCT lot.id),sum(lot.remaining_base_quantity),
                    sum(lot.remaining_cgst_amount),sum(lot.remaining_sgst_amount),
                    sum(lot.remaining_igst_amount),sum(lot.remaining_cess_amount),
-                   count(DISTINCT restoration.id)
+                   count(DISTINCT restoration.id),
+                   sum(restoration.applied_base_quantity)
               FROM inventory.stock_balances balance
               JOIN inventory.batches batch ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
               JOIN inventory.locations location ON location.org_id=balance.org_id
@@ -3398,7 +3404,8 @@ def seed_inventory_destruction_ui_fixture(
         stock = cursor.fetchone()
         if (
             stock is None
-            or stock[0] != stock[8]
+            or stock[0] > stock[8]
+            or stock[0] != stock[14]
             or stock[0] <= 0
             or stock[1] <= 0
             or stock[2] <= 0

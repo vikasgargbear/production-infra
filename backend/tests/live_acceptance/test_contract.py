@@ -37,7 +37,7 @@ def test_browser_certification_selects_only_explicitly_ready_templates() -> None
     assert {item.id for item in ready} == {
         row["id"] for row in readiness["operations"] if row["status"] == "ready"
     }
-    assert "destruction" not in {item.id for item in ready}
+    assert "destruction" in {item.id for item in ready}
 
 
 def test_published_matrix_matches_the_reviewed_mcp_registry() -> None:

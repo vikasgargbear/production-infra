@@ -560,7 +560,7 @@ $needle$;
               AND returned_ledger.branch_id=branch.id
               AND returned_ledger.location_id=location.id
               AND returned_ledger.product_id=product.id
-              AND returned_ledger.batch_id=batch.id
+              AND returned_ledger.batch_id=(allocation->>'batch_id')::uuid
               AND returned_ledger.quantity_delta>0
               AND returned_document.document_type='sales_return_receipt'
               AND returned_document.status='posted')))
@@ -1088,6 +1088,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path=''
 AS $function$
+#variable_conflict use_variable
 DECLARE event tax.input_credit_reversal_events%ROWTYPE; expected_lines integer;
 BEGIN
   PERFORM erp_automation_commands.assert_inventory_destruction_physical_draft(
@@ -1443,7 +1444,8 @@ SECURITY DEFINER
 SET search_path=''
 AS $function$
 BEGIN
-  IF NEW.status='posted' AND OLD.status IS DISTINCT FROM 'posted' THEN
+  IF NEW.status='posted'
+     AND (TG_OP='INSERT' OR OLD.status IS DISTINCT FROM 'posted') THEN
     PERFORM erp_compliance_commands.create_supplier_invoice_input_credit_lots(
       NEW.org_id,NEW.id,NEW.posted_by_membership_id);
   END IF;
@@ -1454,8 +1456,39 @@ ALTER FUNCTION erp_compliance_commands.capture_supplier_invoice_input_credit_lot
 REVOKE ALL ON FUNCTION erp_compliance_commands.capture_supplier_invoice_input_credit_lots()
   FROM PUBLIC,erp_app,erp_runtime;
 CREATE TRIGGER supplier_invoice_input_credit_lots
-  AFTER UPDATE OF status ON procurement.supplier_invoices
+  AFTER INSERT OR UPDATE ON procurement.supplier_invoices
   FOR EACH ROW EXECUTE FUNCTION erp_compliance_commands.capture_supplier_invoice_input_credit_lots();
+
+CREATE OR REPLACE FUNCTION erp_compliance_commands.capture_tax_document_input_credit_lots()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=''
+AS $function$
+DECLARE actor_id uuid;
+BEGIN
+  IF NEW.supplier_invoice_id IS NOT NULL
+     AND NEW.document_class='supplier_invoice'
+     AND NEW.document_effect='original' THEN
+    SELECT invoice.posted_by_membership_id INTO actor_id
+      FROM procurement.supplier_invoices invoice
+     WHERE invoice.org_id=NEW.org_id AND invoice.id=NEW.supplier_invoice_id
+       AND invoice.status='posted';
+    IF actor_id IS NOT NULL THEN
+      PERFORM erp_compliance_commands.create_supplier_invoice_input_credit_lots(
+        NEW.org_id,NEW.supplier_invoice_id,actor_id);
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION erp_compliance_commands.capture_tax_document_input_credit_lots()
+  OWNER TO erp_migration_owner;
+REVOKE ALL ON FUNCTION erp_compliance_commands.capture_tax_document_input_credit_lots()
+  FROM PUBLIC,erp_app,erp_runtime;
+CREATE TRIGGER tax_document_input_credit_lots
+  AFTER INSERT ON tax.documents
+  FOR EACH ROW EXECUTE FUNCTION erp_compliance_commands.capture_tax_document_input_credit_lots();
 
 CREATE OR REPLACE FUNCTION erp_compliance_commands.capture_input_credit_stock_movement()
 RETURNS trigger

@@ -474,6 +474,9 @@ def test_bank_reconciliation_template_targets_exact_run_scoped_pair() -> None:
 
 def test_destruction_template_targets_exact_gst_lineage_and_split_review() -> None:
     root = Path(__file__).resolve().parents[3]
+    compiler = (
+        root / "backend/scripts/compile_live18_browser_fixture.py"
+    ).read_text()
     template = json.loads(
         (root / "frontend/e2e/live18/templates/destruction.json").read_text()
     )
@@ -511,6 +514,11 @@ def test_destruction_template_targets_exact_gst_lineage_and_split_review() -> No
     assert operation["prepare_steps"][9]["value"] == "2026-08-25T10:00:00.000Z"
     assert operation["approval_steps"][2]["value"] == "{{command_request_id}}"
     assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
+    assert "count(DISTINCT lot.id)=1" in compiler
+    assert (
+        "sum(lot.remaining_cgst_amount)*balance.on_hand_quantity/"
+        in compiler
+    )
 
 
 def test_customer_credit_note_targets_exact_invoice_and_post_return_ceiling() -> None:

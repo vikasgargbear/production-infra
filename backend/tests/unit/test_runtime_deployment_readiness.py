@@ -85,7 +85,7 @@ def test_expected_runtime_head_is_the_exact_checked_in_migration_head() -> None:
     contract = load_contract()
 
     assert contract.head == EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260825_0021"
-    assert contract.canonical_table_count == 114
+    assert contract.canonical_table_count == 118
 
 
 def test_runtime_revision_function_is_hash_bound_and_least_privilege() -> None:
