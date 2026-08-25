@@ -180,7 +180,7 @@ def test_runtime_automation_privilege_contract_includes_transfer_boundary():
         root
         / "database/canonical/commands_automation/test_automation_commands_rollback.sql"
     ).read_text()
-    assert "'resolve_inventory_transfer_prepare'" not in contract
+    assert contract.count("'resolve_inventory_transfer_prepare'") == 2
     assert contract.count("'persist_inventory_transfer_prepare'") == 2
-    assert "runtime_count<>20" in contract
-    assert "expected twenty reviewed runtime automation commands" in contract
+    assert "runtime_count<>21" in contract
+    assert "expected twenty-one reviewed runtime automation commands" in contract

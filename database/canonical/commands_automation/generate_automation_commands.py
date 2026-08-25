@@ -3954,7 +3954,7 @@ BEGIN
     'legal_scope',pg_catalog.jsonb_build_object('country','IN','currency','INR','movement','inter_branch_atomic',
       'approval_policy','actor_confirmation','batch_policy','strict_fefo_earliest_expiry_tier','tax_supply_created',false));
 END
-'''),
+''', runtime=True),
         *_function(
             '"assert_inventory_transfer_draft"(organization_id uuid, inventory_document_id uuid, resolved_document jsonb)',
             "void",
