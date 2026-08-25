@@ -1,5 +1,10 @@
 import ast
+import importlib
 import inspect
+import json
+import subprocess
+import sys
+from types import SimpleNamespace
 
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
@@ -8,16 +13,58 @@ from app.core.read_only_router import (
     include_explicit_non_persistent_post_utilities,
     include_legacy_read_only_router,
 )
-from app.main import app as production_app
 
 
-_EFFECTIVE_APP_ROUTES = tuple(
-    route
-    for route in production_app.routes
-    if hasattr(route, "dependant")
-    and hasattr(route, "endpoint")
-    and getattr(route, "methods", None)
-)
+def _load_effective_app_routes():
+    """Audit a true first import, independent of pytest's module graph."""
+
+    marker = "__ERP_ROUTE_GRAPH__="
+    probe = f"""
+import json
+from app.main import app
+rows = []
+for route in app.routes:
+    endpoint = getattr(route, 'endpoint', None)
+    methods = sorted(getattr(route, 'methods', None) or ())
+    if endpoint is None or not methods or not hasattr(route, 'dependant'):
+        continue
+    rows.append({{
+        'path': route.path,
+        'methods': methods,
+        'name': route.name,
+        'endpoint_module': endpoint.__module__,
+        'endpoint_name': endpoint.__name__,
+    }})
+print({marker!r} + json.dumps(rows, sort_keys=True))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if marker not in completed.stdout:
+        raise AssertionError(
+            "isolated production route probe returned no route graph: "
+            + completed.stderr[-1000:]
+        )
+    rows = json.loads(completed.stdout.rsplit(marker, 1)[1].strip())
+    routes = []
+    for row in rows:
+        endpoint_module = importlib.import_module(row["endpoint_module"])
+        endpoint = getattr(endpoint_module, row["endpoint_name"])
+        routes.append(
+            SimpleNamespace(
+                path=row["path"],
+                methods=set(row["methods"]),
+                name=row["name"],
+                endpoint=endpoint,
+            )
+        )
+    return tuple(routes)
+
+
+_EFFECTIVE_APP_ROUTES = _load_effective_app_routes()
 
 
 MUTATION_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
