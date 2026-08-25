@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 import hashlib
 from typing import Any, Callable
@@ -70,6 +71,26 @@ RESOURCE_TABLES = {
         "compliance.destructions",
         "inventory.inventory_documents",
         "destruction_id",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class HeaderOwnedDetailRelation:
+    """A reviewed link where the posted header points at an existing detail row."""
+
+    header_foreign_key: str
+    detail_primary_key: str
+
+
+HEADER_OWNED_DETAIL_RELATIONS = {
+    # A bank-reconciliation command returns finance.reconciliation_matches.id.
+    # The matched statement line is not a child carrying that match UUID: the
+    # reconciliation match owns bank_statement_line_id, which references the
+    # existing finance.bank_statement_lines.id row.
+    "finance.bank_reconciliation": HeaderOwnedDetailRelation(
+        header_foreign_key="bank_statement_line_id",
+        detail_primary_key="id",
     ),
 }
 
@@ -161,6 +182,38 @@ class CanonicalReconciler:
         )
         assert rows == [], f"{operation} leaked through canonical RLS to the denial tenant"
 
+    def _load_resource_rows(
+        self,
+        operation: str,
+        resource_id: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        header_table, detail_table, detail_link = RESOURCE_TABLES[operation]
+        header = self.query(
+            f"SELECT * FROM {_qualified(header_table)} WHERE org_id = %s::uuid AND id = %s::uuid",
+            (self.org_id, resource_id),
+        )
+        if len(header) != 1:
+            return header, []
+
+        header_owned = HEADER_OWNED_DETAIL_RELATIONS.get(operation)
+        if header_owned is None:
+            detail_value = resource_id
+            detail_column = detail_link
+        else:
+            detail_value = header[0].get(header_owned.header_foreign_key)
+            if detail_value is None:
+                raise AssertionError(
+                    f"{operation} header omitted reviewed relation "
+                    f"{header_owned.header_foreign_key}"
+                )
+            detail_column = header_owned.detail_primary_key
+
+        details = self.query(
+            f"SELECT * FROM {_qualified(detail_table)} WHERE org_id = %s::uuid AND {_qualified(detail_column)} = %s::uuid ORDER BY id",
+            (self.org_id, detail_value),
+        )
+        return header, details
+
     def reconcile(
         self,
         command_request_id: str,
@@ -170,7 +223,6 @@ class CanonicalReconciler:
     ) -> dict[str, Any]:
         if operation not in RESOURCE_TABLES:
             raise AssertionError(f"operation has no reconciliation owner: {operation}")
-        header_table, line_table, line_fk = RESOURCE_TABLES[operation]
         command = self.query(
             """
             SELECT status, result_resource_id, preview_hash, response_hash, row_version
@@ -193,15 +245,8 @@ class CanonicalReconciler:
         assert approvals and all(row["decision"] == "approved" for row in approvals)
         assert all(row["preview_hash"] == command[0]["preview_hash"] for row in approvals)
 
-        header = self.query(
-            f"SELECT * FROM {_qualified(header_table)} WHERE org_id = %s::uuid AND id = %s::uuid",
-            (self.org_id, resource_id),
-        )
+        header, lines = self._load_resource_rows(operation, resource_id)
         assert len(header) == 1
-        lines = self.query(
-            f"SELECT * FROM {_qualified(line_table)} WHERE org_id = %s::uuid AND {_qualified(line_fk)} = %s::uuid ORDER BY id",
-            (self.org_id, resource_id),
-        )
         assert lines, f"{operation} posted without typed lines/allocations"
 
         line_to_header = {
