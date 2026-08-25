@@ -340,6 +340,10 @@ def main() -> None:
             assert readback["audit_event_count"] >= 2
             assert readback["outbox_event_count"] >= 2
             with Session(bind=read_connection) as runtime_session:
+                runtime_session.execute(
+                    text("SELECT erp_security.activate_context(:auth_user_id,:org_id)"),
+                    {"auth_user_id": MAKER_AUTH, "org_id": ORG},
+                )
                 assert runtime_session.scalar(text(
                     "SELECT count(*) FROM finance.reconciliation_matches WHERE org_id=:org AND bank_statement_line_id=:line"
                 ), {"org": ORG, "line": STATEMENT_LINE}) == 1
