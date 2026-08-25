@@ -2,9 +2,10 @@
  * Branches API Module
  */
 
-import { createCrudApi } from '../../utils/createCrudApi';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
+import { apiHelpers } from '../../apiClient';
+import { decodeCanonicalBranchList } from '../master/canonicalMasterReads';
 
 // ============================================
 // Type Definitions
@@ -33,17 +34,15 @@ export interface BranchData {
 // API Module
 // ============================================
 
-const crud = createCrudApi({ basePath: '/branches', createPath: '/branches/', useCleanData: false });
-
 export const branchesApi = {
-    ...crud,
+    getAll: (): Promise<AxiosResponse> => apiHelpers.get('/branches')
+        .then(response => ({ ...response, data: decodeCanonicalBranchList(response.data) })),
     create: (_data: BranchData) => rejectCanonicalWrite('Legacy branch creation'),
     update: (_branchId: number | string, _data: Partial<BranchData>) =>
         rejectCanonicalWrite('Legacy branch editing'),
     delete: (_branchId: number | string) => rejectCanonicalWrite('Legacy branch deletion'),
 } as {
-    getAll: (params?: BranchParams) => Promise<AxiosResponse>;
-    getById: (branchId: number | string) => Promise<AxiosResponse>;
+    getAll: () => Promise<AxiosResponse>;
     create: (data: BranchData) => Promise<AxiosResponse>;
     update: (branchId: number | string, data: Partial<BranchData>) => Promise<AxiosResponse>;
     delete: (branchId: number | string) => Promise<AxiosResponse>;

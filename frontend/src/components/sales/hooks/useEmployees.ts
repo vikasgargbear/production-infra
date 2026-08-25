@@ -30,17 +30,11 @@ export function useEmployees(): UseEmployeesReturn {
         setError(null);
 
         try {
-            const response = await employeesApi.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
-
-            if (response.success || response.data) {
-                const data = response.data || [];
-                // Deduplicate by employee_id
-                const unique = Array.from(
-                    new Map(data.map(e => [e.employee_id, e])).values()
-                );
-                setEmployees(unique);
-                console.log(`[useEmployees] Loaded ${unique.length} employees from API`);
-            }
+            const response = await employeesApi.getAll({ limit: 100 });
+            const unique = Array.from(
+                new Map(response.data.employees.map(e => [e.employee_id, e])).values()
+            ) as BaseEmployee[];
+            setEmployees(unique);
         } catch (apiError) {
             console.error('[useEmployees] API request failed:', apiError);
             setError('Failed to load employees from the API');

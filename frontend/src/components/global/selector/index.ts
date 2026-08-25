@@ -4,7 +4,6 @@
  */
 
 export { default as AddressSelector } from './AddressSelector';
-export { default as BankAccountSelector } from './BankAccountSelector';
 export { default as BatchSelector } from './BatchSelector';
 export { default as InvoiceSelector } from './InvoiceSelector';
 export { default as PackTypeSelector } from './PackTypeSelector';

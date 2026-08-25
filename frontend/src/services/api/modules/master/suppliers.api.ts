@@ -6,9 +6,9 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { createCrudApi } from '../../utils/createCrudApi';
 import { cleanData } from '../../utils/dataUtils';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
+import { decodeCanonicalSupplierList } from './canonicalMasterReads';
 
 // ============================================================================
 // TYPES
@@ -73,10 +73,9 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
 // API
 // ============================================================================
 
-const crud = createCrudApi({ basePath: '/suppliers', createPath: '/suppliers/' });
-
 export const suppliersApi = {
-  ...crud,
+  getAll: (params: SupplierParams = {}) => apiHelpers.get('/suppliers', { params })
+    .then(response => ({ ...response, data: decodeCanonicalSupplierList(response.data) })),
 
   create: (data: Record<string, any>) => {
     return apiHelpers.post('/suppliers/', toCanonicalSupplierCreate(data));
@@ -89,35 +88,6 @@ export const suppliersApi = {
   search: (query: string, params: SupplierParams = {}) => {
     return apiHelpers.get('/suppliers', {
       params: { search: query, ...params }
-    });
+    }).then(response => ({ ...response, data: decodeCanonicalSupplierList(response.data) }));
   },
-
-  // Get suppliers with outstanding payments
-  getWithOutstanding: () => {
-    return apiHelpers.get('/suppliers', {
-      params: { has_outstanding: true }
-    });
-  },
-
-  // Get supplier ledger
-  getLedger: (supplierId: number | string, dateFrom?: string, dateTo?: string) => {
-    return apiHelpers.get(`/suppliers/${supplierId}/ledger`, {
-      params: { date_from: dateFrom, date_to: dateTo }
-    });
-  },
-
-  // Get supplier outstanding balance
-  getOutstandingBalance: (supplierId: number | string) => {
-    return apiHelpers.get(`/suppliers/${supplierId}/outstanding`);
-  },
-
-  // Get all suppliers with outstanding amounts
-  getOutstanding: () => {
-    return apiHelpers.get('/suppliers/outstanding');
-  },
-
-  // Get supplier transactions
-  getTransactions: (supplierId: number | string, params: any = {}) => {
-    return apiHelpers.get(`/suppliers/${supplierId}/transactions`, { params });
-  }
 };

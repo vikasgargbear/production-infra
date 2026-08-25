@@ -110,11 +110,11 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
     OperationContract(
         key="master.products.search",
         method="GET",
-        path="/api/products/search",
+        path="/api/products",
         operation_id="master_search_products_v1",
         domain="master_data",
         owner="inventory",
-        permission="inventory.view",
+        permission="master.view",
         oauth_scope="erp.master.read",
         risk=OperationRisk.READ_ONLY,
         tenant_scope=TenantScope.ORGANIZATION,
@@ -130,7 +130,7 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
     OperationContract(
         key="master.suppliers.search",
         method="GET",
-        path="/api/suppliers/search",
+        path="/api/suppliers",
         operation_id="master_search_suppliers_v1",
         domain="master_data",
         owner="procurement",
@@ -267,13 +267,18 @@ def _dependency_calls(route: APIRoute) -> List[Any]:
 
 def _validate_route_security(route: APIRoute, operation: OperationContract) -> None:
     calls = _dependency_calls(route)
-    if get_org_context not in calls:
+    permission_checks = [call for call in calls if isinstance(call, PermissionChecker)]
+    # Canonical routes resolve the verified ERP JWT once through
+    # PermissionChecker; its returned user contains the signed org_id consumed
+    # by the RLS activation boundary.  Older tenant-aware routes expose the
+    # equivalent claim through get_org_context.  Either is JWT-derived; a raw
+    # header or request parameter is never accepted as organization authority.
+    if get_org_context not in calls and not permission_checks:
         raise RuntimeError(
             f"Contract route has no JWT organization context: {operation.key}"
         )
 
     permission_module, permission_action = operation.permission.split(".", 1)
-    permission_checks = [call for call in calls if isinstance(call, PermissionChecker)]
     if not any(
         checker.module == permission_module
         and checker.permission == permission_action

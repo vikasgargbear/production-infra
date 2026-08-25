@@ -100,10 +100,8 @@ export function useSalesTransaction<
     const loadEmployees = useCallback(async () => {
         setLoadingEmployees(true);
         try {
-            const response = await employeesApi.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
-            if (response.success || response.data) {
-                setEmployees(response.data || []);
-            }
+            const response = await employeesApi.getAll({ limit: 100 });
+            setEmployees(response.data.employees as BaseEmployee[]);
         } catch (error) {
             console.error(`[useSalesTransaction:${documentType}] Failed to load employees:`, error);
         } finally {

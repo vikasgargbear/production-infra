@@ -41,6 +41,7 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
     const [reportData, setReportData] = useState<any>(null);
+    const [exportError, setExportError] = useState('');
     const { exportToCSV } = useGSTExport();
     const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
@@ -140,15 +141,23 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
 
     const selectReport = (report: GSTReportType) => {
         setReportData(null);
+        setExportError('');
         setSelectedReport(report);
     };
 
     // Handle export
     const handleExport = () => {
         if (reportData) {
-            exportToCSV(reportData, { filename: `gst_${selectedReport}`, reportType: selectedReport });
+            try {
+                exportToCSV(reportData, { filename: `gst_${selectedReport}`, reportType: selectedReport });
+                setExportError('');
+            } catch (caught) {
+                setExportError(caught instanceof Error ? caught.message : 'GST export is unavailable.');
+            }
         }
     };
+
+    const canExport = reportData && ['gstr-1', 'hsn-summary', 'party-wise'].includes(selectedReport);
 
     // Render current report
     const renderReport = () => {
@@ -307,7 +316,7 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                         <Columns3 className="h-4 w-4 mr-1.5" />
                         {showTaxBreakdown ? 'Hide' : 'Show'} CGST/SGST/IGST
                     </button>
-                    {reportData && (
+                    {canExport && (
                         <button
                             type="button"
                             onClick={handleExport}
@@ -319,6 +328,12 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                     )}
                 </div>
             </div>
+
+            {exportError && (
+                <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    {exportError}
+                </div>
+            )}
 
             {/* Report Content */}
             <div>

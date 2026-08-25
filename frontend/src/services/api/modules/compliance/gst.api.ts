@@ -26,8 +26,7 @@ const ENDPOINTS = {
     TAX_RATES: '/gst/tax-rates',
     CALCULATE: '/gst/calculate',
     COMPLIANCE: '/gst/compliance',
-    RECONCILIATION: '/gst/reconciliation',
-    REPORTS: '/reports/tax'
+    RECONCILIATION: '/gst/reconciliation'
 };
 
 export const gstApi = {
@@ -73,14 +72,6 @@ export const gstApi = {
 
         gstr3b: (filters: GSTFilters = {}) => {
             return apiHelpers.get(`${ENDPOINTS.BASE}/reports/gstr3b`, { params: filters });
-        },
-
-        gstr2a: (filters: GSTFilters = {}) => {
-            return apiHelpers.get(`${ENDPOINTS.BASE}/reports/tax/gstr2a`, { params: filters });
-        },
-
-        hsnSummary: (filters: GSTFilters = {}) => {
-            return apiHelpers.get(`${ENDPOINTS.REPORTS}/hsn`, { params: filters });
         },
 
         creditDebitNotes: (filters: GSTFilters = {}) => {

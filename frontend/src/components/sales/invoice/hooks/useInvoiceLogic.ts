@@ -321,11 +321,7 @@ export const useInvoiceLogic = (
                 // Load employee choices directly from the API without local caches.
                 try {
                     const employeeResponse = await employeesApi.getAll({ limit: 100 });
-                    const rawData = employeeResponse?.data || employeeResponse || [];
-                    const employeesList = Array.isArray(rawData)
-                        ? rawData
-                        : ((rawData as { data?: Employee[]; employees?: Employee[] }).data ||
-                            (rawData as { employees?: Employee[] }).employees || []);
+                    const employeesList = employeeResponse.data.employees as Employee[];
                     const uniqueEmployees = Array.from(
                         new Map(employeesList.map((employee: Employee) => [employee.employee_id, employee])).values()
                     );

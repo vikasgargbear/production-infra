@@ -61,7 +61,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
   const loadBranches = useCallback(async () => {
     setBusy(true); setError('');
     try {
-      const response = await branchesApi.getAll({ is_active: true });
+      const response = await branchesApi.getAll();
       const raw = Array.isArray(response.data?.branches) ? response.data.branches : [];
       const next: BranchChoice[] = raw.filter((row: any) => row?.is_active !== false
         && isCanonicalUuid(String(row?.branch_id || ''))

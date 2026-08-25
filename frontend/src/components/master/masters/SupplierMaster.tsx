@@ -16,7 +16,6 @@ import SupplierFlow from '../suppliers/SupplierFlow';
 import { useEntityMaster } from '../hooks';
 import ContactActions from './ContactActions';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
-import { withoutUnownedSupplierOutstanding } from './supplierProjection';
 
 // ============================================================================
 // Types
@@ -27,10 +26,10 @@ interface Supplier {
   supplier_code?: string;
   supplier_name: string;
   supplier_type?: string;
-  primary_phone: string;
-  primary_email?: string;
+  primary_phone?: string | null;
+  primary_email?: string | null;
   whatsapp_number?: string;
-  gst_number?: string;
+  gst_number?: string | null;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_validity?: string;
@@ -55,10 +54,8 @@ interface Supplier {
 
 export const loadCanonicalSuppliers = async () => {
   const response = await suppliersApi.getAll();
-  const rows = Array.isArray(response.data)
-    ? response.data
-    : Array.isArray(response.data?.suppliers) ? response.data.suppliers : [];
-  return { ...response, data: rows.map(withoutUnownedSupplierOutstanding) };
+  const rows = response.data;
+  return { ...response, data: rows as Supplier[] };
 };
 
 // ============================================================================

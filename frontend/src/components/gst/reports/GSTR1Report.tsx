@@ -64,6 +64,16 @@ const exactMoney = (value: unknown, label: string) => normalizeAuthoritativeDeci
     scale: 2, maximumWholeDigits: 20, allowNegative: true,
 });
 
+const requiredTextFact = (value: unknown, label: string): string => {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(`GSTR-1 is missing canonical ${label}.`);
+    return value.trim();
+};
+
+const requiredCountFact = (value: unknown, label: string): number => {
+    if (!Number.isSafeInteger(value) || Number(value) < 0) throw new Error(`GSTR-1 has invalid canonical ${label}.`);
+    return Number(value);
+};
+
 const GSTR1Report: React.FC<GSTR1ReportProps> = ({
     dateRange = currentMonthRange(),
     refreshTrigger = 0,
@@ -73,7 +83,7 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
     const onDataReadyRef = useRef(onDataReady);
     onDataReadyRef.current = onDataReady;
     const [data, setData] = useState<ExactGSTR1Data | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [creditDebitNotes, setCreditDebitNotes] = useState<any[]>([]);
 
@@ -89,9 +99,20 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                     date_to: dateRange.to,
                 });
                 const payload = response?.data || response;
+                if (!payload || typeof payload !== 'object'
+                    || !Array.isArray(payload.b2b)
+                    || !Array.isArray(payload.notes)
+                    || !payload.b2c?.small
+                    || !payload.b2c?.large
+                    || !payload.summary) {
+                    throw new Error('Canonical GSTR-1 response is incomplete.');
+                }
                 const result: ExactGSTR1Data = {
-                    b2b: (payload?.b2b || []).map((row: any) => ({
+                    b2b: payload.b2b.map((row: any, index: number) => ({
                         ...row,
+                        gst_number: requiredTextFact(row.gst_number, `B2B row ${index + 1} GSTIN`),
+                        name: requiredTextFact(row.name, `B2B row ${index + 1} party name`),
+                        invoices: requiredCountFact(row.invoices, `B2B row ${index + 1} invoice count`),
                         taxableValue: exactMoney(row.taxableValue, 'GSTR-1 B2B taxable value'),
                         cgst: exactMoney(row.cgst, 'GSTR-1 B2B CGST'),
                         sgst: exactMoney(row.sgst, 'GSTR-1 B2B SGST'),
@@ -100,15 +121,15 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                         totalTax: exactMoney(row.totalTax, 'GSTR-1 B2B total tax'),
                     })),
                     b2c: {
-                        small: payload?.b2c?.small,
-                        large: payload?.b2c?.large,
+                        small: payload.b2c.small,
+                        large: payload.b2c.large,
                     },
-                    notes: payload?.notes || [],
+                    notes: payload.notes,
                     summary: {
-                        totalInvoices: payload?.summary?.totalInvoices,
-                        totalTaxableValue: exactMoney(payload?.summary?.totalTaxableValue, 'GSTR-1 taxable value'),
-                        totalTax: exactMoney(payload?.summary?.totalTax, 'GSTR-1 total tax'),
-                        netAdjustment: exactMoney(payload?.summary?.netAdjustment, 'GSTR-1 net adjustment'),
+                        totalInvoices: payload.summary.totalInvoices,
+                        totalTaxableValue: exactMoney(payload.summary.totalTaxableValue, 'GSTR-1 taxable value'),
+                        totalTax: exactMoney(payload.summary.totalTax, 'GSTR-1 total tax'),
+                        netAdjustment: exactMoney(payload.summary.netAdjustment, 'GSTR-1 net adjustment'),
                     },
                 };
                 for (const [label, bucket] of Object.entries(result.b2c)) {
@@ -117,12 +138,14 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                         bucket[field] = exactMoney(bucket[field], `GSTR-1 ${label} ${field}`);
                     }
                 }
-                if (!Number.isSafeInteger(result.summary.totalInvoices)) throw new Error('GSTR-1 invoice count is invalid');
+                result.summary.totalInvoices = requiredCountFact(result.summary.totalInvoices, 'invoice count');
                 setCreditDebitNotes(result.notes);
                 setData(result);
                 onDataReadyRef.current?.(result);
             } catch (err) {
-                setError('Failed to load GSTR1 data');
+                setData(null);
+                onDataReadyRef.current?.(null);
+                setError(err instanceof Error ? err.message : 'Canonical GSTR-1 data is unavailable.');
             } finally {
                 setLoading(false);
             }
@@ -140,11 +163,11 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
         );
     }
 
-    if (error && !data) {
+    if (error || !data) {
         return (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <AlertCircle className="h-5 w-5 text-red-600 inline mr-2" />
-                <span className="text-red-800">{error}</span>
+                <span className="text-red-800">{error || 'Canonical GSTR-1 data is unavailable.'}</span>
             </div>
         );
     }
@@ -169,19 +192,19 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Total Invoices</div>
-                    <div className="text-2xl font-bold">{data?.summary.totalInvoices || 0}</div>
+                    <div className="text-2xl font-bold">{data.summary.totalInvoices}</div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Taxable Value</div>
-                    <div className="text-2xl font-bold">{formatExactCurrency(data?.summary.totalTaxableValue || '0.00', 'GSTR-1 taxable value')}</div>
+                    <div className="text-2xl font-bold">{formatExactCurrency(data.summary.totalTaxableValue, 'GSTR-1 taxable value')}</div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Total GST</div>
-                    <div className="text-2xl font-bold">{formatExactCurrency(data?.summary.totalTax || '0.00', 'GSTR-1 total tax')}</div>
+                    <div className="text-2xl font-bold">{formatExactCurrency(data.summary.totalTax, 'GSTR-1 total tax')}</div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
                     <div className="text-sm text-gray-600">Net Adjustment</div>
-                    <div className="text-2xl font-bold">{formatExactCurrency(data?.summary.netAdjustment || '0.00', 'GSTR-1 net adjustment')}</div>
+                    <div className="text-2xl font-bold">{formatExactCurrency(data.summary.netAdjustment, 'GSTR-1 net adjustment')}</div>
                 </div>
             </div>
 
@@ -192,7 +215,7 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
                     <p className="text-sm text-gray-600">Invoices with GSTIN</p>
                 </div>
                 <DataTable
-                    data={data?.b2b || []}
+                    data={data.b2b}
                     keyField="gst_number"
                     columns={b2bColumns}
                 />
@@ -201,36 +224,36 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({
             {/* B2C Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-lg border p-4">
-                    <h4 className="font-semibold mb-2">B2C Small (&lt; ₹2.5L)</h4>
+                    <h4 className="font-semibold mb-2">B2C Small (per reporting rule)</h4>
                     <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                             <span>Count:</span>
-                            <span>{data?.b2c.small.count || 0}</span>
+                            <span>{data.b2c.small.count}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Taxable:</span>
-                            <span>{formatExactCurrency(data?.b2c.small.taxableValue || '0.00', 'GSTR-1 B2C small taxable')}</span>
+                            <span>{formatExactCurrency(data.b2c.small.taxableValue, 'GSTR-1 B2C small taxable')}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Total GST:</span>
-                            <span>{formatExactCurrency(data?.b2c.small.totalTax || '0.00', 'GSTR-1 B2C small tax')}</span>
+                            <span>{formatExactCurrency(data.b2c.small.totalTax, 'GSTR-1 B2C small tax')}</span>
                         </div>
                     </div>
                 </div>
                 <div className="bg-white rounded-lg border p-4">
-                    <h4 className="font-semibold mb-2">B2C Large (≥ ₹2.5L)</h4>
+                    <h4 className="font-semibold mb-2">B2C Large (per reporting rule)</h4>
                     <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                             <span>Count:</span>
-                            <span>{data?.b2c.large.count || 0}</span>
+                            <span>{data.b2c.large.count}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Taxable:</span>
-                            <span>{formatExactCurrency(data?.b2c.large.taxableValue || '0.00', 'GSTR-1 B2C large taxable')}</span>
+                            <span>{formatExactCurrency(data.b2c.large.taxableValue, 'GSTR-1 B2C large taxable')}</span>
                         </div>
                         <div className="flex justify-between">
                             <span>Total GST:</span>
-                            <span>{formatExactCurrency(data?.b2c.large.totalTax || '0.00', 'GSTR-1 B2C large tax')}</span>
+                            <span>{formatExactCurrency(data.b2c.large.totalTax, 'GSTR-1 B2C large tax')}</span>
                         </div>
                     </div>
                 </div>

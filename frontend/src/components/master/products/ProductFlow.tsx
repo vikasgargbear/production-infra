@@ -12,11 +12,12 @@ import {
   type ProductMutationResponse,
   type ProductUpdateInput,
 } from '../../../types/models/product';
+import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
 
 interface ProductFlowProps {
   open?: boolean;
   show?: boolean;
-  product?: Partial<Product> | null;
+  product?: Partial<Product> | CanonicalProductRead | null;
   onClose?: () => void;
   onProductCreated?: (product: ProductMutationResponse) => void;
   initialProductName?: string;
@@ -29,7 +30,7 @@ type DraftForm = {
   product_kind: ProductCreateInput['product_kind'];
 };
 
-const initialForm = (product?: Partial<Product> | null, name = ''): DraftForm => ({
+const initialForm = (product?: Partial<Product> | CanonicalProductRead | null, name = ''): DraftForm => ({
   product_name: product?.product_name ?? name,
   product_code: product?.product_code ?? '',
   generic_name: product?.generic_name ?? '',

@@ -99,8 +99,9 @@ test('financial comparisons come from equal-period backend facts, never zero pla
   expect(salesReport).toContain('requiredNumberFact');
   expect(salesReport).toContain('Comparison unavailable');
   expect(salesReport).not.toContain('summaryData.sales_growth || 0');
-  expect(taxAnalytics).toContain("'Unavailable'");
-  expect(taxAnalytics).not.toContain('data.compliance_score || 100');
+  expect(taxAnalytics).toContain('Tax analytics unavailable');
+  expect(taxAnalytics).toContain('Draft document totals');
+  expect(taxAnalytics).not.toContain('/tax-entries/analytics/summary');
 });
 
 test('payment analytics uses the organization clock and strict canonical projections', () => {

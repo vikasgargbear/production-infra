@@ -1,9 +1,9 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
-import type { Product } from '../../../types/models/product';
+import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
 
 interface ProductDraftDeleteDialogProps {
-  product: Product | null;
+  product: CanonicalProductRead | null;
   deleting: boolean;
   error: string | null;
   onCancel: () => void;

@@ -58,7 +58,6 @@ import { bankAccountsApi } from './modules/master/bankAccounts.api';
 import { companyApi } from './modules/org/company.api';
 import organizationsApi from './modules/org/organizations.api';
 import { branchesApi } from './modules/org/branches.api';
-import { departmentsApi } from './modules/org/departments.api';
 
 // =========================================================================
 // PURCHASE
@@ -139,7 +138,6 @@ export {
   companyApi,
   organizationsApi,
   branchesApi,
-  departmentsApi,
 
   // Purchase
   purchasesApi,
@@ -200,7 +198,7 @@ const apiModules = {
   master: { customers: customersApi, suppliers: suppliersApi, products: productsApi, employees: employeesApi, bankAccounts: bankAccountsApi },
 
   // Org
-  org: { company: companyApi, organizations: organizationsApi, branches: branchesApi, departments: departmentsApi },
+  org: { company: companyApi, organizations: organizationsApi, branches: branchesApi },
 
   // Purchase
   purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },

@@ -17,8 +17,6 @@ from app.main import app
 ROOT = Path(__file__).resolve().parents[3]
 
 EXPECTED_LEGACY_ROUTER_REFERENCES = {
-    "customers.router", "suppliers.router", "products.router", "branches.router",
-    "departments.router", "employees.router", "bank_accounts.router",
     "sales_returns_router", "purchase_returns_router", "inventory.router",
     "stock_adjustments.router", "stock_movements.router", "stock_writeoff.router",
     "payments.router", "payment_allocation.router", "credit_debit_notes.router",
@@ -27,6 +25,13 @@ EXPECTED_LEGACY_ROUTER_REFERENCES = {
 
 
 RETIRED_MODULE_PREFIXES = (
+    "app.api.routes.master.customers.",
+    "app.api.routes.master.suppliers.",
+    "app.api.routes.master.products.",
+    "app.api.routes.master.branches.",
+    "app.api.routes.master.departments.",
+    "app.api.routes.master.employees.",
+    "app.api.routes.master.bank_accounts.",
     "app.api.routes.sales.orders.",
     "app.api.routes.sales.invoices.",
     "app.api.routes.sales.challans.",
@@ -44,34 +49,6 @@ RETIRED_MODULE_PREFIXES = (
 
 
 LEGACY_READ_INVENTORY = {
-    "app.api.routes.master.customers.routes": {
-        "/api/customers/all-with-addresses", "/api/customers/",
-        "/api/customers/{customer_id}", "/api/customers/{customer_id}/ledger",
-        "/api/customers/{customer_id}/outstanding", "/api/customers/{customer_id}/addresses",
-    },
-    "app.api.routes.master.suppliers.routes": {
-        "/api/suppliers/search", "/api/suppliers/", "/api/suppliers/{supplier_id}",
-        "/api/suppliers/{supplier_id}/products", "/api/suppliers/{supplier_id}/purchases",
-    },
-    "app.api.routes.master.products.routes": {
-        "/api/products/", "/api/products", "/api/products/search",
-        "/api/products/search-with-batches", "/api/products/all-with-batches",
-        "/api/products/{product_id}", "/api/products/{product_id}/batches",
-        "/api/products/master/categories", "/api/products/master/types",
-        "/api/products/master/classes",
-    },
-    "app.api.routes.master.branches.routes": {
-        "/api/branches/", "/api/branches/{branch_id}",
-    },
-    "app.api.routes.master.departments.routes": {
-        "/api/departments/", "/api/departments/{department_id}",
-    },
-    "app.api.routes.master.employees.routes": {
-        "/api/employees", "/api/employees/{employee_id}",
-    },
-    "app.api.routes.master.bank_accounts.routes": {
-        "/api/bank-accounts/", "/api/bank-accounts",
-    },
     "app.api.routes.returns.sales.routes": {
         "/api/sale-returns/", "/api/sale-returns/returnable-invoices",
         "/api/sale-returns/invoice/{invoice_id}/returns",
@@ -176,6 +153,15 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
     paths = app.openapi()["paths"]
 
     for retired_path in {
+        "/api/customers/{customer_id}", "/api/customers/{customer_id}/ledger",
+        "/api/customers/{customer_id}/outstanding",
+        "/api/suppliers/search", "/api/suppliers/{supplier_id}",
+        "/api/suppliers/{supplier_id}/products", "/api/suppliers/{supplier_id}/purchases",
+        "/api/products/search",
+        "/api/products/master/categories", "/api/products/master/types",
+        "/api/products/master/classes", "/api/branches/{branch_id}",
+        "/api/departments/", "/api/departments/{department_id}",
+        "/api/employees/{employee_id}",
         "/api/sales-orders/employees", "/api/sales-orders/dashboard/stats",
         "/api/challan/analytics/summary", "/api/conversions/conversions/eligible-challans",
         "/api/purchases/{purchase_id}/for-entry", "/api/purchases/{purchase_id}/items",
@@ -197,7 +183,16 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
     }:
         assert retired_path not in paths
 
+    assert "get" not in paths["/api/products/{product_id}"]
+    assert {"put", "delete"} <= set(paths["/api/products/{product_id}"])
+
     for canonical_path in {
+        "/api/customers", "/api/customers/", "/api/customers/all-with-addresses",
+        "/api/customers/{customer_id}/addresses",
+        "/api/suppliers", "/api/suppliers/", "/api/products", "/api/products/",
+        "/api/products/search-with-batches", "/api/products/all-with-batches",
+        "/api/products/{product_id}/batches", "/api/employees", "/api/employees/",
+        "/api/branches", "/api/branches/", "/api/bank-accounts", "/api/bank-accounts/",
         "/api/sales-orders/", "/api/sales-orders/{order_id}",
         "/api/canonical/sales-orders/{order_id}/acceptance-readback",
         "/api/invoices/", "/api/invoices/{invoice_id}",

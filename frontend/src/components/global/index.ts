@@ -15,7 +15,6 @@ export {
 // ============== SELECTOR COMPONENTS ==============
 export {
     AddressSelector,
-    BankAccountSelector,
     BatchSelector,
     InvoiceSelector,
     PackTypeSelector

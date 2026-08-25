@@ -11,7 +11,6 @@ import {
     AddressForm,
     PrintUtility
 } from '../../../global';
-import BankAccountSelector from '../../../global/selector/BankAccountSelector';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, BankAccount, Customer } from '../../../../types/models';
 import { canonicalOrderPreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
@@ -48,8 +47,6 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
     selectedCustomer,
     sameAsBilling,
     setSameAsBilling,
-    selectedBankAccount,
-    setSelectedBankAccount,
     message,
     messageType,
     companyInfo
@@ -164,29 +161,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     )}
                                 </div>
 
-                                {/* Bank Details */}
                                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                                    <p className="text-xs font-semibold text-gray-700 mb-2">Bank Information</p>
-                                    <div className="print:hidden">
-                                        <BankAccountSelector
-                                            value={selectedBankAccount as any}
-                                            onChange={(account: any) => {
-                                                setSelectedBankAccount(account);
-                                                if (account) {
-                                                    setOrder(prev => ({
-                                                        ...prev,
-                                                        bank_name: account.bank_name,
-                                                        account_number: account.account_number,
-                                                        ifsc_code: account.ifsc_code,
-                                                        upi_id: account.upi_id || ''
-                                                    }));
-                                                }
-                                            }}
-                                            autoSelectDefault={true}
-                                            className="w-full"
-                                            compact={true}
-                                        />
-                                    </div>
+                                    <p className="text-xs font-semibold text-gray-700">Settlement details</p>
+                                    <p className="mt-1 text-xs text-gray-600">
+                                        A sales order does not select or publish a company bank account.
+                                    </p>
                                 </div>
                             </div>
 

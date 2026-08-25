@@ -7,9 +7,9 @@
 
 import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
-import { createCrudApi } from '../../utils/createCrudApi';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import { decodeCanonicalCustomerList } from './canonicalMasterReads';
 
 // ============================================================================
 // TYPES
@@ -83,10 +83,9 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
 // API
 // ============================================================================
 
-const crud = createCrudApi({ basePath: '/customers', createPath: '/customers/' });
-
 export const customersApi = {
-  ...crud,
+  getAll: (params: CustomerParams = {}) => apiHelpers.get('/customers', { params })
+    .then(response => ({ ...response, data: decodeCanonicalCustomerList(response.data) })),
 
   create: (data: Record<string, any>) => {
     return apiHelpers.post('/customers/', toCanonicalCustomerCreate(data));
@@ -97,11 +96,6 @@ export const customersApi = {
   update: (_id: number | string, _data: Record<string, any>) =>
     rejectCanonicalWrite('Editing a customer'),
   delete: (_id: number | string) => rejectCanonicalWrite('Deleting a customer'),
-
-  // Get customers with embedded addresses from the live API
-  getAllWithAddresses: (params: any = {}) => {
-    return apiHelpers.get('/customers/all-with-addresses', { params });
-  },
 
   // Create a customer address through the live API
   createAddress: (customerId: string, addressData: any) => {
@@ -118,56 +112,6 @@ export const customersApi = {
   search: (query: string, params: CustomerParams = {}) => {
     return apiHelpers.get('/customers', {
       params: { search: query, ...params }
-    });
+    }).then(response => ({ ...response, data: decodeCanonicalCustomerList(response.data) }));
   },
-
-  // Get customers with outstanding payments
-  getWithOutstanding: () => {
-    return apiHelpers.get('/customers', {
-      params: { has_outstanding: true }
-    });
-  },
-
-  // Check customer credit
-  checkCredit: (customerId: number | string) => {
-    return apiHelpers.get('/customers/credit-check', {
-      params: { customer_id: customerId }
-    });
-  },
-
-  // Update credit limit
-  updateCreditLimit: (customerId: number | string, creditLimit: number) => {
-    void customerId;
-    void creditLimit;
-    return rejectCanonicalWrite('Changing a customer credit limit');
-  },
-
-  // Get customer ledger
-  getLedger: (customerId: number | string, dateFrom?: string, dateTo?: string) => {
-    return apiHelpers.get(`/customers/${customerId}/ledger`, {
-      params: { date_from: dateFrom, date_to: dateTo }
-    });
-  },
-
-  // Get customer outstanding balance
-  getOutstandingBalance: (customerId: number | string) => {
-    return apiHelpers.get(`/customers/${customerId}/outstanding`);
-  },
-
-  // Get all customers with outstanding amounts
-  getOutstanding: () => {
-    return apiHelpers.get('/customers/outstanding');
-  },
-
-  // Get customer transactions
-  getTransactions: (customerId: number | string, params: any = {}) => {
-    return apiHelpers.get(`/customers/${customerId}/transactions`, { params });
-  },
-
-  // Send SMS to customer
-  sendSMS: (customerId: number | string, message: string) => {
-    void customerId;
-    void message;
-    return rejectCanonicalWrite('Sending a customer SMS');
-  }
 };

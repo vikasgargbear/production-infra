@@ -278,7 +278,7 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
              user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     effective_offset = offset if offset is not None else skip
-    return _rows(db, """
+    rows = _rows(db, """
         SELECT p.id AS product_id, p.sku AS product_code, p.name AS product_name,
                p.generic_name, p.product_kind AS product_type, p.base_uom_code AS unit,
                conversion.id AS uom_conversion_id,
@@ -292,6 +292,8 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                p.status='active' AS is_active, p.status, p.created_at, p.updated_at,
                COALESCE(stock.current_stock, 0) AS current_stock
           FROM catalog.products p
+          JOIN core.organizations organization
+            ON organization.id=p.org_id AND organization.status='active'
           LEFT JOIN LATERAL (
               SELECT SUM(balance.on_hand_quantity) AS current_stock
                 FROM inventory.stock_balances balance
@@ -301,16 +303,17 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
               SELECT id FROM catalog.uom_conversions
                WHERE org_id=p.org_id AND product_id=p.id
                  AND from_uom_code=p.base_uom_code AND to_uom_code=p.base_uom_code
-                 AND status='active' AND valid_from<=CURRENT_DATE
-                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                 AND status='active'
+                 AND valid_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AND (valid_until IS NULL OR valid_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
           LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
                 FROM tax.tax_code_versions
                WHERE code=p.hsn_code AND code_kind='hsn' AND status='active'
-                 AND effective_from<=CURRENT_DATE
-                 AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+                 AND effective_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AND (effective_to IS NULL OR effective_to>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
                ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
           ) tax_version ON true
          WHERE p.org_id=:org_id
@@ -321,6 +324,19 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
     """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
             "include_drafts": include_inactive,
             "limit": limit, "skip": effective_offset})
+    total = db.execute(text("""
+        SELECT COUNT(*) FROM catalog.products product
+         WHERE product.org_id=:org_id
+           AND (product.status IN ('active','blocked') OR (:include_drafts AND product.status='draft'))
+           AND (:search='' OR product.name ILIKE :pattern OR product.sku ILIKE :pattern
+                OR COALESCE(product.generic_name,'') ILIKE :pattern)
+    """), {
+        "org_id": org_id,
+        "include_drafts": include_inactive,
+        "search": search.strip(),
+        "pattern": f"%{search.strip()}%",
+    }).scalar_one()
+    return {"products": rows, "total": total, "offset": effective_offset, "limit": limit}
 
 
 @router.post("/products/", status_code=status.HTTP_201_CREATED)
@@ -501,21 +517,24 @@ def products_with_batches(
                COALESCE(batch_data.batches, '[]'::jsonb) AS batches,
                COALESCE(batch_data.total_quantity_available, 0) AS total_quantity_available
           FROM catalog.products product
+          JOIN core.organizations organization
+            ON organization.id=product.org_id AND organization.status='active'
           LEFT JOIN LATERAL (
               SELECT id FROM catalog.uom_conversions
                WHERE org_id=product.org_id AND product_id=product.id
                  AND from_uom_code=product.base_uom_code
                  AND to_uom_code=product.base_uom_code
-                 AND status='active' AND valid_from<=CURRENT_DATE
-                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                 AND status='active'
+                 AND valid_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AND (valid_until IS NULL OR valid_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
           LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
                 FROM tax.tax_code_versions
                WHERE code=product.hsn_code AND code_kind='hsn' AND status='active'
-                 AND effective_from<=CURRENT_DATE
-                 AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+                 AND effective_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AND (effective_to IS NULL OR effective_to>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
                ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
           ) tax_version ON true
           LEFT JOIN LATERAL (
@@ -588,14 +607,14 @@ def product_batches(
                location.name AS location_name, branch.name AS branch_name,
                balance.average_unit_cost AS cost_per_unit,
                balance.on_hand_quantity AS quantity_available,
-               batch.expires_on - CURRENT_DATE AS days_to_expiry,
+               (batch.expires_on - business_clock.business_date)::integer AS days_to_expiry,
                CASE WHEN batch.status='released'
                           AND batch.released_at IS NOT NULL
-                          AND batch.expires_on>CURRENT_DATE
+                          AND batch.expires_on>business_clock.business_date
                     THEN dense_rank() OVER (
                            PARTITION BY batch.product_id, balance.location_id,
                              (batch.status='released' AND batch.released_at IS NOT NULL
-                              AND batch.expires_on>CURRENT_DATE)
+                              AND batch.expires_on>business_clock.business_date)
                            ORDER BY batch.expires_on
                          )::integer
                     ELSE NULL END AS fefo_expiry_tier,
@@ -608,6 +627,12 @@ def product_batches(
           FROM inventory.batches batch
           JOIN catalog.products product
             ON product.org_id=batch.org_id AND product.id=batch.product_id
+          JOIN core.organizations organization
+            ON organization.id=batch.org_id AND organization.status='active'
+          CROSS JOIN LATERAL (
+              SELECT (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                       AS business_date
+          ) business_clock
           JOIN inventory.stock_balances balance
             ON balance.org_id=batch.org_id AND balance.batch_id=batch.id
            AND balance.product_id=batch.product_id AND balance.on_hand_quantity>0
@@ -622,16 +647,16 @@ def product_batches(
                WHERE org_id=product.org_id AND product_id=product.id
                  AND from_uom_code=product.base_uom_code
                  AND to_uom_code=product.base_uom_code
-                 AND status='active' AND valid_from<=CURRENT_DATE
-                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                 AND status='active' AND valid_from<=business_clock.business_date
+                 AND (valid_until IS NULL OR valid_until>=business_clock.business_date)
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
           LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
                 FROM tax.tax_code_versions
                WHERE code=product.hsn_code AND code_kind='hsn' AND status='active'
-                 AND effective_from<=CURRENT_DATE
-                 AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+                 AND effective_from<=business_clock.business_date
+                 AND (effective_to IS NULL OR effective_to>=business_clock.business_date)
                ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
           ) tax_version ON true
          WHERE batch.org_id=:org_id AND batch.product_id=:product_id
@@ -1220,8 +1245,14 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
 
 @router.get("/employees")
 @router.get("/employees/")
-def employees(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
-              search: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db)):
+def employees(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    search: str = "",
+    include_inactive: bool = False,
+    user: dict = MASTER_USER,
+    db: Session = Depends(get_db),
+):
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT employee.id AS employee_id, employee.employee_number AS employee_code,
@@ -1236,11 +1267,24 @@ def employees(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0
           LEFT JOIN core.branches branch ON branch.org_id=employee.org_id AND branch.id=employee.branch_id
           LEFT JOIN hr.departments department ON department.org_id=employee.org_id AND department.id=employee.department_id
          WHERE employee.org_id=:org_id
+           AND (:include_inactive OR employee.status='active')
            AND (:search='' OR employee.display_name ILIKE :pattern OR employee.employee_number ILIKE :pattern)
          ORDER BY employee.display_name, employee.id LIMIT :limit OFFSET :offset
     """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
-            "limit": limit, "offset": offset})
-    return {"success": True, "data": rows, "employees": rows, "total": len(rows)}
+            "include_inactive": include_inactive, "limit": limit, "offset": offset})
+    total = db.execute(text("""
+        SELECT COUNT(*) FROM hr.employees employee
+         WHERE employee.org_id=:org_id
+           AND (:include_inactive OR employee.status='active')
+           AND (:search='' OR employee.display_name ILIKE :pattern
+                OR employee.employee_number ILIKE :pattern)
+    """), {
+        "org_id": org_id,
+        "include_inactive": include_inactive,
+        "search": search.strip(),
+        "pattern": f"%{search.strip()}%",
+    }).scalar_one()
+    return {"employees": rows, "total": total, "offset": offset, "limit": limit}
 
 
 @router.get("/branches")
@@ -1251,9 +1295,75 @@ def branches(user: dict = MASTER_USER, db: Session = Depends(get_db)):
         SELECT id AS branch_id, code AS branch_code, name AS branch_name,
                address_line1, address_line2, city, state_code, postal_code AS pincode,
                phone, email, status='active' AS is_active, status
-          FROM core.branches WHERE org_id=:org_id ORDER BY name, id
+          FROM core.branches
+         WHERE org_id=:org_id AND status='active'
+         ORDER BY name, id
     """, {"org_id": org_id})
     return {"branches": rows, "total": len(rows)}
+
+
+class CanonicalBankAccountRead(BaseModel):
+    """Non-secret bank identity backed by the settlement ledger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    bank_account_id: UUID
+    settlement_account_id: UUID
+    settlement_account_code: str
+    settlement_account_name: str
+    bank_name: str
+    account_holder_name: str
+    ifsc: str
+    currency_code: Literal["INR"]
+    allows_bank_reconciliation: bool
+    status: Literal["active"]
+
+
+class CanonicalBankAccountList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bank_accounts: list[CanonicalBankAccountRead]
+    total: int = Field(ge=0)
+
+
+@router.get("/bank-accounts", response_model=CanonicalBankAccountList)
+@router.get("/bank-accounts/", response_model=CanonicalBankAccountList)
+def canonical_bank_accounts(
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+) -> CanonicalBankAccountList:
+    """Return only active INR bank accounts with an active settlement ledger.
+
+    Account numbers are encrypted canonical data and are deliberately absent
+    from this projection.  A missing ledger association excludes the account;
+    it is never replaced by an arbitrary account or a fabricated balance.
+    """
+
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT bank.id AS bank_account_id,
+               settlement.id AS settlement_account_id,
+               settlement.code AS settlement_account_code,
+               settlement.name AS settlement_account_name,
+               bank.bank_name,
+               bank.account_holder_name,
+               bank.ifsc,
+               bank.currency_code,
+               settlement.allows_bank_reconciliation,
+               bank.status
+          FROM finance.bank_accounts bank
+          JOIN finance.accounts settlement
+            ON settlement.org_id=bank.org_id
+           AND settlement.id=bank.account_id
+           AND settlement.status='active'
+           AND settlement.account_type='asset'
+           AND settlement.currency_code='INR'
+         WHERE bank.org_id=:org_id
+           AND bank.status='active'
+           AND bank.currency_code='INR'
+         ORDER BY bank.bank_name, bank.account_holder_name, bank.id
+    """, {"org_id": org_id})
+    return CanonicalBankAccountList(bank_accounts=rows, total=len(rows))
 
 
 @router.get("/warehouses")

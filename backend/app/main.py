@@ -34,15 +34,6 @@ from .api.routes.auth import oauth as auth_oauth
 # Audit Module
 from .api.routes.audit import audit_router
 
-# Master Data Module
-from .api.routes.master import customers
-from .api.routes.master import suppliers
-from .api.routes.master import products
-from .api.routes.master import branches
-from .api.routes.master import departments
-from .api.routes.master import employees
-from .api.routes.master import bank_accounts
-
 # Returns Module (top-level, handles both sales and purchase returns)
 from .api.routes.returns import sales_returns_router, purchase_returns_router
 
@@ -273,15 +264,10 @@ api.include_router(canonical_party_ledger_reads.router)
 api.include_router(canonical_document_history_reads.router)
 
 # --- Master Data ---
-# Bounded canonical product/customer/supplier/address mutations were registered
-# above by canonical_erp_reads.  Only the later legacy master reads survive.
-include_legacy_read_only_router(api, customers.router, prefix="/customers", tags=["Customers"])
-include_legacy_read_only_router(api, suppliers.router, prefix="/suppliers", tags=["Suppliers"])
-include_legacy_read_only_router(api, products.router, prefix="/products", tags=["Products"])
-include_legacy_read_only_router(api, branches.router, prefix="/branches", tags=["Branches"])
-include_legacy_read_only_router(api, departments.router, prefix="/departments", tags=["Departments"])
-include_legacy_read_only_router(api, employees.router, prefix="/employees", tags=["Employees"])
-include_legacy_read_only_router(api, bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
+# Canonical product/customer/supplier/address mutations and every supported
+# master read are registered by canonical_erp_reads above.  The retired master
+# routers are intentionally absent: their integer details, aliases, and
+# guessed account balances are not valid compatibility authorities.
 
 # --- Retired legacy business routers: reads only ---
 # Canonical business writes are available only through /web/actions.  Keeping

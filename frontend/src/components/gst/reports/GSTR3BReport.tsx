@@ -60,7 +60,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
 }) => {
     const onDataReadyRef = useRef(onDataReady);
     onDataReadyRef.current = onDataReady;
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [outputTax, setOutputTax] = useState<TaxSummary>(EMPTY_TAX);
     const [inputCredit, setInputCredit] = useState<TaxSummary>(EMPTY_TAX);
@@ -98,7 +98,8 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
                 });
 
             } catch (err) {
-                setError('Failed to load GSTR-3B data');
+                onDataReadyRef.current?.(null);
+                setError(err instanceof Error ? err.message : 'Canonical GSTR-3B data is unavailable.');
             } finally {
                 setLoading(false);
             }

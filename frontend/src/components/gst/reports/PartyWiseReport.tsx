@@ -1,166 +1,164 @@
-/**
- * Party-wise GST Report - Customer/Supplier breakdown
- */
+/** Party-wise outward GST projection sourced only from canonical GSTR-1. */
 
-import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, Users } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AlertCircle, Loader2, Users } from 'lucide-react';
 import { DataTable } from '../../global';
 import type { DateRange } from '../types';
-import { formatCurrency } from '../utils';
-import { invoicesApi } from '../../../services/api';
+import { gstApi } from '../../../services/api';
+import {
+    addExactDecimals,
+    formatExactCurrency,
+    normalizeAuthoritativeDecimal,
+} from '../../../utils/exactDecimal';
 
 interface PartyWiseReportProps {
     dateRange: DateRange;
     refreshTrigger: number;
     onRefresh?: () => void;
     showTaxBreakdown?: boolean;
-    onDataReady?: (data: any) => void;
+    onDataReady?: (data: unknown) => void;
     onExport?: () => void;
 }
 
-interface PartyData {
+type PartyData = {
+    row_key: string;
     party_name: string;
     gst_number: string;
     invoice_count: number;
-    total_taxable_value: number;
-    total_cgst: number;
-    total_sgst: number;
-    total_igst: number;
-    total_tax: number;
-}
+    total_taxable_value: string;
+    total_cgst: string;
+    total_sgst: string;
+    total_igst: string;
+    total_tax: string;
+};
 
-const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTrigger, showTaxBreakdown = false, onDataReady }) => {
-    const [data, setData] = useState<PartyData[]>([]);
+const MONEY = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
+
+const requiredText = (value: unknown, label: string): string => {
+    if (typeof value !== 'string' || !value.trim()) {
+        throw new Error(`Party-wise GST is missing canonical ${label}.`);
+    }
+    return value.trim();
+};
+
+const requiredCount = (value: unknown): number => {
+    if (!Number.isSafeInteger(value) || Number(value) < 0) {
+        throw new Error('Party-wise GST has an invalid canonical invoice count.');
+    }
+    return Number(value);
+};
+
+export const normalizeCanonicalPartyRows = (payload: unknown): PartyData[] => {
+    if (!payload || typeof payload !== 'object') throw new Error('Canonical GSTR-1 response is unavailable.');
+    const rows = (payload as { b2b?: unknown }).b2b;
+    if (!Array.isArray(rows)) throw new Error('Canonical GSTR-1 B2B rows are unavailable.');
+
+    return rows.map((candidate, index) => {
+        if (!candidate || typeof candidate !== 'object') throw new Error(`Party-wise GST row ${index + 1} is invalid.`);
+        const row = candidate as Record<string, unknown>;
+        const gstNumber = requiredText(row.gst_number, `row ${index + 1} GSTIN`);
+        const partyName = requiredText(row.name, `row ${index + 1} party name`);
+        const money = (field: string) => normalizeAuthoritativeDecimal(
+            row[field], `Party-wise GST row ${index + 1} ${field}`, MONEY,
+        );
+        return {
+            row_key: `${gstNumber}:${partyName}`,
+            gst_number: gstNumber,
+            party_name: partyName,
+            invoice_count: requiredCount(row.invoices),
+            total_taxable_value: money('taxableValue'),
+            total_cgst: money('cgst'),
+            total_sgst: money('sgst'),
+            total_igst: money('igst'),
+            total_tax: money('totalTax'),
+        };
+    });
+};
+
+const sumMoney = (rows: PartyData[], field: keyof PartyData, label: string) => addExactDecimals(
+    rows.map(row => row[field]), label, MONEY,
+);
+
+const PartyWiseReport: React.FC<PartyWiseReportProps> = ({
+    dateRange,
+    refreshTrigger,
+    showTaxBreakdown = false,
+    onDataReady,
+}) => {
+    const onDataReadyRef = useRef(onDataReady);
+    onDataReadyRef.current = onDataReady;
+    const [data, setData] = useState<PartyData[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [totals, setTotals] = useState({ parties: 0, invoices: 0, taxable: 0, tax: 0 });
 
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
             setError(null);
-
+            setData(null);
             try {
-                const response = await invoicesApi.getAll({
-                    from_date: dateRange.from,
-                    to_date: dateRange.to,
-                    limit: 5000
+                const response = await gstApi.reports.gstr1({
+                    date_from: dateRange.from,
+                    date_to: dateRange.to,
                 });
-                const responseData = response?.data || response;
-                const invoices = Array.isArray(responseData) ? responseData : responseData?.invoices || [];
-
-                const partyGroups: Record<string, PartyData> = {};
-
-                invoices.forEach((inv: any) => {
-                    const partyName = inv.customer_name || 'Unknown Party';
-
-                    if (!partyGroups[partyName]) {
-                        partyGroups[partyName] = {
-                            party_name: partyName,
-                            gst_number: inv.customer_gst_number || '',
-                            invoice_count: 0,
-                            total_taxable_value: 0,
-                            total_cgst: 0,
-                            total_sgst: 0,
-                            total_igst: 0,
-                            total_tax: 0
-                        };
-                    }
-
-                    const p = partyGroups[partyName];
-                    p.invoice_count += 1;
-                    p.total_taxable_value += inv.subtotal_amount || 0;
-                    p.total_cgst += inv.cgst_amount || 0;
-                    p.total_sgst += inv.sgst_amount || 0;
-                    p.total_igst += inv.igst_amount || 0;
-                    p.total_tax += (inv.cgst_amount || 0) + (inv.sgst_amount || 0) + (inv.igst_amount || 0);
-                });
-
-                const partyArray = Object.values(partyGroups).sort((a, b) => b.total_taxable_value - a.total_taxable_value);
-                setData(partyArray);
-                onDataReady?.(partyArray);
-
-                setTotals({
-                    parties: partyArray.length,
-                    invoices: invoices.length,
-                    taxable: partyArray.reduce((s, p) => s + p.total_taxable_value, 0),
-                    tax: partyArray.reduce((s, p) => s + p.total_tax, 0)
-                });
-
-            } catch (err) {
-                setError('Failed to load party-wise data');
+                const normalized = normalizeCanonicalPartyRows(response?.data || response);
+                setData(normalized);
+                onDataReadyRef.current?.(normalized);
+            } catch (caught) {
+                onDataReadyRef.current?.(null);
+                setError(caught instanceof Error ? caught.message : 'Party-wise GST data is unavailable.');
             } finally {
                 setLoading(false);
             }
         };
-
         loadData();
     }, [dateRange.from, dateRange.to, refreshTrigger]);
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
-                <span className="ml-2">Loading party-wise data...</span>
-            </div>
-        );
-    }
+    if (loading) return (
+        <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+            <span className="ml-2">Loading party-wise GST data...</span>
+        </div>
+    );
 
-    if (error) {
-        return (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <AlertCircle className="h-5 w-5 text-red-600 inline mr-2" />
-                <span className="text-red-800">{error}</span>
-            </div>
-        );
-    }
+    if (error || !data) return (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <AlertCircle className="mr-2 inline h-5 w-5 text-red-600" />
+            <span className="text-red-800">{error || 'Party-wise GST data is unavailable.'}</span>
+        </div>
+    );
 
+    const invoiceCount = data.reduce((sum, row) => sum + row.invoice_count, 0);
+    const taxable = sumMoney(data, 'total_taxable_value', 'Party-wise taxable total');
+    const tax = sumMoney(data, 'total_tax', 'Party-wise tax total');
+    const currency = (value: unknown, label: string) => formatExactCurrency(value, label);
     const columns = [
         { key: 'party_name', header: 'Party Name' },
-        { key: 'gst_number', header: 'GSTIN', render: (v: string) => v || '-' },
+        { key: 'gst_number', header: 'GSTIN' },
         { key: 'invoice_count', header: 'Invoices' },
-        { key: 'total_taxable_value', header: 'Taxable Value', render: (v: number) => formatCurrency(v) },
+        { key: 'total_taxable_value', header: 'Taxable Value', render: (value: string) => currency(value, 'Party taxable value') },
         ...(showTaxBreakdown ? [
-            { key: 'total_cgst', header: 'CGST', render: (v: number) => formatCurrency(v) },
-            { key: 'total_sgst', header: 'SGST', render: (v: number) => formatCurrency(v) },
-            { key: 'total_igst', header: 'IGST', render: (v: number) => formatCurrency(v) }
+            { key: 'total_cgst', header: 'CGST', render: (value: string) => currency(value, 'Party CGST') },
+            { key: 'total_sgst', header: 'SGST', render: (value: string) => currency(value, 'Party SGST') },
+            { key: 'total_igst', header: 'IGST', render: (value: string) => currency(value, 'Party IGST') },
         ] : []),
-        { key: 'total_tax', header: 'Total Tax', render: (v: number) => formatCurrency(v) }
+        { key: 'total_tax', header: 'Total Tax', render: (value: string) => currency(value, 'Party total tax') },
     ];
 
     return (
         <div className="space-y-6">
-            {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Total Parties</div>
-                    <div className="text-2xl font-bold">{totals.parties}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Total Invoices</div>
-                    <div className="text-2xl font-bold">{totals.invoices}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Taxable Value</div>
-                    <div className="text-2xl font-bold">{formatCurrency(totals.taxable)}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Total Tax</div>
-                    <div className="text-2xl font-bold">{formatCurrency(totals.tax)}</div>
-                </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="rounded-lg border bg-white p-4"><div className="text-sm text-gray-600">Registered Parties</div><div className="text-2xl font-bold">{data.length}</div></div>
+                <div className="rounded-lg border bg-white p-4"><div className="text-sm text-gray-600">B2B Invoices</div><div className="text-2xl font-bold">{invoiceCount}</div></div>
+                <div className="rounded-lg border bg-white p-4"><div className="text-sm text-gray-600">Taxable Value</div><div className="text-2xl font-bold">{currency(taxable, 'Party-wise taxable total')}</div></div>
+                <div className="rounded-lg border bg-white p-4"><div className="text-sm text-gray-600">Total Tax</div><div className="text-2xl font-bold">{currency(tax, 'Party-wise tax total')}</div></div>
             </div>
-
-            {/* Party Table */}
-            <div className="bg-white rounded-lg border">
-                <div className="p-4 border-b flex items-center">
-                    <Users className="h-5 w-5 text-teal-600 mr-2" />
-                    <h3 className="text-lg font-semibold">Party-wise GST Summary</h3>
+            <div className="rounded-lg border bg-white">
+                <div className="flex items-center border-b p-4">
+                    <Users className="mr-2 h-5 w-5 text-teal-600" />
+                    <h3 className="text-lg font-semibold">Registered party outward GST</h3>
                 </div>
-                <DataTable
-                    data={data}
-                    keyField="party_name"
-                    columns={columns}
-                />
+                <DataTable data={data} keyField="row_key" columns={columns} />
             </div>
         </div>
     );

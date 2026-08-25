@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edit, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { productsApi } from '../../../services/api';
-import type { Product } from '../../../types/models/product';
+import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
 import ProductFlow from './ProductFlow';
 import ProductDraftDeleteDialog from './ProductDraftDeleteDialog';
 
 const Products: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<CanonicalProductRead[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [deletingProductId, setDeletingProductId] = useState<Product['product_id'] | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<CanonicalProductRead | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<CanonicalProductRead['product_id'] | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CanonicalProductRead | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteTrigger, setDeleteTrigger] = useState<HTMLElement | null>(null);
   const newDraftButtonRef = useRef<HTMLButtonElement>(null);
@@ -23,7 +23,7 @@ const Products: React.FC = () => {
     setError(null);
     try {
       const response = await productsApi.getAll({ limit: 100, include_inactive: true });
-      setProducts(response.data?.products ?? response.data ?? []);
+      setProducts(response.data.products);
     } catch {
       setError('Failed to load products.');
       setProducts([]);
@@ -41,7 +41,7 @@ const Products: React.FC = () => {
       product.product_name,
       product.product_code,
       product.generic_name,
-      product.manufacturer,
+      product.hsn_code,
     ].some(value => value?.toLowerCase().includes(query)));
   }, [products, search]);
 
@@ -50,7 +50,7 @@ const Products: React.FC = () => {
     setEditingProduct(null);
   };
 
-  const requestDraftDeletion = (product: Product, trigger: HTMLElement) => {
+  const requestDraftDeletion = (product: CanonicalProductRead, trigger: HTMLElement) => {
     // The API is authoritative too, but never offer or issue the mutation when
     // the read projection says this is an active or blocked catalog record.
     if (product.status !== 'draft') return;
@@ -148,7 +148,7 @@ const Products: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium">Code</th>
-                  <th className="px-4 py-3 font-medium">Manufacturer</th>
+                  <th className="px-4 py-3 font-medium">HSN</th>
                   <th className="px-4 py-3 font-medium">Kind</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Actions</th>
@@ -161,7 +161,7 @@ const Products: React.FC = () => {
                   <tr key={product.product_id}>
                     <td className="px-4 py-3"><div className="font-medium text-gray-900">{product.product_name}</div><div className="text-gray-500">{product.generic_name}</div></td>
                     <td className="px-4 py-3 text-gray-700">{product.product_code}</td>
-                    <td className="px-4 py-3 text-gray-700">{product.manufacturer || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{product.hsn_code ?? 'Not classified'}</td>
                     <td className="px-4 py-3 text-gray-700">{product.product_type}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex border px-2 py-1 text-xs font-medium ${isDraft ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-600'}`}>
