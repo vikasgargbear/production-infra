@@ -1189,6 +1189,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json" in live18
     assert "e2e/live18/playwright.config.ts" in live18
     assert "test_browser_evidence_reconciliation.py" in live18
+    assert "${{ runner.temp }}/live18-browser-identities.json" in live18
     assert "id: live18_browser" in live18
     assert "if: always() && steps.live18_browser.outcome != 'skipped'" in live18
     assert "maxFailures: 0" in playwright_config

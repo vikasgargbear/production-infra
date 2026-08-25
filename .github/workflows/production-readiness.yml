@@ -1365,6 +1365,7 @@ jobs:
           name: canonical-live18-acceptance-evidence
           path: |
             ${{ runner.temp }}/live18-deployed-sha.json
+            ${{ runner.temp }}/live18-browser-identities.json
             ${{ runner.temp }}/live18-fixture-identities.json
             ${{ runner.temp }}/live18-playwright-list.txt
             ${{ runner.temp }}/live18-reconciliation.txt
