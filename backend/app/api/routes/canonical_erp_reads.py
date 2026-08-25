@@ -9,7 +9,7 @@ only a non-transactional draft.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
@@ -524,8 +524,8 @@ def products_with_batches(
                          'batch_number', batch.batch_number,
                          'manufacturing_date', batch.manufactured_on,
                          'expiry_date', batch.expires_on, 'mrp_per_unit', batch.mrp,
-                         'sale_price_per_unit', batch.mrp,
-                         'cost_per_unit', COALESCE(stock.average_unit_cost, 0),
+                         'sale_price_per_unit', NULL,
+                         'cost_per_unit', stock.average_unit_cost,
                          'quantity_available', COALESCE(stock.quantity_available, 0),
                          'location_id', stock.location_id,
                          'branch_id', stock.branch_id,
@@ -552,8 +552,23 @@ def products_with_batches(
          ORDER BY product.name, product.id LIMIT :limit OFFSET :offset
     """, {"org_id": org_id, "search": q.strip(), "pattern": f"%{q.strip()}%",
             "limit": page_size, "offset": offset})
-    return {"products": rows, "pagination": {"page": page, "page_size": page_size,
-            "total_pages": 1, "has_more": len(rows) == page_size}}
+    total = db.execute(text("""
+        SELECT COUNT(*)
+          FROM catalog.products product
+         WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
+           AND (:search='' OR product.name ILIKE :pattern OR product.sku ILIKE :pattern)
+    """), {
+        "org_id": org_id,
+        "search": q.strip(),
+        "pattern": f"%{q.strip()}%",
+    }).scalar_one()
+    return {"products": rows, "pagination": {
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+        "total_items": total,
+        "has_more": offset + len(rows) < total,
+    }}
 
 
 @router.get("/products/{product_id}/batches")
@@ -880,7 +895,8 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                registration.registration_status AS gst_verification_status,
                COALESCE(substring(registration.registration_number from 1 for 2),
                         address.state_code) AS place_of_supply_state_code,
-               account.credit_limit, account.credit_days, 0::numeric AS current_outstanding,
+               account.credit_limit, account.credit_days,
+               COALESCE(outstanding.current_outstanding,0) AS current_outstanding,
                party.party_kind AS customer_type, account.status='active' AS is_active,
                account.status, account.created_at, account.updated_at
           FROM parties.customer_accounts account
@@ -892,13 +908,54 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                  AND status='active'
                ORDER BY is_primary DESC, id LIMIT 1
           ) address ON true
+          LEFT JOIN LATERAL (
+              SELECT SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
+                         AS current_outstanding
+                FROM finance.open_items item
+                JOIN finance.accounting_events event
+                  ON event.org_id=item.org_id AND event.id=item.accounting_event_id
+                 AND event.sales_invoice_id IS NOT NULL
+                JOIN sales.invoices invoice
+                  ON invoice.org_id=event.org_id AND invoice.id=event.sales_invoice_id
+                 AND invoice.customer_account_id=account.id AND invoice.status='posted'
+                LEFT JOIN LATERAL (
+                    SELECT SUM(allocation.amount) AS amount
+                      FROM finance.allocations allocation
+                     WHERE allocation.org_id=item.org_id
+                       AND allocation.open_item_id=item.id
+                       AND allocation.status='posted'
+                       AND allocation.reversal_of_allocation_id IS NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM finance.allocations reversal
+                            WHERE reversal.org_id=allocation.org_id
+                              AND reversal.reversal_of_allocation_id=allocation.id
+                       )
+                ) applied ON true
+               WHERE item.org_id=account.org_id
+                 AND item.item_side='receivable' AND item.status<>'reversed'
+          ) outstanding ON true
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
            AND (:search='' OR party.legal_name ILIKE :pattern
                 OR account.customer_code ILIKE :pattern OR COALESCE(contact.phone,'') ILIKE :pattern)
          ORDER BY party.legal_name, account.id LIMIT :limit OFFSET :skip
     """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
             "limit": limit, "skip": skip})
-    return {"customers": rows, "total": len(rows), "skip": skip, "limit": limit}
+    total = db.execute(text(f"""
+        SELECT COUNT(*)
+          FROM parties.customer_accounts account
+          JOIN parties.parties party
+            ON party.org_id=account.org_id AND party.id=account.party_id
+          {_PARTY_CONTACTS}
+         WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
+           AND (:search='' OR party.legal_name ILIKE :pattern
+                OR account.customer_code ILIKE :pattern
+                OR COALESCE(contact.phone,'') ILIKE :pattern)
+    """), {
+        "org_id": org_id,
+        "search": search.strip(),
+        "pattern": f"%{search.strip()}%",
+    }).scalar_one()
+    return {"customers": rows, "total": total, "skip": skip, "limit": limit}
 
 
 @router.get("/customers/all-with-addresses")
@@ -941,8 +998,18 @@ def customers_with_addresses(
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
          ORDER BY party.legal_name, account.id LIMIT :limit OFFSET :offset
     """, {"org_id": org_id, "limit": page_size, "offset": (page - 1) * page_size})
-    return {"customers": rows, "pagination": {"page": page, "page_size": page_size,
-            "total_pages": 1, "has_more": len(rows) == page_size}}
+    total = db.execute(text("""
+        SELECT COUNT(*) FROM parties.customer_accounts
+         WHERE org_id=:org_id AND status IN ('active','on_hold')
+    """), {"org_id": org_id}).scalar_one()
+    offset = (page - 1) * page_size
+    return {"customers": rows, "pagination": {
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+        "total_items": total,
+        "has_more": offset + len(rows) < total,
+    }}
 
 
 def _customer_party_id(db: Session, org_id: UUID, customer_id: UUID) -> UUID:
@@ -1110,12 +1177,39 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
                registration.registration_status AS gst_verification_status,
-               account.payment_days, 0::numeric AS current_outstanding,
+               account.payment_days,
+               COALESCE(outstanding.current_outstanding,0) AS current_outstanding,
                party.party_kind AS supplier_type, account.status='active' AS is_active,
                account.status, account.created_at, account.updated_at
           FROM parties.supplier_accounts account
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
           {_PARTY_CONTACTS}
+          LEFT JOIN LATERAL (
+              SELECT SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
+                         AS current_outstanding
+                FROM finance.open_items item
+                JOIN finance.accounting_events event
+                  ON event.org_id=item.org_id AND event.id=item.accounting_event_id
+                 AND event.supplier_invoice_id IS NOT NULL
+                JOIN procurement.supplier_invoices invoice
+                  ON invoice.org_id=event.org_id AND invoice.id=event.supplier_invoice_id
+                 AND invoice.supplier_account_id=account.id AND invoice.status='posted'
+                LEFT JOIN LATERAL (
+                    SELECT SUM(allocation.amount) AS amount
+                      FROM finance.allocations allocation
+                     WHERE allocation.org_id=item.org_id
+                       AND allocation.open_item_id=item.id
+                       AND allocation.status='posted'
+                       AND allocation.reversal_of_allocation_id IS NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM finance.allocations reversal
+                            WHERE reversal.org_id=allocation.org_id
+                              AND reversal.reversal_of_allocation_id=allocation.id
+                       )
+                ) applied ON true
+               WHERE item.org_id=account.org_id
+                 AND item.item_side='payable' AND item.status<>'reversed'
+          ) outstanding ON true
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
            AND (:search='' OR party.legal_name ILIKE :pattern
                 OR account.supplier_code ILIKE :pattern OR COALESCE(contact.phone,'') ILIKE :pattern)
@@ -1864,9 +1958,11 @@ def gst_returns_status(user: dict = Depends(PermissionChecker("gst", "view")),
          WHERE return_row.org_id=:org_id
          ORDER BY return_row.return_type, period.period_end DESC, return_row.revision DESC
     """, {"org_id": org_id})
-    result = {"gstr1": {"status": "pending", "dueDate": ""},
-              "gstr3b": {"status": "pending", "dueDate": ""},
-              "gstr2b": {"status": "available", "lastUpdated": ""}}
+    # Absence of a filed/draft return is not evidence of a filing status or due
+    # date. GSTR-2B also has no canonical projection in this service yet.
+    result = {"gstr1": {"status": None, "dueDate": None, "lastUpdated": None},
+              "gstr3b": {"status": None, "dueDate": None, "lastUpdated": None},
+              "gstr2b": {"status": None, "dueDate": None, "lastUpdated": None}}
     for row in rows:
         key = str(row["return_type"]).lower().replace("-", "")
         if key in result:
@@ -2967,7 +3063,7 @@ def sales_orders(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=
     for row in rows:
         row.pop("filtered_total", None)
     return {"orders": rows, "total": total, "page": skip // limit + 1,
-            "per_page": limit, "total_pages": max(1, (total + limit - 1) // limit)}
+            "per_page": limit, "total_pages": (total + limit - 1) // limit}
 
 
 @router.get("/challan/")
@@ -4476,19 +4572,48 @@ def _sales_daily(db: Session, params: dict) -> list[dict]:
     """, params)
 
 
-@router.get("/sales/analytics/summary")
-def sales_analytics_summary(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                            user: dict = SALES_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
+def _sales_summary_totals(db: Session, params: dict) -> dict:
     rows = _rows(db, f"""
         SELECT COALESCE(SUM(invoice.grand_total),0) AS total_sales,
-               count(*) AS total_orders, COALESCE(AVG(invoice.grand_total),0) AS avg_order_value,
-               count(DISTINCT invoice.customer_account_id) AS unique_customers,
-               0::numeric AS sales_growth, 0::numeric AS orders_growth,
-               0::numeric AS aov_growth, 0::numeric AS customers_growth
+               count(*) AS total_invoices,
+               COALESCE(AVG(invoice.grand_total),0) AS avg_invoice_value,
+               count(DISTINCT invoice.customer_account_id) AS unique_customers
           FROM sales.invoices invoice WHERE {_INVOICE_RANGE}
-    """, _range_params(org_id, date_from, date_to))
+    """, params)
     return rows[0]
+
+
+def _comparison_percent(current: Any, previous: Any) -> Optional[Decimal]:
+    current_value = Decimal(str(current))
+    previous_value = Decimal(str(previous))
+    if previous_value == 0:
+        return None
+    return (current_value - previous_value) / abs(previous_value) * Decimal("100")
+
+
+@router.get("/sales/analytics/summary")
+def sales_analytics_summary(date_from: date, date_to: date,
+                            user: dict = SALES_USER, db: Session = Depends(get_db)):
+    org_id = _activate(db, user)
+    period = _validated_report_range(date_from, date_to)
+    current = _sales_summary_totals(db, _range_params(org_id, **period))
+    previous_to = period["date_from"] - timedelta(days=1)
+    previous_from = previous_to - (period["date_to"] - period["date_from"])
+    previous = _sales_summary_totals(
+        db, _range_params(org_id, previous_from, previous_to),
+    )
+    current.update({
+        "comparison_period": {"date_from": previous_from, "date_to": previous_to},
+        "sales_growth": _comparison_percent(current["total_sales"], previous["total_sales"]),
+        "invoices_growth": _comparison_percent(current["total_invoices"], previous["total_invoices"]),
+        "average_invoice_growth": _comparison_percent(
+            current["avg_invoice_value"], previous["avg_invoice_value"],
+        ),
+        "customers_growth": _comparison_percent(
+            current["unique_customers"], previous["unique_customers"],
+        ),
+    })
+    return current
 
 
 @router.get("/sales/analytics/trend")
@@ -4864,17 +4989,86 @@ def _financial_totals(db: Session, params: dict) -> dict:
 
 @router.get("/financial/summary")
 @router.get("/dashboard/financial-summary")
-def financial_summary(date_from: Optional[str] = None, date_to: Optional[str] = None,
+def financial_summary(date_from: Optional[date] = None, date_to: Optional[date] = None,
                       user: dict = FINANCE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     result = _financial_totals(db, _range_params(org_id, date_from, date_to))
-    result.update({"previous_revenue": 0, "revenue_change": 0, "revenue_change_percent": 0,
-                   "previous_gross_profit": 0, "gross_profit_change": 0, "gross_profit_change_percent": 0,
-                   "previous_net_profit": 0, "net_profit_change": 0, "net_profit_change_percent": 0,
-                   "previous_operating_expenses": 0, "operating_expenses_change": 0,
-                   "operating_expenses_change_percent": 0, "previous_accounts_receivable": 0,
-                   "receivable_change": 0, "receivable_change_percent": 0,
-                   "previous_accounts_payable": 0, "payable_change": 0, "payable_change_percent": 0})
+    if date_from is None or date_to is None:
+        if date_from is not None or date_to is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Both date_from and date_to are required for a financial comparison",
+            )
+        result.update({
+            "comparison_period": None,
+            "previous_revenue": None,
+            "revenue_change": None,
+            "revenue_change_percent": None,
+            "previous_gross_profit": None,
+            "gross_profit_change": None,
+            "gross_profit_change_percent": None,
+            "previous_net_profit": None,
+            "net_profit_change": None,
+            "net_profit_change_percent": None,
+            "previous_operating_expenses": None,
+            "operating_expenses_change": None,
+            "operating_expenses_change_percent": None,
+            "previous_accounts_receivable": None,
+            "receivable_change": None,
+            "receivable_change_percent": None,
+            "previous_accounts_payable": None,
+            "payable_change": None,
+            "payable_change_percent": None,
+        })
+        return result
+
+    period = _validated_report_range(date_from, date_to)
+    previous_to = period["date_from"] - timedelta(days=1)
+    previous_from = previous_to - (period["date_to"] - period["date_from"])
+    previous = _financial_totals(
+        db,
+        _range_params(org_id, previous_from, previous_to),
+    )
+
+    def comparison(field: str) -> tuple[Decimal, Decimal, Optional[Decimal]]:
+        current_value = Decimal(str(result[field]))
+        previous_value = Decimal(str(previous[field]))
+        change = current_value - previous_value
+        percent = None if previous_value == 0 else (
+            change / abs(previous_value) * Decimal("100")
+        )
+        return previous_value, change, percent
+
+    revenue = comparison("total_revenue")
+    gross_profit = comparison("gross_profit")
+    net_profit = comparison("net_profit")
+    operating_expenses = comparison("operating_expenses")
+    result.update({
+        "comparison_period": {
+            "date_from": previous_from,
+            "date_to": previous_to,
+        },
+        "previous_revenue": revenue[0],
+        "revenue_change": revenue[1],
+        "revenue_change_percent": revenue[2],
+        "previous_gross_profit": gross_profit[0],
+        "gross_profit_change": gross_profit[1],
+        "gross_profit_change_percent": gross_profit[2],
+        "previous_net_profit": net_profit[0],
+        "net_profit_change": net_profit[1],
+        "net_profit_change_percent": net_profit[2],
+        "previous_operating_expenses": operating_expenses[0],
+        "operating_expenses_change": operating_expenses[1],
+        "operating_expenses_change_percent": operating_expenses[2],
+        # Open-item balances are current snapshots. Without an effective-dated
+        # snapshot source, a prior receivable/payable value would be invented.
+        "previous_accounts_receivable": None,
+        "receivable_change": None,
+        "receivable_change_percent": None,
+        "previous_accounts_payable": None,
+        "payable_change": None,
+        "payable_change_percent": None,
+    })
     return result
 
 
@@ -4924,27 +5118,71 @@ def financial_expense_breakdown(date_from: Optional[str] = None, date_to: Option
     """, _range_params(org_id, date_from, date_to))
 
 
-@router.get("/dashboard/stats")
-def dashboard_stats(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                    user: dict = SALES_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    params = _range_params(org_id, date_from, date_to)
+def _dashboard_stats_totals(db: Session, params: dict) -> dict:
     rows = _rows(db, f"""
         SELECT COALESCE(SUM(invoice.grand_total),0) AS total_revenue,
-               count(*) AS total_orders, count(*) AS total_invoices,
+               count(*) AS total_invoices,
                count(DISTINCT invoice.customer_account_id) AS purchasing_customers,
-               (SELECT count(*) FROM parties.customer_accounts WHERE org_id=:org_id) AS total_customers,
-               0::numeric AS revenue_change, 0::numeric AS orders_change,
-               0::numeric AS customers_change
+               (SELECT count(*) FROM sales.orders sales_order
+                 WHERE sales_order.org_id=:org_id
+                   AND sales_order.status NOT IN ('cancelled','reversed')
+                   AND (:date_from IS NULL OR sales_order.order_date >= CAST(:date_from AS date))
+                   AND (:date_to IS NULL OR sales_order.order_date <= CAST(:date_to AS date))) AS total_orders,
+               (SELECT count(*) FROM parties.customer_accounts
+                 WHERE org_id=:org_id) AS total_customers,
+               (SELECT count(*) FROM parties.customer_accounts
+                 WHERE org_id=:org_id
+                   AND (:date_from IS NULL OR created_at::date >= CAST(:date_from AS date))
+                   AND (:date_to IS NULL OR created_at::date <= CAST(:date_to AS date))) AS new_customers
           FROM sales.invoices invoice WHERE {_INVOICE_RANGE}
     """, params)
     return rows[0]
 
 
+@router.get("/dashboard/stats")
+def dashboard_stats(date_from: Optional[date] = None, date_to: Optional[date] = None,
+                    user: dict = SALES_USER, db: Session = Depends(get_db)):
+    org_id = _activate(db, user)
+    current = _dashboard_stats_totals(db, _range_params(org_id, date_from, date_to))
+    current.update({
+        "comparison_period": None,
+        "revenue_change": None,
+        "orders_change": None,
+        "customers_change": None,
+    })
+    if date_from is None or date_to is None:
+        if date_from is not None or date_to is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Both date_from and date_to are required for dashboard comparison",
+            )
+        return current
+
+    period = _validated_report_range(date_from, date_to)
+    previous_to = period["date_from"] - timedelta(days=1)
+    previous_from = previous_to - (period["date_to"] - period["date_from"])
+    previous = _dashboard_stats_totals(
+        db, _range_params(org_id, previous_from, previous_to),
+    )
+    current.update({
+        "comparison_period": {"date_from": previous_from, "date_to": previous_to},
+        "revenue_change": _comparison_percent(
+            current["total_revenue"], previous["total_revenue"],
+        ),
+        "orders_change": _comparison_percent(
+            current["total_orders"], previous["total_orders"],
+        ),
+        "customers_change": _comparison_percent(
+            current["new_customers"], previous["new_customers"],
+        ),
+    })
+    return current
+
+
 @router.get("/dashboard/inventory-summary")
 def dashboard_inventory_summary(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
     rows = _inventory_analytics_rows(db, _activate(db, user))
-    return {"total_products": len(rows), "active_products": len(rows), "products_change": 0,
+    return {"total_products": len(rows), "active_products": len(rows), "products_change": None,
             "stock_value": sum((row["stock_value"] or 0) for row in rows),
             "low_stock": sum(1 for row in rows if (row["total_quantity_available"] or 0) <= 0)}
 
@@ -4994,7 +5232,22 @@ def tax_analytics_summary(date_from: Optional[str] = None, date_to: Optional[str
                           db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     result = _tax_totals(db, _range_params(org_id, date_from, date_to))
-    result.update({"pending_returns": 0, "compliance_score": 100})
+    pending = _rows(db, """
+        SELECT count(*) AS pending_returns
+          FROM tax.returns return_row
+         WHERE return_row.org_id=:org_id
+           AND return_row.status IN ('draft','validated')
+           AND NOT EXISTS (
+               SELECT 1 FROM tax.returns later_revision
+                WHERE later_revision.org_id=return_row.org_id
+                  AND later_revision.return_period_id=return_row.return_period_id
+                  AND later_revision.return_type=return_row.return_type
+                  AND later_revision.revision>return_row.revision
+           )
+    """, {"org_id": org_id})[0]
+    # No canonical scoring policy exists. Expose the authoritative pending count
+    # and make the synthetic percentage explicitly unavailable.
+    result.update({"pending_returns": pending["pending_returns"], "compliance_score": None})
     return result
 
 

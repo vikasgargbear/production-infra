@@ -11,9 +11,26 @@ import { isValidReportDateRange } from './utils/reportDateRange';
 interface SalesMetric {
   label: string;
   value: string;
-  trend: number;
+  trend: number | null;
   comparison: string;
 }
+
+const requiredNumberFact = (record: Record<string, unknown>, field: string): number => {
+  const value = record[field];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Sales report is missing canonical ${field}.`);
+  }
+  return value;
+};
+
+const optionalNumberFact = (record: Record<string, unknown>, field: string): number | null => {
+  const value = record[field];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Sales report has invalid canonical ${field}.`);
+  }
+  return value;
+};
 
 const SalesReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -92,30 +109,30 @@ const SalesReport: React.FC = () => {
       ]);
 
       // Process metrics from API response
-      const summaryData = salesSummary.data || {};
+      const summaryData: Record<string, unknown> = salesSummary.data;
       const calculatedMetrics: SalesMetric[] = [
         {
           label: 'Total Sales',
-          value: formatCurrency(summaryData.total_sales || 0),
-          trend: summaryData.sales_growth || 0,
+          value: formatCurrency(requiredNumberFact(summaryData, 'total_sales')),
+          trend: optionalNumberFact(summaryData, 'sales_growth'),
           comparison: 'vs last period'
         },
         {
-          label: 'Total Orders',
-          value: String(summaryData.total_orders || 0),
-          trend: summaryData.orders_growth || 0,
+          label: 'Total Invoices',
+          value: String(requiredNumberFact(summaryData, 'total_invoices')),
+          trend: optionalNumberFact(summaryData, 'invoices_growth'),
           comparison: 'vs last period'
         },
         {
-          label: 'Average Order Value',
-          value: formatCurrency(summaryData.avg_order_value || 0),
-          trend: summaryData.aov_growth || 0,
+          label: 'Average Invoice Value',
+          value: formatCurrency(requiredNumberFact(summaryData, 'avg_invoice_value')),
+          trend: optionalNumberFact(summaryData, 'average_invoice_growth'),
           comparison: 'vs last period'
         },
         {
           label: 'Unique Customers',
-          value: String(summaryData.unique_customers || 0),
-          trend: summaryData.customers_growth || 0,
+          value: String(requiredNumberFact(summaryData, 'unique_customers')),
+          trend: optionalNumberFact(summaryData, 'customers_growth'),
           comparison: 'vs last period'
         }
       ];
@@ -325,15 +342,21 @@ const SalesReport: React.FC = () => {
             <p className="text-sm text-gray-600">{metric.label}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
             <div className="flex items-center mt-2">
-              {metric.trend > 0 ? (
-                <ChevronUp className="h-4 w-4 text-green-600" />
+              {metric.trend === null ? (
+                <span className="text-xs text-gray-500">Comparison unavailable</span>
               ) : (
-                <ChevronDown className="h-4 w-4 text-red-600" />
+                <>
+                  {metric.trend >= 0 ? (
+                    <ChevronUp className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-red-600" />
+                  )}
+                  <span className={`text-sm font-medium ${metric.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {Math.abs(metric.trend)}%
+                  </span>
+                  <span className="text-xs text-gray-500 ml-2">{metric.comparison}</span>
+                </>
               )}
-              <span className={`text-sm font-medium ${metric.trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {Math.abs(metric.trend)}%
-              </span>
-              <span className="text-xs text-gray-500 ml-2">{metric.comparison}</span>
             </div>
           </div>
         ))}

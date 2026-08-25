@@ -589,7 +589,7 @@ def test_sales_order_search_uses_canonical_number_and_customer_fields(monkeypatc
         limit=50, skip=0, search="DEMO-SO", user={}, db=object(),
     )
 
-    assert result == {"orders": [], "total": 0, "page": 1, "per_page": 50, "total_pages": 1}
+    assert result == {"orders": [], "total": 0, "page": 1, "per_page": 50, "total_pages": 0}
     assert "document.order_number ILIKE :search_pattern" in captured["sql"]
     assert "party.legal_name ILIKE :search_pattern" in captured["sql"]
     assert captured["params"]["search_pattern"] == "%DEMO-SO%"

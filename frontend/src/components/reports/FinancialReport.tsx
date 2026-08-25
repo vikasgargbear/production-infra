@@ -33,11 +33,44 @@ ChartJS.register(
 interface FinancialMetric {
   label: string;
   current: number;
-  previous: number;
-  change: number;
-  changePercent: number;
-  trend: 'up' | 'down' | 'stable';
+  previous: number | null;
+  change: number | null;
+  changePercent: number | null;
+  trend: 'up' | 'down' | null;
 }
+
+const requiredNumberFact = (source: Record<string, unknown>, key: string): number => {
+  const raw = source[key];
+  if ((typeof raw !== 'number' && typeof raw !== 'string') || raw === '') {
+    throw new Error(`Financial summary is missing authoritative ${key}.`);
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Financial summary ${key} is not a finite number.`);
+  }
+  return value;
+};
+
+const optionalNumberFact = (source: Record<string, unknown>, key: string): number | null => (
+  source[key] === null || source[key] === undefined
+    ? null
+    : requiredNumberFact(source, key)
+);
+
+const requiredTextFact = (source: Record<string, unknown>, key: string): string => {
+  const value = source[key];
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Financial transaction is missing authoritative ${key}.`);
+  }
+  return value;
+};
+
+const transactionStatus = (value: unknown): Transaction['status'] => {
+  if (value === 'posted' || value === 'paid' || value === 'completed') return 'Completed';
+  if (value === 'draft' || value === 'submitted' || value === 'approved' || value === 'pending') return 'Pending';
+  if (value === 'overdue') return 'Overdue';
+  throw new Error('Financial transaction status is outside the canonical lifecycle.');
+};
 
 interface Transaction {
   id: string;
@@ -98,70 +131,55 @@ const FinancialReport: React.FC = () => {
       ]);
 
       // Process metrics
-      const summaryData = financialSummary.data || {};
+      if (!financialSummary.data || typeof financialSummary.data !== 'object' || Array.isArray(financialSummary.data)) {
+        throw new Error('Financial summary response is not an authoritative object.');
+      }
+      const summaryData = financialSummary.data as Record<string, unknown>;
+      const metric = (
+        label: string,
+        currentKey: string,
+        previousKey: string,
+        changeKey: string,
+        percentKey: string,
+        lowerIsBetter = false,
+      ): FinancialMetric => {
+        const change = optionalNumberFact(summaryData, changeKey);
+        return {
+          label,
+          current: requiredNumberFact(summaryData, currentKey),
+          previous: optionalNumberFact(summaryData, previousKey),
+          change,
+          changePercent: optionalNumberFact(summaryData, percentKey),
+          trend: change === null ? null : (
+            (lowerIsBetter ? change <= 0 : change >= 0) ? 'up' : 'down'
+          ),
+        };
+      };
       const calculatedMetrics: FinancialMetric[] = [
-        {
-          label: 'Total Revenue',
-          current: summaryData.total_revenue || 0,
-          previous: summaryData.previous_revenue || 0,
-          change: summaryData.revenue_change || 0,
-          changePercent: summaryData.revenue_change_percent || 0,
-          trend: summaryData.revenue_change >= 0 ? 'up' : 'down'
-        },
-        {
-          label: 'Gross Profit',
-          current: summaryData.gross_profit || 0,
-          previous: summaryData.previous_gross_profit || 0,
-          change: summaryData.gross_profit_change || 0,
-          changePercent: summaryData.gross_profit_change_percent || 0,
-          trend: summaryData.gross_profit_change >= 0 ? 'up' : 'down'
-        },
-        {
-          label: 'Net Profit',
-          current: summaryData.net_profit || 0,
-          previous: summaryData.previous_net_profit || 0,
-          change: summaryData.net_profit_change || 0,
-          changePercent: summaryData.net_profit_change_percent || 0,
-          trend: summaryData.net_profit_change >= 0 ? 'up' : 'down'
-        },
-        {
-          label: 'Operating Expenses',
-          current: summaryData.operating_expenses || 0,
-          previous: summaryData.previous_operating_expenses || 0,
-          change: summaryData.operating_expenses_change || 0,
-          changePercent: summaryData.operating_expenses_change_percent || 0,
-          trend: summaryData.operating_expenses_change <= 0 ? 'up' : 'down'
-        },
-        {
-          label: 'Accounts Receivable',
-          current: summaryData.accounts_receivable || 0,
-          previous: summaryData.previous_accounts_receivable || 0,
-          change: summaryData.receivable_change || 0,
-          changePercent: summaryData.receivable_change_percent || 0,
-          trend: summaryData.receivable_change <= 0 ? 'up' : 'down'
-        },
-        {
-          label: 'Accounts Payable',
-          current: summaryData.accounts_payable || 0,
-          previous: summaryData.previous_accounts_payable || 0,
-          change: summaryData.payable_change || 0,
-          changePercent: summaryData.payable_change_percent || 0,
-          trend: summaryData.payable_change <= 0 ? 'up' : 'down'
-        }
+        metric('Total Revenue', 'total_revenue', 'previous_revenue', 'revenue_change', 'revenue_change_percent'),
+        metric('Gross Profit', 'gross_profit', 'previous_gross_profit', 'gross_profit_change', 'gross_profit_change_percent'),
+        metric('Net Profit', 'net_profit', 'previous_net_profit', 'net_profit_change', 'net_profit_change_percent'),
+        metric('Operating Expenses', 'operating_expenses', 'previous_operating_expenses', 'operating_expenses_change', 'operating_expenses_change_percent', true),
+        metric('Accounts Receivable', 'accounts_receivable', 'previous_accounts_receivable', 'receivable_change', 'receivable_change_percent', true),
+        metric('Accounts Payable', 'accounts_payable', 'previous_accounts_payable', 'payable_change', 'payable_change_percent', true),
       ];
       setMetrics(calculatedMetrics);
 
       // Process transactions
-      const transactionData = recentTransactions.data || [];
-      const processedTransactions: Transaction[] = transactionData.map((item: any) => ({
-        id: item.id || item.transaction_id,
-        date: item.date || item.transaction_date,
-        type: item.type === 'income' ? 'Income' : 'Expense',
-        category: item.category || item.transaction_category || 'General',
-        description: item.description || item.remarks || '',
-        amount: item.amount || 0,
-        status: item.status === 'paid' ? 'Completed' : item.status === 'pending' ? 'Pending' : 'Overdue',
-        reference: item.reference || item.party_name || ''
+      if (!Array.isArray(recentTransactions.data)) {
+        throw new Error('Financial transactions response is not an authoritative list.');
+      }
+      const processedTransactions: Transaction[] = recentTransactions.data.map((item: Record<string, unknown>) => ({
+        id: requiredTextFact(item, 'id'),
+        date: requiredTextFact(item, 'date'),
+        type: item.type === 'income' ? 'Income' : item.type === 'expense' ? 'Expense' : (() => {
+          throw new Error('Financial transaction type is outside the canonical contract.');
+        })(),
+        category: requiredTextFact(item, 'category'),
+        description: typeof item.description === 'string' ? item.description : '',
+        amount: requiredNumberFact(item, 'amount'),
+        status: transactionStatus(item.status),
+        reference: typeof item.reference === 'string' ? item.reference : '',
       }));
       setTransactions(processedTransactions);
 
@@ -186,19 +204,19 @@ const FinancialReport: React.FC = () => {
       return { labels: [], datasets: [] };
     }
 
-    const labels = chartData.cashFlow.map((item: any) => item.period || item.week || '');
+    const labels = chartData.cashFlow.map((item: Record<string, unknown>) => requiredTextFact(item, 'period'));
     return {
       labels,
       datasets: [
         {
           label: 'Cash Inflow',
-          data: chartData.cashFlow.map((item: any) => item.inflow || 0),
+          data: chartData.cashFlow.map((item: Record<string, unknown>) => requiredNumberFact(item, 'income')),
           backgroundColor: 'rgba(34, 197, 94, 0.8)',
           borderWidth: 0
         },
         {
           label: 'Cash Outflow',
-          data: chartData.cashFlow.map((item: any) => item.outflow || 0),
+          data: chartData.cashFlow.map((item: Record<string, unknown>) => requiredNumberFact(item, 'expenses')),
           backgroundColor: 'rgba(239, 68, 68, 0.8)',
           borderWidth: 0
         }
@@ -267,13 +285,13 @@ const FinancialReport: React.FC = () => {
     return `₹${Math.abs(amount).toLocaleString('en-IN')}`;
   };
 
-  const getChangeIcon = (trend: 'up' | 'down' | 'stable', isPositive: boolean) => {
-    if (trend === 'up' && isPositive) {
+  const getChangeIcon = (trend: 'up' | 'down' | null) => {
+    if (trend === null) return null;
+    if (trend === 'up') {
       return <ArrowUpRight className="h-4 w-4 text-green-600" />;
-    } else if (trend === 'down' || !isPositive) {
+    } else {
       return <ArrowDownRight className="h-4 w-4 text-red-600" />;
     }
-    return null;
   };
 
   const getStatusBadge = (status: string) => {
@@ -354,17 +372,19 @@ const FinancialReport: React.FC = () => {
                   {index === 4 && <ArrowUpRight className="h-5 w-5 text-indigo-600" />}
                   {index === 5 && <ArrowDownRight className="h-5 w-5 text-red-600" />}
                 </div>
-                {getChangeIcon(metric.trend, metric.change > 0)}
+                {getChangeIcon(metric.trend)}
               </div>
               <p className="text-xs text-gray-600 mb-1">{metric.label}</p>
               <p className="text-lg font-bold text-gray-900">
                 {formatCurrency(metric.current)}
               </p>
-              <p className={`text-xs mt-1 ${
-                metric.change > 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {metric.change > 0 ? '+' : ''}{metric.changePercent.toFixed(1)}% from last period
-              </p>
+              {metric.change === null || metric.changePercent === null ? (
+                <p className="mt-1 text-xs text-slate-500">Previous-period comparison unavailable</p>
+              ) : (
+                <p className={`mt-1 text-xs ${metric.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {metric.change > 0 ? '+' : ''}{metric.changePercent.toFixed(1)}% from last period
+                </p>
+              )}
             </div>
           ))}
         </div>

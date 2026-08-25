@@ -36,6 +36,23 @@ interface TaxFilters {
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
+const requiredNumberFact = (record: Record<string, unknown>, field: string): number => {
+  const value = record[field];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Tax analytics is missing canonical ${field}.`);
+  }
+  return value;
+};
+
+const optionalNumberFact = (record: Record<string, unknown>, field: string): number | null => {
+  const value = record[field];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Tax analytics has invalid canonical ${field}.`);
+  }
+  return value;
+};
+
 const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }) => {
   const [filters, setFilters] = useState<TaxFilters>({
     dateRange: {
@@ -59,21 +76,23 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         }
       });
 
-      const data = response.data || {};
+      const data: Record<string, unknown> = response.data;
+      const outputTax = requiredNumberFact(data, 'total_output_tax');
+      const inputTax = requiredNumberFact(data, 'total_input_tax');
 
       // Transform API response to match our component structure
       return {
-        output_tax: data.total_output_tax || 0,
-        input_tax: data.total_input_tax || 0,
-        net_tax_liability: (data.total_output_tax || 0) - (data.total_input_tax || 0),
-        cgst_collected: data.cgst_collected || 0,
-        sgst_collected: data.sgst_collected || 0,
-        igst_collected: data.igst_collected || 0,
-        cgst_paid: data.cgst_paid || 0,
-        sgst_paid: data.sgst_paid || 0,
-        igst_paid: data.igst_paid || 0,
-        pending_returns: data.pending_returns || 0,
-        compliance_score: data.compliance_score || 100
+        output_tax: outputTax,
+        input_tax: inputTax,
+        net_tax_liability: outputTax - inputTax,
+        cgst_collected: requiredNumberFact(data, 'cgst_collected'),
+        sgst_collected: requiredNumberFact(data, 'sgst_collected'),
+        igst_collected: requiredNumberFact(data, 'igst_collected'),
+        cgst_paid: requiredNumberFact(data, 'cgst_paid'),
+        sgst_paid: requiredNumberFact(data, 'sgst_paid'),
+        igst_paid: requiredNumberFact(data, 'igst_paid'),
+        pending_returns: requiredNumberFact(data, 'pending_returns'),
+        compliance_score: optionalNumberFact(data, 'compliance_score')
       };
     }
   });
@@ -167,19 +186,21 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         </div>
         <div className="flex items-baseline gap-2">
           <p className="text-2xl font-bold text-gray-900">
-            {taxSummary?.compliance_score || 0}%
+            {taxSummary?.compliance_score == null ? 'Unavailable' : `${taxSummary.compliance_score}%`}
           </p>
-          <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full"
-              style={{ width: `${taxSummary?.compliance_score || 0}%` }}
-            />
-          </div>
+          {taxSummary?.compliance_score != null && (
+            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full"
+                style={{ width: `${taxSummary.compliance_score}%` }}
+              />
+            </div>
+          )}
         </div>
         <p className="text-sm text-gray-600 mt-1">Compliance Score</p>
         <div className="mt-4 text-xs">
           <span className="text-purple-600 font-semibold">
-            {taxSummary?.pending_returns || 0} returns pending
+            {taxSummary?.pending_returns ?? 'Unavailable'} returns pending
           </span>
         </div>
       </div>

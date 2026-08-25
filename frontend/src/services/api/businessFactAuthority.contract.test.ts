@@ -37,3 +37,35 @@ test('retired browser spreadsheet parsers cannot invent product master facts', (
   expect(read('frontend/src/components/purchase/purchase-entry/PurchaseEntryFlow.tsx'))
     .not.toContain('BulkUploadInline');
 });
+
+test('financial comparisons come from equal-period backend facts, never zero placeholders', () => {
+  const financialReport = read('frontend/src/components/reports/FinancialReport.tsx');
+  const salesReport = read('frontend/src/components/reports/SalesReport.tsx');
+  const taxAnalytics = read('frontend/src/components/reports/TaxAnalytics.tsx');
+  const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
+
+  expect(financialReport).toContain('requiredNumberFact');
+  expect(financialReport).toContain('Previous-period comparison unavailable');
+  expect(financialReport).not.toContain('summaryData.revenue_change_percent || 0');
+  expect(financialReport).not.toContain("transaction_category || 'General'");
+  expect(canonicalReads).toContain('previous_from = previous_to -');
+  expect(canonicalReads).toContain('"previous_accounts_receivable": None');
+  expect(canonicalReads).not.toContain('"revenue_change_percent": 0');
+  expect(canonicalReads).not.toContain('"receivable_change_percent": 0');
+  expect(canonicalReads).not.toContain('0::numeric AS sales_growth');
+  expect(canonicalReads).not.toContain('0::numeric AS revenue_change');
+  expect(canonicalReads).not.toContain('"products_change": 0');
+  expect(canonicalReads).not.toContain('"compliance_score": 100');
+  expect(canonicalReads).not.toContain('"gstr2b": {"status": "available"');
+  expect(canonicalReads).not.toContain('"total_pages": 1');
+  expect(canonicalReads).not.toContain('0::numeric AS current_outstanding');
+  expect(canonicalReads).not.toContain("'sale_price_per_unit', batch.mrp");
+  expect(canonicalReads).not.toContain("'cost_per_unit', COALESCE(stock.average_unit_cost, 0)");
+  expect(canonicalReads).toContain('"total_items": total');
+  expect(canonicalReads).toContain('AS current_outstanding');
+  expect(salesReport).toContain('requiredNumberFact');
+  expect(salesReport).toContain('Comparison unavailable');
+  expect(salesReport).not.toContain('summaryData.sales_growth || 0');
+  expect(taxAnalytics).toContain("'Unavailable'");
+  expect(taxAnalytics).not.toContain('data.compliance_score || 100');
+});
