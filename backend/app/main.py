@@ -109,6 +109,7 @@ from .api.routes import (
     canonical_payment_history_reads,
     canonical_party_ledger_reads,
     canonical_document_history_reads,
+    canonical_inventory_reads,
 )
 from .api.routes import web_operator_actions
 from .api.routes.internal import (
@@ -282,6 +283,7 @@ api.include_router(canonical_supplier_invoice_reads.router)
 api.include_router(canonical_return_reads.router)
 api.include_router(canonical_supplier_payment_reads.router)
 api.include_router(canonical_payment_history_reads.router)
+api.include_router(canonical_inventory_reads.router, tags=["Canonical Inventory Reads"])
 include_legacy_read_only_router(api, canonical_party_ledger_reads.router)
 api.include_router(canonical_document_history_reads.router)
 

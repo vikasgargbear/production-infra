@@ -1,0 +1,93 @@
+import {
+  decodeCurrentStockPage, decodeInventoryContext, decodeMovementPage,
+  displayOrganizationTimestamp, exhaustCursorPages, movementLabel,
+} from './canonicalStockReads';
+
+const ids = {
+  branch: 'd3000000-0000-7000-8000-000000000001',
+  location: 'd3000000-0000-7000-8000-000000000002',
+  product: 'd3000000-0000-7000-8000-000000000003',
+  batch: 'd3000000-0000-7000-8000-000000000004',
+  document: 'd3000000-0000-7000-8000-000000000005',
+  movement1: 'd3000000-0000-7000-8000-000000000006',
+  movement2: 'd3000000-0000-7000-8000-000000000007',
+};
+const scope = { branch_id: ids.branch, branch_code: 'MAIN', branch_name: 'Main', location_id: null, location_code: null, location_name: null };
+const item = (movement_id: string, overrides = {}) => ({
+  movement_id, posted_at: '2026-08-25T10:00:00Z', entry_kind: 'value_adjustment',
+  quantity_delta: '0.000000', value_delta: '5.00', absolute_quantity: '0.000000',
+  absolute_value: '5.00', unit_cost: '100.0000', branch_id: ids.branch,
+  branch_code: 'MAIN', branch_name: 'Main', location_id: ids.location,
+  location_code: 'SALE', location_name: 'Saleable', product_id: ids.product,
+  product_code: 'BOX', product_name: 'Carton', batch_id: ids.batch,
+  batch_number: 'B-1', inventory_document_id: ids.document, document_number: 'ADJ-1',
+  reverses_entry_id: null, reversed_entry_kind: null, posted_by: null, ...overrides,
+});
+const response = (items: unknown[], total_count: number, next_cursor: string | null) => ({
+  scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25', items, total_count,
+  summary: { movement_count: total_count, gross_quantity: '0.000000', net_quantity_delta: '0.000000', gross_value: '10.00', net_value_delta: '0.00' },
+  next_cursor,
+});
+
+test('preserves signed authoritative value adjustments and reversal lineage', () => {
+  const decoded = decodeMovementPage(response([
+    item(ids.movement1),
+    item(ids.movement2, { entry_kind: 'reversal', value_delta: '-5.00', reverses_entry_id: ids.movement1, reversed_entry_kind: 'value_adjustment', document_number: 'REV-1' }),
+  ], 2, null));
+  expect(decoded.items[0]).toMatchObject({ quantity_delta: '0.000000', value_delta: '5.00' });
+  expect(decoded.items[1]).toMatchObject({ quantity_delta: '0.000000', value_delta: '-5.00' });
+  expect(movementLabel(decoded.items[1])).toBe('Reversal of value adjustment');
+});
+
+test.each([
+  ['numeric quantity', { quantity_delta: 0 }],
+  ['numeric value', { value_delta: -5 }],
+  ['derived wrong reversal value', { entry_kind: 'reversal', quantity_delta: '0.000000', value_delta: '0.00', absolute_value: '0.00', reverses_entry_id: ids.movement1, reversed_entry_kind: 'value_adjustment' }],
+])('rejects %s at the strict wire boundary', (_label, override) => {
+  expect(() => decodeMovementPage(response([item(ids.movement1, override)], 1, null))).toThrow();
+});
+
+test('exhausts deterministic cursors and fails incomplete or repeated pagination', async () => {
+  const load = jest.fn()
+    .mockResolvedValueOnce({ data: response([item(ids.movement1)], 2, 'next') })
+    .mockResolvedValueOnce({ data: response([item(ids.movement2)], 2, null) });
+  const complete = await exhaustCursorPages(load, { branch_id: ids.branch }, decodeMovementPage);
+  expect(complete.items.map(row => row.movement_id)).toEqual([ids.movement1, ids.movement2]);
+  expect(load.mock.calls[1][0].cursor).toBe('next');
+
+  await expect(exhaustCursorPages(
+    jest.fn().mockResolvedValue({ data: response([item(ids.movement1)], 2, null) }),
+    { branch_id: ids.branch }, decodeMovementPage,
+  )).rejects.toThrow('incomplete');
+});
+
+test('decodes explicit tracked, positive-stock, and exhausted batch counts', () => {
+  const decoded = decodeCurrentStockPage({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
+    items: [{
+      product_id: ids.product, product_code: 'BOX', product_name: 'Carton',
+      generic_name: null, hsn_code: null, product_type: 'goods', unit: 'EA', category: null,
+      total_quantity: '1.000000', total_value: '95.24', average_unit_cost: '95.2400',
+      batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
+      expired_batch_count: 0, near_expiry_batch_count: 1, requires_cold_chain: false,
+    }],
+    total_count: 1,
+    summary: {
+      product_count: 1, total_quantity: '1.000000', total_value: '95.24',
+      batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
+    },
+    next_cursor: null,
+  });
+  expect(decoded.summary).toMatchObject({
+    batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
+  });
+});
+
+test('validates and uses the organization IANA timezone for movement timestamps', () => {
+  expect(() => decodeInventoryContext({
+    organization_id: ids.branch, organization_timezone: 'Not/AZone',
+    business_date: '2026-08-25', branches: [],
+  })).toThrow('IANA time zone');
+  expect(displayOrganizationTimestamp('2026-08-25T20:00:00Z', 'Asia/Kolkata'))
+    .toContain('26 Aug 2026');
+});

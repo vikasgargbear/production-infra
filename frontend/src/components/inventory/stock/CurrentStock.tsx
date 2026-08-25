@@ -1,304 +1,147 @@
-/**
- * CurrentStock Component (REFACTORED)
- * Significantly reduced from 1,191 lines to ~380 lines
- * 
- * Refactoring changes:
- * - 24 useState → 1 useReducer (via useStockState hook)
- * - Extracted 4 sub-components (StockFilters, StockTable, StockActions)
- * - All sub-components use React.memo for performance
- * - Types extracted to stock/types/
- */
-
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import apiClient from '../../../services/api/apiClient';
-import { ModuleHeader } from '../../global';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, RefreshCw, Search } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { ModuleHeader } from '../../global';
+import { canonicalInventoryReadsApi } from '../../../services/api/modules/inventory/canonicalInventoryReads.api';
+import { InventoryScopeSelector } from './components/InventoryScopeSelector';
+import { useInventoryScope } from './hooks/useInventoryScope';
+import {
+  compareMoney, compareQuantity, decodeCurrentStockPage, displayMoney,
+  displayOrganizationTimestamp, displayQuantity, displayRate, exhaustCursorPages,
+  type CurrentStockItem, type CurrentStockSummary,
+} from './utils/canonicalStockReads';
 
-// Import extracted components
-import { StockFilters } from './components/StockFilters';
-import { StockTable } from './components/StockTable';
-import { StockActions } from './components/StockActions';
+type Props = { open?: boolean; onClose?: () => void };
+type SortKey = 'product_name' | 'total_quantity' | 'total_value';
 
-// Import hooks and types
-import { useStockState } from './hooks/useStockState';
-import type { StockItem, CurrentStockProps, StockFilters as StockFiltersType } from './types/stock.types';
-import { normalizeCurrentStock } from './utils/normalizeCurrentStock';
-
-const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => {
-  // Use centralized state management (replaces 24 useState!)
-  const { state, dispatch, ui, selectedIds } = useStockState();
-
-  // Data state (consolidated)
-  const [stockData, setStockData] = useState<StockItem[]>([]);
-  const [allProducts, setAllProducts] = useState<StockItem[]>([]);
-
-  // Async state
-  const [loading, setLoading] = useState<boolean>(true);
-  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+const CurrentStock: React.FC<Props> = ({ open = true, onClose }) => {
+  const scope = useInventoryScope();
+  const [items, setItems] = useState<CurrentStockItem[]>([]);
+  const [summary, setSummary] = useState<CurrentStockSummary | null>(null);
+  const [asOf, setAsOf] = useState('');
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [currentPage, setCurrentPage] = useState<number>(0);
-  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [sort, setSort] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'product_name', direction: 'asc' });
 
-  // Load stock data from API
-  const loadStockData = useCallback(async (page = 0, reset = true) => {
-    if (page === 0) {
-      setLoading(true);
-    } else {
-      setLoadingMore(true);
-    }
-
-    try {
-      setError(null);
-
-      const response = await apiClient.get('/inventory/stock/current', {
-        params: {
-          limit: 100,
-          offset: page * 100
-        }
-      });
-
-      const payload = response?.data?.stocks ?? response?.data;
-      const products = normalizeCurrentStock(payload);
-
-      setHasMore(products.length === 100);
-
-      const transformedData = products as StockItem[];
-
-      if (reset || page === 0) {
-        setAllProducts(transformedData);
-        setStockData(transformedData);
-      } else {
-        setAllProducts(prev => [...prev, ...transformedData]);
-        setStockData(prev => [...prev, ...transformedData]);
-      }
-    } catch (error: any) {
-      setError(error.message || 'Failed to load stock data');
-      if (page === 0) {
-        setStockData([]);
-        setAllProducts([]);
-      }
-    } finally {
-      if (page === 0) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-      }
-    }
-  }, []);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
+  const load = useCallback(async () => {
+    if (!scope.branchId) return;
+    setLoading(true);
     setError(null);
     try {
-      await loadStockData(0, true);
-    } catch (error) {
-      setError('Failed to refresh data');
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadStockData]);
-
-  useEffect(() => {
-    loadStockData(0, true);
-  }, [loadStockData]);
-
-  // Filter and sort data using useMemo
-  const filteredData = useMemo(() => {
-    let filtered = [...allProducts];
-
-    // Search filter
-    if (ui.searchQuery) {
-      const query = ui.searchQuery.toLowerCase();
-      filtered = filtered.filter(item =>
-        item.product_name?.toLowerCase().includes(query) ||
-        item.product_code?.toLowerCase().includes(query) ||
-        item.generic_name?.toLowerCase().includes(query)
+      const result = await exhaustCursorPages(
+        canonicalInventoryReadsApi.currentStock,
+        { branch_id: scope.branchId, ...(scope.locationId ? { location_id: scope.locationId } : {}) },
+        decodeCurrentStockPage,
       );
+      setItems(result.items);
+      setSummary(result.summary);
+      setAsOf(result.as_of);
+    } catch (caught) {
+      setItems([]);
+      setSummary(null);
+      setError(caught instanceof Error ? caught.message : 'Unable to load current stock.');
+    } finally {
+      setLoading(false);
     }
+  }, [scope.branchId, scope.locationId]);
 
-    // Category filter
-    if (ui.selectedCategory && ui.selectedCategory !== 'all') {
-      filtered = filtered.filter(item => item.category === ui.selectedCategory);
-    }
+  useEffect(() => { void load(); }, [load]);
 
-    // Low stock filter
-    if (ui.showLowStock) {
-      filtered = filtered.filter(item => item.low_stock);
-    }
-
-    // Expiring filter
-    if (ui.showExpiring) {
-      filtered = filtered.filter(item => item.expiry_alert);
-    }
-
-    // Sorting
-    filtered.sort((a, b) => {
-      const aValue = a[ui.sortConfig.key as keyof StockItem] as string | number;
-      const bValue = b[ui.sortConfig.key as keyof StockItem] as string | number;
-
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return ui.sortConfig.direction === 'asc'
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      }
-
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return ui.sortConfig.direction === 'asc'
-          ? aValue - bValue
-          : bValue - aValue;
-      }
-
-      return 0;
+  const visible = useMemo(() => {
+    const lowered = query.trim().toLowerCase();
+    const filtered = lowered ? items.filter(item => (
+      item.product_name.toLowerCase().includes(lowered)
+      || item.product_code.toLowerCase().includes(lowered)
+      || (item.generic_name || '').toLowerCase().includes(lowered)
+    )) : [...items];
+    filtered.sort((left, right) => {
+      const comparison = sort.key === 'product_name'
+        ? left.product_name.localeCompare(right.product_name)
+        : sort.key === 'total_quantity'
+          ? compareQuantity(left.total_quantity, right.total_quantity)
+          : compareMoney(left.total_value, right.total_value);
+      return sort.direction === 'asc' ? comparison : -comparison;
     });
-
     return filtered;
-  }, [allProducts, ui.searchQuery, ui.selectedCategory, ui.showLowStock, ui.showExpiring, ui.sortConfig]);
+  }, [items, query, sort]);
 
-  // Handlers
-  const handleSort = useCallback((key: string) => {
-    const direction = ui.sortConfig.key === key && ui.sortConfig.direction === 'asc' ? 'desc' : 'asc';
-    dispatch({ type: 'SET_SORT', config: { key, direction } });
-  }, [ui.sortConfig, dispatch]);
+  const toggleSort = (key: SortKey) => setSort(current => ({
+    key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+  }));
 
-  const handleFilterChange = useCallback((filters: Partial<StockFiltersType>) => {
-    if ('searchQuery' in filters) dispatch({ type: 'SET_SEARCH_QUERY', query: filters.searchQuery || '' });
-    if ('category' in filters) dispatch({ type: 'SET_CATEGORY', category: filters.category || '' });
-    if ('location' in filters) dispatch({ type: 'SET_LOCATION', location: filters.location || '' });
-    if ('showLowStock' in filters) dispatch({ type: 'TOGGLE_LOW_STOCK' });
-    if ('showExpiring' in filters) dispatch({ type: 'TOGGLE_EXPIRING' });
-  }, [dispatch]);
-
-  const handleExport = useCallback(() => {
-    const itemsToExport = selectedIds.size > 0
-      ? filteredData.filter(item => selectedIds.has(item.product_id))
-      : filteredData;
-
-    if (itemsToExport.length === 0) return;
-
-    try {
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text('Current Stock Report', 20, 20);
-      doc.setFontSize(10);
-
-      const tableData = itemsToExport.map((item, index) => [
-        index + 1,
-        item.product_name || 'N/A',
-        item.product_code || 'N/A',
-        item.total_quantity_available || 0,
-        item.unit || 'Units'
-      ]);
-
-      // Simple table without autoTable
-      let y = 40;
-      doc.text('No.', 20, y);
-      doc.text('Product', 40, y);
-      doc.text('Code', 120, y);
-      doc.text('Stock', 160, y);
-      doc.text('Unit', 180, y);
-
-      y += 10;
-      tableData.forEach(row => {
-        doc.text(String(row[0]), 20, y);
-        doc.text(String(row[1]).substring(0, 30), 40, y);
-        doc.text(String(row[2]), 120, y);
-        doc.text(String(row[3]), 160, y);
-        doc.text(String(row[4]), 180, y);
-        y += 10;
-        if (y > 280) {
-          doc.addPage();
-          y = 20;
-        }
-      });
-
-      doc.save('stock-report.pdf');
-    } catch (error) {
-      console.error('PDF export error:', error);
-    }
-  }, [selectedIds, filteredData]);
-
-  const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
-
-  const handleWhatsApp = useCallback(() => {
-    const itemsToShare = selectedIds.size > 0
-      ? filteredData.filter(item => selectedIds.has(item.product_id))
-      : filteredData.slice(0, 10);
-
-    const message = itemsToShare.map(item =>
-      `${item.product_name}: ${item.total_quantity_available} ${item.unit}`
-    ).join('\n');
-
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-  }, [selectedIds, filteredData]);
-
-  // Stats
-  const lowStockCount = allProducts.filter(item => item.low_stock).length;
-  const expiringCount = allProducts.filter(item => item.expiry_alert).length;
+  const exportPdf = () => {
+    const doc = new jsPDF();
+    doc.text('Canonical Current Stock', 16, 16);
+    doc.setFontSize(9);
+    visible.forEach((item, index) => {
+      if (index > 0 && index % 30 === 0) doc.addPage();
+      const y = 28 + (index % 30) * 8;
+      doc.text(`${item.product_code} | ${item.product_name} | ${displayQuantity(item.total_quantity)} ${item.unit} | ${displayMoney(item.total_value)}`, 16, y);
+    });
+    doc.save('canonical-current-stock.pdf');
+  };
 
   if (!open) return null;
-
   return (
-    <div className="h-full bg-gray-50">
-      <div className="h-full flex flex-col">
-        {/* Header */}
-        <ModuleHeader
-          title="Current Stock"
-          onClose={onClose}
-        />
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Filters */}
-          <StockFilters
-            filters={{
-              category: ui.selectedCategory,
-              location: ui.selectedLocation,
-              showLowStock: ui.showLowStock,
-              showExpiring: ui.showExpiring,
-              dateFilter: ui.dateFilter,
-              stockStatus: ui.moreFilters.stockStatus,
-              expiryPeriod: ui.moreFilters.expiryPeriod,
-              packType: ui.moreFilters.packType,
-              searchQuery: ui.searchQuery
-            }}
-            onFilterChange={handleFilterChange}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-            lowStockCount={lowStockCount}
-            expiringCount={expiringCount}
-          />
-
-          {/* Error */}
-          {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-              {error}
-            </div>
-          )}
-
-          {/* Table */}
-          <StockTable
-            data={filteredData}
-            loading={loading}
-            sortConfig={ui.sortConfig}
-            onSort={handleSort}
-            selectedIds={selectedIds}
-            onSelectionChange={(ids) => dispatch({ type: 'SET_SELECTED_IDS', ids })}
-          />
+    <div className="flex h-full flex-col bg-gray-50">
+      <ModuleHeader title="Current Stock" onClose={onClose} />
+      <main className="flex-1 space-y-4 overflow-y-auto p-6">
+        {scope.context && <InventoryScopeSelector context={scope.context} branchId={scope.branchId}
+          locationId={scope.locationId} onBranchChange={scope.setBranchId}
+          onLocationChange={scope.setLocationId} disabled={loading} />}
+        {(scope.scopeError || error) && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">{scope.scopeError || error}</div>}
+        <section className="rounded-lg border border-gray-200 bg-white p-4" aria-label="Current stock controls">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="relative min-w-[260px] flex-1"><span className="sr-only">Search current stock</span>
+              <Search className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search products by name or code..."
+                className="min-h-11 w-full rounded-lg border border-gray-300 pl-10 pr-3" />
+            </label>
+            <button type="button" disabled title="Unavailable until canonical branch/product reorder policy is configured"
+              className="min-h-11 rounded-lg border border-gray-200 bg-gray-100 px-4 text-gray-500 disabled:cursor-not-allowed">
+              Low Stock unavailable
+            </button>
+            <button type="button" onClick={() => void load()} disabled={loading || !scope.branchId}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-gray-300 bg-white disabled:opacity-50"
+              aria-label="Refresh current stock"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+            <button type="button" onClick={exportPdf} disabled={visible.length === 0}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-white disabled:bg-gray-300">
+              <Download className="h-4 w-4" /> Export visible
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-gray-600">Loaded {items.length} of {summary?.product_count || 0} scoped products{asOf && scope.context ? ` • As of ${displayOrganizationTimestamp(asOf, scope.context.organization_timezone)}` : ''}</p>
+          {summary && <div className="mt-3 flex flex-wrap gap-6 border-t border-gray-100 pt-3 text-sm">
+            <span>Total quantity: <strong>{displayQuantity(summary.total_quantity)}</strong></span>
+            <span>Total value: <strong>{displayMoney(summary.total_value)}</strong></span>
+            <span>Tracked batches: <strong>{summary.batch_count}</strong></span>
+            <span>With positive stock: <strong>{summary.positive_stock_batch_count}</strong></span>
+            <span>Exhausted: <strong>{summary.exhausted_batch_count}</strong></span>
+          </div>}
+        </section>
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-3 text-left"><button onClick={() => toggleSort('product_name')}>Product</button></th>
+              <th className="px-4 py-3 text-left">HSN</th>
+              <th className="px-4 py-3 text-right"><button onClick={() => toggleSort('total_quantity')}>Quantity</button></th>
+              <th className="px-4 py-3 text-right"><button onClick={() => toggleSort('total_value')}>Value</button></th>
+              <th className="px-4 py-3 text-right">Average cost</th><th className="px-4 py-3 text-right">Tracked batches</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {visible.map(item => <tr key={item.product_id} data-product-id={item.product_id}>
+                <td className="px-4 py-3"><strong>{item.product_name}</strong><div className="text-xs text-gray-500">{item.product_code}</div></td>
+                <td className="px-4 py-3">{item.hsn_code || '—'}</td>
+                <td className="px-4 py-3 text-right">{displayQuantity(item.total_quantity)} {item.unit}</td>
+                <td className="px-4 py-3 text-right">{displayMoney(item.total_value)}</td>
+                <td className="px-4 py-3 text-right">{item.average_unit_cost === null ? '—' : displayRate(item.average_unit_cost)}</td>
+                <td className="px-4 py-3 text-right">{item.batch_count}</td>
+              </tr>)}
+            </tbody>
+          </table>
+          {!loading && visible.length === 0 && <p className="p-8 text-center text-gray-500">No stock found in this scope.</p>}
         </div>
-
-        {/* Bulk Actions */}
-        <StockActions
-          selectedCount={selectedIds.size}
-          onExport={handleExport}
-          onPrint={handlePrint}
-          onWhatsApp={handleWhatsApp}
-        />
-
-      </div>
+      </main>
     </div>
   );
 };
