@@ -1,4 +1,4 @@
-/* eslint-disable jest/valid-expect, jest/valid-title */
+/* eslint-disable jest/valid-expect, jest/valid-title, testing-library/prefer-screen-queries */
 import fs from 'fs';
 import path from 'path';
 
@@ -10,6 +10,9 @@ import { loadBrowserConfig, verifyDeployedSha } from '../support/live18/config';
 import {
   loadFixture, loadReadyOperationMatrix, OperationContract, OperationFixture, UiStep,
 } from '../support/live18/contracts';
+import {
+  buildOperationFailureEvidence, OperationFailureProgress, writeOperationFailureEvidence,
+} from '../support/live18/failureEvidence';
 import {
   interpolateUiSteps, RuntimeUiValues,
 } from '../support/live18/runtimeUiValues';
@@ -133,10 +136,26 @@ async function runSteps(
   steps: UiStep[],
   runtime: RuntimeUiValues,
   phase: string,
+  progress: OperationFailureProgress,
 ): Promise<void> {
-  for (const step of interpolateUiSteps(steps, runtime, phase)) {
+  const interpolated = interpolateUiSteps(steps, runtime, phase);
+  for (const [index, step] of interpolated.entries()) {
+    const phaseParts = phase.split('.');
+    progress.stage = phaseParts[phaseParts.length - 1] || 'ui_steps';
+    progress.stepIndex = index;
+    progress.actor = step.actor;
+    progress.action = step.action;
+    progress.locatorKind = step.locator?.kind || null;
     await runUiStep(step.actor === 'requester' ? requester : reviewer, appOrigin, step);
   }
+}
+
+function beginStage(progress: OperationFailureProgress, stage: string): void {
+  progress.stage = stage;
+  progress.stepIndex = null;
+  progress.actor = null;
+  progress.action = null;
+  progress.locatorKind = null;
 }
 
 function findDeep(value: unknown, key: string): unknown {
@@ -210,6 +229,9 @@ async function runOperation(
   const reviewerContext = await browser.newContext();
   const requesterPage = await requesterContext.newPage();
   const reviewerPage = await reviewerContext.newPage();
+  const progress: OperationFailureProgress = {
+    stage: 'requester_login', stepIndex: null, actor: 'requester', action: null, locatorKind: null,
+  };
   const captured: CapturedResponse[] = [];
   const pending = new Set<Promise<void>>();
   const listen = (actor: 'requester' | 'reviewer') => (response: Response) => {
@@ -221,8 +243,15 @@ async function runOperation(
   reviewerPage.on('response', listen('reviewer'));
 
   try {
-    const requesterSession = await loginAndCaptureSession(requesterPage, config.appOrigin, config.requester);
-    const reviewerSession = await loginAndCaptureSession(reviewerPage, config.appOrigin, config.reviewer);
+    const requesterSession = await loginAndCaptureSession(
+      requesterPage, config.appOrigin, config.apiOrigin, config.requester,
+    );
+    beginStage(progress, 'reviewer_login');
+    progress.actor = 'reviewer';
+    const reviewerSession = await loginAndCaptureSession(
+      reviewerPage, config.appOrigin, config.apiOrigin, config.reviewer,
+    );
+    beginStage(progress, 'identity_assertion');
     assertSessionIsolation(config, requesterSession, reviewerSession);
     const denialIdentity = sessionIdentityFromToken(config.denialAccessToken);
     expect(denialIdentity.orgId, 'denial token must carry an organization claim').toBeTruthy();
@@ -239,8 +268,9 @@ async function runOperation(
     try {
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.missing_required_steps,
-        prePrepareRuntime, `${contract.id}.missing_required_steps`,
+        prePrepareRuntime, `${contract.id}.missing_required_steps`, progress,
       );
+      beginStage(progress, 'missing_required_assertion');
       await Promise.all([...pending]);
       const preparePath = `/api/web/actions/${contract.command_operation}/prepare`;
       const invalidPrepare = captured.filter(item => item.method === 'POST'
@@ -251,8 +281,9 @@ async function runOperation(
       ).toHaveLength(0);
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps,
-        prePrepareRuntime, `${contract.id}.prepare_steps`,
+        prePrepareRuntime, `${contract.id}.prepare_steps`, progress,
       );
+      beginStage(progress, 'prepare_assertion');
       await Promise.all([...pending]);
       const prepared = captured.filter(item => item.method === 'POST' && item.path === preparePath
         && item.status >= 200 && item.status < 300);
@@ -270,12 +301,14 @@ async function runOperation(
         run_token: config.runToken,
       };
 
+      beginStage(progress, 'review_readback');
       const review = await responseJson(await reviewerApi.get(`/api/web/actions/commands/${commandId}/review`));
       expect(findDeep(review, 'preview_hash')).toBe(previewHash);
       assertExactScalars(review);
 
       let selfApprovalProbe: { status: number; body: Record<string, unknown> } | null = null;
       if (contract.approval_policy === 'separate_approver') {
+        beginStage(progress, 'self_approval_probe');
         const selfApproval = await requesterApi.post(
           `/api/web/actions/commands/${commandId}/approve`,
           {
@@ -296,8 +329,9 @@ async function runOperation(
 
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.approval_steps,
-        commandRuntime, `${contract.id}.approval_steps`,
+        commandRuntime, `${contract.id}.approval_steps`, progress,
       );
+      beginStage(progress, 'approval_assertion');
       await Promise.all([...pending]);
       const approvalsBeforeExecute = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/approve`);
@@ -310,6 +344,7 @@ async function runOperation(
         ).toHaveLength(0);
       }
 
+      beginStage(progress, 'stale_hash_probe');
       const staleHash = `${previewHash.slice(0, -1)}${previewHash.endsWith('0') ? '1' : '0'}`;
       const stale = await requesterApi.post(`/api/web/actions/commands/${commandId}/execute`, {
         data: { preview_hash: staleHash, idempotency_key: `live18-stale-${commandId}` },
@@ -318,8 +353,9 @@ async function runOperation(
 
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.execute_steps,
-        commandRuntime, `${contract.id}.execute_steps`,
+        commandRuntime, `${contract.id}.execute_steps`, progress,
       );
+      beginStage(progress, 'execute_assertion');
       await Promise.all([...pending]);
       const approvals = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/approve`);
@@ -340,21 +376,25 @@ async function runOperation(
         `${contract.id} must visibly identify the exact canonical resource it posted`,
       ).toBeVisible();
 
+      beginStage(progress, 'rest_readback');
       const readbackPath = resolveReadbackPath(contract, commandId, resourceId);
       const readback = await responseJson(await requesterApi.get(readbackPath));
       assertExactScalars(readback);
       expect(JSON.stringify(readback)).toContain(resourceId);
 
+      beginStage(progress, 'replay_probe');
       const replay = await requesterApi.post(`/api/web/actions/commands/${commandId}/execute`, {
         data: executions[0].requestBody || {},
       });
       const replayBody = await responseJson(replay);
       expect(findDeep(replayBody, 'resource_id')).toBe(resourceId);
 
+      beginStage(progress, 'denial_probe');
       const denied = await denialApi.get(readbackPath);
       expect([403, 404]).toContain(denied.status());
       persistCompletedResource(contract.id, resourceId);
 
+      beginStage(progress, 'evidence_write');
       const evidence = {
         evidence_schema: 'aasopharma.live18.browser.v1',
         tested_sha: config.expectedSha,
@@ -383,6 +423,17 @@ async function runOperation(
       await reviewerApi.dispose();
       await denialApi.dispose();
     }
+  } catch (error) {
+    try {
+      writeOperationFailureEvidence(
+        evidenceRoot(),
+        buildOperationFailureEvidence(config.expectedSha, contract.id, progress, error),
+      );
+    } catch (evidenceError) {
+      const kind = evidenceError instanceof Error ? evidenceError.name : 'UnknownError';
+      console.error(`Safe Live18 failure evidence write failed: ${kind}`);
+    }
+    throw error;
   } finally {
     await requesterContext.close();
     await reviewerContext.close();

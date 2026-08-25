@@ -24,7 +24,15 @@ UUID = re.compile(
     re.IGNORECASE,
 )
 PREVIEW_HASH = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
+SAFE_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
+SAFE_ERROR_KIND = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,79}$")
 SAFE_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+SAFE_ACTORS = {"requester", "reviewer"}
+SAFE_UI_ACTIONS = {
+    "goto", "click", "fill", "select", "setInputFiles", "press", "expectText",
+    "expectDisabled",
+}
+SAFE_LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
 
 
 class ArtifactManifestError(RuntimeError):
@@ -132,6 +140,36 @@ def _browser_summary(path: Path) -> dict[str, Any]:
     }
 
 
+def _browser_failure_summary(path: Path) -> dict[str, Any]:
+    value = _read_json(path)
+    if value.get("evidence_schema") != "aasopharma.live18.browser-failure.v1":
+        raise ArtifactManifestError(f"{path.name} has the wrong browser failure schema")
+    step_index = value.get("step_index")
+    actor = value.get("actor")
+    action = value.get("action")
+    locator_kind = value.get("locator_kind")
+    if (
+        (step_index is not None and (
+            not isinstance(step_index, int) or isinstance(step_index, bool) or step_index < 0
+        ))
+        or (actor is not None and actor not in SAFE_ACTORS)
+        or (action is not None and action not in SAFE_UI_ACTIONS)
+        or (locator_kind is not None and locator_kind not in SAFE_LOCATOR_KINDS)
+    ):
+        raise ArtifactManifestError("invalid browser failure progress metadata")
+    return {
+        "operation_id": _required_text(value, "operation_id", SAFE_IDENTIFIER),
+        "tested_sha": _required_text(value, "tested_sha", SHA),
+        "stage": _required_text(value, "stage", SAFE_IDENTIFIER),
+        "step_index": step_index,
+        "actor": actor,
+        "action": action,
+        "locator_kind": locator_kind,
+        "error_kind": _required_text(value, "error_kind", SAFE_ERROR_KIND),
+        "raw_evidence_sha256": _digest(path),
+    }
+
+
 def _deployment_summary(path: Path) -> dict[str, Any]:
     value = _read_json(path)
     if value.get("schema") != "aasopharma.live18.deployment-evidence.v1":
@@ -219,18 +257,33 @@ def build_manifest(
 ) -> dict[str, Any]:
     if browser_outcome not in {"success", "failure", "cancelled", "skipped"}:
         raise ArtifactManifestError("invalid browser outcome")
-    browser = [
-        _browser_summary(path)
-        for path in sorted(evidence_dir.glob("*.json"))
-        if path.name != "completed-resources.json"
-    ] if evidence_dir.is_dir() else []
+    browser: list[dict[str, Any]] = []
+    browser_failures: list[dict[str, Any]] = []
+    evidence_paths = (
+        sorted(evidence_dir.glob("*.json")) if evidence_dir.is_dir() else []
+    )
+    for path in evidence_paths:
+        if path.name == "completed-resources.json":
+            continue
+        schema = _read_json(path).get("evidence_schema")
+        if schema == "aasopharma.live18.browser.v1":
+            browser.append(_browser_summary(path))
+        elif schema == "aasopharma.live18.browser-failure.v1":
+            browser_failures.append(_browser_failure_summary(path))
+        else:
+            raise ArtifactManifestError(f"{path.name} has an unknown browser evidence schema")
     if len({row["operation_id"] for row in browser}) != len(browser):
         raise ArtifactManifestError("duplicate browser operation evidence")
+    if len({row["operation_id"] for row in browser_failures}) != len(browser_failures):
+        raise ArtifactManifestError("duplicate browser operation failure evidence")
+    if browser_outcome == "success" and browser_failures:
+        raise ArtifactManifestError("successful browser outcome cannot include failure evidence")
     return {
         "schema": "aasopharma.live18.upload-manifest.v1",
         "run": {"id": run_id, "attempt": run_attempt, "browser_outcome": browser_outcome},
         "deployment": _deployment_summary(deployed_sha),
         "browser": browser,
+        "browser_failures": browser_failures,
         "database": (
             _database_summary(database_path)
             if (database_path := _optional_nonempty_file(database_evidence)) is not None

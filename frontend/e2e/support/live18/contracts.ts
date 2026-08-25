@@ -60,7 +60,8 @@ export function loadOperationMatrix(): OperationContract[] {
     repositoryRoot, 'backend/tests/live_acceptance/operation_matrix.json',
   );
   const matrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8')) as OperationMatrix;
-  if (matrix.required_operation_count !== 18 || matrix.operations.length !== 18) {
+  if (matrix.required_operation_count !== 18 || matrix.operations.length !== 18
+    || new Set(matrix.operations.map(item => item.id)).size !== 18) {
     throw new Error('The live18 matrix must contain exactly 18 operations.');
   }
   return matrix.operations;
@@ -113,6 +114,9 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     throw new Error('The reviewed live18 fixture has an invalid schema or operations object.');
   }
   const operationMatrix = loadReadyOperationMatrix();
+  if (required && operationMatrix.length !== 18) {
+    throw new Error('A required live18 run must discover all 18 reviewed operations.');
+  }
   const expected = operationMatrix.map(item => item.id).sort();
   const actual = Object.keys(fixture.operations).sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {

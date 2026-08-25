@@ -1,9 +1,81 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   assertExactCommandTargets, interpolateUiSteps,
 } from './runtimeUiValues.ts';
+import { buildOperationFailureEvidence } from './failureEvidence.ts';
+import { isExpectedSessionExchange } from './session.ts';
+
+test('session bootstrap accepts only the exact reviewed API origin', () => {
+  assert.equal(isExpectedSessionExchange(
+    'https://api.railway.example/api/auth/oauth/supabase/session',
+    'POST',
+    'https://api.railway.example',
+  ), true);
+  assert.equal(isExpectedSessionExchange(
+    'https://api.render.example/api/auth/oauth/supabase/session',
+    'POST',
+    'https://api.railway.example',
+  ), false);
+  assert.equal(isExpectedSessionExchange(
+    'https://api.railway.example/api/auth/oauth/supabase/session',
+    'GET',
+    'https://api.railway.example',
+  ), false);
+});
+
+test('live18 discovery names exactly 18 unique ready operations', () => {
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const matrix = JSON.parse(fs.readFileSync(path.join(
+    repositoryRoot, 'backend/tests/live_acceptance/operation_matrix.json',
+  ), 'utf8')) as { required_operation_count: number; operations: Array<{ id: string }> };
+  const readiness = JSON.parse(fs.readFileSync(path.join(
+    repositoryRoot, 'docs/testing/live18-ui-template-readiness.json',
+  ), 'utf8')) as {
+    ready_count: number;
+    operations: Array<{ id: string; status: 'ready' | 'blocked' }>;
+  };
+  const matrixIds = matrix.operations.map(operation => operation.id);
+  const readyIds = readiness.operations
+    .filter(operation => operation.status === 'ready')
+    .map(operation => operation.id);
+  assert.equal(matrix.required_operation_count, 18);
+  assert.equal(matrixIds.length, 18);
+  assert.equal(new Set(matrixIds).size, 18);
+  assert.equal(readiness.ready_count, 18);
+  assert.deepEqual([...readyIds].sort(), [...matrixIds].sort());
+});
+
+test('operation failure evidence excludes messages, locator values, and credentials', () => {
+  const failure = buildOperationFailureEvidence(
+    'a'.repeat(40),
+    'sales_invoice',
+    {
+      stage: 'prepare_steps',
+      stepIndex: 4,
+      actor: 'requester',
+      action: 'fill',
+      locatorKind: 'label',
+    },
+    new Error('password=must-not-upload; customer=must-not-upload'),
+  );
+  assert.deepEqual(failure, {
+    evidence_schema: 'aasopharma.live18.browser-failure.v1',
+    tested_sha: 'a'.repeat(40),
+    operation_id: 'sales_invoice',
+    stage: 'prepare_steps',
+    step_index: 4,
+    actor: 'requester',
+    action: 'fill',
+    locator_kind: 'label',
+    error_kind: 'Error',
+  });
+  assert.doesNotMatch(JSON.stringify(failure), /must-not-upload/);
+});
 
 test('runtime values target the exact prepared command in value and locator name', () => {
   const [step] = interpolateUiSteps(

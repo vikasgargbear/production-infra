@@ -1,4 +1,5 @@
-import { expect, Page, Response } from '@playwright/test';
+import { expect } from '@playwright/test';
+import type { Page, Response } from '@playwright/test';
 
 import type { Live18BrowserConfig } from './config';
 
@@ -27,15 +28,26 @@ export function sessionIdentityFromToken(token: string): Omit<CapturedSession, '
   };
 }
 
+export function isExpectedSessionExchange(
+  responseUrl: string,
+  method: string,
+  apiOrigin: string,
+): boolean {
+  const response = new URL(responseUrl);
+  return method === 'POST'
+    && response.origin === new URL(apiOrigin).origin
+    && response.pathname === '/api/auth/oauth/supabase/session';
+}
+
 export async function loginAndCaptureSession(
   page: Page,
   appOrigin: string,
+  apiOrigin: string,
   credentials: { email: string; password: string },
 ): Promise<CapturedSession> {
   await page.goto(appOrigin);
-  const exchange = page.waitForResponse((response: Response) => (
-    response.request().method() === 'POST'
-    && new URL(response.url()).pathname === '/api/auth/oauth/supabase/session'
+  const exchange = page.waitForResponse((response: Response) => isExpectedSessionExchange(
+    response.url(), response.request().method(), apiOrigin,
   ), { timeout: 45_000 });
   await page.locator('input[type="email"]').fill(credentials.email);
   await page.locator('input[type="password"]').fill(credentials.password);

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.build_live18_artifact_manifest import build_manifest
+from scripts.build_live18_artifact_manifest import ArtifactManifestError, build_manifest
 
 
 SHA = "a" * 40
@@ -161,6 +161,93 @@ def test_manifest_treats_empty_optional_database_evidence_as_absent(tmp_path: Pa
     )
 
     assert manifest["database"] is None
+
+
+def test_manifest_scrubs_operation_specific_browser_failure_evidence(tmp_path: Path) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "railway",
+        "commit_sha": SHA,
+        "services": {
+            name: {"origin": f"https://{name}.example"}
+            for name in ("api", "frontend", "mcp")
+        },
+    })
+    evidence_dir = tmp_path / "evidence"
+    _write(evidence_dir / "sales_invoice.failure.json", {
+        "evidence_schema": "aasopharma.live18.browser-failure.v1",
+        "tested_sha": SHA,
+        "operation_id": "sales_invoice",
+        "stage": "prepare_steps",
+        "step_index": 4,
+        "actor": "requester",
+        "action": "fill",
+        "locator_kind": "label",
+        "error_kind": "TimeoutError",
+        "message": "password=must-not-upload",
+    })
+
+    manifest = build_manifest(
+        deployed_sha=deployed,
+        evidence_dir=evidence_dir,
+        database_evidence=None,
+        demo_evidence=None,
+        browser_outcome="failure",
+        run_id="123",
+        run_attempt="1",
+    )
+
+    assert manifest["browser"] == []
+    assert manifest["browser_failures"] == [{
+        "operation_id": "sales_invoice",
+        "tested_sha": SHA,
+        "stage": "prepare_steps",
+        "step_index": 4,
+        "actor": "requester",
+        "action": "fill",
+        "locator_kind": "label",
+        "error_kind": "TimeoutError",
+        "raw_evidence_sha256": manifest["browser_failures"][0]["raw_evidence_sha256"],
+    }]
+    assert len(manifest["browser_failures"][0]["raw_evidence_sha256"]) == 64
+    assert "must-not-upload" not in json.dumps(manifest)
+
+
+def test_manifest_rejects_failure_evidence_with_successful_browser_outcome(
+    tmp_path: Path,
+) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "railway",
+        "commit_sha": SHA,
+        "services": {
+            name: {"origin": f"https://{name}.example"}
+            for name in ("api", "frontend", "mcp")
+        },
+    })
+    evidence_dir = tmp_path / "evidence"
+    _write(evidence_dir / "sales_invoice.failure.json", {
+        "evidence_schema": "aasopharma.live18.browser-failure.v1",
+        "tested_sha": SHA,
+        "operation_id": "sales_invoice",
+        "stage": "requester_login",
+        "step_index": None,
+        "actor": "requester",
+        "action": None,
+        "locator_kind": None,
+        "error_kind": "Error",
+    })
+
+    with pytest.raises(ArtifactManifestError, match="successful browser outcome"):
+        build_manifest(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            database_evidence=None,
+            demo_evidence=None,
+            browser_outcome="success",
+            run_id="123",
+            run_attempt="1",
+        )
 
 
 def test_manifest_rejects_nonempty_malformed_optional_evidence(tmp_path: Path) -> None:
