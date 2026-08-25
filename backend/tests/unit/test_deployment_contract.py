@@ -35,6 +35,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "environment: canonical-staging" in live_job
     assert "needs: [canonical-free-staging]" in live_job
     assert "needs.canonical-free-staging.result == 'success'" in live_job
+    assert "inputs.provision_canonical_demo" in live_job
     assert "environment: live-erp-test" not in live_job
     assert "Canonical live API reconciliation is securely blocked" in live_job
     assert "PHARMA_CANONICAL_LIVE_TEST_ORG_ID: d3000000-0000-7000-8000-000000000001" in live_job
@@ -48,6 +49,8 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
     assert "environment: canonical-staging" in browser_job
     assert "needs: [canonical-free-staging]" in browser_job
+    assert "needs.canonical-free-staging.result == 'success'" in browser_job
+    assert "inputs.provision_canonical_demo" in browser_job
     assert "environment: live-erp-test" not in browser_job
     assert "canonical-staging-live-browser-identities" in browser_job
     assert "provision --profile core-operator" in browser_job
@@ -69,6 +72,8 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     )[0]
     assert "verify_render_pilot_sha.py" in two_user_job
     assert "needs: [canonical-free-staging]" in two_user_job
+    assert "needs.canonical-free-staging.result == 'success'" in two_user_job
+    assert "inputs.provision_canonical_demo" in two_user_job
     assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
     assert browser_job.count("group: canonical-staging-live-browser-identities") == 1
     assert live_job.count("group: canonical-staging-live-browser-identities") == 1
@@ -148,6 +153,18 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     assert "canonical-staging-live-browser-identities" in two_user_job
     assert "provision_ephemeral_browser_identities.py" in two_user_job
     assert "provision --profile two-user-approvals" in two_user_job
+    assert "Refuse missing or identical maker/checker browser identities" in two_user_job
+    for ephemeral_value in (
+        "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
+        "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
+        "PLAYWRIGHT_LIVE_REVIEWER_EMAIL",
+        "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD",
+    ):
+        assert f'test -n "${ephemeral_value}"' in two_user_job
+    assert (
+        'test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != '
+        '"$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"'
+    ) in two_user_job
     assert 'cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"' in two_user_job
     cleanup_step = two_user_job.split(
         "Always restore seeded identities and remove disposable Auth users", 1

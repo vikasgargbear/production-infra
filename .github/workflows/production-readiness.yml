@@ -704,7 +704,8 @@ jobs:
     needs: [canonical-free-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
-      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
     concurrency:
@@ -825,7 +826,8 @@ jobs:
     needs: [canonical-free-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
-      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 60
@@ -925,7 +927,8 @@ jobs:
     needs: [canonical-free-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals &&
-      (!inputs.deploy_canonical_staging || needs.canonical-free-staging.result == 'success')
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 45
@@ -997,6 +1000,14 @@ jobs:
           python3 backend/scripts/provision_ephemeral_browser_identities.py \
             provision --profile two-user-approvals \
             --state "$RUNNER_TEMP/canonical-browser-identities.json"
+      - name: Refuse missing or identical maker/checker browser identities
+        run: |
+          set -euo pipefail
+          test -n "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL"
+          test -n "$PLAYWRIGHT_LIVE_REQUESTER_PASSWORD"
+          test -n "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
+          test -n "$PLAYWRIGHT_LIVE_REVIEWER_PASSWORD"
+          test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
       - run: npm run test:e2e:live:approvals
       - name: Always restore seeded identities and remove disposable Auth users
         if: always()
