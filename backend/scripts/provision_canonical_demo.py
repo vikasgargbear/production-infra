@@ -9,6 +9,7 @@ demo organization UUID.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -217,6 +218,25 @@ def required(name: str) -> str:
     if not value:
         raise RuntimeError(f"missing required environment variable: {name}")
     return value
+
+
+@contextmanager
+def database_connection(environment_variable: str):
+    """Open one bounded DB session and always release its pooler client slot.
+
+    A psycopg2 connection's own context manager only commits or rolls back; it
+    deliberately does not close the connection. The staging demo alternates
+    among migration-owner, importer, runtime, and calculator principals while
+    a one-worker API is running, so retaining otherwise sequential connection
+    objects can exhaust the reviewed five-client Supavisor session pool.
+    """
+
+    connection = psycopg2.connect(required(environment_variable))
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def calculation_totals(cursor, command_request_id: str) -> dict[str, Decimal]:
@@ -1778,12 +1798,17 @@ def preflight_action(operation: str, payload: dict[str, Any]) -> None:
         sys.path.insert(0, backend_root)
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
+    from sqlalchemy.pool import NullPool
 
     from app.domain.operator_actions.contract import ACTION_POLICIES, PREPARE_PAYLOAD_MODELS
     from app.infrastructure.operator_actions.service import SqlAlchemyOperatorActionService
 
-    runtime_engine = create_engine(required("ERP_RUNTIME_DATABASE_URL"), pool_pre_ping=True)
-    calculator_engine = create_engine(required("ERP_CALCULATOR_DATABASE_URL"), pool_pre_ping=True)
+    runtime_engine = create_engine(
+        required("ERP_RUNTIME_DATABASE_URL"), poolclass=NullPool, pool_pre_ping=True
+    )
+    calculator_engine = create_engine(
+        required("ERP_CALCULATOR_DATABASE_URL"), poolclass=NullPool, pool_pre_ping=True
+    )
     runtime_connection = runtime_engine.connect()
     calculator_connection = calculator_engine.connect()
     runtime_transaction = runtime_connection.begin()
@@ -2944,7 +2969,7 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
         for index, line in enumerate(payload.get("charge_lines", ()), start=1)
     ]
 
-    with psycopg2.connect(required("ERP_CALCULATOR_DATABASE_URL")) as calculator:
+    with database_connection("ERP_CALCULATOR_DATABASE_URL") as calculator:
         with calculator.cursor() as cursor:
             cursor.execute(
                 """
@@ -2970,6 +2995,7 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
         sys.path.insert(0, backend_root)
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
+    from sqlalchemy.pool import NullPool
 
     from app.domain.operator_actions.contract import ACTION_POLICIES
     from app.domain.operator_actions.models import ActionContext
@@ -2990,7 +3016,11 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
-    engine = create_engine(required("ERP_CALCULATOR_DATABASE_URL"), pool_pre_ping=True)
+    engine = create_engine(
+        required("ERP_CALCULATOR_DATABASE_URL"),
+        poolclass=NullPool,
+        pool_pre_ping=True,
+    )
     try:
         with engine.connect() as connection:
             outer_transaction = connection.begin()
@@ -4085,12 +4115,12 @@ def main() -> int:
     adjustment_source = fetch_adjustment_source(evidence_dir)
     gstr1_reporting_source = fetch_gstr1_reporting_source(evidence_dir)
 
-    with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
         gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
-    with psycopg2.connect(required("ERP_REGULATORY_IMPORTER_DATABASE_URL")) as importer:
+    with database_connection("ERP_REGULATORY_IMPORTER_DATABASE_URL") as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
         adjustment_bytes = adjustment_dataset_bytes(importer)
         gstr1_reporting_bytes = gstr1_reporting_dataset_bytes(importer)
@@ -4107,14 +4137,14 @@ def main() -> int:
             import_gstr1_reporting_release(
                 importer, gstr1_reporting_source, gstr1_reporting_bytes
             )
-    with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         gstr1_reporting_reconciliation = reconcile_gstr1_reporting_release(
             bootstrap, gstr1_reporting_source, gstr1_reporting_bytes,
             initial_activation_replayed=not gstr1_reporting_release_exists,
         )
         seed_business_master(bootstrap)
         seed_end_to_end_master(bootstrap)
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         party_master_reconciliation = reconcile_party_master(runtime)
         verify_fiscal_tax_fact(runtime)
         activate_demo_product(runtime)
@@ -4130,7 +4160,7 @@ def main() -> int:
         "procurement.order.manage",
         purchase_payload,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         purchase_reconciliation = reconcile_purchase_order(
             runtime,
             purchase_journey["executed"]["resource_id"],
@@ -4149,7 +4179,7 @@ def main() -> int:
         advance_payload,
         separate_approver=True,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         advance_reconciliation = reconcile_supplier_advance(
             runtime,
             advance_journey["executed"]["resource_id"],
@@ -4166,7 +4196,7 @@ def main() -> int:
         "procurement.receipt.post",
         receipt_payload,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         receipt_reconciliation = reconcile_goods_receipt(
             runtime,
             receipt_journey["executed"]["resource_id"],
@@ -4185,7 +4215,7 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         portal_evidence = seed_supplier_invoice_portal_evidence(bootstrap)
     supplier_invoice_request = supplier_invoice_payload(
         receipt_reconciliation["id"],
@@ -4199,7 +4229,7 @@ def main() -> int:
         "procurement.supplier_invoice.create",
         supplier_invoice_request,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         supplier_invoice_reconciliation = reconcile_supplier_invoice(
             runtime,
             supplier_invoice_journey["executed"]["resource_id"],
@@ -4215,7 +4245,7 @@ def main() -> int:
         ui_purchase_payload,
         evidence_label="supplier-invoice-ui-fixture",
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         ui_purchase_reconciliation = reconcile_purchase_order(
             runtime,
             ui_purchase_journey["executed"]["resource_id"],
@@ -4235,16 +4265,16 @@ def main() -> int:
         ui_receipt_payload,
         evidence_label="supplier-invoice-ui-fixture",
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         ui_receipt_reconciliation = reconcile_goods_receipt(
             runtime,
             ui_receipt_journey["executed"]["resource_id"],
             expected_accepted_quantity="50",
             expected_free_quantity="2.5",
         )
-    with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         ui_portal_evidence = seed_supplier_invoice_ui_portal_evidence(bootstrap)
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         supplier_invoice_ui_fixture = reconcile_supplier_invoice_ui_fixture(
             runtime,
             ui_receipt_reconciliation["id"],
@@ -4262,7 +4292,7 @@ def main() -> int:
         "finance.supplier_payment.create",
         supplier_payment_request,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         supplier_payment_reconciliation = reconcile_payment(
             runtime,
             supplier_payment_journey["executed"]["resource_id"],
@@ -4273,14 +4303,14 @@ def main() -> int:
     payload = sales_order_payload()
     preflight_sales_order(payload, evidence_dir)
     journey = exercise_sales_order(evidence_dir, payload)
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         reconciliation = reconcile(
             runtime,
             journey["executed"],
             journey["prepared"]["command_request_id"],
         )
 
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         dispatch_allocations = resolve_fefo_dispatch_allocations(runtime)
     dispatch_request = sales_dispatch_payload(
         reconciliation["id"], reconciliation["line_ids"][0], dispatch_allocations
@@ -4292,7 +4322,7 @@ def main() -> int:
         "sales.dispatch.create",
         dispatch_request,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         dispatch_reconciliation = reconcile_sales_dispatch(
             runtime,
             dispatch_journey["executed"]["resource_id"],
@@ -4308,7 +4338,7 @@ def main() -> int:
         "sales.invoice.create",
         invoice_request,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         invoice_reconciliation = reconcile_sales_invoice(
             runtime,
             invoice_journey["executed"]["resource_id"],
@@ -4325,7 +4355,7 @@ def main() -> int:
         "finance.customer_receipt.create",
         customer_receipt_request,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         customer_receipt_reconciliation = reconcile_payment(
             runtime,
             customer_receipt_journey["executed"]["resource_id"],
@@ -4346,14 +4376,14 @@ def main() -> int:
         sales_return_request,
         separate_approver=True,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         sales_return_reconciliation = reconcile_sales_return(
             runtime,
             sales_return_journey["executed"]["resource_id"],
             sales_return_journey["prepared"]["command_request_id"],
         )
 
-    with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         purchase_return_portal = seed_purchase_return_portal_evidence(bootstrap)
     purchase_return_request = purchase_return_payload(
         supplier_invoice_reconciliation["id"],
@@ -4370,7 +4400,7 @@ def main() -> int:
         purchase_return_request,
         separate_approver=True,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         purchase_return_reconciliation = reconcile_purchase_return(
             runtime,
             purchase_return_journey["executed"]["resource_id"],
@@ -4391,7 +4421,7 @@ def main() -> int:
         adjustment_request,
         separate_approver=True,
     )
-    with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         adjustment_reconciliation = reconcile_inventory_adjustment(
             runtime, adjustment_journey["executed"]["resource_id"]
         )
