@@ -163,6 +163,11 @@ test.describe('live ERP pilot', () => {
     const calculation = JSON.parse(body);
     expect(typeof calculation.totals.final_amount).toBe('string');
     expect(calculation.totals.final_amount).toMatch(/^\d+(?:\.\d+)?$/);
+    expect(calculation.totals.taxable_amount).toBe('150.00');
+    expect(calculation.totals.cgst_amount).toBe('9.00');
+    expect(calculation.totals.sgst_amount).toBe('9.00');
+    expect(calculation.totals.igst_amount).toBe('0.00');
+    expect(calculation.totals.final_amount).toBe('168.00');
 
     const line = page.getByRole('row', { name: new RegExp(productName) });
     await expect(line).toBeVisible();
@@ -195,6 +200,7 @@ test.describe('live ERP pilot', () => {
     await expect(page.getByText(customerName, { exact: true })).toBeVisible();
     await expect(page.getByText(profile.bank_accounts[0].bank_name, { exact: true })).toBeVisible();
     await expect(page.getByText(/Payment QR\s*not configured/)).toBeVisible();
+    await expect(page.getByText(/₹\s*168(?:\.00)?/).first()).toBeVisible();
     await testInfo.attach('invoice-preview-positive', {
       body: await page.screenshot({ fullPage: false }),
       contentType: 'image/png',
@@ -240,9 +246,11 @@ test.describe('live ERP pilot', () => {
       expect(execution.resource_id).toMatch(/^[0-9a-f-]{36}$/);
       expect(authoritative.invoice_id).toBe(execution.resource_id);
       expect(authoritative.invoice_number).toBeTruthy();
-      expect(typeof authoritative.total_amount).toBe('string');
-      expect(authoritative.total_amount).toMatch(/^\d+(?:\.\d+)?$/);
-      expect(BigInt(authoritative.total_amount.replace('.', ''))).toBeGreaterThan(0n);
+      expect(authoritative.taxable_amount).toBe('150.00');
+      expect(authoritative.cgst_amount).toBe('9.00');
+      expect(authoritative.sgst_amount).toBe('9.00');
+      expect(authoritative.igst_amount).toBe('0.00');
+      expect(authoritative.total_amount).toBe('168.00');
       expect(authoritative.items).toHaveLength(1);
       expect(authoritative.items[0].batch_id).toBe(recommendedBatchId);
       expect(authoritative.items[0].batch_allocations).toHaveLength(1);
