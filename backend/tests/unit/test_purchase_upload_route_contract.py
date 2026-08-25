@@ -8,8 +8,6 @@ import re
 import textwrap
 from pathlib import Path
 
-from fastapi.routing import APIRoute
-
 from app.api.routes.purchase.upload.routes import _mark_supplier_match_not_performed
 from app.main import app
 
@@ -22,11 +20,23 @@ SQL_TOKEN = re.compile(
 )
 
 
-def _mounted_purchase_upload_routes() -> list[APIRoute]:
+def _effective_route_leaves(routes):
+    """Flatten FastAPI's lazy include wrappers without relying on internals."""
+
+    for route in routes:
+        effective_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_contexts):
+            yield from effective_contexts()
+        else:
+            yield route
+
+
+def _mounted_purchase_upload_routes() -> list[object]:
     return [
         route
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.path.startswith(PURCHASE_UPLOAD_PREFIX)
+        for route in _effective_route_leaves(app.routes)
+        if getattr(route, "path", "").startswith(PURCHASE_UPLOAD_PREFIX)
+        and getattr(route, "endpoint", None) is not None
     ]
 
 
