@@ -620,6 +620,7 @@ def _enter_migration_owner(cursor) -> bool:
 def _leave_migration_owner(cursor, supports_membership_options: bool) -> None:
     """Restore the reviewed non-settable owner membership before commit."""
 
+    cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
     cursor.execute("RESET ROLE")
     if supports_membership_options:
         cursor.execute(

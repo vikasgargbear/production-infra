@@ -116,6 +116,7 @@ def test_migration_owner_scope_is_transactional_and_restores_membership(
         "SHOW server_version_num",
         enter_sql,
         'SET LOCAL ROLE "erp_migration_owner"',
+        "SET CONSTRAINTS ALL IMMEDIATE",
         "RESET ROLE",
         leave_sql,
     ]
