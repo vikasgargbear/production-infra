@@ -103,10 +103,10 @@ export function usePurchaseOrderSave(
             productId: item.product_id,
             uomConversionId: item.uom_conversion_id,
             billed: item.quantity,
-            free: item.free_quantity ?? 0,
+            free: item.free_quantity,
             treatment: item.free_supply_tax_treatment,
             rate: item.unit_price,
-            discount: item.discount_percent ?? 0,
+            discount: item.discount_percent,
         })),
     }), [branchId, purchaseOrder, selectedSupplier]);
 

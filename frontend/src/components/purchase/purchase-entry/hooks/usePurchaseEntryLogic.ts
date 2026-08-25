@@ -26,10 +26,10 @@ export interface PurchaseItem {
     po_item_id?: number;
     product_id: string | number;
     product_name: string;
-    quantity: number;
+    quantity: number | string;
     ordered_quantity?: number;
-    unit_price: number;
-    tax_percent: number;
+    unit_price: number | string;
+    tax_percent: number | string;
     batch?: string;
     batch_number?: string;
     pack_type?: string;
@@ -40,11 +40,11 @@ export interface PurchaseItem {
     brand_name?: string;
     expiry_date?: string;
     manufacturing_date?: string;
-    free_quantity?: number;
-    mrp?: number;
-    selling_price?: number;
-    sale_price?: number;
-    discount_percent?: number;
+    free_quantity?: number | string;
+    mrp?: number | string;
+    selling_price?: number | string;
+    sale_price?: number | string;
+    discount_percent?: number | string;
     taxable_amount?: EditableDecimalValue;
     tax_amount?: EditableDecimalValue;
     total_amount?: EditableDecimalValue;
@@ -137,6 +137,7 @@ export interface UsePurchaseEntryLogicReturn {
     handleRemoveItem: (index: number) => void;
     handleSavePurchase?: undefined;
     validatePurchase: () => boolean;
+    purchaseDraftReadinessError: string | null;
     handlePrint: () => void;
     handlePDFUpload: (file: File) => Promise<void>;
     handleVerificationComplete: (verifiedData: any) => void;
@@ -145,32 +146,64 @@ export interface UsePurchaseEntryLogicReturn {
     formatCurrency: (amount: number | string) => string;
 }
 
-const getInitialPurchase = (prefilledData?: Partial<PurchaseData> | null): PurchaseData => ({
+export const getInitialPurchase = (prefilledData?: Partial<PurchaseData> | null): PurchaseData => ({
     purchase_number: '',
     supplier_invoice_number: '',
-    invoice_date: new Date().toISOString().split('T')[0],
+    invoice_date: '',
     supplier_id: prefilledData?.supplier_id || '',
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
     items: prefilledData?.items || [],
-    payment_methods: [{ id: '1', method: 'cash', amount: 0 }],
-    payment_status: 'pending',
-    delivery_date: new Date().toISOString().split('T')[0],
-    delivery_type: 'DELIVERY',
+    payment_methods: [],
+    payment_status: '',
+    delivery_date: '',
+    delivery_type: '',
     transport_company: '',
     vehicle_number: '',
     lr_number: '',
-    gross_amount: 0,
+    gross_amount: '',
     discount_amount: 0,
-    tax_amount: 0,
+    tax_amount: '',
     other_charges: 0,
-    round_off: 0,
-    net_amount: 0,
-    total_amount: 0,
+    round_off: '',
+    net_amount: '',
+    total_amount: '',
     notes: prefilledData?.notes || '',
     purchase_order_id: prefilledData?.purchase_order_id,
     po_number: prefilledData?.po_number
 });
+
+const missingFact = (value: unknown): boolean => value === '' || value === null || value === undefined;
+
+export const purchaseEntryDraftReadinessError = (
+    purchase: PurchaseData,
+    selectedSupplier: unknown,
+): string | null => {
+    if (!selectedSupplier || !purchase.supplier_id) return 'Select an authoritative supplier.';
+    if (!purchase.supplier_invoice_number.trim()) return 'Enter the supplier invoice number.';
+    if (!purchase.invoice_date || !purchase.delivery_date) return 'Enter invoice and delivery dates.';
+    if (!purchase.items.length) return 'Add at least one verified purchase line.';
+    for (const [index, item] of purchase.items.entries()) {
+        const label = `Line ${index + 1}`;
+        if (!item.product_id || missingFact(item.uom_conversion_id)) return `${label} is missing canonical product or UOM identity.`;
+        if (!String(item.batch_number || '').trim() || !item.expiry_date) return `${label} needs explicit batch and expiry facts.`;
+        if (missingFact(item.quantity) || !(Number(item.quantity) > 0)) return `${label} quantity must be explicit and positive.`;
+        if (missingFact(item.unit_price) || !(Number(item.unit_price) > 0)) return `${label} cost must be explicit and positive.`;
+        if (missingFact(item.mrp) || !(Number(item.mrp) > 0)) return `${label} MRP must be explicit and positive.`;
+        if (missingFact(item.free_quantity) || missingFact(item.discount_percent) || missingFact(item.tax_percent)) {
+            return `${label} needs explicit free quantity, discount and GST facts (zero is allowed).`;
+        }
+        if (!Number.isFinite(Number(item.free_quantity)) || Number(item.free_quantity) < 0) return `${label} free quantity cannot be negative.`;
+        if (!Number.isFinite(Number(item.discount_percent)) || Number(item.discount_percent) < 0 || Number(item.discount_percent) > 100) {
+            return `${label} discount must be between 0% and 100%.`;
+        }
+        if (!Number.isFinite(Number(item.tax_percent)) || Number(item.tax_percent) < 0 || Number(item.tax_percent) > 100) {
+            return `${label} GST rate must be between 0% and 100%.`;
+        }
+    }
+    if (missingFact(purchase.total_amount)) return 'Wait for the authoritative purchase calculation API.';
+    return null;
+};
 
 export function usePurchaseEntryLogic({
     prefilledData = null,
@@ -208,11 +241,30 @@ export function usePurchaseEntryLogic({
         if (!purchaseData.items || purchaseData.items.length === 0) {
             setPurchase(prev => ({
                 ...prev,
-                gross_amount: 0,
-                tax_amount: 0,
-                round_off: 0,
-                net_amount: 0,
-                total_amount: 0
+                gross_amount: '',
+                tax_amount: '',
+                round_off: '',
+                net_amount: '',
+                total_amount: ''
+            }));
+            return;
+        }
+
+        const missing = (value: unknown) => value === '' || value === null || value === undefined;
+        const incompleteLine = purchaseData.items.find(item => (
+            !item.product_id
+            || missing(item.quantity)
+            || missing(item.unit_price)
+            || missing(item.mrp)
+            || missing(item.free_quantity)
+            || missing(item.discount_percent)
+            || missing(item.tax_percent)
+        ));
+        if (!purchaseData.supplier_id || incompleteLine) {
+            setPurchase(prev => ({
+                ...prev,
+                gross_amount: '', tax_amount: '', round_off: '',
+                net_amount: '', total_amount: '',
             }));
             return;
         }
@@ -294,18 +346,6 @@ export function usePurchaseEntryLogic({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [calculateTotals, calculationKey]);
 
-    // Update payment amount when final amount changes
-    useEffect(() => {
-        if (compareExactDecimals(purchase.total_amount, '0.00', 'Purchase total', { scale: 2, maximumWholeDigits: 20 }) > 0 && purchase.payment_methods?.length > 0) {
-            if (purchase.payment_methods.length === 1 && purchase.payment_methods[0].method === 'cash') {
-                setPurchase(prev => ({
-                    ...prev,
-                    payment_methods: [{ id: '1', method: 'cash', amount: prev.total_amount }]
-                }));
-            }
-        }
-    }, [purchase.total_amount]);
-
     // Handlers
     const handleSupplierSelect = useCallback((supplier: any) => {
         setSelectedSupplier(supplier);
@@ -332,17 +372,18 @@ export function usePurchaseEntryLogic({
             product_id: product.product_id || null,
             product_name: product.product_name || product.name || '',
             product_code: product.product_code,
+            uom_conversion_id: product.uom_conversion_id ?? '',
             hsn_code: product.hsn_code || '',
-            mrp: parseFloat(product.mrp) || 0,
-            selling_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
-            tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 0,
-            discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
-            pack_type: product.pack_type || product.packaging_type || 'STRIP',
-            pack_size: product.pack_size || product.units_per_pack || 10,
-            packages_per_box: product.packages_per_box || 10,
+            mrp: product.mrp ?? '',
+            selling_price: product.sale_price ?? product.selling_price ?? '',
+            tax_percent: product.tax_percent ?? product.gst_percent ?? product.tax_rate ?? '',
+            discount_percent: product.discount_percent ?? product.discount ?? '',
+            pack_type: product.pack_type ?? product.packaging_type ?? '',
+            pack_size: product.pack_size ?? product.units_per_pack ?? '',
+            packages_per_box: product.packages_per_box ?? '',
             category: product.category || '',
             brand_name: product.brand_name || product.brand || '',
-            unit: product.unit || product.uom || 'Strip'
+            unit: product.unit ?? product.uom ?? ''
         });
         setShowItemEditModal(true);
     }, []);
@@ -350,7 +391,8 @@ export function usePurchaseEntryLogic({
     const handleSaveItemFromModal = useCallback((editedItem: any) => {
         setPurchase(prev => ({
             ...prev,
-            items: [...(prev.items || []), editedItem]
+            items: [...(prev.items || []), editedItem],
+            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
         }));
         setNewProductToAdd(null);
         setShowItemEditModal(false);
@@ -371,22 +413,23 @@ export function usePurchaseEntryLogic({
                 product_id: product.product_id || null,
                 product_name: product.product_name || product.name || '',
                 product_code: product.product_code,
+                uom_conversion_id: product.uom_conversion_id ?? '',
                 hsn_code: product.hsn_code || '',
                 batch_number: product.batch_number || product.batch || '',
                 expiry_date: product.expiry_date || product.expiry || '',
                 manufacturing_date: product.manufacturing_date || '',
-                quantity: parseFloat(product.quantity) || 1,
-                free_quantity: parseFloat(product.free_quantity || product.free) || 0,
-                mrp: parseFloat(product.mrp) || 0,
-                unit_price: parseFloat(product.unit_price) || (parseFloat(product.mrp) || 0) * 0.7,
-                selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
-                discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
-                tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 0,
-                pack_type: product.pack_type || product.packaging_type || 'STRIP',
-                pack_size: product.pack_size || product.units_per_pack || 10,
+                quantity: product.quantity ?? '',
+                free_quantity: product.free_quantity ?? product.free ?? '',
+                mrp: product.mrp ?? '',
+                unit_price: product.unit_price ?? '',
+                selling_price: product.selling_price ?? product.sale_price ?? '',
+                discount_percent: product.discount_percent ?? product.discount ?? '',
+                tax_percent: product.tax_percent ?? product.gst_percent ?? product.tax_rate ?? '',
+                pack_type: product.pack_type ?? product.packaging_type ?? '',
+                pack_size: product.pack_size ?? product.units_per_pack ?? '',
                 category: product.category || '',
                 brand_name: product.brand_name || product.brand || '',
-                unit: product.unit || product.uom || 'Strip'
+                unit: product.unit ?? product.uom ?? ''
             })),
             isBulkUpload: true
         };
@@ -418,24 +461,28 @@ export function usePurchaseEntryLogic({
                     return updatedItem;
                 }
                 return item;
-            })
+            }),
+            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
         }));
     }, []);
 
     const handleRemoveItem = useCallback((index: number) => {
         setPurchase(prev => ({
             ...prev,
-            items: prev.items.filter((_, i) => i !== index)
+            items: prev.items.filter((_, i) => i !== index),
+            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
         }));
     }, []);
 
     const validatePurchase = useCallback((): boolean => {
         const newErrors: Record<string, string> = {};
-        if (!selectedSupplier) newErrors.supplier = 'Supplier is required';
-        if (!purchase.items || purchase.items.length === 0) newErrors.items = 'At least one item is required';
+        const readinessError = purchaseEntryDraftReadinessError(purchase, selectedSupplier);
+        if (readinessError) newErrors.submission = readinessError;
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [selectedSupplier, purchase.items]);
+    }, [selectedSupplier, purchase]);
+
+    const purchaseDraftReadinessError = purchaseEntryDraftReadinessError(purchase, selectedSupplier);
 
     const { saving, handleSavePurchase } = usePurchaseEntrySave();
 
@@ -465,9 +512,9 @@ export function usePurchaseEntryLogic({
                     invoice_number: extractedData.invoice_number,
                     invoice_date: extractedData.invoice_date,
                     items: extractedData.items || [],
-                    gross_amount: extractedData.gross_amount || 0,
-                    tax_amount: extractedData.tax_amount || 0,
-                    total_amount: extractedData.total_amount || extractedData.total_amount || 0
+                    gross_amount: extractedData.gross_amount ?? '',
+                    tax_amount: extractedData.tax_amount ?? '',
+                    total_amount: extractedData.total_amount ?? ''
                 });
                 setShowPDFUpload(false);
                 setShowVerificationFlow(true);
@@ -484,39 +531,30 @@ export function usePurchaseEntryLogic({
             product_id: item.product_id,
             product_name: item.product_name,
             product_code: item.product_code,
+            uom_conversion_id: item.uom_conversion_id ?? '',
             hsn_code: item.hsn_code,
             batch_number: item.batch_number,
             batch: item.batch_number,
             expiry_date: item.expiry_date,
             manufacturing_date: item.manufacturing_date,
-            quantity: parseFloat(item.quantity) || 0,
-            free_quantity: parseFloat(item.free_quantity) || 0,
-            mrp: parseFloat(item.mrp) || 0,
-            unit_price: parseFloat(item.unit_price) || 0,
-            selling_price: parseFloat(item.selling_price) || parseFloat(item.mrp) || 0,
-            sale_price: parseFloat(item.selling_price) || parseFloat(item.mrp) || 0,
-            discount_percent: parseFloat(item.discount_percent) || 0,
-            tax_percent: parseFloat(item.tax_percent) || 12,
-            tax: parseFloat(item.tax_percent) || 12,
-            tax_amount: 0,
-            pack_type: item.pack_type || 'STRIP',
-            pack_size: item.pack_size || 10,
-            packages_per_box: item.packages_per_box || 10,
+            quantity: item.quantity ?? '',
+            free_quantity: item.free_quantity ?? '',
+            mrp: item.mrp ?? '',
+            unit_price: item.unit_price ?? '',
+            selling_price: item.selling_price ?? '',
+            sale_price: item.selling_price ?? '',
+            discount_percent: item.discount_percent ?? '',
+            tax_percent: item.tax_percent ?? '',
+            tax: item.tax_percent ?? '',
+            tax_amount: '',
+            pack_type: item.pack_type ?? '',
+            pack_size: item.pack_size ?? '',
+            packages_per_box: item.packages_per_box ?? '',
             category: item.category || '',
             brand_name: item.brand_name || '',
-            unit: item.unit || 'Strip',
+            unit: item.unit ?? '',
             isNewProduct: item.isNewProduct || false
         }));
-
-        let grossAmount = 0;
-        let taxAmount = 0;
-        mappedItems.forEach((item: any) => {
-            const itemAmount = item.quantity * item.unit_price;
-            const itemTax = itemAmount * (item.tax_percent / 100);
-            grossAmount += itemAmount;
-            taxAmount += itemTax;
-        });
-        const netAmount = grossAmount + taxAmount;
 
         setPurchase(prev => ({
             ...prev,
@@ -533,10 +571,10 @@ export function usePurchaseEntryLogic({
                 address: verifiedData.supplier_address
             },
             items: mappedItems,
-            gross_amount: grossAmount,
-            tax_amount: taxAmount,
-            net_amount: netAmount,
-            total_amount: verifiedData.total_amount || netAmount
+            gross_amount: '',
+            tax_amount: '',
+            net_amount: '',
+            total_amount: ''
         }));
 
         if (verifiedData.supplier_id) {
@@ -599,6 +637,7 @@ export function usePurchaseEntryLogic({
         handleRemoveItem,
         handleSavePurchase,
         validatePurchase,
+        purchaseDraftReadinessError,
         handlePrint,
         handlePDFUpload,
         handleVerificationComplete,

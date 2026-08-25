@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, CheckCircle, AlertCircle, ChevronLeft,
-  Calendar, DollarSign, Percent, Info,
-  Save, AlertTriangle, Plus, Trash2
+  Calendar, DollarSign, Percent,
+  Save, AlertTriangle, Trash2
 } from 'lucide-react';
 import { PurchaseProductSearch } from '../../global';
 
@@ -20,23 +20,23 @@ const ProductVerificationModal = ({
 }) => {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [mode, setMode] = useState('search'); // 'search', 'selected', 'new'
-  const [isExtractMode, setIsExtractMode] = useState(true); // Track if we're in extract mode
   const productSearchRef = useRef(null);
 
   // Editable product data
   const [productData, setProductData] = useState({
     product_id: product?.product_id || null,
+    uom_conversion_id: product?.uom_conversion_id || '',
     product_name: product?.product_name || '',
     batch_number: product?.batch_number || '',
     expiry_date: product?.expiry_date || '',
-    quantity: product?.quantity || '',
-    unit_price: product?.unit_price || product?.unit_price || '',
-    mrp: product?.mrp || '',
-    selling_price: product?.selling_price || '',
-    tax_percent: product?.tax_percent || 0,
+    quantity: product?.quantity ?? '',
+    unit_price: product?.unit_price ?? '',
+    mrp: product?.mrp ?? '',
+    selling_price: product?.selling_price ?? '',
+    tax_percent: product?.tax_percent ?? '',
     hsn_code: product?.hsn_code || '',
-    free_quantity: product?.free_quantity || 0,
-    discount_percent: product?.discount_percent || 0
+    free_quantity: product?.free_quantity ?? '',
+    discount_percent: product?.discount_percent ?? ''
   });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -71,6 +71,7 @@ const ProductVerificationModal = ({
       // Product was already verified, use the saved values
       setProductData({
         product_id: product.product_id,
+        uom_conversion_id: product.uom_conversion_id || '',
         product_name: product.product_name,
         batch_number: product.batch_number,
         expiry_date: formatDateForInput(product.expiry_date),
@@ -95,21 +96,21 @@ const ProductVerificationModal = ({
       // Product not verified yet, use extracted/original data
       setProductData({
         product_id: product?.product_id || null,
+        uom_conversion_id: product?.uom_conversion_id || '',
         product_name: product?.product_name || '',
         batch_number: product?.batch_number || '',
         expiry_date: formatDateForInput(product?.expiry_date),
-        quantity: product?.quantity || '',
-        unit_price: product?.unit_price || product?.unit_price || '',
-        mrp: product?.mrp || '',
-        selling_price: product?.selling_price || '', // Don't auto-calculate in extract mode
-        tax_percent: product?.tax_percent || 0,
+        quantity: product?.quantity ?? '',
+        unit_price: product?.unit_price ?? '',
+        mrp: product?.mrp ?? '',
+        selling_price: product?.selling_price ?? '',
+        tax_percent: product?.tax_percent ?? '',
         hsn_code: product?.hsn_code || '',
-        free_quantity: product?.free_quantity || 0,
-        discount_percent: product?.discount_percent || 0
+        free_quantity: product?.free_quantity ?? '',
+        discount_percent: product?.discount_percent ?? ''
       });
 
       setMode('search');
-      setIsExtractMode(true); // We're in extract mode
     }
 
     // Reset common state
@@ -123,17 +124,17 @@ const ProductVerificationModal = ({
     // Map the selected product to our format
     const mappedProduct = {
       product_id: selectedProd.product_id || null,
+      uom_conversion_id: selectedProd.uom_conversion_id || '',
       product_name: selectedProd.product_name || selectedProd.name,
       hsn_code: selectedProd.hsn_code || selectedProd.hsn,
-      mrp: selectedProd.mrp || productData.mrp || 0,
-      // In extract mode, don't auto-fill selling price - let it come from customer
-      selling_price: isExtractMode ? (productData.selling_price || '') : (selectedProd.selling_price || selectedProd.ptr || ''),
-      unit_price: productData.unit_price || selectedProd.unit_price || 0,
-      tax_percent: selectedProd.tax_percent || selectedProd.gst_percent || productData.tax_percent || 12,
+      mrp: selectedProd.mrp ?? productData.mrp,
+      selling_price: productData.selling_price || selectedProd.selling_price || selectedProd.ptr || '',
+      unit_price: productData.unit_price || selectedProd.unit_price || '',
+      tax_percent: selectedProd.tax_percent ?? selectedProd.gst_percent ?? productData.tax_percent,
       // Keep extracted values for these
-      quantity: productData.quantity || 1,
-      free_quantity: productData.free_quantity || 0,
-      discount_percent: productData.discount_percent || 0,
+      quantity: productData.quantity,
+      free_quantity: productData.free_quantity,
+      discount_percent: productData.discount_percent,
       batch_number: productData.batch_number || '',
       expiry_date: productData.expiry_date || ''
     };
@@ -141,54 +142,6 @@ const ProductVerificationModal = ({
     setProductData(mappedProduct);
     setSelectedProduct(selectedProd);
     setMode('selected');
-    setIsExtractMode(false); // No longer in pure extract mode after selection
-  };
-
-  // Handle creating new product
-  const handleCreateNewProduct = () => {
-    setMode('new');
-    setSelectedProduct(null);
-    setIsExtractMode(false);
-    // Keep the extracted data but mark as new product
-    setProductData(prev => ({
-      ...prev,
-      product_id: null
-    }));
-  };
-
-  // Auto-calculate prices only when NOT in extract mode
-  useEffect(() => {
-    if (!isExtractMode && productData.unit_price && (!productData.mrp || productData.mrp === '')) {
-      const cost = parseFloat(productData.unit_price);
-      if (!isNaN(cost) && cost > 0) {
-        setProductData(prev => ({
-          ...prev,
-          mrp: (cost * 1.5).toFixed(2)
-        }));
-      }
-    }
-  }, [productData.unit_price, isExtractMode]);
-
-  useEffect(() => {
-    // Don't auto-calculate selling price in extract mode - let customer provide it
-    if (!isExtractMode && productData.mrp && (!productData.selling_price || productData.selling_price === '')) {
-      const mrp = parseFloat(productData.mrp);
-      if (!isNaN(mrp) && mrp > 0) {
-        setProductData(prev => ({
-          ...prev,
-          selling_price: (mrp * 0.9).toFixed(2)
-        }));
-      }
-    }
-  }, [productData.mrp, isExtractMode]);
-
-  // Generate batch number if not provided
-  const generateBatchNumber = () => {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `B${year}${month}${random}`;
   };
 
   // Validate product data
@@ -197,11 +150,30 @@ const ProductVerificationModal = ({
     const warnings: string[] = [];
 
     // Required fields
+    if (!productData.product_id || !productData.uom_conversion_id) {
+      errors.push('Select an existing canonical product with UOM identity');
+    }
     if (!productData.product_name) errors.push('Product name is required');
-    if (!productData.quantity || productData.quantity <= 0) errors.push('Quantity must be greater than 0');
-    if (!productData.unit_price || productData.unit_price <= 0) errors.push('Cost price must be greater than 0');
-    // Batch number is NOT required - will be auto-generated if missing
+    if (!productData.quantity || Number(productData.quantity) <= 0) errors.push('Quantity must be greater than 0');
+    if (!productData.unit_price || Number(productData.unit_price) <= 0) errors.push('Cost price must be greater than 0');
+    if (!productData.mrp || Number(productData.mrp) <= 0) errors.push('MRP must be greater than 0');
+    if (productData.free_quantity === '' || productData.free_quantity === null || productData.free_quantity === undefined) {
+      errors.push('Free quantity must be explicit (zero is allowed)');
+    } else if (!Number.isFinite(Number(productData.free_quantity)) || Number(productData.free_quantity) < 0) {
+      errors.push('Free quantity cannot be negative');
+    }
+    if (productData.discount_percent === '' || productData.discount_percent === null || productData.discount_percent === undefined) {
+      errors.push('Discount must be explicit (zero is allowed)');
+    } else if (!Number.isFinite(Number(productData.discount_percent)) || Number(productData.discount_percent) < 0 || Number(productData.discount_percent) > 100) {
+      errors.push('Discount must be between 0% and 100%');
+    }
+    if (!productData.batch_number?.trim()) errors.push('Authoritative batch number is required');
     if (!productData.expiry_date) errors.push('Expiry date is required');
+    if (productData.tax_percent === '' || productData.tax_percent === null || productData.tax_percent === undefined) {
+      errors.push('GST rate must be selected from authoritative product or invoice data');
+    } else if (!Number.isFinite(Number(productData.tax_percent)) || Number(productData.tax_percent) < 0 || Number(productData.tax_percent) > 100) {
+      errors.push('GST rate must be between 0% and 100%');
+    }
 
     // Price logic
     if (productData.mrp && productData.unit_price) {
@@ -242,16 +214,8 @@ const ProductVerificationModal = ({
       return;
     }
 
-    // Auto-generate batch number if not provided
-    // Only auto-calculate selling price if not in extract mode and not provided
-    const finalProductData = {
-      ...productData,
-      batch_number: productData.batch_number || generateBatchNumber(),
-      selling_price: productData.selling_price || (!isExtractMode && productData.mrp ? (parseFloat(productData.mrp) * 0.9).toFixed(2) : '0')
-    };
-
     onVerified({
-      ...finalProductData,
+      ...productData,
       isNewProduct: mode === 'new',
       verified: true
     });
@@ -292,9 +256,8 @@ const ProductVerificationModal = ({
         <PurchaseProductSearch
           ref={productSearchRef}
           onAddItem={handleProductSelect}
-          onCreateProduct={handleCreateNewProduct}
           requireBatch={false}
-          placeholder="Type to search existing products or create new..."
+          placeholder="Search an existing canonical product..."
           className="w-full"
         />
 
@@ -316,22 +279,9 @@ const ProductVerificationModal = ({
           </div>
         )}
 
-        {mode === 'new' && (
-          <div className="mt-3 p-2 bg-blue-50 rounded-lg flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Info className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-700">
-                New product will be created
-              </span>
-            </div>
-            <button
-              onClick={() => setMode('search')}
-              className="text-xs text-blue-600 hover:text-blue-700"
-            >
-              Search Again
-            </button>
-          </div>
-        )}
+        <p className="mt-2 text-xs text-blue-700">
+          Create missing products in Product Master first; purchase verification never invents product or UOM identity.
+        </p>
       </div>
 
       {/* Product Details Form - Reduced whitespace */}
@@ -339,32 +289,6 @@ const ProductVerificationModal = ({
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-medium text-gray-700">Product Details</h4>
           <div className="flex gap-2">
-            <button
-              onClick={() => {
-                // Clear all fields for new product
-                setProductData({
-                  product_id: null,
-                  product_name: '',
-                  batch_number: '',
-                  expiry_date: '',
-                  quantity: '',
-                  unit_price: '',
-                  mrp: '',
-                  selling_price: '',
-                  tax_percent: 12,
-                  hsn_code: '',
-                  free_quantity: 0,
-                  discount_percent: 0
-                });
-                setMode('new');
-                setSelectedProduct(null);
-                setIsExtractMode(false);
-              }}
-              className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-              title="Add new product"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
             <button
               onClick={onSkip}
               className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -418,7 +342,7 @@ const ProductVerificationModal = ({
                     ...prev,
                     batch_number: e.target.value
                   }))}
-                  placeholder="Auto-generate if empty"
+                  placeholder="Enter authoritative batch number"
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                 />
               </div>
@@ -457,7 +381,7 @@ const ProductVerificationModal = ({
                   value={productData.quantity}
                   onChange={(e) => setProductData(prev => ({
                     ...prev,
-                    quantity: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                    quantity: e.target.value
                   }))}
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
                 />
@@ -472,7 +396,7 @@ const ProductVerificationModal = ({
                   value={productData.free_quantity}
                   onChange={(e) => setProductData(prev => ({
                     ...prev,
-                    free_quantity: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                    free_quantity: e.target.value
                   }))}
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                 />
@@ -483,7 +407,9 @@ const ProductVerificationModal = ({
                 </label>
                 <input
                   type="text"
-                  value={(parseFloat(productData.quantity || 0) + parseFloat(productData.free_quantity || 0))}
+                  value={productData.quantity === '' || productData.free_quantity === ''
+                    ? ''
+                    : `${productData.quantity} + ${productData.free_quantity}`}
                   disabled
                   className="w-full px-3 py-2 border rounded-md bg-gray-100 font-semibold text-green-700"
                 />
@@ -510,7 +436,7 @@ const ProductVerificationModal = ({
                     value={productData.unit_price}
                     onChange={(e) => setProductData(prev => ({
                       ...prev,
-                      unit_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                      unit_price: e.target.value
                     }))}
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
                   />
@@ -528,7 +454,7 @@ const ProductVerificationModal = ({
                     value={productData.mrp}
                     onChange={(e) => setProductData(prev => ({
                       ...prev,
-                      mrp: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                      mrp: e.target.value
                     }))}
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                   />
@@ -546,9 +472,9 @@ const ProductVerificationModal = ({
                     value={productData.selling_price}
                     onChange={(e) => setProductData(prev => ({
                       ...prev,
-                      selling_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                      selling_price: e.target.value
                     }))}
-                    placeholder={isExtractMode ? "Enter price" : "Auto"}
+                    placeholder="Enter explicit selling price when applicable"
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                   />
                 </div>
@@ -575,6 +501,7 @@ const ProductVerificationModal = ({
                   }))}
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                 >
+                  <option value="">Select authoritative GST rate</option>
                   <option value="0">0% (Exempt)</option>
                   <option value="5">5%</option>
                   <option value="12">12%</option>
@@ -607,7 +534,7 @@ const ProductVerificationModal = ({
                   value={productData.discount_percent}
                   onChange={(e) => setProductData(prev => ({
                     ...prev,
-                    discount_percent: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                    discount_percent: e.target.value
                   }))}
                   max="100"
                   placeholder="0"

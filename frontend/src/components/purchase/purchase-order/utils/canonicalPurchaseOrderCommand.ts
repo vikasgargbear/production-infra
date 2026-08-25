@@ -72,7 +72,7 @@ const freeSupplyTreatment = (item: PurchaseOrderItem, index: number): FreeSupply
     ) {
         return item.free_supply_tax_treatment;
     }
-    if (quantityUnits(canonicalDecimal(item.free_quantity ?? 0, 'Free quantity', QUANTITY_PATTERN), 'Free quantity') === 0n) {
+    if (quantityUnits(canonicalDecimal(item.free_quantity, 'Free quantity', QUANTITY_PATTERN), 'Free quantity') === 0n) {
         // The canonical schema requires the field even when there is no free
         // supply; excluded is then mathematically inert, not a pricing default.
         return 'excluded_from_taxable_value';
@@ -110,7 +110,7 @@ export function canonicalPurchaseOrderValidationError(
                 QUANTITY_PATTERN,
             );
             const free = canonicalDecimal(
-                item.free_quantity ?? 0,
+                item.free_quantity,
                 `Item ${index + 1} free quantity`,
                 QUANTITY_PATTERN,
             );
@@ -126,7 +126,7 @@ export function canonicalPurchaseOrderValidationError(
                 throw new Error(`Item ${index + 1} quoted rate must be greater than zero.`);
             }
             const discount = canonicalDecimal(
-                item.discount_percent ?? 0,
+                item.discount_percent,
                 `Item ${index + 1} discount`,
                 QUANTITY_PATTERN,
             );
@@ -187,7 +187,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
         zero_rated_payment_mode: 'not_applicable',
         lines: order.items.map((item, index) => {
             const discount = canonicalDecimal(
-                item.discount_percent ?? 0,
+                item.discount_percent,
                 `Item ${index + 1} discount`,
                 QUANTITY_PATTERN,
             );
@@ -204,7 +204,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
                     QUANTITY_PATTERN,
                 ),
                 free_quantity: canonicalDecimal(
-                    item.free_quantity ?? 0,
+                    item.free_quantity,
                     `Item ${index + 1} free quantity`,
                     QUANTITY_PATTERN,
                 ),

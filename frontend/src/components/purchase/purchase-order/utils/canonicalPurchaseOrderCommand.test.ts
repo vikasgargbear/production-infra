@@ -66,6 +66,8 @@ describe('canonical purchase-order command', () => {
         ['branch UUID', null, supplier, BRANCH, 'Purchase-order branch'],
         ['UOM UUID', { uom_conversion_id: undefined }, supplier, BRANCH, 'UOM'],
         ['positive rate', { unit_price: '0' }, supplier, BRANCH, 'greater than zero'],
+        ['free quantity', { free_quantity: undefined }, supplier, BRANCH, 'free quantity'],
+        ['discount', { discount_percent: undefined }, supplier, BRANCH, 'discount'],
         ['quantity precision', { quantity: '0.1234567' }, supplier, BRANCH, 'precision'],
     ])('fails closed when %s is unavailable', (_name, itemOverride, selected, branch, message) => {
         const candidate = order();
@@ -81,6 +83,12 @@ describe('canonical purchase-order command', () => {
         expect(canonicalPurchaseOrderValidationError(
             { ...order(), freight_charges: '5.00' }, supplier, BRANCH,
         )).toContain('canonical charge-line identity');
+    });
+
+    it('requires an explicit zero when no freight applies', () => {
+        expect(canonicalPurchaseOrderValidationError(
+            { ...order(), freight_charges: '' }, supplier, BRANCH,
+        )).toContain('freight');
     });
 
     it('parses exact backend impacts in minor units', () => {
@@ -133,6 +141,15 @@ describe('canonical purchase-order command', () => {
         const empty = getInitialPurchaseOrder();
         expect(empty.po_date).toBe('');
         expect(empty.expected_delivery_date).toBe('');
+        expect(empty.discount_amount).toBe('');
+        expect(empty.freight_charges).toBe('');
+        expect(empty.gross_amount).toBe('');
+        expect(empty.tax_amount).toBe('');
+        expect(empty.total_amount).toBe('');
+        expect(empty.payment_terms).toBe('');
+        expect(empty.delivery_terms).toBe('');
+        expect(empty.delivery_location).toBe('');
+        expect(empty.transport_mode).toBe('');
 
         const authoritative = getInitialPurchaseOrder({
             po_date: '2026-08-25',

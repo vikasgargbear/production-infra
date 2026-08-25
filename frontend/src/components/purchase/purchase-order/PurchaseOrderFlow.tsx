@@ -174,8 +174,8 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
               ...item,
               unit_price: item.unit_price,
               gst_percent: item.gst_percent ?? item.tax_percent,
-              discount_percent: item.discount_percent || 0,
-              free_quantity: item.free_quantity || 0
+              discount_percent: item.discount_percent ?? '',
+              free_quantity: item.free_quantity ?? ''
             }))}
             onUpdateItem={(index, field, value) => {
               const mappedField = field === 'unit_price' ? 'unit_price' :
@@ -189,9 +189,10 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             preserveExactDecimals
           />
 
-          {purchaseOrder.items.map((item, index) => hasPositiveExactQuantity(
-            item.free_quantity ?? 0, `Item ${index + 1} free quantity`,
-          ) && (
+          {purchaseOrder.items.map((item, index) => item.free_quantity !== ''
+            && item.free_quantity !== null
+            && item.free_quantity !== undefined
+            && hasPositiveExactQuantity(item.free_quantity, `Item ${index + 1} free quantity`) && (
             <label key={String(item.id)} className="mt-3 block border border-gray-200 bg-white p-3 text-sm">
               <span className="mb-2 block font-medium text-gray-800">
                 Free-supply tax treatment for {item.product_name}
@@ -208,7 +209,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             </label>
           ))}
 
-          <div className="mt-4 grid gap-3 border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 border border-gray-200 bg-gray-50 p-4 sm:grid-cols-3">
             <label className="text-sm font-medium text-gray-700">
               Document discount
               <input
@@ -216,6 +217,16 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                 onChange={(event) => setPurchaseOrder(prev => ({ ...prev, discount_amount: event.target.value }))}
                 inputMode="decimal"
                 placeholder="0.00"
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Freight charge
+              <input
+                value={purchaseOrder.freight_charges}
+                onChange={(event) => setPurchaseOrder(prev => ({ ...prev, freight_charges: event.target.value }))}
+                inputMode="decimal"
+                placeholder="Enter 0.00 when none"
                 className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
               />
             </label>
@@ -288,7 +299,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                   <td className="px-3 py-3 font-medium text-gray-900">{item.product_name}</td>
                   <td className="px-3 py-3 font-mono text-xs text-gray-600">{item.uom_conversion_id}</td>
                   <td className="px-3 py-3 text-right">{item.quantity}</td>
-                  <td className="px-3 py-3 text-right">{item.free_quantity ?? 0}</td>
+                  <td className="px-3 py-3 text-right">{item.free_quantity}</td>
                   <td className="px-3 py-3 text-right">₹{String(item.unit_price)}</td>
                 </tr>
               ))}

@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import { Package, FileText, Building2 } from 'lucide-react';
 import {
   GlobalDocumentFlow,
-  DocumentSummaryTop,
   SupplierSearch,
   ProductSearch,
   SupplierCreationModal,
@@ -11,11 +10,9 @@ import {
   ContentCard,
   StandardFormInput,
   StandardDatePicker,
-  SplitPayment,
   NumberInput,
   useToast
 } from '../../global';
-import { PURCHASE_CONFIG } from '../../../config/purchase.config';
 import PDFUploadModal from '../../global/modals/PDFUploadModal';
 import PDFVerificationFlow from '../PDFVerificationFlow';
 import PurchaseItemEditModal from '../ui/PurchaseItemEditModal';
@@ -47,6 +44,12 @@ interface PurchaseEntryFlowProps {
   prefilledData?: Partial<PurchaseData> | null;
 }
 
+const numberInputValue = (value: unknown): number | null => {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefilledData = null }) => {
   const productSearchRef = useRef(null);
   const toast = useToast();
@@ -61,6 +64,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
     setCurrentStep,
     saving,
     errors,
+    purchaseDraftReadinessError,
 
     // Modal states
     showSupplierModal,
@@ -93,7 +97,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
     handleRemoveItem,
     handleSavePurchase,
     handlePrint,
-    handlePDFUpload,
     handleVerificationComplete,
     formatCurrency
   } = usePurchaseEntryLogic({ prefilledData, onClose });
@@ -148,7 +151,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
           label="Supplier Invoice Number"
           value={purchase.supplier_invoice_number}
           onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
-          placeholder="Auto-generates if empty"
+          placeholder="Enter supplier invoice number"
           error={errors.invoice_number}
         />
         <StandardDatePicker
@@ -248,13 +251,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
               </thead>
               <tbody>
                 {purchase.items.map((item, index) => {
-                  const quantity = parseFloat(String(item.quantity)) || 0;
-                  const freeQty = parseFloat(String(item.free_quantity)) || 0;
-                  const cost = parseFloat(String(item.unit_price)) || parseFloat(String(item.unit_price)) || 0;
-                  const mrp = parseFloat(String(item.mrp)) || 0;
-                  const sellingPrice = parseFloat(String(item.selling_price)) || 0;
-                  const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                  const taxPercent = parseFloat(String(item.tax_percent)) || 0;
                   const totalAmount = item.total_amount || '0.00';
 
                   // Format expiry date if exists
@@ -298,14 +294,14 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       <td className="text-center py-2 px-2 text-xs">{expiryDisplay}</td>
                       <td className="text-center py-2 px-2">
                         <NumberInput
-                          value={item.quantity ?? null}
+                          value={numberInputValue(item.quantity)}
                           onChange={(val) => handleUpdateItem(index, 'quantity', val)}
                           className="w-16 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </td>
                       <td className="text-center py-2 px-2">
                         <NumberInput
-                          value={item.free_quantity ?? null}
+                          value={numberInputValue(item.free_quantity)}
                           onChange={(val) => handleUpdateItem(index, 'free_quantity', val)}
                           className="w-14 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                           min={0}
@@ -313,7 +309,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       </td>
                       <td className="text-right py-2 px-2">
                         <NumberInput
-                          value={item.unit_price || item.unit_price || null}
+                          value={numberInputValue(item.unit_price)}
                           onChange={(val) => handleUpdateItem(index, 'unit_price', val)}
                           className="w-20 px-1 py-1 text-xs text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                           min={0}
@@ -322,7 +318,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       </td>
                       <td className="text-right py-2 px-2">
                         <NumberInput
-                          value={item.mrp ?? null}
+                          value={numberInputValue(item.mrp)}
                           onChange={(val) => handleUpdateItem(index, 'mrp', val)}
                           className="w-20 px-1 py-1 text-xs text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                           min={0}
@@ -331,7 +327,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       </td>
                       <td className="text-right py-2 px-2">
                         <NumberInput
-                          value={item.selling_price ?? null}
+                          value={numberInputValue(item.selling_price)}
                           onChange={(val) => handleUpdateItem(index, 'selling_price', val)}
                           className="w-20 px-1 py-1 text-xs text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                           min={0}
@@ -340,7 +336,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       </td>
                       <td className="text-center py-2 px-2">
                         <NumberInput
-                          value={item.discount_percent ?? null}
+                          value={numberInputValue(item.discount_percent)}
                           onChange={(val) => handleUpdateItem(index, 'discount_percent', val)}
                           className="w-14 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                           min={0}
@@ -396,6 +392,11 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
       {errors.items && (
         <p className="text-red-500 text-xs mt-1">{errors.items}</p>
       )}
+      {purchaseDraftReadinessError && (
+        <div role="alert" className="mt-4 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {purchaseDraftReadinessError}
+        </div>
+      )}
     </>
   );
 
@@ -434,23 +435,8 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
           </div>
         </div>
 
-        {/* Payment Information - Properly Contained */}
-        <div className="mb-6 bg-gray-50 px-4 py-3 rounded-lg border border-gray-200">
-          <SplitPayment
-            totalAmount={purchase.total_amount || 0}
-            payments={purchase.payment_methods?.length > 0 ? purchase.payment_methods : [{ id: '1', method: 'cash', amount: purchase.total_amount || 0 }]}
-            onChange={(payments) => {
-              setPurchase(prev => ({
-                ...prev,
-                payment_methods: payments
-              }));
-            }}
-            onPaymentStatusChange={(status) => {
-              setPurchase(prev => ({ ...prev, payment_status: status }));
-            }}
-            allowPartial={true}
-            className=""
-          />
+        <div className="mb-6 border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Supplier-invoice settlement is not inferred in this receipt draft. Post payment separately through the reviewed canonical supplier-payment flow.
         </div>
 
         {/* Simplified Supplier Section with GST and DL */}
@@ -498,15 +484,9 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
             </thead>
             <tbody>
               {(purchase.items || []).map((item, index) => {
-                const quantity = parseFloat(String(item.quantity)) || 0;
-                const freeQty = parseFloat(String(item.free_quantity)) || 0;
-                const cost = parseFloat(String(item.unit_price)) || parseFloat(String(item.unit_price)) || 0;
-                const mrp = parseFloat(String(item.mrp)) || 0;
-                const sellingPrice = parseFloat(String(item.selling_price)) || 0;
-                const discountPercent = parseFloat(String(item.discount_percent || 0));
-                const taxPercent = parseFloat(String(item.tax_percent || 0));
-                const taxAmount = item.tax_amount || '0.00';
-                const totalWithTax = item.total_amount || '0.00';
+                const displayFact = (value: unknown): string => (
+                  value === '' || value === null || value === undefined ? 'Unavailable' : String(value)
+                );
 
                 // Format expiry date if exists
                 const expiryDisplay = (() => {
@@ -547,15 +527,15 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       </div>
                     </td>
                     <td className="text-center py-2 px-2 text-xs text-gray-600">{expiryDisplay}</td>
-                    <td className="text-center py-2 px-2 text-xs font-medium">{quantity}</td>
-                    <td className="text-center py-2 px-2 text-xs text-gray-600">{freeQty > 0 ? freeQty : '-'}</td>
-                    <td className="text-right py-2 px-2 text-xs font-medium">{formatCurrency(cost)}</td>
-                    <td className="text-right py-2 px-2 text-xs">{formatCurrency(mrp)}</td>
-                    <td className="text-right py-2 px-2 text-xs">{formatCurrency(sellingPrice)}</td>
-                    <td className="text-center py-2 px-2 text-xs text-gray-600">{discountPercent}%</td>
-                    <td className="text-center py-2 px-2 text-xs text-gray-600">{taxPercent}%</td>
-                    <td className="text-right py-2 px-2 text-xs">{formatCurrency(taxAmount)}</td>
-                    <td className="text-right py-2 px-2 text-xs font-bold text-green-600">{formatCurrency(totalWithTax)}</td>
+                    <td className="text-center py-2 px-2 text-xs font-medium">{displayFact(item.quantity)}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{displayFact(item.free_quantity)}</td>
+                    <td className="text-right py-2 px-2 text-xs font-medium">{item.unit_price === '' ? 'Unavailable' : formatCurrency(item.unit_price)}</td>
+                    <td className="text-right py-2 px-2 text-xs">{item.mrp === '' || item.mrp === undefined ? 'Unavailable' : formatCurrency(item.mrp)}</td>
+                    <td className="text-right py-2 px-2 text-xs">{item.selling_price === '' || item.selling_price === undefined ? 'Unavailable' : formatCurrency(item.selling_price)}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{item.discount_percent === '' || item.discount_percent === undefined ? 'Unavailable' : `${item.discount_percent}%`}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{item.tax_percent === '' || item.tax_percent === undefined ? 'Unavailable' : `${item.tax_percent}%`}</td>
+                    <td className="text-right py-2 px-2 text-xs">{item.tax_amount === '' || item.tax_amount === undefined ? 'Pending API' : formatCurrency(item.tax_amount)}</td>
+                    <td className="text-right py-2 px-2 text-xs font-bold text-green-600">{item.total_amount === '' || item.total_amount === undefined ? 'Pending API' : formatCurrency(item.total_amount)}</td>
                   </tr>
                 );
               })}
@@ -575,7 +555,8 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   (purchase.items || []).forEach(item => {
                     let taxPercent: string;
                     try {
-                      taxPercent = normalizeExactDecimal(item.tax_percent || 0, 'Purchase GST rate', { scale: 6, maximumWholeDigits: 3 });
+                      if (item.tax_percent === '' || item.tax_percent === null || item.tax_percent === undefined) return;
+                      taxPercent = normalizeExactDecimal(item.tax_percent, 'Purchase GST rate', { scale: 6, maximumWholeDigits: 3 });
                     } catch {
                       return;
                     }
@@ -583,8 +564,9 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                       if (!gstBreakdown[taxPercent]) {
                         gstBreakdown[taxPercent] = { taxable: '0.00', tax: '0.00' };
                       }
-                      gstBreakdown[taxPercent].taxable = addExactDecimals([gstBreakdown[taxPercent].taxable, item.taxable_amount || 0], 'Purchase GST taxable total', { scale: 2, maximumWholeDigits: 20 });
-                      gstBreakdown[taxPercent].tax = addExactDecimals([gstBreakdown[taxPercent].tax, item.tax_amount || 0], 'Purchase GST tax total', { scale: 2, maximumWholeDigits: 20 });
+                      if (item.taxable_amount === '' || item.taxable_amount === undefined || item.tax_amount === '' || item.tax_amount === undefined) return;
+                      gstBreakdown[taxPercent].taxable = addExactDecimals([gstBreakdown[taxPercent].taxable, item.taxable_amount], 'Purchase GST taxable total', { scale: 2, maximumWholeDigits: 20 });
+                      gstBreakdown[taxPercent].tax = addExactDecimals([gstBreakdown[taxPercent].tax, item.tax_amount], 'Purchase GST tax total', { scale: 2, maximumWholeDigits: 20 });
                     }
                   });
 
@@ -665,9 +647,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
 
         // Validation & Actions
         canProceedToReview={() => {
-          return !!selectedSupplier &&
-            purchase.items &&
-            purchase.items.length > 0;
+          return purchaseDraftReadinessError === null;
         }}
         onSave={handleSavePurchase}
         isSaving={saving}
@@ -676,11 +656,11 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
         // Footer totals
         footerTotals={{
           itemCount: purchase.items?.length || 0,
-          totalAmount: purchase.total_amount || 0,
-          subtotal: purchase.gross_amount || 0,
-          tax: purchase.tax_amount || 0,
-          roundOff: purchase.round_off || 0,
-          grandTotal: purchase.total_amount || 0
+          totalAmount: purchase.total_amount === '' ? undefined : purchase.total_amount,
+          subtotal: purchase.gross_amount === '' ? undefined : purchase.gross_amount,
+          tax: purchase.tax_amount === '' ? undefined : purchase.tax_amount,
+          roundOff: purchase.round_off === '' ? undefined : purchase.round_off,
+          grandTotal: purchase.total_amount === '' ? undefined : purchase.total_amount
         }}
 
         // Keyboard shortcuts
@@ -739,24 +719,25 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
               invoice_date: data.invoice_date || '',
               items: (data.items || []).map(item => ({
                 product_id: item.product_id || null,
+                uom_conversion_id: item.uom_conversion_id || '',
                 product_name: item.product_name || item.name || '',
                 hsn_code: item.hsn_code || '',
                 batch_number: item.batch_number || item.batch_number || '',
                 expiry_date: item.expiry_date || '',
                 manufacturing_date: item.manufacturing_date || '',
-                quantity: Number(item.quantity) || 0,
-                free_quantity: Number(item.free_quantity) || 0,
-                unit_price: Number(item.unit_price) || 0,
-                mrp: Number(item.mrp) || 0,
-                selling_price: Number(item.selling_price || item.sale_price || item.mrp) || 0,
-                discount_percent: Number(item.discount_percent) || 0,
-                tax_percent: Number(item.tax_percent || item.gst_percent) || 0,
-                pack_type: item.pack_type || 'STRIP',
-                pack_size: item.pack_size || 10
+                quantity: item.quantity ?? '',
+                free_quantity: item.free_quantity ?? '',
+                unit_price: item.unit_price ?? '',
+                mrp: item.mrp ?? '',
+                selling_price: item.selling_price ?? item.sale_price ?? '',
+                discount_percent: item.discount_percent ?? '',
+                tax_percent: item.tax_percent ?? item.gst_percent ?? '',
+                pack_type: item.pack_type ?? '',
+                pack_size: item.pack_size ?? ''
               })),
-              gross_amount: data.subtotal || data.gross_amount || 0,
-              tax_amount: data.tax_amount || 0,
-              total_amount: data.total_amount || data.total_amount || 0
+              gross_amount: data.subtotal ?? data.gross_amount ?? '',
+              tax_amount: data.tax_amount ?? '',
+              total_amount: data.total_amount ?? ''
             };
 
             setExtractedPDFData(extractedPDFData);
@@ -829,7 +810,8 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 ...prev,
                 items: (prev.items || []).map((item, i) =>
                   i === currentEditItem.index ? (updatedItem as PurchaseItem) : item
-                )
+                ),
+                gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
               }));
               setCurrentEditItem(null);
             } else {

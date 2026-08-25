@@ -8,11 +8,38 @@
 import type { BasePurchaseItem, PurchaseOrderItem, PurchaseEntryItem, GRNItem } from '../types';
 
 /**
- * Generate temporary ID for new items (offline use)
+ * Generate a client-only draft-row identity.
  */
 export function generateTempId(): string {
     return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
+
+const requiredNumber = (
+    value: unknown,
+    label: string,
+    { positive = false, maximum = Number.POSITIVE_INFINITY } = {},
+): number => {
+    if (value === '' || value === null || value === undefined) {
+        throw new Error(`${label} must come from an authoritative source or explicit user entry.`);
+    }
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || (positive && parsed <= 0) || parsed > maximum) {
+        throw new Error(`${label} is invalid.`);
+    }
+    return parsed;
+};
+
+const optionalNumber = (value: unknown, label: string): number | undefined => (
+    value === '' || value === null || value === undefined
+        ? undefined
+        : requiredNumber(value, label)
+);
+
+const productTax = (product: any): number => requiredNumber(
+    product.gst_percent ?? product.tax_percent,
+    'Product GST rate',
+    { maximum: 100 },
+);
 
 /**
  * Prepare product for Purchase Order line item
@@ -23,14 +50,11 @@ export function prepareItemForPurchaseOrder(product: any): PurchaseOrderItem {
         product_id: product.product_id || product.id,
         product_name: product.product_name || product.name,
         hsn_code: product.hsn_code || product.hsn,
-        quantity: 1,
-        free_quantity: 0,
-        unit_price: product.unit_price || product.unit_price || product.cost_per_unit || 0,
-        discount_percent: 0,
-        discount_amount: 0,
-        tax_percent: product.gst_percent || product.tax_percent || 18,
-        cgst_rate: (product.gst_percent || product.tax_percent || 18) / 2,
-        sgst_rate: (product.gst_percent || product.tax_percent || 18) / 2,
+        quantity: requiredNumber(product.quantity, 'Purchase-order quantity', { positive: true }),
+        free_quantity: requiredNumber(product.free_quantity, 'Purchase-order free quantity'),
+        unit_price: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-order unit price', { positive: true }),
+        discount_percent: requiredNumber(product.discount_percent, 'Purchase-order discount', { maximum: 100 }),
+        tax_percent: productTax(product),
         notes: '',
     };
 }
@@ -44,22 +68,19 @@ export function prepareItemForPurchaseEntry(product: any): PurchaseEntryItem {
         product_id: product.product_id || product.id,
         product_name: product.product_name || product.name,
         hsn_code: product.hsn_code || product.hsn,
-        quantity: 1,
-        free_quantity: 0,
-        unit_price: product.unit_price || product.unit_price || product.cost_per_unit || 0,
-        discount_percent: 0,
-        discount_amount: 0,
-        tax_percent: product.gst_percent || product.tax_percent || 18,
-        cgst_rate: (product.gst_percent || product.tax_percent || 18) / 2,
-        sgst_rate: (product.gst_percent || product.tax_percent || 18) / 2,
+        quantity: requiredNumber(product.quantity, 'Purchase-entry quantity', { positive: true }),
+        free_quantity: requiredNumber(product.free_quantity, 'Purchase-entry free quantity'),
+        unit_price: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-entry unit price', { positive: true }),
+        discount_percent: requiredNumber(product.discount_percent, 'Purchase-entry discount', { maximum: 100 }),
+        tax_percent: productTax(product),
 
         // Purchase entry specific
         batch_number: '',
         expiry_date: '',
         manufacturing_date: null,
-        mrp_per_unit: product.mrp_per_unit || product.mrp || 0,
-        sale_price_per_unit: product.sale_price_per_unit || product.selling_price || 0,
-        cost_per_unit: product.unit_price || product.unit_price || product.cost_per_unit || 0,
+        mrp_per_unit: optionalNumber(product.mrp_per_unit ?? product.mrp, 'Purchase-entry MRP'),
+        sale_price_per_unit: optionalNumber(product.sale_price_per_unit ?? product.selling_price, 'Purchase-entry sale price'),
+        cost_per_unit: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-entry cost', { positive: true }),
     };
 }
 
@@ -72,15 +93,13 @@ export function prepareItemForGRN(product: any, poItem?: any): GRNItem {
         product_id: product.product_id || product.id,
         product_name: product.product_name || product.name,
         hsn_code: product.hsn_code || product.hsn,
-        quantity: poItem?.quantity || 1,
-        received_quantity: poItem?.quantity || 1,
-        rejected_quantity: 0,
-        free_quantity: poItem?.free_quantity || 0,
-        unit_price: poItem?.unit_price || product.unit_price || product.cost_per_unit || 0,
-        discount_percent: poItem?.discount_percent || 0,
-        tax_percent: poItem?.tax_percent || product.gst_percent || 18,
-        cgst_rate: ((poItem?.tax_percent || product.gst_percent || 18) / 2),
-        sgst_rate: ((poItem?.tax_percent || product.gst_percent || 18) / 2),
+        quantity: requiredNumber(poItem?.quantity, 'GRN ordered quantity', { positive: true }),
+        received_quantity: requiredNumber(poItem?.received_quantity, 'GRN received quantity', { positive: true }),
+        rejected_quantity: requiredNumber(poItem?.rejected_quantity, 'GRN rejected quantity'),
+        free_quantity: requiredNumber(poItem?.free_quantity, 'GRN free quantity'),
+        unit_price: requiredNumber(poItem?.unit_price, 'GRN unit price', { positive: true }),
+        discount_percent: requiredNumber(poItem?.discount_percent, 'GRN discount', { maximum: 100 }),
+        tax_percent: requiredNumber(poItem?.tax_percent, 'GRN GST rate', { maximum: 100 }),
 
         // GRN specific
         batch_number: '',
@@ -102,11 +121,11 @@ export function cleanItemForBackend(item: BasePurchaseItem): any {
         delete cleaned.id;
     }
 
-    // Ensure numeric fields
-    cleaned.quantity = parseFloat(cleaned.quantity as any) || 0;
-    cleaned.unit_price = parseFloat(cleaned.unit_price as any) || 0;
-    cleaned.discount_percent = parseFloat(cleaned.discount_percent as any) || 0;
-    cleaned.tax_percent = parseFloat(cleaned.tax_percent as any) || 0;
+    // A submission adapter may normalize explicit values, but never invent them.
+    cleaned.quantity = requiredNumber(cleaned.quantity, 'Purchase quantity', { positive: true });
+    cleaned.unit_price = requiredNumber(cleaned.unit_price, 'Purchase unit price', { positive: true });
+    cleaned.discount_percent = requiredNumber(cleaned.discount_percent, 'Purchase discount', { maximum: 100 });
+    cleaned.tax_percent = requiredNumber(cleaned.tax_percent, 'Purchase GST rate', { maximum: 100 });
 
     return cleaned;
 }

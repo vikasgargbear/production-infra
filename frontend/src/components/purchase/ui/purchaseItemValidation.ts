@@ -1,5 +1,9 @@
 export interface PurchaseItemDraft {
     product_name?: string;
+    batch_number?: string;
+    pack_type?: string;
+    pack_size?: number | string;
+    units_per_pack?: number | string;
     expiry_date?: string;
     mrp?: number | string;
     unit_price?: number | string;
@@ -17,6 +21,10 @@ const safeNumber = (value: unknown): number => {
 export const getPurchaseItemErrors = (item: PurchaseItemDraft): string[] => {
     const errors: string[] = [];
     if (!String(item.product_name || '').trim()) errors.push('Product');
+    if (!String(item.batch_number || '').trim()) errors.push('Batch number');
+    if (!String(item.pack_type || '').trim()) errors.push('Pack type');
+    if (safeNumber(item.pack_size) <= 0) errors.push('Pack size');
+    if (safeNumber(item.units_per_pack) <= 0) errors.push('Units per pack');
     if (!item.expiry_date) errors.push('Expiry date');
     if (safeNumber(item.quantity) <= 0) errors.push('Quantity');
     if (safeNumber(item.mrp) <= 0) errors.push('MRP');
@@ -26,14 +34,4 @@ export const getPurchaseItemErrors = (item: PurchaseItemDraft): string[] => {
         errors.push('GST %');
     }
     return errors;
-};
-
-export const calculatePurchaseItemTotal = (item: PurchaseItemDraft): number => {
-    const qty = safeNumber(item.quantity);
-    const cost = safeNumber(item.unit_price);
-    const taxPercent = safeNumber(item.tax_percent);
-    const discountPercent = safeNumber(item.discount_percent);
-    const baseAmount = qty * cost;
-    const discountedAmount = baseAmount - (baseAmount * discountPercent / 100);
-    return discountedAmount + (discountedAmount * taxPercent / 100);
 };

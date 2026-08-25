@@ -32,8 +32,8 @@ export interface PurchaseOrderItem {
     unit_price: number | string;
     mrp?: number;
     expected_rate?: number;
-    tax_percent: number;
-    gst_percent?: number;
+    tax_percent?: number | string;
+    gst_percent?: number | string;
     discount_percent?: number | string;
     free_quantity?: number | string;
     free_supply_tax_treatment?:
@@ -43,7 +43,7 @@ export interface PurchaseOrderItem {
     pack_size?: number;
     packages_per_box?: number;
     manufacturer?: string;
-    total?: number;
+    total?: number | string;
 }
 
 export interface PurchaseOrderData {
@@ -58,12 +58,12 @@ export interface PurchaseOrderData {
     delivery_terms: string;
     delivery_location: string;
     transport_mode: string;
-    gross_amount: number;
+    gross_amount: number | string;
     discount_amount: number | string;
-    tax_amount: number;
-    freight_charges: number;
-    net_amount: number;
-    total_amount: number;
+    tax_amount: number | string;
+    freight_charges: number | string;
+    net_amount: number | string;
+    total_amount: number | string;
     notes: string;
     status: string;
 }
@@ -127,16 +127,16 @@ export const getInitialPurchaseOrder = (
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
     items: prefilledData?.items || [],
-    payment_terms: '30 days',
-    delivery_terms: 'F.O.R. Destination',
-    delivery_location: 'Main Warehouse',
-    transport_mode: 'By Road',
-    gross_amount: 0,
-    discount_amount: '0',
-    tax_amount: 0,
-    freight_charges: 0,
-    net_amount: 0,
-    total_amount: 0,
+    payment_terms: '',
+    delivery_terms: '',
+    delivery_location: '',
+    transport_mode: '',
+    gross_amount: '',
+    discount_amount: '',
+    tax_amount: '',
+    freight_charges: '',
+    net_amount: '',
+    total_amount: '',
     notes: prefilledData?.notes || '',
     status: 'draft'
 });
@@ -163,16 +163,12 @@ export function usePurchaseOrderLogic({
 
     useEffect(() => {
         let active = true;
-        if (purchaseOrder.po_date && purchaseOrder.expected_delivery_date) return undefined;
+        if (purchaseOrder.po_date) return undefined;
         void canonicalBusinessContextApi.get().then(context => {
             if (!active) return;
-            const delivery = new Date(`${context.business_date}T00:00:00Z`);
-            delivery.setUTCDate(delivery.getUTCDate() + 7);
-            const expectedDeliveryDate = delivery.toISOString().slice(0, 10);
             setPurchaseOrder(previous => ({
                 ...previous,
                 po_date: previous.po_date || context.business_date,
-                expected_delivery_date: previous.expected_delivery_date || expectedDeliveryDate,
             }));
         }).catch(error => {
             if (active) toast.error(
@@ -182,7 +178,7 @@ export function usePurchaseOrderLogic({
             );
         });
         return () => { active = false; };
-    }, [purchaseOrder.po_date, purchaseOrder.expected_delivery_date]);
+    }, [purchaseOrder.po_date]);
 
     // Handlers
     const handleSupplierSelect = useCallback((supplier: any) => {
@@ -205,21 +201,21 @@ export function usePurchaseOrderLogic({
             uom_conversion_id: product.uom_conversion_id,
             batch_number: product.batch_number || '',
             expiry_date: product.expiry_date || '',
-            quantity: '1',
+            quantity: '',
             unit: product.unit || product.uom || '',
-            unit_price: String(product.unit_price || product.purchase_rate || 0),
-            mrp: product.mrp || 0,
-            expected_rate: product.unit_price || product.purchase_rate || 0,
-            tax_percent: product.gst_percent ?? product.tax_percent ?? 0,
-            gst_percent: product.gst_percent ?? product.tax_percent ?? 0,
-            discount_percent: '0',
-            free_quantity: '0',
+            unit_price: product.unit_price ?? product.purchase_rate ?? '',
+            mrp: product.mrp,
+            expected_rate: product.unit_price ?? product.purchase_rate,
+            tax_percent: product.gst_percent ?? product.tax_percent,
+            gst_percent: product.gst_percent ?? product.tax_percent,
+            discount_percent: '',
+            free_quantity: '',
             free_supply_tax_treatment: product.free_supply_tax_treatment,
             pack_type: product.pack_type || '',
             pack_size: product.pack_size,
             packages_per_box: product.packages_per_box,
             manufacturer: product.manufacturer || '',
-            total: 0
+            total: ''
         };
 
         setPurchaseOrder(prev => ({
