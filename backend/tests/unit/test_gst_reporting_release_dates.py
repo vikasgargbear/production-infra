@@ -38,12 +38,15 @@ def test_release_date_migration_is_hash_bound_linear_and_narrowly_scoped() -> No
 def test_postgres_head_fixture_inspects_the_live_constraint() -> None:
     fixture = PG_FIXTURE.read_text(encoding="utf-8")
     assert "reference_data_releases_dates_ck" in fixture
-    assert "release_dates_definition NOT LIKE '%dataset_kind = ANY%'" in fixture
-    assert "release_dates_definition NOT LIKE '%gst_reporting_rules%'" in fixture
-    assert "release_dates_definition NOT LIKE '%gst_itc_reversal_rules%'" in fixture
-    assert "publication_date <= effective_from" in fixture
-    assert "effective_to >= effective_from" in fixture
-    assert "reviewed_at <= created_at" in fixture
+    assert "constraint_row.convalidated" in fixture
+    assert "'gst_reporting_rules','reporting-probe'" in fixture
+    assert "'gst_itc_reversal_rules','itc-probe'" in fixture
+    assert "'hsn_sac_tax','ordinary-probe'" in fixture
+    assert "ordinary retrospective reference release was accepted" in fixture
+    assert "inverted reference release effective range was accepted" in fixture
+    assert "post-creation reference release review was accepted" in fixture
+    assert fixture.count("WHEN check_violation") == 3
+    assert "CURRENT_DATE" not in fixture.upper()
 
 
 def test_schema_authority_includes_release_date_migration() -> None:

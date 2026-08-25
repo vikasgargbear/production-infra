@@ -115,20 +115,31 @@ jobs:
           service_matches() {
             local service_name=$1
             local config_file=$2
+            local expected_start=$3
             local id
+            local actual_start
             id=$(service_id "$service_name")
             jq -e \
               --arg id "$id" \
               --arg config_file "$config_file" \
               '(.services[$id].source.rootDirectory // "/") == "/" and
                .services[$id].configFile == $config_file' \
-              railway-service-config.json >/dev/null
+              railway-service-config.json >/dev/null || return 1
+            actual_start=$(jq -r --arg id "$id" '.services[$id].deploy.startCommand // ""' railway-service-config.json)
+            if test -z "$expected_start"; then
+              test -z "$actual_start"
+            else
+              test -z "$actual_start" || \
+                test "$actual_start" = "python start.py" || \
+                test "$actual_start" = "$expected_start"
+            fi
           }
 
-          if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json || \
-             ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json || \
-             ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json; then
-            echo "::error title=Railway service configuration drift::All services must use repository-root context and their exact /deploy/railway/*.railway.json config file. Correct Railway configuration in a separate reviewed change; this exact-SHA workflow will not trigger an unbound intermediate deployment."
+          mcp_start_command=$(jq -er '.deploy.startCommand | strings | select(length > 0)' deploy/railway/mcp.railway.json)
+          if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json "" || \
+             ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json "$mcp_start_command" || \
+             ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json ""; then
+            echo "::error title=Railway service configuration drift::All services must use repository-root context and their exact /deploy/railway/*.railway.json config file. API/frontend start overrides must be empty; MCP may additionally have only the reviewed command or the known python start.py legacy value that this exact upload replaces. Correct any other drift separately; this workflow will not trigger an unbound intermediate deployment."
             exit 1
           fi
 
@@ -250,6 +261,7 @@ jobs:
             local config_file=$3
             local dockerfile=$4
             local healthcheck=$5
+            local expected_start=$6
             railway deployment list \
               --service "$service" \
               --environment "$RAILWAY_ENVIRONMENT_ID" \
@@ -260,6 +272,7 @@ jobs:
                   --arg config_file "$config_file" \
                   --arg dockerfile "$dockerfile" \
                   --arg healthcheck "$healthcheck" \
+                  --arg expected_start "$expected_start" \
                   --arg message "canonical staging $REVIEWED_SHA" \
                   '[.[] | select(.id == $id)] |
                    length == 1 and
@@ -268,9 +281,10 @@ jobs:
                    (.[0].meta.cliMessage == $message) and
                    (.[0].meta.fileServiceManifest.build.builder == "DOCKERFILE") and
                    (.[0].meta.fileServiceManifest.build.dockerfilePath == $dockerfile) and
+                   ((.[0].meta.fileServiceManifest.deploy.startCommand // "") == $expected_start) and
                    (.[0].meta.serviceManifest.build.builder == "DOCKERFILE") and
                    (.[0].meta.serviceManifest.build.dockerfilePath == $dockerfile) and
-                   ((.[0].meta.serviceManifest.deploy.startCommand // "") == "") and
+                   ((.[0].meta.serviceManifest.deploy.startCommand // "") == $expected_start) and
                    (.[0].meta.serviceManifest.deploy.healthcheckPath == $healthcheck) and
                    (.[0].meta.serviceManifest.deploy.sleepApplication == false)' >/dev/null
           }
@@ -305,9 +319,10 @@ jobs:
             sleep 10
           done
 
-          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready
-          require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health
-          require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health
+          mcp_start_command=$(jq -er '.deploy.startCommand | strings | select(length > 0)' deploy/railway/mcp.railway.json)
+          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready ""
+          require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command"
+          require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health ""
 
       - name: Verify all public services publish the reviewed SHA
         run: |

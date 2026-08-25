@@ -30,16 +30,27 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
         "frontend": "/frontend/Dockerfile",
     }
 
+    expected_start_commands = {
+        "api": None,
+        "mcp": "exec uvicorn aasopharma_mcp.server:create_app --factory --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'",
+        "frontend": None,
+    }
+
     for service, dockerfile in expected_dockerfiles.items():
         config = _config(service)
         assert config["$schema"] == RAILWAY_SCHEMA
         assert config["build"]["builder"] == "DOCKERFILE"
         assert config["build"]["dockerfilePath"] == dockerfile
-        assert config["deploy"]["startCommand"] is None
+        assert config["deploy"]["startCommand"] == expected_start_commands[service]
         assert config["deploy"]["sleepApplication"] is False
         assert config["deploy"]["multiRegionConfig"] == {
             SINGAPORE_REGION: {"numReplicas": 1}
         }
+
+    mcp_dockerfile = (ROOT / "deploy/railway/mcp.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert expected_start_commands["mcp"] in mcp_dockerfile
 
 
 def test_railway_healthchecks_match_service_readiness_boundaries() -> None:
@@ -95,7 +106,12 @@ def test_workflow_fails_closed_on_service_configuration_drift() -> None:
         workflow.index("Fail closed on Railway service configuration drift") :
         workflow.index("Populate canonical service variables without triggering stale deploys")
     ]
-    assert "startCommand" not in config_step
+    assert "mcp_start_command=$(jq -er" in config_step
+    assert 'test "$actual_start" = "python start.py"' in config_step
+    assert 'test "$actual_start" = "$expected_start"' in config_step
+    assert 'service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json ""' in config_step
+    assert 'service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json "$mcp_start_command"' in config_step
+    assert 'service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json ""' in config_step
     assert "exit 1" in config_step
 
 
@@ -151,9 +167,11 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert ".meta.cliMessage == $message" in workflow
     assert ".meta.fileServiceManifest.build.builder" in workflow
     assert ".meta.fileServiceManifest.build.dockerfilePath" in workflow
+    assert ".meta.fileServiceManifest.deploy.startCommand" in workflow
     assert ".meta.serviceManifest.build.builder" in workflow
     assert ".meta.serviceManifest.build.dockerfilePath" in workflow
     assert ".meta.serviceManifest.deploy.startCommand" in workflow
+    assert 'require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command"' in workflow
     assert ".meta.serviceManifest.deploy.healthcheckPath" in workflow
     assert ".meta.serviceManifest.deploy.sleepApplication" in workflow
 
