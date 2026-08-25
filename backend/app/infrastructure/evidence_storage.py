@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import re
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -17,6 +18,8 @@ import httpx
 EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 MAX_EVIDENCE_BYTES = 10 * 1024 * 1024
 PDF_MEDIA_TYPE = "application/pdf"
+PROJECT_REF_PATTERN = re.compile(r"[a-z0-9]{20}")
+RETIRED_SUPABASE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
 
 
 class EvidenceStorageError(RuntimeError):
@@ -46,6 +49,7 @@ class EvidenceStorageConfig:
     base_url: str
     anon_key: str
     server_jwt: str
+    project_ref: str
     bucket: str = EVIDENCE_BUCKET
     timeout_seconds: float = 15.0
 
@@ -54,18 +58,32 @@ class EvidenceStorageConfig:
         if os.getenv("EVIDENCE_STORAGE_ENABLED", "").strip().lower() != "true":
             raise EvidenceStorageUnavailable("Canonical evidence storage is not enabled")
         base_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+        project_ref = os.getenv("CANONICAL_STAGING_PROJECT_REF", "").strip()
         anon_key = os.getenv("SUPABASE_ANON_KEY", "").strip()
         server_jwt = os.getenv("EVIDENCE_STORAGE_SERVER_JWT", "").strip()
         parsed = urlparse(base_url)
-        if parsed.scheme != "https" or not parsed.netloc:
+        if parsed.scheme != "https" or not parsed.netloc or parsed.path:
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage requires an explicit HTTPS project origin"
+            )
+        if (
+            PROJECT_REF_PATTERN.fullmatch(project_ref) is None
+            or project_ref == RETIRED_SUPABASE_PROJECT_REF
+            or parsed.hostname != f"{project_ref}.supabase.co"
+        ):
+            raise EvidenceStorageUnavailable(
+                "Canonical evidence storage project authority does not match reviewed staging"
             )
         if not anon_key or not server_jwt:
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage server authority is not configured"
             )
-        return cls(base_url=base_url, anon_key=anon_key, server_jwt=server_jwt)
+        return cls(
+            base_url=base_url,
+            anon_key=anon_key,
+            server_jwt=server_jwt,
+            project_ref=project_ref,
+        )
 
 
 def validate_pdf(filename: str | None, media_type: str | None, content: bytes) -> ValidatedPdf:
