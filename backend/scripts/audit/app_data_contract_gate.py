@@ -243,6 +243,7 @@ def validate_promotion_evidence(
             for predicate in (
                 "source_target_counts_reconciled",
                 "exact_totals_reconciled",
+                "table_content_digests_reconciled",
                 "backup_verified",
                 "restore_tested",
             ):

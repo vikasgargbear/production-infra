@@ -56,6 +56,31 @@ on:
         required: false
         default: ""
         type: string
+      capture_canonical_promotion_evidence:
+        description: Capture read-only exact-SHA application promotion evidence
+        required: true
+        default: false
+        type: boolean
+      canonical_promotion_reviewed_sha:
+        description: Exact deployed SHA to bind into promotion evidence
+        required: false
+        default: ""
+        type: string
+      canonical_promotion_source_disposition:
+        description: Repository path to the reviewed reset disposition JSON
+        required: false
+        default: docs/architecture/promotion-evidence/source-disposition.template.json
+        type: string
+      canonical_promotion_rollback_plan:
+        description: Repository path to the reviewed rollback plan JSON
+        required: false
+        default: docs/architecture/promotion-evidence/rollback-plan.template.json
+        type: string
+      canonical_promotion_decommission_plan:
+        description: Repository path to the reviewed retired-project decommission plan JSON
+        required: false
+        default: docs/architecture/promotion-evidence/decommission-plan.template.json
+        type: string
       run_conversion_preflight:
         description: Run aggregate-only read-only diagnostics against the production legacy source
         required: true
@@ -102,6 +127,22 @@ jobs:
       rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
       refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}
       render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
+    secrets: inherit
+
+  canonical-application-promotion-evidence:
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      inputs.capture_canonical_promotion_evidence &&
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
+    uses: ./.github/workflows/canonical-application-promotion-evidence.yml
+    with:
+      confirmation: CAPTURE_CANONICAL_PROMOTION_EVIDENCE
+      reviewed_sha: ${{ inputs.canonical_promotion_reviewed_sha }}
+      source_disposition: ${{ inputs.canonical_promotion_source_disposition }}
+      rollback_plan: ${{ inputs.canonical_promotion_rollback_plan }}
+      decommission_plan: ${{ inputs.canonical_promotion_decommission_plan }}
     secrets: inherit
 
   render-pilot-diagnostics:

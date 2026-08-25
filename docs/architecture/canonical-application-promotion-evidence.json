@@ -36,6 +36,7 @@
     "state": "missing",
     "source_target_counts_reconciled": null,
     "exact_totals_reconciled": null,
+    "table_content_digests_reconciled": null,
     "backup_verified": null,
     "restore_tested": null,
     "artifact": null,

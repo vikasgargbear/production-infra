@@ -855,6 +855,26 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "restart_staging_database: ${{ inputs.restart_canonical_staging }}" in production_workflow
 
 
+def test_reset_emits_hashable_attestation_after_database_postconditions():
+    workflow = _read(".github/workflows/canonical-staging.yml")
+    postcondition = "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')"
+    attestation = "reset-attestation"
+    assert postcondition in workflow
+    assert "staging-evidence/canonical-staging-reset.json" in workflow
+    assert workflow.index(postcondition) < workflow.index(attestation)
+    assert '--workflow-run-id "$GITHUB_RUN_ID"' in workflow
+    assert '--reviewed-deploy-sha "$reviewed_deploy_sha"' in workflow
+
+
+def test_registered_readiness_workflow_delegates_promotion_evidence():
+    production = _read(".github/workflows/production-readiness.yml")
+    evidence = _read(".github/workflows/canonical-application-promotion-evidence.yml")
+    assert "capture_canonical_promotion_evidence:" in production
+    assert "uses: ./.github/workflows/canonical-application-promotion-evidence.yml" in production
+    assert "workflow_call:" in evidence
+    assert "confirmation: CAPTURE_CANONICAL_PROMOTION_EVIDENCE" in production
+
+
 def test_frontend_builds_use_the_reviewed_node_runtime():
     workflow = _read(".github/workflows/production-readiness.yml")
     blueprint = _read("render.yaml")

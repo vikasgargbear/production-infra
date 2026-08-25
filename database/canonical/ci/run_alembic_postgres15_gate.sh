@@ -157,3 +157,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_sales_invoice_direct_issue_acceptance.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_demo_replay_hardening.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_application_promotion_content_digest.py

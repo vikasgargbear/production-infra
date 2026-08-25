@@ -103,6 +103,18 @@ def _fixture_root(
             "payload": payload,
         }
 
+    reset_attestation = promotion_evidence.build_reset_attestation(
+        project_ref=promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit=git_commit,
+        reviewed_deploy_sha=git_commit,
+        workflow_repository="acme/erp",
+        workflow_run_id=123,
+        workflow_run_attempt=1,
+        reset_completed_at="2026-08-25T11:00:00+00:00",
+    )
+    reset_attestation_hash = hashlib.sha256(
+        promotion_evidence._json_bytes(reset_attestation)
+    ).hexdigest()
     artifact_values = {
         "source.json": artifact("source_disposition", {
             "strategy": "reset",
@@ -110,8 +122,9 @@ def _fixture_root(
             "retired_source_accessed": False,
             "disposable_staging_reset_verified": True,
             "reset_workflow_run_url": "https://github.com/acme/erp/actions/runs/123",
-            "reset_artifact_sha256": "d" * 64,
+            "reset_artifact_sha256": reset_attestation_hash,
             "reset_completed_at": "2026-08-25T11:00:00+00:00",
+            "reset_attestation": reset_attestation,
         }),
         "route.json": artifact("mounted_route_graph", {
             "analyzer_kind": "mounted_route_graph",
@@ -130,11 +143,16 @@ def _fixture_root(
             "forced_rls_failures": [],
             "tenant_positive_count": 1,
             "cross_tenant_visible_count": 0,
-            "snapshot": {"relation_counts": {}, "exact_numeric_sums": {}},
+            "snapshot": {
+                "relation_counts": {},
+                "exact_numeric_sums": {},
+                "table_content_sha256": {},
+            },
         }),
         "reconciliation.json": artifact("reconciliation_backup_restore", {
             "source_target_counts_reconciled": True,
             "exact_totals_reconciled": True,
+            "table_content_digests_reconciled": True,
             "backup_verified": True,
             "restore_tested": True,
             "backup_sha256": "b" * 64,
@@ -192,7 +210,9 @@ def _fixture_root(
         },
         "reconciliation_backup": {
             "state": state, "source_target_counts_reconciled": True,
-            "exact_totals_reconciled": True, "backup_verified": True,
+            "exact_totals_reconciled": True,
+            "table_content_digests_reconciled": True,
+            "backup_verified": True,
             "restore_tested": True, "artifact": "evidence/reconciliation.json",
             "artifact_sha256": artifact_hashes["reconciliation.json"],
         },
