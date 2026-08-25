@@ -94,6 +94,39 @@ def test_missing_template_and_unused_scalar_fail_closed(tmp_path: Path) -> None:
         )
 
 
+def test_cross_operation_resource_tokens_only_reference_earlier_matrix_rows(tmp_path: Path) -> None:
+    matrix = _matrix(tmp_path / "matrix.json")
+    templates = _templates(tmp_path / "templates")
+    second = templates / "operation_2.json"
+    template = json.loads(second.read_text())
+    template["steps"]["prepare_steps"].append({
+        "actor": "requester",
+        "action": "fill",
+        "locator": {"kind": "label", "name": "Source resource"},
+        "value": "{{resource_operation_1}}",
+    })
+    second.write_text(json.dumps(template))
+    compile_fixture(
+        matrix, templates, {"display": {"branch_code": "sales"}},
+        {"quantity": "1.000000"},
+    )
+
+    first = templates / "operation_1.json"
+    template = json.loads(first.read_text())
+    template["steps"]["prepare_steps"].append({
+        "actor": "requester",
+        "action": "fill",
+        "locator": {"kind": "label", "name": "Future resource"},
+        "value": "{{resource_operation_2}}",
+    })
+    first.write_text(json.dumps(template))
+    with pytest.raises(FixtureCompileError, match="unavailable prior operation resources"):
+        compile_fixture(
+            matrix, templates, {"display": {"branch_code": "sales"}},
+            {"quantity": "1.000000"},
+        )
+
+
 def test_scalar_pack_rejects_identity_authority_and_size(tmp_path: Path) -> None:
     path = tmp_path / "scalars.json"
     path.write_text(json.dumps({"schema": SCALAR_SCHEMA, "values": {"product_id": "not-even-a-uuid"}}))

@@ -44,6 +44,24 @@ test('runtime interpolation rejects unknown and unavailable tokens', () => {
   );
 });
 
+test('runtime interpolation accepts only explicitly supplied prior-operation resources', () => {
+  const [step] = interpolateUiSteps(
+    [{ actor: 'requester', action: 'fill', value: '{{resource_purchase_order}}' }],
+    {
+      run_token: '12345-2',
+      resource_purchase_order: 'd3000000-0000-7000-8000-000000000041',
+    },
+  );
+  assert.equal(step.value, 'd3000000-0000-7000-8000-000000000041');
+  assert.throws(
+    () => interpolateUiSteps(
+      [{ actor: 'requester', action: 'fill', value: '{{resource_purchase_order}}' }],
+      { run_token: '12345-2' },
+    ),
+    /unavailable runtime token \{\{resource_purchase_order\}\}/,
+  );
+});
+
 test('all 18 reviewed routes must target their captured command during approval and execute', () => {
   const operations = Object.fromEntries(Array.from({ length: 18 }, (_value, index) => [
     `operation_${index + 1}`,

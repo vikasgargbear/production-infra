@@ -91,6 +91,7 @@ export function loadFixture(required: boolean): Live18Fixture | null {
   const supportedActors: Actor[] = ['requester', 'reviewer'];
   for (const [operationId, operation] of Object.entries(fixture.operations)) {
     const operationContract = operationMatrix.find(item => item.id === operationId)!;
+    const operationIndex = operationMatrix.findIndex(item => item.id === operationId);
     if (!['split', 'combined_actor_confirmation'].includes(operation.lifecycle_mode)) {
       throw new Error(`${operationId}.lifecycle_mode is unsupported.`);
     }
@@ -110,8 +111,19 @@ export function loadFixture(required: boolean): Live18Fixture | null {
         if (!supportedActors.includes(step.actor) || !supportedActions.includes(step.action)) {
           throw new Error(`${operationId}.${phase} contains an unsupported actor or action.`);
         }
-        runtimeTokens(step.value, `${operationId}.${phase}.value`);
-        runtimeTokens(step.locator?.name, `${operationId}.${phase}.locator.name`);
+        const tokens = [
+          ...runtimeTokens(step.value, `${operationId}.${phase}.value`),
+          ...runtimeTokens(step.locator?.name, `${operationId}.${phase}.locator.name`),
+        ];
+        for (const token of tokens.filter(value => value.startsWith('resource_'))) {
+          const sourceOperation = token.slice('resource_'.length);
+          const sourceIndex = operationMatrix.findIndex(item => item.id === sourceOperation);
+          if (sourceIndex < 0 || sourceIndex >= operationIndex) {
+            throw new Error(
+              `${operationId}.${phase} references unavailable prior operation ${sourceOperation}.`,
+            );
+          }
+        }
       }
     }
     if (!operation.missing_required_steps.some(step => step.action === 'expectText')) {

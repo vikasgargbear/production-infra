@@ -2,6 +2,7 @@ export interface RuntimeUiValues {
   command_request_id?: string;
   preview_hash?: string;
   run_token: string;
+  [resourceToken: `resource_${string}`]: string | undefined;
 }
 
 interface RuntimeTemplatedStep {
@@ -13,13 +14,15 @@ const RUNTIME_TOKEN = /\{\{([a-z_][a-z0-9_]*)\}\}/gi;
 const ALLOWED_RUNTIME_TOKENS = new Set<keyof RuntimeUiValues>([
   'command_request_id', 'preview_hash', 'run_token',
 ]);
+const RESOURCE_RUNTIME_TOKEN = /^resource_[a-z][a-z0-9_]*$/;
 
 export function runtimeTokens(value: string | undefined, label: string): string[] {
   if (!value) return [];
   const found: string[] = [];
   for (const match of value.matchAll(RUNTIME_TOKEN)) {
     const token = match[1].toLowerCase();
-    if (!ALLOWED_RUNTIME_TOKENS.has(token as keyof RuntimeUiValues)) {
+    if (!ALLOWED_RUNTIME_TOKENS.has(token as keyof RuntimeUiValues)
+      && !RESOURCE_RUNTIME_TOKEN.test(token)) {
       throw new Error(`${label} contains unsupported runtime token {{${match[1]}}}.`);
     }
     found.push(token);

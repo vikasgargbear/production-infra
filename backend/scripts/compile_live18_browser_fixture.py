@@ -28,7 +28,10 @@ UUID_RE = re.compile(
     re.I,
 )
 TOKEN_RE = re.compile(r"\{\{(fact|scalar)\.([a-z][a-z0-9_.]*)\}\}")
-RUNTIME_TOKEN_RE = re.compile(r"\{\{(command_request_id|preview_hash|run_token)\}\}")
+RUNTIME_TOKEN_RE = re.compile(
+    r"\{\{(?:command_request_id|preview_hash|run_token|resource_[a-z][a-z0-9_]*)\}\}"
+)
+RESOURCE_TOKEN_RE = re.compile(r"\{\{resource_([a-z][a-z0-9_]*)\}\}")
 FORBIDDEN_SCALAR_KEYS = re.compile(r"(?:^|_)(?:id|uuid|row_version|hash|date|time|timestamp)$")
 PHASES = (
     "missing_required_steps", "prepare_steps", "approval_steps", "execute_steps",
@@ -392,6 +395,12 @@ def compile_fixture(
         template = _object(path, f"{operation_id} template")
         if template.get("template_schema") != TEMPLATE_SCHEMA or template.get("operation_id") != operation_id:
             raise FixtureCompileError(f"invalid UI template authority: {operation_id}")
+        dependencies = set(RESOURCE_TOKEN_RE.findall(json.dumps(template, sort_keys=True)))
+        unavailable = sorted(dependencies - set(operations))
+        if unavailable:
+            raise FixtureCompileError(
+                f"{operation_id} references unavailable prior operation resources: {unavailable}"
+            )
         operation_facts = _operation_facts(operation_id, facts, scalars, used)
         compiled_operation = _compile_value(
             {

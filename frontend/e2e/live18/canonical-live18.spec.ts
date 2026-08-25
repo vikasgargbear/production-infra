@@ -23,6 +23,7 @@ const matrix = loadOperationMatrix();
 const fixture = loadFixture(requiredLiveRun);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH = /^sha256:[0-9a-f]{64}$/i;
+const completedResources: Record<`resource_${string}`, string> = {};
 
 interface CapturedResponse {
   actor: 'requester' | 'reviewer';
@@ -169,7 +170,10 @@ async function runOperation(
     const requesterApi = await apiClient(config.apiOrigin, requesterSession.token);
     const reviewerApi = await apiClient(config.apiOrigin, reviewerSession.token);
     const denialApi = await apiClient(config.apiOrigin, config.denialAccessToken);
-    const prePrepareRuntime: RuntimeUiValues = { run_token: config.runToken };
+    const prePrepareRuntime: RuntimeUiValues = {
+      run_token: config.runToken,
+      ...completedResources,
+    };
     try {
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.missing_required_steps,
@@ -202,6 +206,7 @@ async function runOperation(
       const previewHash = String(findDeep(prepared[0].responseBody, 'preview_hash') || '');
       expect(previewHash).toMatch(PREVIEW_HASH);
       const commandRuntime: RuntimeUiValues = {
+        ...completedResources,
         command_request_id: commandId,
         preview_hash: previewHash,
         run_token: config.runToken,
@@ -280,6 +285,7 @@ async function runOperation(
 
       const denied = await denialApi.get(readbackPath);
       expect([403, 404]).toContain(denied.status());
+      completedResources[`resource_${contract.id}`] = resourceId;
 
       const evidence = {
         evidence_schema: 'aasopharma.live18.browser.v1',
