@@ -141,3 +141,29 @@ def test_postgres_route_fixture_uses_real_runtime_role_and_useful_rows():
         assert fragment in fixture
     assert 'SET LOCAL ROLE "erp_app"' not in fixture
     assert "check_canonical_inventory_transfer_runtime_role.py" in gate
+
+
+def test_postgres_lifecycle_fixture_executes_real_command_as_runtime_role():
+    root = Path(__file__).resolve().parents[3]
+    fixture_name = "check_canonical_inventory_transfer_lifecycle_runtime_role.py"
+    fixture = (root / "backend/tests/postgres" / fixture_name).read_text()
+    gate = (root / "database/canonical/ci/run_alembic_postgres15_gate.sh").read_text()
+    for fragment in (
+        'SET SESSION AUTHORIZATION "erp_runtime"',
+        "join_transaction_mode=\"create_savepoint\"",
+        "SqlAlchemyOperatorActionService",
+        "service.prepare(",
+        "service.approve(",
+        "service.execute(",
+        "idempotency_replayed is True",
+        '"transfer_out"',
+        '"transfer_in"',
+        'Decimal("3.000000")',
+        'Decimal("2.000000")',
+        "source-only runtime grant prepared an inter-branch transfer",
+        "SELECT count(*) FROM core.organizations WHERE id=:other_org",
+        "outer.rollback()",
+    ):
+        assert fragment in fixture
+    assert fixture.count("service.execute(") == 2
+    assert fixture_name in gate

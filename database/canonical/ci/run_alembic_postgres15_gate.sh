@@ -85,3 +85,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_inventory_reads_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_inventory_transfer_runtime_role.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_inventory_transfer_lifecycle_runtime_role.py

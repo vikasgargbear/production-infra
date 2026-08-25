@@ -1,119 +1,79 @@
-# 🔀 Stock Transfer
+# Stock Transfer
 
-> Move stock between locations or branches.
+Use Stock Transfer to move released, saleable stock between two branches in the
+same organization. A canonical transfer is one reviewed, atomic posting: the
+source balance decreases and the destination balance increases together. It
+does not create a separate in-transit or receiving step.
 
----
+## Before you start
 
-## What is Stock Transfer?
+You need transfer, inventory-posting, and command execution access to both the
+source and destination branches. The source and destination must also be:
 
-Stock transfer moves products from one location to another. Use it for:
-- Moving between branches
-- Moving between storage areas
-- Sending to sub-distributors
+- Different active branches and different active locations.
+- Saleable locations that allow sales and do not allow negative stock.
+- Governed by the same storage-temperature bounds.
 
----
+Only released, non-expired, non-recalled stock without another pending movement
+is eligible. The transfer date comes from the organization's business timezone;
+the browser clock is not the posting authority.
 
-## Creating a Stock Transfer
+## Create and post a transfer
 
-### Step 1: Start Transfer
+1. Go to **Inventory → Stock Transfer**.
+2. Select the source branch and saleable source location.
+3. Select a different destination branch and a compatible saleable destination
+   location.
+4. Search for a product and select its unit of measure.
+5. Enter the requested quantity.
+6. Review the batch allocation. The form allocates the requested quantity by
+   FEFO by default.
+7. If needed, adjust the allocation manually. Manual allocation may use more
+   than one batch only when every selected batch has the same earliest eligible
+   expiry date. Later-expiry stock cannot be selected while earlier eligible
+   stock remains.
+8. Select the transport mode and enter the exact distance. Non-person transport
+   also requires the governed transport details shown by the form.
+9. Review the exact quantity and inventory value preview, then confirm and post.
 
-1. Go to **Inventory → Stock Transfer**
-2. Click **New Transfer**
+The same user confirmation supplies the required actor approval. A successful
+post returns one transfer number and exact readback evidence for both sides of
+each line.
 
-### Step 2: Select Locations
+## Verify the result
 
-- **From Location** - Where stock is currently
-- **To Location** - Where it's going
+The posted readback shows:
 
-### Step 3: Add Items
+- Source and destination branch and location identifiers.
+- The product and manufacturer batch that moved.
+- Equal and opposite six-decimal quantities.
+- The same four-decimal unit cost on both sides.
+- Equal and opposite two-decimal inventory values.
 
-1. Search for products
-2. Select batch (if batch-tracked)
-3. Enter quantity to transfer
-4. Add more items as needed
+Stock Hub should then show the source batch reduced and the destination batch
+increased by the same quantity and value. Replaying the same approved command
+does not post another document or duplicate ledger entries.
 
-### Step 4: Add Details
+## When a transfer is unavailable
 
-- **Transfer Date** - When it happens
-- **Reference** - Optional reference number
-- **Notes** - Additional details
-- **Transport** - If shipping to another location
+The form excludes locations that are quarantined, non-saleable, configured for
+negative stock, or temperature-incompatible. If an eligible batch disappears,
+refresh the stock context: another posting, recall, expiry, or pending movement
+may have changed its authority.
 
-### Step 5: Save Transfer
+A submitted command also fails closed if either branch permission, the exact
+preview, the selected batch balance, the document sequence, or the organization
+business date changes before execution. Refresh the form and prepare a new
+reviewed transfer rather than retrying stale values.
 
-1. Review items
-2. Click **Save Transfer**
-3. Status becomes **In Transit**
+## Important limitations
 
----
+- Canonical Stock Transfer is inter-branch only. Use the appropriate inventory
+  workflow for movement within one branch.
+- Partial receipt and a separate receive confirmation are not part of this
+  atomic workflow.
+- A posted transfer is immutable. Use an approved correction workflow when a
+  physical discrepancy must be recorded.
 
-## Receiving Transfer
-
-At the destination:
-
-1. Go to **Inventory → Stock Transfer**
-2. Find the transfer (status: In Transit)
-3. Click **Receive Transfer**
-4. Verify quantities
-5. Click **Confirm Receipt**
-
-Stock is now at new location!
-
----
-
-## Transfer Status
-
-| Status | Meaning |
-|--------|---------|
-| **Draft** | Not yet sent |
-| **In Transit** | Sent, not received |
-| **Received** | Delivered and confirmed |
-| **Cancelled** | Transfer cancelled |
-
----
-
-## Partial Receipt
-
-If some items don't arrive:
-
-1. Enter actual quantities received
-2. Note discrepancy in Notes
-3. Complete receipt
-4. Investigate missing items
-
----
-
-## Viewing Transfer History
-
-Track all transfers:
-
-1. Go to **Inventory → Stock Transfer**
-2. Filter by date, status, or location
-3. Click any transfer for details
-
----
-
-## Common Questions
-
-### Does transfer affect total stock?
-No, total remains same - it just moves between locations.
-
-### Can I cancel a transfer?
-Draft transfers can be cancelled. In-transit may need adjustment.
-
-### What about batch/expiry?
-Batch information moves with the stock to the new location.
-
----
-
-## Best Practices
-
-✅ **Confirm receipt** - Don't leave transfers pending  
-✅ **Document transport** - For valuable transfers  
-✅ **Regular reconciliation** - Compare location stocks  
-
----
-
-**Related Guides**:
-- [Managing Stock](./managing-stock.md)
-- [Batch & Expiry](./batch-expiry.md)
+Related guides: [Managing Stock](./managing-stock.md) and
+[Batch & Expiry](./batch-expiry.md).
