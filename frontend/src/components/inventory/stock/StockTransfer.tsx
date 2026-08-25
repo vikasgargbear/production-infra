@@ -32,6 +32,11 @@ import {
   validateTransferQuantity,
 } from './utils/stockTransferExact';
 import { decodeInventoryContext } from './utils/canonicalStockReads';
+import {
+  destinationTransferLocationAvailability,
+  governedTransferLocationAvailability,
+  unavailableTransferLocationLabel,
+} from './utils/stockTransferLocations';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const exactQuantity = (value: unknown, label: string) => normalizeExactDecimal(value, label, quantityOptions);
@@ -98,6 +103,26 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
   const destinationBranch = branches.find((branch) => branch.branch_id === destinationBranchId);
   const sourceLocation = sourceBranch?.locations.find((location) => location.location_id === sourceLocationId);
   const destinationLocation = destinationBranch?.locations.find((location) => location.location_id === destinationLocationId);
+  const sourceAvailability = sourceLocation
+    ? governedTransferLocationAvailability(sourceLocation)
+    : null;
+  const destinationAvailability = destinationLocation
+    ? destinationTransferLocationAvailability(destinationLocation, sourceLocation)
+    : null;
+  const sourceBranchHasEligibleLocation = (branch: InventoryBranch) => branch.locations.some(
+    (location) => governedTransferLocationAvailability(location).eligible,
+  );
+  const destinationBranchHasEligibleLocation = (branch: InventoryBranch) => branch.locations.some(
+    (location) => destinationTransferLocationAvailability(location, sourceLocation).eligible,
+  );
+  const unavailableSourceLocations = (sourceBranch?.locations || []).flatMap((location) => {
+    const availability = governedTransferLocationAvailability(location);
+    return availability.eligible ? [] : [{ location, availability }];
+  });
+  const unavailableDestinationLocations = (destinationBranch?.locations || []).flatMap((location) => {
+    const availability = destinationTransferLocationAvailability(location, sourceLocation);
+    return availability.eligible ? [] : [{ location, availability }];
+  });
 
   const invalidatePreparedReview = () => {
     setPrepared(null);
@@ -121,8 +146,9 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
     const productId = product?.product_id;
     const conversionId = product?.uom_conversion_id;
     if (!productId || !conversionId) return toast.error('This product has no canonical base-UOM conversion.');
-    if (!sourceBranchId || !sourceLocationId || !destinationBranchId || !destinationLocationId) {
-      return toast.error('Select both branches and their locations first.');
+    if (!sourceAvailability?.eligible || !destinationAvailability?.eligible
+      || sourceBranchId === destinationBranchId) {
+      return toast.error('Select distinct branches and governed transfer-eligible locations first.');
     }
     if (items.some((item) => item.productId === productId)) return toast.error('That product is already included.');
     setBatchLoading(true);
@@ -223,6 +249,10 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
     if (!sourceBranchId || !destinationBranchId) message = 'Select distinct source and destination branches.';
     else if (sourceBranchId === destinationBranchId) message = 'Source and destination branches must be different.';
     else if (!sourceLocationId || !destinationLocationId) message = 'Select one location under each branch.';
+    else if (!sourceLocation || !sourceAvailability?.eligible) message = 'Source location is not governed as transfer eligible.';
+    else if (!destinationLocation || !destinationAvailability?.eligible) {
+      message = destinationAvailability?.reasons.join('; ') || 'Destination location is not governed as transfer eligible.';
+    }
     else if (!items.length) message = 'Add at least one product and FEFO batch.';
     else {
       try {
@@ -247,7 +277,11 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
     }
     if (message && showFeedback) toast.error(message);
     return !message;
-  }, [destinationBranchId, destinationLocationId, items, sourceBranchId, sourceLocationId, toast]);
+  }, [
+    destinationAvailability, destinationBranchId, destinationLocation,
+    destinationLocationId, items, sourceAvailability, sourceBranchId,
+    sourceLocation, sourceLocationId, toast,
+  ]);
 
   const handlePrepare = async () => {
     if (!validate()) return;
@@ -313,7 +347,11 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
     } finally { setCommitting(false); }
   };
 
-  const routeReady = Boolean(sourceLocationId && destinationLocationId && sourceBranchId !== destinationBranchId);
+  const routeReady = Boolean(
+    sourceAvailability?.eligible
+    && destinationAvailability?.eligible
+    && sourceBranchId !== destinationBranchId,
+  );
   const selectClass = 'mt-2 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3';
   const createContent = <div className="space-y-5">
     <section className="rounded-lg border border-gray-200 bg-white p-5" aria-labelledby="interbranch-heading">
@@ -321,17 +359,67 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
       <p className="mt-1 text-sm text-gray-600">Choose two distinct branches. Each location is limited to its selected branch.</p>
       {contextError && <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{contextError}</p>}
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_auto_1fr_1fr] md:items-end">
-        <label className="text-sm font-medium">Source branch<select aria-label="Source branch" className={selectClass} value={sourceBranchId} disabled={contextLoading} onChange={(event) => { setSourceBranchId(event.target.value); setSourceLocationId(''); resetLines(); }}><option value="">Select branch</option>{branches.filter((branch) => branch.branch_id !== destinationBranchId).map((branch) => <option key={branch.branch_id} value={branch.branch_id}>{branch.branch_name}</option>)}</select></label>
-        <label className="text-sm font-medium">Source location<select aria-label="Source location" className={selectClass} value={sourceLocationId} disabled={!sourceBranch} onChange={(event) => { setSourceLocationId(event.target.value); resetLines(); }}><option value="">Select location</option>{sourceBranch?.locations.map((location) => <option key={location.location_id} value={location.location_id}>{location.location_name}</option>)}</select></label>
+        <label className="text-sm font-medium">Source branch
+          <select aria-label="Source branch" className={selectClass} value={sourceBranchId} disabled={contextLoading} onChange={(event) => { setSourceBranchId(event.target.value); setSourceLocationId(''); resetLines(); }}>
+            <option value="">Select branch</option>
+            {branches.map((branch) => {
+              const distinct = branch.branch_id !== destinationBranchId;
+              const eligible = sourceBranchHasEligibleLocation(branch);
+              return <option key={branch.branch_id} value={branch.branch_id} disabled={!distinct || !eligible}>{branch.branch_name}{!distinct ? ' — already selected as destination' : !eligible ? ' — no transfer-eligible source location' : ''}</option>;
+            })}
+          </select>
+        </label>
+        <label className="text-sm font-medium">Source location
+          <select aria-label="Source location" className={selectClass} value={sourceLocationId} disabled={!sourceBranch} onChange={(event) => {
+            const nextId = event.target.value;
+            const nextSource = sourceBranch?.locations.find((location) => location.location_id === nextId);
+            setSourceLocationId(nextId);
+            setDestinationLocationId('');
+            if (nextSource && destinationBranch && !destinationBranch.locations.some(
+              (location) => destinationTransferLocationAvailability(location, nextSource).eligible,
+            )) setDestinationBranchId('');
+            resetLines();
+          }}>
+            <option value="">Select location</option>
+            {sourceBranch?.locations.map((location) => {
+              const availability = governedTransferLocationAvailability(location);
+              return <option key={location.location_id} value={location.location_id} disabled={!availability.eligible}>{unavailableTransferLocationLabel(location, availability)}</option>;
+            })}
+          </select>
+        </label>
         <ArrowRight className="mb-3 hidden h-5 w-5 text-gray-500 md:block" aria-hidden="true" />
-        <label className="text-sm font-medium">Destination branch<select aria-label="Destination branch" className={selectClass} value={destinationBranchId} disabled={contextLoading} onChange={(event) => { setDestinationBranchId(event.target.value); setDestinationLocationId(''); resetLines(); }}><option value="">Select branch</option>{branches.filter((branch) => branch.branch_id !== sourceBranchId).map((branch) => <option key={branch.branch_id} value={branch.branch_id}>{branch.branch_name}</option>)}</select></label>
-        <label className="text-sm font-medium">Destination location<select aria-label="Destination location" className={selectClass} value={destinationLocationId} disabled={!destinationBranch} onChange={(event) => { setDestinationLocationId(event.target.value); resetLines(); }}><option value="">Select location</option>{destinationBranch?.locations.map((location) => <option key={location.location_id} value={location.location_id}>{location.location_name}</option>)}</select></label>
+        <label className="text-sm font-medium">Destination branch
+          <select aria-label="Destination branch" className={selectClass} value={destinationBranchId} disabled={contextLoading} onChange={(event) => { setDestinationBranchId(event.target.value); setDestinationLocationId(''); resetLines(); }}>
+            <option value="">Select branch</option>
+            {branches.map((branch) => {
+              const distinct = branch.branch_id !== sourceBranchId;
+              const eligible = destinationBranchHasEligibleLocation(branch);
+              return <option key={branch.branch_id} value={branch.branch_id} disabled={!distinct || !eligible}>{branch.branch_name}{!distinct ? ' — already selected as source' : !eligible ? ' — no compatible destination location' : ''}</option>;
+            })}
+          </select>
+        </label>
+        <label className="text-sm font-medium">Destination location
+          <select aria-label="Destination location" className={selectClass} value={destinationLocationId} disabled={!destinationBranch || !sourceLocation} onChange={(event) => { setDestinationLocationId(event.target.value); resetLines(); }}>
+            <option value="">{sourceLocation ? 'Select location' : 'Select an eligible source location first'}</option>
+            {destinationBranch?.locations.map((location) => {
+              const availability = destinationTransferLocationAvailability(location, sourceLocation);
+              return <option key={location.location_id} value={location.location_id} disabled={!availability.eligible}>{unavailableTransferLocationLabel(location, availability)}</option>;
+            })}
+          </select>
+        </label>
       </div>
+      {(unavailableSourceLocations.length > 0 || unavailableDestinationLocations.length > 0) && <div role="status" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="font-medium">Unavailable locations are disabled by canonical inventory governance.</p>
+        <ul className="mt-1 list-disc pl-5">
+          {unavailableSourceLocations.map(({ location, availability }) => <li key={`source-${location.location_id}`}>Source {unavailableTransferLocationLabel(location, availability)}</li>)}
+          {unavailableDestinationLocations.map(({ location, availability }) => <li key={`destination-${location.location_id}`}>Destination {unavailableTransferLocationLabel(location, availability)}</li>)}
+        </ul>
+      </div>}
       <p className="mt-4 text-sm text-gray-600">Transfer date: <strong>{transferDate || 'Loading…'}</strong></p>
     </section>
     <section className="rounded-lg border border-gray-200 bg-white p-5" aria-labelledby="transfer-products-heading">
       <h3 id="transfer-products-heading" className="font-semibold">Products and FEFO batches</h3>
-      <div className="mt-3"><ProductSearch onAddItem={handleProduct} showBatchSelection={false} enforceFefo disabled={!routeReady} placeholder={routeReady ? 'Search product to transfer…' : 'Select both branches and locations first'} /></div>
+      <div className="mt-3"><ProductSearch onAddItem={handleProduct} showBatchSelection={false} enforceFefo disabled={!routeReady} placeholder={routeReady ? 'Search product to transfer…' : 'Select distinct branches and governed transfer-eligible locations first'} /></div>
       {batchLoading && <p className="mt-3 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading eligible FEFO tier…</p>}
       {batchChoices.length > 0 && selectedProduct && <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><p className="font-medium">Allocate {selectedProduct.product_name}</p><p className="text-sm text-gray-600">Enter the quantity you want. FEFO proposes a split across only the equally earliest-expiry tier; you may adjust that split within this tier.</p><div className="mt-4 flex flex-wrap items-end gap-3"><label className="text-sm font-medium">Requested quantity<input aria-label={`Requested transfer quantity for ${selectedProduct.product_name}`} inputMode="decimal" className="mt-2 min-h-11 w-48 rounded-lg border border-gray-300 bg-white px-3" value={requestedQuantity} onChange={(event) => { setRequestedQuantity(event.target.value); setDraftBatchQuantities({}); }} /></label><button type="button" className="min-h-11 rounded-lg border border-blue-300 bg-white px-4 text-sm font-medium text-blue-700" onClick={proposeAllocation}>Propose FEFO allocation</button></div><div className="mt-4 grid gap-3">{batchChoices.map((batch) => <label key={batch.batch_id} className="grid gap-2 rounded-lg border border-gray-300 bg-white p-3 text-sm md:grid-cols-[1fr_auto] md:items-center"><span><strong>{batch.batch_number}</strong> · expires {batch.expires_on} · available {formatExactDecimal(batch.available_selected_quantity, 'Available quantity', quantityOptions)} {batch.selected_uom_code}{batch.is_default ? ' · FEFO default' : ''}</span><input aria-label={`Allocation for batch ${batch.batch_number}`} inputMode="decimal" className="min-h-11 w-full rounded-lg border px-3 md:w-40" value={draftBatchQuantities[batch.batch_id] || ''} onChange={(event) => setDraftBatchQuantities((current) => ({ ...current, [batch.batch_id]: event.target.value }))} /></label>)}</div><div className="mt-4 flex justify-end"><button type="button" className="min-h-11 rounded-lg bg-blue-600 px-5 text-sm font-medium text-white" onClick={addProductAllocation}>Add product allocation</button></div></div>}
       {items.length === 0 ? <div className="mt-5 rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500"><Package className="mx-auto mb-2 h-8 w-8" />No transfer lines yet.</div> : <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b bg-gray-50 text-left text-gray-600"><th className="p-3">Product</th><th className="p-3">FEFO batch allocation</th><th className="p-3">Requested quantity</th><th className="p-3">Action</th></tr></thead><tbody>{items.map((item) => <tr key={item.productId} className="border-b"><td className="p-3"><strong>{item.productName}</strong><br /><span className="text-gray-500">{item.productCode}</span></td><td className="p-3"><ul className="space-y-1">{item.allocations.map((allocation) => <li key={allocation.batch.batch_id}>{allocation.batch.batch_number} · {allocation.enteredQuantity} {allocation.batch.selected_uom_code} · expires {allocation.batch.expires_on}</li>)}</ul></td><td className="p-3">{item.requestedQuantity} {item.selectedUomCode}</td><td className="p-3"><button type="button" aria-label={`Remove ${item.productName}`} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-red-600 hover:bg-red-50" onClick={() => { setItems((current) => current.filter((row) => row.productId !== item.productId)); invalidatePreparedReview(); }}><X className="h-4 w-4" /></button></td></tr>)}</tbody></table></div>}

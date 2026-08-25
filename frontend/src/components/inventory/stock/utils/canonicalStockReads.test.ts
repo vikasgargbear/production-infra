@@ -139,6 +139,50 @@ test('validates and uses the organization IANA timezone for movement timestamps'
     .toContain('26 Aug 2026');
 });
 
+test('decodes exact governed inventory location facts and rejects ambiguous authority', () => {
+  const context = decodeInventoryContext({
+    organization_id: ids.branch,
+    organization_timezone: 'Asia/Kolkata',
+    business_date: '2026-08-25',
+    branches: [{
+      branch_id: ids.branch,
+      branch_code: 'MAIN',
+      branch_name: 'Main',
+      locations: [{
+        location_id: ids.location,
+        location_code: 'SALE',
+        location_name: 'Saleable',
+        location_type: 'saleable',
+        location_status: 'active',
+        allows_sale: true,
+        allows_negative_stock: false,
+        temperature_min_c: '-20.000000',
+        temperature_max_c: '25.500000',
+      }],
+    }],
+  });
+  expect(context.branches[0].locations[0]).toMatchObject({
+    location_type: 'saleable',
+    location_status: 'active',
+    allows_sale: true,
+    allows_negative_stock: false,
+    temperature_min_c: '-20.000000',
+    temperature_max_c: '25.500000',
+  });
+  const location = context.branches[0].locations[0];
+  for (const invalid of [
+    { ...location, allows_sale: 'true' },
+    { ...location, location_status: 'unknown' },
+    { ...location, temperature_min_c: -20 },
+    { ...location, temperature_max_c: '25.5' },
+  ]) {
+    expect(() => decodeInventoryContext({
+      ...context,
+      branches: [{ ...context.branches[0], locations: [invalid] }],
+    })).toThrow();
+  }
+});
+
 test('neutralizes spreadsheet formulas in batch and movement CSV exports', () => {
   const hostile = '  =HYPERLINK("bad")';
   const batchCsv = batchItemsCsv([{

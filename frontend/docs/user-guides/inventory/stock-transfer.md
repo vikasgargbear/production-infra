@@ -18,6 +18,11 @@ Only released, non-expired, non-recalled stock without another pending movement
 is eligible. The transfer date comes from the organization's business timezone;
 the browser clock is not the posting authority.
 
+Cold-chain and NDPS-regulated products are excluded from this ordinary transfer
+workflow. The canonical command does not yet create the temperature-chain or
+controlled-substance register, licence, and handling evidence those movements
+require. Use the relevant governed workflow when that authority is available.
+
 ## Create and post a transfer
 
 1. Go to **Inventory → Stock Transfer**.
@@ -32,8 +37,8 @@ the browser clock is not the posting authority.
    than one batch only when every selected batch has the same earliest eligible
    expiry date. Later-expiry stock cannot be selected while earlier eligible
    stock remains.
-8. Select the transport mode and enter the exact distance. Non-person transport
-   also requires the governed transport details shown by the form.
+8. This UI currently records an in-person movement at an exact distance of
+   `0.00`. Other transport modes are not exposed here.
 9. Review the exact quantity and inventory value preview, then confirm and post.
 
 The same user confirmation supplies the required actor approval. A successful

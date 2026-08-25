@@ -165,15 +165,23 @@ def test_readback_endpoint_reconciles_exact_paired_ledger_and_branch_authority()
     assert "can_access_branch(destination_branch_id)" in header_sql
 
 
-def test_readback_fails_closed_on_unbalanced_or_incomplete_evidence():
+@pytest.mark.parametrize(("lines", "detail"), [
+    (lambda header: [_line(header, transfer_in_value="9007199254740993.29")],
+     "Posted transfer ledger is not quantity/value balanced"),
+    (lambda header: [_line(header, transfer_in_ledger_id=None)],
+     "Posted transfer ledger evidence is incomplete"),
+])
+def test_readback_fails_closed_on_unbalanced_or_incomplete_evidence(lines, detail):
     header = _header()
-    db = _Database(header, [_line(header, transfer_in_value="9007199254740993.29")])
-    with pytest.raises(HTTPException, match="not quantity/value balanced"):
+    db = _Database(header, lines(header))
+    with pytest.raises(HTTPException) as error:
         reads.get_transfer_readback(
             header["id"],
             db=db,
             current_user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
         )
+    assert error.value.status_code == 409
+    assert error.value.detail == detail
 
 
 def test_eligibility_query_is_business_clock_scoped_strict_fefo_and_fixed_scale():
@@ -184,6 +192,7 @@ def test_eligibility_query_is_business_clock_scoped_strict_fefo_and_fixed_scale(
         "organization.timezone",
         "source_branch.id<>destination_branch.id",
         "source_location.allows_sale AND destination_location.allows_sale",
+        "NOT product.ndps_regulated",
         "can_access_branch(source_branch.id)",
         "can_access_branch(destination_branch.id)",
         "min(expires_on)",

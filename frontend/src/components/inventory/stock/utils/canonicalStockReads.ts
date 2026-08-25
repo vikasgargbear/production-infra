@@ -23,6 +23,7 @@ const SIGNED_QUANTITY = { ...QUANTITY, allowNegative: true } as const;
 const RATE = { scale: 4, maximumWholeDigits: 16 } as const;
 const MONEY = { scale: 2, maximumWholeDigits: 18 } as const;
 const SIGNED_MONEY = { ...MONEY, allowNegative: true } as const;
+const TEMPERATURE = { scale: 6, maximumWholeDigits: 3, allowNegative: true } as const;
 
 const record = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -79,7 +80,7 @@ const exact = (
 const nullableExact = (
   value: unknown,
   label: string,
-  options: { scale: number; maximumWholeDigits: number },
+  options: { scale: number; maximumWholeDigits: number; allowNegative?: boolean },
 ): ExactDecimalString | null => value === null ? null : exact(value, label, options);
 
 const dateOnly = (value: unknown, label: string): string => {
@@ -110,10 +111,24 @@ const timeZone = (value: unknown, label: string): string => {
 
 const decodeLocation = (value: unknown, label: string): InventoryLocation => {
   const row = record(value, label);
+  const locationType = requiredString(row.location_type, `${label} location_type`);
+  if (!['saleable', 'quarantine', 'returns', 'damaged', 'cold_storage', 'transit'].includes(locationType)) {
+    throw new Error(`${label} location_type is not canonical.`);
+  }
+  const locationStatus = requiredString(row.location_status, `${label} location_status`);
+  if (!['active', 'inactive', 'blocked'].includes(locationStatus)) {
+    throw new Error(`${label} location_status is not canonical.`);
+  }
   return {
     location_id: uuid(row.location_id, `${label} location_id`),
     location_code: requiredString(row.location_code, `${label} location_code`),
     location_name: requiredString(row.location_name, `${label} location_name`),
+    location_type: locationType as InventoryLocation['location_type'],
+    location_status: locationStatus as InventoryLocation['location_status'],
+    allows_sale: boolean(row.allows_sale, `${label} allows_sale`),
+    allows_negative_stock: boolean(row.allows_negative_stock, `${label} allows_negative_stock`),
+    temperature_min_c: nullableExact(row.temperature_min_c, `${label} temperature_min_c`, TEMPERATURE),
+    temperature_max_c: nullableExact(row.temperature_max_c, `${label} temperature_max_c`, TEMPERATURE),
   };
 };
 

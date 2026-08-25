@@ -200,6 +200,27 @@ def main() -> None:
                 assert eligible[0]["inventory_value"] == "40.00"
                 assert eligible[0]["is_default"] is True
 
+                session.execute(text("RESET ROLE"))
+                session.execute(text("""
+                    UPDATE catalog.products SET ndps_regulated=true
+                     WHERE org_id=:org AND id=:product
+                """), {"org": ORG, "product": PRODUCT})
+                session.execute(text('SET LOCAL ROLE "erp_runtime"'))
+                regulated = transfers.get_eligible_transfer_batches(
+                    source_branch_id=SOURCE_BRANCH, source_location_id=SOURCE_LOCATION,
+                    destination_branch_id=DESTINATION_BRANCH,
+                    destination_location_id=DESTINATION_LOCATION,
+                    product_id=PRODUCT, uom_conversion_id=CONVERSION,
+                    transfer_date=business_date, db=session, current_user=user,
+                )
+                assert regulated == [], "NDPS-regulated stock entered the ordinary transfer route"
+                session.execute(text("RESET ROLE"))
+                session.execute(text("""
+                    UPDATE catalog.products SET ndps_regulated=false
+                     WHERE org_id=:org AND id=:product
+                """), {"org": ORG, "product": PRODUCT})
+                session.execute(text('SET LOCAL ROLE "erp_runtime"'))
+
                 response = transfers.get_transfer_readback(DOCUMENT, db=session, current_user=user)
                 readback = transfers.TransferReadbackResponse(**response)
                 assert readback.total_abs_base_quantity == "1.000000"

@@ -78,6 +78,8 @@ test.describe('live canonical desktop inter-branch stock transfer', () => {
     expect(destinationLocation, `Missing SALE-PUN-DEMO transfer destination location:\n${provisioning}`).toBeTruthy();
     expect(sourceLocation.location_type).toBe('saleable');
     expect(destinationLocation.location_type).toBe('saleable');
+    expect(sourceLocation.location_status).toBe('active');
+    expect(destinationLocation.location_status).toBe('active');
     expect(sourceLocation.allows_sale).toBe(true);
     expect(destinationLocation.allows_sale).toBe(true);
     expect(sourceLocation.allows_negative_stock).toBe(false);

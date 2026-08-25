@@ -89,6 +89,39 @@ def test_stock_routes_require_explicit_branch_and_expose_cursor_envelopes():
         assert {"scope", "as_of", "business_date", "items", "total_count", "summary", "next_cursor"} <= set(properties)
 
 
+def test_inventory_context_exposes_exact_location_governance_facts():
+    location = reads.InventoryLocation(
+        location_id=uuid4(),
+        location_code="SALE",
+        location_name="Saleable",
+        location_type="saleable",
+        location_status="active",
+        allows_sale=True,
+        allows_negative_stock=False,
+        temperature_min_c="-20.000000",
+        temperature_max_c="25.500000",
+    )
+    wire = json.loads(location.model_dump_json())
+    assert wire["temperature_min_c"] == "-20.000000"
+    assert wire["temperature_max_c"] == "25.500000"
+    source = inspect.getsource(reads.inventory_context)
+    for fragment in (
+        "location.location_type",
+        "location.status AS location_status",
+        "location.allows_sale",
+        "location.allows_negative_stock",
+        "location.temperature_min_c",
+        "location.temperature_max_c",
+        "location.status='active'",
+    ):
+        assert fragment in source
+
+    schema = reads.InventoryLocation.model_json_schema(mode="serialization")["properties"]
+    for field in ("temperature_min_c", "temperature_max_c"):
+        decimal_schema = next(item for item in schema[field]["anyOf"] if item.get("type") == "string")
+        assert decimal_schema["pattern"] == r"^-?(?:0|[1-9][0-9]*)\.[0-9]{6}$"
+
+
 def test_cursor_is_opaque_exact_and_rejects_wrong_shape():
     values = {"movement_id": str(uuid4()), "posted_at": "2026-08-25T10:00:00+00:00",
               "as_of": "2026-08-25T10:01:00+00:00", "business_date": "2026-08-25"}

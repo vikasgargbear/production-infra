@@ -1,10 +1,16 @@
 import type { EligibleTransferBatch } from '../../../services/api/modules/inventory/inventoryTransfers.api';
+import type { InventoryLocation } from '../../../services/api/modules/inventory/canonicalInventoryReads.api';
 import {
   defaultTransferQuantity,
   normalizeEligibleTransferBatches,
   proposeFefoAllocations,
   validateTransferQuantity,
 } from './utils/stockTransferExact';
+import {
+  destinationTransferLocationAvailability,
+  governedTransferLocationAvailability,
+  unavailableTransferLocationLabel,
+} from './utils/stockTransferLocations';
 
 const batch = (overrides: Partial<EligibleTransferBatch> = {}): EligibleTransferBatch => ({
   batch_id: '018f6f6d-4f27-7abc-8000-000000000001',
@@ -20,6 +26,19 @@ const batch = (overrides: Partial<EligibleTransferBatch> = {}): EligibleTransfer
   average_unit_cost: '0.1000',
   inventory_value: '900719925474099.30',
   is_default: true,
+  ...overrides,
+});
+
+const location = (overrides: Partial<InventoryLocation> = {}): InventoryLocation => ({
+  location_id: '018f6f6d-4f27-7abc-8000-000000000010',
+  location_code: 'SALE',
+  location_name: 'Saleable',
+  location_type: 'saleable',
+  location_status: 'active',
+  allows_sale: true,
+  allows_negative_stock: false,
+  temperature_min_c: null,
+  temperature_max_c: null,
   ...overrides,
 });
 
@@ -79,5 +98,28 @@ describe('canonical inter-branch transfer exactness', () => {
       { batch_id: '018f6f6d-4f27-7abc-8000-000000000006', entered_quantity: '0.200000' },
     ]);
     expect(() => proposeFefoAllocations('0.300001', choices)).toThrow(/exceeds/);
+  });
+
+  it.each([
+    [location({ location_status: 'blocked' }), 'not active'],
+    [location({ location_type: 'quarantine' }), 'not saleable'],
+    [location({ allows_sale: false }), 'sales are disabled'],
+    [location({ allows_negative_stock: true }), 'negative stock is allowed'],
+  ])('disables governed transfer-ineligible locations and explains why', (candidate, reason) => {
+    const availability = governedTransferLocationAvailability(candidate);
+    expect(availability.eligible).toBe(false);
+    expect(unavailableTransferLocationLabel(candidate, availability)).toContain(reason);
+  });
+
+  it('requires exact matching source and destination temperature bounds', () => {
+    const source = location({ temperature_min_c: '2.000000', temperature_max_c: '8.000000' });
+    expect(destinationTransferLocationAvailability(location({
+      temperature_min_c: '2.000000', temperature_max_c: '8.000000',
+    }), source).eligible).toBe(true);
+    const mismatch = destinationTransferLocationAvailability(location({
+      temperature_min_c: '2.000000', temperature_max_c: '9.000000',
+    }), source);
+    expect(mismatch.eligible).toBe(false);
+    expect(mismatch.reasons).toContain('storage temperature bounds differ from the source');
   });
 });

@@ -11321,7 +11321,8 @@ BEGIN
        OR pg_catalog.jsonb_array_length(requested_line->'batch_allocations') NOT BETWEEN 1 AND 500 THEN
       RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='each transfer product requires an effective UOM and batch allocation'; END IF;
     SELECT * INTO STRICT product FROM catalog.products WHERE org_id=organization_id
-      AND id=(requested_line->>'product_id')::uuid AND status='active' AND cold_chain_required=false FOR SHARE;
+      AND id=(requested_line->>'product_id')::uuid AND status='active'
+      AND cold_chain_required=false AND ndps_regulated=false FOR SHARE;
     SELECT * INTO STRICT conversion FROM catalog.uom_conversions WHERE org_id=organization_id
       AND id=(requested_line->>'uom_conversion_id')::uuid AND product_id=product.id AND status='active'
       AND to_uom_code=product.base_uom_code AND multiplier>0 AND valid_from<=transfer_date

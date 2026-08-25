@@ -172,7 +172,8 @@ def get_eligible_transfer_batches(
               ON product.org_id=conversion.org_id AND product.id=conversion.product_id
            WHERE conversion.org_id=:org_id AND conversion.id=:uom_conversion_id
              AND conversion.product_id=:product_id AND conversion.status='active' AND product.status='active'
-             AND NOT product.cold_chain_required AND conversion.to_uom_code=product.base_uom_code
+             AND NOT product.cold_chain_required AND NOT product.ndps_regulated
+             AND conversion.to_uom_code=product.base_uom_code
              AND conversion.multiplier>0 AND conversion.valid_from<=CAST(:transfer_date AS date)
              AND (conversion.valid_until IS NULL OR conversion.valid_until>=CAST(:transfer_date AS date))
         ), eligible AS (

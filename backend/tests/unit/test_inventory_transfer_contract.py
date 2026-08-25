@@ -85,6 +85,7 @@ def test_generated_sql_authorizes_both_branches_and_balances_ledger():
         "has_permission('inventory.transfer.create',destination_branch_id)",
         "source_branch_id=destination_branch_id",
         "location_type='saleable' AND allows_sale",
+        "ndps_regulated=false",
         "strict_fefo_earliest_expiry_tier",
         "FOR UPDATE",
         "transfer_out_count",
@@ -99,6 +100,7 @@ def test_generated_sql_authorizes_both_branches_and_balances_ledger():
     ):
         assert fragment in sql
     assert sql.count("location_type='saleable' AND allows_sale") >= 2
+    assert "ndps_regulated=false" in sql
 
 
 def test_missing_stock_transfer_sequence_fails_closed():
@@ -134,6 +136,7 @@ def test_postgres_route_fixture_uses_real_runtime_role_and_useful_rows():
         "transfer_in_branch_id == DESTINATION_BRANCH",
         'transfer_out_value == "-10.00"',
         'transfer_in_value == "10.00"',
+        "NDPS-regulated stock entered the ordinary transfer route",
         "SELECT count(*) FROM core.organizations WHERE id=:other_org",
         "source-only actor read destination transfer evidence",
         "transaction.rollback()",

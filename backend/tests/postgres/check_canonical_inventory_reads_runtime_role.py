@@ -58,11 +58,12 @@ def _seed(session: Session) -> None:
           (:other_org,:other_branch,'OTHER','Other','2 Test Road','Pune','27','411002','active',:other_member,:other_member);
         INSERT INTO inventory.locations(
           org_id,id,branch_id,code,name,location_type,status,allows_sale,
-          allows_negative_stock,created_by_membership_id,updated_by_membership_id
+          allows_negative_stock,temperature_min_c,temperature_max_c,
+          created_by_membership_id,updated_by_membership_id
         ) VALUES
-          (:org,'e3100000-0000-7000-8000-000000000011',:branch,'SALE','Saleable','saleable','active',true,false,:member,:member),
-          (:org,'e3100000-0000-7000-8000-000000000012',:branch,'TRANSIT','Transit','transit','active',false,false,:member,:member),
-          (:other_org,'e3200000-0000-7000-8000-000000000011',:other_branch,'SALE','Saleable','saleable','active',true,false,:other_member,:other_member);
+          (:org,'e3100000-0000-7000-8000-000000000011',:branch,'SALE','Saleable','saleable','active',true,false,-20.000000,25.500000,:member,:member),
+          (:org,'e3100000-0000-7000-8000-000000000012',:branch,'TRANSIT','Transit','transit','active',false,false,NULL,NULL,:member,:member),
+          (:other_org,'e3200000-0000-7000-8000-000000000011',:other_branch,'SALE','Saleable','saleable','active',true,false,NULL,NULL,:other_member,:other_member);
         INSERT INTO catalog.products(
           org_id,id,sku,product_kind,name,base_uom_code,hsn_code,drug_schedule,
           requires_prescription,ndps_regulated,regulatory_ruleset_version,
@@ -142,6 +143,15 @@ def _exercise(session: Session) -> None:
     user = {"org_id": str(ORG_ID), "auth_user_id": str(AUTH_USER_ID)}
     context = reads.inventory_context(user=user, db=session)
     assert [branch.branch_id for branch in context.branches] == [BRANCH_ID]
+    saleable, transit = context.branches[0].locations
+    assert saleable.location_type == "saleable"
+    assert saleable.location_status == "active"
+    assert saleable.allows_sale is True
+    assert saleable.allows_negative_stock is False
+    assert str(saleable.temperature_min_c) == "-20.000000"
+    assert str(saleable.temperature_max_c) == "25.500000"
+    assert transit.location_type == "transit"
+    assert transit.allows_sale is False
 
     current, products = _all_pages(
         lambda **page: reads.current_stock(

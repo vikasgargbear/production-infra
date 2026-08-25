@@ -69,6 +69,12 @@ SignedMoney = Annotated[
     PlainSerializer(_wire(2), return_type=str, when_used="json"),
     WithJsonSchema(_schema(2, signed=True), mode="serialization"),
 ]
+ExactTemperature = Annotated[
+    Decimal,
+    Field(max_digits=9, decimal_places=6),
+    PlainSerializer(_wire(6), return_type=str, when_used="json"),
+    WithJsonSchema(_schema(6, signed=True), mode="serialization"),
+]
 
 
 class InventoryLocation(BaseModel):
@@ -76,6 +82,14 @@ class InventoryLocation(BaseModel):
     location_id: UUID
     location_code: str
     location_name: str
+    location_type: Literal[
+        "saleable", "quarantine", "returns", "damaged", "cold_storage", "transit",
+    ]
+    location_status: Literal["active", "inactive", "blocked"]
+    allows_sale: bool
+    allows_negative_stock: bool
+    temperature_min_c: Optional[ExactTemperature]
+    temperature_max_c: Optional[ExactTemperature]
 
 
 class InventoryBranch(BaseModel):
@@ -446,7 +460,10 @@ def inventory_context(user: dict = INVENTORY_USER, db: Session = Depends(get_db)
     rows = _mappings(db, """
         SELECT branch.id AS branch_id, branch.code AS branch_code, branch.name AS branch_name,
                location.id AS location_id, location.code AS location_code,
-               location.name AS location_name
+               location.name AS location_name, location.location_type,
+               location.status AS location_status, location.allows_sale,
+               location.allows_negative_stock, location.temperature_min_c,
+               location.temperature_max_c
           FROM core.branches branch
           LEFT JOIN inventory.locations location
             ON location.org_id=branch.org_id AND location.branch_id=branch.id
@@ -466,7 +483,11 @@ def inventory_context(user: dict = INVENTORY_USER, db: Session = Depends(get_db)
         if row["location_id"] is not None:
             branches[branch_id].locations.append(InventoryLocation(
                 location_id=row["location_id"], location_code=row["location_code"],
-                location_name=row["location_name"],
+                location_name=row["location_name"], location_type=row["location_type"],
+                location_status=row["location_status"], allows_sale=row["allows_sale"],
+                allows_negative_stock=row["allows_negative_stock"],
+                temperature_min_c=row["temperature_min_c"],
+                temperature_max_c=row["temperature_max_c"],
             ))
     return InventoryContext(
         organization_id=org_id, organization_timezone=timezone,

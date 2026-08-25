@@ -14,6 +14,12 @@ export type InventoryLocation = {
   location_id: string;
   location_code: string;
   location_name: string;
+  location_type: 'saleable' | 'quarantine' | 'returns' | 'damaged' | 'cold_storage' | 'transit';
+  location_status: 'active' | 'inactive' | 'blocked';
+  allows_sale: boolean;
+  allows_negative_stock: boolean;
+  temperature_min_c: string | null;
+  temperature_max_c: string | null;
 };
 
 export type InventoryBranch = {
