@@ -62,6 +62,25 @@ def _fixture(label: str) -> TenantFixture:
     )
 
 
+def _authority_in_tenant(owner: TenantFixture, label: str) -> TenantFixture:
+    """Create fresh run-scoped authority IDs under an existing tenant owner."""
+
+    suffix = uuid4().hex[:20]
+    return TenantFixture(
+        org_id=owner.org_id,
+        creator_auth_user_id=owner.creator_auth_user_id,
+        creator_user_id=owner.creator_user_id,
+        creator_membership_id=owner.creator_membership_id,
+        subject_auth_user_id=uuid4(),
+        subject_user_id=uuid4(),
+        subject_membership_id=uuid4(),
+        role_id=uuid4(),
+        access_grant_id=uuid4(),
+        agent_grant_id=uuid4(),
+        role_code=f"live18_denial_{label}_{suffix}",
+    )
+
+
 def _connect():
     url = make_url(os.environ["DATABASE_URL"])
     return psycopg2.connect(
@@ -251,6 +270,115 @@ def _seed_tenant(cursor, fixture: TenantFixture) -> None:
     )
 
 
+def _seed_additional_authority(cursor, fixture: TenantFixture) -> None:
+    """Provision another disposable run under an already seeded organization."""
+
+    cursor.execute("RESET ROLE")
+    cursor.execute(
+        "INSERT INTO auth.users(id) VALUES (%s)",
+        (fixture.subject_auth_user_id,),
+    )
+    cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+    _set_context(cursor, fixture)
+    cursor.execute(
+        "INSERT INTO core.users(id,auth_user_id,display_name,status) "
+        "VALUES (%s,%s,'Live18 replacement denial observer','active')",
+        (fixture.subject_user_id, fixture.subject_auth_user_id),
+    )
+    cursor.execute(
+        """
+        INSERT INTO core.memberships(
+          org_id,id,user_id,status,joined_at,
+          created_by_membership_id,updated_by_membership_id)
+        VALUES (%s,%s,%s,'active',transaction_timestamp(),%s,%s)
+        """,
+        (
+            fixture.org_id,
+            fixture.subject_membership_id,
+            fixture.subject_user_id,
+            fixture.creator_membership_id,
+            fixture.creator_membership_id,
+        ),
+    )
+    cursor.execute(
+        """
+        INSERT INTO core.roles(
+          org_id,id,code,name,description,is_system,status,
+          created_by_membership_id,updated_by_membership_id)
+        VALUES (%s,%s,%s,'Live18 replacement observer',
+                'PostgreSQL reprovision proof',false,'active',%s,%s)
+        """,
+        (
+            fixture.org_id,
+            fixture.role_id,
+            fixture.role_code,
+            fixture.creator_membership_id,
+            fixture.creator_membership_id,
+        ),
+    )
+    cursor.execute(
+        "INSERT INTO core.role_permissions(org_id,role_id,permission_code,"
+        "created_by_membership_id) VALUES "
+        "(%s,%s,'automation.command.view',%s)",
+        (fixture.org_id, fixture.role_id, fixture.creator_membership_id),
+    )
+    cursor.execute(
+        """
+        INSERT INTO core.access_grants(
+          org_id,id,membership_id,role_id,scope_kind,valid_from_at,expires_at,
+          status,created_by_membership_id)
+        VALUES (%s,%s,%s,%s,'organization',transaction_timestamp(),
+                transaction_timestamp()+interval '2 hours','active',%s)
+        """,
+        (
+            fixture.org_id,
+            fixture.access_grant_id,
+            fixture.subject_membership_id,
+            fixture.role_id,
+            fixture.creator_membership_id,
+        ),
+    )
+    cursor.execute(
+        """
+        INSERT INTO automation.agent_grants(
+          org_id,id,subject_membership_id,client_id,client_display_name,
+          authorization_mode,consent_version,consent_text_hash,
+          consented_by_membership_id,consented_at,granted_by_membership_id,
+          granted_at,expires_at,status,created_by_membership_id,
+          updated_by_membership_id)
+        VALUES (%s,%s,%s,%s,'Live18 replacement denial observer','self_consent',
+                'live18-denial-v1',extensions.digest(%s,'sha256'),%s,
+                transaction_timestamp(),%s,transaction_timestamp(),
+                transaction_timestamp()+interval '2 hours','active',%s,%s)
+        """,
+        (
+            fixture.org_id,
+            fixture.agent_grant_id,
+            fixture.subject_membership_id,
+            identities.WEB_CLIENT_ID,
+            f"terminal-reprovision:{fixture.role_code}",
+            fixture.subject_membership_id,
+            fixture.creator_membership_id,
+            fixture.creator_membership_id,
+            fixture.creator_membership_id,
+        ),
+    )
+    cursor.execute(
+        """
+        INSERT INTO automation.agent_grant_capabilities(
+          org_id,agent_grant_id,capability_code,operation_mode,risk_class,
+          approval_policy,allow_sensitive_read,status,created_by_membership_id)
+        VALUES (%s,%s,'automation.command.status.get','read','read_only',
+                'none',false,'active',%s)
+        """,
+        (
+            fixture.org_id,
+            fixture.agent_grant_id,
+            fixture.creator_membership_id,
+        ),
+    )
+
+
 def _authority_snapshot(cursor, fixture: TenantFixture) -> tuple[tuple, ...]:
     cursor.execute(
         """
@@ -333,10 +461,15 @@ def _active_authority_count(cursor, fixture: TenantFixture) -> int:
 @contextmanager
 def _patched_denial_constants(fixture: TenantFixture):
     names = {
+        "DEMO_ORG_ID": str(fixture.org_id),
         "DENIAL_ORG_ID": str(fixture.org_id),
         "DENIAL_CREATOR_MEMBERSHIP_ID": str(fixture.creator_membership_id),
         "DEMO_OPERATOR_AUTH_USER_ID": str(fixture.creator_auth_user_id),
         "DEMO_OPERATOR_USER_ID": str(fixture.creator_user_id),
+        "DEMO_OPERATOR_MEMBERSHIP_ID": str(fixture.creator_membership_id),
+        "DEMO_REVIEWER_AUTH_USER_ID": str(fixture.creator_auth_user_id),
+        "DEMO_REVIEWER_USER_ID": str(fixture.creator_user_id),
+        "DEMO_REVIEWER_MEMBERSHIP_ID": str(fixture.creator_membership_id),
     }
     original = {name: getattr(identities, name) for name in names}
     try:
@@ -346,6 +479,25 @@ def _patched_denial_constants(fixture: TenantFixture):
     finally:
         for name, value in original.items():
             setattr(identities, name, value)
+
+
+@contextmanager
+def _patched_recovery_connection(connection):
+    """Let production recovery borrow this rollback-only fixture transaction."""
+
+    class BorrowedConnection:
+        def __enter__(self):
+            return connection
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    original = identities._database_connection
+    identities._database_connection = lambda _management_token: BorrowedConnection()
+    try:
+        yield
+    finally:
+        identities._database_connection = original
 
 
 def _cleanup_state(fixture: TenantFixture) -> dict:
@@ -375,6 +527,34 @@ def _expect_check_violation(cursor, statement: str, parameters: tuple) -> None:
     finally:
         cursor.execute("RELEASE SAVEPOINT expected_terminal_rejection")
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+
+
+def _terminal_history_counts(cursor, fixture: TenantFixture) -> tuple[int, int, int]:
+    cursor.execute(
+        """
+        SELECT
+          (SELECT count(*) FROM automation.agent_grants
+            WHERE org_id=%s AND consent_version='live18-denial-v1'
+              AND status='revoked'),
+          (SELECT count(*)
+             FROM automation.agent_grant_capabilities AS capability
+             JOIN automation.agent_grants AS grant_row
+               ON grant_row.org_id=capability.org_id
+              AND grant_row.id=capability.agent_grant_id
+            WHERE grant_row.org_id=%s
+              AND grant_row.consent_version='live18-denial-v1'
+              AND capability.status='revoked'),
+          (SELECT count(*)
+             FROM core.access_grants AS access_grant
+             JOIN core.roles AS role ON role.org_id=access_grant.org_id
+                                    AND role.id=access_grant.role_id
+            WHERE access_grant.org_id=%s
+              AND role.code LIKE 'live18_denial_%%'
+              AND access_grant.status='revoked')
+        """,
+        (fixture.org_id, fixture.org_id, fixture.org_id),
+    )
+    return tuple(int(value) for value in cursor.fetchone())
 
 
 def main() -> None:
@@ -426,6 +606,48 @@ def main() -> None:
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             assert _authority_snapshot(cursor, target) == terminal_snapshot
             assert _active_authority_count(cursor, target) == 0
+            assert _authority_snapshot(cursor, other_tenant) == other_before
+            assert _terminal_history_counts(cursor, target) == (1, 1, 1)
+
+            # Simulate lost runner state: a fresh identity survives until the
+            # purpose-discovery recovery path terminalizes its database rows.
+            recovered = _authority_in_tenant(target, "recovered")
+            _seed_additional_authority(cursor, recovered)
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            assert _active_authority_count(cursor, recovered) == 6
+            cursor.execute("RESET ROLE")
+            with (
+                _patched_denial_constants(target),
+                _patched_recovery_connection(connection),
+            ):
+                identities._recover_stale_live18_database(
+                    "rollback-only-pg15-fixture",
+                    {str(recovered.subject_auth_user_id)},
+                )
+            recovered_terminal = _authority_snapshot(cursor, recovered)
+            assert _active_authority_count(cursor, recovered) == 0
+            assert _terminal_history_counts(cursor, target) == (2, 2, 2)
+            assert _authority_snapshot(cursor, target) == terminal_snapshot
+            assert _authority_snapshot(cursor, other_tenant) == other_before
+
+            # A later run can provision fresh IDs in the same denial tenant;
+            # cleanup grows immutable history without reviving prior consent.
+            replacement = _authority_in_tenant(target, "replacement")
+            _seed_additional_authority(cursor, replacement)
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            assert _active_authority_count(cursor, replacement) == 6
+            with _patched_denial_constants(target):
+                identities._cleanup_live18_denial_database(
+                    cursor, _cleanup_state(replacement)
+                )
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            assert _active_authority_count(cursor, replacement) == 0
+            assert _terminal_history_counts(cursor, target) == (3, 3, 3)
+            assert _authority_snapshot(cursor, target) == terminal_snapshot
+            assert _authority_snapshot(cursor, recovered) == recovered_terminal
             assert _authority_snapshot(cursor, other_tenant) == other_before
 
             _expect_check_violation(
