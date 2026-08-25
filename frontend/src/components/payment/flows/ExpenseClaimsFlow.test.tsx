@@ -56,7 +56,14 @@ beforeEach(() => {
 it('uses canonical claimant, account and receipt context to reach immutable prepare', async () => {
   render(<ExpenseClaimsFlow onClose={jest.fn()} />);
 
+  await waitFor(() => expect((screen.getByLabelText('Branch') as HTMLSelectElement).options.length).toBe(2));
+  expect((screen.getByLabelText('Branch') as HTMLSelectElement).value).toBe('');
+  fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
   expect(await screen.findByDisplayValue('Canonical Claimant')).not.toBeNull();
+  expect((screen.getByLabelText('Reimbursement liability') as HTMLSelectElement).value).toBe('');
+  fireEvent.change(screen.getByLabelText('Period start'), { target: { value: '2026-08-25' } });
+  fireEvent.change(screen.getByLabelText('Period end'), { target: { value: '2026-08-25' } });
+  fireEvent.change(screen.getByLabelText('Reimbursement liability'), { target: { value: ids.reimbursement } });
   fireEvent.change(screen.getByLabelText('Verified unused receipt'), { target: { value: ids.receipt } });
   fireEvent.change(screen.getByLabelText('Expense account'), { target: { value: ids.expense } });
   fireEvent.change(screen.getByLabelText('Merchant'), { target: { value: 'Verified Taxi' } });

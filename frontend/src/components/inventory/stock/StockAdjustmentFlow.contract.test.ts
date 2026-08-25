@@ -29,4 +29,16 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
     expect(source).not.toContain('Use validated rows');
     expect(source).not.toContain('Validated CSV rows loaded for review');
   });
+
+  it('requires explicit count UOM and evidence choices without example business facts', () => {
+    expect(source).toContain('Select count UOM');
+    expect(source).toContain("uom_conversion_id: ''");
+    expect(source).toContain("uom_multiplier: ''");
+    expect(source).toContain("unit: ''");
+    expect(source).toContain("const csvContent = 'product_id,batch_id,product_name,adjustment_quantity,reason,product_code,current_stock,notes\\n'");
+    expect(source).not.toContain('eligibility.uom_conversions[0]');
+    expect(source).not.toContain('availableEvidence[0]');
+    expect(source).not.toContain('018f1e5a-7b2c-7abc');
+    expect(source).not.toContain("batch_number || 'Default'");
+  });
 });

@@ -79,10 +79,6 @@ const PaymentFlowOptimized: React.FC = () => {
         )) : [];
         setBankAccounts(accounts);
         setBankAccountsError(accounts.length ? '' : 'No canonical bank settlement account is available.');
-        if (accounts.length === 1) {
-          setPaymentField('bank_account_id', accounts[0].bank_account_id);
-          setPaymentField('settlement_account_id', accounts[0].settlement_account_id);
-        }
       })
       .catch(() => {
         if (!active) return;

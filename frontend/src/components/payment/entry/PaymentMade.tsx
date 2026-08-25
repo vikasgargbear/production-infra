@@ -31,7 +31,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
   const [bankId, setBankId] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
   const [maximumPaymentDate, setMaximumPaymentDate] = useState('');
-  const [method, setMethod] = useState<'upi' | 'bank_transfer'>('upi');
+  const [method, setMethod] = useState<'upi' | 'bank_transfer' | ''>('');
   const [reference, setReference] = useState('');
   const [amount, setAmount] = useState('');
   const [allocationMode, setAllocationMode] = useState<AllocationMode>('fifo');
@@ -56,7 +56,6 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
       setContext(next);
       setPaymentDate(next.payment_date);
       setMaximumPaymentDate(current => current || next.payment_date);
-      setBankId(current => current || next.bank_accounts[0]?.bank_account_id || '');
     } catch (requestError) {
       if (requestSequence === contextRequestSequence.current) {
         setContext(null); setError(errorMessage(requestError));
@@ -87,8 +86,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
   };
   const chooseSupplier = (value: string) => {
     invalidate(); setSupplierId(value); setAllocations([]); setAmount('');
-    const selected = context?.suppliers.find(row => row.supplier_account_id === value);
-    setBranchId(selected?.open_items[0]?.branch_id || '');
+    setBranchId('');
   };
   const applyFifo = () => {
     try {
@@ -108,7 +106,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
     });
   };
   const prepare = async () => {
-    if (!context || !bank) return;
+    if (!context || !bank || !method) return;
     setBusy(true); setError('');
     try {
       const payload = buildSupplierPaymentPreparePayload({
@@ -156,7 +154,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
               <label className="text-sm font-medium">Branch<select value={branchId} onChange={event => { invalidate(); setBranchId(event.target.value); setAllocations([]); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select branch</option>{context.branches.map(row => <option key={row.branch_id} value={row.branch_id}>{row.branch_code} — {row.branch_name}</option>)}</select></label>
               <label className="text-sm font-medium">Organization payment date<input type="date" max={maximumPaymentDate || undefined} value={paymentDate} onChange={event => { const nextDate = event.target.value; invalidate(); setPaymentDate(nextDate); if (nextDate) void load(nextDate); else setContext(null); }} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
               <label className="text-sm font-medium">Bank and settlement ledger<select value={bankId} onChange={event => { invalidate(); setBankId(event.target.value); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select INR bank</option>{context.bank_accounts.map(row => <option key={row.bank_account_id} value={row.bank_account_id}>{row.bank_name} — {row.account_holder_name} ({row.ifsc})</option>)}</select></label>
-              <label className="text-sm font-medium">Method<select value={method} onChange={event => { invalidate(); setMethod(event.target.value as typeof method); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option></select></label>
+              <label className="text-sm font-medium">Method<select value={method} onChange={event => { invalidate(); setMethod(event.target.value as typeof method); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select payment method</option><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option></select></label>
               <label className="text-sm font-medium">Bank / UPI reference<input value={reference} onChange={event => { invalidate(); setReference(event.target.value); }} maxLength={256} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
             </div>
           </section>
@@ -170,7 +168,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
             {allocationMode === 'fifo' && <div className="mt-4 flex flex-wrap gap-3"><label className="min-w-64 flex-1 text-sm font-medium">Payment amount<input inputMode="decimal" value={amount} onChange={event => { invalidate(); setAmount(event.target.value); setAllocations([]); }} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={applyFifo} disabled={!supplier || !branchId || !amount} className="min-h-11 self-end rounded-lg bg-blue-600 px-5 text-white disabled:bg-slate-300">Allocate FIFO</button></div>}
             {allocationMode === 'manual' && <p className="mt-4 text-sm text-slate-600">Enter the exact amount beside each invoice. Blank invoices are not included.</p>}
             <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left text-slate-600"><th className="p-3">Invoice</th><th className="p-3">Date / Due</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Allocated</th></tr></thead><tbody>{visibleItems.map(item => { const row = allocations.find(value => value.open_item_id === item.open_item_id); return <tr key={item.open_item_id} className="border-b border-slate-100"><td className="p-3 font-medium">{item.document_number}</td><td className="p-3">{item.document_date}<br /><span className="text-slate-500">Due {item.due_date}</span></td><td className="p-3 text-right">₹{item.outstanding_amount}</td><td className="p-3 text-right">{allocationMode === 'manual' ? <input aria-label={`Allocation for ${item.document_number}`} inputMode="decimal" value={row?.amount || ''} onChange={event => setManualAllocation(item.open_item_id, event.target.value)} placeholder="0.00" className="min-h-11 w-32 rounded-lg border px-3 text-right" /> : <>₹{row?.amount || '0.00'}</>}</td></tr>; })}</tbody></table></div>
-            <div className="mt-4 flex items-center justify-between border-t pt-4"><span className="font-semibold">Allocated ₹{supplierMinorToMoney(allocatedTotal)}</span><button type="button" onClick={() => void prepare()} disabled={busy || !context.ready || !allocations.length} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Review immutable preview</button></div>
+            <div className="mt-4 flex items-center justify-between border-t pt-4"><span className="font-semibold">Allocated ₹{supplierMinorToMoney(allocatedTotal)}</span><button type="button" onClick={() => void prepare()} disabled={busy || !context.ready || !supplierId || !branchId || !bankId || !method || !reference.trim() || !allocations.length} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Review immutable preview</button></div>
           </section>
         </>}
 

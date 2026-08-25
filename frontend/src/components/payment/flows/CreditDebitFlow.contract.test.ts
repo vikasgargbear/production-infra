@@ -23,3 +23,9 @@ it('does not retain or submit adjustment notes through a legacy/offline fallback
   expect(source).not.toMatch(/notesApi\.|createCreditNote|createDebitNote/);
   expect(source).not.toMatch(/toast\.success/);
 });
+
+it('requires the actor to select the reviewed GST rule', () => {
+  expect(source).toContain("setRuleId('')");
+  expect(source).toContain('Select reviewed GST rule');
+  expect(source).not.toContain('setRuleId(next.rule_choices[0]');
+});

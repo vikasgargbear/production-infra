@@ -37,7 +37,14 @@ beforeEach(() => {
 test('defaults to FIFO while preserving exact manual per-invoice allocation', async () => {
   render(<PaymentMade />);
   await waitFor(() => expect((screen.getByLabelText('Supplier') as HTMLSelectElement).options.length).toBe(2));
+  expect((screen.getByLabelText('Bank and settlement ledger') as HTMLSelectElement).value).toBe('');
+  expect((screen.getByLabelText('Method') as HTMLSelectElement).value).toBe('');
   fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: ids.supplier } });
+  expect((screen.getByLabelText('Branch') as HTMLSelectElement).value).toBe('');
+  fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
+  fireEvent.change(screen.getByLabelText('Bank and settlement ledger'), { target: { value: ids.bank } });
+  fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'upi' } });
+  fireEvent.change(screen.getByLabelText('Bank / UPI reference'), { target: { value: 'UPI-SP-1' } });
 
   expect((screen.getByRole('radio', { name: 'Automatic FIFO' }) as HTMLInputElement).checked).toBe(true);
   expect((screen.getByRole('radio', { name: 'Manual per invoice' }) as HTMLInputElement).checked).toBe(false);

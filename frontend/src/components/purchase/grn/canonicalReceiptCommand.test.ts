@@ -48,12 +48,20 @@ function validDraft() {
   const draft = initialReceiptDraft(
     context,
     'CODEX-E2E-PUR-RET-20260825:receipt:0001',
-    NOW,
   );
+  draft.receivedAt = '2026-08-25T17:29';
+  draft.lines[0].included = true;
   draft.lines[0].batches[0].manufacturerBatchNumber = 'CODEX-E2E-BATCH-0001';
   draft.lines[0].batches[0].manufacturedOn = '2026-07-01';
   draft.lines[0].batches[0].expiresOn = '2027-07-01';
   draft.lines[0].batches[0].mrp = '125.00';
+  draft.lines[0].batches[0].mrpUomConversionId = context.lines[0].mrp_conversions[0].id;
+  draft.lines[0].batches[0].receivedQuantity = '10.000000';
+  draft.lines[0].batches[0].acceptedQuantity = '10.000000';
+  draft.lines[0].batches[0].rejectedQuantity = '0';
+  draft.lines[0].batches[0].freeQuantity = '2.000000';
+  draft.lines[0].batches[0].qcStatus = 'accepted';
+  draft.lines[0].batches[0].toLocationId = context.lines[0].eligible_locations[0].id;
   draft.supplierChallanNumber = 'CODEX-E2E-CH-0001';
   draft.supplierChallanDate = '2026-08-25';
   return draft;
@@ -133,9 +141,13 @@ describe('canonical goods-receipt command contract', () => {
     second.manufacturerBatchNumber = 'CODEX-E2E-BATCH-0002';
     second.expiresOn = '2027-08-01';
     second.mrp = '130.00';
+    second.mrpUomConversionId = context.lines[0].mrp_conversions[0].id;
     second.receivedQuantity = '4.000000';
     second.acceptedQuantity = '4.000000';
     second.freeQuantity = '1.000000';
+    second.rejectedQuantity = '0';
+    second.qcStatus = 'accepted';
+    second.toLocationId = context.lines[0].eligible_locations[0].id;
     draft.lines[0].batches.push(second);
 
     const payload = buildCanonicalReceiptPayload(context, draft, NOW) as any;
@@ -188,6 +200,16 @@ describe('canonical goods-receipt command contract', () => {
     );
   });
 
+  it('starts with no inferred line, timestamp, quantity, MRP unit, location, or QC choice', () => {
+    const draft = initialReceiptDraft(context, 'CODEX-E2E-PUR-RET-20260825:receipt:blank');
+    expect(draft.receivedAt).toBe('');
+    expect(draft.lines[0].included).toBe(false);
+    expect(draft.lines[0].batches[0]).toMatchObject({
+      mrpUomConversionId: '', receivedQuantity: '', acceptedQuantity: '',
+      rejectedQuantity: '', freeQuantity: '', qcStatus: '', toLocationId: '',
+    });
+  });
+
   it('rejects an impossible organization-local calendar time', () => {
     const draft = validDraft();
     draft.receivedAt = '2026-02-31T10:30';
@@ -203,6 +225,7 @@ describe('canonical goods-receipt command contract', () => {
     ['over free', (draft: any) => { draft.lines[0].batches[0].freeQuantity = '3'; }, /exceeds.*free/i],
     ['quantity mismatch', (draft: any) => { draft.lines[0].batches[0].rejectedQuantity = '1'; }, /accepted plus rejected/i],
     ['partial no notes', (draft: any) => { draft.lines[0].batches[0].qcStatus = 'partial'; draft.lines[0].batches[0].acceptedQuantity = '9'; draft.lines[0].batches[0].rejectedQuantity = '1'; }, /partial QC.*notes/i],
+    ['missing QC disposition', (draft: any) => { draft.lines[0].batches[0].qcStatus = ''; }, /QC disposition is required/i],
     ['future receipt', (draft: any) => { draft.receivedAt = '2026-08-26T12:00:00.000Z'; }, /cannot be in the future/i],
     ['challan pair', (draft: any) => { draft.supplierChallanDate = ''; }, /provided together/i],
   ])('fails closed for %s', (_name, mutate, expected) => {

@@ -226,7 +226,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       if (availableEvidence.length === 0) {
         throw new Error('The selected batches do not share one unused verified cycle-count sheet.');
       }
-      const uom = eligibility.uom_conversions[0];
       const newItem: AdjustmentItem = {
         id: `${eligibility.product_id}:${eligibility.batch_id}`,
         product_id: eligibility.product_id,
@@ -238,10 +237,10 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
         location_id: eligibility.location_id,
         quantity_available: eligibility.system_base_quantity,
         counted_quantity: '',
-        uom_conversion_id: uom.uom_conversion_id,
-        uom_multiplier: uom.multiplier,
+        uom_conversion_id: '',
+        uom_multiplier: '',
         uom_options: eligibility.uom_conversions,
-        unit: uom.from_uom_code,
+        unit: '',
         expiry_date: batch.expiry_date,
       };
       setAdjustmentData(prev => ({ ...prev, items: [...prev.items, newItem] }));
@@ -249,12 +248,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       setSelectedEvidenceId(current => (
         availableEvidence.some(item => item.evidence_attachment_id === current)
           ? current
-          : availableEvidence.length === 1 ? availableEvidence[0].evidence_attachment_id : ''
+          : ''
       ));
       setCountedByMembershipId(eligibility.counted_by_membership_id);
       setSelectedProduct(null);
       setShowBatchSelector(false);
-      toast.info(`Added ${newItem.product_name}. Enter the exact physical count in ${uom.from_uom_code}.`);
+      toast.info(`Added ${newItem.product_name}. Select the count UOM and verified evidence, then enter the exact physical count.`);
     } catch (err: any) {
       const msg = err?.response?.data?.detail?.message || err?.message
         || 'This batch is not eligible for a canonical cycle count.';
@@ -307,8 +306,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   };
 
   const downloadTemplate = () => {
-    const csvContent = `product_id,batch_id,product_name,adjustment_quantity,reason,product_code,current_stock,notes
-018f1e5a-7b2c-7abc-8def-0123456789ab,018f1e5a-7b2c-7abc-9def-0123456789ac,Example Product,5,physical_count,EXAMPLE-1,,Replace example UUIDs with canonical product and batch UUIDs`;
+    const csvContent = 'product_id,batch_id,product_name,adjustment_quantity,reason,product_code,current_stock,notes\n';
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -354,8 +352,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       toast.error('A live verified cycle-count membership and evidence sheet are required.');
       return false;
     }
-    if (adjustmentData.items.some(item => !item.counted_quantity)) {
-      toast.error('Enter the exact physical count for every selected batch.');
+    if (adjustmentData.items.some(item => !item.uom_conversion_id || !item.counted_quantity)) {
+      toast.error('Select a count UOM and enter the exact physical count for every selected batch.');
       return false;
     }
     return true;
@@ -366,7 +364,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     && adjustmentData.items.length > 0
     && Boolean(countedByMembershipId)
     && Boolean(selectedEvidenceId)
-    && adjustmentData.items.every(item => Boolean(item.counted_quantity))
+    && adjustmentData.items.every(item => Boolean(item.uom_conversion_id) && Boolean(item.counted_quantity))
   );
 
   const handleProceedToReview = () => {
@@ -882,7 +880,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div>
-                              <div className="font-medium">{item.batch_number || 'Default'}</div>
+                              <div className="font-medium">{item.batch_number || 'Batch identity unavailable'}</div>
                               {item.expiry_date && (
                                 <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
                               )}
@@ -896,6 +894,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                               className="min-h-11 rounded border border-gray-300 bg-white px-2 text-sm"
                               aria-label={`Count UOM for ${item.product_name}`}
                             >
+                              <option value="">Select count UOM</option>
                               {item.uom_options.map(option => (
                                 <option key={option.uom_conversion_id} value={option.uom_conversion_id}>
                                   {option.from_uom_code} (×{String(option.multiplier)} {option.to_uom_code})
@@ -1094,7 +1093,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                     <div className="text-sm text-gray-500">{item.product_code}</div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <div className="font-medium">{item.batch_number || 'Default'}</div>
+                        <div className="font-medium">{item.batch_number || 'Batch identity unavailable'}</div>
                     {item.expiry_date && (
                       <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
                     )}

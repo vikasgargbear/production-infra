@@ -20,3 +20,11 @@ it('keeps statement import fail closed without compatibility writes', () => {
   expect(source).not.toContain('localStorage');
   expect(source).not.toContain('indexedDB');
 });
+
+it('requires an explicit server-offered match method', () => {
+  expect(source).toContain("useState<'' | 'manual' | 'reference_exact'>('')");
+  expect(source).toContain('Select reviewed match method');
+  expect(source).toContain('selected.match_methods.includes(matchMethod)');
+  expect(source).not.toContain('match_methods[0]');
+  expect(source).not.toContain("|| 'manual'");
+});

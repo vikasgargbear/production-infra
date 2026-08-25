@@ -55,12 +55,19 @@ function draft() {
   const value = initialReceiptDraft(
     context,
     'CODEX-E2E-PUR-RET-20260825:receipt:retry-0001',
-    new Date('2026-08-25T12:00:00Z'),
   );
   value.receivedAt = '2026-08-24T12:00:00Z';
+  value.lines[0].included = true;
   value.lines[0].batches[0].manufacturerBatchNumber = 'CODEX-E2E-BATCH-RETRY-0001';
   value.lines[0].batches[0].expiresOn = '2027-08-25';
   value.lines[0].batches[0].mrp = '125.00';
+  value.lines[0].batches[0].mrpUomConversionId = context.lines[0].mrp_conversions[0].id;
+  value.lines[0].batches[0].receivedQuantity = '1.000000';
+  value.lines[0].batches[0].acceptedQuantity = '1.000000';
+  value.lines[0].batches[0].rejectedQuantity = '0';
+  value.lines[0].batches[0].freeQuantity = '0';
+  value.lines[0].batches[0].qcStatus = 'accepted';
+  value.lines[0].batches[0].toLocationId = context.lines[0].eligible_locations[0].id;
   return value;
 }
 

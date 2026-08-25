@@ -5,7 +5,7 @@ import type {
 } from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 
 
-export type ReceiptQcStatus = 'accepted' | 'partial';
+export type ReceiptQcStatus = '' | 'accepted' | 'partial';
 
 export interface CanonicalReceiptBatchDraft {
   manufacturerBatchNumber: string;
@@ -152,39 +152,36 @@ function requireContextLine(
 export function initialReceiptDraft(
   context: CanonicalReceiptContext,
   idempotencyKey: string,
-  now = new Date(),
 ): CanonicalReceiptDraft {
-  const safeReceivedAt = new Date(now.getTime() - 60_000);
   return {
     idempotencyKey,
-    receivedAt: organizationDateTimeInputValue(safeReceivedAt, context.organization_timezone),
+    receivedAt: '',
     supplierChallanNumber: '',
     supplierChallanDate: '',
     lines: context.lines.map(line => ({
       purchaseOrderLineId: line.purchase_order_line_id,
-      included: true,
-      batches: [initialReceiptBatchDraft(line, true)],
+      included: false,
+      batches: [initialReceiptBatchDraft(line)],
     })),
   };
 }
 
 export function initialReceiptBatchDraft(
-  line: CanonicalReceiptContextLine,
-  includeRemainingQuantities = false,
+  _line: CanonicalReceiptContextLine,
 ): CanonicalReceiptBatchDraft {
   return {
     manufacturerBatchNumber: '',
     manufacturedOn: '',
     expiresOn: '',
     mrp: '',
-    mrpUomConversionId: line.mrp_conversions[0]?.id || '',
-    receivedQuantity: includeRemainingQuantities ? line.remaining_billed_quantity : '0',
-    acceptedQuantity: includeRemainingQuantities ? line.remaining_billed_quantity : '0',
-    rejectedQuantity: '0',
-    freeQuantity: includeRemainingQuantities ? line.remaining_free_quantity : '0',
-    qcStatus: 'accepted',
+    mrpUomConversionId: '',
+    receivedQuantity: '',
+    acceptedQuantity: '',
+    rejectedQuantity: '',
+    freeQuantity: '',
+    qcStatus: '',
     qcNotes: '',
-    toLocationId: line.eligible_locations[0]?.id || '',
+    toLocationId: '',
   };
 }
 
@@ -277,6 +274,9 @@ export function buildCanonicalReceiptPayload(
       }
       if (accepted.scaled + free.scaled <= 0n) {
         throw new Error(`${batchLabel} cannot be fully rejected`);
+      }
+      if (!['accepted', 'partial'].includes(batchDraft.qcStatus)) {
+        throw new Error(`${batchLabel} QC disposition is required`);
       }
       if (batchDraft.qcStatus === 'accepted'
         && (rejected.scaled !== 0n || accepted.scaled !== received.scaled)) {

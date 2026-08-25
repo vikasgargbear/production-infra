@@ -69,7 +69,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
         .map((row: any) => ({ branch_id: String(row.branch_id), branch_code: String(row.branch_code), branch_name: String(row.branch_name) }));
       if (!next.length) throw new Error('No active canonical branch is available for expense claims.');
       setBranches(next);
-      setBranchId(current => next.some(row => row.branch_id === current) ? current : next[0].branch_id);
+      setBranchId(current => next.some(row => row.branch_id === current) ? current : '');
     } catch (requestError) {
       setBranches([]); setBranchId(''); setContext(null); setError(messageFrom(requestError));
     } finally { setBusy(false); }
@@ -79,8 +79,8 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
     setBusy(true); setError(''); setContext(null); invalidatePrepared();
     try {
       const next = (await canonicalExpenseClaimsApi.context(selectedBranch)).data;
-      setContext(next); setPeriodStart(next.business_date); setPeriodEnd(next.business_date);
-      setReimbursementAccountId(next.reimbursement_accounts.length === 1 ? next.reimbursement_accounts[0].account_id : '');
+      setContext(next); setPeriodStart(''); setPeriodEnd('');
+      setReimbursementAccountId('');
       setLines([emptyLine()]);
     } catch (requestError) { setError(messageFrom(requestError)); }
     finally { setBusy(false); }
@@ -197,7 +197,7 @@ const PrepareWorkspace = (props: any) => <>
       <label className="text-sm font-medium">Description<input value={line.description} onChange={event => props.updateLine(line.id, { description: event.target.value })} maxLength={1024} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
       <label className="text-sm font-medium">Gross INR amount<input inputMode="decimal" value={line.claimed_amount} onChange={event => props.updateLine(line.id, { claimed_amount: event.target.value })} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3 text-right" /></label>
     </div>{props.lines.length > 1 && <button type="button" aria-label={`Remove expense ${index + 1}`} onClick={() => { props.setLines((current: ExpenseDraftLine[]) => current.filter(row => row.id !== line.id)); props.invalidatePrepared(); }} className="mt-4 min-h-11 rounded-lg px-3 text-red-700 hover:bg-red-50"><Trash2 className="mr-2 inline h-4 w-4" />Remove</button>}</fieldset>)}</div>
-    <div className="flex flex-wrap items-center justify-between gap-4 border-t p-5"><p className="text-lg font-semibold">Exact total: {props.total === null ? 'Invalid amount' : formatExactCurrency(props.total, 'Expense total')}</p><button type="button" onClick={() => void props.prepare()} disabled={props.busy || !props.total || props.context.expense_accounts.length === 0 || props.context.reimbursement_accounts.length === 0 || props.context.receipts.length === 0} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable preview</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-4 border-t p-5"><p className="text-lg font-semibold">Exact total: {props.total === null ? 'Invalid amount' : formatExactCurrency(props.total, 'Expense total')}</p><button type="button" onClick={() => void props.prepare()} disabled={props.busy || !props.total || !props.periodStart || !props.periodEnd || !props.reimbursementAccountId || props.context.expense_accounts.length === 0 || props.context.reimbursement_accounts.length === 0 || props.context.receipts.length === 0} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable preview</button></div>
   </section>}
   {props.prepared && <section className="rounded-xl border border-blue-200 bg-white p-5"><h2 className="text-lg font-semibold">Prepared — independent approval required</h2><p className="mt-1 text-sm text-slate-600">Nothing has posted. Give this command ID to a different authorized checker.</p><dl className="mt-4 grid gap-3 rounded-lg bg-blue-50 p-4 md:grid-cols-2"><div><dt className="text-xs uppercase text-slate-500">Command ID</dt><dd className="break-all font-mono text-sm">{props.prepared.command_request_id}</dd></div><div><dt className="text-xs uppercase text-slate-500">Exact claim</dt><dd className="font-semibold">{props.total && formatExactCurrency(props.total, 'Prepared expense total')}</dd></div><div className="md:col-span-2"><dt className="text-xs uppercase text-slate-500">Preview hash</dt><dd className="break-all font-mono text-xs">{props.prepared.preview_hash}</dd></div></dl></section>}
 </>;

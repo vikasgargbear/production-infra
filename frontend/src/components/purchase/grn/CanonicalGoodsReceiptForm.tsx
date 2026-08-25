@@ -314,6 +314,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
                         <label className="text-sm font-medium text-gray-700">
                           QC disposition
                           <select value={batch.qcStatus} onChange={event => updateBatch(index, batchIndex, { qcStatus: event.target.value })} className={inputClass}>
+                            <option value="">Select QC disposition</option>
                             <option value="accepted">Accepted</option>
                             <option value="partial">Partially accepted</option>
                           </select>
