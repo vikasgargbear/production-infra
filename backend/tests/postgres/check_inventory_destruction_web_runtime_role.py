@@ -25,7 +25,7 @@ AUTH_USER_ID = UUID("ed000000-0000-7000-8000-000000000004")
 def _readback_sql() -> str:
     return next(
         value
-        for value in web_operator_actions.inventory_destruction_readback.__code__.co_consts
+        for value in web_operator_actions.load_inventory_destruction_readback.__code__.co_consts
         if isinstance(value, str)
         and "FROM automation.command_requests AS command" in value
     )
