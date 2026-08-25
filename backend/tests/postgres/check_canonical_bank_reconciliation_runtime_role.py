@@ -18,7 +18,11 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.operator_actions.contract import ACTION_POLICIES
-from app.domain.operator_actions.models import ActionContext
+from app.domain.operator_actions.models import (
+    ActionContext,
+    ActionErrorCode,
+    OperatorActionError,
+)
 from app.infrastructure.operator_actions.service import SqlAlchemyOperatorActionService
 
 
@@ -243,8 +247,8 @@ def main() -> None:
                     idempotency_key="pg15-bank-partial-rejected",
                     context=_context(),
                 )
-            except DBAPIError:
-                pass
+            except OperatorActionError as error:
+                assert error.code is ActionErrorCode.VALIDATION_FAILED
             else:
                 raise AssertionError("partial bank reconciliation was accepted")
 
@@ -283,8 +287,8 @@ def main() -> None:
                     idempotency_key="pg15-bank-stale-source",
                     context=_context(),
                 )
-            except DBAPIError:
-                pass
+            except OperatorActionError as error:
+                assert error.code is ActionErrorCode.VALIDATION_FAILED
             else:
                 raise AssertionError("changed bank-account source version executed")
         finally:
