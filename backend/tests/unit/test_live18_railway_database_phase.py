@@ -552,6 +552,15 @@ def test_api_image_packages_every_import_time_live18_contract():
     ).read_text(encoding="utf-8")
     assert "COPY backend/ ." in dockerfile
     assert (
+        "COPY database/schema-authority.json "
+        "/app/database/schema-authority.json"
+    ) in dockerfile
+    assert (
+        "COPY database/canonical/domains/_contract.json "
+        "/app/database/canonical/domains/_contract.json"
+    ) in dockerfile
+    assert "RUN python scripts/canonical_migration_contract.py --print-head" in dockerfile
+    assert (
         "COPY docs/architecture/mcp-operator-actions.json "
         "/app/docs/architecture/mcp-operator-actions.json"
     ) in dockerfile

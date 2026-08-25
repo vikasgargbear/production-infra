@@ -11,9 +11,31 @@ from pathlib import Path
 import re
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-VERSIONS_ROOT = REPOSITORY_ROOT / "backend/alembic/versions"
-SQL_ROOT = REPOSITORY_ROOT / "backend/alembic/sql"
+@dataclass(frozen=True)
+class SourceLayout:
+    backend_root: Path
+    data_root: Path
+
+
+def _source_layout(script_path: Path) -> SourceLayout:
+    backend_root = script_path.resolve().parent.parent
+    checkout_root = backend_root.parent
+    checkout_authority = checkout_root / "database/schema-authority.json"
+    packaged_authority = backend_root / "database/schema-authority.json"
+    if checkout_authority.is_file():
+        data_root = checkout_root
+    elif packaged_authority.is_file():
+        data_root = backend_root
+    else:
+        data_root = checkout_root
+    return SourceLayout(backend_root=backend_root, data_root=data_root)
+
+
+SOURCE_LAYOUT = _source_layout(Path(__file__))
+BACKEND_ROOT = SOURCE_LAYOUT.backend_root
+REPOSITORY_ROOT = SOURCE_LAYOUT.data_root
+VERSIONS_ROOT = BACKEND_ROOT / "alembic/versions"
+SQL_ROOT = BACKEND_ROOT / "alembic/sql"
 AUTHORITY_PATH = REPOSITORY_ROOT / "database/schema-authority.json"
 DOMAIN_CONTRACT_PATH = REPOSITORY_ROOT / "database/canonical/domains/_contract.json"
 
@@ -105,7 +127,7 @@ def _required_files(revisions: tuple[Revision, ...]) -> tuple[str, ...]:
         if manifest.exists():
             required.append(manifest)
     return tuple(
-        path.relative_to(REPOSITORY_ROOT).as_posix()
+        (Path("backend") / path.relative_to(BACKEND_ROOT)).as_posix()
         for path in required
     )
 

@@ -14,8 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 COPY docs/architecture/mcp-operator-actions.json /app/docs/architecture/mcp-operator-actions.json
+COPY database/schema-authority.json /app/database/schema-authority.json
+COPY database/canonical/domains/_contract.json /app/database/canonical/domains/_contract.json
 COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
+RUN python scripts/canonical_migration_contract.py --print-head
 RUN python scripts/package_canonical_baseline_migration.py --verify-package
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \

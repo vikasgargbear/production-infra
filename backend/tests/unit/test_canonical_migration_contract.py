@@ -7,10 +7,34 @@ import re
 import subprocess
 import sys
 
-from scripts.canonical_migration_contract import load_contract
+from scripts.canonical_migration_contract import _source_layout, load_contract
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_source_layout_supports_checkout_and_flattened_runtime(tmp_path: Path) -> None:
+    checkout_script = tmp_path / "checkout/backend/scripts/contract.py"
+    checkout_authority = tmp_path / "checkout/database/schema-authority.json"
+    checkout_script.parent.mkdir(parents=True)
+    checkout_authority.parent.mkdir(parents=True)
+    checkout_script.touch()
+    checkout_authority.write_text("{}", encoding="utf-8")
+
+    checkout = _source_layout(checkout_script)
+    assert checkout.backend_root == tmp_path / "checkout/backend"
+    assert checkout.data_root == tmp_path / "checkout"
+
+    packaged_script = tmp_path / "image/scripts/contract.py"
+    packaged_authority = tmp_path / "image/database/schema-authority.json"
+    packaged_script.parent.mkdir(parents=True)
+    packaged_authority.parent.mkdir(parents=True)
+    packaged_script.touch()
+    packaged_authority.write_text("{}", encoding="utf-8")
+
+    packaged = _source_layout(packaged_script)
+    assert packaged.backend_root == tmp_path / "image"
+    assert packaged.data_root == tmp_path / "image"
 
 
 def test_canonical_migration_contract_is_linear_complete_and_declared() -> None:
