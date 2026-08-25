@@ -25,29 +25,11 @@ DOCUMENT_CONFIGS = {
         "column": "invoice_number",
         "id_column": "invoice_id"
     },
-    "purchase_order": {
-        "prefix": "PO",
-        "table": "procurement.purchase_orders",
-        "column": "po_number",
-        "id_column": "purchase_order_id"
-    },
     "grn": {
         "prefix": "GRN",
         "table": "procurement.goods_receipt_notes",
         "column": "grn_number",
         "id_column": "grn_id"
-    },
-    "supplier_invoice": {
-        "prefix": "PINV",
-        "table": "procurement.supplier_invoices",
-        "column": "supplier_invoice_number",
-        "id_column": "supplier_invoice_id"
-    },
-    "sales_order": {
-        "prefix": "SO",
-        "table": "sales.orders",
-        "column": "order_number",
-        "id_column": "order_id"
     },
     "delivery_challan": {
         "prefix": "DC",
@@ -78,19 +60,6 @@ DOCUMENT_CONFIGS = {
         "table": "financial.expense_claims",
         "column": "claim_number",
         "id_column": "claim_id"
-    },
-    # New document types added for service consolidation
-    "product": {
-        "prefix": "PROD",
-        "table": "inventory.products",
-        "column": "product_code",
-        "id_column": "product_id"
-    },
-    "batch": {
-        "prefix": "BATCH",
-        "table": "inventory.batches",
-        "column": "batch_number",
-        "id_column": "batch_id"
     },
     "supplier": {
         "prefix": "SUP",
@@ -179,11 +148,6 @@ class DocumentNumberService:
             logger.error(f"Error generating {document_type} number: {e}")
             raise ValueError(f"Failed to generate {document_type} number: {e}")
 
-    @staticmethod
-    def generate_batch_number(db: Session, org_id: str) -> str:
-        """Generate a tenant-scoped atomic batch reference."""
-        return DocumentNumberService.generate_number(db, "batch", org_id)
-    
     @staticmethod
     def validate_format(document_number: str, document_type: str) -> bool:
         """

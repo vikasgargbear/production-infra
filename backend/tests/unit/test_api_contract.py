@@ -138,7 +138,9 @@ def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
     request_schema = schema["components"]["schemas"]["SalesOrderCalculationRequest"]
     assert request_schema["properties"]["items"]["maxItems"] == 200
     entity_schema = schema["components"]["schemas"]["SalesOrderCalculationLine"]
-    assert any(option.get("format") == "uuid" for option in entity_schema["properties"]["product_id"]["anyOf"])
+    assert entity_schema["properties"]["product_id"]["format"] == "uuid"
+    assert "gst_percent" not in entity_schema["properties"]
+    assert "tax_percent" not in entity_schema["properties"]
     response_schema = operation["responses"]["200"]["content"][
         "application/json"
     ]["schema"]

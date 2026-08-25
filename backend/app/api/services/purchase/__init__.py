@@ -14,9 +14,6 @@ from .grn import GRNService, GRNRepository
 # Supplier Invoice operations
 from .supplier_invoice import SupplierInvoiceService
 
-# Purchase Order operations
-from .order import PurchaseOrderService, PurchaseOrderRepository
-
 # Shared utilities
 from .shared import PurchaseSharedRepository
 
@@ -32,10 +29,6 @@ __all__ = [
     
     # Supplier Invoice
     "SupplierInvoiceService",
-    
-    # Purchase Order
-    "PurchaseOrderService",
-    "PurchaseOrderRepository",
     
     # Shared
     "PurchaseSharedRepository",

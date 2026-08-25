@@ -51,6 +51,10 @@ from app.api.schemas.sales.returns import ReturnStatus as SchemaReturnStatus
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _read(relative_path: str) -> str:
+    return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+
+
 def _load_audit():
     audit_path = REPOSITORY_ROOT / "backend/scripts/audit/contract_consistency_audit.py"
     spec = importlib.util.spec_from_file_location("contract_consistency_audit", audit_path)
@@ -164,7 +168,8 @@ def test_standalone_document_number_reservation_source_is_retired():
     assert not (REPOSITORY_ROOT / "backend/app/api/routes/documents.py").exists()
     assert not hasattr(DocumentNumberService, "reserve_number")
     for relative_path, function_name in retired_route_functions.items():
-        source = (REPOSITORY_ROOT / relative_path).read_text()
+        path = REPOSITORY_ROOT / relative_path
+        source = path.read_text() if path.exists() else ""
         assert f"def {function_name}(" not in source
 
 
@@ -355,9 +360,29 @@ def test_consistency_audit_keeps_unresolved_contracts_release_visible():
     assert "DOCUMENT_NUMBER_RESERVATION_NOT_COMMITTED" not in codes
     assert "DOCUMENT_NUMBER_RESERVATION_IDEMPOTENCY_UNBASELINED" not in codes
     assert "DIVERGENT_ENUM_CONTRACTS" not in codes
-    assert "CLIENT_SUPPLIED_GST_RATE_AUTHORITY" in codes
+    assert "CLIENT_SUPPLIED_GST_RATE_AUTHORITY" not in codes
     assert "MISSING_BRANCH_SCOPE_FAILS_OPEN" not in codes
     assert "TENANT_KEY_WIRE_CONTRACT_DIVERGENCE" not in codes
     assert "MONEY_RESPONSE_FLOAT_SERIALIZATION" not in codes
     assert "NAIVE_TIMESTAMP_SERIALIZATION" not in codes
     assert "UNTYPED_MUTATION_RESPONSE_CONTRACTS" not in codes
+
+
+def test_sales_tax_authority_is_effective_dated_and_not_browser_owned():
+    schemas = _read("backend/app/api/schemas/calculations.py")
+    routes = _read("backend/app/api/routes/calculations.py")
+    authority = _read("backend/app/api/services/sales/tax_authority.py")
+    calculator = _read("backend/app/api/services/sales/calculation.py")
+    canonical_line = schemas.split(
+        "class CanonicalSalesCalculationLine", 1
+    )[1].split("class InvoiceCalculationRequest", 1)[0]
+
+    assert "gst_percent" not in canonical_line
+    assert "tax_percent" not in canonical_line
+    assert "resolve_sales_tax_authority" in routes
+    assert "authority.lines" in routes
+    assert 'item["resolved_gst_percent"]' in calculator
+    assert "tax.tax_code_versions" in authority
+    assert "core.reference_data_releases" in authority
+    assert "version.effective_from<=:document_date" in authority
+    assert "release.dataset_kind='hsn_sac_tax'" in authority

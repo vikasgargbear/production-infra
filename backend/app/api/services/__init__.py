@@ -11,12 +11,10 @@ Organized by domain:
 - settings/:  Settings services
 - email/:     Email services
 
-Note: InvoiceService temporarily disabled - requires type schema refactoring
+Legacy sales/master write services are retired; reviewed commands own writes.
 """
 # Domain-organized services
-from .sales.order.order_service import OrderService
 from .returns.return_calculation import ReturnCalculator
-from .master.product.service import ProductService
 from .master.customer.service import CustomerService
 from .finance.payment.service import PaymentService
 from .finance.adjustment_note_calculation import AdjustmentNoteCalculator
@@ -29,12 +27,9 @@ from .dashboard_service import DashboardService
 from .compliance.gst_service import GSTService  # Moved to compliance/
 
 __all__ = [
-    # Sales
-    "OrderService",
     "ReturnCalculator",
     # Master
     "CustomerService",
-    "ProductService",
     # Finance
     "PaymentService",
     "AdjustmentNoteCalculator",

@@ -7,11 +7,21 @@ import pytest
 from app.api.services.compliance.gst_service import GSTService
 from app.api.services.purchase.calculations import PurchaseCalculator
 from app.api.services.returns.return_calculation import ReturnCalculator
-from app.api.services.sales.invoice.invoice_service import InvoiceService
-from app.api.services.sales.order.order_repository import OrderRepository
-from app.api.services.sales.order.order_service import OrderService
+from app.api.services.sales.calculation import calculate_sales_totals
 from app.api.shared.calculations import calculate_line_item
 from app.core.money import money, rupees
+
+
+def _sales_totals(items, gst_type="CGST/SGST", **kwargs):
+    """Test helper that models rates after server authority has resolved them."""
+    resolved = [
+        {
+            **item,
+            "resolved_gst_percent": item.get("gst_percent", 0),
+        }
+        for item in items
+    ]
+    return calculate_sales_totals(resolved, gst_type, **kwargs)
 
 
 class _ScalarResult:
@@ -89,7 +99,7 @@ def test_line_item_rejects_invalid_business_values():
 
 
 def test_invoice_discount_is_apportioned_before_gst_with_no_residual_drift():
-    result = InvoiceService.calculate_invoice_totals(
+    result = _sales_totals(
         items=[
             {
                 "quantity": 2,
@@ -121,7 +131,7 @@ def test_invoice_discount_is_apportioned_before_gst_with_no_residual_drift():
 
 
 def test_invoice_ignores_client_supplied_calculated_amounts():
-    result = InvoiceService.calculate_invoice_totals(
+    result = _sales_totals(
         items=[{
             "quantity": 1,
             "unit_price": 100,
@@ -141,7 +151,7 @@ def test_invoice_ignores_client_supplied_calculated_amounts():
 
 def test_fixed_discount_cannot_make_taxable_amount_negative():
     with pytest.raises(ValueError, match="cannot exceed"):
-        InvoiceService.calculate_invoice_totals(
+        _sales_totals(
             items=[{
                 "quantity": 1,
                 "unit_price": 100,
@@ -163,11 +173,11 @@ def test_fixed_discount_cannot_make_taxable_amount_negative():
 )
 def test_invoice_rejects_invalid_document_shapes(items, kwargs, error):
     with pytest.raises(ValueError, match=error):
-        InvoiceService.calculate_invoice_totals(items=items, **kwargs)
+        _sales_totals(items=items, **kwargs)
 
 
 def test_invoice_accepts_string_document_discounts_from_json_payloads():
-    result = InvoiceService.calculate_invoice_totals(
+    result = _sales_totals(
         items=[{"quantity": "2", "unit_price": "100", "gst_percent": "18"}],
         gst_type="IGST",
         discount_type="percentage",
@@ -177,112 +187,6 @@ def test_invoice_accepts_string_document_discounts_from_json_payloads():
     assert result["scheme_discount"] == 25.0
     assert result["taxable_amount"] == 175.0
     assert result["igst_amount"] == 31.5
-
-
-def test_invoice_preview_response_is_strict_and_serializes_frontend_numbers():
-    from pydantic import ValidationError
-    from app.api.routes.calculations import _preview_response
-    from app.api.schemas.calculations import (
-        CalculationLine,
-        InvoiceCalculationPreviewResponse,
-    )
-
-    result = InvoiceService.calculate_invoice_totals(
-        items=[{
-            "product_id": "d3000000-0000-7000-8000-000000000001",
-            "quantity": "1", "free_quantity": "1", "unit_price": "100",
-            "gst_percent": "18",
-            "free_supply_tax_treatment": "included_at_unit_rate",
-        }],
-        gst_type="IGST",
-    )
-    source_lines = [CalculationLine.model_validate({
-        "product_id": "d3000000-0000-7000-8000-000000000001",
-        "quantity": "1", "free_quantity": "1", "unit_price": "100",
-        "gst_percent": "18",
-        "free_supply_tax_treatment": "included_at_unit_rate",
-    })]
-    response = _preview_response(
-        result, "IGST", InvoiceCalculationPreviewResponse, source_lines
-    )
-    body = response.model_dump(mode="json")
-    assert body["line_items"][0]["line_total"] == "236.0"
-    assert body["totals"]["final_amount"] == "236.0"
-    assert body["line_items"][0]["product_id"] == (
-        "d3000000-0000-7000-8000-000000000001"
-    )
-    assert body["line_items"][0]["free_supply_tax_treatment"] == (
-        "included_at_unit_rate"
-    )
-
-    invalid = dict(result)
-    invalid["calculated_items"] = [
-        {**result["calculated_items"][0], "client_total": 1}
-    ]
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        _preview_response(
-            invalid, "IGST", InvoiceCalculationPreviewResponse, source_lines
-        )
-
-
-@pytest.mark.parametrize(
-    "free_supply_tax_treatment,expected_subtotal,expected_tax,expected_total",
-    [
-        ("included_at_unit_rate", 300.0, 54.0, 354.0),
-        ("excluded_from_taxable_value", 200.0, 36.0, 236.0),
-    ],
-)
-def test_invoice_mixed_billed_and_free_treatment_matches_preview_contract(
-    free_supply_tax_treatment,
-    expected_subtotal,
-    expected_tax,
-    expected_total,
-):
-    from app.api.routes.calculations import _preview_response
-    from app.api.schemas.calculations import (
-        InvoiceCalculationPreviewResponse,
-        InvoiceCalculationRequest,
-    )
-
-    request = InvoiceCalculationRequest.model_validate({
-        "customer_id": "d3000000-0000-7000-8000-000000000001",
-        "gst_type": "IGST",
-        "items": [{
-            "product_id": "d3000000-0000-7000-8000-000000000002",
-            "quantity": "2",
-            "free_quantity": "1",
-            "free_supply_tax_treatment": free_supply_tax_treatment,
-            "unit_price": "100",
-            "gst_percent": "18",
-        }],
-    })
-    totals = InvoiceService.calculate_invoice_totals(
-        items=[item.model_dump() for item in request.items],
-        gst_type=request.gst_type,
-    )
-    response = _preview_response(
-        totals,
-        request.gst_type,
-        InvoiceCalculationPreviewResponse,
-        request.items,
-    )
-    body = response.model_dump(mode="json")
-
-    line = body["line_items"][0]
-    assert line["product_id"] == "d3000000-0000-7000-8000-000000000002"
-    assert line["quantity"] == "2.0"
-    assert line["free_quantity"] == "1.0"
-    assert line["free_supply_tax_treatment"] == free_supply_tax_treatment
-    assert line["subtotal"] == str(expected_subtotal)
-    assert line["taxable_amount"] == str(expected_subtotal)
-    assert line["igst_amount"] == str(expected_tax)
-    assert line["total_tax_amount"] == str(expected_tax)
-    assert line["line_total"] == str(expected_total)
-    assert body["totals"]["subtotal_amount"] == str(expected_subtotal)
-    assert body["totals"]["taxable_amount"] == str(expected_subtotal)
-    assert body["totals"]["igst_amount"] == str(expected_tax)
-    assert body["totals"]["total_tax_amount"] == str(expected_tax)
-    assert body["totals"]["final_amount"] == str(expected_total)
 
 
 def test_line_calculation_matrix_covers_prices_quantities_discounts_and_gst():
@@ -335,10 +239,10 @@ def test_multi_item_invoice_matrix_reconciles_every_header_and_line_total():
                     "gst_percent": rng.choice(gst_rates),
                 })
 
-            preliminary = InvoiceService.calculate_invoice_totals(items=items, gst_type=gst_type)
+            preliminary = _sales_totals(items=items, gst_type=gst_type)
             discount_ceiling = Decimal(str(preliminary["taxable_amount"]))
             document_discount = money(discount_ceiling * Decimal(rng.randint(0, 100)) / Decimal("100"))
-            result = InvoiceService.calculate_invoice_totals(
+            result = _sales_totals(
                 items=items,
                 gst_type=gst_type,
                 discount_type="fixed",
@@ -470,27 +374,3 @@ def test_return_matrix_reconciles_paid_and_free_quantities():
 def test_purchase_and_return_calculators_fail_closed(calculator, args, error):
     with pytest.raises(ValueError, match=error):
         calculator(*args)
-
-
-def test_sales_order_persists_canonical_invoice_line_calculations(monkeypatch):
-    items = [{
-        "product_id": 1,
-        "quantity": 2,
-        "free_quantity": 1,
-        "unit_price": 100,
-        "discount_percent": 10,
-        "gst_percent": 18,
-    }]
-    totals = InvoiceService.calculate_invoice_totals(items, "IGST")
-    monkeypatch.setattr(
-        OrderRepository,
-        "get_products_and_batches",
-        lambda *args: ({1: {"product_name": "Test"}}, {}, {}),
-    )
-
-    prepared = OrderService._prepare_order_items(None, "org-a", 10, items, totals)
-
-    assert prepared[0]["taxable_amount"] == 180.0
-    assert prepared[0]["igst_amount"] == 32.4
-    assert prepared[0]["total_tax_amount"] == 32.4
-    assert prepared[0]["line_total"] == 212.4

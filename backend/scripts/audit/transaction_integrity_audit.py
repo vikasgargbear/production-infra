@@ -44,20 +44,23 @@ def collect_issues() -> List[IntegrityIssue]:
         sale_function = sales_trigger.split(
             "CREATE OR REPLACE FUNCTION update_inventory_on_sale()", 1
         )[1].split("$$ LANGUAGE plpgsql;", 1)[0]
-    invoice_service = _read("backend/app/api/services/sales/invoice/invoice_service.py")
-    if (
-        "InventoryService.bulk_update_batch_quantities" in invoice_service
-        and "InventoryService.bulk_insert_movements" in invoice_service
-        and sale_function
-        and (
-            "UPDATE inventory.batches" in sale_function
-            or "UPDATE inventory.location_wise_stock" in sale_function
-            or "INSERT INTO inventory.inventory_movements" in sale_function
-        )
+    legacy_invoice_service = (
+        REPOSITORY_ROOT
+        / "backend/app/api/services/sales/invoice/invoice_service.py"
+    )
+    if legacy_invoice_service.exists():
+        issues.append(IntegrityIssue(
+            "LEGACY_INVOICE_WRITE_AUTHORITY",
+            "retired InvoiceService still competes with reviewed canonical sales commands",
+        ))
+    if sale_function and (
+        "UPDATE inventory.batches" in sale_function
+        or "UPDATE inventory.location_wise_stock" in sale_function
+        or "INSERT INTO inventory.inventory_movements" in sale_function
     ):
         issues.append(IntegrityIssue(
-            "INVOICE_STOCK_OWNERSHIP_CONFLICT",
-            "invoice creation and update_inventory_on_sale both mutate stock and write movements",
+            "INVOICE_STOCK_TRIGGER_AUTHORITY",
+            "legacy sale trigger still competes with reviewed canonical sales commands",
         ))
 
     payment_routes = _read("backend/app/api/routes/finance/payments/routes.py")

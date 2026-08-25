@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -11,7 +12,9 @@ from app.api.schemas.calculations import (
 
 def _request(**overrides):
     values = {
+        "branch_id": uuid4(),
         "customer_id": uuid4(),
+        "document_date": date(2026, 8, 25),
         "items": [{
             "product_id": uuid4(),
             "quantity": 1,
@@ -35,14 +38,14 @@ def test_sales_order_preview_accepts_canonical_customer_product_and_batch_ids():
     batch_id = uuid4()
 
     request = SalesOrderCalculationRequest.model_validate({
+        "branch_id": uuid4(),
         "customer_id": customer_id,
-        "gst_type": "CGST/SGST",
+        "order_date": date(2026, 8, 25),
         "items": [{
             "product_id": product_id,
             "batch_id": batch_id,
             "quantity": 1,
             "unit_price": 100,
-            "tax_percent": 12,
         }],
     })
 
@@ -51,14 +54,12 @@ def test_sales_order_preview_accepts_canonical_customer_product_and_batch_ids():
     assert request.items[0].batch_id == batch_id
 
 
-def test_invoice_preview_keeps_legacy_positive_integer_ids():
-    request = _request(
-        customer_id=7,
-        items=[{"product_id": 8, "quantity": 1, "unit_price": 150}],
-    )
-
-    assert request.customer_id == 7
-    assert request.items[0].product_id == 8
+def test_invoice_preview_rejects_legacy_positive_integer_ids():
+    with pytest.raises(ValidationError):
+        _request(
+            customer_id=7,
+            items=[{"product_id": 8, "quantity": 1, "unit_price": 150}],
+        )
 
 
 @pytest.mark.parametrize("field", ["customer_id", "product_id"])

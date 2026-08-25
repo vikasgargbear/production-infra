@@ -8,12 +8,9 @@ import logging
 from datetime import datetime, date
 import os
 import tempfile
-from ....services.document_number_service import DocumentNumberService
 from ....services.purchase.upload.service import UploadService
-from ....services.master.product.service import ProductService
 from decimal import Decimal
 
-from .....core.utils.constants import ProductDefaults, PackDefaults
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
@@ -241,82 +238,6 @@ async def parse_purchase_invoice_safe(
     except Exception as e:
         logger.error(f"Error in parse_invoice_safe: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to process invoice")
-
-
-@router.post("/create-from-parsed")
-@with_tenant_context
-async def create_purchase_from_parsed(
-    purchase_data: dict,
-    _: dict = Depends(PermissionChecker("purchase", "create")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Create purchase order from parsed/verified invoice data"""
-    try:
-        supplier_id = purchase_data.get("supplier_id")
-        if not supplier_id:
-            supplier_data = purchase_data.get("supplier", {})
-            if not supplier_data.get("supplier_name"):
-                raise HTTPException(status_code=400, detail="Supplier name is required")
-            supplier_code = DocumentNumberService.generate_number(db, "supplier", str(context.org_id))
-            supplier_id = UploadService.create_supplier(db, {
-                "org_id": str(context.org_id), "code": supplier_code,
-                "name": supplier_data.get("supplier_name"),
-                "gstin": supplier_data.get("supplier_gstin", supplier_data.get("gst_number")),
-                "address": supplier_data.get("supplier_address", supplier_data.get("address")),
-                "phone": supplier_data.get("phone", ""), "email": supplier_data.get("email", ""),
-                "drug_license": supplier_data.get("drug_license_number", supplier_data.get("drug_license", ""))
-            })
-        
-        purchase_number = DocumentNumberService.generate_number(db, "purchase_order", str(context.org_id))
-        purchase_id = UploadService.create_purchase_order(db, {
-            "org_id": str(context.org_id), "branch_id": context.branch_id or context.primary_branch_id,
-            "purchase_number": purchase_number, "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
-            "supplier_id": supplier_id, "invoice_number": purchase_data.get("invoice_number"),
-            "subtotal": Decimal(str(purchase_data.get("subtotal", 0))),
-            "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
-            "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
-            "other_charges": Decimal(str(purchase_data.get("other_charges", 0))),
-            "total": Decimal(str(purchase_data.get("grand_total", 0)))
-        })
-        
-        items_created = 0
-        for item in purchase_data.get("items", []):
-            product_id = item.get("product_id")
-            if not product_id and item.get("create_product", False):
-                product_id = ProductService.get_or_create_product(
-                    db=db,
-                    org_id=str(context.org_id),
-                    product_name=item.get("description", "Unknown Product"),
-                    hsn_code=item.get("hsn_code"),
-                    user_id=getattr(context, 'user_id', None),
-                    gst_percent=float(item.get("tax_percent", ProductDefaults.DEFAULT_GST_PERCENT))
-                )
-            
-            if product_id:
-                UploadService.create_purchase_order_item(db, {
-                    "purchase_order_id": purchase_id, "product_id": product_id,
-                    "product_name": item.get("description"), "quantity": item.get("quantity", 0),
-                    "unit_price": Decimal(str(item.get("rate", 0))), "mrp": Decimal(str(item.get("mrp", 0))),
-                    "discount_percent": Decimal(str(item.get("discount_percent", 0))),
-                    "discount_amount": Decimal(str(item.get("discount_amount", 0))),
-                    "tax_percent": Decimal(str(item.get("tax_percent", ProductDefaults.DEFAULT_GST_PERCENT))),
-                    "tax_amount": Decimal(str(item.get("tax_amount", 0))),
-                    "line_total": Decimal(str(item.get("amount", 0))),
-                    "batch_number": item.get("batch_number"), "expiry_date": item.get("expiry_date"),
-                    "uom": item.get("unit", ProductDefaults.DEFAULT_BASE_UOM), "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE)
-                })
-                items_created += 1
-        
-        return {"status": "success", "purchase_id": purchase_id, "purchase_number": purchase_number,
-                "items_created": items_created, "message": f"Purchase order {purchase_number} created successfully"}
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error creating purchase: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to create purchase order")
 
 
 @router.get("/parse-history")

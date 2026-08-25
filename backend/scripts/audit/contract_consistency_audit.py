@@ -649,27 +649,52 @@ def collect_issues() -> List[ConsistencyIssue]:
             + "; ".join(divergent_enums),
         ))
 
-    invoice_service = _read("backend/app/api/services/sales/invoice/invoice_service.py")
-    order_service = _read("backend/app/api/services/sales/order/order_service.py")
-    invoice_repository = _read("backend/app/api/services/sales/invoice/invoice_repository.py")
-    product_service = _read("backend/app/api/services/master/product/service.py")
-    product_ddl = _read("database/02-tables/03_inventory_tables.sql")
-    gst_ddl = _read("database/02-tables/07_gst_tables.sql")
+    legacy_sales_authorities = (
+        "backend/app/api/services/sales/invoice/invoice_service.py",
+        "backend/app/api/services/sales/order/order_service.py",
+        "backend/app/api/services/master/product/service.py",
+        "backend/app/api/routes/sales/invoices/routes.py",
+        "backend/app/api/routes/sales/orders/routes.py",
+        "backend/app/api/routes/master/products/routes.py",
+    )
+    calculation_routes = _read("backend/app/api/routes/calculations.py")
+    calculation_schemas = _read("backend/app/api/schemas/calculations.py")
+    tax_authority = _read("backend/app/api/services/sales/tax_authority.py")
+    sales_calculation = _read("backend/app/api/services/sales/calculation.py")
+    canonical_commands = _read(
+        "database/canonical/commands_automation/generate_automation_commands.py"
+    )
+    canonical_line = calculation_schemas.split(
+        "class CanonicalSalesCalculationLine", 1
+    )[1].split("class InvoiceCalculationRequest", 1)[0]
     if (
-        "item.get('gst_percent', 0)" in invoice_service
-        and 'item_data.get("tax_percent", 0)' in order_service
-        and "SELECT product_id, product_name, hsn_code" in invoice_repository
-        and "p.gst_percent" in product_service
-        and "gst_percentage NUMERIC" in product_ddl
-        and "effective_from DATE" in gst_ddl
+        any((REPOSITORY_ROOT / path).exists() for path in legacy_sales_authorities)
+        or "gst_percent" in canonical_line
+        or "tax_percent" in canonical_line
+        or any(token not in calculation_routes for token in (
+            "resolve_sales_tax_authority", "calculate_sales_totals", "authority.lines",
+        ))
+        or any(token not in tax_authority for token in (
+            "tax.tax_code_versions",
+            "core.reference_data_releases",
+            "version.effective_from<=:document_date",
+            "release.dataset_kind='hsn_sac_tax'",
+            "release.status='active'",
+        ))
+        or any(token not in sales_calculation for token in (
+            'item["resolved_gst_percent"]', '"resolved_gst_percent"',
+        ))
+        or any(token not in canonical_commands for token in (
+            "tax.tax_code_versions AS tax_version",
+            "core.reference_data_releases AS tax_release",
+            "tax_version.effective_from<=order_date",
+            "tax_release.dataset_kind='hsn_sac_tax'",
+        ))
     ):
         issues.append(ConsistencyIssue(
             "CLIENT_SUPPLIED_GST_RATE_AUTHORITY",
-            "invoice_service.py:568 and order_service.py:45 trust request GST rates; "
-            "invoice_repository.py:275 omits an authoritative rate; product_service.py:678 "
-            "queries gst_percent while 03_inventory_tables.sql:135 defines gst_percentage "
-            "and 07_gst_tables.sql:24-26 defines versioned HSN rates. Commit-time tax needs "
-            "a baselined product/HSN authority plus permissioned, reasoned overrides",
+            "sales preview or canonical command no longer proves exact effective-dated "
+            "HSN tax authority, or a retired request-owned GST service was reintroduced",
         ))
 
     org_context = _read("backend/app/core/auth/org_context.py")

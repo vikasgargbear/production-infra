@@ -82,9 +82,13 @@ def test_preview_calculators_do_not_import_legacy_return_persistence() -> None:
 
 
 def test_retired_credit_note_service_has_no_invoice_cancellation_fallback() -> None:
-    invoice_routes = (
-        ROOT / "backend/app/api/routes/sales/invoices/routes.py"
+    invoice_routes = ROOT / "backend/app/api/routes/sales/invoices/routes.py"
+    command_authority = (
+        ROOT / "database/canonical/commands_automation/generate_automation_commands.py"
     ).read_text()
-    assert "CreditNoteService" not in invoice_routes
-    assert "services.finance.credit_note" not in invoice_routes
-    assert "canonical adjustment-note prepare, approve, and execute flow" in invoice_routes
+
+    assert not invoice_routes.exists()
+    assert "finance.adjustment_note.prepare" in command_authority
+    assert "resolve_adjustment_note_prepare" in command_authority
+    assert "CreditNoteService" not in command_authority
+    assert "services.finance.credit_note" not in command_authority

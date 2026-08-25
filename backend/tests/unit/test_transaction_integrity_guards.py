@@ -39,18 +39,24 @@ def test_stock_movement_has_one_balance_mutation_owner():
 
 
 def test_invoice_stock_has_one_application_owner():
-    service = _read("backend/app/api/services/sales/invoice/invoice_service.py")
+    legacy_service = (
+        REPOSITORY_ROOT / "backend/app/api/services/sales/invoice/invoice_service.py"
+    )
     triggers = _read("database/04-triggers/11_core_operations_triggers.sql")
+    commands = _read(
+        "database/canonical/commands_automation/generate_automation_commands.py"
+    )
 
-    assert "InventoryService.bulk_update_batch_quantities" in service
-    assert "InventoryService.bulk_insert_movements" in service
-    assert "def cancel_invoice" in service
-    assert "UPDATE inventory.batches" in _method_source(service, "cancel_invoice")
-    assert "UPDATE inventory.location_wise_stock" in _method_source(service, "cancel_invoice")
+    assert not legacy_service.exists()
     assert "CREATE OR REPLACE FUNCTION update_inventory_on_sale()" not in triggers
     assert "trigger_inventory_update_on_sale" not in triggers
     assert "trigger_inventory_update_on_cancellation" not in triggers
-    assert "Invoice creation and cancellation mutate inventory in InvoiceService" in triggers
+    assert '"persist_sales_invoice_prepare"' in commands
+    assert "inventory.stock_ledger_entries" in commands
+    assert "inventory.stock_balances" in commands
+    assert "finance.accounting_events" in commands
+    assert "tax_classification_code_snapshot" in commands
+    assert "tax_code_version_id" in commands
 
 
 def test_stock_out_decision_locks_the_tenant_batch():
@@ -90,12 +96,15 @@ def test_invoice_batch_deduction_is_atomic_and_cannot_go_negative():
     assert "insufficient or inaccessible stock" in method
 
 
-def test_invoice_stock_ledgers_use_total_physical_quantity_including_free_units():
-    source = _read("backend/app/api/services/sales/invoice/invoice_service.py")
-    creation = _method_source(source, "create_invoice_with_items")
+def test_canonical_invoice_command_owns_billed_and_free_quantity():
+    commands = _read(
+        "database/canonical/commands_automation/generate_automation_commands.py"
+    )
 
-    assert '"quantity": item_data["quantity"]' in creation
-    assert '"base_quantity": item_data["quantity"]' in creation
+    assert "base_billed_quantity" in commands
+    assert "base_free_quantity" in commands
+    assert "(allocation->>'base_billed_quantity')::numeric+" in commands
+    assert "(allocation->>'base_free_quantity')::numeric" in commands
 
 
 def test_location_stock_out_is_locked_and_guarded_against_negative_balance():

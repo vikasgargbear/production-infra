@@ -23,7 +23,6 @@ from app.api.schemas.calculations import (
 )
 from app.api.services.purchase.calculations import PurchaseCalculator
 from app.api.services.sales.challan.service import ChallanService
-from app.api.services.sales.invoice.invoice_service import InvoiceService
 from app.main import app
 
 
@@ -220,19 +219,8 @@ async def test_purchase_challan_return_and_note_wire_values_are_exact_strings():
     assert note["totals"]["subtotal_amount"] == "9007199254740993.00"
 
 
-def test_legacy_calculation_service_defaults_remain_float_compatible():
+def test_remaining_legacy_calculation_defaults_remain_float_compatible():
     item = _line(quantity="1", unit_price="100")
-    exact_invoice = InvoiceService.calculate_invoice_totals(
-        [item], "IGST", exact_output=True
-    )
-    legacy_invoice = InvoiceService.calculate_invoice_totals([item], "IGST")
-    assert exact_invoice.keys() == legacy_invoice.keys()
-    assert exact_invoice["calculated_items"][0].keys() == (
-        legacy_invoice["calculated_items"][0].keys()
-    )
-    assert isinstance(exact_invoice["final_amount"], Decimal)
-    assert isinstance(legacy_invoice["final_amount"], float)
-
     exact_challan = ChallanService.calculate_challan_totals(
         [item], "IGST", exact_output=True
     )
