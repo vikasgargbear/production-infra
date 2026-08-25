@@ -67,4 +67,6 @@ def test_staging_workflow_only_verifies_migrated_definitions() -> None:
     assert "CREATE OR REPLACE FUNCTION" not in verification
     assert "reconciliation_sql" not in verification
     assert "--single-transaction" not in verification
-    assert "Alembic head did not install every reviewed definition" in verification
+    assert "failed_definitions=$(jq -r" in verification
+    assert "select(.value != true) | .key" in verification
+    assert "Alembic head verification failed for: $failed_definitions" in verification

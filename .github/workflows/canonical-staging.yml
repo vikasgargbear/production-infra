@@ -627,7 +627,15 @@ jobs:
           if ! jq -e \
             '([.. | objects | select(has("core_current"))]) as $rows | ($rows | length) == 1 and ($rows[0] | to_entries | all(.value == true))' \
             "$definition_state" >/dev/null; then
-            echo "::error title=Canonical definition verification failed::Alembic head did not install every reviewed definition"
+            failed_definitions=$(jq -r \
+              '([.. | objects | select(has("core_current"))]) as $rows |
+               if ($rows | length) != 1 then
+                 "unexpected-definition-row-count=" + (($rows | length) | tostring)
+               else
+                 [$rows[0] | to_entries[] | select(.value != true) | .key] | join(",")
+               end' \
+              "$definition_state")
+            echo "::error title=Canonical definition verification failed::Alembic head verification failed for: $failed_definitions"
             exit 1
           fi
           echo "Control plane verified Alembic-owned command definitions are current"
