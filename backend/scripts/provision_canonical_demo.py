@@ -47,6 +47,10 @@ GSTR1_REPORTING_SOURCE_SHA256 = (
 GSTR1_REPORTING_SOURCE_PUBLICATION_DATE = date(2025, 12, 29)
 GSTR1_REPORTING_EFFECTIVE_FROM = date(2017, 7, 1)
 GSTR1_REPORTING_RULESET_VERSION = "gstn-returns-offline-tool-2025-12-29"
+ITC_REVERSAL_SOURCE_URI = "https://cbic-gst.gov.in/pdf/CGST-Act-2017-amended-01012022.pdf"
+ITC_REVERSAL_SOURCE_PUBLICATION_DATE = date(2022, 1, 1)
+ITC_REVERSAL_EFFECTIVE_FROM = date(2017, 7, 1)
+ITC_REVERSAL_RULESET_VERSION = "cgst-act-section-17-5-h-2022-01-01"
 CLIENT_ID = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "").strip()
 
 IDS = {
@@ -208,6 +212,7 @@ REQUIRED_PERMISSIONS = (
     "finance.journal.post",
     "inventory.adjustment.create",
     "inventory.transfer.create",
+    "inventory.destruction.create",
     "inventory.document.post",
     "inventory.batch.manage",
     "inventory.location.manage",
@@ -216,6 +221,7 @@ REQUIRED_PERMISSIONS = (
     "parties.supplier.manage",
     "finance.payment.manage",
     "tax.registration.manage",
+    "compliance.destruction.manage",
     "automation.command.approve",
     "automation.command.execute",
     "automation.command.view",
@@ -238,6 +244,7 @@ PREPARE_CAPABILITIES = (
     ("finance.adjustment_note.prepare", "separate_approver"),
     ("inventory.adjustment.prepare", "separate_approver"),
     ("inventory.transfer.prepare", "actor_confirmation"),
+    ("inventory.destruction.prepare", "separate_approver"),
 )
 
 CALCULATION_TOTAL_FIELDS = (
@@ -345,6 +352,18 @@ def demo_ui_fixture_uuid(label: str) -> str:
     )
 
 
+for resource_key in (
+    "destruction_loss_account",
+    "destruction_certificate_evidence",
+    "destruction_itc_reversal_evidence",
+    "destruction_itc_rule_release",
+    "destruction_itc_rule_version",
+    "destruction_return_period",
+    "destruction_gstr3b_return",
+):
+    IDS[resource_key] = demo_ui_fixture_uuid(resource_key)
+
+
 def assert_target() -> None:
     if required("CANONICAL_DEMO_WRITE_ACK") != "PROVISION_DISPOSABLE_DEMO":
         raise RuntimeError("canonical demo write acknowledgement is absent")
@@ -413,6 +432,33 @@ def fetch_adjustment_source(evidence_dir: Path) -> bytes:
     if any(fragment.casefold() not in text.casefold() for fragment in required_fragments):
         raise RuntimeError("GST Council return authority lacks reviewed Section 34 fragments")
     (evidence_dir / "gst-council-return-of-goods-faq.pdf").write_bytes(source)
+    return source
+
+
+def fetch_itc_reversal_source(evidence_dir: Path) -> bytes:
+    """Fetch and attest the official CGST Act Section 17(5)(h) source."""
+
+    response = requests.get(
+        ITC_REVERSAL_SOURCE_URI,
+        timeout=60,
+        headers={"User-Agent": "AasoPharma canonical staging evidence/1.0"},
+    )
+    response.raise_for_status()
+    source = response.content
+    if not 10_000 <= len(source) <= 100 * 1024 * 1024 or not source.startswith(b"%PDF"):
+        raise RuntimeError("CBIC Section 17(5)(h) source has an unexpected envelope")
+    with pdfplumber.open(BytesIO(source)) as document:
+        text = re.sub(
+            r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages)
+        )
+    required_fragments = (
+        "CHAPTER V INPUT TAX CREDIT",
+        "goods lost, stolen, destroyed, written off",
+        "disposed of by way of gift or free samples",
+    )
+    if any(fragment.casefold() not in text.casefold() for fragment in required_fragments):
+        raise RuntimeError("CBIC Act source lacks reviewed Section 17(5)(h) fragments")
+    (evidence_dir / "cbic-cgst-act-section-17-5-h.pdf").write_bytes(source)
     return source
 
 
@@ -980,6 +1026,70 @@ def import_adjustment_release(
         )
         if cursor.fetchone() != (IDS["adjustment_rule_release"],):
             raise RuntimeError("GST adjustment importer returned an unexpected release")
+
+
+def itc_reversal_dataset_bytes(connection) -> bytes:
+    dataset = [{
+        "id": IDS["destruction_itc_rule_version"],
+        "rule_code": "CGST_SECTION_17_5_H_GOODS_DESTROYED",
+        "rule_version": ITC_REVERSAL_RULESET_VERSION,
+        "legal_section": "17(5)(h)",
+        "event_kind": "goods_destroyed",
+        "gstr3b_table_code": "4",
+        "gstr3b_row_code": "B(1)",
+        "effective_from": ITC_REVERSAL_EFFECTIVE_FROM.isoformat(),
+        "effective_to": "",
+    }]
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT %s::jsonb::text", (json.dumps(dataset),))
+        return cursor.fetchone()[0].encode("utf-8")
+
+
+def demo_itc_reversal_release_exists(connection) -> bool:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT count(*)
+              FROM tax.itc_reversal_rule_versions rule
+              JOIN core.reference_data_releases release ON release.id=rule.release_id
+             WHERE release.id=%s AND rule.id=%s AND release.status='active'
+               AND rule.status='active' AND rule.legal_section='17(5)(h)'
+               AND rule.event_kind='goods_destroyed'
+               AND rule.gstr3b_table_code='4' AND rule.gstr3b_row_code='B(1)'
+            """,
+            (IDS["destruction_itc_rule_release"], IDS["destruction_itc_rule_version"]),
+        )
+        count = cursor.fetchone()[0]
+    if count not in (0, 1):
+        raise RuntimeError("demo ITC reversal release is ambiguous")
+    return count == 1
+
+
+def import_itc_reversal_release(connection, source: bytes, dataset_bytes: bytes) -> None:
+    source_hash = hashlib.sha256(source).digest()
+    dataset_hash = hashlib.sha256(dataset_bytes).digest()
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.request_id', %s, true)", (IDS["request"],))
+        cursor.execute(
+            """
+            SELECT erp_regulatory_commands.import_itc_reversal_rule_release(
+              %s,%s,'cbic',%s,'github-actions-artifact',%s,'application/pdf',%s,%s,
+              'github-actions-artifact',%s,%s,%s,%s,%s,NULL,%s,
+              transaction_timestamp(),%s)
+            """,
+            (
+                IDS["destruction_itc_rule_release"], ITC_REVERSAL_RULESET_VERSION,
+                ITC_REVERSAL_SOURCE_URI,
+                f"canonical-demo-{DEMO_UI_FIXTURE_ID}/cbic-cgst-act-section-17-5-h.pdf",
+                psycopg2.Binary(source), psycopg2.Binary(source_hash),
+                f"canonical-demo-{DEMO_UI_FIXTURE_ID}/gst-itc-reversal-rules.json",
+                psycopg2.Binary(dataset_bytes), psycopg2.Binary(dataset_hash),
+                ITC_REVERSAL_SOURCE_PUBLICATION_DATE, ITC_REVERSAL_EFFECTIVE_FROM,
+                IDS["reviewer_user"], IDS["request"],
+            ),
+        )
+        if cursor.fetchone() != (IDS["destruction_itc_rule_release"],):
+            raise RuntimeError("ITC reversal importer returned an unexpected release")
 
 
 def gstr1_reporting_dataset_bytes(connection) -> bytes:
@@ -1624,6 +1734,14 @@ def seed_end_to_end_master(
             (IDS["rounding_gain_account"], "4900-DEMO-RG", "Demo rounding gain", "income", False, False),
             (IDS["rounding_loss_account"], "5900-DEMO-RL", "Demo rounding loss", "expense", False, False),
             (
+                IDS["destruction_loss_account"],
+                f"LIVE18-DSTR-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}",
+                "Live18 certified destruction and ITC reversal expense",
+                "expense",
+                False,
+                False,
+            ),
+            (
                 IDS["expense_claim_expense_account"],
                 f"LIVE18-EXP-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}",
                 "Live18 reviewed member expense",
@@ -1706,6 +1824,8 @@ def seed_end_to_end_master(
             "cost_of_goods_sold": IDS["cogs_account"],
             "rounding_gain": IDS["rounding_gain_account"],
             "rounding_loss": IDS["rounding_loss_account"],
+            "inventory_destruction_loss": IDS["destruction_loss_account"],
+            "inventory_itc_reversal_expense": IDS["destruction_loss_account"],
             "member_reimbursement_liability": IDS[
                 "expense_claim_reimbursement_account"
             ],
@@ -2277,7 +2397,7 @@ def exercise_action(
 
 
 def assert_unavailable_actions(connection) -> dict[str, Any]:
-    """Prove the remaining intentionally blocked action rejects before persistence."""
+    """Prove the former destruction gap no longer needs an unavailable probe."""
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -2290,29 +2410,6 @@ def assert_unavailable_actions(connection) -> dict[str, Any]:
         )
         before = cursor.fetchone()[0]
 
-    rejected: dict[str, int] = {}
-    for operation, permission in (
-        ("inventory.destruction.prepare", "inventory.destruction.create"),
-    ):
-        response = requests.post(
-            required("CANONICAL_DEMO_API_URL").rstrip("/")
-            + f"/api/internal/mcp/actions/{operation}/prepare",
-            timeout=30,
-            headers={
-                "Authorization": f"Bearer {required('MCP_INTERNAL_SERVICE_TOKEN')}",
-                "X-MCP-Delegated-Authorization": (
-                    f"Bearer {token(operation, permission)}"
-                ),
-                "Content-Type": "application/json",
-            },
-            json={},
-        )
-        if response.status_code != 503 or "COMMAND_ADAPTER_UNAVAILABLE" not in response.text:
-            raise RuntimeError(
-                f"{operation} did not fail closed at its unavailable adapter boundary"
-            )
-        rejected[operation] = response.status_code
-
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT count(*) FROM automation.command_requests WHERE org_id=%s",
@@ -2320,11 +2417,11 @@ def assert_unavailable_actions(connection) -> dict[str, Any]:
         )
         after = cursor.fetchone()[0]
     if after != before:
-        raise RuntimeError("unavailable action probes persisted a command request")
+        raise RuntimeError("read-only adapter readiness check persisted a command request")
     return {
         "command_count_before": before,
         "command_count_after": after,
-        "rejected_http_statuses": rejected,
+        "unavailable_operation_count": 0,
     }
 
 
@@ -3226,6 +3323,203 @@ def release_received_batch(connection, goods_receipt_id: str, batch_id: str) -> 
             "released_by_membership_id": str(released[4]),
             "on_hand_quantity": str(row[5]),
             "quality_evidence": "posted_qc_accepted_goods_receipt",
+        }
+
+
+def seed_inventory_destruction_ui_fixture(
+    connection, batch_id: str
+) -> dict[str, Any]:
+    """Seed only governed authority around an exact returned-stock lineage."""
+
+    period_start = INDIA_BUSINESS_DATE.replace(day=1)
+    period_end = (
+        (period_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        - timedelta(days=1)
+    )
+    due_date = period_end + timedelta(days=20)
+    certificate_digest = (
+        f"destruction-certificate:{DEMO_UI_FIXTURE_ID}:{batch_id}:{INDIA_BUSINESS_DATE}"
+    )
+    reversal_digest = (
+        f"section-17-5-h-reversal:{DEMO_UI_FIXTURE_ID}:{batch_id}:{INDIA_BUSINESS_DATE}"
+    )
+    with connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+        for setting, value in (
+            ("app.org_id", IDS["org"]),
+            ("app.membership_id", IDS["reviewer_membership"]),
+            ("app.user_id", IDS["reviewer_user"]),
+            ("app.auth_user_id", IDS["reviewer_auth_user"]),
+            ("app.request_id", IDS["request"]),
+        ):
+            cursor.execute("SELECT set_config(%s,%s,true)", (setting, value))
+        cursor.execute(
+            """
+            SELECT balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost,
+                   batch.batch_number,batch.status,location.id,location.name,
+                   count(DISTINCT lot.id),sum(lot.remaining_base_quantity),
+                   sum(lot.remaining_cgst_amount),sum(lot.remaining_sgst_amount),
+                   sum(lot.remaining_igst_amount),sum(lot.remaining_cess_amount),
+                   count(DISTINCT restoration.id)
+              FROM inventory.stock_balances balance
+              JOIN inventory.batches batch ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
+              JOIN inventory.locations location ON location.org_id=balance.org_id
+                AND location.id=balance.location_id AND location.location_type='quarantine'
+                AND NOT location.allows_sale
+              JOIN tax.input_credit_lots lot ON lot.org_id=balance.org_id
+                AND lot.batch_id=balance.batch_id AND lot.lineage_status='exact'
+                AND lot.remaining_base_quantity>0
+              JOIN tax.input_credit_applications restoration ON restoration.org_id=lot.org_id
+                AND restoration.input_credit_lot_id=lot.id
+                AND restoration.application_kind='sales_return_restoration'
+                AND restoration.application_direction='restore' AND restoration.status='posted'
+             WHERE balance.org_id=%s AND balance.branch_id=%s AND balance.location_id=%s
+               AND balance.product_id=%s AND balance.batch_id=%s
+               AND balance.on_hand_quantity>0 AND balance.inventory_value>0
+               AND EXISTS (SELECT 1 FROM inventory.stock_ledger_entries returned_ledger
+                 JOIN inventory.inventory_documents returned_document
+                   ON returned_document.org_id=returned_ledger.org_id
+                  AND returned_document.id=returned_ledger.inventory_document_id
+                WHERE returned_ledger.org_id=balance.org_id
+                  AND returned_ledger.location_id=balance.location_id
+                  AND returned_ledger.batch_id=balance.batch_id
+                  AND returned_ledger.quantity_delta>0
+                  AND returned_document.document_type='sales_return_receipt'
+                  AND returned_document.status='posted')
+             GROUP BY balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost,
+                      batch.batch_number,batch.status,location.id,location.name
+            """,
+            (
+                IDS["org"], IDS["branch"], IDS["quarantine_location"],
+                IDS["product"], batch_id,
+            ),
+        )
+        stock = cursor.fetchone()
+        if (
+            stock is None
+            or stock[0] != stock[8]
+            or stock[0] <= 0
+            or stock[1] <= 0
+            or stock[2] <= 0
+            or stock[7] < 1
+            or stock[13] < 1
+            or sum(Decimal(value or 0) for value in stock[9:13]) <= 0
+        ):
+            raise RuntimeError(
+                "destruction fixture lacks exact returned stock and restored ITC lineage"
+            )
+        for attachment_id, filename, evidence_kind, digest_text in (
+            (
+                IDS["destruction_certificate_evidence"],
+                f"licensed-incineration-certificate-{DEMO_UI_FIXTURE_ID}.pdf",
+                "inventory_destruction_certificate",
+                certificate_digest,
+            ),
+            (
+                IDS["destruction_itc_reversal_evidence"],
+                f"section-17-5-h-working-{DEMO_UI_FIXTURE_ID}.json",
+                "inventory_destruction_itc_reversal",
+                reversal_digest,
+            ),
+        ):
+            cursor.execute(
+                """
+                INSERT INTO core.attachments(
+                  org_id,id,storage_bucket,storage_object_path,original_filename,
+                  media_type,byte_size,sha256,evidence_kind,document_date,
+                  retention_until,status,verified_at,created_by_membership_id)
+                VALUES(%s,%s,'canonical-demo-evidence',%s,%s,%s,256,
+                  extensions.digest(%s,'sha256'),%s,%s,%s,'retained',
+                  transaction_timestamp(),%s)
+                ON CONFLICT (org_id,id) DO NOTHING
+                """,
+                (
+                    IDS["org"], attachment_id,
+                    f"demo/{DEMO_UI_FIXTURE_ID}/{filename}", filename,
+                    "application/pdf" if filename.endswith(".pdf") else "application/json",
+                    digest_text, evidence_kind, INDIA_BUSINESS_DATE,
+                    INDIA_BUSINESS_DATE + timedelta(days=3650),
+                    IDS["reviewer_membership"],
+                ),
+            )
+        cursor.execute(
+            """
+            INSERT INTO tax.return_periods(
+              org_id,id,registration_id,period_start,period_end,due_date,period_kind,status,
+              created_by_membership_id,updated_by_membership_id)
+            VALUES(%s,%s,%s,%s,%s,%s,'monthly','open',%s,%s)
+            ON CONFLICT (org_id,registration_id,period_start,period_end) DO NOTHING
+            RETURNING id
+            """,
+            (
+                IDS["org"], IDS["destruction_return_period"],
+                IDS["org_gst_registration"], period_start, period_end, due_date,
+                IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        period = cursor.fetchone()
+        if period is None:
+            cursor.execute(
+                """SELECT id FROM tax.return_periods
+                     WHERE org_id=%s AND registration_id=%s
+                       AND period_start=%s AND period_end=%s AND status='open'""",
+                (IDS["org"], IDS["org_gst_registration"], period_start, period_end),
+            )
+            period = cursor.fetchone()
+        if period is None:
+            raise RuntimeError("destruction fixture lacks an open GST return period")
+        return_period_id = str(period[0])
+        cursor.execute(
+            """
+            INSERT INTO tax.returns(
+              org_id,id,return_period_id,return_type,revision,status,
+              created_by_membership_id,updated_by_membership_id)
+            VALUES(%s,%s,%s,'gstr3b',1,'draft',%s,%s)
+            ON CONFLICT (org_id,return_period_id,return_type,revision) DO NOTHING
+            RETURNING id
+            """,
+            (
+                IDS["org"], IDS["destruction_gstr3b_return"], return_period_id,
+                IDS["reviewer_membership"], IDS["reviewer_membership"],
+            ),
+        )
+        filing = cursor.fetchone()
+        if filing is None:
+            cursor.execute(
+                """SELECT id FROM tax.returns
+                     WHERE org_id=%s AND return_period_id=%s
+                       AND return_type='gstr3b' AND status='draft'
+                     ORDER BY revision DESC LIMIT 1""",
+                (IDS["org"], return_period_id),
+            )
+            filing = cursor.fetchone()
+        if filing is None:
+            raise RuntimeError("destruction fixture lacks a draft GSTR-3B revision")
+        return {
+            "batch_id": batch_id,
+            "batch_number": stock[3],
+            "batch_status": stock[4],
+            "location_id": str(stock[5]),
+            "location_name": stock[6],
+            "available_base_quantity": str(stock[0]),
+            "inventory_value": str(stock[1]),
+            "average_unit_cost": str(stock[2]),
+            "input_credit_lot_count": stock[7],
+            "remaining_cgst_amount": str(stock[9]),
+            "remaining_sgst_amount": str(stock[10]),
+            "remaining_igst_amount": str(stock[11]),
+            "remaining_cess_amount": str(stock[12]),
+            "sales_return_restoration_count": stock[13],
+            "certificate_attachment_id": IDS["destruction_certificate_evidence"],
+            "itc_reversal_evidence_attachment_id": IDS[
+                "destruction_itc_reversal_evidence"
+            ],
+            "gst_registration_id": IDS["org_gst_registration"],
+            "return_period_id": return_period_id,
+            "gstr3b_return_id": str(filing[0]),
+            "itc_reversal_rule_version_id": IDS["destruction_itc_rule_version"],
+            "business_date": INDIA_BUSINESS_DATE.isoformat(),
         }
 
 
@@ -4759,6 +5053,7 @@ def main() -> int:
     source = fetch_official_source(evidence_dir)
     adjustment_source = fetch_adjustment_source(evidence_dir)
     gstr1_reporting_source = fetch_gstr1_reporting_source(evidence_dir)
+    itc_reversal_source = fetch_itc_reversal_source(evidence_dir)
     expense_receipt_bytes = reviewed_expense_receipt()
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
@@ -4766,14 +5061,19 @@ def main() -> int:
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
         gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
+        itc_reversal_release_exists = demo_itc_reversal_release_exists(bootstrap)
     with database_connection("ERP_REGULATORY_IMPORTER_DATABASE_URL") as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
         adjustment_bytes = adjustment_dataset_bytes(importer)
         gstr1_reporting_bytes = gstr1_reporting_dataset_bytes(importer)
+        itc_reversal_bytes = itc_reversal_dataset_bytes(importer)
         (evidence_dir / "hsn-481910-demo.json").write_bytes(dataset_bytes)
         (evidence_dir / "gst-adjustment-rules-demo.json").write_bytes(adjustment_bytes)
         (evidence_dir / "gstr1-reporting-rules.json").write_bytes(
             gstr1_reporting_bytes
+        )
+        (evidence_dir / "gst-itc-reversal-rules.json").write_bytes(
+            itc_reversal_bytes
         )
         if not release_exists:
             import_tax_release(importer, source, dataset_bytes)
@@ -4782,6 +5082,10 @@ def main() -> int:
         if not gstr1_reporting_release_exists:
             import_gstr1_reporting_release(
                 importer, gstr1_reporting_source, gstr1_reporting_bytes
+            )
+        if not itc_reversal_release_exists:
+            import_itc_reversal_release(
+                importer, itc_reversal_source, itc_reversal_bytes
             )
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         gstr1_reporting_reconciliation = reconcile_gstr1_reporting_release(
@@ -5039,6 +5343,11 @@ def main() -> int:
             sales_return_journey["executed"]["resource_id"],
             sales_return_journey["prepared"]["command_request_id"],
         )
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
+        inventory_destruction_ui_fixture = seed_inventory_destruction_ui_fixture(
+            bootstrap,
+            sales_return_request["lines"][0]["batch_allocation"]["batch_id"],
+        )
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         purchase_return_portal = seed_purchase_return_portal_evidence(bootstrap)
@@ -5142,6 +5451,7 @@ def main() -> int:
         "customer_receipt_reconciliation": customer_receipt_reconciliation,
         "bank_reconciliation_ui_fixture": bank_reconciliation_ui_fixture,
         "sales_return_reconciliation": sales_return_reconciliation,
+        "inventory_destruction_ui_fixture": inventory_destruction_ui_fixture,
         "purchase_return_reconciliation": purchase_return_reconciliation,
         "inventory_adjustment_reconciliation": adjustment_reconciliation,
         "cross_table_reconciliation": cross_table_reconciliation,

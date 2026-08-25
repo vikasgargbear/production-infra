@@ -13,15 +13,16 @@ const context = (): InventoryDestructionContext => ({
   certificate_upload_available: false,
   certificate_upload_message: 'Unavailable',
   method_code: 'licensed_incineration',
-  itc_treatment: 'not_applicable_unregistered',
+  itc_treatment: 'section_17_5_h_reversal',
   certificates: [],
+  itc_reversal_evidence: [],
   candidates: [],
 });
 
 test('destruction context publishes the reviewed method and tax treatment', () => {
   expect(decodeDestructionContext(context())).toMatchObject({
     method_code: 'licensed_incineration',
-    itc_treatment: 'not_applicable_unregistered',
+    itc_treatment: 'section_17_5_h_reversal',
   });
 });
 

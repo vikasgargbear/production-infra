@@ -1,0 +1,44 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "destruction",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/stock-management/inventory-destruction"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Certificate upload unavailable","exact":true},"value":"Certificate upload unavailable"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Only already destroyed, witnessed stock with verified same-day evidence can be prepared. This UI never treats deletion or a stock adjustment as destruction.","exact":true},"value":"Only already destroyed, witnessed stock with verified same-day evidence can be prepared. This UI never treats deletion or a stock adjustment as destruction."}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/stock-management/inventory-destruction"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Eligible full stock balance","exact":true},"value":"{{fact.identity.destruction_batch_id}}:{{fact.identity.destruction_uom_conversion_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Verified destruction certificate","exact":true},"value":"{{fact.identity.destruction_certificate_attachment_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Verified Section 17(5)(h) reversal evidence","exact":true},"value":"{{fact.identity.destruction_itc_reversal_evidence_attachment_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Reason code","exact":true},"value":"{{fact.choice.destruction_reason_code}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Detailed reason","exact":true},"value":"{{fact.display.destruction_reason}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Authority reference","exact":true},"value":"{{fact.display.destruction_authority_reference}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Witness name","exact":true},"value":"{{fact.display.destruction_witness_name}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Witness credential","exact":true},"value":"{{fact.display.destruction_witness_credential}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Physical destruction completed at (UTC)","exact":true},"value":"{{fact.clock.destruction_confirmed_at_utc}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I confirm the physical licensed incineration occurred at the entered evidence timestamp and the selected certificate and witness details are exact.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable destruction","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/stock-management/inventory-destruction"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"2. Independent approval","exact":true}},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{command_request_id}}","exact":false},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed and approve this exact certified destruction and GST input-credit reversal.","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"3. Execute & verify","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Check status","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"approved","exact":true},"value":"approved"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Execute this approved immutable destruction and Section 17(5)(h) reversal once.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute and verify","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Posted and reconciled","exact":true},"value":"Posted and reconciled"}
+    ]
+  }
+}

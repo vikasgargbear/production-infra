@@ -512,6 +512,121 @@ def resolve_authoritative_facts(
          )
        WHERE membership.org_id=%s AND membership.status='active'
     """
+    destruction_sql = """
+      SELECT balance.batch_id::text,batch.batch_number,batch.status,
+             balance.on_hand_quantity::text,balance.inventory_value::text,
+             location.id::text,location.name,conversion.id::text,
+             conversion.from_uom_code,conversion.multiplier::text,
+             certificate.id::text,certificate.original_filename,
+             reversal.id::text,reversal.original_filename,
+             registration.id::text,period.id::text,filing.id::text,rule.id::text,
+             count(DISTINCT lot.id),sum(lot.remaining_cgst_amount)::text,
+             sum(lot.remaining_sgst_amount)::text,sum(lot.remaining_igst_amount)::text,
+             sum(lot.remaining_cess_amount)::text,
+             to_char(certificate.verified_at AT TIME ZONE 'UTC',
+                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+             witness.display_name,witness_membership.id::text,
+             returned_source.reason_code,pg_catalog.encode(certificate.sha256,'hex')
+        FROM inventory.stock_balances balance
+        JOIN inventory.batches batch ON batch.org_id=balance.org_id
+          AND batch.id=balance.batch_id AND batch.product_id=balance.product_id
+          AND batch.lot_kind='manufacturer_batch' AND batch.status='released'
+        JOIN inventory.locations location ON location.org_id=balance.org_id
+          AND location.id=balance.location_id AND location.id=%s
+          AND location.location_type='quarantine' AND NOT location.allows_sale
+        JOIN catalog.uom_conversions conversion ON conversion.org_id=balance.org_id
+          AND conversion.product_id=balance.product_id AND conversion.id=%s
+          AND conversion.status='active' AND conversion.multiplier>0
+        JOIN tax.input_credit_lots lot ON lot.org_id=balance.org_id
+          AND lot.batch_id=balance.batch_id AND lot.lineage_status='exact'
+          AND lot.remaining_base_quantity>0
+        JOIN tax.registrations registration ON registration.org_id=balance.org_id
+          AND registration.status='active' AND registration.registration_type='regular'
+        JOIN tax.registration_branches association ON association.org_id=registration.org_id
+          AND association.registration_id=registration.id
+          AND association.branch_id=balance.branch_id AND association.status='active'
+        JOIN core.organizations organization ON organization.id=balance.org_id
+          AND organization.status='active'
+        JOIN tax.return_periods period ON period.org_id=registration.org_id
+          AND period.registration_id=registration.id AND period.status='open'
+          AND (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+              BETWEEN period.period_start AND period.period_end
+        JOIN tax.returns filing ON filing.org_id=period.org_id
+          AND filing.return_period_id=period.id AND filing.return_type='gstr3b'
+          AND filing.status='draft'
+        JOIN tax.itc_reversal_rule_versions rule ON rule.status='active'
+          AND rule.event_kind='goods_destroyed' AND rule.legal_section='17(5)(h)'
+          AND rule.gstr3b_table_code='4' AND rule.gstr3b_row_code='B(1)'
+          AND rule.effective_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+          AND (rule.effective_to IS NULL OR rule.effective_to>=
+               (transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+        JOIN core.attachments certificate ON certificate.org_id=balance.org_id
+          AND certificate.storage_object_path=%s
+          AND certificate.evidence_kind='inventory_destruction_certificate'
+          AND certificate.status IN ('verified','retained')
+          AND certificate.verified_at IS NOT NULL
+          AND certificate.document_date=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+          AND certificate.retention_until>=certificate.document_date
+        JOIN core.attachments reversal ON reversal.org_id=balance.org_id
+          AND reversal.storage_object_path=%s
+          AND reversal.evidence_kind='inventory_destruction_itc_reversal'
+          AND reversal.status IN ('verified','retained')
+          AND reversal.verified_at IS NOT NULL
+          AND reversal.document_date=certificate.document_date
+          AND reversal.retention_until>=reversal.document_date
+        JOIN core.memberships witness_membership
+          ON witness_membership.org_id=certificate.org_id
+         AND witness_membership.id=certificate.created_by_membership_id
+         AND witness_membership.status='active'
+        JOIN core.users witness ON witness.id=witness_membership.user_id
+         AND witness.status='active'
+        JOIN LATERAL (
+          SELECT returned.reason_code
+            FROM inventory.stock_ledger_entries returned_ledger
+            JOIN inventory.inventory_documents returned_document
+              ON returned_document.org_id=returned_ledger.org_id
+             AND returned_document.id=returned_ledger.inventory_document_id
+            JOIN sales.returns returned ON returned.org_id=returned_document.org_id
+             AND returned.id=returned_document.sales_return_id
+           WHERE returned_ledger.org_id=balance.org_id
+             AND returned_ledger.location_id=balance.location_id
+             AND returned_ledger.batch_id=balance.batch_id
+             AND returned_ledger.quantity_delta>0
+             AND returned_document.document_type='sales_return_receipt'
+             AND returned_document.status='posted' AND returned.status='posted'
+           ORDER BY returned.posted_at DESC,returned.id
+           LIMIT 1
+        ) returned_source ON true
+       WHERE balance.org_id=%s AND balance.branch_id=%s
+         AND balance.product_id=%s AND balance.on_hand_quantity>0
+         AND balance.inventory_value>0 AND balance.average_unit_cost>0
+         AND EXISTS (SELECT 1 FROM inventory.stock_ledger_entries returned_ledger
+           JOIN inventory.inventory_documents returned_document
+             ON returned_document.org_id=returned_ledger.org_id
+            AND returned_document.id=returned_ledger.inventory_document_id
+          WHERE returned_ledger.org_id=balance.org_id
+            AND returned_ledger.location_id=balance.location_id
+            AND returned_ledger.batch_id=balance.batch_id
+            AND returned_ledger.quantity_delta>0
+            AND returned_document.document_type='sales_return_receipt'
+            AND returned_document.status='posted')
+         AND NOT EXISTS (SELECT 1 FROM automation.command_requests command
+          WHERE command.org_id=certificate.org_id
+            AND command.capability_code='inventory.destruction.prepare'
+            AND command.status NOT IN ('failed','expired','cancelled')
+            AND convert_from(command.request_bytes,'UTF8')::jsonb
+                ->>'certificate_attachment_id'=certificate.id::text)
+       GROUP BY balance.batch_id,batch.batch_number,batch.status,
+                balance.on_hand_quantity,balance.inventory_value,location.id,location.name,
+                conversion.id,conversion.from_uom_code,conversion.multiplier,
+                certificate.id,certificate.original_filename,reversal.id,reversal.original_filename,
+                registration.id,period.id,filing.id,rule.id,certificate.verified_at,
+                witness.display_name,witness_membership.id,returned_source.reason_code
+      HAVING sum(lot.remaining_base_quantity)=balance.on_hand_quantity
+         AND sum(lot.remaining_cgst_amount+lot.remaining_sgst_amount+
+                 lot.remaining_igst_amount+lot.remaining_cess_amount)>0
+       ORDER BY balance.batch_id
+    """
     with psycopg2.connect(database_url) as connection:
         connection.set_session(readonly=True, autocommit=False)
         with connection.cursor() as cursor:
@@ -563,6 +678,17 @@ def resolve_authoritative_facts(
                 ),
             )
             expense_claim_rows = cursor.fetchall()
+            cursor.execute(
+                destruction_sql,
+                (
+                    identities["quarantine_location_id"],
+                    identities["uom_conversion_id"],
+                    f"demo/{run_token}/licensed-incineration-certificate-{run_token}.pdf",
+                    f"demo/{run_token}/section-17-5-h-working-{run_token}.json",
+                    org_id, identities["branch_id"], identities["product_id"],
+                ),
+            )
+            destruction_rows = cursor.fetchall()
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
@@ -598,6 +724,11 @@ def resolve_authoritative_facts(
         raise FixtureCompileError(
             "canonical expense claimant, run-scoped accounts, and exact unused "
             f"reviewed receipt resolved {len(expense_claim_rows)} rows, expected one"
+        )
+    if len(destruction_rows) != 1:
+        raise FixtureCompileError(
+            "run-scoped GST destruction stock, ITC lineage, rule, return, and evidence "
+            f"resolved {len(destruction_rows)} rows, expected one"
         )
     goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
@@ -651,6 +782,20 @@ def resolve_authoritative_facts(
         expense_receipt_sha256,
     ) = expense_claim_rows[0]
     (
+        destruction_batch_id, destruction_batch_number, destruction_batch_status,
+        destruction_base_quantity, destruction_inventory_value,
+        destruction_location_id, destruction_location_name,
+        destruction_uom_conversion_id, destruction_uom_code, destruction_uom_multiplier,
+        destruction_certificate_id, destruction_certificate_filename,
+        destruction_reversal_evidence_id, destruction_reversal_evidence_filename,
+        destruction_registration_id, destruction_period_id, destruction_gstr3b_return_id,
+        destruction_rule_id, destruction_lot_count, destruction_cgst_amount,
+        destruction_sgst_amount, destruction_igst_amount, destruction_cess_amount,
+        destruction_confirmed_at, destruction_witness_name,
+        destruction_witness_membership_id, destruction_return_reason_code,
+        destruction_certificate_sha256,
+    ) = destruction_rows[0]
+    (
         cycle_count_membership_id,
         cycle_count_evidence_id,
         cycle_count_completed_at,
@@ -683,6 +828,18 @@ def resolve_authoritative_facts(
             "expense_account_id": expense_account_id,
             "expense_reimbursement_account_id": reimbursement_account_id,
             "expense_receipt_attachment_id": expense_receipt_attachment_id,
+            "destruction_batch_id": destruction_batch_id,
+            "destruction_location_id": destruction_location_id,
+            "destruction_uom_conversion_id": destruction_uom_conversion_id,
+            "destruction_certificate_attachment_id": destruction_certificate_id,
+            "destruction_itc_reversal_evidence_attachment_id": (
+                destruction_reversal_evidence_id
+            ),
+            "destruction_gst_registration_id": destruction_registration_id,
+            "destruction_return_period_id": destruction_period_id,
+            "destruction_gstr3b_return_id": destruction_gstr3b_return_id,
+            "destruction_itc_reversal_rule_id": destruction_rule_id,
+            "destruction_witness_membership_id": destruction_witness_membership_id,
         },
         "display": {
             **resolved,
@@ -718,6 +875,28 @@ def resolve_authoritative_facts(
                 f"{expense_receipt_status}"
             ),
             "expense_receipt_sha256": expense_receipt_sha256,
+            "destruction_candidate_label": (
+                f"{destruction_location_name} · {destruction_batch_number} · "
+                f"{destruction_base_quantity} {destruction_uom_code}"
+            ),
+            "destruction_batch_status": destruction_batch_status,
+            "destruction_batch_number": destruction_batch_number,
+            "destruction_uom_code": destruction_uom_code,
+            "destruction_certificate_label": destruction_certificate_filename,
+            "destruction_itc_reversal_evidence_label": (
+                destruction_reversal_evidence_filename
+            ),
+            "destruction_reason": (
+                f"Certified destruction of quarantined goods returned for "
+                f"{destruction_return_reason_code.replace('_', ' ')}"
+            ),
+            "destruction_authority_reference": (
+                f"{destruction_certificate_filename} · sha256:{destruction_certificate_sha256}"
+            ),
+            "destruction_witness_name": destruction_witness_name,
+            "destruction_witness_credential": (
+                f"canonical-membership:{destruction_witness_membership_id}"
+            ),
         },
         "clock": {
             "business_date": rows[0][-2],
@@ -727,6 +906,7 @@ def resolve_authoritative_facts(
             "expense_receipt_document_date": expense_receipt_document_date,
             "expense_receipt_verified_at_utc": expense_receipt_verified_at,
             "expense_receipt_retention_until": expense_receipt_retention_until,
+            "destruction_confirmed_at_utc": destruction_confirmed_at,
         },
         "choice": {
             "supplier_invoice_number": resolved_invoice_number,
@@ -737,6 +917,15 @@ def resolve_authoritative_facts(
                 Decimal(bank_matched_amount), ".2f"
             ),
             "bank_reconciliation_statement_direction": bank_statement_direction,
+            "destruction_base_quantity": destruction_base_quantity,
+            "destruction_inventory_value": destruction_inventory_value,
+            "destruction_uom_multiplier": destruction_uom_multiplier,
+            "destruction_input_credit_lot_count": str(destruction_lot_count),
+            "destruction_cgst_amount": destruction_cgst_amount,
+            "destruction_sgst_amount": destruction_sgst_amount,
+            "destruction_igst_amount": destruction_igst_amount,
+            "destruction_cess_amount": destruction_cess_amount,
+            "destruction_reason_code": "quality_rejected",
         },
     }
 
