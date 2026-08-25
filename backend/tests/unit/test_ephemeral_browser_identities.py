@@ -239,7 +239,35 @@ def test_auth_users_are_deleted_even_when_database_cleanup_fails(
     assert state_path.exists(), "state must remain available for a cleanup retry"
 
 
+def test_cleanup_without_state_is_successful_and_clears_same_job_credentials(
+    monkeypatch, tmp_path, capsys
+):
+    state_path, github_env = _environment(monkeypatch, tmp_path)
+    github_env.write_text(
+        "PLAYWRIGHT_LIVE_EMAIL=temporary@example.invalid\n"
+        "PLAYWRIGHT_LIVE_PASSWORD=temporary-password\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        identities,
+        "_validate_target",
+        lambda token: pytest.fail("cleanup without state must not call external services"),
+    )
+
+    identities.cleanup(state_path)
+
+    assert "No ephemeral browser identity state was present" in capsys.readouterr().out
+    cleared = github_env.read_text(encoding="utf-8")
+    assert cleared.endswith(
+        "PLAYWRIGHT_LIVE_REVIEWER_EMAIL=\n"
+        "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD=\n"
+    )
+    assert "PLAYWRIGHT_LIVE_EMAIL=\n" in cleared
+    assert "PLAYWRIGHT_LIVE_PASSWORD=\n" in cleared
+
+
 def test_browser_grants_have_exact_minimum_maker_checker_capabilities():
+    assert identities.LOCK_KEY == "canonical-staging-live-browser-identities"
     requester = {capability[0] for capability in identities.REQUESTER_CAPABILITIES}
     reviewer = {capability[0] for capability in identities.REVIEWER_CAPABILITIES}
 
