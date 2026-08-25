@@ -20,7 +20,6 @@ export {
 
 // ============== EDIT COMPONENTS ==============
 export {
-    PartyEditModal,
     ProductEditModal
 } from './edit';
 
@@ -42,12 +41,8 @@ export { default as PurchaseProductSearch } from './search/PurchaseProductSearch
 export { default as InvoiceSearch } from './search/InvoiceSearch';
 export { default as PurchaseSearch } from './search/PurchaseSearch';
 
-// ============== CALCULATOR COMPONENTS ==============
-export { default as GSTCalculator } from './ui/GSTCalculator';
-
 // ============== DISPLAY COMPONENTS ==============
 export { default as BillSummary } from './ui/display/BillSummary';
-export { default as PaymentDetails } from './ui/display/PaymentDetails';
 export { default as TransportDetails } from './ui/forms/TransportDetails';
 
 // ============== ACTION COMPONENTS ==============
