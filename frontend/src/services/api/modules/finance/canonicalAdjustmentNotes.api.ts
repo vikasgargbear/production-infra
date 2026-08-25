@@ -12,6 +12,15 @@ import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 export type AdjustmentSide = 'sales' | 'purchase';
 export type AdjustmentDirection = 'credit' | 'debit';
 export type GstAdjustmentTreatment = 'statutory' | 'commercial_only';
+export type AdjustmentRoundingPolicy = 'none' | 'nearest_rupee';
+export type AdjustmentDiscountKind = 'none' | 'percent' | 'amount';
+export type AdjustmentDiscountBasis = 'taxable_value' | 'price_value';
+
+export interface AdjustmentDiscountPolicy {
+  kind: AdjustmentDiscountKind;
+  basis: AdjustmentDiscountBasis;
+  value: string;
+}
 
 export interface AdjustmentSourceLine {
   original_line_id: string;
@@ -20,13 +29,26 @@ export interface AdjustmentSourceLine {
   product_name: string;
   sku: string;
   uom_code: string;
+  uom_conversion_factor: string;
   original_billed_quantity: string;
   original_free_quantity: string;
+  net_decreased_billed_quantity: string;
+  net_decreased_free_quantity: string;
   remaining_billed_quantity: string;
   remaining_free_quantity: string;
   quoted_unit_rate: string;
   price_basis: 'tax_exclusive' | 'tax_inclusive';
+  line_discount: AdjustmentDiscountPolicy;
+  document_discount_eligible: boolean;
   free_supply_tax_treatment: 'excluded_from_taxable_value' | 'included_at_unit_rate';
+  tax_charge_mechanism: 'normal' | 'reverse_charge';
+  tax_classification_code_snapshot: string;
+  tax_code_version_id: string;
+  taxability_snapshot: 'taxable' | 'zero_rated' | 'exempt' | 'nil_rated' | 'non_gst';
+  cgst_rate: string;
+  sgst_rate: string;
+  igst_rate: string;
+  cess_rate: string;
 }
 
 export interface AdjustmentRuleChoice {
@@ -39,15 +61,23 @@ export interface AdjustmentRuleChoice {
 export interface AdjustmentNoteContext {
   side: AdjustmentSide;
   direction: AdjustmentDirection;
+  document_effect: 'decrease';
   original_document_id: string;
   original_document_number: string;
   original_document_date: string;
   branch_id: string;
   party_id: string;
+  party_account_id: string;
   party_name: string;
   original_open_item_id: string;
+  original_open_item_principal: string;
   original_open_item_outstanding: string;
   currency_code: 'INR';
+  supply_type: 'intra_state' | 'inter_state' | 'export' | 'sez';
+  zero_rated_payment_mode: 'not_applicable' | 'without_payment' | 'with_igst';
+  tax_charge_mechanism: 'normal' | 'reverse_charge';
+  rounding_policy: AdjustmentRoundingPolicy;
+  document_discount: AdjustmentDiscountPolicy;
   lines: AdjustmentSourceLine[];
   rule_choices: AdjustmentRuleChoice[];
 }
@@ -65,11 +95,11 @@ export interface AdjustmentNotePreparePayload {
   counterparty_portal_document_line_id?: string;
   reason_code: string;
   reason: string;
-  rounding_policy: 'none';
+  rounding_policy: AdjustmentRoundingPolicy;
   document_discount: {
-    document_discount_kind: 'none';
-    document_discount_basis: 'taxable_value';
-    document_discount_value: '0';
+    document_discount_kind: AdjustmentDiscountKind;
+    document_discount_basis: AdjustmentDiscountBasis;
+    document_discount_value: string;
   };
   lines: Array<{
     original_line_id: string;
@@ -79,11 +109,11 @@ export interface AdjustmentNotePreparePayload {
     quoted_unit_rate: string;
     price_basis: AdjustmentSourceLine['price_basis'];
     line_discount: {
-      line_discount_kind: 'none';
-      line_discount_basis: 'taxable_value';
-      line_discount_value: '0';
+      line_discount_kind: AdjustmentDiscountKind;
+      line_discount_basis: AdjustmentDiscountBasis;
+      line_discount_value: string;
     };
-    document_discount_eligible: true;
+    document_discount_eligible: boolean;
   }>;
 }
 

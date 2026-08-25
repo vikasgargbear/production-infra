@@ -81,6 +81,14 @@ test('core command inputs never invent zero, aliases, or browser-local evidence 
   expect(expense).not.toContain("line.claimed_amount || '0'");
   expect(adjustment).not.toContain("entered.billed || '0'");
   expect(adjustment).not.toContain("entered.free || '0'");
+  expect(adjustment).not.toContain("rounding_policy: 'none'");
+  expect(adjustment).not.toContain("line_discount_kind: 'none'");
+  expect(adjustment).not.toContain("document_discount_kind: 'none'");
+  expect(adjustment).not.toContain('document_discount_eligible: true');
+  expect(adjustment).toContain('context.rounding_policy');
+  expect(adjustment).toContain('context.document_discount');
+  expect(adjustment).toContain('line.line_discount');
+  expect(adjustment).toContain('line.document_discount_eligible');
   expect(adjustmentUi).not.toContain('type="datetime-local"');
   expect(adjustmentUi).not.toContain('new Date(event.target.value).toISOString()');
   expect(supplierPayment).not.toContain('localBusinessDate');

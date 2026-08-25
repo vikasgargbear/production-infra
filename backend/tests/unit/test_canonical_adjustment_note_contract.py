@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date, datetime, timezone
+from decimal import Decimal
 import hashlib
 from pathlib import Path
 from uuid import uuid4
@@ -232,3 +233,113 @@ def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:
     assert "finance.allocations" in source
     assert "tax.gst_adjustment_rule_versions" in source
     assert "legacy" not in source.lower()
+
+
+def test_context_publishes_exact_original_calculation_and_tax_authority() -> None:
+    source = (
+        Path(__file__).resolve().parents[3]
+        / "backend/app/api/routes/canonical_adjustment_note_reads.py"
+    ).read_text()
+
+    for fact in (
+        "invoice.rounding_policy",
+        "invoice.document_discount_kind",
+        "invoice.document_discount_basis",
+        "invoice.document_discount_value",
+        "source.line_discount_kind",
+        "source.line_discount_basis",
+        "source.line_discount_value",
+        "source.document_discount_eligible",
+        "source.tax_charge_mechanism",
+        "source.tax_classification_code_snapshot",
+        "source.tax_code_version_id",
+        "source.taxability_snapshot",
+        "source.cgst_rate",
+        "source.sgst_rate",
+        "source.igst_rate",
+        "source.cess_rate",
+    ):
+        assert fact in source
+    assert "LEFT JOIN LATERAL" in source
+    assert "GROUP BY source.id" not in source
+    assert "GROUP BY invoice.id" not in source
+
+
+def test_context_model_reconciles_exact_source_policy_and_tax_shape() -> None:
+    context = reads.AdjustmentNoteContext.model_validate({
+        "side": "sales",
+        "direction": "credit",
+        "document_effect": "decrease",
+        "original_document_id": uuid4(),
+        "original_document_number": "SI-EXACT-1",
+        "original_document_date": "2026-08-20",
+        "branch_id": uuid4(),
+        "party_id": uuid4(),
+        "party_account_id": uuid4(),
+        "party_name": "Exact Customer",
+        "original_open_item_id": uuid4(),
+        "original_open_item_principal": "336.00",
+        "original_open_item_outstanding": "168.00",
+        "currency_code": "INR",
+        "supply_type": "intra_state",
+        "zero_rated_payment_mode": "not_applicable",
+        "tax_charge_mechanism": "normal",
+        "rounding_policy": "nearest_rupee",
+        "document_discount": {
+            "kind": "percent",
+            "basis": "price_value",
+            "value": "5.000000",
+        },
+        "lines": [{
+            "original_line_id": uuid4(),
+            "line_number": 1,
+            "product_id": uuid4(),
+            "product_name": "Exact Product",
+            "sku": "EXACT-1",
+            "uom_code": "EA",
+            "uom_conversion_factor": "1.000000",
+            "original_billed_quantity": "2.000000",
+            "original_free_quantity": "1.000000",
+            "net_decreased_billed_quantity": "1.000000",
+            "net_decreased_free_quantity": "0.000000",
+            "remaining_billed_quantity": "1.000000",
+            "remaining_free_quantity": "1.000000",
+            "quoted_unit_rate": "150.0000",
+            "price_basis": "tax_exclusive",
+            "line_discount": {
+                "kind": "amount",
+                "basis": "taxable_value",
+                "value": "10.00",
+            },
+            "document_discount_eligible": False,
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "tax_charge_mechanism": "normal",
+            "tax_classification_code_snapshot": "481910",
+            "tax_code_version_id": uuid4(),
+            "taxability_snapshot": "taxable",
+            "cgst_rate": "6.000000",
+            "sgst_rate": "6.000000",
+            "igst_rate": "0.000000",
+            "cess_rate": "0.000000",
+        }],
+        "rule_choices": [{
+            "id": uuid4(),
+            "reason_code": "customer_rejection",
+            "gst_tax_treatment": "commercial_only",
+            "deadline_policy": "none",
+            "deadline_days": None,
+            "effective_from": "2026-04-01",
+            "effective_to": None,
+            "rule_version": "gst-adjustment-v1",
+        }],
+    })
+
+    assert context.rounding_policy == "nearest_rupee"
+    assert context.document_discount.value == Decimal("5.000000")
+    assert context.lines[0].line_discount.value == Decimal("10.00")
+    assert context.lines[0].document_discount_eligible is False
+
+    invalid = context.model_dump()
+    invalid["lines"][0]["igst_rate"] = Decimal("12.000000")
+    with pytest.raises(ValueError, match="intra-state source unexpectedly carries IGST"):
+        reads.AdjustmentNoteContext.model_validate(invalid)

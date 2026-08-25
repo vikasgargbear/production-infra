@@ -2,6 +2,7 @@ import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type {
   AdjustmentNoteContext,
   AdjustmentNotePreparePayload,
+  AdjustmentDiscountPolicy,
   GstAdjustmentTreatment,
 } from '../../../services/api/modules/finance/canonicalAdjustmentNotes.api';
 
@@ -30,6 +31,40 @@ const lte = (left: string, right: string): boolean => {
   return units(left) <= units(right);
 };
 
+const exactDiscount = (policy: AdjustmentDiscountPolicy, label: string) => {
+  const value = decimal(policy.value, `${label} value`);
+  if (policy.kind === 'none' && positive(value)) {
+    throw new Error(`${label} kind none requires value 0.`);
+  }
+  if (policy.kind === 'percent' && !lte(value, '100')) {
+    throw new Error(`${label} percentage cannot exceed 100.`);
+  }
+  return { kind: policy.kind, basis: policy.basis, value };
+};
+
+const requireExactSourceTaxFacts = (context: AdjustmentNoteContext): void => {
+  if (!['intra_state', 'inter_state'].includes(context.supply_type)
+    || context.zero_rated_payment_mode !== 'not_applicable'
+    || context.tax_charge_mechanism !== 'normal') {
+    throw new Error('The selected source is outside the reviewed domestic non-zero-rated adjustment-note scope.');
+  }
+  context.lines.forEach(line => {
+    if (line.tax_charge_mechanism !== context.tax_charge_mechanism
+      || !isCanonicalUuid(line.tax_code_version_id)
+      || !line.tax_classification_code_snapshot.trim()) {
+      throw new Error(`${line.product_name} lacks an exact canonical tax source.`);
+    }
+    const cgst = decimal(line.cgst_rate, `${line.product_name} CGST rate`);
+    const sgst = decimal(line.sgst_rate, `${line.product_name} SGST rate`);
+    const igst = decimal(line.igst_rate, `${line.product_name} IGST rate`);
+    decimal(line.cess_rate, `${line.product_name} cess rate`);
+    if ((context.supply_type === 'intra_state' && positive(igst))
+      || (context.supply_type === 'inter_state' && (positive(cgst) || positive(sgst)))) {
+      throw new Error(`${line.product_name} tax rates conflict with the authoritative supply type.`);
+    }
+  });
+};
+
 export interface AdjustmentDraft {
   noteDate: string;
   ruleId: string;
@@ -46,6 +81,7 @@ export function buildAdjustmentNotePayload(
   idempotencyKey: string,
 ): AdjustmentNotePreparePayload {
   if (!KEY.test(idempotencyKey)) throw new Error('Adjustment prepare requires a durable idempotency key.');
+  requireExactSourceTaxFacts(context);
   if (!DATE.test(draft.noteDate) || draft.noteDate < context.original_document_date) {
     throw new Error('Adjustment date must be a valid date on or after the original document date.');
   }
@@ -72,12 +108,15 @@ export function buildAdjustmentNotePayload(
       free_supply_tax_treatment: line.free_supply_tax_treatment,
       quoted_unit_rate: decimal(line.quoted_unit_rate, 'Quoted unit rate'),
       price_basis: line.price_basis,
-      line_discount: {
-        line_discount_kind: 'none' as const,
-        line_discount_basis: 'taxable_value' as const,
-        line_discount_value: '0' as const,
-      },
-      document_discount_eligible: true as const,
+      line_discount: (() => {
+        const source = exactDiscount(line.line_discount, `${line.product_name} source-line discount`);
+        return {
+          line_discount_kind: source.kind,
+          line_discount_basis: source.basis,
+          line_discount_value: source.value,
+        };
+      })(),
+      document_discount_eligible: line.document_discount_eligible,
     }];
   });
   if (!lines.length) throw new Error('Enter a positive billed or free quantity on at least one source line.');
@@ -92,12 +131,15 @@ export function buildAdjustmentNotePayload(
     gst_tax_treatment: rule.gst_tax_treatment as GstAdjustmentTreatment,
     reason_code: rule.reason_code,
     reason: draft.reason.trim(),
-    rounding_policy: 'none',
-    document_discount: {
-      document_discount_kind: 'none',
-      document_discount_basis: 'taxable_value',
-      document_discount_value: '0',
-    },
+    rounding_policy: context.rounding_policy,
+    document_discount: (() => {
+      const source = exactDiscount(context.document_discount, 'Original document discount');
+      return {
+        document_discount_kind: source.kind,
+        document_discount_basis: source.basis,
+        document_discount_value: source.value,
+      };
+    })(),
     lines,
   };
   if (rule.gst_tax_treatment === 'statutory' && context.side === 'sales') {

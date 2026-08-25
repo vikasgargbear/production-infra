@@ -49,6 +49,22 @@ class StrictRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class AdjustmentDiscountPolicy(StrictRead):
+    kind: Literal["none", "percent", "amount"]
+    basis: Literal["taxable_value", "price_value"]
+    value: Decimal = Field(ge=0)
+
+    @model_validator(mode="after")
+    def exact_kind_value(self):
+        if self.kind == "none" and self.value != 0:
+            raise ValueError("none discount must have value zero")
+        if self.kind == "percent" and self.value > 100:
+            raise ValueError("percent discount cannot exceed 100")
+        if self.kind == "amount" and self.value != self.value.quantize(Decimal("0.01")):
+            raise ValueError("amount discount must use exact paise precision")
+        return self
+
+
 class AdjustmentSourceLine(StrictRead):
     original_line_id: UUID
     line_number: int = Field(gt=0)
@@ -59,18 +75,23 @@ class AdjustmentSourceLine(StrictRead):
     uom_conversion_factor: Decimal = Field(gt=0)
     original_billed_quantity: Decimal = Field(ge=0)
     original_free_quantity: Decimal = Field(ge=0)
-    net_decreased_billed_quantity: Decimal
-    net_decreased_free_quantity: Decimal
+    net_decreased_billed_quantity: Decimal = Field(ge=0)
+    net_decreased_free_quantity: Decimal = Field(ge=0)
     remaining_billed_quantity: Decimal = Field(ge=0)
     remaining_free_quantity: Decimal = Field(ge=0)
     quoted_unit_rate: Decimal = Field(ge=0)
     price_basis: Literal["tax_exclusive", "tax_inclusive"]
+    line_discount: AdjustmentDiscountPolicy
+    document_discount_eligible: bool
     free_supply_tax_treatment: Literal["excluded_from_taxable_value", "included_at_unit_rate"]
+    tax_charge_mechanism: Literal["normal", "reverse_charge"]
+    tax_classification_code_snapshot: str
+    tax_code_version_id: UUID
     taxability_snapshot: Literal["taxable", "zero_rated", "exempt", "nil_rated", "non_gst"]
-    cgst_rate: Decimal = Field(ge=0)
-    sgst_rate: Decimal = Field(ge=0)
-    igst_rate: Decimal = Field(ge=0)
-    cess_rate: Decimal = Field(ge=0)
+    cgst_rate: Decimal = Field(ge=0, le=100)
+    sgst_rate: Decimal = Field(ge=0, le=100)
+    igst_rate: Decimal = Field(ge=0, le=100)
+    cess_rate: Decimal = Field(ge=0, le=100)
 
     @model_validator(mode="after")
     def reconcile(self):
@@ -110,6 +131,8 @@ class AdjustmentNoteContext(StrictRead):
     supply_type: Literal["intra_state", "inter_state", "export", "sez"]
     zero_rated_payment_mode: Literal["not_applicable", "without_payment", "with_igst"]
     tax_charge_mechanism: Literal["normal", "reverse_charge"]
+    rounding_policy: Literal["none", "nearest_rupee"]
+    document_discount: AdjustmentDiscountPolicy
     lines: list[AdjustmentSourceLine]
     rule_choices: list[AdjustmentRuleChoice]
 
@@ -119,6 +142,14 @@ class AdjustmentNoteContext(StrictRead):
             raise ValueError("posted source has no adjustable product lines")
         if not self.rule_choices:
             raise ValueError("no effective reviewed adjustment rule")
+        if any(line.tax_charge_mechanism != self.tax_charge_mechanism for line in self.lines):
+            raise ValueError("source line tax mechanism differs from the original document")
+        if self.supply_type == "intra_state" and any(line.igst_rate != 0 for line in self.lines):
+            raise ValueError("intra-state source unexpectedly carries IGST")
+        if self.supply_type != "intra_state" and any(
+            line.cgst_rate != 0 or line.sgst_rate != 0 for line in self.lines
+        ):
+            raise ValueError("non-intra-state source unexpectedly carries CGST or SGST")
         return self
 
 
@@ -185,42 +216,80 @@ _CONTEXT_HEADER_SQL = {
              invoice.invoice_date original_document_date, invoice.branch_id, customer.party_id,
              customer.id party_account_id, party.legal_name party_name, item.id original_open_item_id,
              item.principal_amount original_open_item_principal,
-             item.principal_amount-coalesce(sum(allocation.amount) FILTER (
-               WHERE allocation.status='posted' AND allocation.reversal_of_allocation_id IS NULL
-                 AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal WHERE reversal.org_id=allocation.org_id
-                   AND reversal.reversal_of_allocation_id=allocation.id AND reversal.status='reversed')),0) original_open_item_outstanding,
-             tax.currency_code, tax.supply_type, tax.zero_rated_payment_mode, tax.tax_charge_mechanism
+             item.principal_amount-coalesce(allocation_total.amount,0) original_open_item_outstanding,
+             invoice.currency_code, invoice.supply_type, invoice.zero_rated_payment_mode,
+             invoice.tax_charge_mechanism,
+             invoice.rounding_policy,
+             pg_catalog.jsonb_build_object(
+               'kind',invoice.document_discount_kind,
+               'basis',invoice.document_discount_basis,
+               'value',invoice.document_discount_value
+             ) document_discount
         FROM sales.invoices invoice
         JOIN parties.customer_accounts customer ON customer.org_id=invoice.org_id AND customer.id=invoice.customer_account_id
         JOIN parties.parties party ON party.org_id=customer.org_id AND party.id=customer.party_id
         JOIN finance.accounting_events event ON event.org_id=invoice.org_id AND event.sales_invoice_id=invoice.id AND event.event_type='sales_invoice'
         JOIN finance.open_items item ON item.org_id=event.org_id AND item.accounting_event_id=event.id AND item.item_side='receivable' AND item.status IN ('open','partially_settled')
-        JOIN tax.documents tax ON tax.org_id=invoice.org_id AND tax.sales_invoice_id=invoice.id AND tax.document_effect='original'
-        LEFT JOIN finance.allocations allocation ON allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+        JOIN tax.documents tax ON tax.org_id=invoice.org_id AND tax.sales_invoice_id=invoice.id
+          AND tax.document_effect='original' AND tax.currency_code=invoice.currency_code
+          AND tax.supply_type=invoice.supply_type
+          AND tax.zero_rated_payment_mode=invoice.zero_rated_payment_mode
+          AND tax.tax_charge_mechanism=invoice.tax_charge_mechanism
+        LEFT JOIN LATERAL (
+          SELECT sum(allocation.amount) amount
+            FROM finance.allocations allocation
+           WHERE allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+             AND allocation.status='posted' AND allocation.reversal_of_allocation_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
+               WHERE reversal.org_id=allocation.org_id
+                 AND reversal.reversal_of_allocation_id=allocation.id
+                 AND reversal.status='reversed')
+        ) allocation_total ON true
        WHERE invoice.org_id=:org_id AND invoice.id=:document_id AND invoice.status='posted'
+         AND invoice.invoice_type='tax_invoice' AND invoice.currency_code='INR'
+         AND invoice.zero_rated_payment_mode='not_applicable'
+         AND invoice.tax_charge_mechanism='normal'
          AND (:organization_scope OR invoice.branch_id=ANY(CAST(:branch_ids AS uuid[])))
-       GROUP BY invoice.id,customer.id,party.id,item.id,tax.id
     """,
     "purchase": """
       SELECT invoice.id original_document_id, invoice.supplier_invoice_number original_document_number,
              invoice.supplier_invoice_date original_document_date, invoice.branch_id, supplier.party_id,
              supplier.id party_account_id, party.legal_name party_name, item.id original_open_item_id,
              item.principal_amount original_open_item_principal,
-             item.principal_amount-coalesce(sum(allocation.amount) FILTER (
-               WHERE allocation.status='posted' AND allocation.reversal_of_allocation_id IS NULL
-                 AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal WHERE reversal.org_id=allocation.org_id
-                   AND reversal.reversal_of_allocation_id=allocation.id AND reversal.status='reversed')),0) original_open_item_outstanding,
-             tax.currency_code, tax.supply_type, tax.zero_rated_payment_mode, tax.tax_charge_mechanism
+             item.principal_amount-coalesce(allocation_total.amount,0) original_open_item_outstanding,
+             invoice.currency_code, invoice.supply_type, invoice.zero_rated_payment_mode,
+             invoice.tax_charge_mechanism,
+             invoice.rounding_policy,
+             pg_catalog.jsonb_build_object(
+               'kind',invoice.document_discount_kind,
+               'basis',invoice.document_discount_basis,
+               'value',invoice.document_discount_value
+             ) document_discount
         FROM procurement.supplier_invoices invoice
         JOIN parties.supplier_accounts supplier ON supplier.org_id=invoice.org_id AND supplier.id=invoice.supplier_account_id
         JOIN parties.parties party ON party.org_id=supplier.org_id AND party.id=supplier.party_id
         JOIN finance.accounting_events event ON event.org_id=invoice.org_id AND event.supplier_invoice_id=invoice.id AND event.event_type='supplier_invoice'
         JOIN finance.open_items item ON item.org_id=event.org_id AND item.accounting_event_id=event.id AND item.item_side='payable' AND item.status IN ('open','partially_settled')
-        JOIN tax.documents tax ON tax.org_id=invoice.org_id AND tax.supplier_invoice_id=invoice.id AND tax.document_effect='original'
-        LEFT JOIN finance.allocations allocation ON allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+        JOIN tax.documents tax ON tax.org_id=invoice.org_id AND tax.supplier_invoice_id=invoice.id
+          AND tax.document_effect='original' AND tax.currency_code=invoice.currency_code
+          AND tax.supply_type=invoice.supply_type
+          AND tax.zero_rated_payment_mode=invoice.zero_rated_payment_mode
+          AND tax.tax_charge_mechanism=invoice.tax_charge_mechanism
+        LEFT JOIN LATERAL (
+          SELECT sum(allocation.amount) amount
+            FROM finance.allocations allocation
+           WHERE allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+             AND allocation.status='posted' AND allocation.reversal_of_allocation_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
+               WHERE reversal.org_id=allocation.org_id
+                 AND reversal.reversal_of_allocation_id=allocation.id
+                 AND reversal.status='reversed')
+        ) allocation_total ON true
        WHERE invoice.org_id=:org_id AND invoice.id=:document_id AND invoice.status='posted'
+         AND invoice.currency_code='INR'
+         AND invoice.zero_rated_payment_mode='not_applicable'
+         AND invoice.tax_charge_mechanism='normal'
          AND (:organization_scope OR invoice.branch_id=ANY(CAST(:branch_ids AS uuid[])))
-       GROUP BY invoice.id,supplier.id,party.id,item.id,tax.id
     """,
 }
 
@@ -244,18 +313,34 @@ def adjustment_note_context(
       SELECT source.id original_line_id,source.line_number,source.product_id,product.name product_name,product.sku,
              source.uom_code,source.uom_conversion_factor,source.billed_quantity original_billed_quantity,
              source.free_quantity original_free_quantity,
-             coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.billed_quantity ELSE -line.billed_quantity END) FILTER (WHERE note.status='posted'),0) net_decreased_billed_quantity,
-             coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.free_quantity ELSE -line.free_quantity END) FILTER (WHERE note.status='posted'),0) net_decreased_free_quantity,
-             source.billed_quantity-coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.billed_quantity ELSE -line.billed_quantity END) FILTER (WHERE note.status='posted'),0) remaining_billed_quantity,
-             source.free_quantity-coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.free_quantity ELSE -line.free_quantity END) FILTER (WHERE note.status='posted'),0) remaining_free_quantity,
-             source.quoted_unit_rate,source.price_basis,source.free_supply_tax_treatment,source.taxability_snapshot,
+             coalesce(adjusted.billed_quantity,0) net_decreased_billed_quantity,
+             coalesce(adjusted.free_quantity,0) net_decreased_free_quantity,
+             source.billed_quantity-coalesce(adjusted.billed_quantity,0) remaining_billed_quantity,
+             source.free_quantity-coalesce(adjusted.free_quantity,0) remaining_free_quantity,
+             source.quoted_unit_rate,source.price_basis,
+             pg_catalog.jsonb_build_object(
+               'kind',source.line_discount_kind,
+               'basis',source.line_discount_basis,
+               'value',source.line_discount_value
+             ) line_discount,
+             source.document_discount_eligible,source.free_supply_tax_treatment,
+             source.tax_charge_mechanism,source.tax_classification_code_snapshot,
+             source.tax_code_version_id,source.taxability_snapshot,
              source.cgst_rate,source.sgst_rate,source.igst_rate,source.cess_rate
         FROM {table} source JOIN catalog.products product ON product.org_id=source.org_id AND product.id=source.product_id
-        LEFT JOIN finance.adjustment_note_lines line ON line.org_id=source.org_id AND {('line.sales_invoice_line_id' if side == 'sales' else 'line.supplier_invoice_line_id')}=source.id
-        LEFT JOIN finance.adjustment_notes note ON note.org_id=line.org_id AND note.id=line.adjustment_note_id
+        LEFT JOIN LATERAL (
+          SELECT
+            coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.billed_quantity ELSE -line.billed_quantity END) FILTER (WHERE note.status='posted'),0) billed_quantity,
+            coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.free_quantity ELSE -line.free_quantity END) FILTER (WHERE note.status='posted'),0) free_quantity
+            FROM finance.adjustment_note_lines line
+            JOIN finance.adjustment_notes note
+              ON note.org_id=line.org_id AND note.id=line.adjustment_note_id
+           WHERE line.org_id=source.org_id
+             AND {('line.sales_invoice_line_id' if side == 'sales' else 'line.supplier_invoice_line_id')}=source.id
+        ) adjusted ON true
        WHERE source.org_id=:org_id AND source.{source_fk}=:document_id AND source.line_kind='product'
-       GROUP BY source.id,product.id HAVING source.billed_quantity+source.free_quantity>
-         coalesce(sum(CASE note.document_effect WHEN 'decrease' THEN line.billed_quantity+line.free_quantity ELSE -(line.billed_quantity+line.free_quantity) END) FILTER (WHERE note.status='posted'),0)
+         AND source.billed_quantity+source.free_quantity>
+           coalesce(adjusted.billed_quantity,0)+coalesce(adjusted.free_quantity,0)
        ORDER BY source.line_number,source.id
     """
     lines = db.execute(text(line_sql), params).mappings().all()
