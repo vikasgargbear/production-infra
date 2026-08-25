@@ -106,6 +106,46 @@ class RailwayDatabasePhaseError(RuntimeError):
     """The remote database phase failed closed."""
 
 
+def _safe_error_detail(
+    exc: BaseException, *, sensitive_values: tuple[str, ...] = ()
+) -> str:
+    """Return a bounded diagnostic without echoing transported credentials."""
+
+    detail = str(exc)
+    ambient_values = tuple(
+        os.getenv(name, "") for name in (*SECRET_KEYS, "DATABASE_URL")
+    )
+    for secret in (*sensitive_values, *ambient_values):
+        if secret:
+            detail = detail.replace(secret, "[REDACTED]")
+    detail = re.sub(r"sb_(?:secret|service_role)_[A-Za-z0-9._-]+", "[REDACTED]", detail)
+    detail = re.sub(r"eyJ[A-Za-z0-9._-]+", "[REDACTED]", detail)
+    detail = re.sub(
+        r"postgres(?:ql)?://[^\s]+", "[REDACTED_DATABASE_URL]", detail
+    )
+    detail = " ".join(detail.split())
+    if not detail:
+        detail = "no diagnostic detail"
+    return f"{type(exc).__name__}: {detail[:1000]}"
+
+
+def _orphan_reconciliation_is_clean(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    recovered = value.get("recovered_auth_identity_count")
+    if not isinstance(recovered, int) or isinstance(recovered, bool) or recovered < 0:
+        return False
+    for key in (
+        "remaining_auth_identity_count",
+        "remaining_active_temporary_grant_count",
+        "remaining_denial_role_count",
+    ):
+        count = value.get(key)
+        if type(count) is not int or count != 0:
+            return False
+    return True
+
+
 def _deployed_oauth_client_id() -> str:
     value = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "")
     client_id = value.strip()
@@ -711,26 +751,64 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
             response["content_sha256"] = _content_hash(response)
             return response
         except BaseException as provision_error:
-            cleanup_errors: list[str] = []
+            provision_error_detail = _safe_error_detail(
+                provision_error, sensitive_values=tuple(environment.values())
+            )
+            mcp_cleanup_errors: list[str] = []
+            browser_cleanup_errors: list[str] = []
             with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
                 if mcp_provisioned or mcp_state.exists():
                     try:
                         cleanup_mcp_identities(mcp_state)
                     except BaseException as exc:
-                        cleanup_errors.append(f"MCP cleanup failed: {type(exc).__name__}")
+                        mcp_cleanup_errors.append(
+                            "MCP cleanup failed: "
+                            + _safe_error_detail(
+                                exc, sensitive_values=tuple(environment.values())
+                            )
+                        )
                 if browser_provisioned or browser_state.exists():
                     try:
                         cleanup_browser_identities(browser_state)
                     except BaseException as exc:
-                        cleanup_errors.append(
-                            f"browser cleanup failed: {type(exc).__name__}"
+                        browser_cleanup_errors.append(
+                            "browser cleanup failed: "
+                            + _safe_error_detail(
+                                exc, sensitive_values=tuple(environment.values())
+                            )
                         )
+                if browser_cleanup_errors:
+                    try:
+                        reconciliation = recover_lost_live18_state()
+                        if _orphan_reconciliation_is_clean(reconciliation):
+                            browser_cleanup_errors.clear()
+                        else:
+                            browser_cleanup_errors.append(
+                                "orphan reconciliation returned an incomplete boundary"
+                            )
+                    except BaseException as exc:
+                        browser_cleanup_errors.append(
+                            "orphan reconciliation failed: "
+                            + _safe_error_detail(
+                                exc, sensitive_values=tuple(environment.values())
+                            )
+                        )
+            cleanup_errors = [*mcp_cleanup_errors, *browser_cleanup_errors]
             if not cleanup_errors:
                 for path in directory.iterdir():
                     path.unlink(missing_ok=True)
                 directory.rmdir()
-                raise
-            raise RailwayDatabasePhaseError("; ".join(cleanup_errors)) from provision_error
+                raise RailwayDatabasePhaseError(
+                    f"identity provisioning failed: {provision_error_detail}"
+                ) from provision_error
+            raise RailwayDatabasePhaseError(
+                "; ".join(
+                    [
+                        f"identity provisioning failed: {provision_error_detail}",
+                        *cleanup_errors,
+                    ]
+                )
+            ) from provision_error
     except BaseException:
         raise
 
@@ -759,7 +837,10 @@ def _identity_cleanup(request: dict[str, Any]) -> dict[str, Any]:
         _restore_state(browser_state, request.get("browser_state"), "browser")
     if not mcp_state.exists() and request.get("mcp_state") is not None:
         _restore_state(mcp_state, request.get("mcp_state"), "MCP")
-    errors: list[str] = []
+    mcp_cleanup_errors: list[str] = []
+    browser_cleanup_errors: list[str] = []
+    reconciliation_errors: list[str] = []
+    cleanup_warnings: list[str] = []
     orphan_reconciliation: dict[str, int] | None = None
     try:
         with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
@@ -767,18 +848,32 @@ def _identity_cleanup(request: dict[str, Any]) -> dict[str, Any]:
                 try:
                     cleanup_mcp_identities(mcp_state)
                 except BaseException as exc:  # browser cleanup must still run
-                    errors.append(f"MCP cleanup failed: {type(exc).__name__}")
+                    mcp_cleanup_errors.append(
+                        f"MCP cleanup failed: {_safe_error_detail(exc)}"
+                    )
             if browser_state.exists():
                 try:
                     cleanup_browser_identities(browser_state)
                 except BaseException as exc:
-                    errors.append(f"browser cleanup failed: {type(exc).__name__}")
+                    browser_cleanup_errors.append(
+                        f"browser cleanup failed: {_safe_error_detail(exc)}"
+                    )
             try:
                 orphan_reconciliation = recover_lost_live18_state()
             except BaseException as exc:
-                errors.append(
-                    f"orphan reconciliation failed: {type(exc).__name__}"
+                reconciliation_errors.append(
+                    f"orphan reconciliation failed: {_safe_error_detail(exc)}"
                 )
+        if browser_cleanup_errors and _orphan_reconciliation_is_clean(
+            orphan_reconciliation
+        ):
+            cleanup_warnings = browser_cleanup_errors
+            browser_cleanup_errors = []
+        errors = [
+            *mcp_cleanup_errors,
+            *browser_cleanup_errors,
+            *reconciliation_errors,
+        ]
         if errors:
             raise RailwayDatabasePhaseError("; ".join(errors))
     finally:
@@ -792,6 +887,7 @@ def _identity_cleanup(request: dict[str, Any]) -> dict[str, Any]:
         **_response_boundary(request),
         "cleaned": True,
         "orphan_reconciliation": orphan_reconciliation,
+        "cleanup_warnings": cleanup_warnings,
     }
     response["content_sha256"] = _content_hash(response)
     return response

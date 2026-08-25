@@ -380,6 +380,66 @@ def test_remote_identity_client_mismatch_fails_through_cleanup(monkeypatch, tmp_
     ).exists()
 
 
+def test_remote_identity_failure_preserves_redacted_provision_and_cleanup_detail(
+    monkeypatch, tmp_path
+):
+    database_url = "postgresql://admin:database-secret@db.example.test/postgres"
+    request = {
+        **_boundary_request(),
+        "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "mcp_url": "https://mcp.example.test/mcp",
+        "secrets": {
+            "SUPABASE_ACCESS_TOKEN": "management-secret",
+            "SUPABASE_DB_PASSWORD": "database-secret",
+            "SUPABASE_ANON_KEY": "anon-secret",
+        },
+    }
+
+    def fail_provision(state_path, _profile):
+        state_path.write_text('{"version":1}\n', encoding="utf-8")
+        raise identities.EphemeralIdentityError(
+            f"auth exchange rejected management-secret via {database_url}"
+        )
+
+    def fail_cleanup(_state_path):
+        raise identities.EphemeralIdentityError(
+            "database cleanup rejected database-secret"
+        )
+
+    def fail_recovery():
+        raise identities.EphemeralIdentityError(
+            "orphan recovery rejected anon-secret"
+        )
+
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setattr(phase, "provision_browser_identities", fail_provision)
+    monkeypatch.setattr(phase, "cleanup_browser_identities", fail_cleanup)
+    monkeypatch.setattr(phase, "recover_lost_live18_state", fail_recovery)
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "reviewed-public-client")
+    monkeypatch.setenv("DATABASE_URL", database_url)
+
+    with pytest.raises(phase.RailwayDatabasePhaseError) as captured:
+        phase._identity_provision(request)
+
+    message = str(captured.value)
+    assert "identity provisioning failed: EphemeralIdentityError" in message
+    assert "browser cleanup failed: EphemeralIdentityError" in message
+    assert "orphan reconciliation failed: EphemeralIdentityError" in message
+    assert "auth exchange rejected [REDACTED]" in message
+    assert "database cleanup rejected [REDACTED]" in message
+    assert "orphan recovery rejected [REDACTED]" in message
+    assert "[REDACTED_DATABASE_URL]" in message
+    assert "management-secret" not in message
+    assert "database-secret" not in message
+    assert "anon-secret" not in message
+
+
 def test_remote_execution_is_bound_to_exact_deployment_and_provenance(
     monkeypatch, tmp_path
 ):
@@ -464,6 +524,105 @@ def test_zero_remote_state_runs_durable_orphan_reconciliation(monkeypatch, tmp_p
     assert response["cleaned"] is True
     assert response["orphan_reconciliation"] == reconciliation
     assert not any(tmp_path.iterdir())
+
+
+def test_clean_orphan_reconciliation_supersedes_failed_stateful_cleanup(
+    monkeypatch, tmp_path
+):
+    request = {
+        **_boundary_request(),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "secrets": {key: "secret" for key in phase.SECRET_KEYS},
+    }
+    directory = tmp_path / ("live18-railway-identities-" + request["request_nonce"])
+    directory.mkdir()
+    browser_state = directory / "browser-state.json"
+    browser_state.write_text('{"version":1}\n', encoding="utf-8")
+    reconciliation = {
+        "recovered_auth_identity_count": 3,
+        "remaining_auth_identity_count": 0,
+        "remaining_active_temporary_grant_count": 0,
+        "remaining_denial_role_count": 0,
+    }
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setattr(
+        phase,
+        "cleanup_browser_identities",
+        lambda _path: (_ for _ in ()).throw(
+            identities.EphemeralIdentityError("stale state was already recovered")
+        ),
+    )
+    monkeypatch.setattr(
+        phase, "recover_lost_live18_state", lambda: reconciliation
+    )
+
+    response = phase._identity_cleanup(request)
+
+    assert response["cleaned"] is True
+    assert response["orphan_reconciliation"] == reconciliation
+    assert response["cleanup_warnings"] == [
+        "browser cleanup failed: EphemeralIdentityError: stale state was already recovered"
+    ]
+    assert not directory.exists()
+
+
+@pytest.mark.parametrize("invalid_zero", (False, 0.0))
+def test_orphan_reconciliation_rejects_non_integer_zeroes(invalid_zero):
+    reconciliation = {
+        "recovered_auth_identity_count": 0,
+        "remaining_auth_identity_count": invalid_zero,
+        "remaining_active_temporary_grant_count": 0,
+        "remaining_denial_role_count": 0,
+    }
+
+    assert phase._orphan_reconciliation_is_clean(reconciliation) is False
+
+
+def test_browser_orphan_reconciliation_cannot_supersede_failed_mcp_cleanup(
+    monkeypatch, tmp_path
+):
+    request = {
+        **_boundary_request(),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "secrets": {key: "secret" for key in phase.SECRET_KEYS},
+    }
+    directory = tmp_path / ("live18-railway-identities-" + request["request_nonce"])
+    directory.mkdir()
+    mcp_state = directory / "mcp-state.json"
+    mcp_state.write_text('{"version":1}\n', encoding="utf-8")
+    reconciliation = {
+        "recovered_auth_identity_count": 0,
+        "remaining_auth_identity_count": 0,
+        "remaining_active_temporary_grant_count": 0,
+        "remaining_denial_role_count": 0,
+    }
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setattr(
+        phase,
+        "cleanup_mcp_identities",
+        lambda _path: (_ for _ in ()).throw(
+            RuntimeError("temporary MCP authority is still active")
+        ),
+    )
+    monkeypatch.setattr(
+        phase, "recover_lost_live18_state", lambda: reconciliation
+    )
+
+    with pytest.raises(phase.RailwayDatabasePhaseError, match="MCP cleanup failed"):
+        phase._identity_cleanup(request)
+
+    assert directory.exists()
+    assert mcp_state.exists()
 
 
 def test_remote_prepare_rejects_missing_lineage_and_cross_branch(monkeypatch):
