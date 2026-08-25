@@ -1,0 +1,206 @@
+{
+  "contract_version": "1.0.0",
+  "scope": "The eighteen production-critical ERP operations. Every command is authoritative only through the reviewed REST/MCP operator-action boundary and canonical PostgreSQL objects.",
+  "shared_rest_lifecycle": {
+    "prepare": "/api/web/actions/{operation_key}/prepare",
+    "review": "/api/web/actions/commands/{command_request_id}/review",
+    "approve": "/api/web/actions/commands/{command_request_id}/approve",
+    "execute": "/api/web/actions/commands/{command_request_id}/execute",
+    "status": "/api/web/actions/commands/{command_request_id}"
+  },
+  "shared_mcp_lifecycle": [
+    "erp_operation_review_get",
+    "erp_operation_approve",
+    "erp_operation_execute",
+    "erp_operation_status_get"
+  ],
+  "forbidden_runtime_database_namespaces": ["financial", "master"],
+  "operations": [
+    {
+      "id": "sales_order",
+      "operation_key": "sales.order.prepare",
+      "mcp_prepare_tool": "erp_sales_order_prepare",
+      "rest_context": [],
+      "rest_readback": "/api/canonical/sales-orders/{resource_id}/acceptance-readback",
+      "prepare_sql": "erp_automation_commands.persist_sales_order_prepare",
+      "execute_sql": ["erp_trade_commands_v2.approve_sales_order"],
+      "authoritative_tables": ["sales.orders", "sales.order_lines", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "sales_dispatch",
+      "operation_key": "sales.dispatch.prepare",
+      "mcp_prepare_tool": "erp_sales_dispatch_prepare",
+      "rest_context": [],
+      "rest_readback": "/api/canonical/sales-dispatches/{resource_id}/acceptance-readback",
+      "prepare_sql": "erp_automation_commands.persist_sales_dispatch_prepare",
+      "execute_sql": ["erp_trade_commands.post_dispatch", "erp_commercial_commands.post_dispatch_inventory_valuation"],
+      "authoritative_tables": ["sales.dispatches", "sales.dispatch_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "automation.command_requests"]
+    },
+    {
+      "id": "sales_invoice",
+      "operation_key": "sales.invoice.prepare",
+      "mcp_prepare_tool": "erp_sales_invoice_prepare",
+      "rest_context": [],
+      "rest_readback": "/api/canonical/sales-invoices/{resource_id}/posting-readback",
+      "prepare_sql": "erp_automation_commands.persist_sales_invoice_prepare",
+      "execute_sql": ["erp_commercial_commands.post_sales_invoice"],
+      "authoritative_tables": ["sales.invoices", "sales.invoice_lines", "sales.invoice_dispatch_allocations", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.open_items", "tax.documents", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "sales_return",
+      "operation_key": "sales.return.prepare",
+      "mcp_prepare_tool": "erp_sales_return_prepare",
+      "rest_context": ["/api/canonical/returns/sales-invoices/{invoice_id}/context"],
+      "rest_readback": "/api/canonical/returns/sales/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_sales_return_prepare",
+      "execute_sql": ["erp_commercial_commands.post_sales_return"],
+      "authoritative_tables": ["sales.returns", "sales.return_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.allocations", "finance.open_items", "tax.documents", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "purchase_order",
+      "operation_key": "procurement.purchase_order.prepare",
+      "mcp_prepare_tool": "erp_purchase_order_prepare",
+      "rest_context": [],
+      "rest_readback": "/api/canonical/purchase-orders/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_purchase_order_prepare",
+      "execute_sql": ["erp_trade_commands_v2.approve_purchase_order"],
+      "authoritative_tables": ["procurement.purchase_orders", "procurement.purchase_order_lines", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "goods_receipt",
+      "operation_key": "procurement.goods_receipt.prepare",
+      "mcp_prepare_tool": "erp_goods_receipt_prepare",
+      "rest_context": ["/api/canonical/goods-receipts/purchase-orders/{purchase_order_id}/context"],
+      "rest_readback": "/api/canonical/goods-receipts/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_goods_receipt_prepare",
+      "execute_sql": ["erp_trade_commands.post_goods_receipt"],
+      "authoritative_tables": ["procurement.goods_receipts", "procurement.goods_receipt_lines", "procurement.purchase_orders", "inventory.batches", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "automation.command_requests"]
+    },
+    {
+      "id": "supplier_invoice",
+      "operation_key": "procurement.supplier_invoice.prepare",
+      "mcp_prepare_tool": "erp_supplier_invoice_prepare",
+      "rest_context": ["/api/canonical/supplier-invoices/context", "/api/canonical/supplier-invoices/eligible-receipts"],
+      "rest_readback": "/api/canonical/supplier-invoices/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_supplier_invoice_prepare",
+      "execute_sql": ["erp_commercial_commands.post_supplier_invoice"],
+      "authoritative_tables": ["procurement.supplier_invoices", "procurement.supplier_invoice_lines", "procurement.supplier_invoice_receipt_allocations", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.open_items", "tax.documents", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "purchase_return",
+      "operation_key": "procurement.purchase_return.prepare",
+      "mcp_prepare_tool": "erp_purchase_return_prepare",
+      "rest_context": ["/api/canonical/returns/supplier-invoices/{invoice_id}/context"],
+      "rest_readback": "/api/canonical/returns/purchases/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_purchase_return_prepare",
+      "execute_sql": ["erp_commercial_commands.post_purchase_return"],
+      "authoritative_tables": ["procurement.purchase_returns", "procurement.purchase_return_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.allocations", "finance.open_items", "tax.documents", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "customer_receipt",
+      "operation_key": "finance.customer_receipt.prepare",
+      "mcp_prepare_tool": "erp_customer_receipt_prepare",
+      "rest_context": ["/api/payment-allocation/unpaid-invoices"],
+      "rest_readback": "/api/payment-allocation/payment/{resource_id}/readback",
+      "prepare_sql": "erp_automation_commands.persist_customer_receipt_prepare",
+      "execute_sql": ["erp_finance_commands.post_payment", "erp_automation_commands.execute_approved_command"],
+      "authoritative_tables": ["finance.payments", "finance.allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "automation.command_requests"]
+    },
+    {
+      "id": "supplier_payment",
+      "operation_key": "finance.supplier_payment.prepare",
+      "mcp_prepare_tool": "erp_supplier_payment_prepare",
+      "rest_context": ["/api/canonical/supplier-payments/context"],
+      "rest_readback": "/api/canonical/supplier-payments/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_supplier_payment_prepare",
+      "execute_sql": ["erp_finance_commands.post_payment", "erp_automation_commands.execute_approved_command"],
+      "authoritative_tables": ["finance.payments", "finance.allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "automation.command_requests"]
+    },
+    {
+      "id": "supplier_advance",
+      "operation_key": "finance.supplier_advance.prepare",
+      "mcp_prepare_tool": "erp_supplier_advance_prepare",
+      "rest_context": ["/api/canonical/supplier-payments/context"],
+      "rest_readback": "/api/canonical/supplier-payments/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_supplier_advance_prepare",
+      "execute_sql": ["erp_finance_commands.post_supplier_advance_payment"],
+      "authoritative_tables": ["finance.payments", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "procurement.purchase_order_advance_allocations", "automation.command_requests"]
+    },
+    {
+      "id": "customer_credit_note",
+      "operation_key": "finance.adjustment_note.prepare",
+      "variant": "sales_credit",
+      "mcp_prepare_tool": "erp_adjustment_note_prepare",
+      "rest_context": ["/api/canonical/adjustment-notes/context"],
+      "rest_readback": "/api/canonical/adjustment-notes/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_adjustment_note_prepare",
+      "execute_sql": ["erp_commercial_commands.post_adjustment_note"],
+      "authoritative_tables": ["finance.adjustment_notes", "finance.adjustment_note_lines", "finance.allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "tax.documents", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "supplier_debit_note",
+      "operation_key": "finance.adjustment_note.prepare",
+      "variant": "purchase_debit",
+      "mcp_prepare_tool": "erp_adjustment_note_prepare",
+      "rest_context": ["/api/canonical/adjustment-notes/context"],
+      "rest_readback": "/api/canonical/adjustment-notes/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_adjustment_note_prepare",
+      "execute_sql": ["erp_commercial_commands.post_adjustment_note"],
+      "authoritative_tables": ["finance.adjustment_notes", "finance.adjustment_note_lines", "finance.allocations", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "tax.documents", "calculation.artifacts", "automation.command_requests"]
+    },
+    {
+      "id": "inventory_transfer",
+      "operation_key": "inventory.transfer.prepare",
+      "mcp_prepare_tool": "erp_inventory_transfer_prepare",
+      "rest_context": ["/api/canonical/inventory-transfers/eligible-batches"],
+      "rest_readback": "/api/canonical/inventory-transfers/{resource_id}",
+      "prepare_sql": "erp_automation_commands.persist_inventory_transfer_prepare",
+      "execute_sql": ["erp_automation_commands.execute_approved_command"],
+      "authoritative_tables": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_balances", "automation.command_requests"]
+    },
+    {
+      "id": "inventory_adjustment",
+      "operation_key": "inventory.adjustment.prepare",
+      "mcp_prepare_tool": "erp_inventory_adjustment_prepare",
+      "rest_context": ["/api/canonical/inventory/context"],
+      "rest_readback": "/api/web/actions/inventory-adjustment/commands/{command_request_id}/readback",
+      "prepare_sql": "erp_automation_commands.persist_inventory_adjustment_prepare",
+      "execute_sql": ["erp_automation_commands.execute_approved_command"],
+      "authoritative_tables": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.journal_entries", "finance.journal_lines", "automation.command_requests"]
+    },
+    {
+      "id": "inventory_destruction",
+      "operation_key": "inventory.destruction.prepare",
+      "mcp_prepare_tool": "erp_inventory_destruction_prepare",
+      "rest_context": ["/api/canonical/inventory/context"],
+      "rest_readback": "/api/web/actions/inventory-destruction/commands/{command_request_id}/readback",
+      "prepare_sql": "erp_automation_commands.persist_inventory_destruction_prepare",
+      "execute_sql": ["erp_automation_commands.execute_inventory_destruction_command"],
+      "authoritative_tables": ["compliance.destructions", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "automation.command_requests", "automation.command_approvals"]
+    },
+    {
+      "id": "bank_reconciliation",
+      "operation_key": "finance.bank_reconciliation.prepare",
+      "mcp_prepare_tool": "erp_bank_reconciliation_prepare",
+      "mcp_readback_tool": "erp_bank_reconciliation_get",
+      "rest_context": [],
+      "rest_readback": "/api/web/actions/bank-reconciliation/commands/{command_request_id}/readback",
+      "prepare_sql": "erp_automation_commands.persist_bank_reconciliation_prepare",
+      "execute_sql": ["erp_automation_commands.execute_bank_reconciliation_command"],
+      "authoritative_tables": ["finance.bank_statements", "finance.bank_statement_lines", "finance.bank_accounts", "finance.accounts", "finance.journal_entries", "finance.journal_lines", "finance.reconciliation_matches", "automation.command_requests", "automation.command_approvals"]
+    },
+    {
+      "id": "expense_claim",
+      "operation_key": "finance.expense_claim.prepare",
+      "mcp_prepare_tool": "erp_expense_claim_prepare",
+      "mcp_readback_tool": "erp_expense_claim_readback",
+      "rest_context": [],
+      "rest_review": "/api/web/actions/expense-claims/commands/{command_request_id}/review",
+      "rest_readback": "/api/web/actions/expense-claims/commands/{command_request_id}/readback",
+      "prepare_sql": "erp_automation_commands.persist_expense_claim_prepare",
+      "execute_sql": ["erp_automation_commands.execute_approved_expense_claim", "erp_compliance_commands.post_expense_claim"],
+      "authoritative_tables": ["finance.expense_claims", "finance.expense_claim_lines", "core.attachments", "finance.accounts", "finance.journal_entries", "finance.journal_lines", "finance.accounting_events", "automation.command_requests", "automation.command_approvals"],
+      "integration_state": "pending_20260825_0009"
+    }
+  ]
+}
