@@ -141,6 +141,7 @@ jobs:
             else
               test -z "$actual_start" || \
                 test "$actual_start" = "python start.py" || \
+                test "$actual_start" = "exec $expected_start" || \
                 test "$actual_start" = "$expected_start"
             fi
           }
@@ -149,7 +150,7 @@ jobs:
           if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json "" || \
              ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json "$mcp_start_command" || \
              ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json ""; then
-            echo "::error title=Railway service configuration drift::All services must use repository-root context and their exact /deploy/railway/*.railway.json config file. API/frontend start overrides must be empty; MCP may additionally have only the reviewed command or the known python start.py legacy value that this exact upload replaces. Correct any other drift separately; this workflow will not trigger an unbound intermediate deployment."
+            echo "::error title=Railway service configuration drift::All services must use repository-root context and their exact /deploy/railway/*.railway.json config file. API/frontend start overrides must be empty; MCP may additionally have only the reviewed command or one of the two known superseded commands that this exact upload replaces. Correct any other drift separately; this workflow will not trigger an unbound intermediate deployment."
             exit 1
           fi
 

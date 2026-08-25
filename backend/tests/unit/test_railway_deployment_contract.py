@@ -31,7 +31,7 @@ def test_each_railway_service_uses_its_dockerfile_and_plan_default_region() -> N
 
     expected_start_commands = {
         "api": None,
-        "mcp": "exec uvicorn aasopharma_mcp.server:create_app --factory --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'",
+        "mcp": "uvicorn aasopharma_mcp.server:create_app --factory --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'",
         "frontend": None,
     }
 
@@ -52,7 +52,7 @@ def test_each_railway_service_uses_its_dockerfile_and_plan_default_region() -> N
         for line in mcp_dockerfile.splitlines()
         if line.startswith("CMD ")
     )
-    assert mcp_cmd == ["sh", "-c", expected_start_commands["mcp"]]
+    assert mcp_cmd == ["sh", "-c", f'exec {expected_start_commands["mcp"]}']
 
 
 def test_railway_healthchecks_match_service_readiness_boundaries() -> None:
@@ -119,6 +119,7 @@ def test_workflow_fails_closed_on_service_configuration_drift() -> None:
     ]
     assert "mcp_start_command=$(jq -er" in config_step
     assert 'test "$actual_start" = "python start.py"' in config_step
+    assert 'test "$actual_start" = "exec $expected_start"' in config_step
     assert 'test "$actual_start" = "$expected_start"' in config_step
     assert 'service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json ""' in config_step
     assert 'service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json "$mcp_start_command"' in config_step
