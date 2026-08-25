@@ -16,7 +16,6 @@ export { default as DESIGN_SYSTEM } from './design-system.config';
 export { default as THEME_CONFIG } from './theme.config';
 
 export { default as USER_ROLES_CONFIG } from './userRoles.config';
-export { ALL_FIELD_ALIASES as FIELD_ALIASES } from './fieldAliases';
 
 // Constants
 export * from './constants';

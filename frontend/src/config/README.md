@@ -11,7 +11,6 @@ Application-wide configuration files.
 | apiBase.ts | 113 | Base URL resolution |
 | constants.ts | 89 | Business constants (ORDER_STATUS, PAYMENT_STATUS, etc.) |
 | design-system.config.ts | 217 | Design tokens & spacing |
-| fieldAliases.ts | 257 | Backend→Frontend field mappings |
 | gstRates.ts | 177 | GST rate configurations |
 | invoice.config.ts | 331 | Invoice settings |
 | purchase.config.ts | 239 | Purchase settings |

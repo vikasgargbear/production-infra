@@ -38,6 +38,18 @@ test('retired browser spreadsheet parsers cannot invent product master facts', (
     .not.toContain('BulkUploadInline');
 });
 
+test('retired compatibility mappers cannot infer canonical product or batch facts', () => {
+  [
+    'frontend/src/utils/productMapper.ts',
+    'frontend/src/utils/dataMapper.ts',
+    'frontend/src/config/fieldAliases.ts',
+  ].forEach(relative => expect(fs.existsSync(path.join(root, relative))).toBe(false));
+
+  const configIndex = read('frontend/src/config/index.ts');
+  expect(configIndex).not.toContain('FIELD_ALIASES');
+  expect(configIndex).not.toContain('fieldAliases');
+});
+
 test('financial comparisons come from equal-period backend facts, never zero placeholders', () => {
   const financialReport = read('frontend/src/components/reports/FinancialReport.tsx');
   const salesReport = read('frontend/src/components/reports/SalesReport.tsx');
