@@ -642,8 +642,8 @@ def _operation_facts(
             "goods_receipt_free_quantity",
             "purchase_return_billed_quantity",
             "purchase_return_free_quantity",
-            "supplier_debit_note_billed_quantity",
-            "supplier_debit_note_free_quantity",
+            None,
+            None,
         ),
     }
     if operation_id in adjustment_limits:
@@ -656,15 +656,22 @@ def _operation_facts(
             note_free_key,
         ) = adjustment_limits[operation_id]
         values: dict[str, Decimal] = {}
-        for key in (
-            original_billed_key,
-            original_free_key,
-            prior_billed_key,
-            prior_free_key,
-            note_billed_key,
-            note_free_key,
+        note_billed_value = (
+            _leaf(scalars, note_billed_key, "reviewed scalar")
+            if note_billed_key else _leaf(scalars, prior_billed_key, "reviewed scalar")
+        )
+        note_free_value = (
+            _leaf(scalars, note_free_key, "reviewed scalar")
+            if note_free_key else _leaf(scalars, prior_free_key, "reviewed scalar")
+        )
+        for key, rendered in (
+            (original_billed_key, _leaf(scalars, original_billed_key, "reviewed scalar")),
+            (original_free_key, _leaf(scalars, original_free_key, "reviewed scalar")),
+            (prior_billed_key, _leaf(scalars, prior_billed_key, "reviewed scalar")),
+            (prior_free_key, _leaf(scalars, prior_free_key, "reviewed scalar")),
+            (note_billed_key or "derived_note_billed_quantity", note_billed_value),
+            (note_free_key or "derived_note_free_quantity", note_free_value),
         ):
-            rendered = _leaf(scalars, key, "reviewed scalar")
             if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", rendered):
                 raise FixtureCompileError(
                     f"{key} must be a non-negative plain decimal with at most 6 fractional digits"
@@ -677,9 +684,9 @@ def _operation_facts(
                 f"{operation_id} prior return quantities exceed the reviewed source quantities"
             )
         if (
-            values[note_billed_key] + values[note_free_key] <= 0
-            or values[note_billed_key] > remaining_billed
-            or values[note_free_key] > remaining_free
+            Decimal(note_billed_value) + Decimal(note_free_value) <= 0
+            or Decimal(note_billed_value) > remaining_billed
+            or Decimal(note_free_value) > remaining_free
         ):
             raise FixtureCompileError(
                 f"{operation_id} billed/free quantities exceed the exact post-return source ceiling"
@@ -690,6 +697,15 @@ def _operation_facts(
             raise FixtureCompileError(
                 f"{reason_key} must be a specific non-empty reason of at most 1024 characters"
             )
+        if operation_id == "supplier_debit_note":
+            return {
+                **facts,
+                "choice": {
+                    **(facts.get("choice") or {}),
+                    "supplier_debit_note_billed_quantity": note_billed_value,
+                    "supplier_debit_note_free_quantity": note_free_value,
+                },
+            }
         return facts
     if operation_id == "sales_invoice":
         decimal_rules = {

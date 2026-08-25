@@ -488,6 +488,61 @@ def test_customer_credit_note_targets_exact_invoice_and_post_return_ceiling() ->
         )
 
 
+def test_supplier_debit_note_reuses_portal_reconciled_return_quantities() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/supplier_debit_note.json").read_text()
+    )
+    scalars = {
+        "goods_receipt_accepted_quantity": "50.000000",
+        "goods_receipt_free_quantity": "2.500000",
+        "purchase_return_billed_quantity": "10.000000",
+        "purchase_return_free_quantity": "0.000000",
+        "supplier_debit_note_reason": "Supplier-issued price correction",
+    }
+    facts = {
+        "identity": {
+            "purchase_adjustment_rule_id": "d3000000-0000-7000-8000-000000000052",
+            "supplier_credit_note_portal_line_id": "d3000000-0000-7000-8000-000000000053",
+        },
+        "display": {"product_name": "Demo Product"},
+    }
+    used: set[str] = set()
+    operation_facts = _operation_facts(
+        "supplier_debit_note", facts, scalars, used,
+    )
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        operation_facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps(
+        "supplier_debit_note", operation, "separate_approver"
+    )
+    assert used == {"supplier_debit_note_reason"}
+    assert operation_facts["choice"] == {
+        "supplier_debit_note_billed_quantity": "10.000000",
+        "supplier_debit_note_free_quantity": "0.000000",
+    }
+    assert operation["prepare_steps"][2]["value"] == "{{resource_supplier_invoice}}"
+    assert operation["prepare_steps"][7]["value"] == (
+        "d3000000-0000-7000-8000-000000000053"
+    )
+
+    with pytest.raises(FixtureCompileError, match="post-return source ceiling"):
+        _operation_facts(
+            "supplier_debit_note",
+            facts,
+            {
+                **scalars,
+                "goods_receipt_accepted_quantity": "15.000000",
+            },
+            set(),
+        )
+
+
+
 def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(
