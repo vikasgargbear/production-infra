@@ -5,6 +5,7 @@ import {
   projectCanonicalImportLines,
   type CanonicalImportLine,
 } from '../../sales/utils/documentImport';
+import { formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
 export interface ImportData {
   source_type: string;
@@ -109,12 +110,20 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
         || sourceDocument.customer
         || (sourceDocument.customer_id ? {
           customer_id: sourceDocument.customer_id,
-          customer_name: sourceDocument.customer_name || '',
+          customer_name: sourceDocument.customer_name,
         } : undefined);
+
+      const sourceId = sourceDocument.id
+        ?? sourceDocument.invoice_id
+        ?? sourceDocument.order_id
+        ?? sourceDocument.challan_id;
+      if (sourceId === undefined || sourceId === null || String(sourceId).trim() === '') {
+        throw new Error('The selected canonical document identity is unavailable.');
+      }
 
       const importData: ImportData = {
         source_type: selectedType,
-        source_id: sourceDocument.id || sourceDocument.invoice_id || sourceDocument.order_id || sourceDocument.challan_id,
+        source_id: sourceId,
         customer_id: sourceDocument.customer_id,
         customer_name: sourceDocument.customer_name,
         customer_details: customerDetails,
@@ -145,8 +154,12 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     return date.toLocaleDateString('en-IN');
   };
 
-  const formatCurrency = (amount: number) => {
-    return `₹${(amount || 0).toFixed(2)}`;
+  const authoritativeAmount = (document: Record<string, unknown>): string | null => {
+    const amount = document.total_amount ?? document.net_amount;
+    if (amount === undefined || amount === null) return null;
+    return normalizeAuthoritativeDecimal(amount, 'Imported document amount', {
+      scale: 2, maximumWholeDigits: 20, allowNegative: true,
+    });
   };
 
   if (!isOpen) return null;
@@ -246,7 +259,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                     <div>
                       <div className="flex items-center space-x-2">
                         <span className="font-medium text-gray-900">
-                          {doc.invoice_number || doc.order_number || doc.challan_number || `#${doc.id}`}
+                          {doc.invoice_number || doc.order_number || doc.challan_number || 'Document number unavailable'}
                         </span>
                         {doc.status && (
                           <span className={`
@@ -263,7 +276,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                         )}
                       </div>
                       <div className="mt-1 text-sm text-gray-600">
-                        <span>{doc.customer_name || 'Unknown Customer'}</span>
+                        <span>{doc.customer_name || 'Customer unavailable'}</span>
                         {doc.date && (
                           <span className="ml-3">
                             <Calendar className="w-3 h-3 inline mr-1" />
@@ -273,9 +286,13 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold text-gray-900">
-                        {formatCurrency(doc.total_amount || doc.net_amount || 0)}
-                      </div>
+                      {authoritativeAmount(doc) === null ? (
+                        <div className="text-sm text-gray-500">Amount not applicable</div>
+                      ) : (
+                        <div className="font-semibold text-gray-900">
+                          {formatExactCurrency(authoritativeAmount(doc)!, 'Imported document amount')}
+                        </div>
+                      )}
                       {doc.items && (
                         <div className="text-xs text-gray-500 mt-1">
                           {doc.items.length} items
@@ -299,7 +316,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                   <div key={index} className="flex justify-between py-1">
                     <span>{item.product_name || item.name}</span>
                     <span className="text-gray-500">
-                      Qty: {item.quantity || item.dispatched_quantity}
+                      Qty: {item.quantity ?? item.dispatched_quantity ?? 'Unavailable'}
                     </span>
                   </div>
                 ))}

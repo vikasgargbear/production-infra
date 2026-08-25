@@ -19,12 +19,18 @@ interface CanonicalDiscount {
     document_discount_value: string;
 }
 
+const explicitDecimal = (value: unknown, label: string, scale: number): string => {
+    if (value === undefined || value === null || value === '') {
+        throw new Error(`${label} is missing its explicit value`);
+    }
+    return normalizeExactDecimal(value, label, { scale });
+};
 const quantity = (value: unknown, label = 'Invoice quantity'): string =>
-    normalizeExactDecimal(value ?? 0, label, { scale: 6 });
+    explicitDecimal(value, label, 6);
 const rate = (value: unknown, label = 'Invoice rate'): string =>
-    normalizeExactDecimal(value ?? 0, label, { scale: 4 });
+    explicitDecimal(value, label, 4);
 const discount = (value: unknown, label = 'Invoice discount'): string =>
-    normalizeExactDecimal(value ?? 0, label, { scale: 6 });
+    explicitDecimal(value, label, 6);
 
 const requiredUuid = (value: unknown, label: string): string => {
     const normalized = String(value ?? '').trim();
@@ -125,11 +131,10 @@ const validateImportedAllocationLineage = (item: InvoiceItem, index: number): vo
 };
 
 const freeSupplyTaxTreatment = (value: unknown): FreeSupplyTaxTreatment => {
-    if (value == null || value === '') return 'excluded_from_taxable_value';
     if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') {
         return value;
     }
-    throw new Error('Invoice free-supply tax treatment is invalid');
+    throw new Error('Invoice free-supply tax treatment is missing or invalid');
 };
 
 export function invoicePlaceOfSupplyStateCode(
@@ -175,8 +180,8 @@ export function companyInvoiceValidationError(
 }
 
 const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
-    const percent = discount(invoice.discount_percent ?? 0, 'Invoice discount percent');
-    const amount = rate(invoice.discount_amount ?? 0, 'Invoice discount amount');
+    const percent = discount(invoice.discount_percent, 'Invoice discount percent');
+    const amount = rate(invoice.discount_amount, 'Invoice discount amount');
     if (invoice.discount_type === 'fixed'
         && exactDecimalUnits(amount, 'Invoice discount amount', { scale: 4 }) > 0n) {
         return {
@@ -214,7 +219,10 @@ export function invoiceBatchAllocationValidationError(invoice: Invoice): string 
             return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
         }
         try {
-            const requestedQuantity = addExactDecimals([item.quantity ?? 0, item.free_quantity ?? 0], `Item ${index + 1} requested quantity`, { scale: 6 });
+            const requestedQuantity = addExactDecimals([
+                requiredQuantity(item.quantity, `Item ${index + 1} billed quantity`),
+                requiredQuantity(item.free_quantity, `Item ${index + 1} free quantity`),
+            ], `Item ${index + 1} requested quantity`, { scale: 6 });
             if (compareExactDecimals(requestedQuantity, availableQuantity, `Item ${index + 1} availability`, { scale: 6 }) > 0) {
                 return `Item ${index + 1} needs ${requestedQuantity} units but the selected batch has ${availableQuantity}. Multi-batch allocation is not available yet; reduce the quantity or stop and refresh stock.`;
             }
@@ -274,9 +282,9 @@ export function canonicalInvoiceValidationError(
                 }
             }
             const billedQuantity = quantity(item.quantity, `Item ${index + 1} billed quantity`);
-            const freeQuantity = quantity(item.free_quantity ?? 0, `Item ${index + 1} free quantity`);
+            const freeQuantity = quantity(item.free_quantity, `Item ${index + 1} free quantity`);
             rate(item.unit_price, `Item ${index + 1} unit rate`);
-            discount(item.discount_percent ?? 0, `Item ${index + 1} discount`);
+            discount(item.discount_percent, `Item ${index + 1} discount`);
             freeSupplyTaxTreatment(item.free_supply_tax_treatment);
             if (exactDecimalUnits(billedQuantity, `Item ${index + 1} billed quantity`, { scale: 6 }) <= 0n
                 && exactDecimalUnits(freeQuantity, `Item ${index + 1} free quantity`, { scale: 6 }) <= 0n) {
@@ -313,7 +321,7 @@ export function buildCanonicalInvoicePreparePayload(
     const firstDirectIssueItem = invoice.items.find(
         item => fulfillmentSource(item) === 'direct_issue',
     );
-    const freight = rate(invoice.freight_charges ?? 0, 'Invoice freight');
+    const freight = rate(invoice.freight_charges, 'Invoice freight');
     return {
         idempotency_key: idempotencyKey,
         branch_id: requiredUuid(firstItem.branch_id, 'Invoice branch'),
@@ -340,9 +348,9 @@ export function buildCanonicalInvoicePreparePayload(
             },
         } : {}),
         lines: invoice.items.map((item, index) => {
-            const discountPercent = discount(item.discount_percent ?? 0, `Item ${index + 1} discount`);
+            const discountPercent = discount(item.discount_percent, `Item ${index + 1} discount`);
             const billedQuantity = quantity(item.quantity, `Item ${index + 1} billed quantity`);
-            const freeQuantity = quantity(item.free_quantity ?? 0, `Item ${index + 1} free quantity`);
+            const freeQuantity = quantity(item.free_quantity, `Item ${index + 1} free quantity`);
             const source = fulfillmentSource(item);
             return {
                 product_id: requiredUuid(item.product_id, `Item ${index + 1} product`),

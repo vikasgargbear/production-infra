@@ -1,0 +1,48 @@
+import fs from 'fs';
+import path from 'path';
+
+const source = (relativePath: string) => fs.readFileSync(
+  path.resolve(__dirname, '..', relativePath),
+  'utf8',
+);
+
+describe('canonical desktop sales business-fact boundaries', () => {
+  it('does not invent document dates or payment state in creation/history', () => {
+    const invoiceLogic = source('invoice/hooks/useInvoiceLogic.ts');
+    const orderLogic = source('order/hooks/useSalesOrderLogic.ts');
+    const challanLogic = source('challan/hooks/useChallanLogic.ts');
+    const history = source('invoice/invoicelist/utils/invoiceListProjection.ts');
+    expect(invoiceLogic).not.toMatch(/addCalendarDays\([^,]+,\s*30\)/);
+    expect(orderLogic).not.toMatch(/addCalendarDays\([^,]+,\s*7\)/);
+    expect(challanLogic).not.toMatch(/addCalendarDays\([^,]+,\s*1\)/);
+    expect(history).not.toMatch(/payment_status[^\n]*(?:\?\?|\|\|)\s*['"]pending['"]/);
+  });
+
+  it('does not synthesize tax splits, legal identities, or selling totals in previews', () => {
+    const invoicePreview = source('invoice/ui/InvoicePreviewEnterprise.tsx');
+    const invoiceStep = source('invoice/steps/InvoicePreviewStep.tsx');
+    const dispatchPreview = source('challan/ui/ChallanPreview.tsx');
+    expect(invoicePreview).not.toMatch(/tax_amount[^\n]*\/\s*2/);
+    expect(invoicePreview).not.toMatch(/Your Company|Your Company Name|AASO PHARM|08AAX|\b3004\b/);
+    expect(invoiceStep).not.toMatch(/>=\s*500|distance\s*>\s*50/i);
+    expect(dispatchPreview).not.toMatch(/formatCurrency|taxable_amount|total_tax_amount|challan\.total_amount/);
+    expect(dispatchPreview).not.toMatch(/AASO PHARM|Maharashtra|08AAX/);
+  });
+
+  it('keeps dispatch posted readback on inventory evidence rather than a nonexistent total', () => {
+    const save = source('challan/hooks/useChallanSave.ts');
+    expect(save).toContain('detail.inventory_base_quantity');
+    expect(save).toContain('detail.inventory_value');
+    expect(save).toContain('detail.lines');
+    expect(save).not.toContain('detail.total_amount');
+    expect(save).not.toContain('detail.items ?? challan.items');
+  });
+
+  it('requires exact imported tax, discount, quantity, and rate fields', () => {
+    const imports = source('utils/documentImport.ts');
+    expect(imports).toContain("exactRequired(item.gst_percent ?? item.tax_percent ?? item.tax_rate");
+    expect(imports).toContain("exactRequired(item.discount_percent");
+    expect(imports).not.toMatch(/gst_percent[^\n]*(?:\?\?|\|\|)\s*['"]0/);
+    expect(imports).not.toMatch(/discount_percent[^\n]*(?:\?\?|\|\|)\s*['"]0/);
+  });
+});

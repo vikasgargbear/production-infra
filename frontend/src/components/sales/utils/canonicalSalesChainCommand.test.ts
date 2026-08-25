@@ -25,7 +25,7 @@ test('sales order command preserves exact entered decimals and canonical identit
     reference_no: '', sales_person: '', created_by: null, terms_conditions: '', notes: '',
     items: [{ id: 1, product_id: ids.product, product_name: 'P', branch_id: ids.branch,
       uom_conversion_id: ids.uom, quantity: '1.125', free_quantity: '0.25', unit_price: '84.1250',
-      discount_percent: '0.125', gst_percent: 12 } as any],
+      discount_percent: '0.125', free_supply_tax_treatment: 'included_at_unit_rate', gst_percent: 12 } as any],
   }, 'sales-order:test');
   expect(command).toMatchObject({ branch_id: ids.branch, customer_account_id: ids.customer,
     lines: [{ product_id: ids.product, uom_conversion_id: ids.uom,
@@ -55,3 +55,31 @@ test.each([
   ['missing source order', () => buildCanonicalSalesDispatchCommand({ items: [{}] } as any, 'test')],
   ['negative quantity', () => buildCanonicalSalesOrderCommand({ customer_id: ids.customer, order_date: '2026-08-25', items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom, quantity: -1, unit_price: 1 }] } as any, 'test')],
 ])('%s fails closed before prepare', (_label, action) => expect(action).toThrow());
+
+test.each([
+  ['line discount', { discount_percent: undefined }],
+  ['free quantity', { free_quantity: undefined }],
+  ['free-supply tax treatment', { free_supply_tax_treatment: undefined }],
+])('sales order rejects a missing exact %s', (_label, lineOverride) => {
+  expect(() => buildCanonicalSalesOrderCommand({
+    order_date: '2026-08-25', customer_id: ids.customer,
+    discount_amount: 0, other_charges: 0,
+    items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
+      quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
+      discount_percent: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value',
+      ...lineOverride }],
+  } as any, 'test')).toThrow(/missing/i);
+});
+
+test.each([
+  ['document discount', { discount_amount: '1.00', other_charges: '0.00' }],
+  ['delivery charge', { discount_amount: '0.00', other_charges: '0.00', delivery_charges: '1.00' }],
+  ['other charge', { discount_amount: '0.00', other_charges: '1.00' }],
+])('sales order rejects unsupported nonzero %s', (_label, documentOverride) => {
+  expect(() => buildCanonicalSalesOrderCommand({
+    order_date: '2026-08-25', customer_id: ids.customer, ...documentOverride,
+    items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
+      quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
+      discount_percent: '0.000000', free_supply_tax_treatment: 'excluded_from_taxable_value' }],
+  } as any, 'test')).toThrow(/not supported/i);
+});

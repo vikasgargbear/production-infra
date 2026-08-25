@@ -33,7 +33,10 @@ describe('reviewed canonical sales-document lifecycles', () => {
         (challansApi.prepareCanonical as jest.Mock).mockResolvedValue({ data: preview });
         (challansApi.executePreparedCanonical as jest.Mock).mockResolvedValue({ data: { resource_id: '10000000-0000-4000-8000-000000000003' } });
         (challansApi.getCanonical as jest.Mock).mockResolvedValue({ data: {
-            dispatch_id: '10000000-0000-4000-8000-000000000003', challan_number: 'DC-1', customer_name: 'Customer', items: [], total_amount: '9007199254740993.30',
+            dispatch_id: '10000000-0000-4000-8000-000000000003', challan_number: 'DC-1',
+            customer_name: 'Customer', status: 'posted',
+            inventory_document_id: '10000000-0000-4000-8000-000000000004',
+            inventory_base_quantity: '3.000000', inventory_value: '168.00', lines: [],
         } });
     });
 
@@ -77,7 +80,8 @@ describe('reviewed canonical sales-document lifecycles', () => {
             .toEqual((challansApi.executePreparedCanonical as jest.Mock).mock.calls[1]);
         expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
         expect(props.setCreatedChallanData).toHaveBeenCalledWith(expect.objectContaining({
-            total_amount: '9007199254740993.30',
+            inventory_base_quantity: '3.000000',
+            inventory_value: '168.00',
         }));
     });
 });

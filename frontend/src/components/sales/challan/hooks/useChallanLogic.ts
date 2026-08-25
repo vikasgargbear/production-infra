@@ -14,7 +14,6 @@ import { useSalesTransaction } from '../../hooks/useSalesTransaction';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useChallanSave } from './useChallanSave';
-import { calculateChallanPreview } from '../../../../services/calculations/challanCalculationService';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import {
     Challan,
@@ -26,11 +25,9 @@ import {
 } from '../types/challanTypes';
 import {
     addExactDecimals,
-    compareExactDecimals,
-    formatExactDecimal,
+    normalizeExactDecimal,
 } from '../../../../utils/exactDecimal';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
-import { addCalendarDays } from '../../../../utils/calendarDate';
 
 // ==================== PROPS ====================
 
@@ -62,7 +59,6 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         handleProductSelect,
         updateItem,
         removeItem,
-        recalculateTotals,
     } = useSalesTransaction<Challan, CustomerDetails, ChallanItem>({
         getInitialDocument: getInitialChallan,
         documentType: 'challan',
@@ -90,14 +86,12 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     // ==================== CHALLAN-SPECIFIC REFS ====================
     const customerSearchRef = useRef<HTMLInputElement>(null);
     const challanFormRef = useRef<HTMLFormElement>(null);
-    const calculationRequestRef = useRef(0);
 
     useEffect(() => {
         if (businessDate) {
             setChallan(previous => ({
                 ...previous,
                 challan_date: previous.challan_date || businessDate,
-                expected_delivery_date: previous.expected_delivery_date || addCalendarDays(businessDate, 1),
             }));
             return;
         }
@@ -107,83 +101,9 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         }
     }, [businessDate, businessDateError, businessDateLoading, setChallan]);
 
-    useEffect(() => {
-        const requestId = ++calculationRequestRef.current;
-        if (!challan.items.length || !challan.customer_id) return;
-
-        // The backend deliberately trusts the explicit GST mode. Derive it from
-        // the current Place of Supply at the request boundary so delivery-address
-        // edits cannot race with or depend on a previously stored gst_type.
-        const calculationChallan: Challan = {
-            ...challan,
-            gst_type: determineGstTypeForSupply(
-                companyInfo?.state,
-                challan.delivery_state || challan.customer_details?.state,
-                companyInfo?.gst_number,
-                challan.customer_details?.gst_number
-            )
-        };
-
-        void calculateChallanPreview(calculationChallan, true)
-            .then(calculation => {
-                if (requestId !== calculationRequestRef.current) return;
-                setChallan(prev => {
-                    let itemsChanged = false;
-                    const items = prev.items.map((item, index) => {
-                        const calculated = calculation.items[index] || {};
-                        const lineTotal = String(calculated.line_total);
-                        const taxable = String(calculated.taxable_amount);
-                        const tax = String(calculated.total_tax_amount);
-                        if (
-                            compareExactDecimals(item.line_total || 0, lineTotal, 'Challan line total', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                            compareExactDecimals(item.taxable_amount || 0, taxable, 'Challan taxable amount', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                            compareExactDecimals(item.tax_amount || 0, tax, 'Challan tax amount', { scale: 2, maximumWholeDigits: 20 }) === 0
-                        ) return item;
-                        itemsChanged = true;
-                        return {
-                            ...item,
-                            ...calculated,
-                            quantity: item.quantity,
-                            free_quantity: item.free_quantity,
-                            unit_price: item.unit_price,
-                            mrp: item.mrp,
-                            gst_percent: item.gst_percent,
-                            line_total: lineTotal,
-                            total: lineTotal,
-                            taxable_amount: taxable,
-                            tax_amount: tax
-                        };
-                    });
-                    const totalQuantity = addExactDecimals(items.map(item => item.quantity), 'Challan total quantity', { scale: 6, maximumWholeDigits: 14 });
-                    const totalAmount = calculation.totals.final_amount;
-                    const taxableAmount = calculation.totals.taxable_amount;
-                    const totalTaxAmount = calculation.totals.total_tax_amount;
-                    if (
-                        !itemsChanged &&
-                        compareExactDecimals(prev.total_quantity, totalQuantity, 'Challan total quantity', { scale: 6, maximumWholeDigits: 14 }) === 0 &&
-                        compareExactDecimals(prev.total_amount, totalAmount, 'Challan total amount', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                        compareExactDecimals(prev.taxable_amount || 0, taxableAmount, 'Challan taxable total', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                        compareExactDecimals(prev.total_tax_amount || 0, totalTaxAmount, 'Challan tax total', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                        prev.gst_type === calculation.gst_type
-                    ) return prev;
-                    return {
-                        ...prev,
-                        items: itemsChanged ? items : prev.items,
-                        total_quantity: totalQuantity,
-                        total_amount: totalAmount,
-                        taxable_amount: taxableAmount,
-                        total_tax_amount: totalTaxAmount,
-                        gst_type: calculation.gst_type
-                    };
-                });
-            })
-            .catch(error => {
-                if (requestId === calculationRequestRef.current) {
-                    setMessage(error instanceof Error ? error.message : 'Unable to calculate challan totals');
-                    setMessageType('error');
-                }
-            });
-    }, [challan, companyInfo, isOnline, setChallan]);
+    // A dispatch is an inventory movement, not a tax invoice. Its selling price,
+    // GST and document total are therefore never calculated or cached in the browser.
+    // Exact stock quantities and valuation are shown by canonical prepare/readback.
 
     // The canonical API must assign the final document number.
     const generateChallanNumber = useCallback(async () => {
@@ -259,160 +179,92 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         });
     }, [baseHandleCustomerSelect, companyInfo, sameAsBilling, setChallan]);
 
-    // ==================== HANDLE IMPORT ====================
+    // ==================== HANDLE APPROVED ORDER IMPORT ====================
     const handleImport = useCallback(async (importData: ImportData) => {
-        if (importData.customer_id && importData.customer_details) {
-            setSelectedCustomer(importData.customer_details);
-            await handleCustomerSelect(importData.customer_details);
-        }
-
-        const importedState = importData.delivery_state || importData.customer_details?.state || '';
-        const importedGstType = determineGstTypeForSupply(
-            companyInfo?.state,
-            importedState,
-            companyInfo?.gst_number,
-            importData.customer_details?.gst_number
-        );
-
-        if (importData.delivery_address) {
-            setSameAsBilling(false);
-            setChallan(prev => ({
-                ...prev,
-                delivery_address: importData.delivery_address || '',
-                delivery_city: importData.delivery_city || '',
-                delivery_state: importData.delivery_state || '',
-                delivery_pincode: importData.delivery_pincode || '',
-                gst_type: importedGstType
-            }));
-        }
-
-        if (importData.items && importData.items.length > 0) {
-            const formattedItems: ChallanItem[] = importData.items.map((item, index) => ({
-                ...item,
-                id: item.id || `imported-${Date.now()}-${index}`,
-                quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price ?? item.sale_price)) || 0
-            }));
-
-            setChallan(prev => ({
-                ...prev,
-                source_order_id: importData.source_order_id,
-                items: formattedItems,
-                notes: importData.notes || prev.notes,
-                total_quantity: formattedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-                total_amount: 0,
-                taxable_amount: 0,
-                total_tax_amount: 0,
-                gst_type: importedGstType,
-            }));
-        } else {
-            setChallan(prev => ({ ...prev, gst_type: importedGstType }));
-            setMessage('⚠️ No items found in the selected document');
-            setMessageType('warning');
-        }
-    }, [companyInfo, handleCustomerSelect, setChallan, setSelectedCustomer]);
-
-    const saveChallan = handleSaveChallan;
-
-    // ==================== SHARE ON WHATSAPP ====================
-    const shareOnWhatsApp = useCallback(() => {
-        if (!challan.customer_details?.phone) {
-            setMessage('Customer phone number is unavailable. Nothing was opened or sent.');
+        if (!importData.source_order_id
+            || !importData.customer_id
+            || !importData.customer_name
+            || !importData.customer_details
+            || !importData.items?.length) {
+            setMessage('The approved order is missing canonical customer, order, or line evidence.');
             setMessageType('error');
             return;
         }
+        const formattedItems: ChallanItem[] = importData.items.map((item, index) => {
+            if (!item.source_order_line_id) {
+                throw new Error(`Imported order line ${index + 1} is missing its canonical line identity.`);
+            }
+            return {
+                ...item,
+                id: item.source_order_line_id,
+                quantity: normalizeExactDecimal(
+                    item.quantity, `Imported dispatch line ${index + 1} billed quantity`,
+                    { scale: 6, maximumWholeDigits: 14 },
+                ),
+                free_quantity: normalizeExactDecimal(
+                    item.free_quantity, `Imported dispatch line ${index + 1} free quantity`,
+                    { scale: 6, maximumWholeDigits: 14 },
+                ),
+                unit_price: normalizeExactDecimal(
+                    item.unit_price, `Imported order line ${index + 1} unit rate`,
+                    { scale: 4, maximumWholeDigits: 16 },
+                ),
+            };
+        });
+        setSelectedCustomer(importData.customer_details);
+        setChallan(previous => ({
+            ...previous,
+            source_order_id: importData.source_order_id,
+            customer_id: importData.customer_id!,
+            customer_name: importData.customer_name!,
+            customer_details: importData.customer_details!,
+            reference_doc: importData.reference_doc ?? '',
+            items: formattedItems,
+            notes: importData.notes ?? '',
+            total_quantity: addExactDecimals(
+                formattedItems.map(item => item.quantity),
+                'Imported dispatch total quantity',
+                { scale: 6, maximumWholeDigits: 14 },
+            ),
+            total_amount: '',
+            taxable_amount: undefined,
+            total_tax_amount: undefined,
+        }));
+    }, [setChallan, setSelectedCustomer]);
 
-        const message = `
-Delivery Challan: ${challan.challan_number}
-Date: ${challan.challan_date}
-Customer: ${challan.customer_name}
-Items: ${challan.total_quantity}
-Amount: ₹${formatExactDecimal(challan.total_amount, 'Challan total', { scale: 2, maximumWholeDigits: 20 }, 2)}
-Expected Delivery: ${challan.expected_delivery_date}
-    `.trim();
+    const saveChallan = handleSaveChallan;
 
-        const whatsappUrl = `https://wa.me/91${challan.customer_details.phone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
-    }, [challan]);
+    // ==================== SHARE / PRINT ====================
+    const shareOnWhatsApp = useCallback(() => {
+        const phone = String(createdChallanData?.customer_details?.phone ?? '').replace(/\D/g, '');
+        if (!createdChallanData || !phone) {
+            setMessage('A posted dispatch and customer phone are required. Nothing was opened or sent.');
+            setMessageType('error');
+            return;
+        }
+        const recipient = phone.length === 10 ? `91${phone}` : phone;
+        if (!/^[1-9]\d{7,14}$/.test(recipient)) {
+            setMessage('Customer phone number is invalid. Nothing was opened or sent.');
+            setMessageType('error');
+            return;
+        }
+        const message = [
+            `Delivery Challan: ${createdChallanData.challan_number}`,
+            `Customer: ${createdChallanData.customer_name}`,
+            `Posted inventory quantity: ${createdChallanData.inventory_base_quantity}`,
+        ].join('\n');
+        window.open(`https://wa.me/${recipient}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    }, [createdChallanData]);
 
-    // ==================== PRINT ====================
     const printChallan = useCallback(() => {
         window.print();
     }, []);
 
-    const thermalPrintChallan = useCallback((width: string = '80mm') => {
-        const printWindow = window.open('', '', 'width=400,height=600');
-        if (!printWindow) return;
-
-        const challanDate = new Date(challan.challan_date).toLocaleDateString('en-IN');
-        const expectedDeliveryDate = new Date(challan.expected_delivery_date).toLocaleDateString('en-IN');
-
-        const formatAddress = (addr: unknown) => {
-            if (!addr) return '';
-            if (typeof addr === 'string') return addr;
-            const a = addr as { address_line_1?: string; address_line_2?: string; city?: string; state?: string; pincode?: string };
-            const parts: string[] = [];
-            if (a.address_line_1) parts.push(a.address_line_1);
-            if (a.address_line_2) parts.push(a.address_line_2);
-            if (a.city) parts.push(a.city);
-            if (a.state) parts.push(a.state);
-            if (a.pincode) parts.push(a.pincode);
-            return parts.join(', ');
-        };
-
-        const thermalHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Challan - ${challan.challan_number}</title>
-        <style>
-          @page { size: ${width} auto; margin: 0; }
-          body { font-family: monospace; font-size: ${width === '58mm' ? '10px' : '12px'}; line-height: 1.3; margin: 0; padding: 5px; width: ${width}; }
-          .center { text-align: center; }
-          .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 3px 0; }
-          .item-row { display: flex; justify-content: space-between; margin: 2px 0; }
-          .total-section { margin-top: 5px; padding-top: 5px; border-top: 1px dashed #000; }
-        </style>
-      </head>
-      <body>
-        <div class="center bold">DELIVERY CHALLAN</div>
-        <div class="center">${challan.challan_number}</div>
-        <div class="divider"></div>
-        <div>Date: ${challanDate}</div>
-        <div>Expected: ${expectedDeliveryDate}</div>
-        <div class="divider"></div>
-        <div class="bold">Customer:</div>
-        <div>${challan.customer_name || 'N/A'}</div>
-        <div class="divider"></div>
-        <div class="bold">Delivery To:</div>
-        <div>${formatAddress(challan.delivery_address) || 'N/A'}</div>
-        <div class="divider"></div>
-        <div class="bold">Items:</div>
-        ${challan.items.map((item, idx) => `
-          <div class="item-row"><span>${idx + 1}. ${item.product_name || 'N/A'}</span></div>
-          <div class="item-row"><span>  Qty: ${item.quantity} ${item.unit || ''}</span><span>₹${formatExactDecimal(
-              item.unit_price ?? '0',
-              `Challan item ${idx + 1} rate`,
-              { scale: 4, maximumWholeDigits: 16 },
-              2,
-          )}</span></div>
-        `).join('')}
-        <div class="total-section">
-          <div class="item-row"><span class="bold">Total Items:</span><span>${challan.items.length}</span></div>
-          <div class="item-row"><span class="bold">Total Qty:</span><span>${challan.total_quantity}</span></div>
-        </div>
-        <div class="divider"></div>
-        <div class="center">Thank You!</div>
-      </body>
-      </html>
-    `;
-
-        printWindow.document.write(thermalHTML);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
-    }, [challan]);
+    // Thermal output uses the same authoritative DOM preview; it must not build
+    // an independent template with stale addresses, prices, tax, or totals.
+    const thermalPrintChallan = useCallback((_width: string = '80mm') => {
+        window.print();
+    }, []);
 
     // ==================== RETURN ====================
     return {
@@ -469,11 +321,14 @@ Expected Delivery: ${challan.expected_delivery_date}
         thermalPrintChallan,
         generateChallanNumber,
         recalculateTotals: (items: ChallanItem[]) => {
-            const { totalQuantity, totalAmount } = recalculateTotals(items);
+            const totalQuantity = addExactDecimals(
+                items.map(item => item.quantity),
+                'Dispatch selected quantity',
+                { scale: 6, maximumWholeDigits: 14 },
+            );
             setChallan(prev => ({
                 ...prev,
                 total_quantity: totalQuantity,
-                total_amount: totalAmount
             }));
         },
 

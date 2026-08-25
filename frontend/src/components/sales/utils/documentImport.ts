@@ -120,6 +120,16 @@ const exactOptional = (
     return normalizeExactDecimal(value, label, { scale });
 };
 
+const exactRequired = (
+    value: unknown,
+    label: string,
+    scale: number,
+): string => {
+    const result = exactOptional(value, label, scale);
+    if (result === null) throw new Error(`${label} is missing.`);
+    return result;
+};
+
 const quantitiesMatch = (left: unknown, right: unknown, label: string): boolean =>
     compareExactDecimals(left, right, label, { scale: 6 }) === 0;
 
@@ -362,9 +372,9 @@ const projectExecutedAllocations = (
         uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
         manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
         category: typeof item.category === 'string' ? item.category : undefined,
-        gst_percent: exactOptional(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6) ?? '0.000000',
+        gst_percent: exactRequired(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6),
         tax_percent: exactOptional(item.tax_percent ?? item.tax_rate, `Line ${index + 1} tax percent`, 6) ?? undefined,
-        discount_percent: exactOptional(item.discount_percent, `Line ${index + 1} discount percent`, 6) ?? '0.000000',
+        discount_percent: exactRequired(item.discount_percent, `Line ${index + 1} discount percent`, 6),
         free_supply_tax_treatment: freeTreatment as FreeSupplyTaxTreatment,
     }));
 };
@@ -453,10 +463,10 @@ export function projectCanonicalImportLines(
             uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
             manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
             category: typeof item.category === 'string' ? item.category : undefined,
-            gst_percent: exactOptional(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6) ?? '0.000000',
+            gst_percent: exactRequired(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6),
             tax_percent: exactOptional(item.tax_percent ?? item.tax_rate, `Line ${index + 1} tax percent`, 6) ?? undefined,
             free_quantity: freeQuantity,
-            discount_percent: exactOptional(item.discount_percent, `Line ${index + 1} discount percent`, 6) ?? '0.000000',
+            discount_percent: exactRequired(item.discount_percent, `Line ${index + 1} discount percent`, 6),
             free_supply_tax_treatment: requiredFreeSupplyTaxTreatment(
                 item.free_supply_tax_treatment,
                 index,

@@ -212,14 +212,15 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         const invoiceDate = new Date(invoice.invoice_date).toLocaleDateString('en-IN', {
             day: '2-digit', month: 'short', year: 'numeric'
         });
-        const formattedAmount = amount ? formatExactCurrency(amount, 'Posted invoice total') : '';
+        if (!amount || !customerName || !companyInfo?.name) return;
+        const formattedAmount = formatExactCurrency(amount, 'Posted invoice total');
 
-        const whatsappMessage = `Dear ${customerName || 'Customer'},
+        const whatsappMessage = `Dear ${customerName},
 
 Your invoice ${invoice.invoice_number} dated ${invoiceDate} for ${formattedAmount} is ready.
 
 Thank you for your business!
-${companyInfo?.name || 'Your Company'}`;
+${companyInfo.name}`;
 
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank');
@@ -453,10 +454,8 @@ ${companyInfo?.name || 'Your Company'}`;
                             },
                             shipping_address: invoice.shipping_address,
                             is_same_address: invoice.billing_address === invoice.shipping_address,
-                            items: createdInvoiceData.items || invoice.items,
-                            net_amount: createdInvoiceData.totalAmount || invoice.final_amount,
-                            payment_status: invoice.payment_status || 'Paid',
-                            totals: invoice.totals || undefined
+                            items: createdInvoiceData.items,
+                            totals: invoice.totals ?? undefined
                         } as any}
                         companyInfo={companyInfo as any}
                         showAddresses={true}

@@ -14,6 +14,7 @@ import {
 import BankAccountSelector from '../../../global/selector/BankAccountSelector';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, BankAccount, Customer } from '../../../../types/models';
+import { canonicalOrderPreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
 
 // Using canonical Customer type from /types/models - no local duplicate
 
@@ -54,11 +55,18 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
     companyInfo
 }) => {
     const money = (value: unknown, label: string) => formatExactDecimal(
-        value ?? 0,
+        value,
         label,
         { scale: 2, maximumWholeDigits: 20, allowNegative: true },
         2,
     );
+    const previewUnavailableReason = canonicalOrderPreviewUnavailableReason(order);
+    if (previewUnavailableReason) {
+        return <div className="m-6 rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900" role="alert">
+            <h2 className="font-semibold">Authoritative sales-order preview unavailable</h2>
+            <p className="mt-1 text-sm">{previewUnavailableReason} Return to the item step and refresh the live calculation.</p>
+        </div>;
+    }
     return (
         <div className="max-w-6xl mx-auto p-6">
             {/* Message Display */}
@@ -84,21 +92,21 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                     items: order.items.map(item => ({
                         product_name: item.product_name,
                         hsn_code: item.hsn_code,
-                        batch_number: item.batch_number || item.batch_number,
+                        batch_number: item.batch_number,
                         quantity: item.quantity,
-                        free_quantity: item.free_quantity || 0,
+                        free_quantity: item.free_quantity,
                         unit_price: item.unit_price,
-                        discount_percent: item.discount_percent || 0,
-                        gst_percent: item.gst_percent || 0,
-                        total: item.calculated_total || item.total
+                        discount_percent: item.discount_percent,
+                        gst_percent: item.gst_percent,
+                        total: item.calculated_total
                     })) as any,
                     totals: {
                         subtotal: order.subtotal_amount,
-                        discount: order.discount_amount || 0,
+                        discount: order.discount_amount,
                         tax_amount: order.tax_amount,
-                        cgst_amount: order.cgst_amount || 0,
-                        sgst_amount: order.sgst_amount || 0,
-                        igst_amount: order.igst_amount || 0,
+                        cgst_amount: order.cgst_amount,
+                        sgst_amount: order.sgst_amount,
+                        igst_amount: order.igst_amount,
                         total_amount: order.total_amount,
                         final_amount: order.total_amount
                     },
@@ -121,7 +129,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     <span className="text-xs text-gray-400 text-center">Company<br />Logo</span>
                                 </div>
                                 <div>
-                                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{companyInfo.name || 'Your Company'}</h1>
+                                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{companyInfo.name || 'Company identity unavailable'}</h1>
                                     {companyInfo.gst_number && (
                                         <p className="text-sm font-semibold text-gray-700 mb-1">GSTIN: {companyInfo.gst_number}</p>
                                     )}
@@ -183,20 +191,12 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                             </div>
 
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-700 mb-2">Payment & Delivery</h3>
+                                <h3 className="text-xs font-semibold text-gray-700 mb-2">Commercial Details</h3>
                                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
-                                    <label className="text-xs font-semibold text-gray-700 block mb-2">Payment Terms</label>
-                                    <select
-                                        value={order.payment_terms}
-                                        onChange={(e) => setOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
-                                        className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors print:hidden"
-                                    >
-                                        <option value="credit">Credit</option>
-                                        <option value="cash">Cash</option>
-                                        <option value="advance">Advance</option>
-                                        <option value="net30">Net 30 Days</option>
-                                        <option value="net60">Net 60 Days</option>
-                                    </select>
+                                    <p className="text-xs font-semibold text-gray-700">Payment terms</p>
+                                    <p className="mt-1 text-xs text-gray-600">
+                                        Not part of the canonical sales-order contract. No payment term will be inferred or posted.
+                                    </p>
                                 </div>
 
                                 <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
@@ -285,7 +285,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                         <tr key={index} className="border-b hover:bg-gray-50">
                                             <td className="py-2 px-3">
                                                 <p className="text-sm font-medium">{item.product_name}</p>
-                                                <p className="text-xs text-gray-500">Batch: {item.batch_number || item.batch_number || 'N/A'}</p>
+                                                <p className="text-xs text-gray-500">Batch: {item.batch_number || 'Not available'}</p>
                                             </td>
                                             <td className="text-center py-2 px-3 text-sm font-medium">{item.quantity}</td>
                                             <td className="text-right py-2 px-3 text-sm">₹{formatExactDecimal(
@@ -310,7 +310,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     {order.gst_type === 'IGST' ? (
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-600">IGST</span>
-                                            <span className="font-medium">₹{money(order.igst_amount || order.tax_amount, 'Order IGST')}</span>
+                                            <span className="font-medium">₹{money(order.igst_amount, 'Order IGST')}</span>
                                         </div>
                                     ) : (
                                         <>
@@ -366,14 +366,14 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                             <div className="text-center">
                                 <div className="h-12 border-b border-gray-300 mb-2"></div>
                                 <p className="text-xs font-semibold text-gray-700">Authorized Signatory</p>
-                                <p className="text-xs text-gray-500">For {companyInfo.name || 'Your Company Name'}</p>
+                                <p className="text-xs text-gray-500">For {companyInfo.name || 'Company identity unavailable'}</p>
                             </div>
                         </div>
 
                         {/* Thank You */}
                         <div className="text-center mt-4 pt-3 border-t border-gray-100">
                             <p className="text-sm text-gray-600">Thank you for your business!</p>
-                            <p className="text-xs text-gray-400 mt-1">{companyInfo.name || 'Your Company'}</p>
+                            <p className="text-xs text-gray-400 mt-1">{companyInfo.name || 'Company identity unavailable'}</p>
                         </div>
                     </div>
                 </div>

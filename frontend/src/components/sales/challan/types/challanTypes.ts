@@ -120,6 +120,7 @@ export interface Challan {
     challan_id: number;  // REQUIRED - DB: integer NOT NULL
     challan_number: string;  // REQUIRED - DB: text NOT NULL
     source_order_id?: string;
+    reference_doc?: string;
     challan_date: string;  // REQUIRED - DB: date NOT NULL
     expected_delivery_date: string;
     status: ChallanStatus;
@@ -211,8 +212,10 @@ export interface CreatedChallanData {
     challan_number: string;
     customer_name: string;
     customer_details?: CustomerDetails;
-    items: ChallanItem[];
-    total_amount: string;
+    inventory_document_id: string;
+    inventory_base_quantity: string;
+    inventory_value: string;
+    lines: unknown[];
 }
 
 // ==================== COMPANY INFO ====================

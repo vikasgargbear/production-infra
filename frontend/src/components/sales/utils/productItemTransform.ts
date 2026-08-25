@@ -12,6 +12,7 @@ import {
     FreeSupplyTaxTreatment,
 } from '../types/salesSharedTypes';
 import {
+    exactDecimalUnits,
     normalizeAuthoritativeDecimal,
     normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
@@ -95,6 +96,12 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
 ): T => {
     // If product has best_batch from new API, use it
     const bestBatch = product.best_batch;
+    const productId = product.product_id ?? product.id;
+    const productName = String(product.product_name ?? product.name ?? '').trim();
+    if (productId === undefined || productId === null || String(productId).trim() === '') {
+        throw new Error('Selected product is missing its canonical identity.');
+    }
+    if (!productName) throw new Error('Selected product is missing its canonical name.');
 
     let unitPrice: string;
     let mrp: string | undefined;
@@ -134,19 +141,28 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
     }
 
     // Create base item with ONLY canonical fields
+    const freeQuantity = editableQuantity(product.free_quantity, 'Free quantity');
+    let freeSupplyTaxTreatment = product.free_supply_tax_treatment;
+    if (!freeSupplyTaxTreatment) {
+        if (exactDecimalUnits(freeQuantity, 'Free quantity', quantityOptions) !== 0n) {
+            throw new Error('Choose the free-supply tax treatment before adding free quantity.');
+        }
+        // The treatment has no monetary effect when the explicitly entered free quantity is zero.
+        freeSupplyTaxTreatment = 'excluded_from_taxable_value';
+    }
+
     const baseItem: BaseLineItem = {
         id: Date.now(),
-        product_id: product.product_id || product.id || 0,
-        product_name: product.product_name || product.name || '',
+        product_id: productId,
+        product_name: productName,
         batch_id: batchId ?? undefined,
         batch_number: batchNumber,
         expiry_date: expiryDate,
         unit_price: unitPrice,  // ✅ CANONICAL
         mrp: mrp,
         quantity: editableQuantity(product.quantity, 'Quantity'),
-        free_quantity: editableQuantity(product.free_quantity, 'Free quantity'),
-        free_supply_tax_treatment:
-            product.free_supply_tax_treatment || 'excluded_from_taxable_value',
+        free_quantity: freeQuantity,
+        free_supply_tax_treatment: freeSupplyTaxTreatment,
         source_line_id: product.source_line_id,
         source_document_kind: product.source_document_kind,
         source_allocation_kind: product.source_allocation_kind,

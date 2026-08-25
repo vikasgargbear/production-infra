@@ -2,13 +2,14 @@ import type { Invoice, SalesHistoryDocumentType } from '../types/invoicelist.typ
 import type { CanonicalDocumentHistoryItem } from '../../../../../services/api/modules/history/canonicalDocumentHistory.api';
 
 const paymentStatus = (row: CanonicalDocumentHistoryItem): Invoice['payment_status'] => {
-    const status = String(row.payment_status || row.status || 'pending').toLowerCase();
+    if (row.payment_status === null) return null;
+    const status = row.payment_status.toLowerCase();
     if (status === 'paid') return 'paid';
+    if (status === 'pending') return 'pending';
     if (status === 'partial' || status === 'partially_paid') return 'partial';
     if (status === 'overdue') return 'overdue';
     if (status === 'cancelled' || status === 'reversed') return 'cancelled';
-    // A canonical posted invoice is an issued document, not proof of payment.
-    return 'pending';
+    return null;
 };
 
 export function projectInvoiceListRow(row: CanonicalDocumentHistoryItem): Invoice {

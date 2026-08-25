@@ -5,7 +5,6 @@ import { employeesApi } from '../../../../services/api';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
 import { useCompany } from '../../../../contexts/CompanyContext';
-import { addCalendarDays } from '../../../../utils/calendarDate';
 import { Customer } from '../../../../types/models/customer';
 import { determineGstType } from '../../../gst/utils/gstCalculations';
 
@@ -94,8 +93,8 @@ export interface Invoice {
     discount_amount: number;
     discount_percent: number;
     discount_type: 'percentage' | 'fixed';
-    payment_mode: string;
-    payment_status: 'pending' | 'partial' | 'paid';
+    payment_mode?: string;
+    payment_status?: 'pending' | 'partial' | 'paid';
     payments: Payment[];
     notes: string;
     salesperson_id: number | string | null;
@@ -195,7 +194,7 @@ export interface UseInvoiceLogicReturn {
 export const createInitialInvoice = (businessDate = ''): Invoice => ({
     invoice_number: '',
     invoice_date: businessDate,
-    due_date: businessDate ? addCalendarDays(businessDate, 30) : '',
+    due_date: '',
     items: [],
     customer_details: null,
     billing_address: '',
@@ -210,9 +209,7 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     discount_amount: 0,
     discount_percent: 0,
     discount_type: 'percentage',
-    payment_mode: 'credit',
-    payment_status: 'pending',
-    payments: [{ id: '1', method: 'credit', amount: 0, reference: '' }],
+    payments: [],
     notes: '',
     salesperson_id: null,
     e_invoice_applicable: false,
@@ -261,7 +258,6 @@ export const useInvoiceLogic = (
             setInvoice(previous => ({
                 ...previous,
                 invoice_date: previous.invoice_date || businessDate,
-                due_date: previous.due_date || addCalendarDays(businessDate, 30),
             }));
             return;
         }
@@ -539,9 +535,6 @@ export const useInvoiceLogic = (
 
                 const newItem = {
                     ...sanitizedItem,
-                    mrp: sanitizedItem.mrp ?? 0,
-                    // PRESERVE user's discount - don't reset!
-                    discount_percent: sanitizedItem.discount_percent ?? 0,
                 } as any;
 
                 // Note: Toast removed - visual feedback (item appearing in table) is sufficient
@@ -600,14 +593,16 @@ export const useInvoiceLogic = (
             }
 
             if (importData.delivery_details) {
+                const deliveryType = importData.delivery_details.delivery_type;
+                const deliveryCharges = importData.delivery_details.delivery_charges;
                 setInvoice(prev => ({
                     ...prev,
-                    delivery_type: (importData.delivery_details?.delivery_type as Invoice['delivery_type']) || 'PICKUP',
-                    freight_charges: importData.delivery_details?.delivery_charges || 0
+                    ...(deliveryType ? { delivery_type: deliveryType as Invoice['delivery_type'] } : {}),
+                    ...(deliveryCharges !== undefined ? { freight_charges: deliveryCharges } : {}),
                 }));
             }
 
-            toast.success(`Imported ${importData.items?.length || 0} items from ${importData.source}`);
+            toast.success(`Imported ${importData.items?.length ?? 0} items from ${importData.source}`);
         } catch (error) {
             console.error('Import error:', error);
             toast.error('Failed to import data');
@@ -615,11 +610,19 @@ export const useInvoiceLogic = (
     }, [handleCustomerSelect]);
 
     const handleApplyBillDiscount = useCallback((discountData: DiscountData) => {
+        if (discountData.type === 'fixed' && discountData.amount === undefined) {
+            toast.error('Enter the exact fixed discount amount.');
+            return;
+        }
+        if (discountData.type === 'percentage' && discountData.percentage === undefined) {
+            toast.error('Enter the exact discount percentage.');
+            return;
+        }
         setInvoice(prev => ({
             ...prev,
             discount_type: discountData.type,
-            discount_amount: discountData.type === 'fixed' ? (discountData.amount || 0) : 0,
-            discount_percent: discountData.type === 'percentage' ? (discountData.percentage || 0) : 0
+            discount_amount: discountData.type === 'fixed' ? discountData.amount! : 0,
+            discount_percent: discountData.type === 'percentage' ? discountData.percentage! : 0
         }));
     }, []);
 

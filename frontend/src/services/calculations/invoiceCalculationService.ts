@@ -26,30 +26,59 @@ import {
 } from './exactCalculationPreview';
 import { subtractExactDecimals } from '../../utils/exactDecimal';
 
+const requiredInput = <T>(value: T | null | undefined | '', label: string): T => {
+    if (value === undefined || value === null || value === '') {
+        throw new Error(`${label} is missing its explicit value.`);
+    }
+    return value;
+};
+
+const requiredGstType = (value: unknown): 'CGST/SGST' | 'IGST' => {
+    if (value === 'CGST/SGST' || value === 'IGST') return value;
+    throw new Error('Invoice GST treatment is unavailable. Re-select the delivery address.');
+};
+
+const requiredFreeSupplyTreatment = (
+    value: unknown,
+    label: string,
+): 'excluded_from_taxable_value' | 'included_at_unit_rate' => {
+    if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') return value;
+    throw new Error(`${label} is missing its explicit value.`);
+};
+
+const unsupportedCharge = (value: unknown, label: string): string => {
+    if (value === undefined || value === null || value === '') return '0.00';
+    const normalized = inputMoney(value, label);
+    if (normalized !== '0.00') {
+        throw new Error(`${label} is not supported by canonical invoice posting.`);
+    }
+    return normalized;
+};
+
 function toRequest(invoice: any): InvoiceCalculationRequest {
     const customer = invoice?.customer_details;
     const customerId = customer?.customer_id ?? customer?.id;
     return {
         customer_id: calculationEntityId(customerId, 'Customer'),
-        gst_type: invoice?.gst_type || 'CGST/SGST',
+        gst_type: requiredGstType(invoice?.gst_type),
         items: (invoice?.items || []).map((item: any, index: number) => {
             const label = `Invoice calculation items[${index}]`;
             return {
                 product_id: calculationEntityId(item.product_id, `${label}.product_id`),
-                quantity: inputQuantity(item.quantity, `${label}.quantity`),
-                free_quantity: inputQuantity(item.free_quantity, `${label}.free_quantity`),
-                free_supply_tax_treatment: item.free_supply_tax_treatment || 'excluded_from_taxable_value',
-                unit_price: inputRate(item.unit_price, `${label}.unit_price`),
-                discount_percent: inputPercent(item.discount_percent, `${label}.discount_percent`),
-                gst_percent: inputPercent(item.gst_percent ?? item.tax_percent, `${label}.gst_percent`),
+                quantity: inputQuantity(requiredInput(item.quantity, `${label}.quantity`), `${label}.quantity`),
+                free_quantity: inputQuantity(requiredInput(item.free_quantity, `${label}.free_quantity`), `${label}.free_quantity`),
+                free_supply_tax_treatment: requiredFreeSupplyTreatment(item.free_supply_tax_treatment, `${label}.free_supply_tax_treatment`),
+                unit_price: inputRate(requiredInput(item.unit_price, `${label}.unit_price`), `${label}.unit_price`),
+                discount_percent: inputPercent(requiredInput(item.discount_percent, `${label}.discount_percent`), `${label}.discount_percent`),
+                gst_percent: inputPercent(requiredInput(item.gst_percent ?? item.tax_percent, `${label}.gst_percent`), `${label}.gst_percent`),
             };
         }),
-        freight_charges: inputMoney(invoice?.freight_charges, 'Invoice freight charges'),
-        insurance_charges: inputMoney(invoice?.insurance_charges, 'Invoice insurance charges'),
-        other_charges: inputMoney(invoice?.other_charges, 'Invoice other charges'),
-        discount_type: invoice?.discount_type || 'percentage',
-        discount_percent: inputPercent(invoice?.discount_percent, 'Invoice discount percent'),
-        discount_amount: inputMoney(invoice?.discount_amount, 'Invoice discount amount'),
+        freight_charges: inputMoney(requiredInput(invoice?.freight_charges, 'Invoice freight charges'), 'Invoice freight charges'),
+        insurance_charges: unsupportedCharge(invoice?.insurance_charges, 'Invoice insurance charges'),
+        other_charges: unsupportedCharge(invoice?.other_charges, 'Invoice other charges'),
+        discount_type: requiredInput(invoice?.discount_type, 'Invoice discount type'),
+        discount_percent: inputPercent(requiredInput(invoice?.discount_percent, 'Invoice discount percent'), 'Invoice discount percent'),
+        discount_amount: inputMoney(requiredInput(invoice?.discount_amount, 'Invoice discount amount'), 'Invoice discount amount'),
     };
 }
 
@@ -110,7 +139,7 @@ function assertReconciled(
     }
     lines.forEach((line, index) => {
         assertExactEqual(line.quantity, request.items[index].quantity, `Invoice preview lines[${index}] quantity`, calculationQuantityOptions);
-        assertExactEqual(line.free_quantity, request.items[index].free_quantity || '0', `Invoice preview lines[${index}] free quantity`, calculationQuantityOptions);
+        assertExactEqual(line.free_quantity, request.items[index].free_quantity, `Invoice preview lines[${index}] free quantity`, calculationQuantityOptions);
         assertExactEqual(line.total_tax, line.total_tax_amount, `Invoice preview lines[${index}] tax aliases`);
     });
     assertExactEqual(totals.subtotal_amount, sumMoney(lines.map(line => line.subtotal), 'Invoice line subtotal'), 'Invoice subtotal');

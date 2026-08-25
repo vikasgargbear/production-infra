@@ -30,7 +30,11 @@ const exactWireValue = (key: string, value: unknown): unknown => {
 };
 
 const projectCanonicalImportLines = (lines: Array<Record<string, unknown>>) => (
-    projectCanonicalImportLinesFromWire(exactWireValue('', lines) as Array<Record<string, unknown>>)
+    projectCanonicalImportLinesFromWire(exactWireValue('', lines.map(line => ({
+        ...line,
+        gst_percent: line.gst_percent ?? line.tax_percent ?? line.tax_rate ?? '0.000000',
+        discount_percent: line.discount_percent ?? '0.000000',
+    }))) as Array<Record<string, unknown>>)
 );
 
 describe('Sales document import envelope normalization', () => {
@@ -95,6 +99,18 @@ describe('Sales document import envelope normalization', () => {
             free_supply_tax_treatment: 'excluded_from_taxable_value',
             batch_id: 'batch-1', batch_number: 'BATCH-1',
         }])).toThrow('exact decimal string from the canonical API');
+    });
+
+    it.each([
+        ['GST percent', { discount_percent: '0.000000' }],
+        ['discount percent', { gst_percent: '0.000000' }],
+    ])('rejects a missing canonical %s instead of assuming zero', (_label, exactFacts) => {
+        expect(() => projectCanonicalImportLinesFromWire([{
+            product_id: 'product-1', product_name: 'Product',
+            quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
+            batch_id: 'batch-1', batch_number: 'BATCH-1', ...exactFacts,
+        }])).toThrow(/is missing/i);
     });
 
     it('accepts one evidenced direct allocation, including null expiry, without scalar batch fields', () => {

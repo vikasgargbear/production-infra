@@ -15,6 +15,21 @@ import {
     inputRate,
 } from './exactCalculationPreview';
 
+const required = <T>(value: T | null | undefined | '', label: string): T => {
+    if (value === undefined || value === null || value === '') {
+        throw new Error(`${label} is missing its explicit value.`);
+    }
+    return value;
+};
+
+const requiredFreeSupplyTreatment = (
+    value: unknown,
+    label: string,
+): 'excluded_from_taxable_value' | 'included_at_unit_rate' => {
+    if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') return value;
+    throw new Error(`${label} is missing its explicit value.`);
+};
+
 export interface SalesOrderPreviewLine extends Record<string, unknown> {
     subtotal: string;
     discount_amount: string;
@@ -62,8 +77,8 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
                 batch_id: calculationEntityId(item.batch_id, `${label}.batch_id`),
                 batch_number: item.batch_number,
                 quantity: inputQuantity(item.quantity, `${label}.quantity`),
-                free_quantity: inputQuantity(item.free_quantity, `${label}.free_quantity`),
-                free_supply_tax_treatment: item.free_supply_tax_treatment ?? 'excluded_from_taxable_value',
+                free_quantity: inputQuantity(required(item.free_quantity, `${label}.free_quantity`), `${label}.free_quantity`),
+                free_supply_tax_treatment: requiredFreeSupplyTreatment(item.free_supply_tax_treatment, `${label}.free_supply_tax_treatment`),
                 unit_price: inputRate(item.unit_price, `${label}.unit_price`),
                 mrp: inputRate(item.mrp ?? item.unit_price, `${label}.mrp`),
                 discount_percent: inputPercent(item.discount_percent, `${label}.discount_percent`),
@@ -100,7 +115,7 @@ export function normalizeSalesOrderPreview(
             ...line,
             product_id: order.items[index]?.product_id,
             batch_id: order.items[index]?.batch_id,
-            free_quantity: request.items[index].free_quantity || '0.000000',
+            free_quantity: request.items[index].free_quantity,
             free_supply_tax_treatment: request.items[index].free_supply_tax_treatment,
             tax_amount: line.total_tax_amount,
             total: line.line_total,

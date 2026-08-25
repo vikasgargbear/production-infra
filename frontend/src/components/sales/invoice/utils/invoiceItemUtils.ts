@@ -74,7 +74,7 @@ export const prepareImportedItemsForInvoice = (
         quantity: billedQuantity,
         free_quantity: freeQuantity,
         unit_price: unitPrice,
-        discount_percent: normalizeExactDecimal(exact.discount_percent ?? 0, `Imported item ${index + 1} discount`, { scale: 6 }),
+        discount_percent: normalizeExactDecimal(exact.discount_percent, `Imported item ${index + 1} discount`, { scale: 6 }),
         available_quantity: optionalQuantity(exact.available_quantity, `Imported item ${index + 1} availability`),
         base_billed_quantity: optionalQuantity(exact.base_billed_quantity, `Imported item ${index + 1} base billed quantity`),
         base_free_quantity: optionalQuantity(exact.base_free_quantity, `Imported item ${index + 1} base free quantity`),

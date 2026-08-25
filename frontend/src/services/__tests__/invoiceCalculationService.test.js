@@ -12,7 +12,17 @@ const productId = '10000000-0000-7000-8000-000000000002';
 const invoice = (items = [{ product_id: productId, quantity: '1.000000', unit_price: '0.100000', gst_percent: '18.000000' }]) => ({
   customer_details: { customer_id: customerId },
   gst_type: 'CGST/SGST',
-  items,
+  freight_charges: '0.00',
+  discount_type: 'percentage',
+  discount_percent: '0.000000',
+  discount_amount: '0.00',
+  items: items.map(item => ({
+    free_quantity: '0.000000',
+    free_supply_tax_treatment: 'excluded_from_taxable_value',
+    discount_percent: '0.000000',
+    gst_percent: '18.000000',
+    ...item,
+  })),
 });
 
 beforeEach(() => jest.clearAllMocks());

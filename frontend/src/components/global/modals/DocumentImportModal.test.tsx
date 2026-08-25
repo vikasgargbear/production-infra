@@ -6,6 +6,19 @@ jest.mock('react-toastify', () => ({
 }));
 
 describe('DocumentImportModal detail resolution', () => {
+    it('labels a non-monetary dispatch instead of inventing a zero amount', async () => {
+        render(<DocumentImportModal isOpen onClose={jest.fn()} onImport={jest.fn()}
+            documentTypes={[{
+                value: 'challan', label: 'Delivery Challans',
+                loadFunction: jest.fn().mockResolvedValue([{
+                    challan_id: 'dispatch-1', challan_number: 'DC-1',
+                    customer_name: 'Synthetic Customer', delivery_status: 'posted',
+                }]),
+            }]} />);
+        expect(await screen.findByText('Amount not applicable')).toBeTruthy();
+        expect(screen.queryByText('₹0.00')).toBeNull();
+    });
+
     it('resolves the selected API document before importing customer and line data', async () => {
         const onImport = jest.fn();
         const onClose = jest.fn();
@@ -13,7 +26,7 @@ describe('DocumentImportModal detail resolution', () => {
             invoice_id: 'invoice-1',
             invoice_number: 'INV-1',
             customer_name: 'Synthetic Customer',
-            total_amount: 150,
+            total_amount: '150.00',
         }]);
         const resolveDocument = jest.fn().mockResolvedValue({
             invoice_id: 'invoice-1',
@@ -25,6 +38,7 @@ describe('DocumentImportModal detail resolution', () => {
                 free_quantity: '0.000000',
                 free_supply_tax_treatment: 'excluded_from_taxable_value',
                 unit_price: '150.0000', batch_id: 'batch-1', batch_number: 'BATCH-1',
+                gst_percent: '0.000000', discount_percent: '0.000000',
             }],
         });
 
@@ -60,7 +74,7 @@ describe('DocumentImportModal detail resolution', () => {
         const onImport = jest.fn();
         const loadFunction = jest.fn().mockResolvedValue([{
             invoice_id: 'invoice-2', invoice_number: 'INV-2',
-            customer_name: 'Synthetic Customer', total_amount: 336,
+            customer_name: 'Synthetic Customer', total_amount: '336.00',
         }]);
         const resolveDocument = jest.fn().mockResolvedValue({
             invoice_id: 'invoice-2', invoice_number: 'INV-2',
@@ -70,6 +84,7 @@ describe('DocumentImportModal detail resolution', () => {
                 quantity: '3.000000', free_quantity: '1.000000',
                 unit_price: '100.0000', line_total: '336.00',
                 free_supply_tax_treatment: 'excluded_from_taxable_value',
+                gst_percent: '12.000000', discount_percent: '0.000000',
                 batch_id: null, batch_number: null,
                 batch_allocations: [
                     {

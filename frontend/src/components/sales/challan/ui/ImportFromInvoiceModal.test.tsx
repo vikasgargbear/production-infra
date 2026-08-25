@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ImportFromInvoiceModal from './ImportFromInvoiceModal';
-import { invoicesApi } from '../../../../services/api';
+import { ordersApi } from '../../../../services/api';
 
 jest.mock('react-toastify', () => ({ toast: { error: jest.fn() } }));
 jest.mock('../../../../hooks/useDialogFocus', () => ({
@@ -12,84 +12,68 @@ jest.mock('../../../../hooks/useEscapeKey', () => ({
     default: jest.fn(),
 }));
 jest.mock('../../../../services/api', () => ({
-    invoicesApi: { search: jest.fn(), getById: jest.fn() },
-    ordersApi: { search: jest.fn(), getById: jest.fn() },
+    ordersApi: { listApprovedForDispatch: jest.fn(), getById: jest.fn() },
 }));
 
-describe('ImportFromInvoiceModal executed allocation mapping', () => {
-    it('imports every direct/dispatch batch allocation with exact billed and free quantities', async () => {
-        (invoicesApi.search as jest.Mock).mockResolvedValue({ data: { invoices: [{
-            invoice_id: 'invoice-1', invoice_number: 'INV-1',
-            customer_id: 'customer-1', customer_name: 'Customer', total_amount: 336,
-        }] } });
-        (invoicesApi.getById as jest.Mock).mockResolvedValue({ data: {
-            invoice_id: 'invoice-1', invoice_number: 'INV-1',
-            customer_id: 'customer-1', customer_name: 'Customer',
+const id = (suffix: string) => `10000000-0000-7000-8000-${suffix.padStart(12, '0')}`;
+
+describe('delivery challan canonical order import', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (ordersApi.listApprovedForDispatch as jest.Mock).mockResolvedValue([{
+            order_id: id('1'), order_number: 'SO-1', order_date: '2026-08-25',
+            customer_id: id('2'), customer_name: 'Canonical Customer',
+            total_amount: '168.00', order_status: 'approved',
+        }]);
+        (ordersApi.getById as jest.Mock).mockResolvedValue({ data: {
+            order_id: id('1'), order_number: 'SO-1', order_date: '2026-08-25',
+            order_status: 'approved', customer_id: id('2'), customer_name: 'Canonical Customer',
+            total_amount: '168.00',
             items: [{
-                id: 'line-1', product_id: 'product-1', product_name: 'Carton',
-                quantity: '3.000000', free_quantity: '1.000000', unit_price: '100.0000',
-                free_supply_tax_treatment: 'included_at_unit_rate',
-                taxable_amount: '300.00', cgst_amount: '18.00', sgst_amount: '18.00',
-                cess_amount: '2.00', line_total: '338.00',
-                batch_allocations: [
-                    {
-                        source_kind: 'dispatch_allocation', command_request_id: null,
-                        allocation_id: 'invoice-dispatch-allocation-1',
-                        invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
-                        dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
-                        inventory_document_id: 'document-1',
-                        inventory_document_line_id: 'inventory-line-1',
-                        batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
-                        base_quantity: '2.000000', base_billed_quantity: '1.000000',
-                        base_free_quantity: '1.000000', billed_quantity: '1.000000',
-                        free_quantity: '1.000000',
-                    },
-                    {
-                        source_kind: 'dispatch_allocation', command_request_id: null,
-                        allocation_id: 'invoice-dispatch-allocation-2',
-                        invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
-                        dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-2',
-                        inventory_document_id: 'document-2',
-                        inventory_document_line_id: 'inventory-line-2',
-                        batch_id: 'batch-2', batch_number: 'BATCH-2', expiry_date: '2028-09-01',
-                        base_quantity: '2.000000', base_billed_quantity: '2.000000',
-                        base_free_quantity: '0.000000', billed_quantity: '2.000000',
-                        free_quantity: '0.000000',
-                    },
-                ],
+                id: id('3'), source_document_kind: 'sales_order',
+                product_id: id('4'), product_name: 'Canonical Product',
+                branch_id: id('5'), location_id: id('6'), uom_conversion_id: id('7'),
+                batch_id: id('8'), batch_number: 'BATCH-1', expiry_date: '2028-09-01',
+                quantity: '2.000000', free_quantity: '1.000000', unit_price: '50.0000',
+                gst_percent: '12.000000', discount_percent: '0.000000',
+                free_supply_tax_treatment: 'included_at_unit_rate', uom_code: 'EA',
             }],
         } });
-        const onImport = jest.fn();
+    });
 
+    it('offers approved sales orders only and preserves order-line/batch identities', async () => {
+        const onImport = jest.fn();
         render(<ImportFromInvoiceModal isOpen onClose={jest.fn()} onImport={onImport} />);
 
-        await screen.findByText('INV-1');
-        fireEvent.click(screen.getByText('INV-1'));
-        fireEvent.click(screen.getByRole('button', { name: 'Import to Challan' }));
+        expect(await screen.findByText('SO-1')).toBeTruthy();
+        expect(screen.queryByText(/sales invoice/i)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /SO-1/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import order to challan' }));
 
         await waitFor(() => expect(onImport).toHaveBeenCalled());
-        expect(invoicesApi.getById).toHaveBeenCalledWith('invoice-1');
-        expect(onImport.mock.calls[0][0].items).toEqual([
-            expect.objectContaining({
-                batch_id: 'batch-1', batch_number: 'BATCH-1', expiry_date: null,
-                quantity: '1.000000', free_quantity: '1.000000',
-                free_supply_tax_treatment: 'included_at_unit_rate',
-                taxable_amount: '150.00', cgst_amount: '9.00', sgst_amount: '9.00',
-                cess_amount: '1.00', line_total: '169.00',
-                inventory_document_line_id: 'inventory-line-1',
-                invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-1',
-                dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-1',
-            }),
-            expect.objectContaining({
-                batch_id: 'batch-2', batch_number: 'BATCH-2', expiry_date: '2028-09-01',
-                quantity: '2.000000', free_quantity: '0.000000',
-                free_supply_tax_treatment: 'included_at_unit_rate',
-                taxable_amount: '150.00', cgst_amount: '9.00', sgst_amount: '9.00',
-                cess_amount: '1.00', line_total: '169.00',
-                inventory_document_line_id: 'inventory-line-2',
-                invoice_dispatch_allocation_id: 'invoice-dispatch-allocation-2',
-                dispatch_id: 'dispatch-1', dispatch_line_id: 'dispatch-line-2',
-            }),
-        ]);
+        expect(ordersApi.getById).toHaveBeenCalledWith(id('1'));
+        expect(onImport).toHaveBeenCalledWith(expect.objectContaining({
+            source_order_id: id('1'),
+            customer_id: id('2'),
+            reference_doc: 'Order: SO-1',
+            items: [expect.objectContaining({
+                id: id('3'), source_order_line_id: id('3'),
+                product_id: id('4'), batch_id: id('8'),
+                quantity: '2.000000', free_quantity: '1.000000',
+            })],
+        }));
+    });
+
+    it('fails closed when the detail is no longer approved', async () => {
+        (ordersApi.getById as jest.Mock).mockResolvedValueOnce({ data: {
+            order_id: id('1'), order_number: 'SO-1', order_status: 'cancelled',
+            customer_id: id('2'), customer_name: 'Canonical Customer', items: [],
+        } });
+        const onImport = jest.fn();
+        render(<ImportFromInvoiceModal isOpen onClose={jest.fn()} onImport={onImport} />);
+        fireEvent.click(await screen.findByRole('button', { name: /SO-1/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import order to challan' }));
+        await waitFor(() => expect(ordersApi.getById).toHaveBeenCalled());
+        expect(onImport).not.toHaveBeenCalled();
     });
 });

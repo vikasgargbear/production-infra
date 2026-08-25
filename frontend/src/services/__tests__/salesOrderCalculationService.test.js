@@ -17,7 +17,7 @@ const order = {
   items: [{
     product_id: '10000000-0000-7000-8000-000000000002',
     quantity: '0.123456', free_quantity: '0', unit_price: '9007199254740993.000000',
-    discount_percent: '0', gst_percent: '18',
+    discount_percent: '0', gst_percent: '18', free_supply_tax_treatment: 'excluded_from_taxable_value',
   }],
 };
 

@@ -59,6 +59,7 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             ...selectedBatch,
             quantity: '0.100000',
             free_quantity: '0.200000',
+            free_supply_tax_treatment: 'included_at_unit_rate',
         });
 
         expect(item.quantity).toBe('0.100000');
@@ -141,6 +142,7 @@ describe('prepareItemForInvoice free-supply treatment', () => {
             batch_number: 'BATCH-FRACTIONAL',
             quantity: '0.123456',
             free_quantity: '1.625000',
+            free_supply_tax_treatment: 'included_at_unit_rate',
         });
 
         expect(item.quantity).toBe('0.123456');

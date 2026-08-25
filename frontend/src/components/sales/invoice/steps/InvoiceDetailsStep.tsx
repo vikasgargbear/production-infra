@@ -9,10 +9,10 @@ import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { indianStateName } from '../../../../utils/indianStates';
 import { applySelectedDeliveryAddress } from '../utils/invoiceAddressSelection';
-import { addExactDecimals, compareExactDecimals, formatExactCurrency, subtractExactDecimals } from '../../../../utils/exactDecimal';
+import { compareExactDecimals, formatExactCurrency } from '../../../../utils/exactDecimal';
 
 // Shared Types
-import { Customer, Invoice, Payment } from '../types/invoiceTypes';
+import { Customer, Invoice } from '../types/invoiceTypes';
 
 interface InvoiceDetailsStepProps {
     invoice: Invoice;
@@ -43,12 +43,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 }) => {
     const { companyInfo } = useCompany();
     const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
-    const canonicalFinalAmount = invoice.totals?.final_amount || invoice.final_amount || 0;
-    const canonicalTotalPaid = (): string => addExactDecimals(
-        (invoice.payments || []).map(payment => payment.amount || 0),
-        'Invoice payments',
-        moneyOptions,
-    );
+    const canonicalFinalAmount = invoice.totals?.final_amount;
+    const canonicalItemDiscount = invoice.totals?.total_discount;
+    const canonicalSchemeDiscount = invoice.totals?.scheme_discount;
     // State for controlling AddressForm add mode externally
     const [addAddressMode, setAddAddressMode] = useState(false);
 
@@ -198,252 +195,24 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                             </div>
                         </div>
 
-                        {/* 2. Payment */}
+                        {/* Payments are a separate canonical lifecycle. */}
+                        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5">
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-blue-800">Payment</h3>
+                            <p className="mt-2 text-sm text-blue-900">
+                                This invoice flow does not infer payment status, paid amount, credit terms, or allocation. Record payment only after the invoice posts, using the canonical Payments flow.
+                            </p>
+                        </div>
+
                         <div className="mb-6">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
-                                    <FileText className="w-4 h-4 mr-2" />
-                                    PAYMENT
-                                </h3>
-
-                                {/* Split Payment Toggle */}
-                                <div className="flex items-center gap-3">
-                                    <span className="text-sm font-medium text-gray-700">Split Payment</span>
-                                    <button
-                                        role="switch"
-                                        aria-checked={!!(invoice.payments && invoice.payments.length > 1)}
-                                        aria-label="Enable split payment"
-                                        onClick={() => {
-                                            const totalAmount = canonicalFinalAmount;
-                                            if (invoice.payments && invoice.payments.length > 1) {
-                                                setInvoice(prev => ({
-                                                    ...prev,
-                                                    payments: [{
-                                                        id: '1',
-                                                        method: 'credit',
-                                                        amount: totalAmount,
-                                                        reference: ''
-                                                    }],
-                                                    payment_mode: 'credit',
-                                                    payment_status: 'pending'
-                                                }));
-                                            } else {
-                                                setInvoice(prev => ({
-                                                    ...prev,
-                                                    payments: [
-                                                        { id: '1', method: 'upi', amount: totalAmount, reference: '' },
-                                                        { id: '2', method: 'credit', amount: '', reference: '' }
-                                                    ],
-                                                    payment_mode: 'split',
-                                                    payment_status: 'partial'
-                                                }));
-                                            }
-                                        }}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${invoice.payments && invoice.payments.length > 1
-                                            ? 'bg-blue-600'
-                                            : 'bg-gray-200'
-                                            }`}
-                                    >
-                                        <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${invoice.payments && invoice.payments.length > 1
-                                                ? 'translate-x-6'
-                                                : 'translate-x-1'
-                                                }`}
-                                        />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-lg border border-gray-200 p-6">
-
-                                {/* Payment Method Selection - Always show dropdown */}
-                                <div className="space-y-4">
-                                    {invoice.payments && invoice.payments.length > 1 ? (
-                                        /* Split Payment Mode - Multiple rows */
-                                        <>
-                                            <div className="space-y-3">
-                                                {invoice.payments.map((payment, index) => (
-                                                    <div key={payment.id || index} className="grid grid-cols-12 gap-3 items-center">
-                                                        <div className="col-span-4">
-                                                            {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Payment Methods</label>}
-                                                            <select
-                                                                value={payment.method}
-                                                                onChange={(e) => {
-                                                                    const newPayments = [...(invoice.payments || [])];
-                                                                    newPayments[index] = { ...newPayments[index], method: e.target.value };
-                                                                    setInvoice(prev => ({ ...prev, payments: newPayments }));
-                                                                }}
-                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                            >
-                                                                <option value="cash">Cash</option>
-                                                                <option value="card">Card</option>
-                                                                <option value="upi">UPI</option>
-                                                                <option value="bank">Bank Transfer</option>
-                                                                <option value="check">Check</option>
-                                                                <option value="credit">Credit (Pay Later)</option>
-                                                            </select>
-                                                        </div>
-                                                        <div className="col-span-4">
-                                                            {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>}
-                                                            <input
-                                                                type="number"
-                                                                value={payment.amount === 0 || payment.amount === '' ? '' : payment.amount}
-                                                                onChange={(e) => {
-                                                                    const newPayments = [...(invoice.payments || [])];
-                                                                    const val = e.target.value;
-                                                                    newPayments[index] = { ...newPayments[index], amount: val === '' ? '' : parseFloat(val) || 0 };
-                                                                    setInvoice(prev => ({ ...prev, payments: newPayments }));
-                                                                }}
-                                                                onBlur={(e) => {
-                                                                    if (e.target.value === '') {
-                                                                        const newPayments = [...(invoice.payments || [])];
-                                                                        newPayments[index] = { ...newPayments[index], amount: 0 };
-                                                                        setInvoice(prev => ({ ...prev, payments: newPayments }));
-                                                                    }
-                                                                }}
-                                                                onFocus={(e) => e.target.select()}
-                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                                placeholder="Amount"
-                                                            />
-                                                        </div>
-                                                        <div className="col-span-3">
-                                                            {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Reference</label>}
-                                                            <input
-                                                                type="text"
-                                                                value={payment.reference || ''}
-                                                                onChange={(e) => {
-                                                                    const newPayments = [...(invoice.payments || [])];
-                                                                    newPayments[index] = { ...newPayments[index], reference: e.target.value };
-                                                                    setInvoice(prev => ({ ...prev, payments: newPayments }));
-                                                                }}
-                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                                placeholder={payment.method === 'upi' ? 'UPI ID' :
-                                                                    payment.method === 'card' ? 'Last 4 digits' :
-                                                                        payment.method === 'bank' ? 'Transaction ID' :
-                                                                            payment.method === 'check' ? 'Check Number' : 'Reference'}
-                                                            />
-                                                        </div>
-                                                        <div className="col-span-1">
-                                                            {index > 0 && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const newPayments = (invoice.payments || []).filter((_, i) => i !== index);
-                                                                        setInvoice(prev => ({ ...prev, payments: newPayments }));
-                                                                    }}
-                                                                    className="p-2 text-red-600 hover:bg-red-50 rounded"
-                                                                >
-                                                                    ×
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            {/* Add Payment Button */}
-                                            <button
-                                                onClick={() => {
-                                                    const newPayment: Payment = {
-                                                        id: Date.now().toString(),
-                                                        method: 'cash',
-                                                        amount: '',
-                                                        reference: ''
-                                                    };
-                                                    setInvoice(prev => ({
-                                                        ...prev,
-                                                        payments: [...(prev.payments || []), newPayment]
-                                                    }));
-                                                }}
-                                                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                                            >
-                                                + Add Payment Method
-                                            </button>
-                                        </>
-                                    ) : (
-                                        /* Single Payment Mode */
-                                        <div className={`grid gap-4 ${invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method)
-                                            ? 'grid-cols-12'
-                                            : 'grid-cols-2'
-                                            }`}>
-                                            <div className={invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method) ? 'col-span-4' : ''}>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                                                <select
-                                                    value={invoice.payments?.[0]?.method || 'credit'}
-                                                    onChange={(e) => {
-                                                        const totalAmount = canonicalFinalAmount;
-                                                        setInvoice(prev => ({
-                                                            ...prev,
-                                                            payments: [{
-                                                                id: '1',
-                                                                method: e.target.value,
-                                                                amount: totalAmount,
-                                                                reference: ''
-                                                            }],
-                                                            payment_mode: e.target.value
-                                                        }));
-                                                    }}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                                >
-                                                    <option value="credit">Credit (Pay Later)</option>
-                                                    <option value="cash">Cash</option>
-                                                    <option value="card">Card</option>
-                                                    <option value="upi">UPI</option>
-                                                    <option value="bank">Bank Transfer</option>
-                                                    <option value="check">Check</option>
-                                                </select>
-                                            </div>
-                                            <div className={invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method) ? 'col-span-4' : ''}>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
-                                                <input
-                                                    type="number"
-                                                    value={canonicalFinalAmount}
-                                                    readOnly
-                                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
-                                                />
-                                            </div>
-                                            {/* Reference field - show for methods that need it */}
-                                            {invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method) && (
-                                                <div className="col-span-4">
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        {invoice.payments[0].method === 'upi' ? 'UPI ID' :
-                                                            invoice.payments[0].method === 'card' ? 'Last 4 Digits' :
-                                                                invoice.payments[0].method === 'bank' ? 'Transaction ID' :
-                                                                    invoice.payments[0].method === 'check' ? 'Check Number' : 'Reference'}
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        value={invoice.payments[0]?.reference || ''}
-                                                        onChange={(e) => {
-                                                            setInvoice(prev => ({
-                                                                ...prev,
-                                                                payments: [{
-                                                                    ...(prev.payments?.[0] || { id: '1', method: 'credit', amount: 0, reference: '' }),
-                                                                    reference: e.target.value
-                                                                }]
-                                                            }));
-                                                        }}
-                                                        placeholder={invoice.payments[0].method === 'upi' ? 'xyz@paytm' :
-                                                            invoice.payments[0].method === 'card' ? '1234' :
-                                                                invoice.payments[0].method === 'bank' ? 'NEFT123' :
-                                                                    invoice.payments[0].method === 'check' ? '123456' : 'Optional'}
-                                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
+                            <div className="rounded-lg border border-gray-200 bg-white p-6">
                                 {/* Bill Discount - Expanded Grid (no Type label) */}
                                 <div className="border-t border-gray-100 pt-5 mb-4">
                                     <div className="flex items-center gap-3 mb-4">
                                         <h4 className="text-sm font-semibold text-gray-700">Bill Discount</h4>
-                                        {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) && (
+                                        {canonicalSchemeDiscount !== undefined
+                                            && compareExactDecimals(canonicalSchemeDiscount, '0', 'Invoice scheme discount', moneyOptions) > 0 && (
                                             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                                                Saves {formatExactCurrency(
-                                                    invoice.totals?.scheme_discount || invoice.discount_amount || 0,
-                                                    'Invoice scheme discount',
-                                                )}
+                                                Saves {formatExactCurrency(canonicalSchemeDiscount, 'Invoice scheme discount')}
                                             </span>
                                         )}
                                     </div>
@@ -547,11 +316,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         )}
 
                                         {/* Item-level Discounts */}
-                                        {compareExactDecimals(invoice.totals?.total_discount || 0, 0, 'Invoice item discount', moneyOptions) > 0 && (
+                                        {canonicalItemDiscount !== undefined
+                                            && compareExactDecimals(canonicalItemDiscount, '0', 'Invoice item discount', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Item Discounts</span>
                                                 <span className="text-green-600">
-                                                    -{formatExactCurrency(invoice.totals?.total_discount || 0, 'Invoice item discount')}
+                                                    -{formatExactCurrency(canonicalItemDiscount, 'Invoice item discount')}
                                                 </span>
                                             </div>
                                         )}
@@ -560,28 +330,28 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount) && (
                                             <div className="flex justify-between items-center text-sm font-medium">
                                                 <span className="text-gray-700">Taxable Amount</span>
-                                                <span className="text-gray-900">{formatExactCurrency(invoice.totals.taxable_before_scheme || invoice.totals.taxable_amount || 0, 'Invoice taxable amount')}</span>
+                                                <span className="text-gray-900">{formatExactCurrency(invoice.totals.taxable_before_scheme ?? invoice.totals.taxable_amount, 'Invoice taxable amount')}</span>
                                             </div>
                                         )}
 
                                         {/* Invoice Discount (scheme_discount from calculator) */}
-                                        {compareExactDecimals(invoice.totals?.scheme_discount || 0, 0, 'Invoice scheme discount', moneyOptions) > 0 && (
+                                        {invoice.totals?.scheme_discount !== undefined && compareExactDecimals(invoice.totals.scheme_discount, 0, 'Invoice scheme discount', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">
                                                     Invoice Discount
                                                     {invoice.discount_type === 'percentage' && ` (${invoice.discount_percent}%)`}
                                                 </span>
                                                 <span className="text-green-600">
-                                                    -{formatExactCurrency(invoice.totals?.scheme_discount || 0, 'Invoice scheme discount')}
+                                                    -{formatExactCurrency(invoice.totals.scheme_discount, 'Invoice scheme discount')}
                                                 </span>
                                             </div>
                                         )}
 
                                         {/* Delivery Charges */}
-                                        {(invoice.freight_charges || 0) > 0 && (
+                                        {invoice.freight_charges > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Delivery Charges</span>
-                                                <span className="text-gray-900">+{formatExactCurrency(invoice.freight_charges || 0, 'Invoice delivery charges')}</span>
+                                                <span className="text-gray-900">+{formatExactCurrency(invoice.freight_charges, 'Invoice delivery charges')}</span>
                                             </div>
                                         )}
 
@@ -589,7 +359,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                                             <span className="text-sm font-medium text-gray-700">Total Amount</span>
                                             <span className="text-lg font-semibold text-gray-900">
-                                                {formatExactCurrency(canonicalFinalAmount, 'Invoice final amount')}
+                                                {canonicalFinalAmount === undefined
+                                                    ? 'Live total unavailable'
+                                                    : formatExactCurrency(canonicalFinalAmount, 'Invoice final amount')}
                                             </span>
                                         </div>
                                     </div>
@@ -607,28 +379,11 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                     onContinue={onContinue}
                     cancelLabel="← Back to Items"
                     continueLabel="Continue to Preview"
-                    continueDisabled={(() => {
-                        return compareExactDecimals(canonicalTotalPaid(), canonicalFinalAmount, 'Invoice payment limit', moneyOptions) > 0;
-                    })()}
+                    continueDisabled={canonicalFinalAmount === undefined}
                     continueButtonColor="blue"
-                    additionalInfo={(() => {
-                        const remaining = subtractExactDecimals(canonicalFinalAmount, canonicalTotalPaid(), 'Invoice balance', moneyOptions);
-
-                        if (compareExactDecimals(remaining, 0, 'Invoice balance', moneyOptions) > 0) {
-                            return (
-                                <span className="text-sm text-gray-700">
-                                    Credit: <strong className="text-gray-900">{formatExactCurrency(remaining, 'Invoice balance')}</strong>
-                                </span>
-                            );
-                        } else if (compareExactDecimals(remaining, 0, 'Invoice balance', moneyOptions) < 0) {
-                            return (
-                                <span className="text-sm text-red-600">
-                                    Overpaid: <strong>{formatExactCurrency(remaining.slice(1), 'Invoice overpayment')}</strong>
-                                </span>
-                            );
-                        }
-                        return null;
-                    })()}
+                    additionalInfo={canonicalFinalAmount === undefined
+                        ? <span className="text-sm text-amber-800">Refresh the live calculation before continuing.</span>
+                        : <span className="text-sm text-gray-700">Payment is recorded separately after posting.</span>}
                 />
 
             </div>

@@ -5,7 +5,6 @@ import { challansApi } from '../../../../services/api/modules/sales/challans.api
 import { buildCanonicalSalesDispatchCommand } from '../../utils/canonicalSalesChainCommand';
 import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
-import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
 
 export interface UseChallanSaveProps {
     challan: Challan;
@@ -76,18 +75,18 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
             }
             const resourceId = executedResourceId.current;
             const detail = (await challansApi.getCanonical(resourceId)).data;
-            if (!detail || String(detail.dispatch_id ?? detail.challan_id ?? detail.id) !== resourceId) {
+            if (detail.dispatch_id !== resourceId || detail.status !== 'posted') {
                 throw new Error('Dispatch posted, but authoritative readback could not be verified. Refresh history before retrying.');
             }
             setCreatedChallanData({
-                challan_id: String(detail.dispatch_id ?? detail.challan_id ?? detail.id),
-                challan_number: String(detail.challan_number),
-                customer_name: String(detail.customer_name),
+                challan_id: detail.dispatch_id,
+                challan_number: detail.challan_number,
+                customer_name: detail.customer_name,
                 customer_details: selectedCustomer,
-                items: detail.items ?? challan.items,
-                total_amount: normalizeAuthoritativeDecimal(detail.total_amount, 'Posted dispatch total', {
-                    scale: 2, maximumWholeDigits: 20,
-                }),
+                inventory_document_id: detail.inventory_document_id,
+                inventory_base_quantity: detail.inventory_base_quantity,
+                inventory_value: detail.inventory_value,
+                lines: detail.lines,
             });
             setShowSuccessModal(true);
             executedResourceId.current = null;
@@ -100,7 +99,7 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
         } finally {
             setSaving(false);
         }
-    }, [challan, preparedPreview, saving, selectedCustomer, setCreatedChallanData, setShowSuccessModal]);
+    }, [preparedPreview, saving, selectedCustomer, setCreatedChallanData, setShowSuccessModal]);
 
     return {
         saving,

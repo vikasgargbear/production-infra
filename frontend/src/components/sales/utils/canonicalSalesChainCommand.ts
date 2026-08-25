@@ -10,6 +10,9 @@ function uuid(value: unknown, label: string): string {
 }
 
 function decimal(value: unknown, label: string, scale: number, positive = false): string {
+    if (value === undefined || value === null || value === '') {
+        throw new Error(`${label} is missing its explicit canonical value`);
+    }
     const result = normalizeExactDecimal(value, label, { scale });
     if (positive && exactDecimalUnits(result, label, { scale }) <= 0n) {
         throw new Error(`${label} must be greater than zero`);
@@ -17,8 +20,29 @@ function decimal(value: unknown, label: string, scale: number, positive = false)
     return result;
 }
 
+function freeSupplyTaxTreatment(
+    value: unknown,
+    label: string,
+): 'excluded_from_taxable_value' | 'included_at_unit_rate' {
+    if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') {
+        return value;
+    }
+    throw new Error(`${label} is missing its explicit canonical value`);
+}
+
+function requireZero(value: unknown, label: string, scale: number, optional = false): void {
+    if (optional && (value === undefined || value === null || value === '')) return;
+    const normalized = decimal(value, label, scale);
+    if (exactDecimalUnits(normalized, label, { scale }) !== 0n) {
+        throw new Error(`${label} is not supported by canonical sales-order posting`);
+    }
+}
+
 export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: string): Record<string, unknown> {
     if (!order.items.length) throw new Error('Add at least one product before preparing the order');
+    requireZero(order.discount_amount, 'Order document discount', 2);
+    requireZero(order.delivery_charges, 'Order delivery charges', 2, true);
+    requireZero(order.other_charges, 'Order other charges', 2);
     const branchId = uuid(order.items[0].branch_id, 'Order branch');
     const customerId = uuid(order.customer_id, 'Customer');
     return {
@@ -31,13 +55,16 @@ export function buildCanonicalSalesOrderCommand(order: Order, idempotencyKey: st
             if (uuid(item.branch_id, `Item ${index + 1} branch`) !== branchId) {
                 throw new Error('All order items must belong to one branch');
             }
-            const discount = decimal(item.discount_percent ?? 0, `Item ${index + 1} discount`, 6);
+            const discount = decimal(item.discount_percent, `Item ${index + 1} discount`, 6);
             return {
                 product_id: uuid(item.product_id, `Item ${index + 1} product`),
                 uom_conversion_id: uuid(item.uom_conversion_id, `Item ${index + 1} UOM`),
                 billed_quantity: decimal(item.quantity, `Item ${index + 1} billed quantity`, 6, true),
-                free_quantity: decimal(item.free_quantity ?? 0, `Item ${index + 1} free quantity`, 6),
-                free_supply_tax_treatment: item.free_supply_tax_treatment ?? 'excluded_from_taxable_value',
+                free_quantity: decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6),
+                free_supply_tax_treatment: freeSupplyTaxTreatment(
+                    item.free_supply_tax_treatment,
+                    `Item ${index + 1} free-supply tax treatment`,
+                ),
                 quoted_unit_rate: decimal(item.unit_price, `Item ${index + 1} unit rate`, 4),
                 price_basis: 'tax_exclusive',
                 line_discount: {
@@ -77,11 +104,11 @@ export function buildCanonicalSalesDispatchCommand(challan: Challan, idempotency
             return {
                 sales_order_line_id: uuid(item.source_order_line_id ?? item.id, `Item ${index + 1} sales-order line`),
                 billed_quantity: decimal(item.quantity, `Item ${index + 1} billed quantity`, 6, true),
-                free_quantity: decimal(item.free_quantity ?? 0, `Item ${index + 1} free quantity`, 6),
+                free_quantity: decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6),
                 batch_allocations: [{
                     batch_id: uuid(item.batch_id, `Item ${index + 1} batch`),
                     billed_quantity: decimal(item.quantity, `Item ${index + 1} batch billed quantity`, 6, true),
-                    free_quantity: decimal(item.free_quantity ?? 0, `Item ${index + 1} batch free quantity`, 6),
+                    free_quantity: decimal(item.free_quantity, `Item ${index + 1} batch free quantity`, 6),
                 }],
             };
         }),

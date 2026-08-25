@@ -17,6 +17,10 @@ import {
   type CanonicalCommandPreview,
 } from '../../canonicalOperatorActions';
 import type { CanonicalSalesOrderImportDetail } from './canonicalSalesDocuments.types';
+import {
+  canonicalDocumentHistoryApi,
+  requireCanonicalHistoryAmount,
+} from '../history/canonicalDocumentHistory.api';
 
 // Type definitions
 type OrderId = number | string;
@@ -64,6 +68,27 @@ export const ordersApi = {
     return executed;
   },
   getCanonical: (id: string) => apiHelpers.get(`/canonical/sales-orders/${id}/acceptance-readback`),
+
+  /** Canonical approved orders eligible for explicit dispatch selection. */
+  listApprovedForDispatch: async (search = '', pageSize = 50) => {
+    const response = await canonicalDocumentHistoryApi.get({
+      document_kind: 'sales_order', status: 'approved', search, page: 1, page_size: pageSize,
+    });
+    return response.items.map(row => {
+      if (row.document_kind !== 'sales_order' || row.status !== 'approved') {
+        throw new Error('Dispatch eligibility returned a document that is not an approved sales order.');
+      }
+      return {
+        order_id: row.document_id,
+        order_number: row.document_number,
+        order_date: row.document_date,
+        customer_id: row.party_account_id,
+        customer_name: row.party_name,
+        total_amount: requireCanonicalHistoryAmount(row.total_amount, 'Approved sales-order total'),
+        order_status: 'approved' as const,
+      };
+    });
+  },
 
   /** Create multiple orders in bulk */
   createBulk: (_ordersData: any[]) => rejectCanonicalWrite('Bulk sales-order creation'),

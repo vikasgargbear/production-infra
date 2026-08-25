@@ -16,8 +16,8 @@ import ItemProfitModal from '../../modals/ItemProfitModal';
 
 // Utils
 import { toast } from 'react-toastify';
-import { ordersApi, challansApi } from '../../../../services/api';
-import { extractDocumentCollection, extractDocumentDetail } from '../../utils/documentImport';
+import { challansApi } from '../../../../services/api';
+import { extractDocumentDetail } from '../../utils/documentImport';
 import { invoiceBatchAllocationValidationError } from '../utils/canonicalInvoiceCommand';
 import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
 
@@ -148,7 +148,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onClose={onClose}
                     additionalActions={[
                         {
-                            label: 'Import from Order/Challan',
+                            label: 'Import posted delivery challan',
                             icon: FileInput,
                             onClick: () => setShowImportModal(true),
                             variant: 'secondary'
@@ -311,7 +311,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
 
                 {/* Footer */}
                 <InvoiceItemsFooter
-                    totalItems={invoice.items?.length || 0}
+                    totalItems={invoice.items?.length ?? 0}
                     totalAmount={invoice.final_amount || invoice.totals?.final_amount}
                     onReset={onReset}
                     onContinue={onContinue}
@@ -364,23 +364,10 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onImport={handleImport}
                     documentTypes={[
                         {
-                            value: 'sales-order',
-                            label: 'Sales Orders',
-                            loadFunction: async (searchQuery?: string) => {
-                                const response = await ordersApi.getAll({ search: searchQuery, limit: 50 });
-                                return extractDocumentCollection(response, ['orders', 'sales_orders']);
-                            },
-                            resolveDocument: async (document: any) => {
-                                const response = await ordersApi.getById(document.order_id || document.id);
-                                return extractDocumentDetail(response, ['order', 'sales_order']);
-                            },
-                        },
-                        {
                             value: 'challan',
                             label: 'Delivery Challans',
                             loadFunction: async (searchQuery?: string) => {
-                                const response = await challansApi.getAll({ search: searchQuery, limit: 50 });
-                                return extractDocumentCollection(response, ['challans', 'delivery_challans']);
+                                return challansApi.listPostedForInvoice(searchQuery);
                             },
                             resolveDocument: async (document: any) => {
                                 const response = await challansApi.getById(document.challan_id || document.id);

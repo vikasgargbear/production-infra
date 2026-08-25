@@ -57,7 +57,7 @@ describe('useSalesOrderLogic canonical import calculation', () => {
     it('initializes order and delivery dates from the organization business date', async () => {
         const { result } = renderHook(() => useSalesOrderLogic());
         await waitFor(() => expect(result.current.order.order_date).toBe('2026-08-25'));
-        expect(result.current.order.expected_delivery_date).toBe('2026-09-01');
+        expect(result.current.order.expected_delivery_date).toBe('');
     });
 
     it('calculates an import from its committed customer UUID and preserves lineage', async () => {

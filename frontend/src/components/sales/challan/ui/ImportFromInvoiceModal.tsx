@@ -1,51 +1,31 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { X, FileText, ShoppingCart, Calendar } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Calendar, ShoppingCart, X } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { invoicesApi, ordersApi } from '../../../../services/api';
+import { ordersApi } from '../../../../services/api';
 import useDialogFocus from '../../../../hooks/useDialogFocus';
 import useEscapeKey from '../../../../hooks/useEscapeKey';
+import { formatExactCurrency } from '../../../../utils/exactDecimal';
 import {
-    extractDocumentCollection,
     extractDocumentDetail,
     projectCanonicalImportLines,
 } from '../../utils/documentImport';
 import type {
     ChallanItem,
-    CustomerDetails,
     ImportData,
 } from '../types/challanTypes';
 
-interface DocumentItem {
-    product_id: string | number;
-    product_name: string;
-    quantity: number | string;
-    batch_allocations?: unknown[];
+interface ApprovedOrderSummary {
+    order_id: string;
+    order_number: string;
+    order_date: string;
+    customer_id: string;
+    customer_name: string;
+    total_amount: string;
+    order_status: 'approved';
 }
 
-interface Document {
-    invoice_id?: string;
-    order_id?: string;
-    invoice_number?: string;
-    order_number?: string;
-    customer_id: string | number;
-    customer_name: string;
-    customer_details?: CustomerDetails;
-    billing_address?: string;
-    billing_city?: string;
-    billing_state?: string;
-    billing_pincode?: string;
-    shipping_address?: string;
-    shipping_city?: string;
-    shipping_state?: string;
-    shipping_pincode?: string;
-    customer_phone?: string;
-    customer_gst_number?: string;
-    items?: DocumentItem[];
-    invoice_items?: DocumentItem[];
-    invoice_date?: string;
-    order_date?: string;
-    total_amount?: number;
-    payment_status?: string;
+interface ApprovedOrderDetail extends ApprovedOrderSummary {
+    items: unknown[];
 }
 
 interface ImportFromInvoiceModalProps {
@@ -54,270 +34,225 @@ interface ImportFromInvoiceModalProps {
     onImport: (data: ImportData) => void;
 }
 
+/**
+ * A canonical dispatch can only originate from an approved sales order.
+ * Invoice-to-dispatch is deliberately not offered because it has no supported
+ * lineage in the canonical dispatch command.
+ */
 const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen, onClose, onImport }) => {
-    const [searchType, setSearchType] = useState<'invoice' | 'order'>('invoice');
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<Document[]>([]);
-    const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+    const [searchResults, setSearchResults] = useState<ApprovedOrderSummary[]>([]);
+    const [selectedOrder, setSelectedOrder] = useState<ApprovedOrderSummary | null>(null);
     const [loading, setLoading] = useState(false);
     const [importing, setImporting] = useState(false);
     const dialogRef = useDialogFocus<HTMLDivElement>(isOpen);
     useEscapeKey(onClose, isOpen, 'ChallanImportFromInvoiceModal');
 
-    const loadRecentDocuments = useCallback(async () => {
+    const loadOrders = useCallback(async (search = '') => {
         setLoading(true);
         try {
-            let results: Document[] = [];
-            if (searchType === 'invoice') {
-                const response = await invoicesApi.search({ search: '', limit: 10 });
-                const responseData = response?.data || response;
-                results = Array.isArray(responseData) ? responseData :
-                    (responseData?.data && Array.isArray(responseData.data)) ? responseData.data :
-                        (responseData?.invoices && Array.isArray(responseData.invoices)) ? responseData.invoices : [];
-            } else {
-                const response = await ordersApi.search('', { limit: 10 });
-                results = extractDocumentCollection(response, ['orders', 'sales_orders']) as Document[];
-            }
-            setSearchResults(results);
+            const results = await ordersApi.listApprovedForDispatch(search, 10);
+            setSearchResults(results as ApprovedOrderSummary[]);
+            setSelectedOrder(null);
         } catch (error) {
             setSearchResults([]);
+            setSelectedOrder(null);
+            toast.error(error instanceof Error
+                ? error.message
+                : 'Unable to load approved sales orders.');
         } finally {
             setLoading(false);
         }
-    }, [searchType]);
+    }, []);
 
     useEffect(() => {
-        if (isOpen) {
-            void loadRecentDocuments();
-        }
-    }, [isOpen, loadRecentDocuments]);
+        if (isOpen) void loadOrders();
+    }, [isOpen, loadOrders]);
 
     if (!isOpen) return null;
 
-    const handleSearch = async () => {
-        if (!searchQuery.trim()) {
-            void loadRecentDocuments();
-            return;
-        }
-
-        setLoading(true);
-        try {
-            let results: Document[] = [];
-            if (searchType === 'invoice') {
-                const response = await invoicesApi.search({ search: searchQuery });
-                const responseData = response?.data || response;
-                results = Array.isArray(responseData) ? responseData :
-                    (responseData?.data && Array.isArray(responseData.data)) ? responseData.data :
-                        (responseData?.invoices && Array.isArray(responseData.invoices)) ? responseData.invoices : [];
-            } else {
-                const response = await ordersApi.search(searchQuery);
-                results = extractDocumentCollection(response, ['orders', 'sales_orders']) as Document[];
-            }
-            setSearchResults(results);
-        } catch (error) {
-            setSearchResults([]);
-        } finally {
-            setLoading(false);
-        }
+    const handleSearch = () => {
+        void loadOrders(searchQuery.trim());
     };
 
     const handleImport = async () => {
-        if (!selectedDoc) return;
+        if (!selectedOrder) return;
 
         setImporting(true);
         try {
-            const detailResponse = searchType === 'invoice'
-                ? await invoicesApi.getById(selectedDoc.invoice_id!)
-                : await ordersApi.getById(selectedDoc.order_id!);
-            const sourceDoc = extractDocumentDetail(
+            const detailResponse = await ordersApi.getById(selectedOrder.order_id);
+            const sourceOrder = extractDocumentDetail(
                 detailResponse,
-                searchType === 'invoice' ? ['invoice'] : ['order', 'sales_order'],
-            ) as unknown as Document;
-            const sourceNumber = searchType === 'invoice'
-                ? sourceDoc.invoice_number
-                : sourceDoc.order_number;
-            if (!sourceDoc.customer_id || !sourceDoc.customer_name || !sourceNumber) {
-                throw new Error('The canonical document detail is missing its customer or document identity.');
+                ['order', 'sales_order'],
+            ) as unknown as ApprovedOrderDetail;
+            if (!sourceOrder.order_id
+                || !sourceOrder.order_number
+                || !sourceOrder.customer_id
+                || !sourceOrder.customer_name
+                || sourceOrder.order_status !== 'approved') {
+                throw new Error('The canonical order detail is missing its approved order or customer identity.');
             }
             const importableItems = projectCanonicalImportLines(
-                sourceDoc.items || sourceDoc.invoice_items,
+                sourceOrder.items,
                 { requireBatch: true },
             );
-            const challanItems = importableItems.map((item, index) => ({
-                ...item,
-                id: `imported-${Date.now()}-${index}`,
-                source_order_line_id: searchType === 'order' ? String(item.source_line_id ?? '') : undefined,
-            })) as unknown as ChallanItem[];
+            const challanItems = importableItems.map((item, index) => {
+                if (!item.source_line_id) {
+                    throw new Error(`Order line ${index + 1} is missing its canonical sales-order line identity.`);
+                }
+                return {
+                    ...item,
+                    id: String(item.source_line_id),
+                    source_order_line_id: String(item.source_line_id),
+                };
+            }) as unknown as ChallanItem[];
 
             const importData: ImportData = {
-                source_order_id: searchType === 'order' ? sourceDoc.order_id : undefined,
-                customer_id: sourceDoc.customer_id,
-                customer_name: sourceDoc.customer_name,
-                customer_details: sourceDoc.customer_details || {
-                    customer_id: sourceDoc.customer_id,
-                    customer_name: sourceDoc.customer_name,
-                    address: sourceDoc.billing_address,
-                    city: sourceDoc.billing_city,
-                    state: sourceDoc.billing_state,
-                    pincode: sourceDoc.billing_pincode,
-                    phone: sourceDoc.customer_phone,
-                    gst_number: sourceDoc.customer_gst_number
+                source_order_id: sourceOrder.order_id,
+                customer_id: sourceOrder.customer_id,
+                customer_name: sourceOrder.customer_name,
+                customer_details: {
+                    customer_id: sourceOrder.customer_id,
+                    customer_name: sourceOrder.customer_name,
                 },
-                billing_address: sourceDoc.billing_address,
-                delivery_address: sourceDoc.shipping_address || sourceDoc.billing_address,
-                delivery_city: sourceDoc.shipping_city || sourceDoc.billing_city,
-                delivery_state: sourceDoc.shipping_state || sourceDoc.billing_state,
-                delivery_pincode: sourceDoc.shipping_pincode || sourceDoc.billing_pincode,
                 items: challanItems,
-                reference_doc: searchType === 'invoice' ?
-                    `Invoice: ${sourceNumber}` :
-                    `Order: ${sourceNumber}`,
-                notes: `Delivery for ${searchType === 'invoice' ? 'Invoice' : 'Order'} #${sourceNumber}`
+                reference_doc: `Order: ${sourceOrder.order_number}`,
+                notes: `Delivery for approved sales order #${sourceOrder.order_number}`,
             };
 
             onImport(importData);
             onClose();
         } catch (error) {
-            console.error('[ChallanImport] Failed to load document details:', error);
-            toast.error('Unable to load document details. Nothing was imported.');
+            console.error('[ChallanOrderImport] Failed to load canonical order details:', error);
+            toast.error(error instanceof Error
+                ? error.message
+                : 'Unable to load the approved order. Nothing was imported.');
         } finally {
             setImporting(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-invoice-title" tabIndex={-1} className="bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b">
-                    <h3 id="import-invoice-title" className="text-lg font-semibold">Import from Invoice/Order</h3>
-                    <button type="button" onClick={onClose} className="min-h-11 min-w-11 p-2 hover:bg-gray-100 rounded-lg" aria-label="Close import from invoice or order">
-                        <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="import-order-title"
+                tabIndex={-1}
+                className="mx-4 flex max-h-[80vh] w-full max-w-3xl flex-col rounded-lg bg-white"
+            >
+                <div className="flex items-center justify-between border-b p-4">
+                    <div>
+                        <h3 id="import-order-title" className="text-lg font-semibold">Import approved sales order</h3>
+                        <p className="mt-1 text-sm text-gray-600">
+                            Dispatch lines retain the selected order, order-line, location, and batch identities.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="min-h-11 min-w-11 rounded-lg p-2 hover:bg-gray-100"
+                        aria-label="Close approved sales order import"
+                    >
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4">
-                    {/* Document Type */}
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={() => {
-                                    setSearchType('invoice');
-                                    setSearchQuery('');
-                                }}
-                                className={`p-3 rounded-lg border-2 ${searchType === 'invoice'
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-300'
-                                    }`}
-                            >
-                                <FileText className="w-5 h-5 mx-auto mb-1" />
-                                <span className="text-sm">Sales Invoice</span>
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setSearchType('order');
-                                    setSearchQuery('');
-                                }}
-                                className={`p-3 rounded-lg border-2 ${searchType === 'order'
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-300'
-                                    }`}
-                            >
-                                <ShoppingCart className="w-5 h-5 mx-auto mb-1" />
-                                <span className="text-sm">Sales Order</span>
-                            </button>
-                        </div>
+                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                        <ShoppingCart className="mr-2 inline h-4 w-4" />
+                        Only approved orders returned by the canonical history API are eligible.
                     </div>
 
-                    {/* Search */}
                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Search Document</label>
+                        <label htmlFor="challan-order-search" className="mb-2 block text-sm font-medium text-gray-700">
+                            Search approved orders
+                        </label>
                         <div className="flex gap-2">
                             <input
-                                type="text"
+                                id="challan-order-search"
+                                type="search"
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                                placeholder={`Enter ${searchType === 'invoice' ? 'invoice' : 'order'} number or customer name`}
-                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                onChange={(event) => setSearchQuery(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') handleSearch();
+                                }}
+                                placeholder="Order number or customer name"
+                                className="min-h-11 flex-1 rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
                             />
                             <button
+                                type="button"
                                 onClick={handleSearch}
                                 disabled={loading}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                                className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
                             >
-                                {loading ? '...' : 'Search'}
+                                {loading ? 'Loading…' : 'Search'}
                             </button>
                         </div>
                     </div>
 
-                    {/* Results */}
+                    {!loading && searchResults.length === 0 && (
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-5 text-center text-sm text-gray-600">
+                            No approved sales orders are available for dispatch.
+                        </div>
+                    )}
+
                     {searchResults.length > 0 && (
                         <div className="space-y-2">
                             <h4 className="text-sm font-medium text-gray-700">
-                                {searchQuery ? 'Search Results' : `Recent ${searchType === 'invoice' ? 'Invoices' : 'Orders'}`}
+                                {searchQuery ? 'Search results' : 'Recent approved orders'}
                             </h4>
-                            <div className="max-h-64 overflow-y-auto">
-                                {searchResults.map((doc) => (
-                                    <div
-                                        key={doc.invoice_id || doc.order_id}
-                                        onClick={() => setSelectedDoc(doc)}
-                                        className={`p-3 border rounded-lg cursor-pointer ${selectedDoc?.invoice_id === doc.invoice_id || selectedDoc?.order_id === doc.order_id
+                            <div className="max-h-64 space-y-2 overflow-y-auto">
+                                {searchResults.map((order) => (
+                                    <button
+                                        type="button"
+                                        key={order.order_id}
+                                        onClick={() => setSelectedOrder(order)}
+                                        aria-pressed={selectedOrder?.order_id === order.order_id}
+                                        className={`w-full rounded-lg border p-3 text-left ${selectedOrder?.order_id === order.order_id
                                             ? 'border-blue-500 bg-blue-50'
                                             : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
-                                        <div className="flex justify-between items-start">
+                                        <div className="flex justify-between gap-4">
                                             <div>
-                                                <div className="font-medium">
-                                                    {searchType === 'invoice' ? doc.invoice_number : doc.order_number}
-                                                </div>
-                                                <div className="text-sm text-gray-600">{doc.customer_name}</div>
-                                                <div className="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                                                    <Calendar className="w-3 h-3" />
-                                                    {new Date(doc.invoice_date || doc.order_date || '').toLocaleDateString()}
+                                                <div className="font-medium">{order.order_number}</div>
+                                                <div className="text-sm text-gray-600">{order.customer_name}</div>
+                                                <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                                                    <Calendar className="h-3 w-3" />
+                                                    <span>{order.order_date}</span>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="font-medium">
-                                                    ₹{(doc.total_amount || 0).toFixed(2)}
+                                                    {formatExactCurrency(order.total_amount, 'Approved order total')}
                                                 </div>
-                                                <div className="text-xs text-gray-500">
-                                                    {doc.items?.length || doc.invoice_items?.length || 0} items
-                                                </div>
-                                                {doc.payment_status && (
-                                                    <div className={`text-xs mt-1 px-2 py-0.5 rounded-full inline-block ${doc.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
-                                                        doc.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                                                            'bg-red-100 text-red-700'
-                                                        }`}>
-                                                        {doc.payment_status}
-                                                    </div>
-                                                )}
+                                                <div className="mt-1 text-xs text-green-700">Approved</div>
                                             </div>
                                         </div>
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="flex justify-end gap-2 p-4 border-t">
+                <div className="flex justify-end gap-2 border-t p-4">
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                        className="min-h-11 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
                     >
                         Cancel
                     </button>
                     <button
+                        type="button"
                         onClick={handleImport}
-                        disabled={!selectedDoc || importing}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                        disabled={!selectedOrder || importing}
+                        className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
                     >
-                        {importing ? 'Loading details...' : 'Import to Challan'}
+                        {importing ? 'Loading exact lines…' : 'Import order to challan'}
                     </button>
                 </div>
             </div>

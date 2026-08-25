@@ -16,7 +16,6 @@ import type { ImportData } from '../../../global/modals/DocumentImportModal';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
-import { addCalendarDays } from '../../../../utils/calendarDate';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -127,11 +126,11 @@ const createInitialOrder = (): Order => ({
     shipping_address_data: null,
     items: [],
     status: 'pending',
-    payment_terms: 'credit',
+    payment_terms: '',
     reference_no: '',
     sales_person: '',
     created_by: '',
-    terms_conditions: 'Standard terms apply',
+    terms_conditions: '',
     notes: '',
     discount_amount: 0,
     other_charges: 0,
@@ -198,7 +197,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             setOrder(previous => ({
                 ...previous,
                 order_date: previous.order_date || businessDate,
-                expected_delivery_date: previous.expected_delivery_date || addCalendarDays(businessDate, 7),
             }));
             return;
         }
@@ -588,7 +586,7 @@ Expected Delivery: ${order.expected_delivery_date}
         setOrder({
             ...createInitialOrder(),
             order_date: businessDate,
-            expected_delivery_date: businessDate ? addCalendarDays(businessDate, 7) : '',
+            expected_delivery_date: '',
         });
         setSelectedCustomer(null);
         setCreatedOrderData(null);

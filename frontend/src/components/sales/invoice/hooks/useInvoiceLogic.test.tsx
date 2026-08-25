@@ -93,7 +93,7 @@ describe('useInvoiceLogic selected quantity boundary', () => {
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
         expect(result.current.invoice.invoice_date).toBe('2026-08-25');
-        expect(result.current.invoice.due_date).toBe('2026-09-24');
+        expect(result.current.invoice.due_date).toBe('');
     });
 
     it.each([

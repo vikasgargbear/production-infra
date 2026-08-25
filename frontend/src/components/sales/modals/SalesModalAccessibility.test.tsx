@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import BillDiscountModal from './BillDiscountModal';
 import CashCalculatorModal from './CashCalculatorModal';
@@ -31,12 +31,10 @@ describe.each([
     ['Tax Detail (F10)', <TaxDetailModal isOpen onClose={jest.fn()} invoice={{ items: [], totals: {} }} />],
     ['Item Cost & Profit Analysis (Shift+~)', <ItemProfitModal isOpen onClose={jest.fn()} items={[]} />],
     ['Import from Document', <ImportDocumentModal isOpen onClose={jest.fn()} onImport={jest.fn()} />],
-    ['Import from Invoice/Order', <ImportFromInvoiceModal isOpen onClose={jest.fn()} onImport={jest.fn()} />],
+    ['Import approved sales order', <ImportFromInvoiceModal isOpen onClose={jest.fn()} onImport={jest.fn()} />],
 ] as const)('%s dialog', (name, element) => {
     it('has a programmatic name, modal semantics, and a named close control', async () => {
-        await act(async () => {
-            render(element);
-        });
+        render(element);
         const dialog = screen.getByRole('dialog', { name });
         expect(dialog).toHaveAttribute('aria-modal', 'true');
         expect(within(dialog).getAllByRole('button', { name: /close/i }).length).toBeGreaterThan(0);
