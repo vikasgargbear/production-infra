@@ -709,6 +709,19 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'evidence_label="supplier-invoice-ui-fixture"' in provisioner
     assert "expected_line_count=1" in provisioner
     assert "def reconcile_supplier_invoice_ui_fixture" in provisioner
+    receipt_ceiling = provisioner.split("WITH receipt_ceiling AS (", 1)[1].split(
+        "), exact_portal_candidates AS (", 1
+    )[0]
+    receipt_ceiling_group = receipt_ceiling.split("GROUP BY", 1)[1]
+    for grouped_column in (
+        "receipt.goods_receipt_number",
+        "receipt.supplier_challan_number",
+        "receipt.supplier_challan_date",
+        "line.base_accepted_quantity",
+        "line.base_free_quantity",
+        "line.unit_cost",
+    ):
+        assert grouped_column in receipt_ceiling_group
     assert "demo supplier-invoice UI fixture portal row was already consumed" in provisioner
     assert '"supplier_invoice_ui_fixture": supplier_invoice_ui_fixture' in provisioner
     assert "dispatch_delivery_challan_number" in provisioner

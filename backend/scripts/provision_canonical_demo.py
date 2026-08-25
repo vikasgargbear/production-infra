@@ -2659,7 +2659,16 @@ def reconcile_supplier_invoice_ui_fixture(
                    AND allocation.goods_receipt_line_id=line.id
                  WHERE receipt.org_id=%s AND receipt.id=%s AND line.id=%s
                    AND receipt.status='posted'
-                 GROUP BY receipt.org_id,receipt.id,line.id
+                 GROUP BY receipt.org_id,
+                          receipt.id,
+                          receipt.goods_receipt_number,
+                          receipt.supplier_challan_number,
+                          receipt.supplier_challan_date,
+                          line.org_id,
+                          line.id,
+                          line.base_accepted_quantity,
+                          line.base_free_quantity,
+                          line.unit_cost
             ), exact_portal_candidates AS (
                 SELECT count(*) AS candidate_count,
                        min(line.id::text) AS portal_document_line_id
