@@ -1,5 +1,9 @@
 import ast
+import importlib.util
 import inspect
+from pathlib import Path
+import sys
+from uuid import uuid4
 
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
@@ -8,16 +12,30 @@ from app.core.read_only_router import (
     include_explicit_non_persistent_post_utilities,
     include_legacy_read_only_router,
 )
-import app.main as main_module
+def _load_effective_app_routes():
+    """Construct the production app without reusing a partially imported module."""
+
+    module_name = f"app._write_fence_main_probe_{uuid4().hex}"
+    main_path = Path(__file__).resolve().parents[2] / "app" / "main.py"
+    spec = importlib.util.spec_from_file_location(module_name, main_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not construct isolated app.main write-fence probe")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+        return tuple(
+            route
+            for route in module.app.routes
+            if hasattr(route, "dependant")
+            and hasattr(route, "endpoint")
+            and getattr(route, "methods", None)
+        )
+    finally:
+        sys.modules.pop(module_name, None)
 
 
-_EFFECTIVE_APP_ROUTES = tuple(
-    route
-    for route in main_module.app.routes
-    if hasattr(route, "dependant")
-    and hasattr(route, "endpoint")
-    and getattr(route, "methods", None)
-)
+_EFFECTIVE_APP_ROUTES = _load_effective_app_routes()
 
 
 MUTATION_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
