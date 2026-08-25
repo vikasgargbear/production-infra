@@ -610,6 +610,9 @@ $migration$;
 ALTER FUNCTION erp_automation_commands.resolve_inventory_destruction_prepare(
   uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,jsonb)
   RENAME TO resolve_inventory_destruction_prepare_physical_base;
+REVOKE ALL ON FUNCTION erp_automation_commands.resolve_inventory_destruction_prepare_physical_base(
+  uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,jsonb)
+  FROM PUBLIC,erp_app,erp_runtime,erp_calculator;
 
 CREATE OR REPLACE FUNCTION erp_automation_commands.resolve_inventory_destruction_prepare(
   organization_id uuid, membership_id uuid, auth_user_id uuid,

@@ -175,6 +175,12 @@ def test_runtime_privilege_contract_lists_only_reviewed_destruction_functions() 
         assert contract.count(f"'{function}'") == 1
     assert "runtime_count<>3" in contract
     assert "private inventory destruction assertion exposes execute privilege" in contract
+    assert (
+        "REVOKE ALL ON FUNCTION "
+        "erp_automation_commands.resolve_inventory_destruction_prepare_physical_base("
+        in SQL
+    )
+    assert "FROM PUBLIC,erp_app,erp_runtime,erp_calculator;" in SQL
 
 
 def test_demo_provisions_destruction_sequence_and_mcp_readback_authority() -> None:
