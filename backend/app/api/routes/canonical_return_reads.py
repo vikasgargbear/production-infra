@@ -142,6 +142,82 @@ class ReturnReasonChoice(StrictRead):
         return self
 
 
+PurchaseReturnTransportMode = Literal[
+    "road",
+    "rail",
+    "air",
+    "ship",
+    "multimodal",
+    "in_person",
+]
+PurchaseReturnVehicleType = Literal["regular", "over_dimensional_cargo"]
+LogisticsFieldRequirement = Literal["required", "optional", "forbidden"]
+
+
+class PurchaseReturnLogisticsMode(StrictRead):
+    transport_mode: PurchaseReturnTransportMode
+    display_name: str = Field(min_length=1)
+    distance_required: Literal[True]
+    minimum_distance_km: Decimal = Field(ge=0)
+    transporter_requirement: LogisticsFieldRequirement
+    vehicle_requirement: Literal["required", "forbidden"]
+    transport_document_requirement: LogisticsFieldRequirement
+    vehicle_type_choices: list[PurchaseReturnVehicleType]
+
+    @model_validator(mode="after")
+    def require_executable_policy(self):
+        if self.vehicle_requirement == "required" and not self.vehicle_type_choices:
+            raise ValueError("vehicle-required logistics mode has no vehicle types")
+        if self.vehicle_requirement != "required" and self.vehicle_type_choices:
+            raise ValueError("non-vehicle logistics mode exposes vehicle types")
+        return self
+
+
+class PurchaseReturnTransporterChoice(StrictRead):
+    party_id: UUID
+    party_row_version: str = Field(pattern=r"^[1-9][0-9]*$")
+    legal_name: str = Field(min_length=1)
+    gstin: Optional[str] = Field(default=None, pattern=r"^[0-9]{2}[A-Z0-9]{13}$")
+
+
+def _purchase_return_logistics_modes(
+    *,
+    carrier_choices_available: bool,
+) -> list[PurchaseReturnLogisticsMode]:
+    """Publish the exact browser-selectable policy enforced by the resolver."""
+    policies = [
+        ("in_person", "In person / hand carried", "forbidden", "forbidden", "forbidden", ()),
+    ]
+    if carrier_choices_available:
+        policies.extend((
+            ("road", "Road", "required", "required", "optional", ("regular", "over_dimensional_cargo")),
+            ("rail", "Rail", "required", "forbidden", "required", ()),
+            ("air", "Air", "required", "forbidden", "required", ()),
+            ("ship", "Ship", "required", "forbidden", "required", ()),
+            ("multimodal", "Multimodal", "required", "forbidden", "required", ()),
+        ))
+    return [
+        PurchaseReturnLogisticsMode(
+            transport_mode=mode,
+            display_name=display_name,
+            distance_required=True,
+            minimum_distance_km=Decimal("0"),
+            transporter_requirement=transporter_requirement,
+            vehicle_requirement=vehicle_requirement,
+            transport_document_requirement=document_requirement,
+            vehicle_type_choices=list(vehicle_types),
+        )
+        for (
+            mode,
+            display_name,
+            transporter_requirement,
+            vehicle_requirement,
+            document_requirement,
+            vehicle_types,
+        ) in policies
+    ]
+
+
 def _effective_return_reason_choices(
     db: Session,
     *,
@@ -371,6 +447,8 @@ class PurchaseReturnContext(StrictRead):
     return_date: date
     lines: list[PurchaseReturnableAllocation]
     supplier_destinations: list[SupplierAddress]
+    logistics_modes: list[PurchaseReturnLogisticsMode]
+    transporter_choices: list[PurchaseReturnTransporterChoice]
     statutory_gstr2b_credit_notes: list[PortalCreditNoteEvidence]
     return_reason_choices: list[ReturnReasonChoice]
     approval_policy: Literal["separate_approver"] = "separate_approver"
@@ -381,6 +459,17 @@ class PurchaseReturnContext(StrictRead):
             raise ValueError("supplier invoice has no returnable receipt allocation")
         if not self.supplier_destinations:
             raise ValueError("supplier has no active return destination")
+        if not self.logistics_modes:
+            raise ValueError("purchase return has no executable logistics mode")
+        if len({policy.transport_mode for policy in self.logistics_modes}) != len(self.logistics_modes):
+            raise ValueError("purchase return repeats a logistics mode")
+        if any(
+            policy.transporter_requirement == "required"
+            for policy in self.logistics_modes
+        ) and not self.transporter_choices:
+            raise ValueError("carrier-based return modes require a canonical transporter choice")
+        if len({choice.party_id for choice in self.transporter_choices}) != len(self.transporter_choices):
+            raise ValueError("purchase return repeats a transporter identity")
         if not self.return_reason_choices:
             raise ValueError("purchase return has no exact effective GST adjustment authority")
         if len({choice.reason_code for choice in self.return_reason_choices}) != len(self.return_reason_choices):
@@ -892,6 +981,41 @@ def purchase_return_context(
         """,
         {"org_id": org_id, "party_id": header["supplier_party_id"], "return_date": return_date},
     )
+    transporters = _rows(
+        db,
+        """
+        SELECT party.id AS party_id, party.row_version::text AS party_row_version,
+               party.legal_name, registration.registration_number AS gstin
+          FROM parties.parties party
+          LEFT JOIN LATERAL (
+              SELECT tax_registration.registration_number
+                FROM parties.tax_registrations tax_registration
+               WHERE tax_registration.org_id=party.org_id
+                 AND tax_registration.party_id=party.id
+                 AND tax_registration.registration_type='GSTIN'
+                 AND tax_registration.status='active'
+                 AND tax_registration.verified_at IS NOT NULL
+                 AND (tax_registration.valid_from IS NULL OR tax_registration.valid_from<=:return_date)
+                 AND (tax_registration.valid_until IS NULL OR tax_registration.valid_until>=:return_date)
+               ORDER BY tax_registration.id
+          ) registration ON true
+         WHERE party.org_id=:org_id AND party.status='active'
+           AND btrim(party.legal_name)<>''
+           AND 1>=(
+                SELECT count(*)
+                  FROM parties.tax_registrations exact_registration
+                 WHERE exact_registration.org_id=party.org_id
+                   AND exact_registration.party_id=party.id
+                   AND exact_registration.registration_type='GSTIN'
+                   AND exact_registration.status='active'
+                   AND exact_registration.verified_at IS NOT NULL
+                   AND (exact_registration.valid_from IS NULL OR exact_registration.valid_from<=:return_date)
+                   AND (exact_registration.valid_until IS NULL OR exact_registration.valid_until>=:return_date)
+           )
+         ORDER BY party.legal_name, party.id
+        """,
+        {"org_id": org_id, "return_date": return_date},
+    )
     portal = _rows(
         db,
         """
@@ -967,6 +1091,10 @@ def purchase_return_context(
             "return_date": return_date,
             "lines": lines,
             "supplier_destinations": addresses,
+            "logistics_modes": _purchase_return_logistics_modes(
+                carrier_choices_available=bool(transporters),
+            ),
+            "transporter_choices": transporters,
             "statutory_gstr2b_credit_notes": portal,
             "return_reason_choices": reason_choices,
         }

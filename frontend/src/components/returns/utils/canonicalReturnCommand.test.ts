@@ -51,6 +51,17 @@ const purchase = () => ({
     supported_gst_treatments: ['commercial_only'],
   }],
   supplier_destination_address_id: ids.address,
+  logistics_modes: [{
+    transport_mode: 'in_person',
+    display_name: 'In person / hand carried',
+    distance_required: true,
+    minimum_distance_km: '0',
+    transporter_requirement: 'forbidden',
+    vehicle_requirement: 'forbidden',
+    transport_document_requirement: 'forbidden',
+    vehicle_type_choices: [],
+  }],
+  transporter_choices: [],
   transport_details: { transport_mode: 'in_person', distance_km: '0' },
   items: [{
     selected: true,
@@ -164,5 +175,52 @@ describe('canonical return command builders', () => {
     value.items.push({ ...value.items[0], batch_id: 'd3000000-0000-7000-8000-000000000010' });
     expect(() => buildPurchaseReturnPreparePayload(value, 'erp-web-purchase-return-prepare:test-0003'))
       .toThrow(/cannot repeat/);
+  });
+
+  it('rejects transport modes that were not published by the canonical context', () => {
+    const value = purchase();
+    value.transport_details.transport_mode = 'road';
+    expect(() => buildPurchaseReturnPreparePayload(value, 'erp-web-purchase-return-prepare:test-logistics-1'))
+      .toThrow(/exact canonical choice/);
+  });
+
+  it('requires carrier identity and vehicle type from the selected server policy', () => {
+    const value: any = purchase();
+    value.logistics_modes = [{
+      transport_mode: 'road',
+      display_name: 'Road',
+      distance_required: true,
+      minimum_distance_km: '1',
+      transporter_requirement: 'required',
+      vehicle_requirement: 'required',
+      transport_document_requirement: 'optional',
+      vehicle_type_choices: ['regular'],
+    }];
+    value.transporter_choices = [{
+      party_id: ids.evidence,
+      party_row_version: '3',
+      legal_name: 'Reviewed carrier',
+    }];
+    value.transport_details = {
+      transport_mode: 'road',
+      distance_km: '12.5',
+      transporter_party_id: ids.evidence,
+      vehicle_number: 'KA01AB1234',
+      vehicle_type: 'regular',
+    };
+    const payload: any = buildPurchaseReturnPreparePayload(
+      value,
+      'erp-web-purchase-return-prepare:test-logistics-2',
+    );
+    expect(payload.logistics).toEqual({
+      transport_mode: 'road',
+      distance_km: '12.5',
+      transporter_party_id: ids.evidence,
+      vehicle_number: 'KA01AB1234',
+      vehicle_type: 'regular',
+    });
+    value.transport_details.transporter_party_id = ids.location;
+    expect(() => buildPurchaseReturnPreparePayload(value, 'erp-web-purchase-return-prepare:test-logistics-3'))
+      .toThrow(/exact canonical context choice/);
   });
 });

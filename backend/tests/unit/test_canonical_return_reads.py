@@ -13,6 +13,8 @@ from pydantic import ValidationError
 from app.api.routes import canonical_return_reads, web_operator_actions
 from app.api.routes.canonical_return_reads import (
     PostedReturnReadback,
+    PurchaseReturnLogisticsMode,
+    PurchaseReturnTransporterChoice,
     PurchaseReturnableAllocation,
     ReturnReasonChoice,
     ReturnCommandSummary,
@@ -179,6 +181,82 @@ def test_return_reason_choice_rejects_empty_duplicate_or_unknown_treatments():
             "reason_code": "damage",
             "supported_gst_treatments": ["invented"],
         })
+
+
+def test_purchase_return_logistics_policy_matches_command_domain():
+    policies = canonical_return_reads._purchase_return_logistics_modes(
+        carrier_choices_available=True,
+    )
+    assert {policy.transport_mode for policy in policies} == {
+        "road", "rail", "air", "ship", "multimodal", "in_person",
+    }
+    road = next(policy for policy in policies if policy.transport_mode == "road")
+    assert road.transporter_requirement == "required"
+    assert road.vehicle_requirement == "required"
+    assert road.transport_document_requirement == "optional"
+    assert road.vehicle_type_choices == ["regular", "over_dimensional_cargo"]
+    in_person = next(policy for policy in policies if policy.transport_mode == "in_person")
+    assert in_person.transporter_requirement == "forbidden"
+    assert in_person.vehicle_requirement == "forbidden"
+    assert in_person.transport_document_requirement == "forbidden"
+
+    resolver_sql = (
+        Path(__file__).parents[2]
+        / "alembic/sql/20260820_0001_canonical_v1.sql"
+    ).read_text()
+    resolver_sql = resolver_sql.split(
+        'CREATE FUNCTION "erp_automation_commands"."resolve_purchase_return_prepare"',
+        1,
+    )[1].split("ALTER FUNCTION", 1)[0]
+    for mode in {policy.transport_mode for policy in policies}:
+        assert f"'{mode}'" in resolver_sql
+    for vehicle_type in road.vehicle_type_choices:
+        assert f"'{vehicle_type}'" in resolver_sql
+
+    no_carrier = canonical_return_reads._purchase_return_logistics_modes(
+        carrier_choices_available=False,
+    )
+    assert [policy.transport_mode for policy in no_carrier] == ["in_person"]
+
+
+def test_purchase_return_logistics_policy_rejects_incomplete_vehicle_authority():
+    with pytest.raises(ValidationError, match="no vehicle types"):
+        PurchaseReturnLogisticsMode.model_validate({
+            "transport_mode": "road",
+            "display_name": "Road",
+            "distance_required": True,
+            "minimum_distance_km": Decimal("0"),
+            "transporter_requirement": "required",
+            "vehicle_requirement": "required",
+            "transport_document_requirement": "optional",
+            "vehicle_type_choices": [],
+        })
+
+
+def test_transporter_identity_keeps_row_version_exact():
+    choice = PurchaseReturnTransporterChoice.model_validate({
+        "party_id": uid(88),
+        "party_row_version": "9007199254740993",
+        "legal_name": "Exact carrier",
+        "gstin": "27ABCDE1234F1Z5",
+    })
+    assert choice.party_row_version == "9007199254740993"
+    with pytest.raises(ValidationError, match="party_row_version"):
+        PurchaseReturnTransporterChoice.model_validate({
+            "party_id": uid(88),
+            "party_row_version": 3,
+            "legal_name": "Coerced carrier",
+        })
+
+
+def test_purchase_return_context_queries_only_exact_canonical_transporter_choices():
+    source = inspect.getsource(canonical_return_reads.purchase_return_context)
+    assert "party.row_version::text AS party_row_version" in source
+    assert "party.status='active'" in source
+    assert "tax_registration.verified_at IS NOT NULL" in source
+    assert "exact_registration" in source
+    assert '"transporter_choices": transporters' in source
+    assert 'carrier_choices_available=bool(transporters)' in source
 
 
 def test_effective_return_reason_choices_are_rule_and_evidence_derived(monkeypatch):

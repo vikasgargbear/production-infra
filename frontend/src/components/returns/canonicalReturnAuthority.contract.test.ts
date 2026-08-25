@@ -74,6 +74,24 @@ describe('canonical desktop return authority boundary', () => {
     expect(activeSources).not.toMatch(/units_per_pack\s*(?:\|\||\?\?)\s*1/);
   });
 
+  it('renders purchase-return logistics only from the canonical context contract', () => {
+    const command = read('./utils/canonicalReturnCommand.ts');
+    const api = read('../../services/api/modules/returns/canonicalReturns.api.ts');
+    expect(api).toContain('logistics_modes: CanonicalPurchaseReturnLogisticsMode[]');
+    expect(api).toContain('transporter_choices: CanonicalPurchaseReturnTransporterChoice[]');
+    expect(purchaseFlow).toContain('context.logistics_modes');
+    expect(purchaseFlow).toContain('context.transporter_choices');
+    expect(purchaseFlow).toContain('returnData.logistics_modes.map');
+    expect(purchaseFlow).toContain('returnData.transporter_choices.map');
+    expect(purchaseFlow).not.toContain('Canonical transporter party UUID');
+    expect(purchaseFlow).not.toMatch(/options=\{\[\s*\{ value: 'in_person'/);
+    expect(purchaseFlow).not.toMatch(/\['rail', 'air', 'ship', 'multimodal'\]/);
+    expect(command).toContain('data.logistics_modes');
+    expect(command).toContain('data.transporter_choices');
+    expect(command).not.toMatch(/\['road', 'rail', 'air', 'ship', 'multimodal', 'in_person'\]/);
+    expect(command).not.toMatch(/\['regular', 'over_dimensional_cargo'\]/);
+  });
+
   it('does not infer return dates, status, GST, rates, quantities, IDs or selection', () => {
     expect(salesFlow).toContain('canonicalBusinessContextApi.get()');
     expect(purchaseFlow).toContain('canonicalBusinessContextApi.get()');

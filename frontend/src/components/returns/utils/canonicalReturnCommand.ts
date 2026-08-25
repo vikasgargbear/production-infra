@@ -6,6 +6,16 @@ type ReturnReasonChoice = {
   reason_code: string;
   supported_gst_treatments: GstTreatment[];
 };
+type LogisticsFieldRequirement = 'required' | 'optional' | 'forbidden';
+type PurchaseReturnLogisticsPolicy = {
+  transport_mode: string;
+  distance_required: true;
+  minimum_distance_km: unknown;
+  transporter_requirement: LogisticsFieldRequirement;
+  vehicle_requirement: 'required' | 'forbidden';
+  transport_document_requirement: LogisticsFieldRequirement;
+  vehicle_type_choices: string[];
+};
 
 const DECIMAL_PATTERN = /^(?:0|[1-9][0-9]{0,13})(?:\.([0-9]{1,6}))?$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -183,27 +193,52 @@ export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey
   );
   const transport = data.transport_details || {};
   const mode = String(transport.transport_mode ?? '');
-  if (!['road', 'rail', 'air', 'ship', 'multimodal', 'in_person'].includes(mode)) {
-    throw new Error('Purchase return transport mode is not canonical.');
+  if (!Array.isArray(data.logistics_modes) || !data.logistics_modes.length) {
+    throw new Error('Purchase return lacks canonical logistics authority.');
+  }
+  const matchingPolicies = (data.logistics_modes as PurchaseReturnLogisticsPolicy[])
+    .filter(candidate => candidate?.transport_mode === mode);
+  if (!mode || matchingPolicies.length !== 1) {
+    throw new Error('Purchase return transport mode is not an exact canonical choice.');
+  }
+  const policy = matchingPolicies[0];
+  const distance = canonicalDecimal(transport.distance_km, 'Purchase return distance');
+  const minimumDistance = canonicalDecimal(
+    policy.minimum_distance_km,
+    'Purchase return minimum distance policy',
+  );
+  if (policy.distance_required !== true || !decimalLte(minimumDistance, distance)) {
+    throw new Error('Purchase return distance does not satisfy canonical logistics policy.');
   }
   const logistics: Record<string, unknown> = {
     transport_mode: mode,
-    distance_km: canonicalDecimal(transport.distance_km, 'Purchase return distance'),
+    distance_km: distance,
   };
-  if (mode === 'road') {
+  if (policy.vehicle_requirement === 'required') {
     const vehicle = String(transport.vehicle_number ?? '').trim();
-    if (!vehicle || !['regular', 'over_dimensional_cargo'].includes(transport.vehicle_type)) {
-      throw new Error('Road return requires vehicle number and vehicle type.');
+    const vehicleType = String(transport.vehicle_type ?? '');
+    if (!vehicle || !Array.isArray(policy.vehicle_type_choices)
+      || !policy.vehicle_type_choices.includes(vehicleType)) {
+      throw new Error('Selected return mode requires a canonical vehicle number and type.');
     }
     logistics.vehicle_number = vehicle;
-    logistics.vehicle_type = transport.vehicle_type;
-  } else if (transport.vehicle_number || transport.vehicle_type) {
-    throw new Error('Non-road return must not include road vehicle fields.');
+    logistics.vehicle_type = vehicleType;
+  } else if (policy.vehicle_requirement === 'forbidden'
+    && (transport.vehicle_number || transport.vehicle_type)) {
+    throw new Error('Selected return mode forbids vehicle fields.');
   }
-  if (mode !== 'in_person') {
-    logistics.transporter_party_id = requiredUuid(transport.transporter_party_id, 'Transporter party');
+  if (policy.transporter_requirement === 'required'
+    || (policy.transporter_requirement === 'optional' && transport.transporter_party_id)) {
+    const transporterId = requiredUuid(transport.transporter_party_id, 'Transporter party');
+    if (!Array.isArray(data.transporter_choices)
+      || data.transporter_choices.filter(choice => choice?.party_id === transporterId).length !== 1) {
+      throw new Error('Transporter party is not an exact canonical context choice.');
+    }
+    logistics.transporter_party_id = transporterId;
+  } else if (policy.transporter_requirement === 'forbidden' && transport.transporter_party_id) {
+    throw new Error('Selected return mode forbids a transporter party.');
   }
-  if (['rail', 'air', 'ship', 'multimodal'].includes(mode)) {
+  if (policy.transport_document_requirement === 'required') {
     const reference = String(transport.transport_document_number ?? '').trim();
     if (!reference) throw new Error('Selected transport mode requires a transport document number.');
     logistics.transport_document_number = reference;
@@ -211,7 +246,8 @@ export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey
       transport.transport_document_date,
       'Transport document date',
     );
-  } else if (transport.transport_document_number || transport.transport_document_date) {
+  } else if (policy.transport_document_requirement === 'optional'
+    && (transport.transport_document_number || transport.transport_document_date)) {
     if (!transport.transport_document_number || !transport.transport_document_date) {
       throw new Error('Transport document number and date must be supplied together.');
     }
@@ -220,6 +256,9 @@ export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey
       transport.transport_document_date,
       'Transport document date',
     );
+  } else if (policy.transport_document_requirement === 'forbidden'
+    && (transport.transport_document_number || transport.transport_document_date)) {
+    throw new Error('Selected return mode forbids transport document fields.');
   }
 
   const seenReceipt = new Set<string>();

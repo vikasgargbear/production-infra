@@ -141,6 +141,34 @@ export interface CanonicalPurchaseReturnLine {
   hsn_code: string;
 }
 
+export type CanonicalPurchaseReturnTransportMode =
+  | 'road'
+  | 'rail'
+  | 'air'
+  | 'ship'
+  | 'multimodal'
+  | 'in_person';
+
+export type CanonicalLogisticsFieldRequirement = 'required' | 'optional' | 'forbidden';
+
+export interface CanonicalPurchaseReturnLogisticsMode {
+  transport_mode: CanonicalPurchaseReturnTransportMode;
+  display_name: string;
+  distance_required: true;
+  minimum_distance_km: DecimalString;
+  transporter_requirement: CanonicalLogisticsFieldRequirement;
+  vehicle_requirement: 'required' | 'forbidden';
+  transport_document_requirement: CanonicalLogisticsFieldRequirement;
+  vehicle_type_choices: Array<'regular' | 'over_dimensional_cargo'>;
+}
+
+export interface CanonicalPurchaseReturnTransporterChoice {
+  party_id: string;
+  party_row_version: string;
+  legal_name: string;
+  gstin?: string;
+}
+
 export interface CanonicalPurchaseReturnContext {
   supplier_invoice_id: string;
   supplier_invoice_number: string;
@@ -159,6 +187,8 @@ export interface CanonicalPurchaseReturnContext {
     state_code: string;
     postal_code: string;
   }>;
+  logistics_modes: CanonicalPurchaseReturnLogisticsMode[];
+  transporter_choices: CanonicalPurchaseReturnTransporterChoice[];
   statutory_gstr2b_credit_notes: Array<{
     id: string;
     invoice_number: string;

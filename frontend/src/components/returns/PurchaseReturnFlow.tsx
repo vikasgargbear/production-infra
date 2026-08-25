@@ -10,7 +10,11 @@ import {
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { purchasesApi } from '../../services/api';
-import { canonicalReturnsApi } from '../../services/api/modules/returns/canonicalReturns.api';
+import {
+  canonicalReturnsApi,
+  type CanonicalPurchaseReturnLogisticsMode,
+  type CanonicalPurchaseReturnTransporterChoice,
+} from '../../services/api/modules/returns/canonicalReturns.api';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
 import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
@@ -78,6 +82,8 @@ interface PurchaseReturnData {
   supplier_destination_address_id: string;
   statutory_gstr2b_credit_notes: any[];
   supplier_credit_note_portal_line_id: string;
+  logistics_modes: CanonicalPurchaseReturnLogisticsMode[];
+  transporter_choices: CanonicalPurchaseReturnTransporterChoice[];
   transport_details: TransportDetails;
 }
 
@@ -122,6 +128,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     supplier_destination_address_id: '',
     statutory_gstr2b_credit_notes: [],
     supplier_credit_note_portal_line_id: '',
+    logistics_modes: [],
+    transporter_choices: [],
     transport_details: {
       transport_mode: '',
       distance_km: ''
@@ -146,6 +154,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     try { return formatReturnMoney(returnData.total_amount, 'Purchase return total'); }
     catch { return 'Invalid amount'; }
   })();
+  const selectedLogisticsMode = returnData.logistics_modes.find(
+    policy => policy.transport_mode === returnData.transport_details.transport_mode,
+  );
 
   useEffect(() => {
     let active = true;
@@ -232,6 +243,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       gst_tax_treatment: '',
       statutory_gstr2b_credit_notes: [],
       supplier_credit_note_portal_line_id: '',
+      logistics_modes: [],
+      transporter_choices: [],
+      transport_details: { transport_mode: '', distance_km: '' },
     }));
 
     // Load invoice items if not already loaded
@@ -293,6 +307,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           statutory_gstr2b_credit_notes: context.statutory_gstr2b_credit_notes,
           supplier_credit_note_portal_line_id: '',
           gst_tax_treatment: '',
+          logistics_modes: context.logistics_modes,
+          transporter_choices: context.transporter_choices,
+          transport_details: {
+            transport_mode: context.logistics_modes.length === 1
+              ? context.logistics_modes[0].transport_mode
+              : '',
+            distance_km: '',
+          },
         }));
         setReturnReasons(context.return_reason_choices.map(choice => ({
           value: choice.reason_code,
@@ -311,6 +333,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
         supplier_destinations: [], supplier_destination_address_id: '',
         statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+        logistics_modes: [], transporter_choices: [],
+        transport_details: { transport_mode: '', distance_km: '' },
       }));
     } finally {
       setLoading(false);
@@ -337,6 +361,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         total_amount: '',
         supplier_destinations: [], supplier_destination_address_id: '',
         statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+        logistics_modes: [], transporter_choices: [],
+        transport_details: { transport_mode: '', distance_km: '' },
       }));
       return;
     }
@@ -369,6 +395,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       total_amount: '',
       supplier_destinations: [], supplier_destination_address_id: '',
       statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+      logistics_modes: [], transporter_choices: [],
+      transport_details: { transport_mode: '', distance_km: '' },
     }));
 
     // Fetch returnable invoices
@@ -395,17 +423,24 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   };
 
   const updateTransportMode = (mode: string) => {
+    const policy = returnDataRef.current.logistics_modes.find(
+      candidate => candidate.transport_mode === mode,
+    );
     setReturnData(prev => ({
       ...prev,
-      transport_details: {
-        transport_mode: mode,
+      transport_details: policy ? {
+        transport_mode: policy.transport_mode,
         distance_km: '',
-        ...(mode === 'road' ? { vehicle_number: '', vehicle_type: '' } : {}),
-        ...(mode !== 'in_person' ? { transporter_party_id: '' } : {}),
-        ...(['rail', 'air', 'ship', 'multimodal'].includes(mode)
+        ...(policy.vehicle_requirement !== 'forbidden'
+          ? { vehicle_number: '', vehicle_type: '' }
+          : {}),
+        ...(policy.transporter_requirement !== 'forbidden'
+          ? { transporter_party_id: '' }
+          : {}),
+        ...(policy.transport_document_requirement !== 'forbidden'
           ? { transport_document_number: '', transport_document_date: '' }
           : {}),
-      },
+      } : { transport_mode: '', distance_km: '' },
     }));
   };
 
@@ -516,6 +551,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       gst_tax_treatment: '',
                       statutory_gstr2b_credit_notes: [],
                       supplier_credit_note_portal_line_id: '',
+                      logistics_modes: [],
+                      transporter_choices: [],
+                      transport_details: { transport_mode: '', distance_km: '' },
                     }));
                   }}
                   required
@@ -602,6 +640,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                             total_amount: '',
                             supplier_destinations: [], supplier_destination_address_id: '',
                             statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+                            logistics_modes: [], transporter_choices: [],
+                            transport_details: { transport_mode: '', distance_km: '' },
                           }));
                         }}
                         className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-red-700 hover:bg-red-50"
@@ -680,53 +720,74 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     options={returnData.supplier_destinations.map(address => ({ value: address.id, label: `${address.address_kind}: ${address.line1}, ${address.city}` }))}
                     placeholder="Choose verified address"
                   />
-                  <Select
-                    label="Transport mode"
-                    required
-                    value={returnData.transport_details.transport_mode}
-                    onChange={(value) => updateTransportMode(String(value))}
-                    options={[
-                      { value: 'in_person', label: 'In person / hand carried' },
-                      { value: 'road', label: 'Road' },
-                      { value: 'rail', label: 'Rail' },
-                      { value: 'air', label: 'Air' },
-                      { value: 'ship', label: 'Ship' },
-                      { value: 'multimodal', label: 'Multimodal' },
-                    ]}
-                    placeholder="Choose transport mode"
-                  />
-                  <label className="text-sm font-medium text-gray-700">
-                    Distance (km) <span className="text-red-500">*</span>
-                    <input
-                      inputMode="decimal"
-                      value={returnData.transport_details.distance_km}
-                      onChange={(event) => setReturnData(prev => ({
-                        ...prev,
-                        transport_details: { ...prev.transport_details, distance_km: event.target.value },
-                      }))}
-                      placeholder="Enter 0 for hand-carried return"
-                      className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
-                    />
-                  </label>
-                  {returnData.transport_details.transport_mode !== ''
-                    && returnData.transport_details.transport_mode !== 'in_person' && (
+                  {returnData.logistics_modes.length === 1 ? (
                     <label className="text-sm font-medium text-gray-700">
-                      Transporter party UUID <span className="text-red-500">*</span>
+                      Transport mode
                       <input
-                        value={returnData.transport_details.transporter_party_id ?? ''}
+                        readOnly
+                        value={returnData.logistics_modes[0].display_name}
+                        className="mt-1 min-h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-gray-700"
+                      />
+                      <span className="mt-1 block text-xs text-gray-500">
+                        Set by the canonical return policy.
+                      </span>
+                    </label>
+                  ) : (
+                    <Select
+                      label="Transport mode"
+                      required
+                      value={returnData.transport_details.transport_mode}
+                      onChange={(value) => updateTransportMode(String(value))}
+                      options={returnData.logistics_modes.map(policy => ({
+                        value: policy.transport_mode,
+                        label: policy.display_name,
+                      }))}
+                      placeholder="Choose transport mode"
+                    />
+                  )}
+                  {selectedLogisticsMode?.distance_required && (
+                    <label className="text-sm font-medium text-gray-700">
+                      Distance (km) <span className="text-red-500">*</span>
+                      <input
+                        inputMode="decimal"
+                        min={selectedLogisticsMode.minimum_distance_km}
+                        value={returnData.transport_details.distance_km}
                         onChange={(event) => setReturnData(prev => ({
                           ...prev,
-                          transport_details: { ...prev.transport_details, transporter_party_id: event.target.value },
+                          transport_details: { ...prev.transport_details, distance_km: event.target.value },
                         }))}
-                        placeholder="Canonical transporter party UUID"
+                        placeholder={`Minimum ${selectedLogisticsMode.minimum_distance_km} km`}
                         className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
                       />
                     </label>
                   )}
-                  {returnData.transport_details.transport_mode === 'road' && (
+                  {selectedLogisticsMode
+                    && selectedLogisticsMode.transporter_requirement !== 'forbidden' && (
+                    <Select
+                      label="Transporter"
+                      required={selectedLogisticsMode.transporter_requirement === 'required'}
+                      value={returnData.transport_details.transporter_party_id ?? ''}
+                      onChange={(value) => setReturnData(prev => ({
+                        ...prev,
+                        transport_details: {
+                          ...prev.transport_details,
+                          transporter_party_id: String(value || ''),
+                        },
+                      }))}
+                      options={returnData.transporter_choices.map(transporter => ({
+                        value: transporter.party_id,
+                        label: transporter.gstin
+                          ? `${transporter.legal_name} · ${transporter.gstin}`
+                          : transporter.legal_name,
+                      }))}
+                      placeholder="Choose canonical transporter"
+                    />
+                  )}
+                  {selectedLogisticsMode?.vehicle_requirement !== 'forbidden' && (
                     <>
                       <label className="text-sm font-medium text-gray-700">
-                        Vehicle number <span className="text-red-500">*</span>
+                        Vehicle number {selectedLogisticsMode?.vehicle_requirement === 'required'
+                          && <span className="text-red-500">*</span>}
                         <input
                           value={returnData.transport_details.vehicle_number ?? ''}
                           onChange={(event) => setReturnData(prev => ({
@@ -738,24 +799,26 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       </label>
                       <Select
                         label="Vehicle type"
-                        required
+                        required={selectedLogisticsMode?.vehicle_requirement === 'required'}
                         value={returnData.transport_details.vehicle_type ?? ''}
                         onChange={(value) => setReturnData(prev => ({
                           ...prev,
                           transport_details: { ...prev.transport_details, vehicle_type: String(value) },
                         }))}
-                        options={[
-                          { value: 'regular', label: 'Regular' },
-                          { value: 'over_dimensional_cargo', label: 'Over-dimensional cargo' },
-                        ]}
+                        options={(selectedLogisticsMode?.vehicle_type_choices || []).map(value => ({
+                          value,
+                          label: formatCanonicalReasonCode(value),
+                        }))}
                         placeholder="Choose vehicle type"
                       />
                     </>
                   )}
-                  {['rail', 'air', 'ship', 'multimodal'].includes(returnData.transport_details.transport_mode) && (
+                  {selectedLogisticsMode
+                    && selectedLogisticsMode.transport_document_requirement !== 'forbidden' && (
                     <>
                       <label className="text-sm font-medium text-gray-700">
-                        Transport document number <span className="text-red-500">*</span>
+                        Transport document number {selectedLogisticsMode.transport_document_requirement === 'required'
+                          && <span className="text-red-500">*</span>}
                         <input
                           value={returnData.transport_details.transport_document_number ?? ''}
                           onChange={(event) => setReturnData(prev => ({
@@ -767,7 +830,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       </label>
                       <StandardDatePicker
                         label="Transport document date"
-                        required
+                        required={selectedLogisticsMode.transport_document_requirement === 'required'}
                         value={returnData.transport_details.transport_document_date ?? ''}
                         onChange={(date) => setReturnData(prev => ({
                           ...prev,
