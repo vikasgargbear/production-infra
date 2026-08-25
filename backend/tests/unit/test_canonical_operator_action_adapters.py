@@ -3699,7 +3699,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 15
+    assert source.count("_lock_prepare_idempotency(") == 16
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):
