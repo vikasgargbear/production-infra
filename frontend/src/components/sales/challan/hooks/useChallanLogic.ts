@@ -40,7 +40,12 @@ export interface UseChallanLogicProps {
 export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseChallanLogicProps = {}) {
 
     const { companyInfo } = useCompany();
-    const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
+    const {
+        businessDate,
+        documentPolicy,
+        loading: businessDateLoading,
+        error: businessDateError,
+    } = useCanonicalBusinessDate();
 
     // ==================== COMPOSE SHARED TRANSACTION LOGIC ====================
     const {
@@ -123,6 +128,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         challan,
         selectedCustomer: selectedCustomer as CustomerDetails,
         companyInfo,
+        documentPolicy,
         isOnline,
         setChallan,
         setCreatedChallanData,
@@ -280,6 +286,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         fetchingAddress,
         message,
         messageType,
+        documentPolicy,
 
         // Refs
         customerSearchRef,

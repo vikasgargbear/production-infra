@@ -5,11 +5,13 @@ import { challansApi } from '../../../../services/api/modules/sales/challans.api
 import { buildCanonicalSalesDispatchCommand } from '../../utils/canonicalSalesChainCommand';
 import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 export interface UseChallanSaveProps {
     challan: Challan;
     selectedCustomer: CustomerDetails | null;
     companyInfo: unknown;
+    documentPolicy: CanonicalDocumentPolicy | null;
     isOnline: boolean;
     setChallan: React.Dispatch<React.SetStateAction<Challan>>;
     setCreatedChallanData: React.Dispatch<React.SetStateAction<CreatedChallanData | null>>;
@@ -28,7 +30,7 @@ export interface UseChallanSaveReturn {
 }
 
 export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn {
-    const { challan, selectedCustomer, isOnline, setCreatedChallanData, setShowSuccessModal } = props;
+    const { challan, selectedCustomer, documentPolicy, isOnline, setCreatedChallanData, setShowSuccessModal } = props;
     const [saving, setSaving] = useState(false);
     const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -42,13 +44,13 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
             if (!isOnline) throw new Error('Cloud API is unavailable. Nothing was saved or queued.');
             if (!selectedCustomer) throw new Error('Select a customer before preparing the dispatch');
             setSaving(true);
-            let payload = buildCanonicalSalesDispatchCommand(challan, idempotencyKey.current);
+            let payload = buildCanonicalSalesDispatchCommand(challan, idempotencyKey.current, documentPolicy);
             let fingerprint = JSON.stringify(payload);
             if (preparedFingerprint.current && preparedFingerprint.current !== fingerprint) {
                 idempotencyKey.current = `erp-web-sales-dispatch:${clientUuid()}`;
                 lifecycleId.current = clientUuid(); executedResourceId.current = null;
                 setPreparedPreview(null);
-                payload = buildCanonicalSalesDispatchCommand(challan, idempotencyKey.current);
+                payload = buildCanonicalSalesDispatchCommand(challan, idempotencyKey.current, documentPolicy);
                 fingerprint = JSON.stringify(payload);
             }
             if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
@@ -59,7 +61,7 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Unable to prepare the delivery challan');
         } finally { setSaving(false); }
-    }, [challan, isOnline, preparedPreview, saving, selectedCustomer]);
+    }, [challan, documentPolicy, isOnline, preparedPreview, saving, selectedCustomer]);
 
     const confirmPreparedChallan = useCallback(async () => {
         if (!preparedPreview || saving) return;

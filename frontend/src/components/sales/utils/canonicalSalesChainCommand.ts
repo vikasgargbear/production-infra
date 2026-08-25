@@ -104,7 +104,12 @@ export function buildCanonicalSalesOrderCommand(
     };
 }
 
-export function buildCanonicalSalesDispatchCommand(challan: Challan, idempotencyKey: string): Record<string, unknown> {
+export function buildCanonicalSalesDispatchCommand(
+    challan: Challan,
+    idempotencyKey: string,
+    policy: CanonicalDocumentPolicy | null,
+): Record<string, unknown> {
+    if (!policy) throw new Error('Canonical physical logistics policy is unavailable');
     const salesOrderId = uuid(challan.source_order_id, 'Source sales order');
     if (!challan.items.length) throw new Error('Import an approved sales order before preparing the dispatch');
     const branchId = uuid(challan.items[0].branch_id, 'Dispatch branch');
@@ -121,7 +126,7 @@ export function buildCanonicalSalesDispatchCommand(challan: Challan, idempotency
                 throw new Error('All dispatch allocations must use one branch and stock location');
             }
             return {
-                sales_order_line_id: uuid(item.source_order_line_id ?? item.id, `Item ${index + 1} sales-order line`),
+                sales_order_line_id: uuid(item.source_order_line_id, `Item ${index + 1} sales-order line`),
                 billed_quantity: decimal(item.quantity, `Item ${index + 1} billed quantity`, 6, true),
                 free_quantity: decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6),
                 batch_allocations: [{
@@ -132,10 +137,8 @@ export function buildCanonicalSalesDispatchCommand(challan: Challan, idempotency
             };
         }),
         logistics: {
-            transport_mode: 'road',
-            ...(challan.transport_company ? { transporter_name: challan.transport_company } : {}),
-            ...(challan.vehicle_number ? { vehicle_number: challan.vehicle_number } : {}),
-            ...(challan.lr_number ? { transport_document_number: challan.lr_number } : {}),
+            transport_mode: policy.default_transport_mode,
+            distance_km: decimal(challan.distance_km, 'Dispatch transport distance', 2),
         },
     };
 }

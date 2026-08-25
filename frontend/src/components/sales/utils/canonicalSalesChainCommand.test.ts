@@ -51,22 +51,44 @@ test('dispatch command requires exact order lineage and preserves explicit batch
     status: 'draft', source_order_id: ids.order, customer_id: ids.customer, customer_name: 'Test',
     customer_details: {}, billing_address: 'A', delivery_address: 'A', delivery_city: 'Mumbai',
     delivery_state: '27', delivery_pincode: '400001', delivery_contact_person: '', delivery_contact_phone: '',
-    transport_company: '', eway_bill_number: '', lr_number: '', vehicle_number: '', driver_name: '', driver_phone: '',
-    freight_charges: 0, total_packages: 1, total_weight: 0, total_quantity: 1, total_amount: 0,
+    distance_km: '8.25', total_packages: 1, total_weight: 0, total_quantity: 1, total_amount: 0,
     gst_type: 'CGST/SGST', notes: '', items: [{ id: ids.line, source_order_line_id: ids.line,
       product_id: ids.product, product_name: 'P', branch_id: ids.branch, location_id: ids.location,
       batch_id: ids.batch, quantity: 1, free_quantity: '0.5' } as any],
-  }, 'sales-dispatch:test');
+  }, 'sales-dispatch:test', policy);
   expect(command).toMatchObject({ sales_order_id: ids.order, from_location_id: ids.location,
+    logistics: { transport_mode: 'in_person', distance_km: '8.25' },
     lines: [{ sales_order_line_id: ids.line, billed_quantity: '1.000000', free_quantity: '0.500000',
       batch_allocations: [{ batch_id: ids.batch, billed_quantity: '1.000000', free_quantity: '0.500000' }] }] });
 });
 
 test.each([
   ['missing UOM', () => buildCanonicalSalesOrderCommand({ items: [{ branch_id: ids.branch, product_id: ids.product, quantity: 1, unit_price: 1 }] } as any, 'test', policy)],
-  ['missing source order', () => buildCanonicalSalesDispatchCommand({ items: [{}] } as any, 'test')],
+  ['missing source order', () => buildCanonicalSalesDispatchCommand({ items: [{}] } as any, 'test', policy)],
   ['negative quantity', () => buildCanonicalSalesOrderCommand({ customer_id: ids.customer, order_date: '2026-08-25', items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom, quantity: -1, unit_price: 1 }] } as any, 'test', policy)],
 ])('%s fails closed before prepare', (_label, action) => expect(action).toThrow());
+
+test('dispatch rejects missing policy, exact distance, and order-line identity', () => {
+  const base = {
+    source_order_id: ids.order,
+    challan_date: '2026-08-25',
+    distance_km: '1.00',
+    items: [{
+      source_order_line_id: ids.line,
+      branch_id: ids.branch,
+      location_id: ids.location,
+      batch_id: ids.batch,
+      quantity: '1.000000',
+      free_quantity: '0.000000',
+    }],
+  } as any;
+  expect(() => buildCanonicalSalesDispatchCommand(base, 'test', null)).toThrow(/logistics policy/i);
+  expect(() => buildCanonicalSalesDispatchCommand({ ...base, distance_km: '' }, 'test', policy)).toThrow(/distance.*missing/i);
+  expect(() => buildCanonicalSalesDispatchCommand({
+    ...base,
+    items: [{ ...base.items[0], source_order_line_id: undefined, id: ids.line }],
+  }, 'test', policy)).toThrow(/sales-order line.*missing/i);
+});
 
 test.each([
   ['line discount', { discount_percent: undefined }],

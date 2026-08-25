@@ -168,6 +168,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
             challan={logic.challan}
             setChallan={logic.setChallan}
             selectedCustomer={logic.selectedCustomer}
+            documentPolicy={logic.documentPolicy}
             saving={logic.saving}
             submissionUnavailableReason={logic.submissionUnavailableReason}
             sameAsBilling={logic.sameAsBilling}

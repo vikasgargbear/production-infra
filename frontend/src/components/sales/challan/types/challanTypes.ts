@@ -8,6 +8,7 @@
 // ==================== BASE TYPES ====================
 
 import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 /** Challan status values */
 export type ChallanStatus = 'draft' | 'pending' | 'dispatched' | 'delivered' | 'cancelled';
@@ -78,26 +79,6 @@ export interface ChallanItem {
     dispatch_line_id?: string | null;
 }
 
-// ==================== TRANSPORT DETAILS ====================
-
-/** Transport information for challan */
-export interface TransportDetails {
-    transport_company?: string;
-    transporter_name?: string;  // Alias for transport_company
-    vehicle_number?: string;
-    vehicle_no?: string;  // Alias for vehicle_number
-    driver_name?: string;
-    driver_phone?: string;
-    lr_number?: string;
-    lr_no?: string;  // Alias for lr_number
-    eway_bill_number?: string;
-    eway_bill_no?: string;  // Alias for eway_bill_number
-    freight_charges?: number;
-    loading_charges?: number;
-    other_charges?: number;
-    weight?: string;
-}
-
 // ==================== CHALLAN ====================
 
 /** 
@@ -134,17 +115,8 @@ export interface Challan {
     // Items
     items: ChallanItem[];
 
-    // Transport - Individual fields (DB style)
-    transport_company: string;
-    eway_bill_number: string;
-    lr_number: string;
-    vehicle_number: string;
-    driver_name: string;
-    driver_phone: string;
-    freight_charges: number;
-
-    // Transport - Nested object (UI compatibility)
-    transport_details?: TransportDetails;
+    // Canonical logistics evidence entered for the reviewed dispatch command.
+    distance_km: string;
 
     // Totals
     total_packages: number;
@@ -247,6 +219,7 @@ export interface UseChallanLogicReturn {
     fetchingAddress: boolean;
     message: string;
     messageType: string;
+    documentPolicy: CanonicalDocumentPolicy | null;
 
     // Refs
     customerSearchRef: React.RefObject<HTMLInputElement>;
@@ -288,13 +261,7 @@ export const getInitialChallan = (): Challan => ({
     delivery_contact_person: '',
     delivery_contact_phone: '',
     items: [],
-    transport_company: '',
-    eway_bill_number: '',
-    lr_number: '',
-    vehicle_number: '',
-    driver_name: '',
-    driver_phone: '',
-    freight_charges: 0,
+    distance_km: '',
     status: 'draft',
     total_packages: 0,
     total_weight: 0,

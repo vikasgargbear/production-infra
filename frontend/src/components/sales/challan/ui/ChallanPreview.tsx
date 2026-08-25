@@ -89,13 +89,11 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                     </div>
                 </div>
 
-                {(challan.transport_company || challan.vehicle_number || challan.lr_number) && (
+                {challan.distance_km !== '' && (
                     <div className="mb-6 rounded-lg border border-gray-300 p-4">
                         <h3 className="mb-2 text-xs font-bold uppercase text-gray-700">Transport evidence</h3>
-                        <dl className="grid grid-cols-3 gap-4 text-sm">
-                            {challan.transport_company && <div><dt className="text-gray-500">Transporter</dt><dd>{challan.transport_company}</dd></div>}
-                            {challan.vehicle_number && <div><dt className="text-gray-500">Vehicle</dt><dd>{challan.vehicle_number}</dd></div>}
-                            {challan.lr_number && <div><dt className="text-gray-500">Transport document</dt><dd>{challan.lr_number}</dd></div>}
+                        <dl className="text-sm">
+                            <div><dt className="text-gray-500">Exact distance</dt><dd>{challan.distance_km} km</dd></div>
                         </dl>
                     </div>
                 )}

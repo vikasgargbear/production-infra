@@ -18,12 +18,14 @@ import ChallanPreview from '../ui/ChallanPreview';
 import { Challan, CustomerDetails, CreatedChallanData } from '../types/challanTypes';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { canonicalDispatchPreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 interface ChallanPreviewStepProps {
     // State
     challan: Challan;
     setChallan: React.Dispatch<React.SetStateAction<Challan>>;
     selectedCustomer: CustomerDetails | null;
+    documentPolicy: CanonicalDocumentPolicy | null;
     saving: boolean;
     submissionUnavailableReason: string;
     sameAsBilling: boolean;
@@ -47,6 +49,7 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
     challan,
     setChallan,
     selectedCustomer,
+    documentPolicy,
     saving,
     submissionUnavailableReason,
     showSuccessModal,
@@ -98,50 +101,31 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                                     Transport evidence
                                 </h3>
                             </div>
-                            <div className="grid grid-cols-3 gap-4 p-6">
+                            <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
                                 <div>
-                                    <label htmlFor="dispatch-transporter" className="mb-2 block text-sm font-medium text-gray-600">
-                                        Transport company
-                                    </label>
-                                    <input
-                                        id="dispatch-transporter"
-                                        type="text"
-                                        value={challan.transport_company}
-                                        onChange={(event) => setChallan(previous => ({
-                                            ...previous,
-                                            transport_company: event.target.value,
-                                        }))}
-                                        className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    />
+                                    <span className="mb-2 block text-sm font-medium text-gray-600">Transport mode</span>
+                                    <div className="min-h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800">
+                                        {documentPolicy?.logistics_modes[0]?.display_name
+                                            || 'Waiting for server policy'}
+                                    </div>
                                 </div>
                                 <div>
-                                    <label htmlFor="dispatch-vehicle" className="mb-2 block text-sm font-medium text-gray-600">
-                                        Vehicle number
+                                    <label htmlFor="dispatch-distance-km" className="mb-2 block text-sm font-medium text-gray-600">
+                                        Exact distance (km)
                                     </label>
                                     <input
-                                        id="dispatch-vehicle"
-                                        type="text"
-                                        value={challan.vehicle_number}
+                                        id="dispatch-distance-km"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={challan.distance_km}
                                         onChange={(event) => setChallan(previous => ({
                                             ...previous,
-                                            vehicle_number: event.target.value.toUpperCase(),
-                                        }))}
-                                        className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="dispatch-transport-document" className="mb-2 block text-sm font-medium text-gray-600">
-                                        Transport document number
-                                    </label>
-                                    <input
-                                        id="dispatch-transport-document"
-                                        type="text"
-                                        value={challan.lr_number}
-                                        onChange={(event) => setChallan(previous => ({
-                                            ...previous,
-                                            lr_number: event.target.value,
+                                            distance_km: event.target.value,
                                         }))}
                                         className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter measured distance"
                                     />
                                 </div>
                             </div>
