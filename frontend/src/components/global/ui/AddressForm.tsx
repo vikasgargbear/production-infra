@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { MapPin, Edit2, Check, Plus, Phone, Building2, Home, LucideIcon } from 'lucide-react';
 import { apiClient, customersApi } from '../../../services/api';
-import { INDIAN_STATES } from '../../../utils/indianStates';
 
 // Imports from centralized types
 import type {
@@ -53,7 +52,7 @@ export const validateCustomerAddress = (data: Partial<AddressData>): AddressVali
     if (!data.address_line1?.trim()) errors.address_line1 = 'Address line 1 is required';
     if (!data.city?.trim()) errors.city = 'City is required';
     if (!/^\d{2}$/.test(String(data.state || '').trim())) {
-        errors.state = 'Select a canonical state code';
+        errors.state = 'Enter the 2-digit GST state code';
     }
     if (!/^\d{6}$/.test(String(data.pincode || '').trim())) {
         errors.pincode = 'Enter a valid 6-digit pincode';
@@ -583,7 +582,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             />
                         </div>
 
-                        {/* Row 3: City | State */}
+                        {/* Row 3: City | exact GST state code */}
                         <div>
                             <input
                                 type="text"
@@ -596,20 +595,20 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         </div>
 
                         <div>
-                            <select
-                                aria-label="State"
+                            <input
+                                aria-label="GST state code (2 digits)"
                                 aria-invalid={Boolean(fieldErrors.state)}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]{2}"
+                                maxLength={2}
                                 value={formData.state}
-                                onChange={(e: ChangeEvent<HTMLSelectElement>) => handleFieldChange('state', e.target.value)}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange(
+                                    'state', e.target.value.replace(/\D/g, '').slice(0, 2),
+                                )}
                                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            >
-                                <option value="">Select State *</option>
-                                {INDIAN_STATES.map(([code, name]) => (
-                                    <option key={code} value={code}>
-                                        {name}
-                                    </option>
-                                ))}
-                            </select>
+                                placeholder="GST state code (2 digits) *"
+                            />
                             {fieldErrors.state && <p className="mt-1 text-xs text-red-600">{fieldErrors.state}</p>}
                         </div>
 

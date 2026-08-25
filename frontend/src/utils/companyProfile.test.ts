@@ -22,7 +22,7 @@ describe('normalizeCompanyProfile', () => {
         expect(result).toEqual(expect.objectContaining({
             name: 'Canonical Pharma Private Limited',
             address: '1 Canonical Road',
-            state: 'Maharashtra',
+            state: '27',
             phone: '9000000000',
             email: 'ops@example.invalid',
             gst_number: '27ABCDE1234F1Z5',
@@ -46,5 +46,14 @@ describe('normalizeCompanyProfile', () => {
 
     it('rejects malformed canonical collections instead of inventing defaults', () => {
         expect(normalizeCompanyProfile({ legal_name: 'Canonical Pharma Private Limited' })).toBeNull();
+    });
+
+    it('does not translate or preserve an unversioned state name', () => {
+        expect(normalizeCompanyProfile({
+            legal_name: 'Canonical Pharma Private Limited',
+            state: 'Maharashtra',
+            licenses: [],
+            bank_accounts: [],
+        })?.state).toBe('');
     });
 });

@@ -5,7 +5,7 @@ describe('validateCustomerAddress', () => {
         expect(validateCustomerAddress({})).toEqual({
             address_line1: 'Address line 1 is required',
             city: 'City is required',
-            state: 'Select a canonical state code',
+            state: 'Enter the 2-digit GST state code',
             pincode: 'Enter a valid 6-digit pincode',
         });
     });
@@ -34,6 +34,6 @@ describe('validateCustomerAddress', () => {
             city: 'Mumbai',
             state: 'Maharashtra',
             pincode: '400001',
-        })).toEqual({ state: 'Select a canonical state code' });
+        })).toEqual({ state: 'Enter the 2-digit GST state code' });
     });
 });

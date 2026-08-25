@@ -1,5 +1,4 @@
 import type { BankAccount, CompanyContextInfo } from '../types/common/company.types';
-import { indianStateName } from './indianStates';
 
 export function unwrapCompanyProfileResponse(response: any): Record<string, any> | null {
     const transport = response?.data ?? response;
@@ -42,12 +41,13 @@ export function normalizeCompanyProfile(
             && typeof (account as BankAccount).ifsc_code === 'string',
         ),
     );
+    const stateCode = textValue(profile.state_code || profile.state).trim();
 
     return {
         name,
         address: textValue(profile.registered_address),
         city: textValue(profile.city),
-        state: indianStateName(textValue(profile.state_code || profile.state)),
+        state: /^\d{2}$/.test(stateCode) ? stateCode : '',
         pincode: textValue(profile.pincode),
         phone: firstText(profile.contact_numbers),
         email: firstText(profile.email_addresses),

@@ -41,5 +41,6 @@ describe('master business facts have no browser-invented policy', () => {
     expect(combined).not.toContain("state: 'Maharashtra'");
     expect(combined).not.toMatch(/state:\s*firstDefined\(/);
     expect(combined).toContain('GST state code (2 digits)');
+    expect(fs.existsSync(path.resolve(__dirname, '../../utils/indianStates.ts'))).toBe(false);
   });
 });

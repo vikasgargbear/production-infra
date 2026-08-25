@@ -185,7 +185,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     address: normalized.address,
                     city: normalized.city,
                     state: normalized.state,
-                    stateCode: data.state_code || data.registered_state_code || normalized.state,
+                    stateCode: normalized.state,
                     pincode: normalized.pincode,
                     country: data.country || 'India',
                     phone: normalized.phone,
@@ -539,21 +539,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label htmlFor="company-state" className="block text-sm font-medium text-gray-700 mb-1">
-                                        State
-                                    </label>
-                                    <input
-                                        id="company-state"
-                                        type="text"
-                                        value={companyData.state}
-                                        onChange={(e) => handleInputChange('state', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-
-                                <div>
                                     <label htmlFor="company-state-code" className="block text-sm font-medium text-gray-700 mb-1">
-                                        State Code
+                                        GST state code (2 digits)
                                     </label>
                                     <input
                                         id="company-state-code"
@@ -561,7 +548,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                         value={companyData.stateCode}
                                         onChange={(e) => handleInputChange('stateCode', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="29"
+                                        placeholder="Unavailable"
                                     />
                                 </div>
 
