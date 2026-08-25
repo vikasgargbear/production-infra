@@ -325,7 +325,13 @@ def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
     try:
         fixture.bootstrap_identity(connection, organization_pan="YYYYY8888Y")
         dataset_bytes = fixture.itc_reversal_dataset_bytes(connection)
-        fixture.import_itc_reversal_release(connection, source, dataset_bytes)
+        with connection.cursor() as cursor:
+            cursor.execute('SET SESSION AUTHORIZATION "erp_regulatory_importer"')
+        try:
+            fixture.import_itc_reversal_release(connection, source, dataset_bytes)
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute("RESET SESSION AUTHORIZATION")
 
         fixture.IDS["destruction_itc_rule_release"] = str(uuid4())
         fixture.IDS["destruction_itc_rule_version"] = str(uuid4())

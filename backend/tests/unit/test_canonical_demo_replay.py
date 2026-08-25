@@ -9,6 +9,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "backend/scripts/provision_canonical_demo.py"
+POSTGRES_REPLAY_FIXTURE = (
+    ROOT / "backend/tests/postgres/check_canonical_demo_replay_hardening.py"
+)
 
 
 def _module():
@@ -128,6 +131,22 @@ def test_regulatory_identity_is_content_scoped_not_ui_run_scoped(
     assert first.IDS["destruction_certificate_evidence"] != second.IDS[
         "destruction_certificate_evidence"
     ]
+
+
+def test_postgres_replay_import_uses_the_isolated_importer_principal() -> None:
+    source = POSTGRES_REPLAY_FIXTURE.read_text(encoding="utf-8")
+    replay = source.split(
+        "def _assert_itc_reversal_authority_replays_across_ui_runs()", 1
+    )[1].split("\ndef main()", 1)[0]
+
+    set_authorization = replay.index(
+        'SET SESSION AUTHORIZATION "erp_regulatory_importer"'
+    )
+    import_release = replay.index("fixture.import_itc_reversal_release(")
+    reset_authorization = replay.index("RESET SESSION AUTHORIZATION")
+    resolve_authority = replay.index("fixture.resolve_existing_itc_reversal_authority(")
+
+    assert set_authorization < import_release < reset_authorization < resolve_authority
 
 
 def test_replay_reconciliation_accepts_only_valid_forward_order_states() -> None:
