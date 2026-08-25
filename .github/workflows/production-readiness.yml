@@ -757,7 +757,19 @@ jobs:
           printf '%s' "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" > "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH"
           python3 -m json.tool "$PHARMA_CANONICAL_LIVE_DELEGATED_TOKEN_PATH" >/dev/null
           python3 -m json.tool "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH" >/dev/null
-      - run: PYTHONPATH=backend pytest -q backend/tests/live_canonical
+      - run: |
+          set -o pipefail
+          PYTHONPATH=backend pytest -q backend/tests/live_canonical | tee canonical-live-pytest.txt
+      - name: Upload canonical REST, MCP, database, and SHA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-live-reconciliation-evidence
+          path: |
+            render-pilot-live-sha.json
+            canonical-live-pytest.txt
+          if-no-files-found: error
+          retention-days: 30
 
   live-browser-erp:
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
@@ -814,6 +826,7 @@ jobs:
         with:
           name: live-erp-browser-evidence
           path: |
+            render-pilot-browser-sha.json
             frontend/playwright-report
             frontend/test-results
           if-no-files-found: ignore
@@ -907,6 +920,7 @@ jobs:
         with:
           name: live-erp-two-user-approval-evidence
           path: |
+            render-pilot-two-user-sha.json
             frontend/playwright-report
             frontend/test-results
           if-no-files-found: ignore
