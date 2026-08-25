@@ -458,6 +458,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
             <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+              <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Required: select an exact posted invoice, return line and quantities, condition, quarantine destination, reason, and GST treatment.
+              </p>
               {/* Header Section - Compact when details filled, Expanded for editing */}
               {headerComplete && !showDetailsExpanded ? (
                 /* COMPACT HEADER - Preview mode with edit button */
@@ -546,10 +549,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                       required
                     />
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Return Reason <span className="text-red-500">*</span>
-                      </label>
                       <Select
+                        label="Return Reason"
+                        required
                         value={returnData.return_reason || ''}
                         onChange={(value) => dispatch({
                           type: 'SET_RETURN_DATA',

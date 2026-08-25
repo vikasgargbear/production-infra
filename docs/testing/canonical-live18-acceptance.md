@@ -96,6 +96,11 @@ invoice-to-GRN allocation, batch and stock-location context. A sole verified
 supplier destination is selected automatically; zero or multiple destinations
 remain blocked. Independent reviewer approval and original-requester execution
 both target the captured command UUID.
+Sales return reviews billed/free quantities, return condition, effective reason
+label, and GST-treatment label. It selects the exact certified sales-invoice
+UUID produced earlier, then uses only its dispatch allocation, batch, and
+server-published quarantine locations. The return remains intentionally
+dependent on the sales-invoice operation; no older invoice fallback is used.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

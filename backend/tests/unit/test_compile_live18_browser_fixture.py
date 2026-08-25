@@ -584,3 +584,46 @@ def test_purchase_return_template_targets_prior_supplier_invoice_and_split_revie
     assert operation["execute_steps"][2]["locator"]["name"] == (
         "open-return-{{command_request_id}}"
     )
+
+
+def test_sales_return_template_targets_prior_sales_invoice_and_split_review() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/sales_return.json").read_text()
+    )
+    scalars = {
+        "sales_return_billed_quantity": "0.010000",
+        "sales_return_free_quantity": "0.000000",
+        "sales_return_condition": "sealed_resaleable",
+        "sales_return_reason_label": "Damaged Goods",
+        "sales_return_gst_treatment_label": "Commercial only (no GST adjustment)",
+    }
+    facts = {
+        "identity": {
+            "quarantine_location_id": "d3000000-0000-7000-8000-000000000044",
+        },
+        "display": {
+            "customer_code": "DEMO-CUSTOMER",
+            "customer_name": "Demo Customer",
+            "product_name": "Demo Product",
+        },
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("sales_return", operation, "separate_approver")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][3]["locator"]["name"] == (
+        "select-sales-invoice-{{resource_sales_invoice}}"
+    )
+    assert operation["prepare_steps"][8]["value"] == facts["identity"]["quarantine_location_id"]
+    assert operation["approval_steps"][2]["locator"]["name"] == (
+        "review-return-{{command_request_id}}"
+    )
+    assert operation["execute_steps"][2]["locator"]["name"] == (
+        "open-return-{{command_request_id}}"
+    )

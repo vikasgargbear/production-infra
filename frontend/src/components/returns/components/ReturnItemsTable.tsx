@@ -111,7 +111,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                     <table className="w-full border-collapse">
                         <thead>
                             <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
-                                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
+                                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Return</th>
                                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Pack</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Expiry</th>
@@ -145,8 +145,15 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         key={index}
                                         className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                                     >
-                                        {/* Row Number */}
-                                        <td className="px-3 py-2 text-sm text-gray-600 text-left">{index + 1}</td>
+                                        <td className="px-3 py-2 text-left">
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Return ${row.product_name}`}
+                                                checked={Boolean(row.selected)}
+                                                onChange={(event) => onUpdateItem(index, 'selected', event.target.checked)}
+                                                className="h-5 w-5 rounded border-gray-300"
+                                            />
+                                        </td>
 
                                         {/* Product Info */}
                                         <td className="px-3 py-2">
@@ -216,6 +223,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
                                                     value={row.return_paid_qty ?? ''}
+                                                    ariaLabel={`Billed quantity for ${row.product_name}`}
                                                     type="number"
                                                     maxDecimalPlaces={6}
                                                     preserveDecimalString
@@ -233,6 +241,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
                                                     value={row.return_free_qty ?? ''}
+                                                    ariaLabel={`Free quantity for ${row.product_name}`}
                                                     type="number"
                                                     maxDecimalPlaces={6}
                                                     preserveDecimalString

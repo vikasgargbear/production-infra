@@ -194,6 +194,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                                 {invoices.map((invoice) => (
                                     <button
                                         key={invoice.id ?? invoice.invoice_id}
+                                        data-testid={`select-sales-invoice-${invoice.id ?? invoice.invoice_id}`}
                                         onClick={() => handleInvoiceClick(invoice)}
                                         className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all flex items-center justify-between group"
                                     >
