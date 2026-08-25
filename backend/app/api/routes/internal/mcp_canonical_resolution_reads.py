@@ -13,6 +13,14 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
+from ..canonical_adjustment_note_reads import (
+    AdjustmentNoteReadback,
+    load_adjustment_note_readback,
+)
+from ..web_operator_actions import (
+    InventoryDestructionReadback,
+    load_inventory_destruction_readback,
+)
 from .mcp_canonical_reads import (
     CanonicalDelegation,
     _require_operation,
@@ -25,6 +33,38 @@ router = APIRouter(
     tags=["Internal MCP"],
     include_in_schema=False,
 )
+
+
+@router.get("/adjustment-notes", response_model=AdjustmentNoteReadback)
+def canonical_adjustment_note_readback_get(
+    note_id: UUID,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+) -> AdjustmentNoteReadback:
+    _require_operation(context, "finance.adjustment_notes.get")
+    return load_adjustment_note_readback(
+        note_id=note_id,
+        db=db,
+        org_id=context.organization_id,
+        organization_scope=context.branch_id is None,
+        branch_ids=[] if context.branch_id is None else [context.branch_id],
+    )
+
+
+@router.get("/inventory-destructions", response_model=InventoryDestructionReadback)
+def canonical_inventory_destruction_readback_get(
+    command_request_id: UUID,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+) -> InventoryDestructionReadback:
+    _require_operation(context, "inventory.destructions.get")
+    return load_inventory_destruction_readback(
+        command_request_id=command_request_id,
+        db=db,
+        org_id=context.organization_id,
+        organization_scope=context.branch_id is None,
+        branch_ids=[] if context.branch_id is None else [context.branch_id],
+    )
 
 _ALLOCATION_QUANTITY_QUANTUM = Decimal("0.000001")
 

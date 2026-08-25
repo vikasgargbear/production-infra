@@ -43,6 +43,7 @@ EXPECTED_PREPARE_TOOLS = {
 }
 EXPECTED_SHARED_TOOLS = {
     "erp_operation_approve",
+    "erp_operation_review_get",
     "erp_operation_execute",
     "erp_operation_status_get",
 }
@@ -65,6 +66,8 @@ EXPECTED_RESOLUTION_TOOLS = {
     "erp_supplier_invoice_get",
     "erp_open_item_search",
     "erp_settlement_choice_search",
+    "erp_adjustment_note_readback_get",
+    "erp_inventory_destruction_readback_get",
 }
 EXPECTED_RELEASE_GATES = {
     "canonical_api_command_boundary_verified",
@@ -192,6 +195,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
     "command_request_id": {
         "erp_operation_approve.command_request_id",
         "erp_operation_execute.command_request_id",
+        "erp_operation_review_get.command_request_id",
         "erp_operation_status_get.command_request_id",
     },
     "document_discount_eligible": {

@@ -93,6 +93,16 @@ OPERATIONS = {
         "/api/internal/mcp/resolution/settlement-choices", "finance.payment.manage", 100,
         "branch_id",
     ),
+    "erp_adjustment_note_readback_get": Operation(
+        "finance.adjustment_notes.get", "erp_adjustment_note_readback_get",
+        "/api/internal/mcp/resolution/adjustment-notes", "finance.adjustment_note.manage", 1,
+        "branch_id",
+    ),
+    "erp_inventory_destruction_readback_get": Operation(
+        "inventory.destructions.get", "erp_inventory_destruction_readback_get",
+        "/api/internal/mcp/resolution/inventory-destructions",
+        "inventory.destruction.create", 1, "branch_id",
+    ),
 }
 
 
@@ -117,6 +127,10 @@ OPERATOR_OPERATIONS.update(
         "erp_operation_approve": OperatorOperation(
             "erp_operation_approve", "automation.command.approve",
             SHARED_ACTION_SCHEMAS["erp_operation_approve"], "approve",
+        ),
+        "erp_operation_review_get": OperatorOperation(
+            "erp_operation_review_get", "automation.command.approve",
+            SHARED_ACTION_SCHEMAS["erp_operation_review_get"], "review",
         ),
         "erp_operation_execute": OperatorOperation(
             "erp_operation_execute", "automation.command.execute",
@@ -349,6 +363,10 @@ class OperationGateway:
                 key: value for key, value in arguments.items()
                 if key != "command_request_id"
             }
+        elif operation.kind == "review":
+            method = "GET"
+            path = f"/api/internal/mcp/commands/{command_request_id}/review"
+            payload = None
         else:
             method = "GET"
             path = f"/api/internal/mcp/commands/{command_request_id}"

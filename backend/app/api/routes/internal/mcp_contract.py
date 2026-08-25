@@ -111,6 +111,16 @@ PLANNED_RESOLUTION_READ_POLICIES = {
         "finance.payment.manage", "/internal/mcp/resolution/settlement-choices", 100,
         exposed_in_mcp=True, readiness_verified=True,
     ),
+    "finance.adjustment_notes.get": CanonicalReadPolicy(
+        "finance.adjustment_notes.get", "finance.adjustment_notes.get",
+        "finance.adjustment_note.manage", "/internal/mcp/resolution/adjustment-notes", 1,
+        exposed_in_mcp=True, readiness_verified=True,
+    ),
+    "inventory.destructions.get": CanonicalReadPolicy(
+        "inventory.destructions.get", "inventory.destructions.get",
+        "inventory.destruction.create", "/internal/mcp/resolution/inventory-destructions", 1,
+        exposed_in_mcp=True, readiness_verified=True,
+    ),
 }
 
 ALL_CANONICAL_READ_POLICIES = {

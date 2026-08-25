@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -60,7 +61,7 @@ def _context(operation_key, branch=True, sensitive=False):
     )
 
 
-def test_ten_resolution_policies_match_operator_contract_and_are_published():
+def test_resolution_policies_match_operator_contract_and_are_published():
     contract = json.loads(
         (ROOT / "docs/architecture/mcp-operator-actions.json").read_text(encoding="utf-8")
     )
@@ -87,15 +88,17 @@ def test_ten_resolution_policies_match_operator_contract_and_are_published():
     }.issubset(service["tools"])
 
 
-def test_ten_resolution_routes_are_hidden_get_only_and_have_no_generic_filter():
+def test_resolution_routes_are_hidden_get_only_and_have_no_generic_filter():
     assert {route.path for route in reads.router.routes} == {
         policy.path for policy in PLANNED_RESOLUTION_READ_POLICIES.values()
     }
-    assert len(reads.router.routes) == 10
+    assert len(reads.router.routes) == 12
     assert all(route.include_in_schema is False for route in reads.router.routes)
     assert all(route.methods == {"GET"} for route in reads.router.routes)
 
     allowed_parameters = {
+        "canonical_adjustment_note_readback_get": {"note_id", "context", "db"},
+        "canonical_inventory_destruction_readback_get": {"command_request_id", "context", "db"},
         "canonical_customer_search": {"search_term", "limit", "context", "db"},
         "canonical_location_search": {"search_term", "limit", "context", "db"},
         "canonical_stock_batch_search": {"product_id", "location_id", "limit", "context", "db"},
@@ -109,6 +112,35 @@ def test_ten_resolution_routes_are_hidden_get_only_and_have_no_generic_filter():
     }
     for name, expected in allowed_parameters.items():
         assert set(inspect.signature(getattr(reads, name)).parameters) == expected
+
+
+def test_exact_readbacks_reuse_authoritative_projections_with_tenant_scope(monkeypatch):
+    note_id, command_id, branch_id, org_id = (uuid4() for _ in range(4))
+    note_context = _context("finance.adjustment_notes.get", branch=True)
+    note_context = replace(note_context, organization_id=org_id, branch_id=branch_id)
+    destruction_context = _context("inventory.destructions.get", branch=True)
+    destruction_context = replace(
+        destruction_context, organization_id=org_id, branch_id=branch_id
+    )
+    captured = []
+    monkeypatch.setattr(
+        reads,
+        "load_adjustment_note_readback",
+        lambda **kwargs: captured.append(("note", kwargs)) or SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        reads,
+        "load_inventory_destruction_readback",
+        lambda **kwargs: captured.append(("destruction", kwargs)) or SimpleNamespace(),
+    )
+    reads.canonical_adjustment_note_readback_get(note_id, note_context, object())
+    reads.canonical_inventory_destruction_readback_get(
+        command_id, destruction_context, object()
+    )
+    assert captured[0][1]["org_id"] == org_id
+    assert captured[0][1]["branch_ids"] == [branch_id]
+    assert captured[1][1]["org_id"] == org_id
+    assert captured[1][1]["branch_ids"] == [branch_id]
 
 
 def test_sql_contract_uses_only_canonical_relations_and_exact_scope_predicates():

@@ -3686,6 +3686,85 @@ def test_status_rejects_inactive_authority_without_command_enumeration():
     assert len(session.executions) == 3
 
 
+def test_reviewer_reads_exact_preview_without_requester_grant_ownership():
+    command_id, requester_id, branch_id, target_id = (uuid4() for _ in range(4))
+    preview = {
+        "resolved_references": [{"resource_id": str(target_id)}],
+        "source_versions": [{"resource_id": str(target_id), "row_version": 7}],
+        "calculation_ruleset": [],
+        "inventory_impact": [],
+        "financial_impact": [{"amount": "168.00"}],
+        "tax_impact": [],
+        "policy_warnings": [],
+    }
+    preview_bytes = json.dumps(
+        preview, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    row = {
+        "id": command_id,
+        "operation": "finance.adjustment_note.post",
+        "capability_code": "finance.adjustment_note.prepare",
+        "status": "pending_approval",
+        "requested_by_membership_id": requester_id,
+        "branch_id": branch_id,
+        "destination_branch_id": None,
+        "target_resource_type": "adjustment_note",
+        "target_resource_id": target_id,
+        "target_row_version": 1,
+        "serializer_version": "canonical-json-v1",
+        "preview_media_type": "application/json",
+        "preview_bytes": preview_bytes,
+        "preview_hash": hashlib.sha256(preview_bytes).digest(),
+        "request_hash": hashlib.sha256(b"request").digest(),
+        "aggregate_version_hash": hashlib.sha256(b"aggregate").digest(),
+        "approval_policy": "separate_approver",
+        "required_approval_count": 1,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+    }
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(branch_id,)).__dict__,
+            "operation_key": "automation.command.approve",
+            "permission": "automation.command.approve",
+        }
+    )
+    session = FakeSession(authority_branch=branch_id, command_row=row)
+
+    review = SqlAlchemyOperatorActionService(lambda: session).review(
+        command_request_id=command_id,
+        context=context,
+    )
+
+    assert review.preview_canonical_json.encode("utf-8") == preview_bytes
+    assert review.preview_hash == "sha256:" + hashlib.sha256(preview_bytes).hexdigest()
+    assert review.requested_by_membership_id == requester_id
+    review_sql, params = next(
+        (sql, params) for sql, params in session.executions
+        if "request.preview_bytes" in sql
+    )
+    assert "request.agent_grant_id" not in review_sql
+    assert "request.requested_by_membership_id<>:membership_id" in review_sql
+    assert params["org_id"] == context.organization_id
+    assert params["branch_ids"] == [branch_id]
+
+
+def test_reviewer_cross_tenant_or_unauthorized_command_is_not_enumerated():
+    session = FakeSession(authority_branch=None, command_row=None)
+    context = ActionContext(
+        **{
+            **_context(organization_scope=True).__dict__,
+            "operation_key": "automation.command.approve",
+            "permission": "automation.command.approve",
+        }
+    )
+    with pytest.raises(OperatorActionError) as error:
+        SqlAlchemyOperatorActionService(lambda: session).review(
+            command_request_id=uuid4(), context=context
+        )
+    assert error.value.code is ActionErrorCode.SCOPE_DENIED
+    assert "unavailable to this reviewer" in error.value.message
+
+
 def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     source = "\n".join(
         path.read_text(encoding="utf-8")

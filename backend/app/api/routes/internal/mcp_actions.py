@@ -83,6 +83,24 @@ class PreparedCommandResponse(StrictDTO):
     required_approvals: list[dict[str, Any]]
 
 
+class CommandReviewResponse(PreparedCommandResponse):
+    status: str
+    capability_code: str
+    requested_by_membership_id: UUID
+    branch_id: Optional[UUID]
+    destination_branch_id: Optional[UUID]
+    target_resource_type: str
+    target_resource_id: UUID
+    target_row_version: int
+    serializer_version: str
+    preview_media_type: str
+    preview_canonical_json: str
+    request_hash: str
+    aggregate_version_hash: str
+    approval_policy: str
+    required_approval_count: int
+
+
 class CommandExecutionResponse(StrictDTO):
     command_request_id: UUID
     command_type: str
@@ -351,6 +369,52 @@ def _prepared_response(command: PreparedCommand, policy) -> PreparedCommandRespo
 
 def _execution_response(command: CommandExecution) -> CommandExecutionResponse:
     return CommandExecutionResponse(**command.__dict__)
+
+
+def _review_response(review) -> CommandReviewResponse:
+    values = dict(review.__dict__)
+    policy = ACTION_POLICIES[review.capability_code]
+    values["operation_policy"] = OperationPolicyResponse(
+        operation_key=policy.operation_key,
+        permission=policy.permission,
+        risk_class=policy.risk_class,
+        schema_profile=policy.schema_profile,
+        approval_policy=policy.approval_policy,
+        branch_fields=list(policy.branch_fields),
+    )
+    for name in (
+        "resolved_references", "source_versions", "calculation_ruleset",
+        "inventory_impact", "financial_impact", "tax_impact",
+        "policy_warnings", "required_approvals",
+    ):
+        values[name] = [dict(item) for item in values[name]]
+    return CommandReviewResponse(**values)
+
+
+@router.get(
+    "/commands/{command_request_id}/review",
+    response_model=CommandReviewResponse,
+)
+def review_command(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+) -> CommandReviewResponse:
+    """Return immutable preview bytes under the reviewer's approval authority."""
+
+    operation_key = "automation.command.approve"
+    _require_release_gate(service)
+    _require_authority(context, operation_key)
+    _require_command_binding(context, command_request_id)
+    _require_adapter(service, operation_key)
+    try:
+        result = service.review(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action_error(exc)
+    return _review_response(result)
 
 
 @router.post(

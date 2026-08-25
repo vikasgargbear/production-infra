@@ -280,6 +280,25 @@ def adjustment_note_readback(
     user: dict[str, Any] = FINANCE_USER,
 ) -> AdjustmentNoteReadback:
     org_id, organization_scope, branch_ids = _activate(db, user)
+    return load_adjustment_note_readback(
+        note_id=note_id,
+        db=db,
+        org_id=org_id,
+        organization_scope=organization_scope,
+        branch_ids=branch_ids,
+    )
+
+
+def load_adjustment_note_readback(
+    *,
+    note_id: UUID,
+    db: Session,
+    org_id: UUID,
+    organization_scope: bool,
+    branch_ids: list[UUID],
+) -> AdjustmentNoteReadback:
+    """Authoritative posted projection shared by REST and MCP transports."""
+
     params = {"org_id": org_id, "note_id": note_id, "organization_scope": organization_scope, "branch_ids": branch_ids}
     row = db.execute(text("""
       SELECT note.id,note.note_number,note.note_date,note.side,note.direction,note.document_effect,note.status,

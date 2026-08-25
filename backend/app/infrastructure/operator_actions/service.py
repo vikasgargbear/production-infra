@@ -20,6 +20,7 @@ from ...domain.operator_actions.models import (
     ActionContext,
     ActionErrorCode,
     CommandExecution,
+    CommandReview,
     CommandState,
     OperatorActionError,
     PreparedCommand,
@@ -217,6 +218,34 @@ _COMMAND_STATUS_SQL = text(
        AND request.id=:command_request_id
        AND request.agent_grant_id=:agent_grant_id
        AND request.requested_by_membership_id=:membership_id
+     FOR SHARE OF request
+    """
+)
+
+_COMMAND_REVIEW_SQL = text(
+    """
+    SELECT request.id, request.operation, request.capability_code, request.status,
+           request.requested_by_membership_id, request.branch_id,
+           request.destination_branch_id, request.target_resource_type,
+           request.target_resource_id, request.target_row_version,
+           request.serializer_version, request.preview_media_type,
+           request.preview_bytes, request.preview_hash, request.request_hash,
+           request.aggregate_version_hash, request.approval_policy,
+           request.required_approval_count, request.expires_at
+      FROM automation.command_requests AS request
+     WHERE request.org_id=:org_id
+       AND request.id=:command_request_id
+       AND request.status IN ('prepared','pending_approval')
+       AND request.expires_at>transaction_timestamp()
+       AND (request.approval_policy='actor_confirmation'
+            OR request.requested_by_membership_id<>:membership_id)
+       AND (:organization_scope
+            OR (request.branch_id IS NULL
+                OR request.branch_id=ANY(CAST(:branch_ids AS uuid[])))
+            AND (request.destination_branch_id IS NULL
+                 OR request.destination_branch_id=ANY(CAST(:branch_ids AS uuid[]))))
+       AND request.request_hash=extensions.digest(request.request_bytes,'sha256')
+       AND request.preview_hash=extensions.digest(request.preview_bytes,'sha256')
      FOR SHARE OF request
     """
 )
@@ -3729,6 +3758,123 @@ class SqlAlchemyOperatorActionService:
                 ActionErrorCode.BRANCH_DENIED,
                 "Canonical operator branch scope changed",
             )
+
+    def review(
+        self,
+        *,
+        command_request_id: UUID,
+        context: ActionContext,
+    ) -> CommandReview:
+        """Return exact immutable preview bytes to an authorized approver.
+
+        Authority is the reviewer's own approval grant.  The lookup is scoped by
+        organization and branch, deliberately not by the requester's grant.
+        """
+
+        binding = self._bindings["automation.command.approve"]
+        if not binding.available:
+            self._unavailable(binding.operation_key)
+        approval_policy = ActionPolicy(
+            operation_key="automation.command.approve",
+            permission="automation.command.approve",
+            risk_class="consequential_write",
+            schema_profile="immutable_command_approval",
+            approval_policy="explicit_human",
+            branch_fields=(),
+        )
+        with self._session_factory() as session:
+            with session.begin():
+                self._authorize(session, context, approval_policy)
+                rows = _mapping_rows(
+                    session.execute(
+                        _COMMAND_REVIEW_SQL,
+                        {
+                            "org_id": context.organization_id,
+                            "command_request_id": command_request_id,
+                            "membership_id": context.membership_id,
+                            "organization_scope": context.organization_scope,
+                            "branch_ids": list(context.branch_ids),
+                        },
+                    )
+                )
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.SCOPE_DENIED,
+                        "Canonical command preview is unavailable to this reviewer",
+                    )
+                row = rows[0]
+                binding = self._bindings.get(row["capability_code"])
+                if binding is None or not binding.available:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical command adapter is not available for review",
+                    )
+                preview_bytes = bytes(row["preview_bytes"])
+                preview_hash = "sha256:" + hashlib.sha256(preview_bytes).hexdigest()
+                if preview_hash != _hash_string(row["preview_hash"]):
+                    raise OperatorActionError(
+                        ActionErrorCode.PREVIEW_CHANGED,
+                        "Prepared command preview bytes no longer match their hash",
+                    )
+                try:
+                    preview_canonical_json = preview_bytes.decode("utf-8")
+                    preview = json.loads(preview_canonical_json)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise OperatorActionError(
+                        ActionErrorCode.PREVIEW_CHANGED,
+                        "Prepared command preview is not canonical UTF-8 JSON",
+                    ) from exc
+                if not isinstance(preview, dict):
+                    raise OperatorActionError(
+                        ActionErrorCode.PREVIEW_CHANGED,
+                        "Prepared command preview is not an object",
+                    )
+
+                def impacts(name: str) -> tuple[Mapping[str, Any], ...]:
+                    value = preview.get(name, [])
+                    if not isinstance(value, list) or any(
+                        not isinstance(item, dict) for item in value
+                    ):
+                        raise OperatorActionError(
+                            ActionErrorCode.PREVIEW_CHANGED,
+                            f"Prepared command {name} is malformed",
+                        )
+                    return tuple(value)
+
+                return CommandReview(
+                    command_request_id=row["id"],
+                    command_type=row["operation"],
+                    capability_code=row["capability_code"],
+                    status=row["status"],
+                    requested_by_membership_id=row["requested_by_membership_id"],
+                    branch_id=row["branch_id"],
+                    destination_branch_id=row["destination_branch_id"],
+                    target_resource_type=row["target_resource_type"],
+                    target_resource_id=row["target_resource_id"],
+                    target_row_version=row["target_row_version"],
+                    serializer_version=row["serializer_version"],
+                    preview_media_type=row["preview_media_type"],
+                    preview_canonical_json=preview_canonical_json,
+                    preview_hash=preview_hash,
+                    request_hash=_hash_string(row["request_hash"]),
+                    aggregate_version_hash=_hash_string(row["aggregate_version_hash"]),
+                    approval_policy=row["approval_policy"],
+                    required_approval_count=row["required_approval_count"],
+                    expires_at=row["expires_at"],
+                    resolved_references=impacts("resolved_references"),
+                    source_versions=impacts("source_versions"),
+                    calculation_ruleset=impacts("calculation_ruleset"),
+                    inventory_impact=impacts("inventory_impact"),
+                    financial_impact=impacts("financial_impact"),
+                    tax_impact=impacts("tax_impact"),
+                    policy_warnings=impacts("policy_warnings"),
+                    required_approvals=(
+                        {
+                            "policy": row["approval_policy"],
+                            "count": row["required_approval_count"],
+                        },
+                    ),
+                )
 
     def get_status(
         self,

@@ -39,6 +39,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
     "erp_inventory_destruction_prepare": "Prepare a certified same-day destruction of exact non-regulated stock with no GST ITC consequence.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
+    "erp_operation_review_get": "Inspect exact immutable preview bytes, hashes, source versions, impacts, and approval requirements using an independent approval grant.",
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
     "erp_operation_status_get": "Read immutable status, result, failure, and audit references for one authorized command.",
 }
@@ -1064,8 +1065,15 @@ STATUS_INPUT_SCHEMA = _object(
     "Read status and immutable references for one authorized command request.",
 )
 
+REVIEW_INPUT_SCHEMA = _object(
+    {"command_request_id": _uuid("Prepared command request to inspect before approval.")},
+    ("command_request_id",),
+    "Read the exact immutable command preview without mutating it.",
+)
+
 SHARED_ACTION_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_operation_approve": APPROVE_INPUT_SCHEMA,
+    "erp_operation_review_get": REVIEW_INPUT_SCHEMA,
     "erp_operation_execute": EXECUTE_INPUT_SCHEMA,
     "erp_operation_status_get": STATUS_INPUT_SCHEMA,
 }

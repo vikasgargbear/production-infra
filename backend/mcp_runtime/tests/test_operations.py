@@ -175,6 +175,7 @@ async def test_readiness_requires_the_app_owned_grant_authority() -> None:
     ("tool_name", "suffix", "method"),
     (
         ("erp_operation_approve", "/approve", "POST"),
+        ("erp_operation_review_get", "/review", "GET"),
         ("erp_operation_execute", "/execute", "POST"),
         ("erp_operation_status_get", "", "GET"),
     ),

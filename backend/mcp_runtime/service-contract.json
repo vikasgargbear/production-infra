@@ -31,6 +31,7 @@
     "client_registration": "reviewed-pre-registration-only"
   },
   "tools": [
+    "erp_adjustment_note_readback_get",
     "erp_adjustment_note_prepare",
     "erp_customer_receipt_prepare",
     "erp_customer_search",
@@ -38,11 +39,13 @@
     "erp_goods_receipt_prepare",
     "erp_gst_settings_get",
     "erp_inventory_adjustment_prepare",
+    "erp_inventory_destruction_readback_get",
     "erp_inventory_destruction_prepare",
     "erp_inventory_location_search",
     "erp_open_item_search",
     "erp_operation_approve",
     "erp_operation_execute",
+    "erp_operation_review_get",
     "erp_operation_status_get",
     "erp_product_search",
     "erp_purchase_order_get",
@@ -75,6 +78,7 @@
       "erp_inventory_destruction_prepare",
       "erp_operation_approve",
       "erp_operation_execute",
+      "erp_operation_review_get",
       "erp_operation_status_get",
       "erp_purchase_order_prepare",
       "erp_purchase_return_prepare",
@@ -90,9 +94,11 @@
       "erp_inventory_transfer_prepare"
     ],
     "published_resolution_tools": [
+      "erp_adjustment_note_readback_get",
       "erp_customer_search",
       "erp_goods_receipt_get",
       "erp_inventory_location_search",
+      "erp_inventory_destruction_readback_get",
       "erp_open_item_search",
       "erp_purchase_order_get",
       "erp_sales_invoice_get",

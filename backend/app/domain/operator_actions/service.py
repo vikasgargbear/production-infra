@@ -10,6 +10,7 @@ from .models import (
     ActionContext,
     ActionErrorCode,
     CommandExecution,
+    CommandReview,
     CommandState,
     OperatorActionError,
     PreparedCommand,
@@ -38,6 +39,13 @@ class OperatorActionService(Protocol):
         idempotency_key: str,
         context: ActionContext,
     ) -> CommandExecution: ...
+
+    def review(
+        self,
+        *,
+        command_request_id: UUID,
+        context: ActionContext,
+    ) -> CommandReview: ...
 
     def execute(
         self,
@@ -77,6 +85,9 @@ class UnavailableOperatorActionService:
         return self._unavailable(policy.operation_key)
 
     def approve(self, *, command_request_id, preview_hash, idempotency_key, context):
+        return self._unavailable("automation.command.approve")
+
+    def review(self, *, command_request_id, context):
         return self._unavailable("automation.command.approve")
 
     def execute(self, *, command_request_id, preview_hash, idempotency_key, context):

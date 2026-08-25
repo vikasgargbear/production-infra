@@ -57,6 +57,7 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
     assert set(PREPARE_ACTIONS) == EXPECTED_PREPARES
     assert set(SHARED_ACTION_SCHEMAS) == {
         "erp_operation_approve",
+        "erp_operation_review_get",
         "erp_operation_execute",
         "erp_operation_status_get",
     }

@@ -137,7 +137,7 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert len(gateway) == 13
+    assert len(gateway) == 15
     assert {values[0] for values in gateway.values()} == set(
         ALL_CANONICAL_READ_POLICIES
     )

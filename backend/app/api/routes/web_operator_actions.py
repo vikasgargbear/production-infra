@@ -72,6 +72,24 @@ class PreparedResponse(StrictDTO):
     required_approvals: list[dict[str, Any]]
 
 
+class CommandReviewResponse(PreparedResponse):
+    status: str
+    capability_code: str
+    requested_by_membership_id: UUID
+    branch_id: Optional[UUID]
+    destination_branch_id: Optional[UUID]
+    target_resource_type: str
+    target_resource_id: UUID
+    target_row_version: int
+    serializer_version: str
+    preview_media_type: str
+    preview_canonical_json: str
+    request_hash: str
+    aggregate_version_hash: str
+    approval_policy: str
+    required_approval_count: int
+
+
 class ExecutionResponse(StrictDTO):
     command_request_id: UUID
     command_type: str
@@ -675,6 +693,25 @@ def inventory_destruction_readback(
     context = _command_context(
         db, user, "automation.command.execute", command_request_id
     )
+    return load_inventory_destruction_readback(
+        command_request_id=command_request_id,
+        db=db,
+        org_id=context.organization_id,
+        organization_scope=context.organization_scope,
+        branch_ids=list(context.branch_ids),
+    )
+
+
+def load_inventory_destruction_readback(
+    *,
+    command_request_id: UUID,
+    db: Session,
+    org_id: UUID,
+    organization_scope: bool,
+    branch_ids: list[UUID],
+) -> InventoryDestructionReadback:
+    """Authoritative posted projection shared by REST and MCP transports."""
+
     rows = db.execute(
         text(
             """
@@ -748,12 +785,16 @@ def inventory_destruction_readback(
                AND destruction.status='posted'
                AND document.status='posted'
                AND journal.status='posted'
+               AND (:organization_scope
+                    OR document.branch_id=ANY(CAST(:branch_ids AS uuid[])))
              ORDER BY document_line.line_number, document_line.id
             """
         ),
         {
-            "org_id": context.organization_id,
+            "org_id": org_id,
             "command_request_id": command_request_id,
+            "organization_scope": organization_scope,
+            "branch_ids": branch_ids,
         },
     ).fetchall()
     if not rows:
@@ -890,70 +931,52 @@ def _command_context(db: Session, user: dict, operation: str, command_id: UUID):
     )
 
 
+def _review_response(review) -> CommandReviewResponse:
+    values = dict(review.__dict__)
+    for name in (
+        "resolved_references", "source_versions", "calculation_ruleset",
+        "inventory_impact", "financial_impact", "tax_impact",
+        "policy_warnings", "required_approvals",
+    ):
+        values[name] = [dict(item) for item in values[name]]
+    return CommandReviewResponse(**values)
+
+
 @router.get(
     "/inventory-adjustment/commands/{command_request_id}/review",
-    response_model=PreparedResponse,
+    response_model=CommandReviewResponse,
+    include_in_schema=False,
 )
-def inventory_adjustment_review(
+@router.get(
+    "/commands/{command_request_id}/review",
+    response_model=CommandReviewResponse,
+)
+def command_review(
     command_request_id: UUID,
     user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
-) -> PreparedResponse:
-    """Load the immutable preview for a distinct authorized approver."""
+    service: OperatorActionService = Depends(get_operator_action_service),
+) -> CommandReviewResponse:
+    """Load exact immutable preview bytes using the reviewer's approval grant."""
 
+    operation = "automation.command.approve"
+    _ready(service, operation)
     context = _command_context(
-        db, user, "automation.command.approve", command_request_id
+        db, user, operation, command_request_id
     )
-    row = db.execute(
-        text(
-            """
-            SELECT command.id,
-                   command.operation,
-                   command.status,
-                   command.expires_at,
-                   command.preview_hash,
-                   convert_from(command.preview_bytes,'UTF8')::jsonb AS preview
-              FROM automation.command_requests AS command
-             WHERE command.org_id=:org_id
-               AND command.id=:command_request_id
-               AND command.capability_code='inventory.adjustment.prepare'
-               AND command.approval_policy='separate_approver'
-               AND command.status IN ('prepared','pending_approval','approved')
-               AND command.expires_at>transaction_timestamp()
-               AND command.requested_by_membership_id<>:membership_id
-             FOR SHARE
-            """
-        ),
-        {
-            "org_id": context.organization_id,
-            "command_request_id": command_request_id,
-            "membership_id": context.membership_id,
-        },
-    ).first()
-    if row is None:
-        raise HTTPException(
-            status_code=404,
-            detail=_detail(
-                ActionErrorCode.SCOPE_DENIED,
-                "No unexpired cycle-count preview is available for independent approval",
-            ),
+    try:
+        review = service.review(
+            command_request_id=command_request_id,
+            context=context,
         )
-    value = row._mapping
-    preview = value["preview"]
-    return PreparedResponse(
-        command_request_id=value["id"],
-        command_type=value["operation"],
-        preview_hash="sha256:" + bytes(value["preview_hash"]).hex(),
-        expires_at=value["expires_at"],
-        resolved_references=list(preview.get("resolved_references") or []),
-        source_versions=list(preview.get("source_versions") or []),
-        calculation_ruleset=list(preview.get("calculation_ruleset") or []),
-        inventory_impact=list(preview.get("inventory_impact") or []),
-        financial_impact=list(preview.get("financial_impact") or []),
-        tax_impact=list(preview.get("tax_impact") or []),
-        policy_warnings=list(preview.get("policy_warnings") or []),
-        required_approvals=[{"policy": "separate_approver", "count": 1}],
-    )
+    except OperatorActionError as exc:
+        _raise_action(exc)
+    return _review_response(review)
+
+
+# Kept as a direct callable for existing first-party tests and imports; the
+# public route above is the canonical endpoint for every available command.
+inventory_adjustment_review = command_review
 
 
 @router.post("/commands/{command_request_id}/approve", response_model=ExecutionResponse)

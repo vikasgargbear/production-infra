@@ -222,6 +222,26 @@ def create_app(
             OPERATIONS["erp_settlement_choice_search"], _access_token(), locals(),
         )
 
+    @server.tool()
+    async def erp_adjustment_note_readback_get(
+        branch_id: Annotated[str, Field(description="Authorized branch UUID owning the posted adjustment note.")],
+        note_id: Annotated[str, Field(description="Exact posted canonical adjustment-note UUID.")],
+    ) -> Any:
+        """Return exact posted note, journal, tax, allocation, and residual effects."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_adjustment_note_readback_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_inventory_destruction_readback_get(
+        branch_id: Annotated[str, Field(description="Authorized branch UUID owning the posted destruction.")],
+        command_request_id: Annotated[str, Field(description="Exact succeeded destruction command UUID.")],
+    ) -> Any:
+        """Return exact posted destruction, stock, valuation, and journal effects."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_inventory_destruction_readback_get"], _access_token(), locals(),
+        )
+
     def register_operator_tool(tool_name: str) -> None:
         operation = OPERATOR_OPERATIONS[tool_name]
 

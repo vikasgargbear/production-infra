@@ -74,6 +74,39 @@ class PreparedCommand:
 
 
 @dataclass(frozen=True)
+class CommandReview:
+    """Immutable command envelope exposed to an independently authorized reviewer."""
+
+    command_request_id: UUID
+    command_type: str
+    capability_code: str
+    status: str
+    requested_by_membership_id: UUID
+    branch_id: Optional[UUID]
+    destination_branch_id: Optional[UUID]
+    target_resource_type: str
+    target_resource_id: UUID
+    target_row_version: int
+    serializer_version: str
+    preview_media_type: str
+    preview_canonical_json: str
+    preview_hash: str
+    request_hash: str
+    aggregate_version_hash: str
+    approval_policy: str
+    required_approval_count: int
+    expires_at: datetime
+    resolved_references: tuple[Mapping[str, Any], ...]
+    source_versions: tuple[Mapping[str, Any], ...]
+    calculation_ruleset: tuple[Mapping[str, Any], ...]
+    inventory_impact: tuple[Mapping[str, Any], ...]
+    financial_impact: tuple[Mapping[str, Any], ...]
+    tax_impact: tuple[Mapping[str, Any], ...]
+    policy_warnings: tuple[Mapping[str, Any], ...] = ()
+    required_approvals: tuple[Mapping[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
 class CommandExecution:
     command_request_id: UUID
     command_type: str

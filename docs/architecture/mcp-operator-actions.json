@@ -158,6 +158,22 @@
       "permission": "finance.payment.manage",
       "max_records": 100,
       "description": "Return active matching-currency asset settlement accounts for the delegated branch as explicit cash choices without a bank identity and non-cash choices with one active bank identity."
+    },
+    {
+      "tool": "erp_adjustment_note_readback_get",
+      "operation_key": "finance.adjustment_notes.get",
+      "resource": "adjustment_note",
+      "permission": "finance.adjustment_note.manage",
+      "max_records": 1,
+      "description": "Return the authoritative posted adjustment note projection, exact journal, tax document, allocations, and residual open item without recalculation."
+    },
+    {
+      "tool": "erp_inventory_destruction_readback_get",
+      "operation_key": "inventory.destructions.get",
+      "resource": "inventory",
+      "permission": "inventory.destruction.create",
+      "max_records": 1,
+      "description": "Return the authoritative posted destruction projection, exact stock ledger, remaining balance, valuation, and journal without recalculation."
     }
   ],
   "prepare_actions": [
@@ -313,6 +329,15 @@
     }
   ],
   "shared_actions": [
+    {
+      "tool": "erp_operation_review_get",
+      "operation_key": "automation.command.approve",
+      "resource": "agent_governance",
+      "mode": "read",
+      "risk": "consequential_write",
+      "permission": "automation.command.approve",
+      "allowed_fields": ["command_request_id"]
+    },
     {
       "tool": "erp_operation_approve",
       "operation_key": "automation.command.approve",

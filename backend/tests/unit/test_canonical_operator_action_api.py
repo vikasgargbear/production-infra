@@ -17,6 +17,7 @@ from app.domain.operator_actions import (
     PREPARE_PAYLOAD_MODELS,
     ActionContext,
     CommandExecution,
+    CommandReview,
     CommandState,
     PreparedCommand,
     get_operator_action_service,
@@ -77,6 +78,34 @@ class FakeOperatorActionService:
             status="approved",
             preview_hash=preview_hash,
             approved_at=datetime.now(timezone.utc),
+        )
+
+    def review(self, *, command_request_id, context):
+        self.calls.append(("review", command_request_id, context))
+        preview = '{"financial_impact":[{"amount":"168.00"}]}'
+        return CommandReview(
+            command_request_id=command_request_id,
+            command_type="finance.adjustment_note.post",
+            capability_code="finance.adjustment_note.prepare",
+            status="pending_approval",
+            requested_by_membership_id=uuid4(),
+            branch_id=BRANCH_ID,
+            destination_branch_id=None,
+            target_resource_type="adjustment_note",
+            target_resource_id=uuid4(),
+            target_row_version=1,
+            serializer_version="canonical-json-v1",
+            preview_media_type="application/json",
+            preview_canonical_json=preview,
+            preview_hash=PREVIEW_HASH,
+            request_hash="sha256:" + "b" * 64,
+            aggregate_version_hash="sha256:" + "c" * 64,
+            approval_policy="separate_approver",
+            required_approval_count=1,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            resolved_references=(), source_versions=(), calculation_ruleset=(),
+            inventory_impact=(), financial_impact=({"amount": "168.00"},),
+            tax_impact=(), required_approvals=({"policy": "separate_approver", "count": 1},),
         )
 
     def execute(self, *, command_request_id, preview_hash, idempotency_key, context):
@@ -1292,6 +1321,13 @@ def test_approve_execute_and_status_have_narrow_immutable_inputs(enabled_boundar
     }
     client = TestClient(_app(fake, holder))
 
+    review = client.get(f"/api/internal/mcp/commands/{COMMAND_ID}/review")
+    assert review.status_code == 200, review.text
+    assert review.json()["preview_canonical_json"].encode() == (
+        b'{"financial_impact":[{"amount":"168.00"}]}'
+    )
+    assert review.json()["preview_hash"] == PREVIEW_HASH
+
     approval = client.post(
         f"/api/internal/mcp/commands/{COMMAND_ID}/approve",
         json={
@@ -1372,7 +1408,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
         if path.startswith("/api/internal/mcp/")
         for route in routes
     ]
-    assert len(action_routes) == 5
+    assert len(action_routes) == 6
     assert all(route.include_in_schema is False for route in action_routes)
     assert all(
         mcp_actions.get_action_context

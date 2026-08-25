@@ -243,24 +243,36 @@ def test_review_returns_exact_immutable_preview_for_distinct_member(monkeypatch)
         "_command_context",
         lambda *_args, **_kwargs: _context(org_id, membership_id),
     )
-    preview_hash = bytes.fromhex("ab" * 32)
-    row = {
-        "id": command_id,
-        "operation": "inventory.document.post",
-        "status": "prepared",
-        "expires_at": datetime(2026, 8, 25, 12, tzinfo=timezone.utc),
-        "preview_hash": preview_hash,
-        "preview": {
-            "resolved_references": [], "source_versions": [], "calculation_ruleset": [],
-            "inventory_impact": [{"batch_id": str(uuid4())}],
-            "financial_impact": [{"amount": "25.00"}], "tax_impact": [],
-        },
-    }
+    batch_id = uuid4()
+    class Service:
+        def deployment_readiness(self): return True
+        def adapter_readiness(self): return {"automation.command.approve": True}
+        def review(self, **_kwargs):
+            return SimpleNamespace(
+                command_request_id=command_id, command_type="inventory.document.post",
+                capability_code="inventory.adjustment.prepare", status="prepared",
+                requested_by_membership_id=uuid4(), branch_id=uuid4(),
+                destination_branch_id=None, target_resource_type="inventory_document",
+                target_resource_id=uuid4(), target_row_version=1,
+                serializer_version="canonical-json-v1", preview_media_type="application/json",
+                preview_canonical_json='{"inventory_impact":[]}',
+                preview_hash="sha256:" + "ab" * 32, request_hash="sha256:" + "cd" * 32,
+                aggregate_version_hash="sha256:" + "ef" * 32,
+                approval_policy="separate_approver", required_approval_count=1,
+                expires_at=datetime(2026, 8, 25, 12, tzinfo=timezone.utc),
+                resolved_references=(), source_versions=(), calculation_ruleset=(),
+                inventory_impact=({"batch_id": str(batch_id)},),
+                financial_impact=({"amount": "25.00"},), tax_impact=(),
+                policy_warnings=(),
+                required_approvals=({"policy": "separate_approver", "count": 1},),
+            )
     response = web.inventory_adjustment_review(
         command_request_id=command_id,
         user={},
-        db=_Db([[row]]),
+        db=_Db([]),
+        service=Service(),
     )
     assert response.command_request_id == command_id
     assert response.preview_hash == "sha256:" + "ab" * 32
+    assert response.preview_canonical_json == '{"inventory_impact":[]}'
     assert response.required_approvals == [{"policy": "separate_approver", "count": 1}]
