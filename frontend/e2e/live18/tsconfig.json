@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "types": ["node", "jest"],
+    "noEmit": true
+  },
+  "include": [
+    "./**/*.ts",
+    "../support/live18/**/*.ts"
+  ],
+  "exclude": []
+}
