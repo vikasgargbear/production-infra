@@ -1119,6 +1119,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "secrets.LIVE18_REVIEWED_SCALARS_JSON" in live18
     assert 'printf \'%s\' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_PATH"' in live18
     assert "compile_live18_browser_fixture.py" in live18
+    assert "--readiness docs/testing/live18-ui-template-readiness.json" in live18
     assert live18.index("provision_ephemeral_canonical_live.py provision") < live18.index(
         "compile_live18_browser_fixture.py"
     )
@@ -1127,7 +1128,8 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "LIVE18_DENIAL_ACCESS_TOKEN" in live18
     assert "LIVE18_EXPECTED_DENIAL_ORG_ID" in live18
     assert "LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}" in live18
-    assert "test \"$discovered\" -eq 18" in live18
+    assert "test \"$discovered\" -eq \"$expected\"" in live18
+    assert "jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json" in live18
     assert "e2e/live18/playwright.config.ts" in live18
     assert "test_browser_evidence_reconciliation.py" in live18
     assert live18.index("provision_ephemeral_canonical_live.py cleanup") < live18.index(

@@ -30,13 +30,13 @@ def _templates(root: Path) -> Path:
     for number in range(1, 19):
         operation = f"operation_{number}"
         steps = {
-            "missing_required_steps": [{"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "Required"}}],
+            "missing_required_steps": [{"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "Required", "exact": True}}],
             "prepare_steps": [{"actor": "requester", "action": "goto", "value": "/?module={{fact.display.branch_code}}"}],
-            "approval_steps": [{"actor": "reviewer", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}"}}],
-            "execute_steps": [{"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}"}}],
+            "approval_steps": [{"actor": "reviewer", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}", "exact": True}}],
+            "execute_steps": [{"actor": "requester", "action": "expectText", "locator": {"kind": "text", "name": "{{command_request_id}}", "exact": True}}],
         }
         if number == 1:
-            steps["prepare_steps"].append({"actor": "requester", "action": "fill", "locator": {"kind": "label", "name": "Quantity"}, "value": "{{scalar.quantity}}"})
+            steps["prepare_steps"].append({"actor": "requester", "action": "fill", "locator": {"kind": "label", "name": "Quantity", "exact": True}, "value": "{{scalar.quantity}}"})
         (root / f"{operation}.json").write_text(json.dumps({
             "template_schema": TEMPLATE_SCHEMA,
             "operation_id": operation,
@@ -55,6 +55,36 @@ def test_compiles_exact_18_from_facts_and_only_used_reviewed_scalars(tmp_path: P
     assert len(fixture["operations"]) == 18
     assert fixture["operations"]["operation_1"]["prepare_steps"][1]["value"] == "1.000000"
     assert fixture["operations"]["operation_1"]["approval_steps"][0]["locator"]["name"] == "{{command_request_id}}"
+
+
+def test_compiles_only_registry_ready_templates_without_claiming_blocked_work(
+    tmp_path: Path,
+) -> None:
+    matrix = _matrix(tmp_path / "matrix.json")
+    templates = _templates(tmp_path / "templates")
+    (templates / "operation_18.json").unlink()
+    readiness = tmp_path / "readiness.json"
+    readiness.write_text(json.dumps({
+        "ready_count": 17,
+        "operations": [
+            {
+                "id": f"operation_{number}",
+                "status": "blocked" if number == 18 else "ready",
+            }
+            for number in range(1, 19)
+        ],
+    }))
+
+    fixture = compile_fixture(
+        matrix,
+        templates,
+        {"display": {"branch_code": "sales"}},
+        {"quantity": "1.000000"},
+        readiness,
+    )
+
+    assert len(fixture["operations"]) == 17
+    assert "operation_18" not in fixture["operations"]
 
 
 def test_combined_actor_confirmation_lifecycle_is_explicit_and_policy_bound(tmp_path: Path) -> None:
@@ -102,7 +132,7 @@ def test_cross_operation_resource_tokens_only_reference_earlier_matrix_rows(tmp_
     template["steps"]["prepare_steps"].append({
         "actor": "requester",
         "action": "fill",
-        "locator": {"kind": "label", "name": "Source resource"},
+        "locator": {"kind": "label", "name": "Source resource", "exact": True},
         "value": "{{resource_operation_1}}",
     })
     second.write_text(json.dumps(template))
@@ -116,7 +146,7 @@ def test_cross_operation_resource_tokens_only_reference_earlier_matrix_rows(tmp_
     template["steps"]["prepare_steps"].append({
         "actor": "requester",
         "action": "fill",
-        "locator": {"kind": "label", "name": "Future resource"},
+        "locator": {"kind": "label", "name": "Future resource", "exact": True},
         "value": "{{resource_operation_2}}",
     })
     first.write_text(json.dumps(template))
@@ -161,7 +191,7 @@ def test_customer_search_text_is_not_mistaken_for_a_communication_action(tmp_pat
     template["steps"]["prepare_steps"].append({
         "actor": "requester",
         "action": "fill",
-        "locator": {"kind": "placeholder", "name": "Search by name or phone"},
+        "locator": {"kind": "placeholder", "name": "Search by name or phone", "exact": True},
         "value": "Canonical Customer",
     })
     path.write_text(json.dumps(template))
@@ -175,7 +205,7 @@ def test_customer_search_text_is_not_mistaken_for_a_communication_action(tmp_pat
     template["steps"]["prepare_steps"].append({
         "actor": "requester",
         "action": "click",
-        "locator": {"kind": "role", "role": "button", "name": "Send WhatsApp"},
+        "locator": {"kind": "role", "role": "button", "name": "Send WhatsApp", "exact": True},
     })
     path.write_text(json.dumps(template))
     with pytest.raises(FixtureCompileError, match="targets communication"):
@@ -222,6 +252,8 @@ def test_stock_transfer_template_compiles_only_reviewed_choices() -> None:
     facts = {
         "identity": {
             "branch_id": "d3000000-0000-7000-8000-000000000005",
+            "product_id": "d3000000-0000-7000-8000-000000000007",
+            "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000008",
             "saleable_location_id": "d3200000-0000-7000-8000-000000000006",
             "transfer_destination_branch_id": "d3000000-0000-7000-8000-000000000028",
             "transfer_destination_location_id": "d3200000-0000-7000-8000-00000000000f",
@@ -276,6 +308,8 @@ def test_sales_invoice_template_compiles_exact_canonical_selectors_and_reviewed_
     }
     facts = {
         "identity": {
+            "customer_account_id": "d3000000-0000-7000-8000-000000000040",
+            "product_id": "d3000000-0000-7000-8000-000000000043",
             "delivery_address_id": "d3000000-0000-7000-8000-000000000041",
             "delivery_address_row_version": "7",
             "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000042",
@@ -341,6 +375,7 @@ def test_stock_adjustment_template_derives_post_sales_count_from_authoritative_s
     }
     facts = {
         "identity": {
+            "product_id": "d3000000-0000-7000-8000-000000000041",
             "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000042",
             "count_uom_conversion_id": "d3000000-0000-7000-8000-000000000043",
             "cycle_count_evidence_attachment_id": "d3000000-0000-7000-8000-000000000044",
@@ -605,6 +640,10 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
         "sales_order",
         {
             "clock": {"business_date": "2026-08-25"},
+            "identity": {
+                "customer_account_id": "d3000000-0000-7000-8000-000000000041",
+                "product_id": "d3000000-0000-7000-8000-000000000042",
+            },
             "display": {
                 "customer_code": "DEMO-CUSTOMER",
                 "customer_name": "Demo Customer",
@@ -647,6 +686,10 @@ def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:
         "purchase_order",
         {
             "clock": {"business_date": "2026-08-25"},
+            "identity": {
+                "supplier_account_id": "d3000000-0000-7000-8000-000000000041",
+                "product_id": "d3000000-0000-7000-8000-000000000042",
+            },
             "display": {
                 "supplier_code": "DEMO-SUPPLIER",
                 "supplier_name": "Demo Supplier",
@@ -714,7 +757,10 @@ def test_customer_receipt_template_targets_prior_certified_invoice() -> None:
         "customer_receipt_payment_method_label": "Bank",
     }
     facts = {
-        "identity": {"bank_account_id": "d3000000-0000-7000-8000-000000000040"},
+        "identity": {
+            "bank_account_id": "d3000000-0000-7000-8000-000000000040",
+            "customer_account_id": "d3000000-0000-7000-8000-000000000041",
+        },
         "display": {
             "customer_code": "DEMO-CUSTOMER",
             "customer_name": "Demo Customer",
@@ -762,7 +808,9 @@ def test_supplier_payment_template_targets_prior_certified_supplier_invoice() ->
     )
     _validate_compiled_steps("supplier_payment", operation, "actor_confirmation")
     assert used == set(scalars)
-    assert operation["prepare_steps"][7]["locator"]["name"] == "{{resource_supplier_invoice}}"
+    assert operation["prepare_steps"][7]["locator"]["name"] == (
+        "allocate-supplier-invoice-{{resource_supplier_invoice}}"
+    )
     assert operation["execute_steps"][1]["locator"]["name"] == "Post ₹0.01"
 
 
@@ -848,6 +896,7 @@ def test_goods_receipt_template_derives_clock_and_expiry_and_targets_prior_po() 
     }
     facts = {
         "identity": {
+            "product_id": "d3000000-0000-7000-8000-000000000041",
             "uom_conversion_id": "d3000000-0000-7000-8000-000000000042",
             "saleable_location_id": "d3000000-0000-7000-8000-000000000044",
         },
@@ -889,6 +938,9 @@ def test_purchase_return_template_targets_prior_supplier_invoice_and_split_revie
         "purchase_return_distance_km": "1.00",
     }
     facts = {
+        "identity": {
+            "supplier_account_id": "d3000000-0000-7000-8000-000000000041",
+        },
         "display": {
             "supplier_code": "DEMO-SUPPLIER",
             "supplier_name": "Demo Supplier",
@@ -929,6 +981,7 @@ def test_sales_return_template_targets_prior_sales_invoice_and_split_review() ->
     }
     facts = {
         "identity": {
+            "customer_account_id": "d3000000-0000-7000-8000-000000000043",
             "quarantine_location_id": "d3000000-0000-7000-8000-000000000044",
         },
         "display": {

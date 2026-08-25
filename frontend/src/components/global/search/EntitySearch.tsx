@@ -344,6 +344,7 @@ function EntitySearchInner<T>(
                     {searchResults.map((item, index) => (
                         <div
                             key={getItemKey(item)}
+                            data-testid={`entity-search-option-${getItemKey(item)}`}
                             onClick={() => handleSelect(item)}
                             ref={(el) => { resultRefs.current[index] = el; }}
                             role="option"

@@ -289,6 +289,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                             <button
                                                 type="button"
                                                 key={`product-${product.product_id}-${index}`}
+                                                data-testid={`product-search-option-${product.product_id}`}
                                                 ref={(el) => (resultRefs.current[index] = el)}
                                                 onClick={() => handleProductSelect(product)}
                                                 role="option"

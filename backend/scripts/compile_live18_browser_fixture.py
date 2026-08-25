@@ -1068,6 +1068,10 @@ def _validate_compiled_steps(
                     raise FixtureCompileError(f"{operation_id}.{phase}[{index}] requires a valid locator")
                 if locator["kind"] == "role" and not isinstance(locator.get("role"), str):
                     raise FixtureCompileError(f"{operation_id}.{phase}[{index}] role locator omitted role")
+                if locator["kind"] != "testId" and locator.get("exact") is not True:
+                    raise FixtureCompileError(
+                        f"{operation_id}.{phase}[{index}] must use an exact accessible locator or canonical test ID"
+                    )
             encoded = json.dumps(step, sort_keys=True)
             if action == "click" and COMMUNICATION_ACTION.search(encoded):
                 raise FixtureCompileError(f"{operation_id}.{phase}[{index}] targets communication")
@@ -1085,11 +1089,44 @@ def compile_fixture(
     template_directory: Path,
     facts: dict[str, Any],
     scalars: dict[str, Any],
+    readiness_path: Path | None = None,
 ) -> dict[str, Any]:
     matrix = _object(matrix_path, "operation matrix")
     expected = [row["id"] for row in matrix.get("operations", [])]
     if matrix.get("required_operation_count") != 18 or len(expected) != 18 or len(set(expected)) != 18:
         raise FixtureCompileError("operation matrix must declare exactly 18 unique operations")
+    if readiness_path is not None:
+        readiness = _object(readiness_path, "UI template readiness")
+        readiness_rows = readiness.get("operations")
+        if not isinstance(readiness_rows, list):
+            raise FixtureCompileError("UI template readiness operations must be a list")
+        readiness_ids = [
+            row.get("id") for row in readiness_rows if isinstance(row, dict)
+        ]
+        if (
+            len(readiness_ids) != len(expected)
+            or len(set(readiness_ids)) != len(readiness_ids)
+            or set(readiness_ids) != set(expected)
+        ):
+            raise FixtureCompileError(
+                "UI template readiness must cover the exact operation matrix"
+            )
+        invalid_status = [
+            row.get("id") for row in readiness_rows
+            if row.get("status") not in {"ready", "blocked"}
+        ]
+        if invalid_status:
+            raise FixtureCompileError(
+                f"UI template readiness has invalid status: {invalid_status}"
+            )
+        ready_ids = {
+            row["id"] for row in readiness_rows if row["status"] == "ready"
+        }
+        if readiness.get("ready_count") != len(ready_ids):
+            raise FixtureCompileError(
+                "UI template readiness count does not match its ready operations"
+            )
+        expected = [operation_id for operation_id in expected if operation_id in ready_ids]
     missing_templates = [
         operation_id
         for operation_id in expected
@@ -1138,6 +1175,7 @@ def main() -> None:
     parser.add_argument("--identity-evidence", type=Path, required=True)
     parser.add_argument("--reviewed-scalars", type=Path, required=True)
     parser.add_argument("--matrix", type=Path, required=True)
+    parser.add_argument("--readiness", type=Path, required=True)
     parser.add_argument("--templates", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -1150,7 +1188,11 @@ def main() -> None:
         os.environ["LIVE18_RUN_TOKEN"],
     )
     fixture = compile_fixture(
-        args.matrix, args.templates, facts, load_reviewed_scalars(args.reviewed_scalars)
+        args.matrix,
+        args.templates,
+        facts,
+        load_reviewed_scalars(args.reviewed_scalars),
+        args.readiness,
     )
     args.output.write_text(json.dumps(fixture, separators=(",", ":")) + "\n", encoding="utf-8")
     args.output.chmod(0o600)

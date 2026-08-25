@@ -23,6 +23,11 @@ interface OperationMatrix {
   operations: OperationContract[];
 }
 
+interface TemplateReadiness {
+  ready_count: number;
+  operations: Array<{ id: string; status: 'ready' | 'blocked' }>;
+}
+
 export type LocatorKind = 'role' | 'label' | 'placeholder' | 'text' | 'testId';
 export type UiAction = 'goto' | 'click' | 'fill' | 'select' | 'press' | 'expectText';
 export type Actor = 'requester' | 'reviewer';
@@ -61,6 +66,34 @@ export function loadOperationMatrix(): OperationContract[] {
   return matrix.operations;
 }
 
+export function loadReadyOperationMatrix(): OperationContract[] {
+  const readinessPath = path.join(
+    repositoryRoot, 'docs/testing/live18-ui-template-readiness.json',
+  );
+  const readiness = JSON.parse(fs.readFileSync(readinessPath, 'utf8')) as TemplateReadiness;
+  if (!Number.isInteger(readiness.ready_count) || !Array.isArray(readiness.operations)) {
+    throw new Error('The live18 UI readiness registry is invalid.');
+  }
+  const matrix = loadOperationMatrix();
+  const matrixIds = new Set(matrix.map(item => item.id));
+  const readinessIds = readiness.operations.map(item => item.id);
+  if (readiness.operations.some(item => item.status !== 'ready' && item.status !== 'blocked')) {
+    throw new Error('The live18 UI readiness registry contains an invalid status.');
+  }
+  if (readinessIds.length !== matrix.length
+    || new Set(readinessIds).size !== readinessIds.length
+    || readinessIds.some(id => !matrixIds.has(id))) {
+    throw new Error('The live18 UI readiness registry must cover the exact operation matrix.');
+  }
+  const readyIds = new Set(
+    readiness.operations.filter(item => item.status === 'ready').map(item => item.id),
+  );
+  if (readyIds.size !== readiness.ready_count) {
+    throw new Error('The live18 UI readiness count does not match its ready operations.');
+  }
+  return matrix.filter(item => readyIds.has(item.id));
+}
+
 export function loadFixture(required: boolean): Live18Fixture | null {
   const fixturePath = process.env.LIVE18_FIXTURE_PATH?.trim();
   if (!fixturePath) {
@@ -79,7 +112,7 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     || !fixture.operations || typeof fixture.operations !== 'object') {
     throw new Error('The reviewed live18 fixture has an invalid schema or operations object.');
   }
-  const operationMatrix = loadOperationMatrix();
+  const operationMatrix = loadReadyOperationMatrix();
   const expected = operationMatrix.map(item => item.id).sort();
   const actual = Object.keys(fixture.operations).sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -110,6 +143,16 @@ export function loadFixture(required: boolean): Live18Fixture | null {
       for (const step of operation[phase]) {
         if (!supportedActors.includes(step.actor) || !supportedActions.includes(step.action)) {
           throw new Error(`${operationId}.${phase} contains an unsupported actor or action.`);
+        }
+        if (step.action !== 'goto') {
+          if (!step.locator?.name) {
+            throw new Error(`${operationId}.${phase} contains an action without a locator.`);
+          }
+          if (step.locator.kind !== 'testId' && step.locator.exact !== true) {
+            throw new Error(
+              `${operationId}.${phase} must use an exact accessible locator or canonical test ID.`,
+            );
+          }
         }
         const tokens = [
           ...runtimeTokens(step.value, `${operationId}.${phase}.value`),

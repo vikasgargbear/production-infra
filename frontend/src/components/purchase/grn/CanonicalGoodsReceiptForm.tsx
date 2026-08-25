@@ -236,6 +236,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
               <label className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-gray-700">
                 <input
                   type="checkbox"
+                  data-testid={`receive-po-product-${source.product_id}`}
                   checked={line.included}
                   onChange={event => updateLine(index, { included: event.target.checked })}
                   className="h-5 w-5 rounded border-gray-300"

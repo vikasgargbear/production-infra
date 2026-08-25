@@ -10,6 +10,7 @@ from typing import Any
 
 
 MATRIX_PATH = Path(__file__).with_name("operation_matrix.json")
+READINESS_PATH = Path(__file__).resolve().parents[3] / "docs/testing/live18-ui-template-readiness.json"
 OPERATION_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+\.prepare$")
 TOOL_RE = re.compile(r"^erp_[a-z0-9_]+$")
 RELATION_RE = re.compile(
@@ -114,3 +115,38 @@ def load_operation_matrix(path: Path = MATRIX_PATH) -> tuple[OperationContract, 
             blocker=blocker,
         ))
     return tuple(contracts)
+
+
+def load_ready_operation_matrix(
+    matrix_path: Path = MATRIX_PATH,
+    readiness_path: Path = READINESS_PATH,
+) -> tuple[OperationContract, ...]:
+    contracts = load_operation_matrix(matrix_path)
+    readiness = json.loads(readiness_path.read_text())
+    rows = readiness.get("operations")
+    ready_count = readiness.get("ready_count")
+    if not isinstance(rows, list) or not isinstance(ready_count, int):
+        raise MatrixContractError("live18 UI readiness registry is invalid")
+    contract_ids = {item.id for item in contracts}
+    readiness_ids = [row.get("id") for row in rows if isinstance(row, dict)]
+    if (
+        len(readiness_ids) != len(contracts)
+        or len(set(readiness_ids)) != len(readiness_ids)
+        or set(readiness_ids) != contract_ids
+    ):
+        raise MatrixContractError(
+            "live18 UI readiness registry must cover the exact operation matrix"
+        )
+    ready_ids = {row["id"] for row in rows if row.get("status") == "ready"}
+    if len(ready_ids) != ready_count:
+        raise MatrixContractError(
+            "live18 UI readiness count does not match its ready operations"
+        )
+    unknown_status = [
+        row.get("id") for row in rows if row.get("status") not in {"ready", "blocked"}
+    ]
+    if unknown_status:
+        raise MatrixContractError(
+            f"live18 UI readiness has invalid status: {unknown_status}"
+        )
+    return tuple(item for item in contracts if item.id in ready_ids)

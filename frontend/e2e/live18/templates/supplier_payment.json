@@ -15,7 +15,7 @@
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Method","exact":true},"value":"{{scalar.supplier_payment_method}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Bank / UPI reference","exact":true},"value":"LIVE18-SPAY-{{run_token}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"radio","name":"Manual per invoice","exact":true}},
-      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{resource_supplier_invoice}}","exact":false},"value":"{{scalar.supplier_payment_amount}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"testId","name":"allocate-supplier-invoice-{{resource_supplier_invoice}}"},"value":"{{scalar.supplier_payment_amount}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review immutable preview","exact":true}}
     ],
     "approval_steps": [
