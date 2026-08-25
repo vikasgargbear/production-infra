@@ -23,6 +23,16 @@ SIGNATURE = (
     "application_user_id uuid, grant_id uuid, caller_client_id varchar, "
     "invoice_id uuid, request_document jsonb)"
 )
+# PostgreSQL 15 pg_get_functiondef() SHA-256 for the exact resolver emitted by
+# the regenerated canonical baseline. This permits a fresh baseline chain to
+# cross the incremental revision without treating an arbitrary auto-FEFO marker
+# as proof that the reviewed definition is installed.
+LEGACY_DEFINITION_SHA256 = (
+    "bb2f61f4bbcceb5acaf571f6d92a02394aa4163fed356e126a0747fda8bd2ceb"
+)
+CURRENT_DEFINITION_SHA256 = (
+    "2e59057ad1155566aa41632c8940b6031a137e8c78ebc07fa36cee7b357e0c70"
+)
 
 
 def _reviewed_statements() -> list[str]:
@@ -60,16 +70,25 @@ def generate_sql() -> str:
         "-- Alembic owns the transaction; this file must not be applied directly.\n"
         "SET LOCAL ROLE erp_migration_owner;\n\n"
         "DO $migration$\n"
-        "DECLARE definition text;\n"
+        "DECLARE definition text; definition_sha256 text;\n"
         "BEGIN\n"
         "  SELECT pg_catalog.pg_get_functiondef(\n"
         "    'erp_automation_commands.resolve_sales_invoice_prepare"
         "(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::pg_catalog.regprocedure\n"
         "  ) INTO STRICT definition;\n"
-        "  IF pg_catalog.strpos(definition,'delivery_address_row_version bigint')=0\n"
-        "     OR pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')=0\n"
-        "     OR pg_catalog.strpos(definition,'direct invoice batch allocations are invalid')=0\n"
-        "     OR pg_catalog.strpos(definition,'sales_invoice_auto_fefo_v1')<>0 THEN\n"
+        "  definition_sha256:=pg_catalog.encode(extensions.digest(\n"
+        "    pg_catalog.convert_to(definition,'UTF8'),'sha256'),'hex');\n"
+        "  IF (definition_sha256='"
+        f"{CURRENT_DEFINITION_SHA256}'\n"
+        "      AND pg_catalog.strpos(definition,'sales_invoice_auto_fefo_v1')<>0)\n"
+        "     OR (definition_sha256='"
+        f"{LEGACY_DEFINITION_SHA256}'\n"
+        "      AND pg_catalog.strpos(definition,'sales_invoice_auto_fefo_v1')=0\n"
+        "      AND pg_catalog.strpos(definition,'delivery_address_row_version bigint')<>0\n"
+        "      AND pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')<>0\n"
+        "      AND pg_catalog.strpos(definition,'direct invoice batch allocations are invalid')<>0) THEN\n"
+        "    NULL;\n"
+        "  ELSE\n"
         "    RAISE EXCEPTION USING ERRCODE='55000',\n"
         "      MESSAGE='sales-invoice resolver differs from reviewed auto-FEFO migration precondition';\n"
         "  END IF;\n"

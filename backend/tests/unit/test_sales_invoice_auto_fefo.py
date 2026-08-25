@@ -3,7 +3,11 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from scripts.generate_sales_invoice_auto_fefo_migration import generate_sql
+from scripts.generate_sales_invoice_auto_fefo_migration import (
+    CURRENT_DEFINITION_SHA256,
+    LEGACY_DEFINITION_SHA256,
+    generate_sql,
+)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -42,6 +46,35 @@ def test_auto_fefo_resolver_is_fail_closed_and_source_evidenced() -> None:
     assert "allocation_tracker#>>ARRAY[batch_row.id::text,'base_quantity']" in sql
     assert "GRANT EXECUTE ON FUNCTION" in sql
     assert 'TO "erp_calculator"' in sql
+
+
+def test_auto_fefo_precondition_accepts_only_exact_incremental_or_fresh_definition() -> None:
+    sql = SQL_PATH.read_text(encoding="utf-8")
+    baseline = (
+        ROOT / "backend/alembic/sql/20260820_0001_canonical_v1.sql"
+    ).read_text(encoding="utf-8")
+
+    assert LEGACY_DEFINITION_SHA256 in sql
+    assert CURRENT_DEFINITION_SHA256 in sql
+    assert "definition_sha256" in sql
+    assert "sales_invoice_auto_fefo_v1')<>0" in sql
+    assert "sales_invoice_auto_fefo_v1')=0" in sql
+    assert "sales_invoice_auto_fefo_v1" in baseline
+    assert "automatic FEFO allocation cannot satisfy locked stock" in baseline
+
+
+def test_postgres_precondition_fixture_covers_reapply_and_mismatch_rollback() -> None:
+    fixture = (
+        ROOT
+        / "backend/tests/postgres/check_sales_invoice_auto_fefo_migration_precondition.py"
+    ).read_text(encoding="utf-8")
+
+    assert "150000 <= int(cursor.fetchone()[0]) < 160000" in fixture
+    assert "assert cursor.fetchone()[0] == CURRENT_DEFINITION_SHA256" in fixture
+    assert "cursor.execute(MIGRATION_SQL)" in fixture
+    assert "SAVEPOINT before_mismatched_reapply" in fixture
+    assert 'assert exc.pgcode == "55000"' in fixture
+    assert "connection.rollback()" in fixture
 
 
 def test_live_sales_invoice_matrix_requires_all_authoritative_consequences() -> None:

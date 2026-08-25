@@ -3,15 +3,22 @@
 SET LOCAL ROLE erp_migration_owner;
 
 DO $migration$
-DECLARE definition text;
+DECLARE definition text; definition_sha256 text;
 BEGIN
   SELECT pg_catalog.pg_get_functiondef(
     'erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::pg_catalog.regprocedure
   ) INTO STRICT definition;
-  IF pg_catalog.strpos(definition,'delivery_address_row_version bigint')=0
-     OR pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')=0
-     OR pg_catalog.strpos(definition,'direct invoice batch allocations are invalid')=0
-     OR pg_catalog.strpos(definition,'sales_invoice_auto_fefo_v1')<>0 THEN
+  definition_sha256:=pg_catalog.encode(extensions.digest(
+    pg_catalog.convert_to(definition,'UTF8'),'sha256'),'hex');
+  IF (definition_sha256='2e59057ad1155566aa41632c8940b6031a137e8c78ebc07fa36cee7b357e0c70'
+      AND pg_catalog.strpos(definition,'sales_invoice_auto_fefo_v1')<>0)
+     OR (definition_sha256='bb2f61f4bbcceb5acaf571f6d92a02394aa4163fed356e126a0747fda8bd2ceb'
+      AND pg_catalog.strpos(definition,'sales_invoice_auto_fefo_v1')=0
+      AND pg_catalog.strpos(definition,'delivery_address_row_version bigint')<>0
+      AND pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')<>0
+      AND pg_catalog.strpos(definition,'direct invoice batch allocations are invalid')<>0) THEN
+    NULL;
+  ELSE
     RAISE EXCEPTION USING ERRCODE='55000',
       MESSAGE='sales-invoice resolver differs from reviewed auto-FEFO migration precondition';
   END IF;
