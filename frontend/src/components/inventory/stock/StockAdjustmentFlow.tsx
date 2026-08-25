@@ -55,14 +55,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
 
   // Adjustment data state
   const [adjustmentData, setAdjustmentData] = useState<{
-    adjustment_no: string;
     adjustment_type: string;
     reason: string;
     adjustment_date: string;
     notes: string;
     items: AdjustmentItem[];
   }>({
-    adjustment_no: '',
     adjustment_type: 'increase',
     reason: 'cycle_count',
     adjustment_date: '',
@@ -88,20 +86,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [awaitingIndependentApproval, setAwaitingIndependentApproval] = useState(false);
   const [reviewCommandId, setReviewCommandId] = useState('');
   const [reviewPreview, setReviewPreview] = useState<CanonicalCommandPreview | null>(null);
-
-  // Generate adjustment number
-  const generateAdjustmentNumber = () => {
-    const timestamp = Date.now();
-    return `ADJ-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}`;
-  };
-
-  // Initialize adjustment number
-  useEffect(() => {
-    setAdjustmentData(prev => ({
-      ...prev,
-      adjustment_no: generateAdjustmentNumber()
-    }));
-  }, []);
 
   // The organization clock, not the browser clock, owns the command business date.
   useEffect(() => {

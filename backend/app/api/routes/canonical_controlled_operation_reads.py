@@ -135,6 +135,8 @@ class InventoryDestructionContext(StrictDTO):
     blocking_reasons: list[str]
     certificate_upload_available: Literal[False]
     certificate_upload_message: str
+    method_code: Literal["licensed_incineration"]
+    itc_treatment: Literal["not_applicable_unregistered"]
     certificates: list[DestructionCertificate]
     candidates: list[DestructionStockCandidate]
 
@@ -535,6 +537,8 @@ def inventory_destruction_context(
             "Certificate upload is unavailable until a reviewed canonical attachment "
             "verification command is published. Existing verified evidence remains selectable."
         ),
+        method_code="licensed_incineration",
+        itc_treatment="not_applicable_unregistered",
         certificates=[DestructionCertificate.model_validate(row) for row in certificates],
         candidates=[DestructionStockCandidate.model_validate(row) for row in candidates],
     )

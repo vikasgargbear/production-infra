@@ -63,10 +63,15 @@ def test_exact_wire_models_keep_fail_closed_flags_and_decimal_strings() -> None:
         business_date=date(2026, 8, 25),
         as_of=datetime(2026, 8, 25, 12, tzinfo=timezone.utc), ready=False,
         blocking_reasons=["No evidence"], certificate_upload_available=False,
-        certificate_upload_message="Unavailable", certificates=[], candidates=[],
+        certificate_upload_message="Unavailable",
+        method_code="licensed_incineration",
+        itc_treatment="not_applicable_unregistered",
+        certificates=[], candidates=[],
     )
     wire = json.loads(context.model_dump_json())
     assert wire["certificate_upload_available"] is False
+    assert wire["method_code"] == "licensed_incineration"
+    assert wire["itc_treatment"] == "not_applicable_unregistered"
     candidate = reads.BankReconciliationCandidate(
         branch_id=uuid4(), branch_code="MAIN", branch_name="Main",
         bank_account_id=uuid4(), bank_name="Bank", bank_account_name="Current",

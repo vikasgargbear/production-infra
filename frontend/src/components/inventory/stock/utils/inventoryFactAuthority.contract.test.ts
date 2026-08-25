@@ -11,6 +11,13 @@ test('retired inventory adapters cannot reintroduce guessed business facts', () 
     'utils/stockCalculations.ts',
     'utils/stockValidation.ts',
     'stock/utils/normalizeCurrentStock.ts',
+    'stock/components/StockActions.tsx',
+    'stock/components/StockFilters.tsx',
+    'stock/components/StockTable.tsx',
+    'stock/hooks/useStockState.ts',
+    'stock/types/stock.types.ts',
+    'stock/utils/batchValuation.ts',
+    'stock/utils/movementProjection.ts',
   ];
   for (const relativePath of retired) {
     expect(fs.existsSync(path.join(inventoryRoot, relativePath))).toBe(false);
@@ -33,4 +40,15 @@ test('active desktop inventory reads contain no zero, one, or price-alias fallba
   expect(source).not.toContain('reorder_level');
   expect(source).not.toContain('pack_size');
   expect(source).not.toContain("'Units'");
+});
+
+test('inventory commands never invent a browser document number', () => {
+  const adjustment = fs.readFileSync(
+    path.join(inventoryRoot, 'stock/StockAdjustmentFlow.tsx'),
+    'utf8',
+  );
+
+  expect(adjustment).not.toContain('adjustment_no');
+  expect(adjustment).not.toContain('ADJ-');
+  expect(adjustment).not.toContain('Date.now()');
 });

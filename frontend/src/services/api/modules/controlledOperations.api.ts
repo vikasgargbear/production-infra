@@ -73,6 +73,8 @@ export interface InventoryDestructionContext {
   blocking_reasons: string[];
   certificate_upload_available: false;
   certificate_upload_message: string;
+  method_code: 'licensed_incineration';
+  itc_treatment: 'not_applicable_unregistered';
   certificates: DestructionCertificate[];
   candidates: DestructionStockCandidate[];
 }
@@ -136,6 +138,8 @@ export function decodeBankContext(value: BankReconciliationContext): BankReconci
 export function decodeDestructionContext(value: InventoryDestructionContext): InventoryDestructionContext {
   requireUuid(value.organization_id, 'Organization');
   if (value.certificate_upload_available !== false
+      || value.method_code !== 'licensed_incineration'
+      || value.itc_treatment !== 'not_applicable_unregistered'
       || !Array.isArray(value.certificates) || !Array.isArray(value.candidates)) {
     throw new Error('Canonical destruction context is incomplete.');
   }

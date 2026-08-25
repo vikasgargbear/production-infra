@@ -5,6 +5,10 @@ const source = fs.readFileSync(path.resolve(__dirname, 'InventoryDestructionFlow
 
 it('uses canonical eligibility, evidence, command lifecycle and exact readback', () => {
   expect(source).toContain('canonicalControlledOperationsApi.destructionContext');
+  expect(source).toContain('method_code: context.method_code');
+  expect(source).toContain('itc_treatment: context.itc_treatment');
+  expect(source).not.toContain("method_code: 'licensed_incineration'");
+  expect(source).not.toContain("itc_treatment: 'not_applicable_unregistered'");
   expect(source).toContain("prepareCanonicalAction('inventory.destruction.prepare'");
   expect(source).toContain('inventory_document_line_id: lineId.current');
   expect(source).toContain("getCanonicalCommandReview(commandId.trim())");
