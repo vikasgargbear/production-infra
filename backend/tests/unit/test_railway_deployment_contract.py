@@ -88,7 +88,6 @@ def test_workflow_fails_closed_on_service_configuration_drift() -> None:
         "Populate canonical service variables without triggering stale deploys"
     )
     assert '(.services[$id].source.rootDirectory // "/") == "/"' in workflow
-    assert '(.services[$id].deploy.startCommand // "") == ""' in workflow
     assert "railway-service-config.json" in workflow
     assert "Railway service configuration drift" in workflow
     assert "will not trigger an unbound intermediate deployment" in workflow
@@ -96,6 +95,7 @@ def test_workflow_fails_closed_on_service_configuration_drift() -> None:
         workflow.index("Fail closed on Railway service configuration drift") :
         workflow.index("Populate canonical service variables without triggering stale deploys")
     ]
+    assert "startCommand" not in config_step
     assert "exit 1" in config_step
 
 

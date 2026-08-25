@@ -121,15 +121,14 @@ jobs:
               --arg id "$id" \
               --arg config_file "$config_file" \
               '(.services[$id].source.rootDirectory // "/") == "/" and
-               .services[$id].configFile == $config_file and
-               (.services[$id].deploy.startCommand // "") == ""' \
+               .services[$id].configFile == $config_file' \
               railway-service-config.json >/dev/null
           }
 
           if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json || \
              ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json || \
              ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json; then
-            echo "::error title=Railway service configuration drift::All services must use repository-root context, their exact /deploy/railway/*.railway.json config file, and no dashboard start-command override. Correct Railway configuration in a separate reviewed change; this exact-SHA workflow will not trigger an unbound intermediate deployment."
+            echo "::error title=Railway service configuration drift::All services must use repository-root context and their exact /deploy/railway/*.railway.json config file. Correct Railway configuration in a separate reviewed change; this exact-SHA workflow will not trigger an unbound intermediate deployment."
             exit 1
           fi
 

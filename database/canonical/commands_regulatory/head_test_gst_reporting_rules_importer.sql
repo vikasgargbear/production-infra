@@ -50,11 +50,13 @@ BEGIN
    WHERE constraint_row.conrelid='core.reference_data_releases'::regclass
      AND constraint_row.conname='reference_data_releases_dates_ck';
   IF release_dates_definition IS NULL
-     OR release_dates_definition NOT LIKE '%dataset_kind = ''gst_reporting_rules''%'
+     OR release_dates_definition NOT LIKE '%dataset_kind = ANY%'
+     OR release_dates_definition NOT LIKE '%gst_reporting_rules%'
+     OR release_dates_definition NOT LIKE '%gst_itc_reversal_rules%'
      OR release_dates_definition NOT LIKE '%publication_date <= effective_from%'
      OR release_dates_definition NOT LIKE '%effective_to >= effective_from%'
      OR release_dates_definition NOT LIKE '%reviewed_at <= created_at%' THEN
-    RAISE EXCEPTION 'reference release dates do not permit only governed retrospective GST reporting rules';
+    RAISE EXCEPTION 'reference release dates do not permit only governed retrospective GST rule datasets';
   END IF;
 
   IF NOT EXISTS (
