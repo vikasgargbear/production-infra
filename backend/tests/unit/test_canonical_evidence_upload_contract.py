@@ -63,3 +63,15 @@ def test_integrity_readback_requires_exact_canonical_branch_permissions():
 
     assert "'core.attachment.manage',attachment.branch_id" in route
     assert "'finance.expense.manage',attachment.branch_id" in route
+
+
+def test_expense_context_only_lists_receipts_from_the_selected_branch():
+    route = (
+        ROOT / "backend/app/api/routes/web_operator_actions.py"
+    ).read_text(encoding="utf-8")
+
+    receipt_query = route.split("receipt_rows = db.execute", 1)[1].split(
+        "accounts =", 1
+    )[0]
+    assert "attachment.branch_id=:branch_id" in receipt_query
+    assert '"branch_id": branch_id' in receipt_query

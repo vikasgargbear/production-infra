@@ -44,6 +44,16 @@ def test_attachment_lifecycle_is_narrow_and_verified_identity_stays_immutable():
     assert "verified, retained, or held attachment evidence cannot be deleted" in sql
 
 
+def test_branch_scoped_receipt_cannot_cross_expense_claim_command_branch():
+    sql = SQL_PATH.read_text(encoding="utf-8")
+
+    assert "guard_expense_receipt_branch" in sql
+    assert "command.capability_code='finance.expense_claim.prepare'" in sql
+    assert "command.target_resource_id=NEW.expense_claim_id" in sql
+    assert "command.branch_id=receipt_branch_id" in sql
+    assert "expense receipt branch must match" in sql
+
+
 def test_private_object_path_is_exact_content_addressed_pdf_identity():
     sql = SQL_PATH.read_text(encoding="utf-8")
 
