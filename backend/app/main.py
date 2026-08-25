@@ -31,9 +31,6 @@ from .middleware.global_cors import GlobalCORSEnabledFastAPI
 from .api.routes.auth import enterprise as auth_enterprise
 from .api.routes.auth import oauth as auth_oauth
 
-# Audit Module
-from .api.routes.audit import audit_router
-
 # Purchase Module
 from .api.routes.purchase import upload as purchase_upload
 from .api.routes.purchase.upload import routes as purchase_upload_routes
@@ -237,9 +234,6 @@ api.include_router(mcp_canonical_resolution_reads.router)
 api.include_router(mcp_actions.router)
 api.include_router(web_operator_actions.router)
 api.include_router(tax_provider.router)
-
-# --- Audit ---
-api.include_router(audit_router, tags=["Audit Trail"])
 
 # Register canonical compatibility before legacy routes with overlapping paths.
 api.include_router(canonical_erp_reads.router, tags=["Canonical ERP Reads"])

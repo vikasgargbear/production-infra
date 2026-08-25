@@ -3,11 +3,8 @@ Enterprise Authentication API
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import text
 from typing import Dict, Any
 import logging
-
-from ....core.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -18,20 +15,22 @@ bearer = HTTPBearer(auto_error=False)
 @router.post("/logout")
 async def logout(
     req: Request,
-    db=Depends(get_db),
 ) -> Dict[str, str]:
     """
     Logout user and invalidate session by blacklisting the token.
 
-    The token is extracted from Authorization header and added to blacklist.
-    The frontend then clears its browser-held session credentials.
+    The token is extracted from the Authorization header and added to the
+    process token blacklist.  This endpoint deliberately performs no database
+    audit write: canonical ``core.audit_events`` records reviewed row
+    mutations and has no explicit session-logout append command.  Treating it
+    as a replacement for the retired activity-log table would manufacture a
+    contract the canonical model does not provide.
     """
     from ....core.auth.jwt_auth import decode_jwt
     from ....core.auth.token_blacklist import blacklist_token
 
     # Extract token from Authorization header
     auth_header = req.headers.get("Authorization", "")
-    payload = None
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
     else:
@@ -59,30 +58,6 @@ async def logout(
     except Exception as e:
         # Token invalid or expired - that's fine, user is effectively logged out
         logger.info(f"Logout: Token already invalid - IP: {req.client.host}")
-
-    # Write logout to audit trail
-    if payload:
-        try:
-            user_id = payload.get("user_id") or payload.get("sub")
-            org_id = payload.get("org_id")
-            if user_id and org_id:
-                db.execute(text("""
-                    INSERT INTO system_config.audit_logs
-                    (org_id, activity_type, entity_type, entity_id, action_performed,
-                     user_id, user_name, ip_address, result_status)
-                    VALUES (:org_id, 'logout', 'user', :user_id, 'User logged out',
-                            :user_id,
-                            COALESCE((SELECT username FROM master.org_users WHERE user_id = :user_id_int), 'unknown'),
-                            :ip::inet, 'success')
-                """), {
-                    "org_id": org_id,
-                    "user_id": str(user_id),
-                    "user_id_int": int(user_id) if str(user_id).isdigit() else 0,
-                    "ip": req.client.host if req.client else '0.0.0.0',
-                })
-                db.commit()
-        except Exception as audit_err:
-            logger.warning(f"Failed to write logout audit log: {audit_err}")
 
     return {
         "message": "Logged out successfully",
