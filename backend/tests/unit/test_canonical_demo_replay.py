@@ -130,6 +130,25 @@ def test_regulatory_identity_is_content_scoped_not_ui_run_scoped(
     ]
 
 
+def test_grant_identity_is_unique_per_workflow_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_RUN_ID", "3003")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    first = _module()
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    second = _module()
+
+    assert first.IDS["org"] == second.IDS["org"]
+    for key in (
+        "reviewer_access_grant",
+        "operator_access_grant",
+        "agent_grant",
+        "legacy_approver_agent_grant",
+    ):
+        assert first.IDS[key] != second.IDS[key]
+
+
 def test_replay_reconciliation_accepts_only_valid_forward_order_states() -> None:
     module = _module()
     assert module.PURCHASE_ORDER_RECONCILABLE_STATUSES == {

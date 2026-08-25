@@ -146,7 +146,10 @@ for grant_key in (
     IDS[grant_key] = str(
         uuid5(
             NAMESPACE_URL,
-            f"canonical-staging:{grant_key}:{IDS['org']}:{DEMO_RUN_ID}",
+            (
+                f"canonical-staging:{grant_key}:{IDS['org']}:"
+                f"{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}"
+            ),
         )
     )
 IDS["cycle_count_evidence"] = str(

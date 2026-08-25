@@ -645,7 +645,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "legacy_approver_agent_grant",
     ):
         assert f'"{grant_key}"' in provisioner
-    assert 'f"canonical-staging:{grant_key}:{IDS[\'org\']}:{DEMO_RUN_ID}"' in provisioner
+    assert 'f"canonical-staging:{grant_key}:{IDS[\'org\']}:"' in provisioner
+    assert 'f"{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}"' in provisioner
     assert "SET status='suspended', row_version=row_version+1" in provisioner
     assert "status='active', row_version=agent_grants.row_version+1" in provisioner
     assert "erp_finance_commands.parse_portal_document" in provisioner
@@ -1058,12 +1059,14 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
         in workflow
     )
     assert "https://rgihahbmkrmhitjdjvev.supabase.co" in workflow
-    assert "https://aasopharma-erp-pilot.onrender.com" in workflow
-    assert "oauth_server_enabled: true" in workflow
-    assert "oauth_server_allow_dynamic_registration: false" in workflow
-    assert 'oauth_server_authorization_path: "/oauth/consent"' in workflow
+    redirect_authority = _read("backend/scripts/reconcile_supabase_auth_redirect.py")
+    assert '"oauth_server_enabled": True' in redirect_authority
+    assert '"oauth_server_allow_dynamic_registration": False' in redirect_authority
+    assert '"oauth_server_authorization_path": "/oauth/consent"' in redirect_authority
     assert "for attempt in 1 2 3 4 5" in workflow
     assert "canonical-staging-oauth.json" in workflow
+    assert "hosted_consent_origin: $hosted_consent_origin" in workflow
+    assert "site_url: $site_url" not in workflow
     assert "provision_staging_mcp_oauth.py --mode client-only" in workflow
     assert "provision_staging_mcp_oauth.py --mode bind-existing-demo" in workflow
     assert "exercise_staging_mcp_oauth.py" in workflow
@@ -1095,7 +1098,7 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "canonical-staging-mcp-access:" in provisioner
     assert "canonical-staging-mcp-agent:" in provisioner
     assert "SET status='suspended', row_version=row_version+1" in provisioner
-    assert "oauth_server_allow_dynamic_registration: false" in workflow
+    assert '"oauth_server_allow_dynamic_registration": False' in redirect_authority
     assert '"prompt": "consent"' in exercise
     assert "_revoke_existing_grant(" in exercise
     assert 'f"{ISSUER}/user/oauth/grants"' in exercise

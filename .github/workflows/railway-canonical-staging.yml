@@ -32,6 +32,8 @@ on:
         required: true
       SUPABASE_ANON_KEY:
         required: true
+      SUPABASE_ACCESS_TOKEN:
+        required: true
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN:
         required: true
       TAX_PROVIDER_INTERNAL_HMAC_SECRET:
@@ -92,7 +94,10 @@ jobs:
           test "$RAILWAY_FRONTEND_SERVICE" = aasopharma-erp-pilot
           test "$RAILWAY_API_URL" = https://aasopharma-api-pilot-production.up.railway.app
           test "$RAILWAY_MCP_URL" = https://pharma-backend-production-0c09.up.railway.app
-          test "$RAILWAY_FRONTEND_URL" = https://aasopharma-erp-pilot-production.up.railway.app
+          case "$RAILWAY_FRONTEND_URL" in
+            https://*.up.railway.app) ;;
+            *) echo "Railway frontend URL must be one exact Railway HTTPS origin" >&2; exit 2 ;;
+          esac
 
       - uses: actions/setup-node@v4
         with:
@@ -108,6 +113,21 @@ jobs:
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID"
           railway whoami >/dev/null
+
+      - name: Bind the reviewed frontend origin to a live service domain
+        run: |
+          set -euo pipefail
+          frontend_domain=${RAILWAY_FRONTEND_URL#https://}
+          test "$frontend_domain" != "$RAILWAY_FRONTEND_URL"
+          case "$frontend_domain" in */*|*:*|'') exit 2 ;; esac
+          railway domain list \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_FRONTEND_SERVICE" \
+            --json > "$RUNNER_TEMP/railway-frontend-domains.json"
+          jq -e --arg domain "$frontend_domain" '
+            [.. | objects | .domain? // empty] | index($domain) != null
+          ' "$RUNNER_TEMP/railway-frontend-domains.json" >/dev/null
 
       - name: Require API outbound IPv6 without absorbing other staged changes
         run: |
@@ -547,9 +567,22 @@ jobs:
           echo "Railway services did not converge on reviewed SHA $REVIEWED_SHA" >&2
           exit 1
 
+      - name: Reconcile the exact Railway frontend OAuth redirect
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/reconcile_supabase_auth_redirect.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --frontend-origin "$RAILWAY_FRONTEND_URL" \
+            --reviewed-sha "$REVIEWED_SHA" \
+            > railway-supabase-auth-redirect.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: railway-canonical-staging-${{ inputs.reviewed_sha }}
-          path: railway-pilot-evidence.json
+          path: |
+            railway-pilot-evidence.json
+            railway-supabase-auth-redirect.json
           if-no-files-found: error
           retention-days: 14

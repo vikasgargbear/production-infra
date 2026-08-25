@@ -311,3 +311,14 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
     assert "deployment_id:$api_deployment_id" in workflow
     assert "deployment_id:$mcp_deployment_id" in workflow
     assert "deployment_id:$frontend_deployment_id" in workflow
+
+
+def test_workflow_binds_frontend_origin_to_registered_railway_domain() -> None:
+    workflow = _workflow()
+
+    assert "Railway frontend URL must be one exact Railway HTTPS origin" in workflow
+    assert "railway domain list" in workflow
+    assert '--service "$RAILWAY_FRONTEND_SERVICE"' in workflow
+    assert '[.. | objects | .domain? // empty] | index($domain) != null' in workflow
+    assert "SUPABASE_ACCESS_TOKEN:" in workflow
+    assert "reconcile_supabase_auth_redirect.py" in workflow

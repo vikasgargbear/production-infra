@@ -483,6 +483,15 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     assert "railway ssh keys add" in live18
     assert "railway ssh keys remove" in live18
     assert (
+        'LIVE18_RAILWAY_SSH_PRIVATE_KEY=$HOME/.ssh/live18-railway-'
+        '${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in live18
+    )
+    assert 'mkdir -p "$HOME/.ssh"' in live18
+    assert 'chmod 700 "$HOME/.ssh"' in live18
+    assert '--key "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"' in live18
+    assert '--identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
+    assert 'rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
+    assert (
         "--deployment-instance \"$RAILWAY_API_DEPLOYMENT_INSTANCE_ID\"" in live18
     )
     assert "expected one exact running API instance" in live18

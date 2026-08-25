@@ -3,8 +3,10 @@
 The fixture extracts the receipt-ceiling SQL from the production provisioner,
 uses two independent supplier-invoice allocations, and proves the exact
 remaining quantities/value.  It also executes the real typed setting
-replacement command twice and verifies its idempotency lineage.  Every row is
-rolled back and the script refuses to choose a database itself.
+replacement command twice, verifies its idempotency lineage, and simulates a
+later run after the 30-day grant window to prove fresh access/agent authority
+is issued without rewriting terminal evidence. Every row is rolled back and
+the script refuses to choose a database itself.
 """
 
 from __future__ import annotations
@@ -316,6 +318,127 @@ def _assert_setting_replacement_replay() -> None:
         connection.close()
 
 
+def _assert_deterministic_authority_renews_after_expiry() -> None:
+    """A later run issues new grants without mutating terminal evidence."""
+
+    _configure_fixture_ids()
+    connection = _connect()
+    try:
+        fixture.bootstrap_identity(connection, organization_pan="XXXXX7777X")
+        prior_access_ids = (
+            fixture.IDS["reviewer_access_grant"],
+            fixture.IDS["operator_access_grant"],
+        )
+        prior_agent_ids = (
+            fixture.IDS["agent_grant"],
+            fixture.IDS["legacy_approver_agent_grant"],
+        )
+        with connection.cursor() as cursor:
+            # The lifecycle guard permits expiry only after the validity window.
+            # Set the clock-bound column with triggers disabled solely to model a
+            # grant whose real 30-day window elapsed between workflow attempts.
+            cursor.execute("ALTER TABLE core.access_grants DISABLE TRIGGER ALL")
+            try:
+                cursor.execute(
+                    """
+                    UPDATE core.access_grants
+                       SET valid_from_at=transaction_timestamp()-interval '61 days',
+                           expires_at=transaction_timestamp()-interval '31 days',
+                           status='expired',row_version=row_version+1
+                     WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                    """,
+                    (fixture.IDS["org"], list(prior_access_ids)),
+                )
+                assert cursor.rowcount == 2
+            finally:
+                cursor.execute("ALTER TABLE core.access_grants ENABLE TRIGGER ALL")
+            cursor.execute("ALTER TABLE automation.agent_grants DISABLE TRIGGER ALL")
+            try:
+                cursor.execute(
+                    """
+                    UPDATE automation.agent_grants
+                       SET consented_at=transaction_timestamp()-interval '61 days',
+                           granted_at=transaction_timestamp()-interval '61 days',
+                           expires_at=transaction_timestamp()-interval '31 days',
+                           status='expired'
+                     WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                    """,
+                    (fixture.IDS["org"], list(prior_agent_ids)),
+                )
+                assert cursor.rowcount == 2
+            finally:
+                cursor.execute("ALTER TABLE automation.agent_grants ENABLE TRIGGER ALL")
+
+        for grant_key in (
+            "reviewer_access_grant",
+            "operator_access_grant",
+            "agent_grant",
+            "legacy_approver_agent_grant",
+        ):
+            fixture.IDS[grant_key] = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    f"canonical-staging:{grant_key}:{fixture.IDS['org']}:future-run:2",
+                )
+            )
+        renewed_access_ids = (
+            fixture.IDS["reviewer_access_grant"],
+            fixture.IDS["operator_access_grant"],
+        )
+        renewed_agent_ids = (
+            fixture.IDS["agent_grant"],
+            fixture.IDS["legacy_approver_agent_grant"],
+        )
+        fixture.bootstrap_identity(connection, organization_pan="XXXXX7777X")
+        with connection.cursor() as cursor:
+            _set_owner_context(cursor)
+            cursor.execute(
+                """
+                SELECT count(*),bool_and(status='active'),
+                       bool_and(valid_from_at<=transaction_timestamp()),
+                       bool_and(expires_at>=transaction_timestamp()+interval '29 days')
+                  FROM core.access_grants
+                 WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                """,
+                (fixture.IDS["org"], list(renewed_access_ids)),
+            )
+            assert cursor.fetchone() == (2, True, True, True)
+            cursor.execute(
+                """
+                SELECT count(*),bool_and(status='expired'),
+                       bool_and(expires_at<transaction_timestamp())
+                  FROM core.access_grants
+                 WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                """,
+                (fixture.IDS["org"], list(prior_access_ids)),
+            )
+            assert cursor.fetchone() == (2, True, True)
+            cursor.execute(
+                """
+                SELECT count(*),bool_and(status='active'),
+                       bool_and(granted_at<=transaction_timestamp()),
+                       bool_and(expires_at>=transaction_timestamp()+interval '29 days')
+                  FROM automation.agent_grants
+                 WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                """,
+                (fixture.IDS["org"], list(renewed_agent_ids)),
+            )
+            assert cursor.fetchone() == (2, True, True, True)
+            cursor.execute(
+                """
+                SELECT count(*),bool_and(status='expired'),
+                       bool_and(expires_at<transaction_timestamp())
+                  FROM automation.agent_grants
+                 WHERE org_id=%s AND id=ANY(CAST(%s AS uuid[]))
+                """,
+                (fixture.IDS["org"], list(prior_agent_ids)),
+            )
+            assert cursor.fetchone() == (2, True, True)
+    finally:
+        connection.rollback()
+        connection.close()
+
+
 def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
     _configure_fixture_ids()
     source = b"reviewed PostgreSQL ITC reversal authority"
@@ -408,6 +531,7 @@ def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
 def main() -> None:
     _assert_numeric_multi_allocation_ceiling()
     _assert_setting_replacement_replay()
+    _assert_deterministic_authority_renews_after_expiry()
     _assert_itc_reversal_authority_replays_across_ui_runs()
 
 

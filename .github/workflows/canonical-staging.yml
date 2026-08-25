@@ -944,7 +944,7 @@ jobs:
             --live-evidence staging-evidence/canonical-transaction-integrity.json \
             --expected-git-sha "$GITHUB_SHA"
 
-      - name: Configure OAuth and bind the reviewed staging client
+      - name: Bind the reviewed staging MCP OAuth client
         env:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
         run: |
@@ -952,25 +952,6 @@ jobs:
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
           test -n "$SUPABASE_ACCESS_TOKEN"
-          frontend_url=https://aasopharma-erp-pilot.onrender.com
-          payload=$(jq -cn --arg site_url "$frontend_url" '{
-            site_url: $site_url,
-            oauth_server_enabled: true,
-            oauth_server_allow_dynamic_registration: false,
-            oauth_server_authorization_path: "/oauth/consent"
-          }')
-          response=$(curl --fail-with-body --silent --show-error \
-            --request PATCH \
-            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            --header 'Content-Type: application/json' \
-            --data "$payload" \
-            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/auth")
-          jq -e --arg site_url "$frontend_url" '
-            .site_url == $site_url and
-            .oauth_server_enabled == true and
-            .oauth_server_allow_dynamic_registration == false and
-            .oauth_server_authorization_path == "/oauth/consent"
-          ' <<<"$response" >/dev/null
           python3 backend/scripts/provision_staging_mcp_oauth.py --mode client-only
 
       - name: Reconcile and deploy the free Render pilot
@@ -1137,13 +1118,13 @@ jobs:
             >/dev/null
           jq -n \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --arg site_url "$frontend_url" \
+            --arg hosted_consent_origin "$frontend_url" \
             --arg discovery_url "$discovery_url" \
             --arg commit_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
             --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{
               project_ref: $project_ref,
-              site_url: $site_url,
+              hosted_consent_origin: $hosted_consent_origin,
               authorization_path: "/oauth/consent",
               dynamic_client_registration: false,
               discovery_url: $discovery_url,

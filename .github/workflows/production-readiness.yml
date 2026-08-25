@@ -1184,7 +1184,7 @@ jobs:
             echo "LIVE18_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live18-database-evidence.json"
             echo "LIVE18_RAILWAY_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-railway-demo.json"
             echo "LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH=$RUNNER_TEMP/live18-railway-identity-response.json"
-            echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$RUNNER_TEMP/live18-railway-ssh-key"
+            echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$HOME/.ssh/live18-railway-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             echo "LIVE18_RAILWAY_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/live18-railway-ssh-fingerprint"
             echo "LIVE18_RAILWAY_SSH_REGISTERED_PATH=$RUNNER_TEMP/live18-railway-ssh-registered"
             echo "LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-identity-attempted"
@@ -1276,6 +1276,8 @@ jobs:
           test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
           railway whoami >/dev/null
           umask 077
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
           ssh-keygen -q -t ed25519 -N '' \
             -C "live18-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"
