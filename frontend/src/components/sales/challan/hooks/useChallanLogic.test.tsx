@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { employeesApi } from '../../../../services/api';
+import { apiClient, employeesApi } from '../../../../services/api';
 import { useChallanLogic } from './useChallanLogic';
 
 jest.mock('../../../../contexts/CompanyContext', () => ({
@@ -38,6 +38,7 @@ jest.mock('./useChallanSave', () => ({
 }));
 
 const mockedEmployeeGetAll = employeesApi.getAll as jest.MockedFunction<typeof employeesApi.getAll>;
+const mockedApiGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;
 
 const interstateCustomer = {
     customer_id: '10000000-0000-7000-8000-000000000001',
@@ -52,6 +53,7 @@ const interstateCustomer = {
 describe('useChallanLogic canonical draft boundaries', () => {
     beforeEach(() => {
         mockedEmployeeGetAll.mockResolvedValue({ data: [] } as Awaited<ReturnType<typeof employeesApi.getAll>>);
+        mockedApiGet.mockResolvedValue({ data: { success: true, data: [] } } as any);
     });
 
     it('uses the organization business date without inventing an expected delivery date', async () => {

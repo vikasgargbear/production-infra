@@ -244,7 +244,13 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 return (
                   <div className="text-[11px] text-gray-600 mt-1">
                     <span className="font-semibold text-gray-700">Place of Supply:</span> {posState}
-                    <span className="ml-2 text-[10px] text-gray-500">({invoice.gst_type === 'IGST' ? 'Inter-State' : 'Intra-State'})</span>
+                    <span className="ml-2 text-[10px] text-gray-500">
+                      ({invoice.gst_type === 'IGST'
+                        ? 'Inter-State'
+                        : invoice.gst_type === 'CGST/SGST'
+                          ? 'Intra-State'
+                          : 'Tax treatment unavailable'})
+                    </span>
                   </div>
                 );
               })()}
@@ -415,7 +421,11 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 <h3 className="text-xs font-semibold text-gray-700 mb-2">
                   Tax Breakup
                   <span className="ml-2 text-[10px] font-normal text-gray-500">
-                    ({invoice.gst_type === 'IGST' ? 'Inter-State · IGST' : 'Intra-State · CGST/SGST'})
+                    ({invoice.gst_type === 'IGST'
+                      ? 'Inter-State · IGST'
+                      : invoice.gst_type === 'CGST/SGST'
+                        ? 'Intra-State · CGST/SGST'
+                        : 'Tax treatment unavailable'})
                   </span>
                 </h3>
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">

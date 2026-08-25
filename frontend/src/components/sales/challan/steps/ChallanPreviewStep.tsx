@@ -202,7 +202,8 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                         onPrint: printChallan,
                         onThermalPrint: thermalPrintChallan,
                         onWhatsApp: shareOnWhatsApp,
-                        phoneNumber: createdChallanData.customer_details?.phone || challan.customer_details?.phone
+                        phoneNumber: createdChallanData.customer_details?.primary_phone
+                            || challan.customer_details?.primary_phone
                     } as any}
                 />
             )}

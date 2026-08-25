@@ -58,7 +58,6 @@ export interface CustomerAddress {
     city?: string;
     state?: string;
     state_code?: string;
-    state_name?: string;
     pincode?: string;
     country?: string;
 }

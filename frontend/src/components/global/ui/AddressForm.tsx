@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
-import { MapPin, Edit2, Check, X, Plus, Phone, Building2, Home, LucideIcon } from 'lucide-react';
+import { MapPin, Edit2, Check, Plus, Phone, Building2, Home, LucideIcon } from 'lucide-react';
 import { apiClient, customersApi } from '../../../services/api';
-import { INDIAN_STATES, indianStateName } from '../../../utils/indianStates';
+import { INDIAN_STATES } from '../../../utils/indianStates';
 
 // Imports from centralized types
 import type {
@@ -19,16 +19,12 @@ interface AddressData extends CustomerAddress {
 }
 
 interface SavedAddress extends Partial<AddressData> {
-    id?: string | number;
     address_id?: string | number;
     label?: string;
     address_type?: string;
     is_default?: boolean;
-    address?: string;
-    address2?: string;
-    state?: string;
     pincode?: string;
-    phone?: string;
+    country_code?: string;
 }
 
 export interface AddressFormProps {
@@ -56,7 +52,9 @@ export const validateCustomerAddress = (data: Partial<AddressData>): AddressVali
     const errors: AddressValidationErrors = {};
     if (!data.address_line1?.trim()) errors.address_line1 = 'Address line 1 is required';
     if (!data.city?.trim()) errors.city = 'City is required';
-    if (!data.state?.trim()) errors.state = 'State is required';
+    if (!/^\d{2}$/.test(String(data.state || '').trim())) {
+        errors.state = 'Select a canonical state code';
+    }
     if (!/^\d{6}$/.test(String(data.pincode || '').trim())) {
         errors.pincode = 'Enter a valid 6-digit pincode';
     }
@@ -65,7 +63,6 @@ export const validateCustomerAddress = (data: Partial<AddressData>): AddressVali
 
 const AddressForm: React.FC<AddressFormProps> = ({
     customer,
-    addressData,
     addressType = 'billing',
     onChange,
     onSave,
@@ -128,6 +125,9 @@ const AddressForm: React.FC<AddressFormProps> = ({
             document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('keydown', handleEscapeKey);
         };
+    // The handlers intentionally read the current form state; listener setup is
+    // bounded by the edit-mode state rather than handler identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditing, isAddingNew]);
 
     // Handle external trigger to enter add mode
@@ -135,7 +135,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
         if (isAddMode && !isAddingNew) {
             handleAddNew();
         }
-    }, [isAddMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAddMode, isAddingNew]);
 
     const [formData, setFormData] = useState<AddressData>({
         address_line1: '',
@@ -154,32 +155,6 @@ const AddressForm: React.FC<AddressFormProps> = ({
         if (currentCustomerId && currentCustomerId !== customerIdRef.current) {
             customerIdRef.current = currentCustomerId;
             fetchCustomerAddresses(currentCustomerId);
-        } else if (customer && !currentCustomerId) {
-            // Helper to safely get string value
-            const getStr = (val: unknown): string => typeof val === 'string' ? val : '';
-
-            const mobileNumber = getStr(customer.primary_phone || (customer as any).mobile || (customer as any).phone ||
-                (customer as any).contact_number || addressData?.mobile);
-
-            const custAddress = typeof customer.address === 'object' ? customer.address : null;
-            const addressStr = typeof customer.address === 'string' ? customer.address : '';
-
-            const newFormData: AddressData = {
-                address_line1: custAddress?.address_line1 || addressStr || addressData?.address_line1 || '',
-                address_line2: custAddress?.address_line2 || (customer as any).address2 || addressData?.address_line2 || '',
-                city: custAddress?.city || customer.city || addressData?.city || '',
-                state: custAddress?.state || customer.state || (customer as any).state || addressData?.state || '',
-                pincode: custAddress?.pincode || customer.pincode || (customer as any).pincode || addressData?.pincode || '',
-                country: custAddress?.country || customer.country || addressData?.country || '',
-                mobile: mobileNumber,
-                landmark: (customer as any).landmark || addressData?.landmark || ''
-            };
-
-            setFormData(newFormData);
-
-            if (onSave && addressType === 'billing') {
-                onSave(newFormData);
-            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customer]);
@@ -216,18 +191,16 @@ const AddressForm: React.FC<AddressFormProps> = ({
     };
 
     const selectAddress = (address: SavedAddress): void => {
-        setSelectedAddressId(address.id || address.address_id || null);
-        const mobileNumber = address.mobile || address.phone ||
-            customer?.mobile || customer?.phone ||
-            customer?.primary_phone || (customer as any)?.contact_number || (customer as any)?.mobile || '';
+        setSelectedAddressId(address.address_id || null);
+        const mobileNumber = address.mobile || customer?.primary_phone || '';
 
         setFormData({
-            address_line1: address.address_line1 || address.address || '',
-            address_line2: address.address_line2 || address.address2 || '',
+            address_line1: address.address_line1 || '',
+            address_line2: address.address_line2 || '',
             city: address.city || '',
-            state: indianStateName(address.state || (address as any).state_code || (address as any).state_name),
+            state: String(address.state_code ?? '').trim(),
             pincode: address.pincode || '',
-            country: address.country || 'India',
+            country: address.country_code || '',
             mobile: mobileNumber,
             landmark: address.landmark || ''
         });
@@ -240,7 +213,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
         if (onSave) {
             onSave({
                 ...address,
-                mobile: address.mobile || customer?.phone || customer?.mobile || ''
+                mobile: address.mobile || customer?.primary_phone || ''
             });
         }
 
@@ -255,7 +228,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
         if (data.address_line2) parts.push(data.address_line2);
         if (data.landmark) parts.push(`Near ${data.landmark}`);
         if (data.city) parts.push(data.city);
-        if (data.state) parts.push(data.state);
+        if (data.state_code) parts.push(data.state_code);
+        else if (data.state) parts.push(data.state);
         if (data.pincode) parts.push(data.pincode);
         if (data.mobile) parts.push(`Ph: ${data.mobile}`);
         return parts.filter(Boolean).join(', ');
@@ -287,8 +261,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
         setSaveError('');
         setFieldErrors({});
 
-        const mobileNumber = customer?.mobile || customer?.phone ||
-            customer?.primary_phone || (customer as any)?.contact_number || (customer as any)?.mobile || '';
+        const mobileNumber = customer?.primary_phone || '';
 
         setFormData({
             address_line1: '',
@@ -320,7 +293,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
             address_line1: String(formData.address_line1).trim(),
             address_line2: formData.address_line2?.trim() || undefined,
             city: String(formData.city).trim(),
-            state: String(formData.state).trim(),
+            state_code: String(formData.state).trim(),
             pincode: String(formData.pincode).trim(),
             landmark: formData.landmark?.trim() || undefined,
             address_type: addressType,
@@ -355,11 +328,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 const updatedAddress = {
                     ...addressPayload,
                     mobile: formData.mobile,
-                    id: selectedAddressId,
                     address_id: selectedAddressId,
                 };
                 setSavedAddresses(previous => previous.map(address =>
-                    address.id === selectedAddressId || address.address_id === selectedAddressId
+                    address.address_id === selectedAddressId
                         ? { ...address, ...updatedAddress }
                         : address,
                 ));
@@ -385,7 +357,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
         }
 
         if (onSave) {
-            onSave({ ...formData, is_default: isDefault });
+            onSave({ ...formData, state_code: formData.state, is_default: isDefault });
         }
     };
 
@@ -395,18 +367,18 @@ const AddressForm: React.FC<AddressFormProps> = ({
         setShowDropdown(false);
 
         if (selectedAddressId && savedAddresses.length > 0) {
-            const selected = savedAddresses.find(a => a.id === selectedAddressId || a.address_id === selectedAddressId);
+            const selected = savedAddresses.find(a => a.address_id === selectedAddressId);
             if (selected) selectAddress(selected);
         } else if (customer) {
             setFormData({
-                address_line1: (typeof customer.address === 'string' ? customer.address : customer.address?.address_line1) || '',
-                address_line2: (customer as any).address2 || '',
-                city: (customer as any).city || '',
-                state: (customer as any).state || '',
-                pincode: (customer as any).pincode || (customer as any).pincode || '',
-                country: (customer as any).country || '',
-                mobile: (customer as any).mobile || (customer as any).phone || '',
-                landmark: (customer as any).landmark || ''
+                address_line1: '',
+                address_line2: '',
+                city: '',
+                state: '',
+                pincode: '',
+                country: '',
+                mobile: customer.primary_phone || '',
+                landmark: '',
             });
         }
     };
@@ -420,7 +392,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
     };
 
     if (addressType === 'shipping' && sameAsBilling && billingAddressData) {
-        const mobileNumber = billingAddressData?.mobile || customer?.phone || customer?.mobile;
+        const mobileNumber = billingAddressData?.mobile || customer?.primary_phone;
         return (
             <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${className}`}>
                 <div className="flex items-center justify-between mb-3">
@@ -503,8 +475,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
                                         return (
                                             <div
-                                                key={String(addr.id || addr.address_id)}
-                                                className={`flex items-start gap-2 p-3 hover:bg-gray-50 rounded-lg transition-colors ${selectedAddressId === (addr.id || addr.address_id) ? 'bg-blue-50 border-l-2 border-blue-500' : ''
+                                                key={String(addr.address_id)}
+                                                className={`flex items-start gap-2 p-3 hover:bg-gray-50 rounded-lg transition-colors ${selectedAddressId === addr.address_id ? 'bg-blue-50 border-l-2 border-blue-500' : ''
                                                     }`}
                                             >
                                                 {/* Select button (main click area) */}
@@ -536,11 +508,11 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                             address_line2: addr.address_line2 || '',
                                                             landmark: addr.landmark || '',
                                                             city: addr.city || '',
-                                                            state: addr.state || (addr as any).state_name || '',
+                                                            state: String(addr.state_code ?? '').trim(),
                                                             pincode: addr.pincode || '',
-                                                            mobile: addr.mobile || addr.phone || ''
+                                                            mobile: addr.mobile || customer?.primary_phone || ''
                                                         });
-                                                        setSelectedAddressId(addr.id || addr.address_id || null);
+                                                        setSelectedAddressId(addr.address_id || null);
                                                         setShowDropdown(false);
                                                         setIsEditing(true);
                                                     }}
@@ -633,7 +605,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             >
                                 <option value="">Select State *</option>
                                 {INDIAN_STATES.map(([code, name]) => (
-                                    <option key={code} value={name}>
+                                    <option key={code} value={code}>
                                         {name}
                                     </option>
                                 ))}
@@ -719,11 +691,11 @@ const AddressForm: React.FC<AddressFormProps> = ({
                     {/* First line: Name, Phone */}
                     <div className="flex items-center flex-wrap gap-1">
                         <span className="font-semibold text-gray-900">
-                            {customer?.name || customer?.customer_name || 'Customer'}
+                            {customer?.customer_name || 'Customer identity unavailable'}
                         </span>
-                        {(formData.mobile || customer?.phone || customer?.mobile) && (
+                        {(formData.mobile || customer?.primary_phone) && (
                             <span className="font-semibold text-gray-900">
-                                , {formData.mobile || customer?.phone || customer?.mobile}
+                                , {formData.mobile || customer?.primary_phone}
                             </span>
                         )}
                     </div>

@@ -10,28 +10,18 @@ import { calculateSalesOrderPreview } from '../../../../services/calculations/sa
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
-import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 import type { ImportData } from '../../../global/modals/DocumentImportModal';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
+import { clientUuid } from '../../../../utils/clientUuid';
 
 // ==================== TYPE DEFINITIONS ====================
 
-// Using canonical Customer type with additional UI fields
 import type { Customer as BaseCustomer } from '../../../../types/models/customer';
 
-// Extended Customer with UI fields for this component
-type Customer = BaseCustomer & {
-    id?: number | string;
-    name?: string;
-    address?: string;
-    address2?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-};
+type Customer = BaseCustomer;
 
 interface CompanyInfo {
     name?: string;
@@ -142,7 +132,7 @@ const createInitialOrder = (): Order => ({
     sgst_amount: 0,
     igst_amount: 0,
     round_off: 0,
-    gst_type: 'CGST/SGST',
+    gst_type: '',
     place_of_supply: ''
 });
 
@@ -294,92 +284,77 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 billing_address: '',
                 shipping_address: '',
                 billing_address_data: null,
-                shipping_address_data: null
+                shipping_address_data: null,
+                gst_type: '',
+                place_of_supply: '',
             }));
             return;
         }
 
-        const addressParts: string[] = [];
-        if (customer.address) addressParts.push(customer.address);
-        if (customer.city) addressParts.push(customer.city);
-        if (customer.state) addressParts.push(customer.state);
-        if (customer.pincode) addressParts.push(customer.pincode);
-        let fullAddress = addressParts.filter(Boolean).join(', ');
-
-        let addressData: Address = {
-            address_line1: customer.address || '',
-            address_line2: customer.address2 || '',
-            city: customer.city || '',
-            state: customer.state || '',
-            pincode: customer.pincode || '',
-            country: 'India'
-        };
-
-        if (!fullAddress && customer.customer_id) {
-            try {
-                const response = await apiClient.get(`/customers/${customer.customer_id}/addresses`);
-                if (response.data?.success && response.data.data?.length > 0) {
-                    const addresses = response.data.data;
-                    const billingAddr = addresses.find((addr: { address_type: string; is_default: boolean }) =>
-                        addr.address_type === 'billing' && addr.is_default);
-                    const shippingAddr = addresses.find((addr: { address_type: string; is_default: boolean }) =>
-                        addr.address_type === 'shipping' && addr.is_default);
-                    const anyDefaultAddr = addresses.find((addr: { is_default: boolean }) => addr.is_default);
-                    const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-
-                    const fetchedParts: string[] = [];
-                    if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
-                    if (preferredAddr.address_line2) fetchedParts.push(preferredAddr.address_line2);
-                    if (preferredAddr.city) fetchedParts.push(preferredAddr.city);
-                    if (preferredAddr.state) fetchedParts.push(preferredAddr.state);
-                    if (preferredAddr.pincode) fetchedParts.push(preferredAddr.pincode);
-                    fullAddress = fetchedParts.filter(Boolean).join(', ');
-
-                    addressData = {
-                        address_line1: preferredAddr.address_line1 || '',
-                        address_line2: preferredAddr.address_line2 || '',
-                        city: preferredAddr.city || '',
-                        state: preferredAddr.state || '',
-                        pincode: preferredAddr.pincode || '',
-                        country: preferredAddr.country || 'India'
-                    };
-
-                    customer = {
-                        ...customer,
-                        address: preferredAddr.address_line1 || '',
-                        address2: preferredAddr.address_line2 || '',
-                        city: preferredAddr.city || '',
-                        state: preferredAddr.state || '',
-                        pincode: preferredAddr.pincode || ''
-                    };
-                    setSelectedCustomer(customer);
-                }
-            } catch {
-                // Silent error
+        let billingAddress = '';
+        let shippingAddress = '';
+        let billingAddressData: Address | null = null;
+        let shippingAddressData: Address | null = null;
+        try {
+            const response = await apiClient.get(`/customers/${customer.customer_id}/addresses`);
+            if (!response.data?.success || !Array.isArray(response.data.data)) {
+                throw new Error('The server returned an invalid canonical address response.');
             }
+            const addresses = response.data.data as Array<Record<string, unknown>>;
+            const billing = addresses.find(address =>
+                address.address_type === 'billing' && address.is_default === true);
+            const shipping = addresses.find(address =>
+                address.address_type === 'shipping' && address.is_default === true);
+            if (!billing) {
+                throw new Error('The customer has no default canonical billing address.');
+            }
+            const toAddress = (address: Record<string, unknown>): Address => {
+                const stateCode = String(address.state_code ?? '').trim();
+                if (!/^\d{2}$/.test(stateCode)) {
+                    throw new Error('The customer address is missing its canonical state code.');
+                }
+                return {
+                    address_line1: String(address.address_line1 ?? '').trim(),
+                    address_line2: String(address.address_line2 ?? '').trim(),
+                    city: String(address.city ?? '').trim(),
+                    state_code: stateCode,
+                    pincode: String(address.pincode ?? '').trim(),
+                    country: String(address.country_code ?? '').trim(),
+                };
+            };
+            const display = (address: Address): string => [
+                address.address_line1,
+                address.address_line2,
+                address.city,
+                address.state_code,
+                address.pincode,
+            ].filter(Boolean).join(', ');
+            billingAddressData = toAddress(billing);
+            shippingAddressData = shipping ? toAddress(shipping) : billingAddressData;
+            billingAddress = display(billingAddressData);
+            shippingAddress = display(shippingAddressData);
+        } catch (addressError) {
+            const reason = addressError instanceof Error
+                ? addressError.message
+                : 'Canonical customer addresses are unavailable.';
+            setMessage(reason);
+            setMessageType('error');
+            toast.error(reason);
         }
-
-        const customerState = addressData.state || addressData.state_name || customer.state || '';
-        const gstType = determineGstTypeForSupply(
-            companyInfo?.state,
-            customerState,
-            companyInfo?.gst_number,
-            customer.gst_number
-        );
 
         setOrder(prev => ({
             ...prev,
-            customer_id: String(customer?.customer_id || customer?.id || ''),
-            customer_name: customer?.customer_name || customer?.name || '',
+            customer_id: String(customer.customer_id),
+            customer_name: customer.customer_name,
             customer_details: customer,
-            billing_address: fullAddress,
-            shipping_address: fullAddress,
-            billing_address_data: addressData,
-            shipping_address_data: addressData,
-            gst_type: gstType,
-            place_of_supply: customerState || companyInfo?.state || ''
+            billing_address: billingAddress,
+            shipping_address: shippingAddress,
+            billing_address_data: billingAddressData,
+            shipping_address_data: shippingAddressData,
+            gst_type: '',
+            place_of_supply: shippingAddressData?.state_code || '',
         }));
-    }, [companyInfo]);
+    }, []);
 
     // Handle product selection
     const handleProductSelect = useCallback((product: ProductInput): void => {
@@ -413,17 +388,17 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 return;
             }
             const newItem: OrderItem = {
-                id: Date.now(),
+                id: clientUuid(),
                 product_id: product.product_id,
                 product_name: product.product_name,
                 hsn_code: product.hsn_code,
                 batch_id: product.batch_id,
-                batch_number: product.batch_number || product.batch_number,
+                batch_number: product.batch_number,
                 branch_id: product.branch_id,
                 location_id: product.location_id,
                 uom_conversion_id: product.uom_conversion_id,
                 quantity,
-                unit: product.unit || product.uom || 'NOS',
+                unit: product.unit || product.uom,
                 pack_size: product.pack_size || product.pack_type,
                 mrp: product.mrp,
                 unit_price: unitPrice,
@@ -454,6 +429,13 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             toast.error(errorMessage);
             return;
         }
+        if (!String(importData.customer_name ?? '').trim()) {
+            const errorMessage = 'The imported document is missing its canonical customer name.';
+            setMessage(errorMessage);
+            setMessageType('error');
+            toast.error(errorMessage);
+            return;
+        }
         if (!importData.items.length) {
             const warningMsg = 'No items found in the selected document';
             setMessage(warningMsg);
@@ -468,17 +450,15 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             ? {
                 ...(suppliedCustomer as Customer),
                 customer_id: importedCustomerId,
-                customer_name: importData.customer_name
-                    || (suppliedCustomer as Customer).customer_name
-                    || '',
+                customer_name: String(importData.customer_name).trim(),
             }
             : {
                 customer_id: importedCustomerId,
-                customer_name: importData.customer_name || '',
+                customer_name: String(importData.customer_name).trim(),
             } as Customer;
         const formattedItems = importData.items.map((item, index) => ({
             ...item,
-            id: `imported-${Date.now()}-${index}`,
+            id: `imported-${clientUuid()}-${index}`,
             quantity: item.quantity,
             free_quantity: item.free_quantity,
             unit_price: item.unit_price,
@@ -487,32 +467,23 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             mrp: item.mrp,
             total: '0.00',
         }));
-        const importedCustomerState = importedCustomer.state || '';
         const importedOrder: Order = {
             ...order,
             customer_id: importedCustomerId,
-            customer_name: importData.customer_name || importedCustomer.customer_name || '',
+            customer_name: String(importData.customer_name).trim(),
             customer_details: importedCustomer,
-            billing_address: importData.billing_address || importedCustomer.address || '',
-            shipping_address: importData.shipping_address
-                || importData.billing_address
-                || importedCustomer.address
-                || '',
+            billing_address: importData.billing_address || '',
+            shipping_address: importData.shipping_address || '',
             items: formattedItems,
             notes: importData.notes || order.notes,
-            gst_type: determineGstTypeForSupply(
-                companyInfo?.state,
-                importedCustomerState,
-                companyInfo?.gst_number,
-                importedCustomer.gst_number,
-            ),
-            place_of_supply: importedCustomerState || companyInfo?.state || '',
+            gst_type: '',
+            place_of_supply: '',
         };
 
         setSelectedCustomer(importedCustomer);
         setOrder(importedOrder);
         void recalculateTotals(formattedItems, importedOrder);
-    }, [companyInfo, order, recalculateTotals]);
+    }, [order, recalculateTotals]);
 
     // Update item
     const updateItem = useCallback((index: number, field: string, value: unknown): void => {

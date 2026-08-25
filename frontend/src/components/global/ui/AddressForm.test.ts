@@ -5,7 +5,7 @@ describe('validateCustomerAddress', () => {
         expect(validateCustomerAddress({})).toEqual({
             address_line1: 'Address line 1 is required',
             city: 'City is required',
-            state: 'State is required',
+            state: 'Select a canonical state code',
             pincode: 'Enter a valid 6-digit pincode',
         });
     });
@@ -14,7 +14,7 @@ describe('validateCustomerAddress', () => {
         expect(validateCustomerAddress({
             address_line1: '202 Synthetic Retail Lane',
             city: 'Mumbai',
-            state: 'Maharashtra',
+            state: '27',
             pincode: '4000A1',
         })).toEqual({ pincode: 'Enter a valid 6-digit pincode' });
     });
@@ -23,8 +23,17 @@ describe('validateCustomerAddress', () => {
         expect(validateCustomerAddress({
             address_line1: '202 Synthetic Retail Lane',
             city: 'Mumbai',
-            state: 'Maharashtra',
+            state: '27',
             pincode: '400001',
         })).toEqual({});
+    });
+
+    it('rejects a display name in place of the canonical state code', () => {
+        expect(validateCustomerAddress({
+            address_line1: '202 Synthetic Retail Lane',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400001',
+        })).toEqual({ state: 'Select a canonical state code' });
     });
 });

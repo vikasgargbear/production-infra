@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Annotated, Any, Literal
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -284,7 +285,14 @@ def create_app(
 
     @server.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
-        return JSONResponse({"status": "ok", "service": "aasopharma-mcp"})
+        git_commit = os.getenv("RENDER_GIT_COMMIT", "").strip().lower()
+        if len(git_commit) != 40 or any(
+            character not in "0123456789abcdef" for character in git_commit
+        ):
+            git_commit = None
+        return JSONResponse(
+            {"status": "ok", "service": "aasopharma-mcp", "git_commit": git_commit}
+        )
 
     @server.custom_route("/ready", methods=["GET"])
     async def ready(_: Request) -> JSONResponse:

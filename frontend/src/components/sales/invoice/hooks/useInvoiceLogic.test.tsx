@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { calculateInvoicePreview } from '../../../../services/calculations/invoiceCalculationService';
+import { employeesApi } from '../../../../services/api';
 import type { Customer } from '../../../../types/models/customer';
 import { buildCanonicalInvoicePreparePayload } from '../utils/canonicalInvoiceCommand';
 import { useInvoiceLogic } from './useInvoiceLogic';
@@ -72,10 +73,12 @@ const selectedProduct = {
 const mockedPreview = calculateInvoicePreview as jest.MockedFunction<
     typeof calculateInvoicePreview
 >;
+const mockedEmployeeGetAll = employeesApi.getAll as jest.MockedFunction<typeof employeesApi.getAll>;
 
 describe('useInvoiceLogic selected quantity boundary', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockedEmployeeGetAll.mockResolvedValue({ data: { employees: [] } } as any);
         mockedPreview.mockResolvedValue({
             items: [],
             totals: {

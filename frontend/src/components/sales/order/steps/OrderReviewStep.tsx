@@ -11,7 +11,6 @@ import {
     AddressForm,
     PrintUtility
 } from '../../../global';
-import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, BankAccount, Customer } from '../../../../types/models';
 import { canonicalOrderPreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
 
@@ -208,16 +207,14 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     addressType="shipping"
                                     onChange={(address: string) => setOrder(prev => ({ ...prev, shipping_address: address }))}
                                     onSave={(addressData: any) => {
-                                        const addrState = addressData?.state;
-                                        const gstType = determineGstTypeForSupply(
-                                            companyInfo?.state, addrState,
-                                            companyInfo?.gst_number, selectedCustomer?.gst_number
-                                        );
+                                        const stateCode = /^\d{2}$/.test(String(addressData?.state_code ?? '').trim())
+                                            ? String(addressData.state_code).trim()
+                                            : '';
                                         setOrder(prev => ({
                                             ...prev,
                                             shipping_address_data: addressData,
-                                            gst_type: gstType,
-                                            place_of_supply: addrState || ''
+                                            gst_type: '',
+                                            place_of_supply: stateCode,
                                         }));
                                     }}
                                     sameAsBilling={sameAsBilling}
@@ -225,17 +222,17 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     onSameAsBillingChange={(same: boolean) => {
                                         setSameAsBilling(same);
                                         if (same) {
-                                            const billingState = (order.billing_address_data as any)?.state;
-                                            const gstType = determineGstTypeForSupply(
-                                                companyInfo?.state, billingState,
-                                                companyInfo?.gst_number, selectedCustomer?.gst_number
-                                            );
+                                            const billingStateCode = String(
+                                                order.billing_address_data?.state_code ?? '',
+                                            ).trim();
                                             setOrder(prev => ({
                                                 ...prev,
                                                 shipping_address: prev.billing_address,
                                                 shipping_address_data: prev.billing_address_data,
-                                                gst_type: gstType,
-                                                place_of_supply: billingState || ''
+                                                gst_type: '',
+                                                place_of_supply: /^\d{2}$/.test(billingStateCode)
+                                                    ? billingStateCode
+                                                    : '',
                                             }));
                                         }
                                     }}
@@ -291,7 +288,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                             <span className="text-gray-600">IGST</span>
                                             <span className="font-medium">₹{money(order.igst_amount, 'Order IGST')}</span>
                                         </div>
-                                    ) : (
+                                    ) : order.gst_type === 'CGST/SGST' ? (
                                         <>
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-gray-600">CGST</span>
@@ -302,6 +299,10 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                                 <span className="font-medium">₹{money(order.sgst_amount, 'Order SGST')}</span>
                                             </div>
                                         </>
+                                    ) : (
+                                        <p role="status" className="text-sm text-amber-700">
+                                            Tax treatment is unavailable until the canonical preview succeeds.
+                                        </p>
                                     )}
                                     <div className="flex justify-between text-sm border-t pt-1">
                                         <span className="text-blue-700 font-medium">Total GST</span>

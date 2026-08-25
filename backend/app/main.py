@@ -172,18 +172,33 @@ app.router.redirect_slashes = False
 # The custom handler was returning JSON without CORS headers, causing CORS failures
 # FastAPI's CORSMiddleware automatically handles OPTIONS requests properly
 
+def _deployed_git_commit() -> str | None:
+    """Return the immutable Render build identity when the platform provides it."""
+
+    value = os.getenv("RENDER_GIT_COMMIT", "").strip().lower()
+    if len(value) == 40 and all(character in "0123456789abcdef" for character in value):
+        return value
+    return None
+
+
 @app.get("/")
 async def root():
     return {
         "message": "Pharma ERP API",
         "version": "3.0.0",
         "status": "healthy",
-        "structure": "domain-based-folders"
+        "structure": "domain-based-folders",
+        "git_commit": _deployed_git_commit(),
     }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "pharma-erp-backend", "version": "3.0.0"}
+    return {
+        "status": "healthy",
+        "service": "pharma-erp-backend",
+        "version": "3.0.0",
+        "git_commit": _deployed_git_commit(),
+    }
 
 
 READINESS_TIMEOUT_SECONDS = 5.0

@@ -20,6 +20,7 @@ describe('canonical desktop sales business-fact boundaries', () => {
     ]) {
       expect(fs.existsSync(path.resolve(__dirname, '..', relativePath))).toBe(false);
     }
+    expect(fs.existsSync(path.resolve(__dirname, '../../gst/utils/gstCalculations.ts'))).toBe(false);
   });
 
   it('does not invent document dates or payment state in creation/history', () => {
@@ -79,5 +80,29 @@ describe('canonical desktop sales business-fact boundaries', () => {
     expect(invoicePreview).not.toMatch(/company_name|state_name|bank_accounts/);
     expect(orderReview).not.toMatch(/calculated_total[^\n]*(?:\?\?|\|\|)[^\n]*\.total/);
     expect(invoiceApi).not.toContain('getLastDeals');
+  });
+
+  it('leaves GST treatment unresolved until the canonical preview and consumes exact address fields', () => {
+    const invoiceLogic = source('invoice/hooks/useInvoiceLogic.ts');
+    const invoiceDetails = source('invoice/steps/InvoiceDetailsStep.tsx');
+    const invoiceCommand = source('invoice/utils/canonicalInvoiceCommand.ts');
+    const orderLogic = source('order/hooks/useSalesOrderLogic.ts');
+    const orderReview = source('order/steps/OrderReviewStep.tsx');
+    const challanLogic = source('challan/hooks/useChallanLogic.ts');
+    const challanTypes = source('challan/types/challanTypes.ts');
+    const sharedLogic = source('hooks/useSalesTransaction.ts');
+    const itemTransform = source('utils/productItemTransform.ts');
+
+    for (const draftSource of [invoiceLogic, orderLogic, orderReview, challanLogic, challanTypes]) {
+      expect(draftSource).not.toMatch(/gst_type:\s*['"]CGST\/SGST['"]/);
+    }
+    expect(invoiceLogic).not.toMatch(/address_info|billing_address\?\.|shipping_address\?\./);
+    expect(invoiceDetails).not.toMatch(/state_name|determineGstType/);
+    expect(invoiceCommand).not.toMatch(/state_name|deliveryAddress\.state\b/);
+    expect(orderLogic).not.toMatch(/customer\?\.(?:id|name)|customer\.(?:address|state|pincode)/);
+    expect(challanLogic).not.toMatch(/customer\.(?:phone|mobile|contact_number|name)\b/);
+    expect(sharedLogic).not.toMatch(/customer\.(?:address|state|pincode)\b/);
+    expect(sharedLogic).not.toContain('Date.now()');
+    expect(itemTransform).not.toContain('Date.now()');
   });
 });

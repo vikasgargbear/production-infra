@@ -14,7 +14,6 @@ import { useSalesTransaction } from '../../hooks/useSalesTransaction';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useChallanSave } from './useChallanSave';
-import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import {
     Challan,
     ChallanItem,
@@ -146,38 +145,19 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 delivery_pincode: '',
                 delivery_contact_person: '',
                 delivery_contact_phone: '',
-                gst_type: 'CGST/SGST'
             }));
             return;
         }
 
-        // Challan-specific: handle delivery address based on sameAsBilling
-        const address = customer.address || customer.address_line1 || '';
-        const city = customer.city || '';
-        const state = customer.state || customer.state || '';
-        const pincode = customer.pincode || customer.pincode || customer.pincode || '';
-        const phone = customer.phone || customer.primary_phone || customer.mobile || customer.contact_number || '';
-
-        setChallan(prev => {
-            const deliveryState = sameAsBilling ? state : prev.delivery_state;
-            return {
-                ...prev,
-                customer_details: { ...customer, address, city, state, pincode, phone } as CustomerDetails,
-                delivery_address: sameAsBilling ? address : prev.delivery_address,
-                delivery_city: sameAsBilling ? city : prev.delivery_city,
-                delivery_state: deliveryState,
-                delivery_pincode: sameAsBilling ? pincode : prev.delivery_pincode,
-                delivery_contact_person: sameAsBilling ? (customer.contact_person || customer.customer_name || customer.name || '') : prev.delivery_contact_person,
-                delivery_contact_phone: sameAsBilling ? phone : prev.delivery_contact_phone,
-                gst_type: determineGstTypeForSupply(
-                    companyInfo?.state,
-                    deliveryState || state,
-                    companyInfo?.gst_number,
-                    customer.gst_number
-                )
-            };
-        });
-    }, [baseHandleCustomerSelect, companyInfo, sameAsBilling, setChallan]);
+        // Dispatch posting is sourced from an approved order and does not infer
+        // a tax treatment or delivery address from compatibility customer fields.
+        setChallan(prev => ({
+            ...prev,
+            customer_details: customer,
+            delivery_contact_person: sameAsBilling ? customer.customer_name || '' : prev.delivery_contact_person,
+            delivery_contact_phone: sameAsBilling ? customer.primary_phone || '' : prev.delivery_contact_phone,
+        }));
+    }, [baseHandleCustomerSelect, sameAsBilling, setChallan]);
 
     // ==================== HANDLE APPROVED ORDER IMPORT ====================
     const handleImport = useCallback(async (importData: ImportData) => {
@@ -236,7 +216,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
 
     // ==================== SHARE / PRINT ====================
     const shareOnWhatsApp = useCallback(() => {
-        const phone = String(createdChallanData?.customer_details?.phone ?? '').replace(/\D/g, '');
+        const phone = String(createdChallanData?.customer_details?.primary_phone ?? '').replace(/\D/g, '');
         if (!createdChallanData || !phone) {
             setMessage('A posted dispatch and customer phone are required. Nothing was opened or sent.');
             setMessageType('error');

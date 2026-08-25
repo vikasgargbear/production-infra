@@ -25,18 +25,8 @@ export type AllocationSourceKind = 'direct_issue' | 'dispatch_allocation';
 export interface CustomerDetails {
     customer_id?: string | number;
     customer_name?: string;
-    name?: string;
-    address?: string;
-    address_line1?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
     gst_number?: string;
-    phone?: string;
     primary_phone?: string;
-    mobile?: string;
-    contact_number?: string;
-    contact_person?: string;
 }
 
 // ==================== CHALLAN ITEM ====================
@@ -163,7 +153,6 @@ export interface Challan {
     total_amount: EditableDecimalValue;
     taxable_amount?: EditableDecimalValue;
     total_tax_amount?: EditableDecimalValue;
-    gst_type: 'CGST/SGST' | 'IGST';
 
     // Notes
     notes: string;
@@ -311,6 +300,5 @@ export const getInitialChallan = (): Challan => ({
     total_weight: 0,
     total_quantity: 0,
     total_amount: 0,
-    gst_type: 'CGST/SGST',
     notes: ''
 });

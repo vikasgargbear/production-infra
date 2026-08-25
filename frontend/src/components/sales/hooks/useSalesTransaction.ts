@@ -16,10 +16,11 @@ import {
     normalizeAuthoritativeDecimal,
     normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
+import { clientUuid } from '../../../utils/clientUuid';
 
 // ==================== CONFIGURATION ====================
 
-export interface UseSalesTransactionConfig<TDoc, TCustomer extends BaseCustomer, TItem extends BaseLineItem> {
+export interface UseSalesTransactionConfig<TDoc> {
     /** Initial document state */
     getInitialDocument: () => TDoc;
     /** Document type identifier */
@@ -65,7 +66,7 @@ export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer,
     updateItem: (index: number, field: string, value: unknown) => void;
     removeItem: (indexOrId: number | string) => void;
     recalculateTotals: (items: TItem[]) => { totalQuantity: number; totalAmount: number };
-    fetchCustomerAddress: (customerId: string | number) => Promise<{ address: string; city: string; state: string; pincode: string } | null>;
+    fetchCustomerAddress: (customerId: string | number) => Promise<{ address: string; city: string; stateCode: string; pincode: string } | null>;
 
     // Utilities
     resetDocument: () => void;
@@ -78,10 +79,10 @@ export function useSalesTransaction<
     TCustomer extends BaseCustomer = BaseCustomer,
     TItem extends BaseLineItem = BaseLineItem
 >(
-    config: UseSalesTransactionConfig<TDoc, TCustomer, TItem>
+    config: UseSalesTransactionConfig<TDoc>
 ): UseSalesTransactionReturn<TDoc, TCustomer, TItem> {
 
-    const { getInitialDocument, documentType, priceField = 'sale_price', includeGst = false, onClose } = config;
+    const { getInitialDocument, documentType, priceField = 'sale_price', includeGst = false } = config;
 
     // ==================== STATE ====================
     const [document, setDocument] = useState<TDoc>(getInitialDocument());
@@ -89,7 +90,7 @@ export function useSalesTransaction<
     const [employees, setEmployees] = useState<BaseEmployee[]>([]);
     const [selectedMR, setSelectedMR] = useState<BaseEmployee | null>(null);
     const [loadingEmployees, setLoadingEmployees] = useState(false);
-    const [saving, setSaving] = useState(false);
+    const saving = false;
     const [fetchingAddress, setFetchingAddress] = useState(false);
 
     // ==================== REFS ====================
@@ -118,18 +119,16 @@ export function useSalesTransaction<
         try {
             const response = await apiClient.get(`/customers/${customerId}/addresses`);
 
-            if (response.data?.success && response.data.data?.length > 0) {
-                const addresses = response.data.data;
-                const billingAddr = addresses.find((addr: any) => addr.address_type === 'billing' && addr.is_default);
-                const shippingAddr = addresses.find((addr: any) => addr.address_type === 'shipping' && addr.is_default);
-                const anyDefaultAddr = addresses.find((addr: any) => addr.is_default);
-                const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-
+            if (response.data?.success && Array.isArray(response.data.data)) {
+                const billingAddress = response.data.data.find((address: Record<string, unknown>) =>
+                    address.address_type === 'billing' && address.is_default === true);
+                const stateCode = String(billingAddress?.state_code ?? '').trim();
+                if (!billingAddress || !/^\d{2}$/.test(stateCode)) return null;
                 return {
-                    address: preferredAddr.address_line1 || '',
-                    city: preferredAddr.city || '',
-                    state: preferredAddr.state || preferredAddr.state || '',
-                    pincode: preferredAddr.pincode || ''
+                    address: String(billingAddress.address_line1 ?? '').trim(),
+                    city: String(billingAddress.city ?? '').trim(),
+                    stateCode,
+                    pincode: String(billingAddress.pincode ?? '').trim(),
                 };
             }
             return null;
@@ -164,31 +163,21 @@ export function useSalesTransaction<
             return;
         }
 
-        let address = customer.address || customer.address_line1 || '';
-        let city = customer.city || '';
-        let state = customer.state || customer.state || '';
-        let pincode = customer.pincode || customer.pincode || customer.pincode || '';
+        setFetchingAddress(true);
+        const addressData = customer.customer_id
+            ? await fetchCustomerAddress(customer.customer_id)
+            : null;
+        setFetchingAddress(false);
 
-        // Fetch address if not available locally
-        if (!address && !city && customer.customer_id) {
-            setFetchingAddress(true);
-            const addressData = await fetchCustomerAddress(customer.customer_id);
-            if (addressData) {
-                address = addressData.address;
-                city = addressData.city;
-                state = addressData.state;
-                pincode = addressData.pincode;
-            }
-            setFetchingAddress(false);
-        }
-
-        const billingAddressParts = [address, city, state, pincode].filter(p => p && p.trim());
+        const billingAddressParts = addressData
+            ? [addressData.address, addressData.city, addressData.stateCode, addressData.pincode]
+            : [];
         const billingAddress = billingAddressParts.join(', ');
 
         setDocument(prev => ({
             ...prev,
-            customer_id: customer.customer_id || '',
-            customer_name: customer.customer_name || '',
+            customer_id: customer.customer_id ?? '',
+            customer_name: customer.customer_name ?? '',
             billing_address: billingAddress
         } as TDoc));
 
@@ -229,7 +218,7 @@ export function useSalesTransaction<
             );
 
             const newItem: TItem = {
-                id: Date.now(),
+                id: clientUuid(),
                 product_id: product.product_id,
                 product_name: product.product_name,
                 hsn_code: product.hsn_code,
@@ -255,7 +244,7 @@ export function useSalesTransaction<
                 }
             }, 150);
         }
-    }, [document.items, priceField, includeGst]);
+    }, [document.items, documentType, priceField, includeGst]);
 
     // ==================== UPDATE ITEM ====================
     const updateItem = useCallback((index: number, field: string, value: unknown) => {
@@ -264,8 +253,7 @@ export function useSalesTransaction<
                 const updatedItem = { ...item, [field]: value };
 
                 // Recalculate line total if quantity or price changes
-                if (field === 'quantity' || field === 'unit_price' || field === 'unit_price') {
-                    const quantity = parseFloat(field === 'quantity' ? String(value) : String(item.quantity)) || 0;
+                if (field === 'quantity' || field === 'unit_price') {
                     const unitPrice = parseFloat(field === 'unit_price' ? String(value) : String(item.unit_price)) || 0;
                     updatedItem.unit_price = unitPrice;
                 }

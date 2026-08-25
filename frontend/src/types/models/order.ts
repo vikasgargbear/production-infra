@@ -83,7 +83,7 @@ export interface Address {
     address_line2?: string;
     city?: string;
     state?: string;
-    state_name?: string;
+    state_code?: string;
     pincode?: string;
     country?: string;
 }

@@ -12,19 +12,20 @@ const text = (value: unknown): string => String(value ?? '').trim();
 export const applySelectedDeliveryAddress = (
   invoice: Invoice,
   address: SavedAddress,
-  stateName: string,
-  gstType: Invoice['gst_type'],
 ): Invoice => {
+  const stateCode = text(address.state_code);
+  if (!/^\d{2}$/.test(stateCode)) {
+    throw new Error('The selected delivery address is missing its canonical state code.');
+  }
   const normalizedAddress = {
     ...address,
-    state: stateName,
-    state_name: stateName,
+    state_code: stateCode,
   };
   const displayAddress = [
     address.address_line1,
     address.address_line2,
     address.city,
-    stateName,
+    stateCode,
     address.pincode,
   ].map(text).filter(Boolean).join(', ');
 
@@ -34,6 +35,7 @@ export const applySelectedDeliveryAddress = (
     billing_address_data: invoice.billing_address_data || normalizedAddress,
     shipping_address: displayAddress,
     shipping_address_data: normalizedAddress,
-    gst_type: gstType,
+    // Tax treatment is server-owned and remains unresolved until preview.
+    gst_type: '',
   } as Invoice;
 };

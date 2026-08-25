@@ -16,6 +16,7 @@ import {
     normalizeAuthoritativeDecimal,
     normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
+import { clientUuid } from '../../../utils/clientUuid';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const moneyOptions = { scale: 4, maximumWholeDigits: 16 } as const;
@@ -151,7 +152,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
     }
 
     const baseItem: BaseLineItem = {
-        id: Date.now(),
+        // Draft row identity is UI-only; never derive it from the browser clock.
+        id: clientUuid(),
         product_id: productId,
         product_name: productName,
         batch_id: batchId ?? undefined,

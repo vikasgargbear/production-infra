@@ -3,7 +3,6 @@ import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { FreeSupplyTaxTreatment, InvoiceItem } from '../types/invoiceTypes';
 import type { CompanyInfo } from '../../../../types/common/company.types';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
-import { indianStateCode } from '../../../../utils/indianStates';
 import {
     addExactDecimals,
     compareExactDecimals,
@@ -143,13 +142,11 @@ export function invoicePlaceOfSupplyStateCode(
 ): string {
     const deliveryAddress = invoice.shipping_address_data as {
         state_code?: string;
-        state_name?: string;
-        state?: string;
     } | undefined;
     if (deliveryAddress) {
-        return indianStateCode(
-            deliveryAddress.state_code || deliveryAddress.state_name || deliveryAddress.state,
-        );
+        return /^\d{2}$/.test(String(deliveryAddress.state_code || '').trim())
+            ? String(deliveryAddress.state_code).trim()
+            : '';
     }
     if (String(invoice.shipping_address || '').trim() !== String(invoice.billing_address || '').trim()) {
         return '';

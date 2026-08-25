@@ -4,10 +4,6 @@ import { FileText, Plus } from 'lucide-react';
 // Global Components
 import { ModuleHeader, AddressForm, DocumentFooter } from '../../../global';
 
-// GST Type Determination
-import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
-import { useCompany } from '../../../../contexts/CompanyContext';
-import { indianStateName } from '../../../../utils/indianStates';
 import { applySelectedDeliveryAddress } from '../utils/invoiceAddressSelection';
 import { compareExactDecimals, formatExactCurrency } from '../../../../utils/exactDecimal';
 
@@ -41,7 +37,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     vehicleRef,
     deliveryChargesRef,
 }) => {
-    const { companyInfo } = useCompany();
     const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
     const canonicalFinalAmount = invoice.totals?.final_amount;
     const canonicalItemDiscount = invoice.totals?.total_discount;
@@ -114,21 +109,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         }}
                                         onSave={(addressData: unknown) => {
                                             setAddAddressMode(false);
-                                            // Uses global GST utility — delivery address state = Place of Supply (IGST Act Section 10)
-                                            const addrState = indianStateName(
-                                                (addressData as any)?.state_code ||
-                                                (addressData as any)?.state ||
-                                                (addressData as any)?.state_name,
-                                            );
-                                            const gstType = determineGstTypeForSupply(
-                                                companyInfo?.state, addrState,
-                                                companyInfo?.gst_number, selectedCustomer?.gst_number
-                                            );
                                             setInvoice(prev => applySelectedDeliveryAddress(
                                                 prev,
                                                 addressData as Record<string, unknown>,
-                                                addrState,
-                                                gstType,
                                             ));
                                         }}
                                     />

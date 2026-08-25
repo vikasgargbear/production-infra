@@ -6,7 +6,6 @@ import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { Customer } from '../../../../types/models/customer';
-import { determineGstType } from '../../../gst/utils/gstCalculations';
 
 // Shared Types - Single Source of Truth
 import {
@@ -82,7 +81,7 @@ export interface Invoice {
     shipping_address: string;
     billing_address_data?: CustomerAddress;
     shipping_address_data?: CustomerAddress;
-    gst_type: GstType;
+    gst_type: GstType | '';
     delivery_type: 'PICKUP' | 'DELIVERY' | 'COURIER';
     transport_company: string;
     vehicle_number: string;
@@ -183,7 +182,9 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     customer_details: null,
     billing_address: '',
     shipping_address: '',
-    gst_type: 'CGST/SGST',
+    // The canonical calculation preview resolves the tax treatment from the
+    // branch, customer, document date, and reviewed tax registration facts.
+    gst_type: '',
     delivery_type: 'PICKUP',
     transport_company: '',
     vehicle_number: '',
@@ -407,61 +408,27 @@ export const useInvoiceLogic = (
                 shipping_address: '',
                 billing_address_data: undefined,
                 shipping_address_data: undefined,
-                gst_type: 'CGST/SGST' // Reset to default when no customer
+                gst_type: '',
             }));
             return;
         }
 
         setSelectedCustomer(customer);
 
-        // PRELIMINARY GST type from customer registration state / GSTIN
-        // This is a temporary value — gets OVERRIDDEN by determineGstTypeForSupply()
-        // when delivery address is selected in InvoiceDetailsStep (Step 2)
-        const customerState = (customer as any).state ||
-            customer.billing_address?.state ||
-            customer.address_info?.billing_state || '';
-        const gstType = determineGstType(
-            companyInfo?.state,
-            customerState,
-            (companyInfo as any)?.gst_number,
-            customer.gst_number
-        );
-
-        const billingAddressData: CustomerAddress = {
-            address_line1: customer.address_info?.billing_address || customer.billing_address?.street || '',
-            city: customer.address_info?.billing_city || customer.billing_address?.city || '',
-            state: customer.address_info?.billing_state || customer.billing_address?.state || '',
-            pincode: customer.address_info?.billing_pincode || customer.billing_address?.pincode || '',
-            country: 'India',
-        };
-        const shippingAddressData: CustomerAddress = {
-            address_line1: customer.address_info?.shipping_address || customer.shipping_address?.street || billingAddressData.address_line1,
-            city: customer.address_info?.shipping_city || customer.shipping_address?.city || billingAddressData.city,
-            state: customer.address_info?.shipping_state || customer.shipping_address?.state || billingAddressData.state,
-            pincode: customer.address_info?.shipping_pincode || customer.shipping_address?.pincode || billingAddressData.pincode,
-            country: 'India',
-        };
-        const addressString = (address: CustomerAddress): string => [
-            address.address_line1,
-            address.city,
-            address.state,
-            address.pincode,
-        ].filter(Boolean).join(', ');
-        const billingAddress = addressString(billingAddressData);
-        const shippingAddress = addressString(shippingAddressData);
-
+        // Canonical customer search does not project a saved address. AddressForm
+        // loads the reviewed UUID-scoped address projection after selection.
         setInvoice(prev => ({
             ...prev,
             customer_details: customer,
-            billing_address: billingAddress,
-            billing_address_data: billingAddressData,
-            shipping_address: sameAsShipping ? (shippingAddress || billingAddress) : prev.shipping_address,
-            shipping_address_data: sameAsShipping ? shippingAddressData : prev.shipping_address_data,
-            gst_type: gstType // CRITICAL: Set GST type based on state comparison
+            billing_address: '',
+            billing_address_data: undefined,
+            shipping_address: sameAsShipping ? '' : prev.shipping_address,
+            shipping_address_data: sameAsShipping ? undefined : prev.shipping_address_data,
+            gst_type: '',
         }));
 
         // Note: Toast removed to prevent duplicates (parent component may also show selection feedback)
-    }, [sameAsShipping, companyInfo]);
+    }, [sameAsShipping]);
 
     const handleAddItem = useCallback(async (product: ProductInput) => {
         if (!product) return;
