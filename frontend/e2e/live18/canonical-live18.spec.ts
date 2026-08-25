@@ -123,7 +123,7 @@ async function responseJson(response: APIResponse): Promise<Record<string, any>>
   return text ? JSON.parse(text) as Record<string, any> : {};
 }
 
-function renderReadbackPath(contract: OperationContract, commandId: string, resourceId: string): string {
+function resolveReadbackPath(contract: OperationContract, commandId: string, resourceId: string): string {
   if (!contract.rest_readback) throw new Error(`${contract.id} lacks REST readback.`);
   return contract.rest_readback
     .replace('{command_request_id}', commandId)
@@ -195,7 +195,7 @@ async function runOperation(
       expect(executions, `${contract.id} must execute exactly once through visible UI`).toHaveLength(1);
       const resourceId = requireUuid(findDeep(executions[0].responseBody, 'resource_id'), 'resource UUID');
 
-      const readbackPath = renderReadbackPath(contract, commandId, resourceId);
+      const readbackPath = resolveReadbackPath(contract, commandId, resourceId);
       const readback = await responseJson(await requesterApi.get(readbackPath));
       assertExactScalars(readback);
       expect(JSON.stringify(readback)).toContain(resourceId);
