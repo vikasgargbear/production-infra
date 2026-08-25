@@ -266,7 +266,7 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
         "zero_rated_payment_mode": "not_applicable",
         "customer_account_id": str(uuid4()),
         "delivery_address_id": delivery_address_id,
-        "delivery_address_row_version": 7,
+        "delivery_address_row_version": "7",
         "lines": [
             {
                 "product_id": str(uuid4()),
@@ -317,7 +317,7 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
     )
     assert calls[1][2]["json"] == arguments
     assert calls[1][2]["json"]["delivery_address_id"] == delivery_address_id
-    assert calls[1][2]["json"]["delivery_address_row_version"] == 7
+    assert calls[1][2]["json"]["delivery_address_row_version"] == "7"
     assert access.token not in json.dumps(calls)
 
 
