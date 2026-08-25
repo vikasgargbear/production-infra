@@ -1855,6 +1855,7 @@ def _command_row(command_request_id):
     return {
         "id": command_request_id,
         "operation": "sales.invoice.prepare",
+        "capability_code": "sales.invoice.prepare",
         "status": "prepared",
         "preview_hash": bytes.fromhex("ab" * 32),
         "expires_at": now + timedelta(minutes=10),
@@ -3540,6 +3541,38 @@ def test_status_reauthorizes_and_reads_canonical_evidence_in_one_transaction():
     }
     assert "activate_context(:auth_user_id, :org_id)" in session.executions[1][0]
     assert ":membership_id" not in session.executions[1][0]
+
+
+def test_readback_resource_preserves_exact_capability_and_result_identity():
+    branch_id = uuid4()
+    command_request_id = uuid4()
+    resource_id = uuid4()
+    command_row = {
+        **_command_row(command_request_id),
+        "operation": "finance.payment.post",
+        "capability_code": "finance.customer_receipt.prepare",
+        "status": "succeeded",
+        "result_resource_type": "payment",
+        "result_resource_id": resource_id,
+    }
+    session = FakeSession(authority_branch=branch_id, command_row=command_row)
+    context = _context(branch_ids=(branch_id,))
+
+    result = SqlAlchemyOperatorActionService(lambda: session).get_succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+    )
+
+    assert result == {
+        "command_request_id": command_request_id,
+        "capability_code": "finance.customer_receipt.prepare",
+        "command_type": "finance.payment.post",
+        "status": "succeeded",
+        "resource_type": "payment",
+        "resource_id": resource_id,
+    }
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert "request.capability_code" in session.executions[-1][0]
 
 
 def test_approval_calls_only_reviewed_command_in_one_transaction():

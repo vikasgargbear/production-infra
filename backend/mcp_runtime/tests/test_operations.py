@@ -11,10 +11,20 @@ from aasopharma_mcp.operations import (
     AuthorizationDenied,
     OPERATIONS,
     OPERATOR_OPERATIONS,
+    OPERATOR_READBACK_TOOLS,
+    READ_ONLY_OPERATOR_KINDS,
     OperationGateway,
     UpstreamContractError,
 )
 from conftest import settings
+
+
+def test_readback_tool_registry_is_the_single_route_and_grant_authority() -> None:
+    assert {
+        tool_name: (operation.kind, OPERATOR_READBACK_TOOLS[tool_name][1])
+        for tool_name, operation in OPERATOR_OPERATIONS.items()
+        if operation.kind in READ_ONLY_OPERATOR_KINDS - {"status"}
+    } == dict(OPERATOR_READBACK_TOOLS)
 
 
 class Response:
@@ -89,10 +99,9 @@ def _operator_grant(access: AccessToken, operation_name: str, command_id=None) -
         "client_id": access.client_id,
         "operation_key": operation.operation_key,
         "capability_code": operation.operation_key,
-        "operation_mode": "read" if operation.kind in {
-            "status", "bank_reconciliation_readback", "supplier_advance_readback",
-            "readback",
-        } else "write",
+        "operation_mode": (
+            "read" if operation.kind in READ_ONLY_OPERATOR_KINDS else "write"
+        ),
         "permission_code": "automation.command.view",
         "organization_id": access.claims["organization_id"],
         "membership_id": str(uuid4()),
@@ -182,7 +191,14 @@ async def test_readiness_requires_the_app_owned_grant_authority() -> None:
         ("erp_operation_execute", "/execute", "POST"),
         ("erp_operation_status_get", "", "GET"),
         ("erp_bank_reconciliation_get", "/bank-reconciliation-readback", "GET"),
+        ("erp_sales_dispatch_readback", "/sales-dispatch-readback", "GET"),
+        ("erp_sales_return_readback", "/sales-return-readback", "GET"),
+        ("erp_purchase_return_readback", "/purchase-return-readback", "GET"),
+        ("erp_customer_receipt_readback", "/customer-receipt-readback", "GET"),
+        ("erp_supplier_payment_readback", "/supplier-payment-readback", "GET"),
         ("erp_supplier_advance_readback", "/supplier-advance-readback", "GET"),
+        ("erp_inventory_transfer_readback", "/inventory-transfer-readback", "GET"),
+        ("erp_inventory_adjustment_readback", "/inventory-adjustment-readback", "GET"),
         ("erp_expense_claim_readback", "/expense-claim-readback", "GET"),
     ),
 )

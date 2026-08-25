@@ -212,7 +212,8 @@ _AUTHORIZE_SQL = text(
 
 _COMMAND_STATUS_SQL = text(
     """
-    SELECT request.id, request.operation, request.status, request.preview_hash,
+    SELECT request.id, request.operation, request.capability_code,
+           request.status, request.preview_hash,
            request.expires_at, request.completed_at,
            request.result_resource_type, request.result_resource_id,
            request.failure_code, request.failure_message,
@@ -4296,6 +4297,50 @@ class SqlAlchemyOperatorActionService:
                     failure=failure,
                     audit_references=audit_references,
                 )
+
+    def get_succeeded_resource(
+        self,
+        *,
+        command_request_id: UUID,
+        context: ActionContext,
+    ) -> Mapping[str, Any]:
+        """Return the exact succeeded command identity for a canonical readback."""
+
+        binding = self._bindings["automation.command.status.get"]
+        if not binding.available:
+            self._unavailable(binding.operation_key)
+        policy = ActionPolicy(
+            operation_key="automation.command.status.get",
+            permission="automation.command.view",
+            risk_class="read_only",
+            schema_profile="command_status",
+            approval_policy="none",
+            branch_fields=(),
+        )
+        with self._session_factory() as session:
+            with session.begin():
+                self._authorize(session, context, policy)
+                params = {
+                    "org_id": context.organization_id,
+                    "command_request_id": command_request_id,
+                    "agent_grant_id": context.agent_grant_id,
+                    "membership_id": context.membership_id,
+                }
+                rows = _mapping_rows(session.execute(_COMMAND_STATUS_SQL, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.SCOPE_DENIED,
+                        "Canonical command is unavailable in this delegation",
+                    )
+                row = rows[0]
+                return {
+                    "command_request_id": row["id"],
+                    "capability_code": row["capability_code"],
+                    "command_type": row["operation"],
+                    "status": row["status"],
+                    "resource_type": row["result_resource_type"],
+                    "resource_id": row["result_resource_id"],
+                }
 
     def get_bank_reconciliation_readback(
         self,

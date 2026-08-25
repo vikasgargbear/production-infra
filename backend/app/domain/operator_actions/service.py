@@ -63,6 +63,10 @@ class OperatorActionService(Protocol):
         context: ActionContext,
     ) -> CommandState: ...
 
+    def get_succeeded_resource(
+        self, *, command_request_id: UUID, context: ActionContext
+    ) -> Mapping[str, Any]: ...
+
     def get_bank_reconciliation_readback(
         self, *, command_request_id: UUID, context: ActionContext
     ) -> Mapping[str, Any]: ...
@@ -102,6 +106,9 @@ class UnavailableOperatorActionService:
         return self._unavailable("automation.command.execute")
 
     def get_status(self, *, command_request_id, context):
+        return self._unavailable("automation.command.status.get")
+
+    def get_succeeded_resource(self, *, command_request_id, context):
         return self._unavailable("automation.command.status.get")
 
     def get_bank_reconciliation_readback(self, *, command_request_id, context):

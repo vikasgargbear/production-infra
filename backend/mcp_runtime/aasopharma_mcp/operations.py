@@ -140,21 +140,52 @@ OPERATOR_OPERATIONS.update(
             "erp_operation_status_get", "automation.command.status.get",
             SHARED_ACTION_SCHEMAS["erp_operation_status_get"], "status",
         ),
-        "erp_bank_reconciliation_get": OperatorOperation(
-            "erp_bank_reconciliation_get", "automation.command.status.get",
-            SHARED_ACTION_SCHEMAS["erp_bank_reconciliation_get"], "bank_reconciliation_readback",
-        ),
-        "erp_supplier_advance_readback": OperatorOperation(
-            "erp_supplier_advance_readback", "automation.command.status.get",
-            SHARED_ACTION_SCHEMAS["erp_supplier_advance_readback"],
-            "supplier_advance_readback",
-        ),
-        "erp_expense_claim_readback": OperatorOperation(
-            "erp_expense_claim_readback", "automation.command.status.get",
-            SHARED_ACTION_SCHEMAS["erp_expense_claim_readback"], "readback",
-        ),
     }
 )
+
+OPERATOR_READBACK_TOOLS: Mapping[str, tuple[str, str]] = {
+    "erp_bank_reconciliation_get": (
+        "bank_reconciliation_readback", "bank-reconciliation-readback"
+    ),
+    "erp_sales_dispatch_readback": (
+        "sales_dispatch_readback", "sales-dispatch-readback"
+    ),
+    "erp_sales_return_readback": ("sales_return_readback", "sales-return-readback"),
+    "erp_purchase_return_readback": (
+        "purchase_return_readback", "purchase-return-readback"
+    ),
+    "erp_customer_receipt_readback": (
+        "customer_receipt_readback", "customer-receipt-readback"
+    ),
+    "erp_supplier_payment_readback": (
+        "supplier_payment_readback", "supplier-payment-readback"
+    ),
+    "erp_supplier_advance_readback": (
+        "supplier_advance_readback", "supplier-advance-readback"
+    ),
+    "erp_inventory_transfer_readback": (
+        "inventory_transfer_readback", "inventory-transfer-readback"
+    ),
+    "erp_inventory_adjustment_readback": (
+        "inventory_adjustment_readback", "inventory-adjustment-readback"
+    ),
+    "erp_expense_claim_readback": ("readback", "expense-claim-readback"),
+}
+OPERATOR_OPERATIONS.update(
+    {
+        tool_name: OperatorOperation(
+            tool_name,
+            "automation.command.status.get",
+            SHARED_ACTION_SCHEMAS[tool_name],
+            kind,
+        )
+        for tool_name, (kind, _suffix) in OPERATOR_READBACK_TOOLS.items()
+    }
+)
+OPERATOR_READBACK_SUFFIXES: Mapping[str, str] = {
+    kind: suffix for kind, suffix in OPERATOR_READBACK_TOOLS.values()
+}
+READ_ONLY_OPERATOR_KINDS = frozenset(("status", *OPERATOR_READBACK_SUFFIXES))
 
 
 def published_operator_action_tool_names() -> tuple[str, ...]:
@@ -281,10 +312,7 @@ class OperationGateway:
         claims, organization_id = _oauth_identity(access)
         operation_mode = (
             "read"
-            if operation.kind in {
-                "status", "bank_reconciliation_readback", "supplier_advance_readback",
-                "readback",
-            }
+            if operation.kind in READ_ONLY_OPERATOR_KINDS
             else "write"
         )
         payload = {
@@ -387,17 +415,10 @@ class OperationGateway:
             method = "GET"
             path = f"/api/internal/mcp/commands/{command_request_id}/review"
             payload = None
-        elif operation.kind == "bank_reconciliation_readback":
+        elif operation.kind in OPERATOR_READBACK_SUFFIXES:
             method = "GET"
-            path = f"/api/internal/mcp/commands/{command_request_id}/bank-reconciliation-readback"
-            payload = None
-        elif operation.kind == "supplier_advance_readback":
-            method = "GET"
-            path = f"/api/internal/mcp/commands/{command_request_id}/supplier-advance-readback"
-            payload = None
-        elif operation.kind == "readback":
-            method = "GET"
-            path = f"/api/internal/mcp/commands/{command_request_id}/expense-claim-readback"
+            suffix = OPERATOR_READBACK_SUFFIXES[operation.kind]
+            path = f"/api/internal/mcp/commands/{command_request_id}/{suffix}"
             payload = None
         else:
             method = "GET"

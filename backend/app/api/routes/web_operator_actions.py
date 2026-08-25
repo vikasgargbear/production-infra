@@ -648,6 +648,20 @@ def inventory_adjustment_readback(
     context = _command_context(
         db, user, "automation.command.execute", command_request_id
     )
+    return load_inventory_adjustment_readback(
+        command_request_id=command_request_id,
+        context=context,
+        db=db,
+    )
+
+
+def load_inventory_adjustment_readback(
+    *,
+    command_request_id: UUID,
+    context: ActionContext,
+    db: Session,
+) -> InventoryAdjustmentReadback:
+    """Load the shared exact cycle-count readback after transport authorization."""
     rows = db.execute(
         text(
             """
@@ -775,6 +789,26 @@ def inventory_adjustment_readback(
             )
             for row in line_values
         ],
+    )
+
+
+def activate_inventory_adjustment_readback_context(
+    *, db: Session, context: ActionContext, command_request_id: UUID
+) -> None:
+    """Activate the verified delegation before a non-web transport readback."""
+
+    db.execute(
+        text(
+            """
+            SELECT erp_security.activate_context(:auth_user_id, :org_id),
+                   pg_catalog.set_config('app.request_id', :request_id, true)
+            """
+        ),
+        {
+            "auth_user_id": context.auth_user_id,
+            "org_id": context.organization_id,
+            "request_id": str(command_request_id),
+        },
     )
 
 

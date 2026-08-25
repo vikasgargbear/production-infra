@@ -46,7 +46,14 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
     "erp_operation_status_get": "Read immutable status, result, failure, and audit references for one authorized command.",
     "erp_bank_reconciliation_get": "Read authoritative bank-statement, posted-journal, audit, and outbox evidence for one succeeded reconciliation command.",
+    "erp_sales_dispatch_readback": "Read one posted sales dispatch with its exact order, batch, inventory-document, stock-ledger, quantity, and value evidence.",
+    "erp_sales_return_readback": "Read one posted sales return with its exact invoice, dispatch allocation, quarantine receipt, adjustment-note, allocation, and tax evidence.",
+    "erp_purchase_return_readback": "Read one posted purchase return with its exact supplier-invoice, goods-receipt, inventory issue, adjustment-note, allocation, and tax evidence.",
+    "erp_customer_receipt_readback": "Read one posted customer receipt with its exact receivable allocations and balanced settlement journal.",
+    "erp_supplier_payment_readback": "Read one posted supplier payment with its exact payable allocations, residual open items, withholding identity, and balanced settlement journal.",
     "erp_supplier_advance_readback": "Read one posted supplier advance with its exact purchase-order-line allocation, prepayment open item, withholding identity, and balanced journal.",
+    "erp_inventory_transfer_readback": "Read one posted inventory transfer with its exact paired source and destination stock-ledger evidence and unchanged value.",
+    "erp_inventory_adjustment_readback": "Read one posted cycle-count gain with its exact count, stock ledger, valuation journal, and accounting-event evidence.",
     "erp_expense_claim_readback": "Read a posted expense claim with approved lines, verified receipt hashes, balanced journal totals, and accounting-event identity.",
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
@@ -1155,7 +1162,14 @@ SHARED_ACTION_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_operation_execute": EXECUTE_INPUT_SCHEMA,
     "erp_operation_status_get": STATUS_INPUT_SCHEMA,
     "erp_bank_reconciliation_get": STATUS_INPUT_SCHEMA,
+    "erp_sales_dispatch_readback": STATUS_INPUT_SCHEMA,
+    "erp_sales_return_readback": STATUS_INPUT_SCHEMA,
+    "erp_purchase_return_readback": STATUS_INPUT_SCHEMA,
+    "erp_customer_receipt_readback": STATUS_INPUT_SCHEMA,
+    "erp_supplier_payment_readback": STATUS_INPUT_SCHEMA,
     "erp_supplier_advance_readback": STATUS_INPUT_SCHEMA,
+    "erp_inventory_transfer_readback": STATUS_INPUT_SCHEMA,
+    "erp_inventory_adjustment_readback": STATUS_INPUT_SCHEMA,
     "erp_expense_claim_readback": STATUS_INPUT_SCHEMA,
 }
 

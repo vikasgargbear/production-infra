@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -31,11 +32,37 @@ from ....domain.operator_actions import (
     validate_prepare_payload_semantics,
 )
 from .mcp_agent_grants import _internal_auth, bearer
+from ..canonical_erp_reads import (
+    CanonicalCustomerReceiptReadback,
+    canonical_customer_receipt_readback,
+)
+from ..canonical_inventory_transfers import (
+    TransferReadbackResponse,
+    get_transfer_readback,
+)
+from ..canonical_return_reads import (
+    PostedReturnReadback,
+    purchase_return_readback as canonical_purchase_return_readback,
+    sales_return_readback as canonical_sales_return_readback,
+)
+from ..canonical_sales_chain_reads import (
+    CanonicalSalesDispatchReadback,
+    sales_dispatch_acceptance_readback,
+)
 from ..canonical_supplier_advance_reads import (
     PostedSupplierAdvanceResponse,
     posted_supplier_advance,
 )
-from ..web_operator_actions import ExpenseClaimReadback
+from ..canonical_supplier_payment_reads import (
+    PostedSupplierPaymentResponse,
+    posted_supplier_payment,
+)
+from ..web_operator_actions import (
+    ExpenseClaimReadback,
+    InventoryAdjustmentReadback,
+    activate_inventory_adjustment_readback_context,
+    load_inventory_adjustment_readback,
+)
 
 
 router = APIRouter(
@@ -609,6 +636,269 @@ def bank_reconciliation_readback(
     except OperatorActionError as exc:
         _raise_action_error(exc)
     return BankReconciliationReadback(**dict(row))
+
+
+def _projection_user(context: ActionContext) -> dict[str, Any]:
+    """Build signed-claim projection input from the already verified delegation."""
+
+    return {
+        "org_id": str(context.organization_id),
+        "auth_user_id": str(context.auth_user_id),
+        "user_id": str(context.user_id),
+        "is_admin": context.organization_scope,
+        "data_access_level": (
+            "organization" if context.organization_scope else "branch"
+        ),
+        "branch_ids": [str(value) for value in context.branch_ids],
+    }
+
+
+@dataclass(frozen=True)
+class CanonicalReadbackContract:
+    """Reviewed command-to-resource binding for one canonical readback."""
+
+    capability_code: str
+    command_type: str
+    resource_type: str
+
+
+CORE_READBACK_CONTRACTS = {
+    "sales_dispatch": CanonicalReadbackContract(
+        "sales.dispatch.prepare", "sales.dispatch.post", "dispatch"
+    ),
+    "sales_return": CanonicalReadbackContract(
+        "sales.return.prepare", "sales.return.post", "sales_return"
+    ),
+    "purchase_return": CanonicalReadbackContract(
+        "procurement.purchase_return.prepare",
+        "procurement.purchase_return.post",
+        "purchase_return",
+    ),
+    "customer_receipt": CanonicalReadbackContract(
+        "finance.customer_receipt.prepare", "finance.payment.post", "payment"
+    ),
+    "supplier_payment": CanonicalReadbackContract(
+        "finance.supplier_payment.prepare", "finance.payment.post", "payment"
+    ),
+    "inventory_transfer": CanonicalReadbackContract(
+        "inventory.transfer.prepare",
+        "inventory.document.post",
+        "inventory_document",
+    ),
+    "inventory_adjustment": CanonicalReadbackContract(
+        "inventory.adjustment.prepare",
+        "inventory.document.post",
+        "inventory_document",
+    ),
+}
+
+
+def _succeeded_resource(
+    *,
+    command_request_id: UUID,
+    context: ActionContext,
+    service: OperatorActionService,
+    contract: CanonicalReadbackContract,
+) -> UUID:
+    """Bind a readback projection to one exact succeeded canonical command."""
+
+    operation_key = "automation.command.status.get"
+    _require_release_gate(service)
+    _require_authority(context, operation_key)
+    _require_command_binding(context, command_request_id)
+    try:
+        state = service.get_succeeded_resource(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action_error(exc)
+    if (
+        state["capability_code"] != contract.capability_code
+        or state["command_type"] != contract.command_type
+        or state["status"] != "succeeded"
+        or state["resource_type"] != contract.resource_type
+        or state["resource_id"] is None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=_error_detail(
+                ActionErrorCode.POLICY_BLOCKED,
+                "Canonical readback requires one succeeded command of the exact resource type",
+                metadata={
+                    "expected_command_type": contract.command_type,
+                    "expected_capability_code": contract.capability_code,
+                    "expected_resource_type": contract.resource_type,
+                },
+            ),
+        )
+    return UUID(str(state["resource_id"]))
+
+
+@router.get(
+    "/commands/{command_request_id}/sales-dispatch-readback",
+    response_model=CanonicalSalesDispatchReadback,
+)
+def sales_dispatch_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CanonicalSalesDispatchReadback:
+    dispatch_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["sales_dispatch"],
+    )
+    return sales_dispatch_acceptance_readback(
+        dispatch_id=dispatch_id,
+        user=_projection_user(context),
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/sales-return-readback",
+    response_model=PostedReturnReadback,
+)
+def sales_return_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> PostedReturnReadback:
+    return_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["sales_return"],
+    )
+    return canonical_sales_return_readback(
+        return_id=return_id,
+        user=_projection_user(context),
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/purchase-return-readback",
+    response_model=PostedReturnReadback,
+)
+def purchase_return_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> PostedReturnReadback:
+    return_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["purchase_return"],
+    )
+    return canonical_purchase_return_readback(
+        return_id=return_id,
+        user=_projection_user(context),
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/customer-receipt-readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def customer_receipt_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CanonicalCustomerReceiptReadback:
+    payment_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["customer_receipt"],
+    )
+    return canonical_customer_receipt_readback(
+        payment_id=payment_id,
+        user=_projection_user(context),
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/supplier-payment-readback",
+    response_model=PostedSupplierPaymentResponse,
+)
+def supplier_payment_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> PostedSupplierPaymentResponse:
+    payment_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["supplier_payment"],
+    )
+    return posted_supplier_payment(
+        payment_id=payment_id,
+        user=_projection_user(context),
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/inventory-transfer-readback",
+    response_model=TransferReadbackResponse,
+)
+def inventory_transfer_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> TransferReadbackResponse:
+    inventory_document_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["inventory_transfer"],
+    )
+    return get_transfer_readback(
+        inventory_document_id=inventory_document_id,
+        db=db,
+        current_user=_projection_user(context),
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/inventory-adjustment-readback",
+    response_model=InventoryAdjustmentReadback,
+)
+def inventory_adjustment_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> InventoryAdjustmentReadback:
+    _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS["inventory_adjustment"],
+    )
+    activate_inventory_adjustment_readback_context(
+        db=db,
+        context=context,
+        command_request_id=command_request_id,
+    )
+    return load_inventory_adjustment_readback(
+        command_request_id=command_request_id,
+        context=context,
+        db=db,
+    )
 
 
 @router.get(

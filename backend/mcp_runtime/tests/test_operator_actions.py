@@ -63,7 +63,14 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
         "erp_operation_execute",
         "erp_operation_status_get",
         "erp_bank_reconciliation_get",
+        "erp_sales_dispatch_readback",
+        "erp_sales_return_readback",
+        "erp_purchase_return_readback",
+        "erp_customer_receipt_readback",
+        "erp_supplier_payment_readback",
         "erp_supplier_advance_readback",
+        "erp_inventory_transfer_readback",
+        "erp_inventory_adjustment_readback",
         "erp_expense_claim_readback",
     }
     assert OPERATOR_ACTIONS_EXPORTED is True
