@@ -7,6 +7,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 RAILWAY_SCHEMA = "https://railway.com/railway.schema.json"
 SINGAPORE_REGION = "asia-southeast1-eqsg3a"
+MCP_DOCKER_COMMAND = (
+    "exec uvicorn aasopharma_mcp.server:create_app --factory --host 0.0.0.0 "
+    "--port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'"
+)
+MCP_RAILWAY_START_COMMAND = f'/bin/sh -c "{MCP_DOCKER_COMMAND}"'
 
 
 def _config(name: str) -> dict:
@@ -32,7 +37,7 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
 
     expected_start_commands = {
         "api": None,
-        "mcp": "exec uvicorn aasopharma_mcp.server:create_app --factory --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'",
+        "mcp": MCP_RAILWAY_START_COMMAND,
         "frontend": None,
     }
 
@@ -55,7 +60,7 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
         for line in mcp_dockerfile.splitlines()
         if line.startswith("CMD ")
     )
-    assert mcp_cmd == ["sh", "-c", expected_start_commands["mcp"]]
+    assert mcp_cmd == ["sh", "-c", MCP_DOCKER_COMMAND]
 
 
 def test_railway_healthchecks_match_service_readiness_boundaries() -> None:
