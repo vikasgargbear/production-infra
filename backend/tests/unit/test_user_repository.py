@@ -127,3 +127,31 @@ def test_identity_lookup_maps_only_exact_membership_context_denial():
         UserRepository.find_by_auth_user_id(AUTH_USER_ID, ORG_ID, database)
 
     assert database.rolled_back is True
+
+
+def test_identity_lookup_does_not_map_an_unrelated_42501_denial():
+    class OriginalError(Exception):
+        pgcode = "42501"
+        diag = type(
+            "Diagnostic",
+            (),
+            {"message_primary": "permission denied for relation core.memberships"},
+        )()
+
+    original = DBAPIError("activate context", {}, OriginalError(), False)
+
+    class DeniedDatabase:
+        rolled_back = False
+
+        def execute(self, _statement, _parameters):
+            raise original
+
+        def rollback(self):
+            self.rolled_back = True
+
+    database = DeniedDatabase()
+    with pytest.raises(DBAPIError) as exc_info:
+        UserRepository.find_by_auth_user_id(AUTH_USER_ID, ORG_ID, database)
+
+    assert exc_info.value is original
+    assert database.rolled_back is False

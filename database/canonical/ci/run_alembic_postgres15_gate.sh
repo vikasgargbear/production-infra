@@ -155,3 +155,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_calculation_schema_c_collation_migration.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_sales_invoice_direct_issue_acceptance.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_demo_replay_hardening.py
