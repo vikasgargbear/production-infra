@@ -184,5 +184,5 @@ def test_runtime_automation_privilege_contract_includes_transfer_boundary():
     ).read_text()
     assert contract.count("'resolve_inventory_transfer_prepare'") == 2
     assert contract.count("'persist_inventory_transfer_prepare'") == 2
-    assert "runtime_count<>24" in contract
-    assert "expected twenty-four reviewed runtime automation commands" in contract
+    assert "runtime_count<>21" in contract
+    assert "expected twenty-one reviewed runtime automation commands" in contract

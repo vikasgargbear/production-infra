@@ -249,6 +249,7 @@ def _seed(session: Session) -> None:
     for table_name in TABLES_WITH_USER_TRIGGERS:
         session.execute(text(f"ALTER TABLE {table_name} ENABLE TRIGGER USER"))
     session.execute(text("RESET ROLE"))
+    session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
 
 
 def _context(*, grant_id: UUID = AGENT_GRANT, limited: bool = False) -> ActionContext:

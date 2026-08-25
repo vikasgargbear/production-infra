@@ -11,7 +11,7 @@ from app.domain.operator_actions.contract import (
     validate_prepare_payload_semantics,
 )
 from app.infrastructure.operator_actions.registry import ACTION_ADAPTER_BINDINGS
-from aasopharma_mcp.operator_actions import (
+from mcp_runtime.aasopharma_mcp.operator_actions import (
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
 )
@@ -151,15 +151,16 @@ def test_sql_posts_exact_inventory_value_loss_and_readback_evidence() -> None:
 def test_runtime_privilege_contract_lists_only_reviewed_destruction_functions() -> None:
     contract = (
         ROOT
-        / "database/canonical/commands_automation/test_automation_commands_rollback.sql"
+        / "database/canonical/commands_automation/head_test_inventory_destruction_command.sql"
     ).read_text(encoding="utf-8")
     for function in (
         "resolve_inventory_destruction_prepare",
         "persist_inventory_destruction_prepare",
         "execute_inventory_destruction_command",
     ):
-        assert contract.count(f"'{function}'") == 2
-    assert "runtime_count<>24" in contract
+        assert contract.count(f"'{function}'") == 1
+    assert "runtime_count<>3" in contract
+    assert "private inventory destruction assertion exposes execute privilege" in contract
 
 
 def test_rest_readback_requires_posted_destruction_ledger_and_journal() -> None:
