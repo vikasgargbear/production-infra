@@ -41,7 +41,7 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
   const [bankId, setBankId] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
   const [maximumDate, setMaximumDate] = useState('');
-  const [method, setMethod] = useState<SupplierAdvanceMethod>('upi');
+  const [method, setMethod] = useState<SupplierAdvanceMethod | ''>('');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [prepared, setPrepared] = useState<CanonicalCommandPreview | null>(null);
@@ -77,7 +77,6 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
       if (sequence !== contextSequence.current) return;
       setContext(next); setPaymentDate(next.payment_date);
       setMaximumDate(current => current || next.payment_date);
-      setBankId(current => current || next.bank_accounts[0]?.bank_account_id || '');
     } catch (requestError) {
       if (sequence === contextSequence.current) { setContext(null); setError(messageFrom(requestError)); }
     } finally { if (sequence === contextSequence.current) setBusy(false); }
@@ -93,7 +92,7 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
   }, [prepared]);
 
   const prepare = async () => {
-    if (!context) return;
+    if (!context || !method) return;
     setBusy(true); setError('');
     try {
       const payload = buildSupplierAdvancePreparePayload(context, {
@@ -181,13 +180,13 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
             <label className="text-sm font-medium">Approved PO product line<select value={lineId} onChange={event => { invalidatePrepare(); setLineId(event.target.value); setAmount(''); }} disabled={!supplier} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select PO line</option>{supplier?.lines.map(line => <option key={line.purchase_order_line_id} value={line.purchase_order_line_id}>{line.purchase_order_number} · line {line.line_number} · {line.product_code} · available ₹{line.remaining_advance_amount}</option>)}</select></label>
             <label className="text-sm font-medium">Organization payment date<input type="date" max={maximumDate || undefined} value={paymentDate} onChange={event => { const next = event.target.value; invalidatePrepare(); setPaymentDate(next); if (next) void loadContext(next); else setContext(null); }} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
             <label className="text-sm font-medium">Bank and settlement ledger<select value={bankId} onChange={event => { invalidatePrepare(); setBankId(event.target.value); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select INR bank</option>{context.bank_accounts.map(row => <option key={row.bank_account_id} value={row.bank_account_id}>{row.bank_name} — {row.account_holder_name} ({row.ifsc})</option>)}</select></label>
-            <label className="text-sm font-medium">Method<select value={method} onChange={event => { invalidatePrepare(); setMethod(event.target.value as SupplierAdvanceMethod); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option></select></label>
+            <label className="text-sm font-medium">Method<select value={method} onChange={event => { invalidatePrepare(); setMethod(event.target.value as SupplierAdvanceMethod | ''); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select payment method</option><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option></select></label>
             <label className="text-sm font-medium">Bank / UPI reference<input value={reference} onChange={event => { invalidatePrepare(); setReference(event.target.value); }} maxLength={256} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
             <label className="text-sm font-medium">Gross advance amount<input inputMode="decimal" value={amount} onChange={event => { invalidatePrepare(); setAmount(event.target.value); }} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
           </div>
           {selectedLine && <dl className="mt-5 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-3"><div><dt className="text-xs uppercase text-slate-500">Product</dt><dd className="font-medium">{selectedLine.product_name} · {selectedLine.uom_code}</dd></div><div><dt className="text-xs uppercase text-slate-500">PO net / prior advance</dt><dd>₹{selectedLine.net_value_amount} / ₹{selectedLine.prior_active_gross}</dd></div><div><dt className="text-xs uppercase text-slate-500">Available advance</dt><dd className="font-semibold">₹{selectedLine.remaining_advance_amount}</dd></div></dl>}
           <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Withholding: backend-verified not applicable for this bounded pilot. The immutable preview and posted readback must both prove ₹0.00 withheld.</div>
-          <div className="mt-5 flex justify-end"><button type="button" onClick={() => void prepare()} disabled={busy || !context.ready || !lineId || !amount || !reference || !bankId} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable preview</button></div>
+          <div className="mt-5 flex justify-end"><button type="button" onClick={() => void prepare()} disabled={busy || !context.ready || !lineId || !amount || !reference || !bankId || !method} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable preview</button></div>
         </section>}
         {prepared && <section className="rounded-xl border border-blue-200 bg-white p-5"><h2 className="text-lg font-semibold">Prepared — independent approval required</h2><p className="mt-1 text-sm text-slate-600">Nothing has posted. A different authorized reviewer must load the command ID and approve its immutable preview.</p><dl className="mt-4 grid gap-3 rounded-lg bg-blue-50 p-4 md:grid-cols-2"><div><dt className="text-xs uppercase text-slate-500">Command ID</dt><dd className="break-all font-mono text-sm">{prepared.command_request_id}</dd></div><div><dt className="text-xs uppercase text-slate-500">Gross / cash / withheld</dt><dd className="font-semibold">₹{String(previewImpact?.gross_advance_amount)} / ₹{String(previewImpact?.cash_disbursed_amount)} / ₹{String(previewImpact?.withheld_amount)}</dd></div><div className="md:col-span-2"><dt className="text-xs uppercase text-slate-500">Preview hash</dt><dd className="break-all font-mono text-xs">{prepared.preview_hash}</dd></div></dl></section>}
       </>}

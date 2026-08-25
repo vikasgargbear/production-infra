@@ -52,6 +52,8 @@ test('exposes the complete mandatory PO-line flow and keeps prepare disabled unt
   expect((prepare as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: ids.supplier } });
   fireEvent.change(screen.getByLabelText('Approved PO product line'), { target: { value: ids.line } });
+  fireEvent.change(screen.getByLabelText('Bank and settlement ledger'), { target: { value: ids.bank } });
+  fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'upi' } });
   fireEvent.change(screen.getByLabelText('Gross advance amount'), { target: { value: '168.01' } });
   fireEvent.change(screen.getByLabelText('Bank / UPI reference'), { target: { value: 'UPI-SA-1' } });
   expect(screen.getByText('₹200.10 / ₹32.09')).not.toBeNull();
