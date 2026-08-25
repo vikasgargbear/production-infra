@@ -112,6 +112,10 @@ test.describe('live read-only History and GST cross-projection', () => {
     ) as Record<HistoryKind, { items: HistoryItem[]; total: number }>;
     for (const kind of historyKinds) {
       expect(Array.isArray(histories[kind].items), `${kind} history items`).toBe(true);
+      expect(
+        histories[kind].items.length,
+        `Provisioned ${kind} evidence is required; an empty history cannot pass live acceptance.`,
+      ).toBeGreaterThan(0);
       expect(histories[kind].total, `${kind} history total`).toBeGreaterThanOrEqual(histories[kind].items.length);
       histories[kind].items.forEach(row => assertExactHistoryRow(kind, row));
     }
@@ -132,7 +136,6 @@ test.describe('live read-only History and GST cross-projection', () => {
       ['sales_invoice', 'Invoices'], ['sales_dispatch', 'Delivery Challans'], ['sales_order', 'Sales Orders'],
     ] as const) {
       const row = histories[kind].items[0];
-      if (!row) continue;
       await page.getByRole('button', { name: tab, exact: true }).click();
       await page.getByPlaceholder(/Search (?:invoice|order) number or customer name/i).fill(row.document_number);
       const visible = page.getByRole('row').filter({ hasText: row.document_number });
@@ -148,7 +151,6 @@ test.describe('live read-only History and GST cross-projection', () => {
       ['supplier_invoice', 'Supplier Invoices'], ['purchase_order', 'Purchase Orders'], ['goods_receipt', 'GRN'],
     ] as const) {
       const row = histories[kind].items[0];
-      if (!row) continue;
       await page.getByRole('button', { name: tab, exact: true }).click();
       await page.getByPlaceholder(new RegExp(`Search ${tab.toLowerCase()} by number or supplier`, 'i')).fill(row.document_number);
       const visible = page.getByRole('row').filter({ hasText: row.document_number });
@@ -161,7 +163,6 @@ test.describe('live read-only History and GST cross-projection', () => {
     await chooseHubModule(page, 'Returns', 'Returns History');
     for (const [kind, tab] of [['sales_return', 'Sales Returns'], ['purchase_return', 'Purchase Returns']] as const) {
       const row = histories[kind].items[0];
-      if (!row) continue;
       await page.getByRole('button', { name: tab, exact: true }).click();
       await page.getByPlaceholder(/Search by customer name, invoice number, or order number/i).fill(row.document_number);
       const visible = page.getByRole('row').filter({ hasText: row.document_number });
@@ -191,7 +192,6 @@ test.describe('live read-only History and GST cross-projection', () => {
     }
     await testInfo.attach('history-gst-cross-projection.json', {
       body: JSON.stringify({ ranges, historyCounts: Object.fromEntries(historyKinds.map(kind => [kind, histories[kind].total])),
-        absentMountedKinds: historyKinds.filter(kind => histories[kind].items.length === 0),
         salesInvoice, supplierInvoice, gstr1: gstr1.summary,
         gstr3b: { outputTax: gstr3b.outputTax, inputCredit: gstr3b.inputCredit },
         previousPeriodDifferent: currentSignature !== previousSignature }, null, 2),
