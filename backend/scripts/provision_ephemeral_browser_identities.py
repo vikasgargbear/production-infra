@@ -738,6 +738,19 @@ def _recover_stale_live18_database(
             _leave_migration_owner(cursor, membership_options)
 
 
+def _verify_live18_owner_delegation(management_token: str) -> None:
+    """Fail before Auth creation unless the scoped owner handoff is reversible."""
+
+    with _database_connection(management_token) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (LOCK_KEY,),
+            )
+            membership_options = _enter_migration_owner(cursor)
+            _leave_migration_owner(cursor, membership_options)
+
+
 def _provision_live18_denial_database(
     management_token: str,
     state_path: Path,
@@ -1513,6 +1526,7 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
                 raise EphemeralIdentityError(
                     "Stale disposable live18 Auth identities remained after recovery"
                 )
+        _verify_live18_owner_delegation(management_token)
     run_token = str(uuid4())
     state: dict[str, Any] = {
         "version": STATE_VERSION,

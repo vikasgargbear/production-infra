@@ -548,6 +548,9 @@ def test_live18_profile_exports_only_run_scoped_three_identity_credentials(
     monkeypatch.setattr(
         identities, "_list_purpose_auth_user_ids", lambda *args: set()
     )
+    monkeypatch.setattr(
+        identities, "_verify_live18_owner_delegation", lambda *args: None
+    )
 
     def provision_database(token, path, state, profile):
         assert profile == identities.PROFILE_LIVE18
@@ -608,6 +611,12 @@ def test_live18_recovers_stale_purpose_users_before_creating_new_ones(
         "_recover_stale_live18_database",
         lambda token, values: recovered.append((token, values)),
     )
+    verified = []
+    monkeypatch.setattr(
+        identities,
+        "_verify_live18_owner_delegation",
+        lambda token: verified.append(token),
+    )
     monkeypatch.setattr(
         identities, "_delete_auth_user", lambda key, value: deleted.append(value)
     )
@@ -633,3 +642,4 @@ def test_live18_recovers_stale_purpose_users_before_creating_new_ones(
 
     assert recovered == [("management-token", stale)]
     assert deleted == sorted(stale)
+    assert verified == ["management-token"]
