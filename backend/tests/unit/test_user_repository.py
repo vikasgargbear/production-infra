@@ -2,7 +2,9 @@ from uuid import UUID
 
 import pytest
 
-from app.repositories.user_repository import UserRepository
+from sqlalchemy.exc import DBAPIError
+
+from app.repositories.user_repository import MembershipContextDenied, UserRepository
 
 
 AUTH_USER_ID = UUID("8d19f4e8-3e4b-46a8-b7d9-87f30ddaf41c")
@@ -96,3 +98,32 @@ def test_identity_lookup_rejects_multiple_membership_rows():
 
     with pytest.raises(RuntimeError, match="multiple ERP memberships"):
         UserRepository.find_by_auth_user_id(AUTH_USER_ID, ORG_ID, database)
+
+
+def test_identity_lookup_maps_only_exact_membership_context_denial():
+    class OriginalError(Exception):
+        pgcode = "42501"
+        diag = type(
+            "Diagnostic",
+            (),
+            {
+                "message_primary": (
+                    "invalid or inactive ERP authenticated organization membership"
+                )
+            },
+        )()
+
+    class DeniedDatabase:
+        rolled_back = False
+
+        def execute(self, _statement, _parameters):
+            raise DBAPIError("activate context", {}, OriginalError(), False)
+
+        def rollback(self):
+            self.rolled_back = True
+
+    database = DeniedDatabase()
+    with pytest.raises(MembershipContextDenied):
+        UserRepository.find_by_auth_user_id(AUTH_USER_ID, ORG_ID, database)
+
+    assert database.rolled_back is True

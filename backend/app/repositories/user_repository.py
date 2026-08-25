@@ -4,7 +4,12 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+
+
+class MembershipContextDenied(Exception):
+    """The canonical database rejected an inactive or missing tenant membership."""
 
 
 class UserRepository:
@@ -20,10 +25,22 @@ class UserRepository:
         db: Session,
     ) -> Optional[Dict[str, Any]]:
         """Resolve one active canonical membership from an admin-assigned tenant."""
-        db.execute(
-            text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
-            {"auth_user_id": auth_user_id, "org_id": organization_id},
-        )
+        try:
+            db.execute(
+                text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+                {"auth_user_id": auth_user_id, "org_id": organization_id},
+            )
+        except DBAPIError as exc:
+            original = exc.orig
+            primary_message = getattr(getattr(original, "diag", None), "message_primary", None)
+            if (
+                getattr(original, "pgcode", None) == "42501"
+                and primary_message
+                == "invalid or inactive ERP authenticated organization membership"
+            ):
+                db.rollback()
+                raise MembershipContextDenied from exc
+            raise
         result = db.execute(text("""
             WITH active_grants AS (
                 SELECT grant_row.org_id, grant_row.membership_id,

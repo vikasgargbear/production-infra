@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ....core.auth.jwt_auth import create_access_token
 from ....core.auth.supabase_auth import supabase_auth
 from ....core.database import get_db
-from ....repositories.user_repository import UserRepository
+from ....repositories.user_repository import MembershipContextDenied, UserRepository
 from ...services.auth import build_erp_token_claims
 
 
@@ -155,7 +155,16 @@ async def exchange_supabase_session(
             },
         ) from exc
 
-    user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
+    try:
+        user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
+    except MembershipContextDenied as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "erp_membership_required",
+                "message": "Your identity is not linked to an active ERP organization.",
+            },
+        ) from exc
     if not user_data:
         raise HTTPException(
             status_code=403,

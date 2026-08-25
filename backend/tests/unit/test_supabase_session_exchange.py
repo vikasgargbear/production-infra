@@ -140,6 +140,32 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     assert not hasattr(oauth.UserRepository, "find_by_email")
 
 
+def test_exchange_returns_forbidden_for_database_membership_denial(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+
+    def deny_membership(*_args):
+        raise oauth.MembershipContextDenied
+
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        deny_membership,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["error"] == "erp_membership_required"
+
+
 def test_exchange_requires_admin_assigned_organization(monkeypatch):
     async def verified_identity(_token):
         return _identity(app_metadata={"provider": "google"})
