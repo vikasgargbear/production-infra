@@ -745,8 +745,9 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "balance.moving_weighted_average" not in provisioner
     assert "item.original_amount" not in provisioner
     assert "item.outstanding_amount" not in provisioner
-    assert "COMMAND_ADAPTER_UNAVAILABLE" in provisioner
-    assert 'response.status_code != 503' in provisioner
+    assert "COMMAND_ADAPTER_UNAVAILABLE" not in provisioner
+    assert '"unavailable_operation_count": 0' in provisioner
+    assert 'response.status_code != 503' not in provisioner
     cross_table = provisioner.split("def reconcile_cross_table_invariants", 1)[1].split(
         "\ndef main", 1
     )[0]

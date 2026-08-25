@@ -472,6 +472,47 @@ def test_bank_reconciliation_template_targets_exact_run_scoped_pair() -> None:
     assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
 
 
+def test_destruction_template_targets_exact_gst_lineage_and_split_review() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/destruction.json").read_text()
+    )
+    facts = {
+        "identity": {
+            "destruction_batch_id": "d3000000-0000-7000-8000-000000000041",
+            "destruction_uom_conversion_id": "d3000000-0000-7000-8000-000000000042",
+            "destruction_certificate_attachment_id": "d3000000-0000-7000-8000-000000000043",
+            "destruction_itc_reversal_evidence_attachment_id": "d3000000-0000-7000-8000-000000000044",
+        },
+        "display": {
+            "destruction_reason": "Certified destruction of quarantined goods",
+            "destruction_authority_reference": "certificate.pdf · sha256:abcd",
+            "destruction_witness_name": "Independent Reviewer",
+            "destruction_witness_credential": "canonical-membership:reviewer",
+        },
+        "clock": {"destruction_confirmed_at_utc": "2026-08-25T10:00:00.000Z"},
+        "choice": {"destruction_reason_code": "quality_rejected"},
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        {},
+        used,
+    )
+    _validate_compiled_steps("destruction", operation, "separate_approver")
+    assert not used
+    assert operation["prepare_steps"][1]["value"] == (
+        "d3000000-0000-7000-8000-000000000041:"
+        "d3000000-0000-7000-8000-000000000042"
+    )
+    assert operation["prepare_steps"][2]["value"].endswith("43")
+    assert operation["prepare_steps"][3]["value"].endswith("44")
+    assert operation["prepare_steps"][9]["value"] == "2026-08-25T10:00:00.000Z"
+    assert operation["approval_steps"][2]["value"] == "{{command_request_id}}"
+    assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
+
+
 def test_customer_credit_note_targets_exact_invoice_and_post_return_ceiling() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(

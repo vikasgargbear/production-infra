@@ -62,6 +62,11 @@ export interface DestructionStockCandidate {
   available_base_quantity: string;
   average_unit_cost: string;
   inventory_value: string;
+  input_credit_lot_count: number;
+  eligible_itc_cgst_amount: string;
+  eligible_itc_sgst_amount: string;
+  eligible_itc_igst_amount: string;
+  eligible_itc_cess_amount: string;
 }
 
 export interface InventoryDestructionContext {
@@ -74,8 +79,9 @@ export interface InventoryDestructionContext {
   certificate_upload_available: false;
   certificate_upload_message: string;
   method_code: 'licensed_incineration';
-  itc_treatment: 'not_applicable_unregistered';
+  itc_treatment: 'section_17_5_h_reversal';
   certificates: DestructionCertificate[];
+  itc_reversal_evidence: DestructionCertificate[];
   candidates: DestructionStockCandidate[];
 }
 
@@ -99,10 +105,38 @@ export interface InventoryDestructionReadback {
   destruction_number: string;
   status: 'posted';
   certificate_attachment_id: string;
+  itc_reversal_evidence_attachment_id: string;
+  physical_destruction_confirmed_at: string;
+  gst_registration_id: string;
+  gst_return_period_id: string;
+  gstr3b_return_id: string;
+  itc_reversal_rule_version_id: string;
+  itc_reversal_cgst_amount: string;
+  itc_reversal_sgst_amount: string;
+  itc_reversal_igst_amount: string;
+  itc_reversal_cess_amount: string;
   total_destroyed_base_quantity: string;
   total_destroyed_value: string;
   journal_debit_total: string;
   journal_credit_total: string;
+  input_credit_applications: Array<{
+    input_credit_application_id: string;
+    input_credit_lot_id: string;
+    supplier_invoice_id: string;
+    supplier_invoice_line_id: string;
+    goods_receipt_line_id: string;
+    batch_id: string;
+    applied_base_quantity: string;
+    applied_cgst_amount: string;
+    applied_sgst_amount: string;
+    applied_igst_amount: string;
+    applied_cess_amount: string;
+    remaining_lot_base_quantity: string;
+    remaining_lot_cgst_amount: string;
+    remaining_lot_sgst_amount: string;
+    remaining_lot_igst_amount: string;
+    remaining_lot_cess_amount: string;
+  }>;
   lines: Array<{
     inventory_document_line_id: string;
     product_id: string;
@@ -139,12 +173,16 @@ export function decodeDestructionContext(value: InventoryDestructionContext): In
   requireUuid(value.organization_id, 'Organization');
   if (value.certificate_upload_available !== false
       || value.method_code !== 'licensed_incineration'
-      || value.itc_treatment !== 'not_applicable_unregistered'
-      || !Array.isArray(value.certificates) || !Array.isArray(value.candidates)) {
+      || value.itc_treatment !== 'section_17_5_h_reversal'
+      || !Array.isArray(value.certificates) || !Array.isArray(value.itc_reversal_evidence)
+      || !Array.isArray(value.candidates)) {
     throw new Error('Canonical destruction context is incomplete.');
   }
   value.certificates.forEach((row, index) => requireUuid(
     row.certificate_attachment_id, `Certificate ${index + 1}`,
+  ));
+  value.itc_reversal_evidence.forEach((row, index) => requireUuid(
+    row.certificate_attachment_id, `ITC reversal evidence ${index + 1}`,
   ));
   value.candidates.forEach((row, index) => {
     ['branch_id', 'location_id', 'product_id', 'uom_conversion_id', 'batch_id']
@@ -155,6 +193,14 @@ export function decodeDestructionContext(value: InventoryDestructionContext): In
     normalizeAuthoritativeDecimal(row.inventory_value, `Stock candidate ${index + 1} value`, {
       scale: 2, maximumWholeDigits: 18,
     });
+    ['eligible_itc_cgst_amount', 'eligible_itc_sgst_amount',
+      'eligible_itc_igst_amount', 'eligible_itc_cess_amount'].forEach(field =>
+      normalizeAuthoritativeDecimal((row as any)[field], `Stock candidate ${index + 1} ${field}`, {
+        scale: 2, maximumWholeDigits: 18,
+      }));
+    if (!Number.isInteger(row.input_credit_lot_count) || row.input_credit_lot_count < 1) {
+      throw new Error(`Stock candidate ${index + 1} has no exact input-credit lot lineage.`);
+    }
   });
   return value;
 }
