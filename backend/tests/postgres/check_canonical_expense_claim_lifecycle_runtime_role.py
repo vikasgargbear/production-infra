@@ -37,6 +37,8 @@ EXPENSE_ACCOUNT = UUID("ee000000-0000-7000-8000-000000000011")
 REIMBURSEMENT_ACCOUNT = UUID("ee000000-0000-7000-8000-000000000012")
 RECEIPT = UUID("ee000000-0000-7000-8000-000000000013")
 UNVERIFIED_RECEIPT = UUID("ee000000-0000-7000-8000-000000000014")
+CROSS_BRANCH = UUID("ee000000-0000-7000-8000-000000000030")
+CROSS_BRANCH_RECEIPT = UUID("ee000000-0000-7000-8000-000000000031")
 OTHER_ORG = UUID("ef000000-0000-7000-8000-000000000001")
 
 TABLES_WITH_USER_TRIGGERS = (
@@ -93,7 +95,9 @@ def _seed(session: Session) -> None:
             INSERT INTO core.branches(
               org_id,id,code,name,address_line1,city,state_code,postal_code,status,
               created_by_membership_id,updated_by_membership_id)
-            VALUES (:org,:branch,'EXP-LIFE','Expense Lifecycle','1 Test Road','Mumbai','27','400001','active',:claimant,:claimant);
+            VALUES
+              (:org,:branch,'EXP-LIFE','Expense Lifecycle','1 Test Road','Mumbai','27','400001','active',:claimant,:claimant),
+              (:org,:cross_branch,'EXP-OTHER','Other Expense Branch','2 Test Road','Mumbai','27','400002','active',:claimant,:claimant);
             INSERT INTO core.roles(org_id,id,code,name,status,created_by_membership_id,updated_by_membership_id)
             VALUES (:org,:claimant_role,'expense_claimant','Expense Claimant','active',:claimant,:claimant),
                    (:org,:approver_role,'expense_approver','Expense Approver','active',:approver,:approver);
@@ -146,16 +150,19 @@ def _seed(session: Session) -> None:
             VALUES (:org,:expense_account,'6100','Employee Travel Expense','expense','INR',false,'active',:claimant,:claimant),
                    (:org,:reimbursement_account,'2200','Member Reimbursements Payable','liability','INR',false,'active',:claimant,:claimant);
             INSERT INTO core.attachments(
-              org_id,id,storage_bucket,storage_object_path,original_filename,media_type,byte_size,
+              org_id,branch_id,id,storage_bucket,storage_object_path,original_filename,media_type,byte_size,
               sha256,evidence_kind,document_date,retention_until,status,verified_at,created_by_membership_id)
             VALUES
-              (:org,:receipt,'evidence','expense/verified-receipt.pdf','receipt.pdf','application/pdf',1680,
+              (:org,:branch,:receipt,'evidence','expense/verified-receipt.pdf','receipt.pdf','application/pdf',1680,
                decode(repeat('71',32),'hex'),'expense_receipt',:business_date,:business_date+3650,'verified',transaction_timestamp(),:claimant),
-              (:org,:unverified_receipt,'evidence','expense/pending-receipt.pdf','pending.pdf','application/pdf',1680,
-               decode(repeat('72',32),'hex'),'expense_receipt',:business_date,:business_date+3650,'pending_upload',NULL,:claimant);
+              (:org,:branch,:unverified_receipt,'evidence','expense/pending-receipt.pdf','pending.pdf','application/pdf',1680,
+               decode(repeat('72',32),'hex'),'expense_receipt',:business_date,:business_date+3650,'pending_upload',NULL,:claimant),
+              (:org,:cross_branch,:cross_branch_receipt,'evidence','expense/cross-branch-receipt.pdf','cross-branch.pdf','application/pdf',1680,
+               decode(repeat('73',32),'hex'),'expense_receipt',:business_date,:business_date+3650,'verified',transaction_timestamp(),:claimant);
         """),
         {
             "org": ORG, "other_org": OTHER_ORG, "branch": BRANCH,
+            "cross_branch": CROSS_BRANCH,
             "claimant": CLAIMANT, "claimant_user": CLAIMANT_USER, "claimant_auth": CLAIMANT_AUTH,
             "approver": APPROVER, "approver_user": APPROVER_USER, "approver_auth": APPROVER_AUTH,
             "other_member": UUID("ef000000-0000-7000-8000-000000000002"),
@@ -169,6 +176,7 @@ def _seed(session: Session) -> None:
             "journal_sequence": UUID("ee000000-0000-7000-8000-000000000020"),
             "expense_account": EXPENSE_ACCOUNT, "reimbursement_account": REIMBURSEMENT_ACCOUNT,
             "receipt": RECEIPT, "unverified_receipt": UNVERIFIED_RECEIPT,
+            "cross_branch_receipt": CROSS_BRANCH_RECEIPT,
             "business_date": session.scalar(text(
                 "SELECT (transaction_timestamp() AT TIME ZONE 'Asia/Kolkata')::date"
             )),
@@ -343,6 +351,18 @@ def main() -> None:
                     assert error.code is ActionErrorCode.VALIDATION_FAILED
                 else:
                     raise AssertionError("unverified receipt reached an expense claim command")
+
+                try:
+                    service.prepare(
+                        policy=ACTION_POLICIES["finance.expense_claim.prepare"],
+                        payload=_payload(business_date, CROSS_BRANCH_RECEIPT),
+                        idempotency_key="pg15-expense-cross-branch-receipt",
+                        context=_context(),
+                    )
+                except OperatorActionError as error:
+                    assert error.code is ActionErrorCode.VALIDATION_FAILED
+                else:
+                    raise AssertionError("cross-branch receipt reached an expense claim command")
             finally:
                 if outer.is_active:
                     outer.rollback()
