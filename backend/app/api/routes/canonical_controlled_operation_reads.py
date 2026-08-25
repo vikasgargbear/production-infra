@@ -12,7 +12,8 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, WithJsonSchema
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -21,7 +22,10 @@ from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
 
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Security(HTTPBearer(auto_error=False))],
+    tags=["Canonical Controlled Operation Reads"],
+)
 
 
 def _wire(scale: int):

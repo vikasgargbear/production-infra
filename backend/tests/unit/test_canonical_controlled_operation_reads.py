@@ -11,16 +11,16 @@ from app.main import app
 
 def test_controlled_desktop_context_routes_are_typed_and_mounted() -> None:
     schema = app.openapi()
-    assert schema["paths"]["/api/canonical/bank-reconciliation/context"]["get"][
-        "responses"
-    ]["200"]["content"]["application/json"]["schema"] == {
+    bank_operation = schema["paths"]["/api/canonical/bank-reconciliation/context"]["get"]
+    destruction_operation = schema["paths"]["/api/canonical/inventory-destruction/context"]["get"]
+    assert bank_operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/BankReconciliationContext"
     }
-    assert schema["paths"]["/api/canonical/inventory-destruction/context"]["get"][
-        "responses"
-    ]["200"]["content"]["application/json"]["schema"] == {
+    assert destruction_operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/InventoryDestructionContext"
     }
+    assert bank_operation["security"] == [{"HTTPBearer": []}]
+    assert destruction_operation["security"] == [{"HTTPBearer": []}]
 
 
 def test_bank_candidate_projection_matches_the_command_resolver_boundary() -> None:
