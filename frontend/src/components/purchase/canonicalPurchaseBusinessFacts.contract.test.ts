@@ -15,6 +15,7 @@ describe('active canonical purchase desktop facts', () => {
         read('purchase-order/utils/canonicalPurchaseOrderCommand.ts'),
         read('ui/PurchaseItemEditModal.tsx'),
         read('utils/productItemTransform.ts'),
+        read('../../services/calculations/purchaseOrderCalculationService.ts'),
     ].join('\n');
 
     it('contains no guessed GST, price multiplier, pack size, quantity or payment method', () => {
@@ -42,11 +43,13 @@ describe('active canonical purchase desktop facts', () => {
     it('keeps calculation requests behind explicit line facts', () => {
         const logic = read('purchase-entry/hooks/usePurchaseEntryLogic.ts');
         expect(logic).toContain('const incompleteLine');
-        expect(logic).toContain('if (!purchaseData.supplier_id || incompleteLine)');
-        expect(logic).toContain("gross_amount: '', tax_amount: '', round_off: ''");
+        expect(logic).toContain('const incompleteCharges');
+        expect(logic).toContain('if (!purchaseData.supplier_id || incompleteLine || incompleteCharges)');
+        expect(logic).toContain("gross_amount: '', discount_amount: '', tax_amount: '', round_off: ''");
         expect(logic).toContain('purchaseEntryDraftReadinessError');
         expect(logic).toContain('missing canonical product or UOM identity');
         expect(read('PDFVerificationFlow.tsx')).not.toMatch(/\.reduce\(|\.toFixed\(/);
         expect(read('ui/PurchaseItemEditModal.tsx')).not.toContain('calculatePurchaseItemTotal');
+        expect(read('../../services/calculations/purchaseOrderCalculationService.ts')).toContain('requiredFact');
     });
 });

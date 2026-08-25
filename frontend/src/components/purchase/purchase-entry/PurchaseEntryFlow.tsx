@@ -166,6 +166,29 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
         />
       </div>
 
+      <div className="mb-6 grid grid-cols-3 gap-4 border border-gray-200 bg-gray-50 p-4">
+        {([
+          ['freight_charges', 'Freight charges'],
+          ['insurance_charges', 'Insurance charges'],
+          ['other_charges', 'Other charges'],
+        ] as const).map(([field, label]) => (
+          <label key={field} className="text-sm font-medium text-gray-700">
+            {label}
+            <input
+              value={purchase[field]}
+              onChange={(event) => setPurchase(prev => ({
+                ...prev,
+                [field]: event.target.value,
+                gross_amount: '', discount_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
+              }))}
+              inputMode="decimal"
+              placeholder="Enter 0.00 when none"
+              className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3"
+            />
+          </label>
+        ))}
+      </div>
+
       {/* Supplier Section - Clean and Separate */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -811,7 +834,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 items: (prev.items || []).map((item, i) =>
                   i === currentEditItem.index ? (updatedItem as PurchaseItem) : item
                 ),
-                gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
+                gross_amount: '', discount_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
               }));
               setCurrentEditItem(null);
             } else {

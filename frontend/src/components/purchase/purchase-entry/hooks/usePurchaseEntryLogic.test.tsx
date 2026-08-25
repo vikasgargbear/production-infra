@@ -35,7 +35,9 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
         expect(getInitialPurchase()).toMatchObject({
             invoice_date: '', delivery_date: '', delivery_type: '',
             payment_methods: [], payment_status: '', items: [],
-            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
+            gross_amount: '', discount_amount: '', tax_amount: '',
+            freight_charges: '', insurance_charges: '', other_charges: '',
+            round_off: '', net_amount: '', total_amount: '',
         });
     });
 
@@ -46,6 +48,9 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
         draft.supplier_invoice_number = 'SUP-INV-1';
         draft.invoice_date = '2026-08-25';
         draft.delivery_date = '2026-08-25';
+        draft.freight_charges = '0';
+        draft.insurance_charges = '0';
+        draft.other_charges = '0';
         draft.items = [{
             product_id: '0198ea37-2b1d-7c8d-9123-123456789abc', product_name: 'Product',
             quantity: '1', unit_price: '100', mrp: '150', free_quantity: '0',
@@ -65,6 +70,7 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
             items: [{ taxable_amount: '100.00', tax_amount: '12.00', total: '112.00' }],
             totals: {
                 subtotal_amount: '100.00',
+                discount_amount: '0.00',
                 tax_amount: '12.00',
                 round_off_amount: '0.00',
                 net_amount: '112.00',
@@ -77,6 +83,7 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
         act(() => result.current.setPurchase(previous => ({
             ...previous,
             supplier_id: '0198ea37-2b1c-7c8d-9123-123456789abc',
+            freight_charges: '0', insurance_charges: '0', other_charges: '0',
             items: [{
                 product_id: '0198ea37-2b1d-7c8d-9123-123456789abc',
                 product_name: 'Test Product',

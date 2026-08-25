@@ -24,13 +24,19 @@ import {
     sumMoney,
     sumSignedMoney,
 } from './exactCalculationPreview';
-import { exactDecimalUnits } from '../../utils/exactDecimal';
 
 interface PurchasePreviewResult {
     items: Array<Record<string, unknown>>;
     totals: Record<string, string>;
     gst_type: 'CGST/SGST' | 'IGST';
 }
+
+const requiredFact = (value: unknown, label: string): unknown => {
+    if (value === '' || value === null || value === undefined) {
+        throw new Error(`${label} must be explicit (zero is allowed).`);
+    }
+    return value;
+};
 
 export function toPurchaseCalculationRequest(order: any): PurchaseCalculationRequest {
     return {
@@ -41,17 +47,17 @@ export function toPurchaseCalculationRequest(order: any): PurchaseCalculationReq
             return {
                 product_id: calculationEntityId(item.product_id, `${label}.product_id`, true)!,
                 product_name: item.product_name,
-                quantity: inputQuantity(item.quantity, `${label}.quantity`),
-                free_quantity: inputQuantity(item.free_quantity, `${label}.free_quantity`),
-                unit_price: inputRate(item.unit_price, `${label}.unit_price`),
-                mrp: inputRate(item.mrp, `${label}.mrp`),
-                discount_percent: inputPercent(item.discount_percent, `${label}.discount_percent`),
-                tax_percent: inputPercent(item.tax_percent ?? item.gst_percent, `${label}.tax_percent`),
+                quantity: inputQuantity(requiredFact(item.quantity, `${label}.quantity`), `${label}.quantity`),
+                free_quantity: inputQuantity(requiredFact(item.free_quantity, `${label}.free_quantity`), `${label}.free_quantity`),
+                unit_price: inputRate(requiredFact(item.unit_price, `${label}.unit_price`), `${label}.unit_price`),
+                mrp: inputRate(requiredFact(item.mrp, `${label}.mrp`), `${label}.mrp`),
+                discount_percent: inputPercent(requiredFact(item.discount_percent, `${label}.discount_percent`), `${label}.discount_percent`),
+                tax_percent: inputPercent(requiredFact(item.tax_percent ?? item.gst_percent, `${label}.tax_percent`), `${label}.tax_percent`),
             };
         }),
-        freight_charges: inputMoney(order.freight_charges, 'Purchase freight charges'),
-        insurance_charges: inputMoney(order.insurance_charges, 'Purchase insurance charges'),
-        other_charges: inputMoney(order.other_charges, 'Purchase other charges'),
+        freight_charges: inputMoney(requiredFact(order.freight_charges, 'Purchase freight charges'), 'Purchase freight charges'),
+        insurance_charges: inputMoney(requiredFact(order.insurance_charges, 'Purchase insurance charges'), 'Purchase insurance charges'),
+        other_charges: inputMoney(requiredFact(order.other_charges, 'Purchase other charges'), 'Purchase other charges'),
     };
 }
 
@@ -139,12 +145,6 @@ function normalizePurchasePreview(
 export async function calculatePurchaseOrderPreview(order: any, isOnline: boolean): Promise<PurchasePreviewResult> {
     if (!isOnline) {
         throw new Error('Purchase calculations require the live ERP API. Reconnect and try again.');
-    }
-    if (exactDecimalUnits(order.discount_amount ?? '0', 'Purchase header discount', {
-        scale: 2,
-        maximumWholeDigits: 20,
-    }) !== 0n) {
-        throw new Error('Purchase-order header discounts are blocked until their tax and persistence contract is baselined.');
     }
     const request = toPurchaseCalculationRequest(order);
     const response = await purchaseCalculationsApi.preview(request);

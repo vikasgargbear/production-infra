@@ -70,6 +70,8 @@ export interface PurchaseData {
     gross_amount: EditableDecimalValue;
     discount_amount: EditableDecimalValue;
     tax_amount: EditableDecimalValue;
+    freight_charges: EditableDecimalValue;
+    insurance_charges: EditableDecimalValue;
     other_charges: EditableDecimalValue;
     round_off: EditableDecimalValue;
     net_amount: EditableDecimalValue;
@@ -162,9 +164,11 @@ export const getInitialPurchase = (prefilledData?: Partial<PurchaseData> | null)
     vehicle_number: '',
     lr_number: '',
     gross_amount: '',
-    discount_amount: 0,
+    discount_amount: '',
     tax_amount: '',
-    other_charges: 0,
+    freight_charges: '',
+    insurance_charges: '',
+    other_charges: '',
     round_off: '',
     net_amount: '',
     total_amount: '',
@@ -182,6 +186,9 @@ export const purchaseEntryDraftReadinessError = (
     if (!selectedSupplier || !purchase.supplier_id) return 'Select an authoritative supplier.';
     if (!purchase.supplier_invoice_number.trim()) return 'Enter the supplier invoice number.';
     if (!purchase.invoice_date || !purchase.delivery_date) return 'Enter invoice and delivery dates.';
+    if ([purchase.freight_charges, purchase.insurance_charges, purchase.other_charges].some(missingFact)) {
+        return 'Enter freight, insurance and other charges explicitly (zero is allowed).';
+    }
     if (!purchase.items.length) return 'Add at least one verified purchase line.';
     for (const [index, item] of purchase.items.entries()) {
         const label = `Line ${index + 1}`;
@@ -242,6 +249,7 @@ export function usePurchaseEntryLogic({
             setPurchase(prev => ({
                 ...prev,
                 gross_amount: '',
+                discount_amount: '',
                 tax_amount: '',
                 round_off: '',
                 net_amount: '',
@@ -260,10 +268,15 @@ export function usePurchaseEntryLogic({
             || missing(item.discount_percent)
             || missing(item.tax_percent)
         ));
-        if (!purchaseData.supplier_id || incompleteLine) {
+        const incompleteCharges = [
+            purchaseData.freight_charges,
+            purchaseData.insurance_charges,
+            purchaseData.other_charges,
+        ].some(missing);
+        if (!purchaseData.supplier_id || incompleteLine || incompleteCharges) {
             setPurchase(prev => ({
                 ...prev,
-                gross_amount: '', tax_amount: '', round_off: '',
+                gross_amount: '', discount_amount: '', tax_amount: '', round_off: '',
                 net_amount: '', total_amount: '',
             }));
             return;
@@ -293,6 +306,7 @@ export function usePurchaseEntryLogic({
                     ...prev,
                     items: itemValuesChanged ? items : prev.items,
                     gross_amount: totals.subtotal_amount,
+                    discount_amount: totals.discount_amount,
                     tax_amount: totals.tax_amount,
                     round_off: totals.round_off_amount,
                     net_amount: totals.net_amount,
@@ -392,7 +406,7 @@ export function usePurchaseEntryLogic({
         setPurchase(prev => ({
             ...prev,
             items: [...(prev.items || []), editedItem],
-            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
+            gross_amount: '', discount_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
         }));
         setNewProductToAdd(null);
         setShowItemEditModal(false);
@@ -462,7 +476,7 @@ export function usePurchaseEntryLogic({
                 }
                 return item;
             }),
-            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
+            gross_amount: '', discount_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
         }));
     }, []);
 
@@ -470,7 +484,7 @@ export function usePurchaseEntryLogic({
         setPurchase(prev => ({
             ...prev,
             items: prev.items.filter((_, i) => i !== index),
-            gross_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
+            gross_amount: '', discount_amount: '', tax_amount: '', round_off: '', net_amount: '', total_amount: '',
         }));
     }, []);
 
@@ -572,6 +586,7 @@ export function usePurchaseEntryLogic({
             },
             items: mappedItems,
             gross_amount: '',
+            discount_amount: '',
             tax_amount: '',
             net_amount: '',
             total_amount: ''

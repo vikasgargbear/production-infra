@@ -12,7 +12,7 @@ const order = {
   discount_amount: '0.00', freight_charges: '0.00', insurance_charges: '0.00', other_charges: '0.00',
   items: [{
     product_id: '10000000-0000-7000-8000-000000000002',
-    quantity: '0.123456', unit_price: '9007199254740993.000000', mrp: '9007199254740993.000000',
+    quantity: '0.123456', free_quantity: '0', unit_price: '9007199254740993.000000', mrp: '9007199254740993.000000',
     discount_percent: '0', tax_percent: '18',
   }],
 };
@@ -46,8 +46,17 @@ test.each([1, '0.1234567'])('rejects invalid authoritative quantity %p', async q
     .rejects.toThrow(/exact decimal string|precision/);
 });
 
-test('blocks header discounts and offline calculation', async () => {
-  await expect(calculatePurchaseOrderPreview({ ...order, discount_amount: '0.01' }, true)).rejects.toThrow('header discounts');
+test('blocks offline calculation', async () => {
   await expect(calculatePurchaseOrderPreview(order, false)).rejects.toThrow('live ERP API');
   expect(purchaseCalculationsApi.preview).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['free quantity', { items: [{ ...order.items[0], free_quantity: undefined }] }],
+  ['line discount', { items: [{ ...order.items[0], discount_percent: undefined }] }],
+  ['freight', { freight_charges: undefined }],
+  ['insurance', { insurance_charges: '' }],
+  ['other charges', { other_charges: null }],
+])('requires explicit %s, including explicit zero', (_label, override) => {
+  expect(() => toPurchaseCalculationRequest({ ...order, ...override })).toThrow(/must be explicit/i);
 });
