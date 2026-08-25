@@ -2842,6 +2842,8 @@ class SqlAlchemyOperatorActionService:
                 "command_request_id",
                 "journal_id",
                 "event_id",
+                "itc_reversal_event_id",
+                "itc_reversal_event_id",
                 "advance_allocation_id",
                 "prepayment_open_item_id",
             )
@@ -3611,6 +3613,7 @@ class SqlAlchemyOperatorActionService:
                 "command_request_id",
                 "journal_id",
                 "event_id",
+                "itc_reversal_event_id",
             )
         }
         normalized = {key: _json_value(value) for key, value in payload.items()}
@@ -3620,6 +3623,7 @@ class SqlAlchemyOperatorActionService:
                 "inventory_document_id": str(identifiers["inventory_document_id"]),
                 "journal_id": str(identifiers["journal_id"]),
                 "event_id": str(identifiers["event_id"]),
+                "itc_reversal_event_id": str(identifiers["itc_reversal_event_id"]),
             }
         )
         normalized["lines"] = []
@@ -3714,12 +3718,38 @@ class SqlAlchemyOperatorActionService:
                         "credit_account_id": resolution["inventory_asset_account_id"],
                         "amount": resolution["total_value"],
                     },
+                    {
+                        "currency_code": "INR",
+                        "debit_account_id": resolution[
+                            "inventory_itc_reversal_expense_account_id"
+                        ],
+                        "credit_account_ids": [
+                            resolution["input_cgst_account_id"],
+                            resolution["input_sgst_account_id"],
+                            resolution["input_igst_account_id"],
+                            resolution["input_cess_account_id"],
+                        ],
+                        "amount": resolution["itc_reversal_total"],
+                    },
                 )
                 tax_impact = (
                     {
                         "supply_created": False,
                         "gst_amount": "0.00",
-                        "itc_treatment": "not_applicable_unregistered",
+                        "itc_treatment": "section_17_5_h_reversal",
+                        "legal_section": "17(5)(h)",
+                        "gstr3b_table_code": "4",
+                        "gstr3b_row_code": "B(1)",
+                        "registration_id": resolution["gst_registration_id"],
+                        "return_period_id": resolution["gst_return_period_id"],
+                        "gstr3b_return_id": resolution["gstr3b_return_id"],
+                        "rule_version_id": resolution[
+                            "itc_reversal_rule_version_id"
+                        ],
+                        "cgst_reversal": resolution["itc_reversal_cgst_amount"],
+                        "sgst_reversal": resolution["itc_reversal_sgst_amount"],
+                        "igst_reversal": resolution["itc_reversal_igst_amount"],
+                        "cess_reversal": resolution["itc_reversal_cess_amount"],
                     },
                 )
                 preview = {

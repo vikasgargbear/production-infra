@@ -1631,6 +1631,7 @@ class CanonicalGSTR3BResponse(BaseModel):
     period: CanonicalReportPeriod
     outputTax: CanonicalTaxAmounts
     inputCredit: CanonicalTaxAmounts
+    inputCreditReversed: CanonicalTaxAmounts
     payable: CanonicalTaxAmounts
     netPayable: MoneyJSON
 
@@ -1999,10 +2000,14 @@ def canonical_gstr3b_report(
                COALESCE(output.sgst,0) AS output_sgst,
                COALESCE(output.igst,0) AS output_igst,
                COALESCE(output.cess,0) AS output_cess,
-               COALESCE(input.cgst,0) AS input_cgst,
-               COALESCE(input.sgst,0) AS input_sgst,
-               COALESCE(input.igst,0) AS input_igst,
-               COALESCE(input.cess,0) AS input_cess,
+               COALESCE(input.cgst,0)-COALESCE(reversal.cgst,0) AS input_cgst,
+               COALESCE(input.sgst,0)-COALESCE(reversal.sgst,0) AS input_sgst,
+               COALESCE(input.igst,0)-COALESCE(reversal.igst,0) AS input_igst,
+               COALESCE(input.cess,0)-COALESCE(reversal.cess,0) AS input_cess,
+               COALESCE(reversal.cgst,0) AS reversed_cgst,
+               COALESCE(reversal.sgst,0) AS reversed_sgst,
+               COALESCE(reversal.igst,0) AS reversed_igst,
+               COALESCE(reversal.cess,0) AS reversed_cess,
                COALESCE(purchase_adjustments.unsupported_count,0) AS unsupported_input_adjustments
           FROM (
               SELECT SUM(CASE WHEN tax_document.document_effect='decrease' THEN -tax_document.cgst_amount ELSE tax_document.cgst_amount END) cgst,
@@ -2065,6 +2070,21 @@ def canonical_gstr3b_report(
                  )
           ) input
           CROSS JOIN (
+              SELECT SUM(event.cgst_amount) cgst,SUM(event.sgst_amount) sgst,
+                     SUM(event.igst_amount) igst,SUM(event.cess_amount) cess
+                FROM tax.input_credit_reversal_events event
+                JOIN compliance.destructions destruction
+                  ON destruction.org_id=event.org_id AND destruction.id=event.destruction_id
+               WHERE event.org_id=:org_id AND event.status='posted'
+                 AND destruction.destruction_date BETWEEN :date_from AND :date_to
+                 AND EXISTS (SELECT 1 FROM tax.returns filing
+                   JOIN tax.return_periods period ON period.org_id=filing.org_id
+                     AND period.id=filing.return_period_id
+                  WHERE filing.org_id=event.org_id AND filing.id=event.gstr3b_return_id
+                    AND period.id=event.return_period_id
+                    AND destruction.destruction_date BETWEEN period.period_start AND period.period_end)
+          ) reversal
+          CROSS JOIN (
               SELECT count(DISTINCT note.id) AS unsupported_count
                 FROM finance.adjustment_notes note
                 JOIN finance.adjustment_note_lines line
@@ -2104,13 +2124,16 @@ def canonical_gstr3b_report(
         )
     output = {component: Decimal(str(row.get(f"output_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
     input_credit = {component: Decimal(str(row.get(f"input_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
+    input_credit_reversed = {component: Decimal(str(row.get(f"reversed_{component}") or 0)) for component in ("cgst", "sgst", "igst", "cess")}
     payable = {component: max(Decimal("0"), output[component]-input_credit[component]) for component in output}
     output_total = sum(output.values(), Decimal("0"))
     input_total = sum(input_credit.values(), Decimal("0"))
+    reversed_total = sum(input_credit_reversed.values(), Decimal("0"))
     return {
         "period": {"start": date_from, "end": date_to},
         "outputTax": {**{key: money_json(value) for key, value in output.items()}, "total": money_json(output_total)},
         "inputCredit": {**{key: money_json(value) for key, value in input_credit.items()}, "total": money_json(input_total)},
+        "inputCreditReversed": {**{key: money_json(value) for key, value in input_credit_reversed.items()}, "total": money_json(reversed_total)},
         "payable": {**{key: money_json(value) for key, value in payable.items()}, "total": money_json(sum(payable.values(), Decimal("0")))},
         "netPayable": money_json(output_total-input_total),
     }

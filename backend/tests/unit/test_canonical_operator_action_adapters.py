@@ -1385,6 +1385,8 @@ class FakeInventoryDestructionSession:
             request = json.loads(params["request_json"])
             destruction_loss = str(uuid4())
             inventory_asset = str(uuid4())
+            reversal_expense = str(uuid4())
+            input_accounts = [str(uuid4()) for _ in range(4)]
             lines = []
             sources = [{
                 "resource_type": "destruction_certificate",
@@ -1415,13 +1417,27 @@ class FakeInventoryDestructionSession:
                 "location_id": request["location_id"],
                 "inventory_asset_account_id": inventory_asset,
                 "inventory_destruction_loss_account_id": destruction_loss,
+                "inventory_itc_reversal_expense_account_id": reversal_expense,
+                "input_cgst_account_id": input_accounts[0],
+                "input_sgst_account_id": input_accounts[1],
+                "input_igst_account_id": input_accounts[2],
+                "input_cess_account_id": input_accounts[3],
+                "gst_registration_id": str(uuid4()),
+                "gst_return_period_id": str(uuid4()),
+                "gstr3b_return_id": str(uuid4()),
+                "itc_reversal_rule_version_id": str(uuid4()),
+                "itc_reversal_cgst_amount": "1.80",
+                "itc_reversal_sgst_amount": "1.80",
+                "itc_reversal_igst_amount": "0.00",
+                "itc_reversal_cess_amount": "0.00",
+                "itc_reversal_total": "3.60",
                 "lines": lines,
                 "total_base_quantity": "3.000000",
                 "total_value": "30.00",
                 "source_versions": sources,
                 "legal_scope": {
                     "approval_policy": "separate_approver",
-                    "gst_scope": "organization_has_no_active_gst_registration",
+                    "gst_scope": "active_registered_taxpayer",
                     "supported_quantity": "full_batch_location_balance_only",
                 },
             }},))
@@ -3244,7 +3260,8 @@ def _inventory_destruction_service_payload():
         "witness_name": "Licensed Disposal Witness",
         "witness_credential": "PCB-WITNESS-001",
         "certificate_attachment_id": uuid4(),
-        "itc_treatment": "not_applicable_unregistered",
+        "itc_reversal_evidence_attachment_id": uuid4(),
+        "itc_treatment": "section_17_5_h_reversal",
         "lines": [{
             "product_id": uuid4(),
             "uom_conversion_id": uuid4(),

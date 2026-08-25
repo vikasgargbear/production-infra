@@ -124,6 +124,11 @@ class DestructionStockCandidate(StrictDTO):
     available_base_quantity: ExactQuantity
     average_unit_cost: ExactRate
     inventory_value: ExactMoney
+    input_credit_lot_count: int = Field(gt=0)
+    eligible_itc_cgst_amount: ExactMoney
+    eligible_itc_sgst_amount: ExactMoney
+    eligible_itc_igst_amount: ExactMoney
+    eligible_itc_cess_amount: ExactMoney
 
 
 class InventoryDestructionContext(StrictDTO):
@@ -136,8 +141,9 @@ class InventoryDestructionContext(StrictDTO):
     certificate_upload_available: Literal[False]
     certificate_upload_message: str
     method_code: Literal["licensed_incineration"]
-    itc_treatment: Literal["not_applicable_unregistered"]
+    itc_treatment: Literal["section_17_5_h_reversal"]
     certificates: list[DestructionCertificate]
+    itc_reversal_evidence: list[DestructionCertificate]
     candidates: list[DestructionStockCandidate]
 
 
@@ -343,9 +349,7 @@ def inventory_destruction_context(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Certified destruction candidate access requires its exact cross-domain authority",
         )
-    candidates: list[dict[str, Any]] = []
-    if not clock["has_active_gst_registration"]:
-        candidates = _rows(
+    candidates = _rows(
             db,
             """
             SELECT branch.id AS branch_id, branch.code AS branch_code,
@@ -360,7 +364,27 @@ def inventory_destruction_context(
                    round(balance.on_hand_quantity/conversion.multiplier, 6)
                      AS available_selected_quantity,
                    balance.on_hand_quantity AS available_base_quantity,
-                   balance.average_unit_cost, balance.inventory_value
+                   balance.average_unit_cost, balance.inventory_value,
+                   (SELECT count(*) FROM tax.input_credit_lots lot
+                     WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                       AND lot.lineage_status='exact' AND lot.remaining_base_quantity>0)
+                     AS input_credit_lot_count,
+                   (SELECT COALESCE(sum(lot.remaining_cgst_amount),0) FROM tax.input_credit_lots lot
+                     WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                       AND lot.lineage_status='exact' AND lot.remaining_base_quantity>0)
+                     AS eligible_itc_cgst_amount,
+                   (SELECT COALESCE(sum(lot.remaining_sgst_amount),0) FROM tax.input_credit_lots lot
+                     WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                       AND lot.lineage_status='exact' AND lot.remaining_base_quantity>0)
+                     AS eligible_itc_sgst_amount,
+                   (SELECT COALESCE(sum(lot.remaining_igst_amount),0) FROM tax.input_credit_lots lot
+                     WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                       AND lot.lineage_status='exact' AND lot.remaining_base_quantity>0)
+                     AS eligible_itc_igst_amount,
+                   (SELECT COALESCE(sum(lot.remaining_cess_amount),0) FROM tax.input_credit_lots lot
+                     WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                       AND lot.lineage_status='exact' AND lot.remaining_base_quantity>0)
+                     AS eligible_itc_cess_amount
               FROM inventory.stock_balances balance
               JOIN core.branches branch
                 ON branch.org_id=balance.org_id AND branch.id=balance.branch_id
@@ -380,7 +404,21 @@ def inventory_destruction_context(
               JOIN inventory.batches batch
                 ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
                AND batch.product_id=product.id AND batch.lot_kind='manufacturer_batch'
-               AND batch.status IN ('quarantined','blocked','expired')
+               AND (batch.status IN ('quarantined','blocked','expired') OR (
+                 batch.status='released' AND location.location_type='quarantine'
+                 AND EXISTS (
+                   SELECT 1 FROM inventory.stock_ledger_entries returned_ledger
+                   JOIN inventory.inventory_documents returned_document
+                     ON returned_document.org_id=returned_ledger.org_id
+                    AND returned_document.id=returned_ledger.inventory_document_id
+                  WHERE returned_ledger.org_id=balance.org_id
+                    AND returned_ledger.branch_id=balance.branch_id
+                    AND returned_ledger.location_id=balance.location_id
+                    AND returned_ledger.product_id=balance.product_id
+                    AND returned_ledger.batch_id=balance.batch_id
+                    AND returned_ledger.quantity_delta>0
+                    AND returned_document.document_type='sales_return_receipt'
+                    AND returned_document.status='posted'))
                AND batch.expires_on IS NOT NULL AND batch.mrp>0
                AND batch.mrp_uom_conversion_id IS NOT NULL
               JOIN catalog.uom_conversions conversion
@@ -390,6 +428,31 @@ def inventory_destruction_context(
                AND conversion.multiplier>0 AND conversion.valid_from<=:business_date
                AND (conversion.valid_until IS NULL OR conversion.valid_until>=:business_date)
              WHERE balance.org_id=:org_id AND balance.on_hand_quantity>0
+               AND EXISTS (SELECT 1 FROM tax.registration_branches association
+                 JOIN tax.registrations registration
+                   ON registration.org_id=association.org_id AND registration.id=association.registration_id
+                WHERE association.org_id=balance.org_id AND association.branch_id=balance.branch_id
+                  AND registration.status='active' AND registration.registration_type='regular'
+                  AND registration.effective_from<=:business_date
+                  AND (registration.effective_to IS NULL OR registration.effective_to>=:business_date)
+                  AND EXISTS (SELECT 1 FROM tax.return_periods period
+                    JOIN tax.returns filing ON filing.org_id=period.org_id
+                      AND filing.return_period_id=period.id AND filing.return_type='gstr3b'
+                      AND filing.status='draft'
+                   WHERE period.org_id=registration.org_id AND period.registration_id=registration.id
+                     AND :business_date BETWEEN period.period_start AND period.period_end
+                     AND period.status='open'))
+               AND EXISTS (SELECT 1 FROM tax.itc_reversal_rule_versions rule
+                 WHERE rule.status='active' AND rule.event_kind='goods_destroyed'
+                   AND rule.legal_section='17(5)(h)' AND rule.effective_from<=:business_date
+                   AND (rule.effective_to IS NULL OR rule.effective_to>=:business_date))
+               AND (SELECT COALESCE(sum(lot.remaining_base_quantity),0)
+                      FROM tax.input_credit_lots lot
+                     WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                       AND lot.lineage_status='exact')>=balance.on_hand_quantity
+               AND NOT EXISTS (SELECT 1 FROM tax.input_credit_lots lot
+                 WHERE lot.org_id=balance.org_id AND lot.batch_id=balance.batch_id
+                   AND lot.lineage_status<>'exact')
                AND round(
                     round(balance.on_hand_quantity/conversion.multiplier,6)
                       * conversion.multiplier,
@@ -476,6 +539,37 @@ def inventory_destruction_context(
                                       THEN setting.value_text::uuid END
                   AND account.status='active' AND account.account_type='expense'
                   AND account.currency_code='INR' AND NOT account.allows_party_posting)
+               AND 5=(
+                 SELECT count(*)
+                   FROM (VALUES
+                     ('inventory_itc_reversal_expense','expense'),
+                     ('input_cgst','asset'),('input_sgst','asset'),
+                     ('input_igst','asset'),('input_cess','asset')
+                   ) expected(role_key,account_type)
+                  WHERE EXISTS (
+                    SELECT 1
+                      FROM LATERAL (
+                        SELECT role_setting.value_text
+                          FROM core.settings role_setting
+                         WHERE role_setting.org_id=balance.org_id
+                           AND role_setting.status='active'
+                           AND role_setting.value_type='text'
+                           AND role_setting.namespace='finance.account_roles'
+                           AND role_setting.key=expected.role_key
+                           AND (role_setting.branch_id=balance.branch_id
+                                OR role_setting.branch_id IS NULL)
+                         ORDER BY (role_setting.branch_id=balance.branch_id) DESC
+                         LIMIT 1
+                      ) setting
+                      JOIN finance.accounts account
+                        ON account.org_id=balance.org_id
+                       AND account.id=CASE
+                           WHEN setting.value_text~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+                           THEN setting.value_text::uuid END
+                       AND account.status='active'
+                       AND account.account_type=expected.account_type
+                       AND account.currency_code='INR'
+                       AND NOT account.allows_party_posting))
              ORDER BY branch.code, location.code, product.name, batch.expires_on,
                       batch.batch_number, conversion.multiplier, conversion.id
             """,
@@ -512,18 +606,35 @@ def inventory_destruction_context(
             "business_date": clock["business_date"],
         },
     )
+    reversal_evidence = _rows(
+        db,
+        """
+            SELECT attachment.id AS certificate_attachment_id,
+                   attachment.original_filename, attachment.document_date,
+                   attachment.verified_at, attachment.retention_until
+              FROM core.attachments attachment
+             WHERE attachment.org_id=:org_id
+               AND attachment.evidence_kind='inventory_destruction_itc_reversal'
+               AND attachment.status IN ('verified','retained')
+               AND attachment.verified_at IS NOT NULL AND attachment.verified_at<=:as_of
+               AND attachment.document_date=:business_date
+               AND attachment.retention_until>=:business_date AND attachment.sha256 IS NOT NULL
+             ORDER BY attachment.verified_at DESC,attachment.id
+        """,
+        {"org_id": org_id, "as_of": clock["as_of"], "business_date": clock["business_date"]},
+    )
     blockers: list[str] = []
-    if clock["has_active_gst_registration"]:
-        blockers.append(
-            "GST-registered destruction needs a reviewed Section 17(5)(h) ITC reversal command."
-        )
+    if not clock["has_active_gst_registration"]:
+        blockers.append("Destruction requires an active regular GST registration and Section 17(5)(h) authority.")
     if not certificates:
         blockers.append(
             "No unconsumed, verified destruction certificate for the organization business date is available."
         )
-    if not candidates and not clock["has_active_gst_registration"]:
+    if not reversal_evidence:
+        blockers.append("No verified same-day Section 17(5)(h) reversal evidence is available.")
+    if not candidates:
         blockers.append(
-            "No full-balance, non-regulated stock in an eligible quarantine or damaged location is available."
+            "No full-balance stock with exact residual input-credit lineage is available."
         )
     return InventoryDestructionContext(
         organization_id=org_id,
@@ -538,7 +649,8 @@ def inventory_destruction_context(
             "verification command is published. Existing verified evidence remains selectable."
         ),
         method_code="licensed_incineration",
-        itc_treatment="not_applicable_unregistered",
+        itc_treatment="section_17_5_h_reversal",
         certificates=[DestructionCertificate.model_validate(row) for row in certificates],
+        itc_reversal_evidence=[DestructionCertificate.model_validate(row) for row in reversal_evidence],
         candidates=[DestructionStockCandidate.model_validate(row) for row in candidates],
     )

@@ -162,7 +162,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/web/actions/inventory-destruction/commands/{command_request_id}/readback",
       "mcp_readback_tool": "erp_inventory_destruction_readback_get",
-      "database_relations": ["compliance.destructions", "inventory.inventory_documents", "inventory.stock_ledger_entries", "finance.journal_entries"],
+      "database_relations": ["compliance.destructions", "inventory.inventory_documents", "inventory.stock_ledger_entries", "tax.input_credit_lots", "tax.input_credit_applications", "tax.input_credit_reversal_events", "tax.returns", "finance.journal_entries"],
       "scenario_steps": ["inventory_destruction_certified_full_balance"],
       "availability": "published"
     },

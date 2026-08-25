@@ -250,6 +250,25 @@ class InventoryDestructionReadbackLine(StrictDTO):
     remaining_inventory_value: Decimal
 
 
+class InventoryDestructionItcApplicationReadback(StrictDTO):
+    input_credit_application_id: UUID
+    input_credit_lot_id: UUID
+    supplier_invoice_id: UUID
+    supplier_invoice_line_id: UUID
+    goods_receipt_line_id: UUID
+    batch_id: UUID
+    applied_base_quantity: Decimal
+    applied_cgst_amount: Decimal
+    applied_sgst_amount: Decimal
+    applied_igst_amount: Decimal
+    applied_cess_amount: Decimal
+    remaining_lot_base_quantity: Decimal
+    remaining_lot_cgst_amount: Decimal
+    remaining_lot_sgst_amount: Decimal
+    remaining_lot_igst_amount: Decimal
+    remaining_lot_cess_amount: Decimal
+
+
 class InventoryDestructionReadback(StrictDTO):
     command_request_id: UUID
     destruction_id: UUID
@@ -259,6 +278,17 @@ class InventoryDestructionReadback(StrictDTO):
     method_code: Literal["licensed_incineration"]
     reason_code: Literal["expired", "damaged", "quality_rejected"]
     certificate_attachment_id: UUID
+    itc_reversal_evidence_attachment_id: UUID
+    physical_destruction_confirmed_at: datetime
+    gst_registration_id: UUID
+    gst_return_period_id: UUID
+    gstr3b_return_id: UUID
+    itc_reversal_rule_version_id: UUID
+    itc_reversal_event_id: UUID
+    itc_reversal_cgst_amount: Decimal
+    itc_reversal_sgst_amount: Decimal
+    itc_reversal_igst_amount: Decimal
+    itc_reversal_cess_amount: Decimal
     created_by_membership_id: UUID
     approved_by_membership_id: UUID
     posted_by_membership_id: UUID
@@ -274,6 +304,7 @@ class InventoryDestructionReadback(StrictDTO):
     journal_credit_total: Decimal
     accounting_event_id: UUID
     lines: list[InventoryDestructionReadbackLine]
+    input_credit_applications: list[InventoryDestructionItcApplicationReadback]
 
 
 class BankReconciliationReadback(StrictDTO):
@@ -1094,6 +1125,17 @@ def load_inventory_destruction_readback(
                    destruction.method_code,
                    destruction.reason_code,
                    destruction.certificate_attachment_id,
+                   destruction.itc_reversal_evidence_attachment_id,
+                   destruction.physical_destruction_confirmed_at,
+                   destruction.gst_registration_id,
+                   destruction.gst_return_period_id,
+                   destruction.gstr3b_return_id,
+                   destruction.itc_reversal_rule_version_id,
+                   reversal.id AS itc_reversal_event_id,
+                   reversal.cgst_amount AS itc_reversal_cgst_amount,
+                   reversal.sgst_amount AS itc_reversal_sgst_amount,
+                   reversal.igst_amount AS itc_reversal_igst_amount,
+                   reversal.cess_amount AS itc_reversal_cess_amount,
                    destruction.created_by_membership_id,
                    destruction.approved_by_membership_id,
                    destruction.posted_by_membership_id,
@@ -1127,6 +1169,10 @@ def load_inventory_destruction_readback(
                 ON document.org_id=destruction.org_id
                AND document.id=destruction.inventory_document_id
                AND document.destruction_id=destruction.id
+              JOIN tax.input_credit_reversal_events AS reversal
+                ON reversal.org_id=destruction.org_id
+               AND reversal.destruction_id=destruction.id
+               AND reversal.status='posted'
               JOIN inventory.inventory_document_lines AS document_line
                 ON document_line.org_id=document.org_id
                AND document_line.inventory_document_id=document.id
@@ -1178,6 +1224,37 @@ def load_inventory_destruction_readback(
         )
     header = rows[0]._mapping
     values = [row._mapping for row in rows]
+    applications = db.execute(
+        text(
+            """
+            SELECT application.id AS input_credit_application_id,
+                   lot.id AS input_credit_lot_id,lot.supplier_invoice_id,
+                   lot.supplier_invoice_line_id,lot.goods_receipt_line_id,lot.batch_id,
+                   application.applied_base_quantity,application.applied_cgst_amount,
+                   application.applied_sgst_amount,application.applied_igst_amount,
+                   application.applied_cess_amount,
+                   lot.remaining_base_quantity AS remaining_lot_base_quantity,
+                   lot.remaining_cgst_amount AS remaining_lot_cgst_amount,
+                   lot.remaining_sgst_amount AS remaining_lot_sgst_amount,
+                   lot.remaining_igst_amount AS remaining_lot_igst_amount,
+                   lot.remaining_cess_amount AS remaining_lot_cess_amount
+              FROM tax.input_credit_applications application
+              JOIN tax.input_credit_lots lot
+                ON lot.org_id=application.org_id AND lot.id=application.input_credit_lot_id
+             WHERE application.org_id=:org_id AND application.destruction_id=:destruction_id
+               AND application.reversal_event_id=:reversal_event_id
+               AND application.application_kind='destruction_reversal'
+               AND application.status='posted'
+             ORDER BY lot.acquired_on,lot.supplier_invoice_id,lot.supplier_invoice_line_id,lot.id
+            """
+        ),
+        {"org_id": org_id, "destruction_id": header["destruction_id"],
+         "reversal_event_id": header["itc_reversal_event_id"]},
+    ).fetchall()
+    reversal_total = sum(
+        (header[f"itc_reversal_{component}_amount"] for component in ("cgst", "sgst", "igst", "cess")),
+        Decimal("0"),
+    )
     if (
         any(
             row["ledger_quantity_delta"] != -row["destroyed_base_quantity"]
@@ -1190,8 +1267,11 @@ def load_inventory_destruction_readback(
         != header["total_destroyed_base_quantity"]
         or sum((row["destroyed_value"] for row in values), Decimal("0"))
         != header["total_destroyed_value"]
-        or header["journal_debit_total"] != header["total_destroyed_value"]
-        or header["journal_credit_total"] != header["total_destroyed_value"]
+        or not applications
+        or sum((row._mapping["applied_base_quantity"] for row in applications), Decimal("0"))
+        != header["total_destroyed_base_quantity"]
+        or header["journal_debit_total"] != header["total_destroyed_value"] + reversal_total
+        or header["journal_credit_total"] != header["total_destroyed_value"] + reversal_total
         or any(row["location_id"] != header["location_id"] for row in values)
     ):
         raise HTTPException(
@@ -1210,6 +1290,17 @@ def load_inventory_destruction_readback(
         method_code=header["method_code"],
         reason_code=header["reason_code"],
         certificate_attachment_id=header["certificate_attachment_id"],
+        itc_reversal_evidence_attachment_id=header["itc_reversal_evidence_attachment_id"],
+        physical_destruction_confirmed_at=header["physical_destruction_confirmed_at"],
+        gst_registration_id=header["gst_registration_id"],
+        gst_return_period_id=header["gst_return_period_id"],
+        gstr3b_return_id=header["gstr3b_return_id"],
+        itc_reversal_rule_version_id=header["itc_reversal_rule_version_id"],
+        itc_reversal_event_id=header["itc_reversal_event_id"],
+        itc_reversal_cgst_amount=header["itc_reversal_cgst_amount"],
+        itc_reversal_sgst_amount=header["itc_reversal_sgst_amount"],
+        itc_reversal_igst_amount=header["itc_reversal_igst_amount"],
+        itc_reversal_cess_amount=header["itc_reversal_cess_amount"],
         created_by_membership_id=header["created_by_membership_id"],
         approved_by_membership_id=header["approved_by_membership_id"],
         posted_by_membership_id=header["posted_by_membership_id"],
@@ -1239,6 +1330,10 @@ def load_inventory_destruction_readback(
                 remaining_inventory_value=row["remaining_inventory_value"],
             )
             for row in values
+        ],
+        input_credit_applications=[
+            InventoryDestructionItcApplicationReadback(**dict(row._mapping))
+            for row in applications
         ],
     )
 
