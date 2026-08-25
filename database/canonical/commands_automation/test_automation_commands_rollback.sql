@@ -4,6 +4,7 @@ BEGIN;
 
 DO $automation_command_contract$
 DECLARE bad_count integer; runtime_count integer; calculator_count integer;
+  expected_runtime_count integer;
 BEGIN
     SELECT count(*) INTO bad_count
       FROM pg_catalog.pg_proc procedure
@@ -36,8 +37,14 @@ BEGIN
                                  'resolve_bank_reconciliation_prepare','persist_bank_reconciliation_prepare',
                                  'execute_bank_reconciliation_command')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
-    IF runtime_count<>29 THEN
-        RAISE EXCEPTION 'expected twenty-nine reviewed runtime automation commands, found %',runtime_count;
+    expected_runtime_count:=CASE
+      WHEN pg_catalog.to_regprocedure(
+        'erp_automation_commands.execute_bank_reconciliation_command(uuid,uuid)'
+      ) IS NULL THEN 21
+      ELSE 28
+    END;
+    IF runtime_count<>expected_runtime_count THEN
+        RAISE EXCEPTION 'expected % reviewed runtime automation commands, found %',expected_runtime_count,runtime_count;
     END IF;
 
     SELECT count(*) INTO bad_count
