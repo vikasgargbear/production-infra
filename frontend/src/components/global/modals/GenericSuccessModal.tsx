@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CheckCircle, X, Printer, Download, Copy, Mail, MessageCircle, FileText, LucideIcon } from 'lucide-react';
+import { CheckCircle, X, Printer, Download, Copy, Mail, FileText, LucideIcon } from 'lucide-react';
+import WhatsAppIcon from '../../icons/WhatsAppIcon';
+import { canonicalContactEmail, indianContactDigits } from '../../../utils/contactDestinations';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -102,6 +104,15 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
         const [whole, fraction = ''] = totalAmount.trim().split('.');
         return `${whole}.${fraction.padEnd(2, '0')}`;
     })();
+    const whatsappDigits = indianContactDigits(
+        partyDetails?.phone || documentData.customerPhone,
+    );
+    const emailAddress = canonicalContactEmail(
+        partyDetails?.email || documentData.customerEmail,
+    );
+    const recipientName = customerName || partyDetails?.name || 'customer';
+    const shareSubject = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber || ''}`.trim();
+    const shareBody = `Dear ${recipientName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber || ''}\nAmount: ₹${formattedTotalAmount || '0.00'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
 
     // Focus trap: capture trigger element, trap focus inside dialog, restore on close.
     useEffect(() => {
@@ -287,38 +298,50 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-2">
                                 <button
+                                    type="button"
+                                    disabled={!whatsappDigits}
                                     onClick={() => {
+                                        if (!whatsappDigits) return;
                                         if (onWhatsApp) {
                                             onWhatsApp();
-                                        } else {
-                                            const phone = partyDetails?.phone || documentData.customerPhone || '';
-                                            const message = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}\nAmount: ₹${formattedTotalAmount || '0'}\nFor: ${customerName}`;
-                                            const formattedPhone = phone.replace(/^\+91|^91/, '');
-                                            const whatsappUrl = `https://wa.me/91${formattedPhone}?text=${encodeURIComponent(message)}`;
-                                            window.open(whatsappUrl, '_blank');
+                                            return;
                                         }
+                                        const message = `${shareSubject}\nAmount: ₹${formattedTotalAmount || '0.00'}\nFor: ${recipientName}`;
+                                        window.open(
+                                            `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(message)}`,
+                                            '_blank',
+                                            'noopener,noreferrer',
+                                        );
                                     }}
-                                    className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                                    aria-label={`Send ${documentType} #${documentNumber} to ${customerName} via WhatsApp`}
+                                    title={whatsappDigits ? `Open WhatsApp for ${recipientName}` : 'Valid WhatsApp number unavailable'}
+                                    className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                                    aria-label={whatsappDigits ? `Open WhatsApp for ${recipientName}` : 'Valid WhatsApp number unavailable'}
                                 >
-                                    <MessageCircle className="w-5 h-5 text-green-600" />
+                                    <WhatsAppIcon className={`w-5 h-5 ${whatsappDigits ? 'text-green-600' : 'text-gray-300'}`} />
                                     <span className="font-medium">WhatsApp</span>
                                 </button>
 
-                                <button
-                                    onClick={() => {
-                                        const email = partyDetails?.email || documentData.customerEmail || '';
-                                        const subject = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}`;
-                                        const body = `Dear ${customerName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber}\nAmount: ₹${formattedTotalAmount || '0'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
-                                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                        window.open(gmailUrl, '_blank');
-                                    }}
-                                    className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
-                                    aria-label={`Send ${documentType} #${documentNumber} to ${customerName} via Email`}
-                                >
-                                    <Mail className="w-5 h-5" />
-                                    <span className="font-medium">Email</span>
-                                </button>
+                                {emailAddress ? (
+                                    <a
+                                        href={`mailto:${encodeURIComponent(emailAddress)}?subject=${encodeURIComponent(shareSubject)}&body=${encodeURIComponent(shareBody)}`}
+                                        className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
+                                        aria-label={`Email ${recipientName}`}
+                                    >
+                                        <Mail className="w-5 h-5" />
+                                        <span className="font-medium">Email</span>
+                                    </a>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled
+                                        title="Valid email address unavailable"
+                                        className="min-h-[44px] flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-3 text-gray-400"
+                                        aria-label="Valid email address unavailable"
+                                    >
+                                        <Mail className="w-5 h-5" />
+                                        <span className="font-medium">Email</span>
+                                    </button>
+                                )}
                             </div>
 
                             <div className={`grid gap-2 ${onDownload ? 'grid-cols-3' : 'grid-cols-2'}`}>

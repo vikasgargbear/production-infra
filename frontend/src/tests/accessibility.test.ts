@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
@@ -247,5 +247,47 @@ describe('GenericSuccessModal accessibility', () => {
       })
     );
     expect(screen.getByText('₹9007199254740993.01')).toBeInTheDocument();
+  });
+
+  it('disables contact actions when destinations are missing or invalid', () => {
+    const { default: GenericSuccessModal } = require('../components/global/modals/GenericSuccessModal');
+    render(React.createElement(GenericSuccessModal, {
+      isOpen: true,
+      onClose: jest.fn(),
+      documentType: 'invoice',
+      documentNumber: 'INV-001',
+      customerName: 'Test Customer',
+      partyDetails: { phone: '123', email: 'not-an-email' },
+    }));
+
+    expect(screen.getByRole('button', { name: 'Valid WhatsApp number unavailable' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Valid email address unavailable' })).toBeDisabled();
+  });
+
+  it('uses the shared WhatsApp mark and the device mail composer for valid destinations', () => {
+    const { default: GenericSuccessModal } = require('../components/global/modals/GenericSuccessModal');
+    const opened = jest.spyOn(window, 'open').mockImplementation(() => null);
+    render(React.createElement(GenericSuccessModal, {
+      isOpen: true,
+      onClose: jest.fn(),
+      documentType: 'invoice',
+      documentNumber: 'INV-001',
+      customerName: 'Test Customer',
+      totalAmount: '168.00',
+      partyDetails: { phone: '+91 98765 43210', email: 'buyer@example.com' },
+    }));
+
+    const whatsapp = screen.getByRole('button', { name: 'Open WhatsApp for Test Customer' });
+    expect(whatsapp.querySelector('svg')).toBeInTheDocument();
+    fireEvent.click(whatsapp);
+    expect(opened).toHaveBeenCalledWith(
+      expect.stringMatching(/^https:\/\/wa\.me\/919876543210\?text=/),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(screen.getByRole('link', { name: 'Email Test Customer' }).getAttribute('href'))
+      .toMatch(/^mailto:buyer%40example\.com\?/);
+    expect(document.body.innerHTML).not.toContain('mail.google.com');
+    opened.mockRestore();
   });
 });
