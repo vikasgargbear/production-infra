@@ -28,6 +28,7 @@ import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValida
 import { useInvoiceSave } from './useInvoiceSave';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { addExactDecimals, type ExactDecimalString } from '../../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 // ==================== HOOK-SPECIFIC TYPE EXTENSIONS ====================
 // These extend shared types with required fields for the hook's internal state
@@ -82,12 +83,13 @@ export interface Invoice {
     billing_address_data?: CustomerAddress;
     shipping_address_data?: CustomerAddress;
     gst_type: GstType | '';
-    delivery_type: 'PICKUP' | 'DELIVERY' | 'COURIER';
+    delivery_type: '' | 'PICKUP' | 'DELIVERY' | 'COURIER';
+    distance_km: string;
     transport_company: string;
     vehicle_number: string;
     driver_phone: string;
     lr_number: string;
-    freight_charges: number;
+    freight_charges: string | number;
     discount_amount: number;
     discount_percent: number;
     discount_type: 'percentage' | 'fixed';
@@ -134,6 +136,7 @@ export interface UseInvoiceLogicReturn {
     isOnline: boolean;
     error: string | null;
     setError: Dispatch<SetStateAction<string | null>>;
+    documentPolicy: CanonicalDocumentPolicy | null;
 
     saving: boolean;
     showSuccessModal: boolean;
@@ -185,12 +188,13 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     // The canonical calculation preview resolves the tax treatment from the
     // branch, customer, document date, and reviewed tax registration facts.
     gst_type: '',
-    delivery_type: 'PICKUP',
+    delivery_type: '',
+    distance_km: '',
     transport_company: '',
     vehicle_number: '',
     driver_phone: '',
     lr_number: '',
-    freight_charges: 0,
+    freight_charges: '',
     discount_amount: 0,
     discount_percent: 0,
     discount_type: 'percentage',
@@ -223,6 +227,7 @@ export const useInvoiceLogic = (
     const { companyInfo } = useCompany();
     const {
         businessDate,
+        documentPolicy,
         loading: businessDateLoading,
         error: businessDateError,
     } = useCanonicalBusinessDate();
@@ -281,6 +286,7 @@ export const useInvoiceLogic = (
         invoice,
         selectedCustomer,
         companyInfo,
+        documentPolicy,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,
@@ -578,6 +584,7 @@ export const useInvoiceLogic = (
         isOnline,
         error,
         setError,
+        documentPolicy,
 
         saving,
         showSuccessModal,

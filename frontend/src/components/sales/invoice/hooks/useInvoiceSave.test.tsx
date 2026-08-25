@@ -51,6 +51,7 @@ const createProps = (isOnline: boolean) => ({
         primary_email: 'customer@example.test',
     } as any,
     companyInfo: { name: 'Synthetic Company' } as any,
+    documentPolicy: {} as any,
     isOnline,
     setInvoice: jest.fn(),
     setCreatedInvoiceData: jest.fn(),

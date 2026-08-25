@@ -393,6 +393,8 @@ export interface Invoice {
 
     // Delivery
     delivery_type?: string;
+    distance_km?: string | number;
+    freight_charges?: string | number;
     transport_company?: string;
     vehicle_number?: string;
     driver_phone?: string;

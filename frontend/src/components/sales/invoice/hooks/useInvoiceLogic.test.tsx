@@ -4,6 +4,26 @@ import { employeesApi } from '../../../../services/api';
 import type { Customer } from '../../../../types/models/customer';
 import { buildCanonicalInvoicePreparePayload } from '../utils/canonicalInvoiceCommand';
 import { useInvoiceLogic } from './useInvoiceLogic';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+
+const mockDocumentPolicy: CanonicalDocumentPolicy = {
+    allowed_rounding_policies: ['none'],
+    default_rounding_policy: 'none',
+    allowed_zero_rated_payment_modes: ['not_applicable'],
+    default_zero_rated_payment_mode: 'not_applicable',
+    allowed_tax_charge_mechanisms: ['normal'],
+    default_tax_charge_mechanism: 'normal',
+    allowed_price_bases: ['tax_exclusive'],
+    default_price_basis: 'tax_exclusive',
+    logistics_modes: [{
+        transport_mode: 'in_person',
+        display_name: 'In person / own conveyance',
+        requires_transporter_party: false,
+        requires_vehicle: false,
+        requires_transport_document: false,
+    }],
+    default_transport_mode: 'in_person',
+};
 
 jest.mock('react-toastify', () => ({
     toast: { error: jest.fn(), success: jest.fn() },
@@ -23,6 +43,7 @@ jest.mock('../../../../hooks/useCanonicalBusinessDate', () => ({
     useCanonicalBusinessDate: () => ({
         businessDate: '2026-08-25',
         organizationTimezone: 'Asia/Kolkata',
+        documentPolicy: mockDocumentPolicy,
         loading: false,
         error: '',
     }),
@@ -146,7 +167,8 @@ describe('useInvoiceLogic selected quantity boundary', () => {
                     state_code: '27',
                 },
                 delivery_type: 'PICKUP',
-            }, customer, `erp-web-invoice:${billed}:${free}`);
+                distance_km: '4.25',
+            }, customer, `erp-web-invoice:${billed}:${free}`, mockDocumentPolicy);
         expect(payload.lines[0]).toEqual(expect.objectContaining({
             billed_quantity: billed,
             free_quantity: free,

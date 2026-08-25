@@ -6,6 +6,7 @@ import { ModuleHeader, AddressForm, DocumentFooter } from '../../../global';
 
 import { applySelectedDeliveryAddress } from '../utils/invoiceAddressSelection';
 import { compareExactDecimals, formatExactCurrency } from '../../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 // Shared Types
 import { Customer, Invoice } from '../types/invoiceTypes';
@@ -14,6 +15,7 @@ interface InvoiceDetailsStepProps {
     invoice: Invoice;
     setInvoice: React.Dispatch<React.SetStateAction<Invoice>>;
     selectedCustomer: Customer | null;
+    documentPolicy: CanonicalDocumentPolicy | null;
     onClose: () => void;
     onContinue: () => void;
     onBack: () => void;
@@ -28,6 +30,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     invoice,
     setInvoice,
     selectedCustomer,
+    documentPolicy,
     onClose,
     onContinue,
     onBack,
@@ -123,41 +126,27 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                                 {/* Delivery Options - Compact row */}
                                 <div className="border-t border-gray-100 pt-4">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Type</label>
-                                            <select
-                                                ref={deliveryTypeRef}
-                                                value={invoice.delivery_type || 'PICKUP'}
-                                                onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
-                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                            >
-                                                <option value="PICKUP">Pickup</option>
-                                                <option value="SAME_DAY">Same Day</option>
-                                                <option value="NEXT_DAY">Next Day</option>
-                                                <option value="EXPRESS">Express</option>
-                                            </select>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Transport Mode</label>
+                                            <div className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-800">
+                                                {documentPolicy?.logistics_modes[0]?.display_name
+                                                    || 'Waiting for server policy'}
+                                            </div>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Transport</label>
+                                            <label htmlFor="invoice-distance-km" className="block text-sm font-medium text-gray-700 mb-2">Exact Distance (km)</label>
                                             <input
                                                 ref={transportRef}
-                                                type="text"
-                                                value={invoice.transport_company || ''}
-                                                onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
+                                                id="invoice-distance-km"
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                inputMode="decimal"
+                                                value={invoice.distance_km ?? ''}
+                                                onChange={(e) => setInvoice(prev => ({ ...prev, distance_km: e.target.value }))}
                                                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                placeholder="Company name"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle</label>
-                                            <input
-                                                ref={vehicleRef}
-                                                type="text"
-                                                value={invoice.vehicle_number || ''}
-                                                onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
-                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                placeholder="MH-01-AB-1234"
+                                                placeholder="Enter measured distance"
                                             />
                                         </div>
                                         <div>
@@ -165,8 +154,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             <input
                                                 ref={deliveryChargesRef}
                                                 type="number"
-                                                value={invoice.freight_charges || ''}
-                                                onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: parseFloat(e.target.value) || 0 }))}
+                                                value={invoice.freight_charges ?? ''}
+                                                onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: e.target.value }))}
                                                 onFocus={(e) => e.target.select()}
                                                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                 placeholder="0"
@@ -331,7 +320,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         )}
 
                                         {/* Delivery Charges */}
-                                        {invoice.freight_charges > 0 && (
+                                        {invoice.freight_charges !== undefined
+                                            && invoice.freight_charges !== ''
+                                            && compareExactDecimals(invoice.freight_charges, 0, 'Invoice delivery charges', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Delivery Charges</span>
                                                 <span className="text-gray-900">+{formatExactCurrency(invoice.freight_charges, 'Invoice delivery charges')}</span>

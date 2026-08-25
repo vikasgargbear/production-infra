@@ -2,6 +2,7 @@ import type { Customer } from '../../../../types/models/customer';
 import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { FreeSupplyTaxTreatment, InvoiceItem } from '../types/invoiceTypes';
 import type { CompanyInfo } from '../../../../types/common/company.types';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import {
     addExactDecimals,
@@ -138,7 +139,7 @@ const freeSupplyTaxTreatment = (value: unknown): FreeSupplyTaxTreatment => {
 
 const selectedDeliveryAddress = (invoice: Invoice): { id: string; rowVersion: string } => {
     const address = invoice.shipping_address_data;
-    const id = requiredUuid(address?.address_id ?? address?.id, 'Delivery address');
+    const id = requiredUuid(address?.address_id, 'Delivery address');
     const rowVersion = String(address?.row_version ?? '').trim();
     if (!/^[1-9][0-9]*$/.test(rowVersion)) {
         throw new Error('Delivery address is missing its canonical row version. Re-select it and try again.');
@@ -203,7 +204,7 @@ export function invoiceBatchAllocationValidationError(invoice: Invoice): string 
         if (fulfillmentSource(item) === 'dispatch_allocated') continue;
         let availableQuantity: string;
         try {
-            availableQuantity = quantity(item.available_quantity ?? item.quantity_available, `Item ${index + 1} selected batch availability`);
+            availableQuantity = quantity(item.available_quantity, `Item ${index + 1} selected batch availability`);
         } catch {
             return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
         }
@@ -239,9 +240,6 @@ export function canonicalInvoiceValidationError(
         selectedDeliveryAddress(invoice);
     } catch (error) {
         return error instanceof Error ? error.message : 'Select a saved delivery address before previewing the invoice.';
-    }
-    if (invoice.delivery_type !== 'PICKUP') {
-        return 'Delivery and courier invoices need an exact transport distance. Use Pickup until distance capture is available.';
     }
     const batchAllocationError = invoiceBatchAllocationValidationError(invoice);
     if (batchAllocationError) return batchAllocationError;
@@ -304,40 +302,51 @@ export function buildCanonicalInvoicePreparePayload(
     invoice: Invoice,
     customer: Customer,
     idempotencyKey: string,
+    policy: CanonicalDocumentPolicy | null,
 ): Record<string, unknown> {
     const validationError = canonicalInvoiceValidationError(invoice, customer);
     if (validationError) throw new Error(validationError);
+    if (!policy) {
+        throw new Error('Commercial document policy is unavailable. Refresh before preparing the invoice.');
+    }
 
     const firstItem = invoice.items[0];
     const firstDirectIssueItem = invoice.items.find(
         item => fulfillmentSource(item) === 'direct_issue',
     );
     const deliveryAddress = selectedDeliveryAddress(invoice);
-    const freight = rate(invoice.freight_charges, 'Invoice freight');
+    const freight = invoice.freight_charges === undefined
+        || invoice.freight_charges === null
+        || invoice.freight_charges === ''
+        ? null
+        : rate(invoice.freight_charges, 'Invoice freight');
+    const distanceKm = firstDirectIssueItem
+        ? explicitDecimal(invoice.distance_km, 'Invoice transport distance', 2)
+        : null;
     return {
         idempotency_key: idempotencyKey,
         branch_id: requiredUuid(firstItem.branch_id, 'Invoice branch'),
         invoice_date: invoice.invoice_date,
         document_discount: documentDiscount(invoice),
-        rounding_policy: 'none',
-        zero_rated_payment_mode: 'not_applicable',
-        ...(exactDecimalUnits(freight, 'Invoice freight', { scale: 4 }) > 0n ? {
+        rounding_policy: policy.default_rounding_policy,
+        zero_rated_payment_mode: policy.default_zero_rated_payment_mode,
+        ...(freight !== null && exactDecimalUnits(freight, 'Invoice freight', { scale: 4 }) > 0n ? {
             charge_lines: [{
                 charge_code: 'freight',
                 quoted_amount: freight,
-                price_basis: 'tax_exclusive',
+                price_basis: policy.default_price_basis,
                 document_discount_eligible: false,
             }],
         } : {}),
         customer_account_id: requiredUuid(customer.customer_id, 'Customer'),
         delivery_address_id: deliveryAddress.id,
         delivery_address_row_version: deliveryAddress.rowVersion,
-        tax_charge_mechanism: 'normal',
+        tax_charge_mechanism: policy.default_tax_charge_mechanism,
         ...(firstDirectIssueItem ? {
             from_location_id: requiredUuid(firstDirectIssueItem.location_id, 'Stock location'),
             logistics: {
-                transport_mode: 'in_person',
-                distance_km: '0',
+                transport_mode: policy.default_transport_mode,
+                distance_km: distanceKm,
             },
         } : {}),
         lines: invoice.items.map((item, index) => {
@@ -354,7 +363,7 @@ export function buildCanonicalInvoicePreparePayload(
                     item.free_supply_tax_treatment,
                 ),
                 quoted_unit_rate: rate(item.unit_price, `Item ${index + 1} unit rate`),
-                price_basis: 'tax_exclusive',
+                price_basis: policy.default_price_basis,
                 line_discount: exactDecimalUnits(discountPercent, `Item ${index + 1} discount`, { scale: 6 }) > 0n ? {
                     line_discount_kind: 'percent',
                     line_discount_basis: 'price_value',

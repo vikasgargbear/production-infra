@@ -66,6 +66,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         isOnline,
         error,
         setError,
+        documentPolicy,
         saving,
         showSuccessModal,
         setShowSuccessModal,
@@ -331,6 +332,7 @@ ${companyInfo.name}`;
                     invoice={invoice as any}
                     setInvoice={setInvoice as any}
                     selectedCustomer={selectedCustomer as any}
+                    documentPolicy={documentPolicy}
                     onClose={onClose as any}
                     onContinue={handleContinueFromStep2}
                     onBack={handleBackFromStep2}

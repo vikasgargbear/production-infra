@@ -1,5 +1,5 @@
 import {
-    buildCanonicalInvoicePreparePayload,
+    buildCanonicalInvoicePreparePayload as buildCanonicalInvoicePreparePayloadRaw,
     canonicalInvoiceValidationError,
     companyInvoiceValidationError,
     invoicePreviewValidationError,
@@ -8,6 +8,32 @@ import type { Invoice } from '../hooks/useInvoiceLogic';
 import type { Customer } from '../../../../types/models/customer';
 import { prepareImportedItemsForInvoice } from './invoiceItemUtils';
 import { projectCanonicalImportLines } from '../../utils/documentImport';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+
+const documentPolicy: CanonicalDocumentPolicy = {
+    allowed_rounding_policies: ['none'],
+    default_rounding_policy: 'none',
+    allowed_zero_rated_payment_modes: ['not_applicable'],
+    default_zero_rated_payment_mode: 'not_applicable',
+    allowed_tax_charge_mechanisms: ['normal'],
+    default_tax_charge_mechanism: 'normal',
+    allowed_price_bases: ['tax_exclusive'],
+    default_price_basis: 'tax_exclusive',
+    logistics_modes: [{
+        transport_mode: 'in_person',
+        display_name: 'In person / own conveyance',
+        requires_transporter_party: false,
+        requires_vehicle: false,
+        requires_transport_document: false,
+    }],
+    default_transport_mode: 'in_person',
+};
+
+const buildCanonicalInvoicePreparePayload = (
+    invoice: Invoice,
+    customer: Customer,
+    idempotencyKey: string,
+) => buildCanonicalInvoicePreparePayloadRaw(invoice, customer, idempotencyKey, documentPolicy);
 
 const ids = {
     branch: '10000000-0000-7000-8000-000000000001',
@@ -38,6 +64,7 @@ const customer = {
 const invoice = {
     invoice_date: '2026-08-24',
     delivery_type: 'PICKUP',
+    distance_km: '6.75',
     discount_type: 'percentage',
     discount_percent: '5',
     discount_amount: 0,
@@ -83,7 +110,7 @@ describe('canonical invoice command', () => {
             delivery_address_id: ids.deliveryAddress,
             delivery_address_row_version: '7',
             from_location_id: ids.location,
-            logistics: { transport_mode: 'in_person', distance_km: '0' },
+            logistics: { transport_mode: 'in_person', distance_km: '6.75' },
             document_discount: {
                 document_discount_kind: 'percent',
                 document_discount_basis: 'price_value',
@@ -208,7 +235,7 @@ describe('canonical invoice command', () => {
         expect(payload.from_location_id).toBe(isDispatch ? undefined : ids.location);
         expect(payload.logistics).toEqual(isDispatch ? undefined : {
             transport_mode: 'in_person',
-            distance_km: '0',
+            distance_km: '6.75',
         });
         expect(line.batch_allocations).toEqual(isDispatch ? undefined : [{
             batch_id: ids.batch,
@@ -356,7 +383,7 @@ describe('canonical invoice command', () => {
             from_location_id: ids.location,
             logistics: {
                 transport_mode: 'in_person',
-                distance_km: '0',
+                distance_km: '6.75',
             },
             lines: [{
                 product_id: ids.product,
@@ -402,11 +429,22 @@ describe('canonical invoice command', () => {
         )).toThrow(/quantity|non-negative numbers/i);
     });
 
-    it('fails closed for delivery until exact distance is captured', () => {
-        const delivery = { ...invoice, delivery_type: 'DELIVERY' } as Invoice;
-        expect(canonicalInvoiceValidationError(delivery, customer)).toMatch(
-            /exact transport distance/i,
-        );
+    it('fails closed when direct issue lacks an explicit transport distance', () => {
+        const missingDistance = { ...invoice, distance_km: '' } as Invoice;
+        expect(() => buildCanonicalInvoicePreparePayload(
+            missingDistance,
+            customer,
+            'erp-web-invoice:missing-distance',
+        )).toThrow(/transport distance.*missing/i);
+    });
+
+    it('fails closed when the commercial document policy is unavailable', () => {
+        expect(() => buildCanonicalInvoicePreparePayloadRaw(
+            invoice,
+            customer,
+            'erp-web-invoice:missing-policy',
+            null,
+        )).toThrow(/document policy is unavailable/i);
     });
 
     it('sends selected delivery-address identity and leaves place of supply to the backend', () => {

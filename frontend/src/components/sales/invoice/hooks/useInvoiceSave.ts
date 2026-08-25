@@ -16,6 +16,7 @@ import { clientUuid } from '../../../../utils/clientUuid';
 import type { Invoice } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
 import {
     buildCanonicalInvoicePreparePayload,
@@ -26,6 +27,7 @@ export interface UseInvoiceSaveProps {
     invoice: Invoice;
     selectedCustomer: Customer | null;
     companyInfo: CompanyInfo | null;
+    documentPolicy: CanonicalDocumentPolicy | null;
     isOnline: boolean;
     setInvoice: Dispatch<SetStateAction<Invoice>>;
     setCreatedInvoiceData: Dispatch<SetStateAction<CreatedInvoiceData | null>>;
@@ -66,6 +68,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         invoice,
         selectedCustomer,
         companyInfo,
+        documentPolicy,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,
@@ -103,6 +106,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 invoice,
                 selectedCustomer!,
                 idempotencyKey.current,
+                documentPolicy,
             );
             let fingerprint = JSON.stringify(payload);
             if (preparedFingerprint.current && preparedFingerprint.current !== fingerprint) {
@@ -110,7 +114,12 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 lifecycleId.current = clientUuid();
                 executedResourceId.current = null;
                 setPreparedPreview(null);
-                payload = buildCanonicalInvoicePreparePayload(invoice, selectedCustomer!, idempotencyKey.current);
+                payload = buildCanonicalInvoicePreparePayload(
+                    invoice,
+                    selectedCustomer!,
+                    idempotencyKey.current,
+                    documentPolicy,
+                );
                 fingerprint = JSON.stringify(payload);
             }
             if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
@@ -128,6 +137,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         }
     }, [
         companyInfo,
+        documentPolicy,
         invoice,
         isOnline,
         preparedPreview,
