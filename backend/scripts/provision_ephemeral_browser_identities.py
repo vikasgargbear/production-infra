@@ -44,8 +44,10 @@ EXPECTED_POOLER_HOST = "aws-0-ap-south-1.pooler.supabase.com"
 RAILWAY_DIRECT_DATABASE_TRANSPORT = "railway_direct_ipv6"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
+DEMO_REVIEWER_AUTH_USER_ID = "d3000000-0000-7000-8000-000000000002"
 DEMO_REVIEWER_USER_ID = "d3000000-0000-7000-8000-000000000003"
 DEMO_REVIEWER_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000004"
+DEMO_OPERATOR_AUTH_USER_ID = "d3000000-0000-7000-8000-000000000022"
 DEMO_OPERATOR_USER_ID = "d3000000-0000-7000-8000-000000000023"
 DEMO_OPERATOR_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000024"
 DENIAL_ORG_ID = "d3000000-0000-7000-8000-00000000002c"
@@ -645,6 +647,7 @@ def _recover_stale_live18_database(
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             membership_options = _enter_migration_owner(cursor)
+            _set_reviewer_context(cursor)
             cursor.execute(
                 """
                 UPDATE core.users
@@ -658,9 +661,9 @@ def _recover_stale_live18_database(
                 """,
                 (
                     DEMO_OPERATOR_USER_ID,
-                    "d3000000-0000-7000-8000-000000000022",
+                    DEMO_OPERATOR_AUTH_USER_ID,
                     DEMO_REVIEWER_USER_ID,
-                    "d3000000-0000-7000-8000-000000000002",
+                    DEMO_REVIEWER_AUTH_USER_ID,
                     DEMO_OPERATOR_USER_ID,
                     DEMO_REVIEWER_USER_ID,
                     stale_ids,
@@ -682,6 +685,7 @@ def _recover_stale_live18_database(
                     DEMO_REVIEWER_MEMBERSHIP_ID,
                 ),
             )
+            _set_denial_context(cursor)
             cursor.execute(
                 """
                 UPDATE automation.agent_grants
@@ -874,6 +878,7 @@ def _provision_live18_denial_database(
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             membership_options = _enter_migration_owner(cursor)
+            _set_denial_context(cursor)
             cursor.execute(
                 "SELECT status FROM core.organizations WHERE id=%s FOR SHARE",
                 (DENIAL_ORG_ID,),
@@ -1103,6 +1108,7 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
         raise EphemeralIdentityError(
             "Committed live18 denial state omitted its Auth UUID"
         )
+    _set_denial_context(cursor)
     cursor.execute(
         "DELETE FROM automation.agent_grant_capabilities WHERE org_id=%s AND agent_grant_id=%s",
         (DENIAL_ORG_ID, denial["agent_grant_id"]),
@@ -1120,7 +1126,7 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
         (DENIAL_ORG_ID, denial["role_id"]),
     )
     cursor.execute(
-        "DELETE FROM core.roles WHERE org_id=%s AND id=%s AND code LIKE 'live18_denial_%'",
+        "DELETE FROM core.roles WHERE org_id=%s AND id=%s AND code LIKE 'live18_denial_%%'",
         (DENIAL_ORG_ID, denial["role_id"]),
     )
     cursor.execute(
@@ -1133,14 +1139,42 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
     )
 
 
-def _set_reviewer_context(cursor) -> None:
+def _set_audit_context(
+    cursor,
+    *,
+    organization_id: str,
+    auth_user_id: str,
+    user_id: str,
+    membership_id: str,
+) -> None:
     for name, value in (
-        ("app.org_id", DEMO_ORG_ID),
-        ("app.auth_user_id", "d3000000-0000-7000-8000-000000000002"),
-        ("app.membership_id", DEMO_REVIEWER_MEMBERSHIP_ID),
+        ("app.org_id", organization_id),
+        ("app.auth_user_id", auth_user_id),
+        ("app.user_id", user_id),
+        ("app.membership_id", membership_id),
         ("app.request_id", str(uuid4())),
     ):
         cursor.execute("SELECT set_config(%s,%s,true)", (name, value))
+
+
+def _set_reviewer_context(cursor) -> None:
+    _set_audit_context(
+        cursor,
+        organization_id=DEMO_ORG_ID,
+        auth_user_id=DEMO_REVIEWER_AUTH_USER_ID,
+        user_id=DEMO_REVIEWER_USER_ID,
+        membership_id=DEMO_REVIEWER_MEMBERSHIP_ID,
+    )
+
+
+def _set_denial_context(cursor) -> None:
+    _set_audit_context(
+        cursor,
+        organization_id=DENIAL_ORG_ID,
+        auth_user_id=DEMO_OPERATOR_AUTH_USER_ID,
+        user_id=DEMO_OPERATOR_USER_ID,
+        membership_id=DENIAL_CREATOR_MEMBERSHIP_ID,
+    )
 
 
 def _resolve_core_sales_fixture(cursor) -> str:
@@ -1523,10 +1557,10 @@ def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
                 (LOCK_KEY,),
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-            _set_reviewer_context(cursor)
             membership_options = _enter_migration_owner(cursor)
             if profile == PROFILE_LIVE18:
                 _cleanup_live18_denial_database(cursor, state)
+            _set_reviewer_context(cursor)
             temporary_grants = list(state.get("temporary_grants", {}).values())
             if temporary_grants:
                 cursor.execute(

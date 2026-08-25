@@ -237,11 +237,206 @@ def test_browser_database_cleanup_restores_owner_before_commit(monkeypatch):
         "connection-enter",
         "sql",
         "sql",
-        "context",
         "owner-enter",
+        "context",
         "owner-leave",
         "connection-exit",
     ]
+
+
+def test_live18_cleanup_switches_denial_then_restores_demo_context(monkeypatch):
+    events = []
+
+    class Cursor:
+        def execute(self, *_args, **_kwargs):
+            events.append("sql")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(
+        identities,
+        "_cleanup_live18_denial_database",
+        lambda _cursor, _state: events.append("denial-cleanup"),
+    )
+    monkeypatch.setattr(
+        identities, "_set_reviewer_context", lambda _cursor: events.append("demo-context")
+    )
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(identities, "_leave_migration_owner", lambda *_args: None)
+
+    identities._cleanup_database(
+        "management-token",
+        {
+            "purpose": identities.LIVE18_PURPOSE,
+            "auth_users": [],
+            "prior_bindings": [],
+            "prior_active_grants": [],
+            "temporary_grants": {},
+        },
+    )
+
+    assert events.index("denial-cleanup") < events.index("demo-context")
+
+
+def test_denial_cleanup_sets_exact_audit_context_and_escapes_like_pattern():
+    statements = []
+
+    class Cursor:
+        def execute(self, statement, params=None):
+            statements.append((" ".join(statement.split()), params))
+
+    identities._cleanup_live18_denial_database(
+        Cursor(),
+        {
+            "denial_database_provisioned": True,
+            "denial_identity": {
+                "auth_user_id": "d4000000-0000-7000-8000-000000000001",
+                "user_id": "d4000000-0000-7000-8000-000000000002",
+                "membership_id": "d4000000-0000-7000-8000-000000000003",
+                "role_id": "d4000000-0000-7000-8000-000000000004",
+                "access_grant_id": "d4000000-0000-7000-8000-000000000005",
+                "agent_grant_id": "d4000000-0000-7000-8000-000000000006",
+            },
+        },
+    )
+
+    context = {
+        params[0]: params[1]
+        for statement, params in statements[:5]
+        if statement == "SELECT set_config(%s,%s,true)"
+    }
+    assert context == {
+        "app.org_id": identities.DENIAL_ORG_ID,
+        "app.auth_user_id": identities.DEMO_OPERATOR_AUTH_USER_ID,
+        "app.user_id": identities.DEMO_OPERATOR_USER_ID,
+        "app.membership_id": identities.DENIAL_CREATOR_MEMBERSHIP_ID,
+        "app.request_id": context["app.request_id"],
+    }
+    UUID(context["app.request_id"])
+    role_delete = next(
+        statement for statement, _params in statements
+        if "DELETE FROM core.roles" in statement
+    )
+    assert "LIKE 'live18_denial_%%'" in role_delete
+
+
+def test_denial_provision_sets_context_before_reading_or_mutating_tenant(
+    monkeypatch, tmp_path
+):
+    events = []
+
+    class ContextBoundaryReached(RuntimeError):
+        pass
+
+    class Cursor:
+        def execute(self, statement, *_args, **_kwargs):
+            normalized = " ".join(statement.split())
+            events.append(normalized)
+            if normalized.startswith("SELECT status FROM core.organizations"):
+                raise ContextBoundaryReached
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(
+        identities, "_set_denial_context", lambda _cursor: events.append("denial-context")
+    )
+
+    with pytest.raises(ContextBoundaryReached):
+        identities._provision_live18_denial_database(
+            "management-token",
+            tmp_path / "state.json",
+            {"denial_identity": {}},
+        )
+
+    assert events[:4] == [
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+        "SET CONSTRAINTS ALL DEFERRED",
+        "denial-context",
+        "SELECT status FROM core.organizations WHERE id=%s FOR SHARE",
+    ]
+
+
+def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
+    events = []
+
+    class DenialBoundaryReached(RuntimeError):
+        pass
+
+    class Cursor:
+        def execute(self, statement, *_args, **_kwargs):
+            normalized = " ".join(statement.split())
+            if normalized.startswith("DELETE FROM automation.agent_grant_capabilities"):
+                raise DenialBoundaryReached
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(
+        identities, "_set_reviewer_context", lambda _cursor: events.append("demo")
+    )
+    monkeypatch.setattr(
+        identities, "_set_denial_context", lambda _cursor: events.append("denial")
+    )
+
+    with pytest.raises(DenialBoundaryReached):
+        identities._recover_stale_live18_database(
+            "management-token",
+            {"d4000000-0000-7000-8000-000000000001"},
+        )
+
+    assert events == ["demo", "denial"]
 
 
 def test_auth_deletion_retries_transient_admin_failure(monkeypatch):
