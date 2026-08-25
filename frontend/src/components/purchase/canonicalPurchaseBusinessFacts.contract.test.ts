@@ -8,8 +8,8 @@ describe('active canonical purchase desktop facts', () => {
         read('../global/modals/PDFUploadModal.tsx'),
         read('PDFVerificationFlow.tsx'),
         read('modals/ProductVerificationModal.tsx'),
-        read('purchase-entry/PurchaseEntryFlow.tsx'),
-        read('purchase-entry/hooks/usePurchaseEntryLogic.ts'),
+        read('purchase-entry/CanonicalPurchaseWorkflow.tsx'),
+        read('purchase-entry/CanonicalSupplierInvoiceFlow.tsx'),
         read('purchase-order/hooks/usePurchaseOrderLogic.ts'),
         read('purchase-order/hooks/usePurchaseOrderSave.ts'),
         read('purchase-order/utils/canonicalPurchaseOrderCommand.ts'),
@@ -41,14 +41,11 @@ describe('active canonical purchase desktop facts', () => {
         expect(source).not.toContain("transport_mode: 'By Road'");
     });
 
-    it('keeps calculation requests behind explicit line facts', () => {
-        const logic = read('purchase-entry/hooks/usePurchaseEntryLogic.ts');
-        expect(logic).toContain('const incompleteLine');
-        expect(logic).toContain('const incompleteCharges');
-        expect(logic).toContain('if (!purchaseData.supplier_id || incompleteLine || incompleteCharges)');
-        expect(logic).toContain("gross_amount: '', discount_amount: '', tax_amount: '', round_off: ''");
-        expect(logic).toContain('purchaseEntryDraftReadinessError');
-        expect(logic).toContain('missing canonical product or UOM identity');
+    it('keeps calculation requests behind explicit canonical evidence', () => {
+        const supplierInvoice = read('purchase-entry/CanonicalSupplierInvoiceFlow.tsx');
+        expect(supplierInvoice).toContain('Load canonical GRN and GSTR-2B context first.');
+        expect(supplierInvoice).toContain("prepareCanonicalAction(\n        'procurement.supplier_invoice.prepare'");
+        expect(supplierInvoice).toContain('validateCanonicalSupplierInvoicePreview');
         expect(read('PDFVerificationFlow.tsx')).not.toMatch(/\.reduce\(|\.toFixed\(/);
         expect(read('ui/PurchaseItemEditModal.tsx')).not.toContain('calculatePurchaseItemTotal');
         expect(read('../../services/calculations/purchaseOrderCalculationService.ts')).toContain('requiredFact');
@@ -88,6 +85,7 @@ describe('active canonical purchase desktop facts', () => {
     it('does not advertise writes that only load a draft', () => {
         expect(read('PDFVerificationFlow.tsx')).toContain('Confirm & Load Draft');
         expect(read('PDFVerificationFlow.tsx')).not.toContain('Confirm & Save Purchase');
-        expect(read('purchase-entry/PurchaseEntryFlow.tsx')).not.toContain("{ key: 'Ctrl+S', action: 'Save Purchase' }");
+        expect(read('purchase-entry/CanonicalPurchaseWorkflow.tsx')).not.toContain('Save Purchase');
+        expect(existsSync(join(__dirname, 'purchase-entry/PurchaseEntryFlow.tsx'))).toBe(false);
     });
 });

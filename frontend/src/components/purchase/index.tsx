@@ -12,7 +12,7 @@ export { default as PurchaseErrorBoundary } from './PurchaseErrorBoundary';
 
 // ==================== SUB-MODULES ====================
 export { PurchaseOrderFlow } from './purchase-order';
-export { PurchaseEntryFlow } from './purchase-entry';
+export { CanonicalPurchaseWorkflow } from './purchase-entry';
 export { GRNFlow } from './grn';
 
 // ==================== SHARED INFRASTRUCTURE ====================

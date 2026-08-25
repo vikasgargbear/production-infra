@@ -8,6 +8,7 @@ import type {
   CanonicalReceiptDetail,
 } from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 import { CanonicalGoodsReceiptForm } from './CanonicalGoodsReceiptForm';
+import { formatCalendarDate } from '../../../utils/calendarDate';
 
 interface GRNFlowProps {
   onClose: () => void;
@@ -15,6 +16,7 @@ interface GRNFlowProps {
   initialDetailId?: string | null;
   onReceiptContextConsumed?: () => void;
   onReceiptPosted?: (goodsReceiptId: string) => void;
+  onContinueToSupplierInvoice?: () => void;
 }
 
 const GRNFlow = ({
@@ -23,6 +25,7 @@ const GRNFlow = ({
   initialDetailId,
   onReceiptContextConsumed,
   onReceiptPosted,
+  onContinueToSupplierInvoice,
 }: GRNFlowProps) => {
   const [grns, setGrns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +93,7 @@ const GRNFlow = ({
       case 'PO':
         return <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">From PO</span>;
       case 'DIRECT':
-        return <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">From Purchase Entry</span>;
+        return <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Receipt record</span>;
       default:
         return <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">Canonical receipt</span>;
     }
@@ -110,9 +113,7 @@ const GRNFlow = ({
       header: 'Date',
       render: (_: any, grn: any) => (
         <span className="text-sm text-gray-600">
-          {grn.grn_date ? new Date(grn.grn_date).toLocaleDateString('en-IN', {
-            day: '2-digit', month: 'short', year: 'numeric'
-          }) : '-'}
+          {grn.grn_date ? formatCalendarDate(grn.grn_date) : '-'}
         </span>
       ),
       width: '110px'
@@ -262,11 +263,22 @@ const GRNFlow = ({
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  <p className="text-sm text-blue-800">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    <FileText className="mt-0.5 w-5 h-5 shrink-0 text-blue-600" />
+                    <p className="text-sm text-blue-800">
                     Inventory-only receipt: no supplier payable, GST/ITC document, or journal entry is created at GRN posting. Those belong to the matched supplier invoice.
-                  </p>
+                    </p>
+                  </div>
+                  {onContinueToSupplierInvoice && (
+                    <button
+                      type="button"
+                      onClick={onContinueToSupplierInvoice}
+                      className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    >
+                      Continue to supplier invoice
+                    </button>
+                  )}
                 </div>
               </div>
 

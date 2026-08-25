@@ -54,7 +54,7 @@ test('retired browser spreadsheet parsers cannot invent product master facts', (
 
   const packageJson = JSON.parse(read('frontend/package.json'));
   expect(packageJson.dependencies?.xlsx).toBeUndefined();
-  expect(read('frontend/src/components/purchase/purchase-entry/PurchaseEntryFlow.tsx'))
+  expect(read('frontend/src/components/purchase/purchase-entry/CanonicalPurchaseWorkflow.tsx'))
     .not.toContain('BulkUploadInline');
 });
 

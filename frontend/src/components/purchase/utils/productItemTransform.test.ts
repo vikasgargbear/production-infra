@@ -1,7 +1,6 @@
 import {
     cleanItemForBackend,
     prepareItemForGRN,
-    prepareItemForPurchaseEntry,
     prepareItemForPurchaseOrder,
 } from './productItemTransform';
 
@@ -28,8 +27,6 @@ describe('purchase item transformation authority', () => {
         expect(order).not.toHaveProperty('cgst_rate');
         expect(order).not.toHaveProperty('sgst_rate');
 
-        const entry = prepareItemForPurchaseEntry(product);
-        expect(entry).toMatchObject({ mrp_per_unit: 150, sale_price_per_unit: 140 });
     });
 
     it.each([

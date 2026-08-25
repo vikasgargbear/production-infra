@@ -32,7 +32,6 @@ describe('exact calculation consumer boundaries', () => {
       '../../components/sales/invoice/InvoiceFlow.tsx',
       '../../components/sales/order/hooks/useSalesOrderLogic.ts',
       '../../components/sales/challan/hooks/useChallanLogic.ts',
-      '../../components/purchase/purchase-entry/hooks/usePurchaseEntryLogic.ts',
       '../../components/sales/invoice/ui/InvoicePreviewEnterprise.tsx',
       '../../components/global/ui/display/DocumentFooter.tsx',
       '../../components/global/ui/PrintUtility.tsx',

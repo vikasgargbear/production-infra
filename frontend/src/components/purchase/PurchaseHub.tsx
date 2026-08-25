@@ -10,7 +10,7 @@ import {
   ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import { PurchaseEntryFlow } from './purchase-entry';
+import { CanonicalPurchaseWorkflow } from './purchase-entry';
 import CanonicalSupplierInvoiceFlow from './purchase-entry/CanonicalSupplierInvoiceFlow';
 import { PurchaseOrderFlow } from './purchase-order';
 import { GRNFlow } from './grn';
@@ -61,6 +61,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
       setReceiptContext(context);
       setReceiptReadbackId(null);
       setForceModule('grn');
+      onSubpageChange?.('grn');
     } catch (error: any) {
       const detail = error.response?.data?.detail;
       const msg = typeof detail === 'string'
@@ -68,12 +69,19 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
         : detail?.message || error.message || 'Failed to load canonical receipt context';
       toast.error(msg);
     }
-  }, []);
+  }, [onSubpageChange]);
 
-  // Purchase entry remains independent; receipt posting never routes through it.
-  const PurchaseEntryWrapper = useCallback((props: any) => {
-    return <PurchaseEntryFlow {...props} />;
-  }, []);
+  const navigateToCanonicalPurchaseStep = useCallback((moduleId: string) => {
+    setForceModule(moduleId);
+    onSubpageChange?.(moduleId);
+  }, [onSubpageChange]);
+
+  const PurchaseWorkflowWrapper = useCallback((props: any) => (
+    <CanonicalPurchaseWorkflow
+      {...props}
+      onNavigate={navigateToCanonicalPurchaseStep}
+    />
+  ), [navigateToCanonicalPurchaseStep]);
 
   const ReceiptWrapper = useCallback((props: any) => (
     <GRNFlow
@@ -85,8 +93,9 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
         setReceiptContext(null);
         setReceiptReadbackId(goodsReceiptId);
       }}
+      onContinueToSupplierInvoice={() => navigateToCanonicalPurchaseStep('supplier-invoice')}
     />
-  ), [receiptContext, receiptReadbackId]);
+  ), [navigateToCanonicalPurchaseStep, receiptContext, receiptReadbackId]);
 
   const HistoryWrapper = useCallback((props: any) => (
     <PurchaseListHistory {...props} onRecordReceipt={handleRecordReceipt} />
@@ -99,12 +108,12 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
       modules.push(
         {
           id: 'purchase',
-          label: 'Purchase',
-          fullLabel: 'Purchase Entry',
-          description: 'Record purchases',
+          label: 'Start',
+          fullLabel: 'Purchase Workflow',
+          description: 'Receipt then invoice',
           icon: ShoppingBag,
           color: 'indigo',
-          component: PurchaseEntryWrapper
+          component: PurchaseWorkflowWrapper
         },
         {
           id: 'purchase-order',
@@ -149,7 +158,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
     );
 
     return modules;
-  }, [canCreate, PurchaseEntryWrapper, ReceiptWrapper, HistoryWrapper]);
+  }, [canCreate, PurchaseWorkflowWrapper, ReceiptWrapper, HistoryWrapper]);
 
   // Use forceModule to switch tab when navigating from PO; fall back to deep-link or permission-based default
   const resolvedInitialSubpage =

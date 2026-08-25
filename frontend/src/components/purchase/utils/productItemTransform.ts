@@ -5,7 +5,7 @@
  * Following sales module pattern
  */
 
-import type { BasePurchaseItem, PurchaseOrderItem, PurchaseEntryItem, GRNItem } from '../types';
+import type { BasePurchaseItem, PurchaseOrderItem, GRNItem } from '../types';
 
 /**
  * Generate a client-only draft-row identity.
@@ -29,12 +29,6 @@ const requiredNumber = (
     return parsed;
 };
 
-const optionalNumber = (value: unknown, label: string): number | undefined => (
-    value === '' || value === null || value === undefined
-        ? undefined
-        : requiredNumber(value, label)
-);
-
 const productTax = (product: any): number => requiredNumber(
     product.gst_percent,
     'Product GST rate',
@@ -56,31 +50,6 @@ export function prepareItemForPurchaseOrder(product: any): PurchaseOrderItem {
         discount_percent: requiredNumber(product.discount_percent, 'Purchase-order discount', { maximum: 100 }),
         tax_percent: productTax(product),
         notes: '',
-    };
-}
-
-/**
- * Prepare product for Purchase Entry line item (with batch/expiry)
- */
-export function prepareItemForPurchaseEntry(product: any): PurchaseEntryItem {
-    return {
-        id: generateTempId(),
-        product_id: product.product_id,
-        product_name: product.product_name,
-        hsn_code: product.hsn_code,
-        quantity: requiredNumber(product.quantity, 'Purchase-entry quantity', { positive: true }),
-        free_quantity: requiredNumber(product.free_quantity, 'Purchase-entry free quantity'),
-        unit_price: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-entry unit price', { positive: true }),
-        discount_percent: requiredNumber(product.discount_percent, 'Purchase-entry discount', { maximum: 100 }),
-        tax_percent: productTax(product),
-
-        // Purchase entry specific
-        batch_number: '',
-        expiry_date: '',
-        manufacturing_date: null,
-        mrp_per_unit: optionalNumber(product.mrp_per_unit ?? product.mrp, 'Purchase-entry MRP'),
-        sale_price_per_unit: optionalNumber(product.sale_price_per_unit ?? product.selling_price, 'Purchase-entry sale price'),
-        cost_per_unit: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-entry cost', { positive: true }),
     };
 }
 

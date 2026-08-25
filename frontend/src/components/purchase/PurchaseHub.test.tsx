@@ -15,7 +15,12 @@ jest.mock('../../services/api/modules/purchase/canonicalGoodsReceipts.api', () =
   },
 }));
 
-jest.mock('./purchase-entry', () => ({ PurchaseEntryFlow: () => null }));
+jest.mock('./purchase-entry', () => ({
+  CanonicalPurchaseWorkflow: ({ onNavigate }: { onNavigate: (id: string) => void }) => (
+    <button type="button" onClick={() => onNavigate('supplier-invoice')}>Open supplier invoice step</button>
+  ),
+}));
+jest.mock('./purchase-entry/CanonicalSupplierInvoiceFlow', () => () => null);
 jest.mock('./purchase-order', () => ({ PurchaseOrderFlow: () => null }));
 jest.mock('./grn', () => ({ GRNFlow: () => null }));
 jest.mock('./PurchaseListHistory', () => ({
@@ -30,9 +35,12 @@ jest.mock('./PurchaseListHistory', () => ({
 jest.mock('../global', () => ({
   ModuleHub: (props: any) => {
     const History = props.modules.find((module: any) => module.id === 'purchase-history').component;
+    const Workflow = props.modules.find((module: any) => module.id === 'purchase').component;
     return (
       <div>
         <output aria-label="Purchase default module">{props.defaultModule}</output>
+        <output aria-label="Purchase module labels">{props.modules.map((module: any) => module.fullLabel).join('|')}</output>
+        <Workflow />
         <History />
         <button type="button" onClick={() => props.onActiveModuleChange('purchase-history')}>
           Switch module
@@ -61,10 +69,11 @@ describe('PurchaseHub canonical receipt navigation', () => {
 
   it('keeps the Receipts module selected after loading canonical PO context', async () => {
     jest.useFakeTimers();
+    const onSubpageChange = jest.fn();
     (canonicalGoodsReceiptsApi.getPurchaseOrderContext as jest.Mock).mockResolvedValue({
       data: receiptContext,
     });
-    render(<PurchaseHub />);
+    render(<PurchaseHub onSubpageChange={onSubpageChange} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Start receipt' }));
     await waitFor(() => expect(
@@ -73,5 +82,20 @@ describe('PurchaseHub canonical receipt navigation', () => {
 
     act(() => jest.runOnlyPendingTimers());
     expect(screen.getByLabelText('Purchase default module').textContent).toBe('grn');
+    expect(onSubpageChange).toHaveBeenCalledWith('grn');
+  });
+
+  it('routes the workflow CTA directly to the canonical supplier-invoice step', async () => {
+    const onSubpageChange = jest.fn();
+    render(<PurchaseHub onSubpageChange={onSubpageChange} />);
+
+    expect(screen.getByLabelText('Purchase module labels').textContent).toContain('Purchase Workflow');
+    expect(screen.getByLabelText('Purchase module labels').textContent).not.toContain('Purchase Entry');
+    fireEvent.click(screen.getByRole('button', { name: 'Open supplier invoice step' }));
+
+    await waitFor(() => expect(
+      screen.getByLabelText('Purchase default module').textContent,
+    ).toBe('supplier-invoice'));
+    expect(onSubpageChange).toHaveBeenCalledWith('supplier-invoice');
   });
 });

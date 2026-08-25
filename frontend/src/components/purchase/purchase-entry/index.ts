@@ -1,6 +1,6 @@
 /**
- * Purchase Entry Sub-Module
+ * Canonical purchase receipt and supplier-invoice workflow.
  */
 
-export { default as PurchaseEntryFlow } from './PurchaseEntryFlow';
-export { default } from './PurchaseEntryFlow';
+export { default as CanonicalPurchaseWorkflow } from './CanonicalPurchaseWorkflow';
+export { default } from './CanonicalPurchaseWorkflow';
