@@ -10,6 +10,36 @@ def _read(relative_path: str) -> str:
     return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
+    production = _read(".github/workflows/production-readiness.yml")
+    staging = _read(".github/workflows/canonical-staging.yml")
+
+    assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging }}" in production
+    assert "if: inputs.deploy_render_pilot == true" in staging
+    assert staging.count("if: inputs.deploy_render_pilot == true") == 3
+    provision = staging.split("Provision and exercise the disposable demo organization", 1)[1]
+    assert "if [ '${{ inputs.deploy_render_pilot }}' != true ]; then" in provision
+    assert "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" in provision
+
+    live_job = production.split("\n  live-erp:", 1)[1].split("\n  live-browser-erp:", 1)[0]
+    assert "verify_render_pilot_sha.py" in live_job
+    assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live_job
+    assert "pytest -q backend/tests/live_canonical" in live_job
+    assert "backend/tests/live_erp" not in live_job
+    assert "PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test" in live_job
+    assert "PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev" in live_job
+    assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" in live_job
+    assert "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" in live_job
+
+    browser_job = production.split("\n  live-browser-erp:", 1)[1].split(
+        "\n  live-browser-erp-two-user-approvals:", 1
+    )[0]
+    assert "verify_render_pilot_sha.py" in browser_job
+    assert "PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com" in browser_job
+    assert "PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" in browser_job
+    assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
+
+
 def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     workflow = _read(".github/workflows/production-readiness.yml")
     package = json.loads(_read("frontend/package.json"))

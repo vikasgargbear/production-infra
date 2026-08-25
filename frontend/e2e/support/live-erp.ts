@@ -61,6 +61,24 @@ export async function loginToLiveErp(page: Page, email: string, password: string
     await signIn.click();
   }
   await expect(page.getByText('Core Operations')).toBeVisible({ timeout: 45_000 });
+
+  const expectedOrganizationId = process.env.PLAYWRIGHT_LIVE_EXPECTED_ORG_ID?.trim();
+  if (expectedOrganizationId) {
+    expect(expectedOrganizationId, 'expected disposable organization must be a canonical UUID')
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    const contextResponse = page.waitForResponse(response => (
+      response.request().method() === 'GET'
+      && new URL(response.url()).pathname === '/api/canonical/business-context'
+    ), { timeout: 30_000 });
+    await page.reload();
+    const response = await contextResponse;
+    const body = await response.text();
+    expect(response.status(), `canonical business context: ${body}`).toBe(200);
+    const context = JSON.parse(body);
+    expect(context.organization_id, 'authenticated browser session organization')
+      .toBe(expectedOrganizationId);
+    await expect(page.getByText('Core Operations')).toBeVisible({ timeout: 45_000 });
+  }
 }
 
 export async function assertNoVisibleFailure(page: Page): Promise<void> {

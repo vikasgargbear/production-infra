@@ -22,6 +22,11 @@ on:
         required: false
         default: false
         type: boolean
+      deploy_render_pilot:
+        description: Deploy and verify the reviewed application SHA on all three Render pilot services
+        required: false
+        default: true
+        type: boolean
       reset_disposable_data:
         description: Reset only canonical schemas and roles on the pinned disposable project
         required: false
@@ -55,6 +60,11 @@ on:
         type: boolean
       provision_demo_data:
         description: Provision and exercise the disposable synthetic demo organization
+        required: false
+        default: false
+        type: boolean
+      deploy_render_pilot:
+        description: Deploy and verify the reviewed application SHA on all three Render pilot services
         required: false
         default: false
         type: boolean
@@ -1142,7 +1152,7 @@ jobs:
           python3 backend/scripts/provision_staging_mcp_oauth.py
 
       - name: Reconcile and deploy the free Render pilot
-        if: inputs.provision_demo_data != true
+        if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
           test -n "$RENDER_API_KEY"
@@ -1216,7 +1226,7 @@ jobs:
           done
 
       - name: Wait for free service smoke readiness
-        if: inputs.provision_demo_data != true
+        if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
           api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
@@ -1271,7 +1281,7 @@ jobs:
              > staging-evidence/render-pilot-smoke.json
 
       - name: Verify and exercise the reviewed hosted OAuth server boundary
-        if: inputs.provision_demo_data != true
+        if: inputs.deploy_render_pilot == true
         env:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
           CANONICAL_STAGING_MCP_EXERCISE_MODE: boundary_only
@@ -1349,7 +1359,9 @@ jobs:
           echo "::add-mask::$runtime_url"
           export ERP_RUNTIME_DATABASE_URL="$runtime_url"
           export CANONICAL_DEMO_API_URL=http://127.0.0.1:8090
-          echo "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" >> "$GITHUB_ENV"
+          if [ '${{ inputs.deploy_render_pilot }}' != true ]; then
+            echo "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" >> "$GITHUB_ENV"
+          fi
 
           api_log=$(mktemp)
           PYTHONPATH=backend PORT=8090 python3 -m uvicorn app.main:app \
