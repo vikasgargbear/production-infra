@@ -4,6 +4,7 @@ Reorganized with domain-based folder structure
 """
 import asyncio
 import os
+from typing import Optional
 from fastapi import FastAPI, APIRouter
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -172,7 +173,7 @@ app.router.redirect_slashes = False
 # The custom handler was returning JSON without CORS headers, causing CORS failures
 # FastAPI's CORSMiddleware automatically handles OPTIONS requests properly
 
-def _deployed_git_commit() -> str | None:
+def _deployed_git_commit() -> Optional[str]:
     """Return the immutable Render build identity when the platform provides it."""
 
     value = os.getenv("RENDER_GIT_COMMIT", "").strip().lower()
