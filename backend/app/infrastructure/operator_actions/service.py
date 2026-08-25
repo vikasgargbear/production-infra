@@ -86,6 +86,10 @@ from .inventory_adjustment import (
     PERSIST_INVENTORY_ADJUSTMENT_SQL,
     RESOLVE_INVENTORY_ADJUSTMENT_SQL,
 )
+from .inventory_transfer import (
+    PERSIST_INVENTORY_TRANSFER_SQL,
+    RESOLVE_INVENTORY_TRANSFER_SQL,
+)
 from .runtime_database import (
     assert_runtime_principal,
     runtime_database_configured,
@@ -643,6 +647,13 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "finance.supplier_advance.prepare":
             return self._prepare_supplier_advance(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key == "inventory.transfer.prepare":
+            return self._prepare_inventory_transfer(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -2708,6 +2719,149 @@ class SqlAlchemyOperatorActionService:
                     required_approvals=(
                         {"policy": policy.approval_policy, "count": 1},
                     ),
+                )
+
+    def _prepare_inventory_transfer(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"inventory.transfer.prepare:{idempotency_key}"
+        )
+        inventory_document_id = uuid5(NAMESPACE_URL, identity + ":inventory-document")
+        command_id = uuid5(NAMESPACE_URL, identity + ":command")
+        normalized = {key: _json_value(value) for key, value in payload.items()}
+        normalized["inventory_document_id"] = str(inventory_document_id)
+        normalized_lines = []
+        line_number = 0
+        for product_line in payload["lines"]:
+            normalized_line = {
+                key: _json_value(value)
+                for key, value in dict(product_line).items()
+                if key != "batch_allocations"
+            }
+            allocations = []
+            for source_allocation in product_line["batch_allocations"]:
+                line_number += 1
+                allocations.append(
+                    {
+                        **{
+                            key: _json_value(value)
+                            for key, value in dict(source_allocation).items()
+                        },
+                        "inventory_document_line_id": str(
+                            uuid5(NAMESPACE_URL, identity + f":line:{line_number}")
+                        ),
+                    }
+                )
+            normalized_line["batch_allocations"] = allocations
+            normalized_lines.append(normalized_line)
+        normalized["lines"] = normalized_lines
+        request_bytes = canonical_json_bytes(normalized)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "membership_id": context.membership_id,
+            "auth_user_id": context.auth_user_id,
+            "user_id": context.user_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
+            "inventory_document_id": inventory_document_id,
+            "command_request_id": command_id,
+            "idempotency_key_hash": hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+            "document_sequence_key_hash": hashlib.sha256(
+                (idempotency_key + ":stock-transfer-number").encode("utf-8")
+            ).digest(),
+            "request_json": request_bytes.decode("utf-8"),
+            "request_bytes": request_bytes,
+            "expires_at": expires_at,
+        }
+        with self._session_factory() as session:
+            with session.begin():
+                assert_runtime_principal(session)
+                _lock_prepare_idempotency(session, params, "inventory.transfer.prepare")
+                rows = _mapping_rows(session.execute(RESOLVE_INVENTORY_TRANSFER_SQL, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical inter-branch transfer resolution is unavailable",
+                    )
+                resolution = _json_document(rows[0]["resolution"])
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {key: value for key, value in source.items() if key in {"resource_type", "id", "role"}}
+                    for source in source_versions
+                    if source.get("id") is not None
+                )
+                inventory_impact = tuple(
+                    {
+                        "source_branch_id": resolution["source_branch_id"],
+                        "destination_branch_id": resolution["destination_branch_id"],
+                        "source_location_id": resolution["source_location_id"],
+                        "destination_location_id": resolution["destination_location_id"],
+                        "product_id": line["product_id"],
+                        "batch_id": line["batch_id"],
+                        "base_quantity": line["base_quantity"],
+                        "unit_cost": line["unit_cost"],
+                        "value": line["extended_cost"],
+                    }
+                    for line in resolution["lines"]
+                )
+                preview = {
+                    "branch_id": resolution["source_branch_id"],
+                    "calculation_ruleset": [],
+                    "capability_code": "inventory.transfer.prepare",
+                    "command_request_id": str(command_id),
+                    "destination_branch_id": resolution["destination_branch_id"],
+                    "financial_impact": [],
+                    "inventory_impact": list(inventory_impact),
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": "inventory.document.post",
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(inventory_document_id),
+                    "target_resource_type": "inventory_document",
+                    "tax_impact": [{"supply_created": False, "gst_amount": "0.00", "itc_claimed_or_reversed": False}],
+                }
+                params.update(
+                    {
+                        "resolved_bytes": canonical_json_bytes(resolution),
+                        "preview_bytes": canonical_json_bytes(preview),
+                    }
+                )
+                persisted = _mapping_rows(session.execute(PERSIST_INVENTORY_TRANSFER_SQL, params))
+                if len(persisted) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical inter-branch transfer prepare did not persist exactly once",
+                    )
+                result = _json_document(persisted[0]["command_request_id"])
+                if UUID(str(result["command_request_id"])) != command_id:
+                    raise OperatorActionError(
+                        ActionErrorCode.IDEMPOTENCY_CONFLICT,
+                        "Canonical inter-branch transfer idempotency replay differs",
+                    )
+                return PreparedCommand(
+                    command_request_id=command_id,
+                    command_type="inventory.document.post",
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=datetime.fromisoformat(str(result["expires_at"]).replace("Z", "+00:00")),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=(),
+                    inventory_impact=inventory_impact,
+                    financial_impact=(),
+                    tax_impact=tuple(preview["tax_impact"]),
+                    required_approvals=({"policy": policy.approval_policy, "count": 1},),
                 )
 
     def _prepare_inventory_adjustment(

@@ -168,6 +168,23 @@ def validate_prepare_payload_semantics(
     """Enforce conditional action rules that JSON Schema field shapes cannot express."""
 
     values = payload.model_dump(mode="python")
+    if operation_key == "inventory.transfer.prepare":
+        if values["source_branch_id"] == values["destination_branch_id"]:
+            raise ValueError("source and destination branches must be distinct")
+        if values["source_location_id"] == values["destination_location_id"]:
+            raise ValueError("source and destination locations must be distinct")
+        seen_batches: set[UUID] = set()
+        for line in values["lines"]:
+            for allocation in line["batch_allocations"]:
+                quantity = Decimal(allocation["entered_quantity"])
+                if quantity <= 0 or quantity != quantity.quantize(Decimal("0.000001")):
+                    raise ValueError(
+                        "transfer quantities must be positive with at most six decimals"
+                    )
+                batch_id = allocation["batch_id"]
+                if batch_id in seen_batches:
+                    raise ValueError("each batch may appear only once in a transfer")
+                seen_batches.add(batch_id)
     if operation_key in {
         "finance.customer_receipt.prepare",
         "finance.supplier_payment.prepare",

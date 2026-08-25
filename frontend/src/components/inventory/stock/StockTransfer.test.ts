@@ -1,56 +1,73 @@
-import { canReviewStockTransfer } from './utils/canReviewStockTransfer';
+import type { EligibleTransferBatch } from '../../../services/api/modules/inventory/inventoryTransfers.api';
+import {
+  defaultTransferQuantity,
+  normalizeEligibleTransferBatches,
+  proposeFefoAllocations,
+  validateTransferQuantity,
+} from './utils/stockTransferExact';
 
-const validTransfer = {
-  source_location: 1,
-  destination_location: 2,
-  items: [{ transfer_quantity: 2, quantity_available: 5 }]
-};
-
-describe('canReviewStockTransfer', () => {
-  it('rejects an empty transfer', () => {
-    expect(canReviewStockTransfer({ ...validTransfer, items: [] })).toBe(false);
-  });
-
-  it('rejects the same source and destination', () => {
-    expect(canReviewStockTransfer({ ...validTransfer, destination_location: 1 })).toBe(false);
-  });
-
-  it('rejects non-positive and over-stock quantities', () => {
-    expect(canReviewStockTransfer({ ...validTransfer, items: [{ transfer_quantity: 0, quantity_available: 5 }] })).toBe(false);
-    expect(canReviewStockTransfer({ ...validTransfer, items: [{ transfer_quantity: 6, quantity_available: 5 }] })).toBe(false);
-  });
-
-  it('accepts a complete transfer', () => {
-    expect(canReviewStockTransfer(validTransfer)).toBe(true);
-  });
-
-  it('accepts exact-quantity transfers (FEFO boundary)', () => {
-    expect(canReviewStockTransfer({ ...validTransfer, items: [{ transfer_quantity: 5, quantity_available: 5 }] })).toBe(true);
-  });
-
-  it('rejects null locations', () => {
-    expect(canReviewStockTransfer({ ...validTransfer, source_location: null })).toBe(false);
-    expect(canReviewStockTransfer({ ...validTransfer, destination_location: null })).toBe(false);
-  });
+const batch = (overrides: Partial<EligibleTransferBatch> = {}): EligibleTransferBatch => ({
+  batch_id: '018f6f6d-4f27-7abc-8000-000000000001',
+  batch_number: 'B-001',
+  expires_on: '2027-01-01',
+  product_id: '018f6f6d-4f27-7abc-8000-000000000002',
+  uom_conversion_id: '018f6f6d-4f27-7abc-8000-000000000003',
+  selected_uom_code: 'EA',
+  base_uom_code: 'EA',
+  uom_multiplier: '1.000000',
+  available_base_quantity: '99999999999999.000000',
+  available_selected_quantity: '99999999999999.000000',
+  average_unit_cost: '0.1000',
+  inventory_value: '900719925474099.30',
+  is_default: true,
+  ...overrides,
 });
 
-/**
- * Transfer command unavailability guard.
- *
- * TRANSFER_COMMAND_UNAVAILABLE is a module-level constant in StockTransfer.tsx
- * that gates the onSave callback while the backend adapter
- * (erp_automation_commands.persist_inventory_transfer_prepare) is pending.
- * The constant must be true until registry.py changes available=True.
- *
- * This test ensures we have a documented gate — remove it when the adapter
- * ships and TRANSFER_COMMAND_UNAVAILABLE is set to false.
- */
-describe('inventory.transfer.prepare backend adapter guard', () => {
-  it('TRANSFER_COMMAND_UNAVAILABLE is true while adapter is pending', () => {
-    // This test documents the current state. When the backend adapter ships,
-    // update registry.py available=True and set TRANSFER_COMMAND_UNAVAILABLE=false
-    // in StockTransfer.tsx, then remove this test.
-    const TRANSFER_COMMAND_UNAVAILABLE = true;
-    expect(TRANSFER_COMMAND_UNAVAILABLE).toBe(true);
+describe('canonical inter-branch transfer exactness', () => {
+  it('keeps quantities above Number.MAX_SAFE_INTEGER exact', () => {
+    expect(validateTransferQuantity(
+      '99999999999998.999999',
+      '99999999999999.000000',
+      'Transfer quantity',
+    )).toBe('99999999999998.999999');
+    expect(normalizeEligibleTransferBatches([
+      batch({ inventory_value: '9007199254740993.30' }),
+    ])[0].inventory_value).toBe('9007199254740993.30');
+  });
+
+  it('rejects numeric authoritative stock and over-allocation', () => {
+    expect(() => validateTransferQuantity('0.20', 0.3, 'Transfer quantity')).toThrow(/exact decimal string/);
+    expect(() => validateTransferQuantity('0.300001', '0.300000', 'Transfer quantity')).toThrow(/within available/);
+  });
+
+  it('uses the whole exact remainder below one as the default', () => {
+    expect(defaultTransferQuantity(batch({ available_selected_quantity: '0.300000' }))).toBe('0.300000');
+  });
+
+  it('accepts only one equally earliest-expiry tier and one deterministic default', () => {
+    expect(normalizeEligibleTransferBatches([
+      batch(),
+      batch({ batch_id: '018f6f6d-4f27-7abc-8000-000000000004', batch_number: 'B-002', is_default: false }),
+    ])).toHaveLength(2);
+    expect(() => normalizeEligibleTransferBatches([
+      batch(),
+      batch({ batch_id: '018f6f6d-4f27-7abc-8000-000000000004', expires_on: '2027-02-01', is_default: false }),
+    ])).toThrow(/one earliest-expiry FEFO tier/);
+    expect(() => normalizeEligibleTransferBatches([
+      batch(),
+      batch({ batch_number: 'B-DUP', is_default: false }),
+    ])).toThrow(/duplicate canonical batch identity/);
+  });
+
+  it('proposes an exact allocation across tied earliest-expiry batches', () => {
+    const choices = normalizeEligibleTransferBatches([
+      batch({ batch_id: '018f6f6d-4f27-7abc-8000-000000000005', available_selected_quantity: '0.100000' }),
+      batch({ batch_id: '018f6f6d-4f27-7abc-8000-000000000006', batch_number: 'B-002', available_selected_quantity: '0.200000', is_default: false }),
+    ]);
+    expect(proposeFefoAllocations('0.300000', choices)).toEqual([
+      { batch_id: '018f6f6d-4f27-7abc-8000-000000000005', entered_quantity: '0.100000' },
+      { batch_id: '018f6f6d-4f27-7abc-8000-000000000006', entered_quantity: '0.200000' },
+    ]);
+    expect(() => proposeFefoAllocations('0.300001', choices)).toThrow(/exceeds/);
   });
 });

@@ -60,6 +60,7 @@ from .api.routes.purchase import supplier_invoices
 from .api.routes.purchase import grn
 from .api.routes.purchase import upload as purchase_upload
 from .api.routes.purchase.upload import routes as purchase_upload_routes
+from .api.routes import canonical_inventory_transfers
 
 # Inventory Module
 from .api.routes.inventory import stock as inventory
@@ -284,6 +285,7 @@ api.include_router(canonical_return_reads.router)
 api.include_router(canonical_supplier_payment_reads.router)
 api.include_router(canonical_payment_history_reads.router)
 api.include_router(canonical_inventory_reads.router, tags=["Canonical Inventory Reads"])
+api.include_router(canonical_inventory_transfers.router, tags=["Canonical Inventory Transfers"])
 include_legacy_read_only_router(api, canonical_party_ledger_reads.router)
 api.include_router(canonical_document_history_reads.router)
 

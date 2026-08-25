@@ -54,6 +54,7 @@ IDS = {
     "reviewer_user": "d3000000-0000-7000-8000-000000000003",
     "reviewer_membership": "d3000000-0000-7000-8000-000000000004",
     "branch": "d3000000-0000-7000-8000-000000000005",
+    "transfer_destination_branch": "d3000000-0000-7000-8000-000000000028",
     "role": "d3000000-0000-7000-8000-000000000006",
     "reviewer_access_grant": "d3000000-0000-7000-8000-000000000007",
     "safety_setting": "d3000000-0000-7000-8000-000000000008",
@@ -91,6 +92,7 @@ IDS = {
     "org_gst_registration": "d3200000-0000-7000-8000-000000000005",
     "saleable_location": "d3200000-0000-7000-8000-000000000006",
     "quarantine_location": "d3200000-0000-7000-8000-000000000007",
+    "transfer_destination_location": "d3200000-0000-7000-8000-00000000000f",
     "bank_account": "d3200000-0000-7000-8000-000000000008",
     "tax_profile_evidence": "d3200000-0000-7000-8000-000000000009",
     "fiscal_fact_evidence": "d3200000-0000-7000-8000-00000000000a",
@@ -157,6 +159,8 @@ REQUIRED_PERMISSIONS = (
     "finance.supplier_advance.create",
     "finance.supplier_payment.create",
     "inventory.adjustment.create",
+    "inventory.transfer.create",
+    "inventory.document.post",
     "inventory.batch.manage",
     "inventory.location.manage",
     "catalog.product.manage",
@@ -184,6 +188,7 @@ PREPARE_CAPABILITIES = (
     ("finance.supplier_advance.prepare", "separate_approver"),
     ("finance.supplier_payment.prepare", "actor_confirmation"),
     ("inventory.adjustment.prepare", "separate_approver"),
+    ("inventory.transfer.prepare", "actor_confirmation"),
 )
 
 CALCULATION_TOTAL_FIELDS = (
@@ -452,17 +457,26 @@ def bootstrap_identity(connection) -> None:
                 IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
-        cursor.execute(
+        cursor.executemany(
             """
             INSERT INTO core.branches (
                 org_id, id, code, name, address_line1, city, state_code,
                 postal_code, status, created_by_membership_id, updated_by_membership_id
-            ) VALUES (
-                %s, %s, 'MUM-DEMO', 'Mumbai Demo Branch', '101 Demo Market Road',
-                'Mumbai', '27', '400001', 'active', %s, %s
-            ) ON CONFLICT (org_id, id) DO NOTHING
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, %s)
+            ON CONFLICT (org_id, id) DO NOTHING
             """,
-            (IDS["org"], IDS["branch"], IDS["reviewer_membership"], IDS["reviewer_membership"]),
+            [
+                (
+                    IDS["org"], IDS["branch"], "MUM-DEMO", "Mumbai Demo Branch",
+                    "101 Demo Market Road", "Mumbai", "27", "400001",
+                    IDS["reviewer_membership"], IDS["reviewer_membership"],
+                ),
+                (
+                    IDS["org"], IDS["transfer_destination_branch"], "PUN-DEMO",
+                    "Pune Demo Branch", "202 Demo Distribution Road", "Pune", "27",
+                    "411001", IDS["reviewer_membership"], IDS["reviewer_membership"],
+                ),
+            ],
         )
         cursor.execute(
             """
@@ -1535,6 +1549,7 @@ def seed_end_to_end_master(connection) -> None:
             [
                 (IDS["org"], IDS["saleable_location"], IDS["branch"], "SALE-DEMO", "Demo saleable stock", "saleable", True, IDS["reviewer_membership"], IDS["reviewer_membership"]),
                 (IDS["org"], IDS["quarantine_location"], IDS["branch"], "QUAR-DEMO", "Demo returned quarantine", "quarantine", False, IDS["reviewer_membership"], IDS["reviewer_membership"]),
+                (IDS["org"], IDS["transfer_destination_location"], IDS["transfer_destination_branch"], "SALE-PUN-DEMO", "Demo transfer destination", "saleable", True, IDS["reviewer_membership"], IDS["reviewer_membership"]),
             ],
         )
         sequence_types = {
@@ -1549,6 +1564,7 @@ def seed_end_to_end_master(connection) -> None:
             "customer_receipt": "DEMO-CR-",
             "journal_entry": "DEMO-JE-",
             "stock_count": "DEMO-SC-",
+            "stock_transfer": "DEMO-ST-",
         }
         cursor.executemany(
             """
@@ -1869,7 +1885,7 @@ def exercise_action(
 
 
 def assert_unavailable_actions(connection) -> dict[str, Any]:
-    """Prove the two intentionally blocked actions reject before persistence."""
+    """Prove the remaining intentionally blocked action rejects before persistence."""
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -1884,7 +1900,6 @@ def assert_unavailable_actions(connection) -> dict[str, Any]:
 
     rejected: dict[str, int] = {}
     for operation, permission in (
-        ("inventory.transfer.prepare", "inventory.transfer.create"),
         ("inventory.destruction.prepare", "inventory.destruction.create"),
     ):
         response = requests.post(

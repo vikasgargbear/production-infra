@@ -106,26 +106,57 @@ export async function approveAndExecuteCanonicalAction(
   preparedPreview: CanonicalCommandPreview,
   lifecycleId: string = clientUuid(),
 ): Promise<CanonicalApprovedExecution> {
-  const preview = requirePreview(preparedPreview);
-  const idempotencyNamespace = operationKey.replace(/\.prepare$/, '').replace(/\./g, '-');
+  const approved = await approveCanonicalAction(operationKey, preparedPreview, lifecycleId);
+  const executed = await executeApprovedCanonicalAction(operationKey, preparedPreview, lifecycleId);
+  return { approved, executed };
+}
 
-  const approved = await apiHelpers.post<Record<string, unknown>>(
+export async function approveCanonicalAction(
+  operationKey: CanonicalOperationKey,
+  preparedPreview: CanonicalCommandPreview,
+  lifecycleId: string,
+): Promise<AxiosResponse<Record<string, unknown>>> {
+  const preview = requirePreview(preparedPreview);
+  const namespace = operationKey.replace(/\.prepare$/, '').replace(/\./g, '-');
+  return apiHelpers.post<Record<string, unknown>>(
     `/web/actions/commands/${preview.command_request_id}/approve`,
     {
       preview_hash: preview.preview_hash,
       approval_intent: 'approve',
-      idempotency_key: `erp-web-${idempotencyNamespace}-approve:${lifecycleId}`,
+      idempotency_key: `erp-web-${namespace}-approve:${lifecycleId}`,
     },
   );
+}
+
+export async function executeApprovedCanonicalAction(
+  operationKey: CanonicalOperationKey,
+  preparedPreview: CanonicalCommandPreview,
+  lifecycleId: string,
+): Promise<AxiosResponse<CanonicalCommandExecution>> {
+  const preview = requirePreview(preparedPreview);
+  const namespace = operationKey.replace(/\.prepare$/, '').replace(/\./g, '-');
   const executed = await apiHelpers.post<CanonicalCommandExecution>(
     `/web/actions/commands/${preview.command_request_id}/execute`,
     {
       preview_hash: preview.preview_hash,
-      idempotency_key: `erp-web-${idempotencyNamespace}-execute:${lifecycleId}`,
+      idempotency_key: `erp-web-${namespace}-execute:${lifecycleId}`,
     },
   );
   requireExecution(executed.data);
-  return { approved, executed };
+  return executed;
+}
+
+export async function getCanonicalCommandStatus(
+  commandRequestId: string,
+): Promise<AxiosResponse<CanonicalCommandExecution>> {
+  if (!isCanonicalUuid(commandRequestId)) {
+    throw new Error('Canonical command status requires a valid command identity.');
+  }
+  const response = await apiHelpers.get<CanonicalCommandExecution>(
+    `/web/actions/commands/${commandRequestId}`,
+  );
+  requireExecution(response.data);
+  return response;
 }
 
 export function canonicalExecutionCompleted(execution: CanonicalCommandExecution): boolean {

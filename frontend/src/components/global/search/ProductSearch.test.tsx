@@ -77,4 +77,18 @@ describe('ProductSearch canonical request lifecycle', () => {
 
         expect(screen.queryByText('Unsafe Product')).toBeNull();
     });
+
+    it('honors accessible disabled guidance without issuing a request', async () => {
+        const { rerender } = render(
+            <ProductSearch onAddItem={jest.fn()} disabled placeholder="Select transfer branches first" />,
+        );
+        const input = screen.getByPlaceholderText('Select transfer branches first');
+        expect((input as HTMLInputElement).disabled).toBe(true);
+        fireEvent.change(input, { target: { value: 'Exact' } });
+        await act(async () => { jest.advanceTimersByTime(100); });
+        expect(productsApi.search).not.toHaveBeenCalled();
+
+        rerender(<ProductSearch onAddItem={jest.fn()} placeholder="Search transfer product" />);
+        expect((screen.getByPlaceholderText('Search transfer product') as HTMLInputElement).disabled).toBe(false);
+    });
 });

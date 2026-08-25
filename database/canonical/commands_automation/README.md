@@ -6,10 +6,12 @@ rows are exact typed consent. Command requests persist branch, amount, currency,
 sensitivity, target version, serializer, request, preview, calculation, and
 aggregate hash facts.
 
-The dispatcher currently admits only `automation.agent_grant.revoke`. Every
-other operation fails closed until its own reviewed typed handler is composed.
-The SQL boundary is callable only by `erp_runtime`; no MCP route or tool is
-mounted by this fragment.
+The dispatcher admits only the prepare capabilities named in the generated
+manifest. Inter-branch stock transfer is a reviewed, actor-confirmed atomic
+movement: both branch authorities, subordinate locations, strict FEFO tier,
+locked source stock and paired value-preserving ledger entries are rechecked at
+execution. Unsupported operations continue to fail closed. The SQL boundary is
+callable only by `erp_runtime`; no MCP route or tool is mounted by this fragment.
 
 Regenerate with:
 

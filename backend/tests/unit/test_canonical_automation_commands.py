@@ -65,6 +65,7 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
         for capability, (operation, _) in sorted(_module().OPERATOR_COMMANDS.items())
     }
     assert "inventory.adjustment.prepare" in executable
+    assert "inventory.transfer.prepare" in executable
     assert "inventory.document.post" in dispatcher["execution_operations"]
     assert dispatcher["inventory_adjustment_pilot_scope"]["supported_effect"] == (
         "same_day_positive_cycle_count_gain_only"
@@ -72,10 +73,10 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
     assert dispatcher["inventory_destruction_blockers"]["status"] == (
         "unavailable_fail_closed"
     )
-    assert dispatcher["inventory_transfer_blockers"]["status"] == (
-        "unavailable_fail_closed"
+    assert dispatcher["inventory_transfer_pilot_scope"]["status"] == (
+        "available_reviewed_atomic_interbranch"
     )
-    assert "inventory.transfer.prepare" in dispatcher["blocked_prepare_capabilities"]
+    assert "inventory.transfer.prepare" not in dispatcher["blocked_prepare_capabilities"]
     assert dispatcher["dynamic_sql"] is False
     assert dispatcher["mcp_mounted"] is False
     assert "EXECUTE FORMAT" not in mapping.upper()
@@ -117,11 +118,11 @@ def test_prepare_resolvers_activate_only_the_verified_auth_user_context() -> Non
     mapping = _sql()
     assert mapping.count(
         "erp_security.activate_context(auth_user_id,organization_id)"
-    ) == 12
+    ) == 13
     assert "erp_security.activate_context(organization_id,membership_id)" not in mapping
     assert mapping.count(
         "erp_security.current_membership_id() IS DISTINCT FROM membership_id"
-    ) == 12
+    ) == 13
 
 
 def test_purchase_return_prepare_and_execute_reauthorize_exact_invoiced_lineage() -> None:

@@ -378,11 +378,11 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
     assert {step["operation"] for step in steps} | {
         probe["operation"] for probe in probes if probe["phase"] == "readiness"
     } == set(RESOURCE_TABLES)
-    assert len(steps) == 17
+    assert len(steps) == 18
     assert len(probes) == 17
-    assert sum(probe["phase"] == "readiness" for probe in probes) == 2
-    assert sum(probe["phase"] == "prepare" for probe in probes) == 15
-    assert len(steps) + sum(probe["phase"] == "prepare" for probe in probes) == 32
+    assert sum(probe["phase"] == "readiness" for probe in probes) == 1
+    assert sum(probe["phase"] == "prepare" for probe in probes) == 16
+    assert len(steps) + sum(probe["phase"] == "prepare" for probe in probes) == 34
     assert len({step["id"] for step in steps}) == len(steps)
     assert len({probe["id"] for probe in probes}) == len(probes)
 

@@ -38,12 +38,25 @@ ambiguity. It must fail closed instead of selecting one arbitrarily.
 | Supplier payment | `finance.supplier_payment.prepare` | FIFO/manual allocation → attested review → post | payment, bank/settlement accounts, allocations and balanced journal | active |
 | Supplier advance | `finance.supplier_advance.prepare` | no primary desktop entry yet | canonical command supports it | backend available; UI absent |
 | Cycle-count adjustment | `inventory.adjustment.prepare` | exact count review → independent approval → execute | inventory document, stock ledger and valuation | active; separate approver |
-| Stock transfer | `inventory.transfer.prepare` | Posting Unavailable | none | backend resolver unavailable; disabled |
+| Stock transfer | `inventory.transfer.prepare` | explicit source/destination branches and locations → requested quantity → tied-earliest FEFO allocation → exact review → actor confirmation → execute once | posted transfer UUID, exact lines, paired `transfer_out`/`transfer_in` quantities and values | active; inter-branch only |
 | Destruction | `inventory.destruction.prepare` | no entry | none | backend resolver unavailable |
 
 The browser never retries `execute` after an ambiguous response. Once an
 execution returns a resource UUID, recovery is GET-only against canonical
 readback using the retained UUID and lifecycle identity.
+
+Stock Transfer preserves the canonical inter-branch authority: the source and
+destination branches must be distinct, the actor/session must be authorized
+for both, and each location must belong to its explicitly selected branch.
+Same-branch inter-location movement is a different capability and remains
+unsupported. Eligibility returns only released, nonexpired, unrecalled stock in
+the equally earliest-expiry FEFO tier; the operator chooses the requested
+quantity and may adjust its split only among that tier. Posting locks and
+rechecks source stock, then writes one inventory document with exactly balanced
+`transfer_out` and `transfer_in` quantity/value evidence. Deployment must
+provision an active `stock_transfer` document sequence for the source branch and
+fiscal year. Missing sequence authority fails closed; neither migrations nor
+runtime code silently create one.
 
 ## Deliberately unsupported writes
 

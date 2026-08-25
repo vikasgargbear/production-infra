@@ -36,3 +36,9 @@ official GST authority URI validation, and a distinct active activator. The
 operator supplies every effective range and threshold through a hash-attested
 canonical dataset; direct SQL, demo provisioning, application startup, and the
 migration itself do not activate this global reference dataset.
+
+`20260825_0005_inventory_transfer_command.py` adds the reviewed canonical
+inter-branch transfer resolver, immutable prepare draft, and capability-specific
+execute dispatcher. It deliberately does not seed `stock_transfer` document
+sequences; each source branch needs an active fiscal-year sequence or prepare
+fails closed.

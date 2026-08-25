@@ -1174,6 +1174,74 @@ class FakeSupplierPaymentSession:
         raise AssertionError(f"Unexpected supplier payment SQL: {sql}")
 
 
+class FakeInventoryTransferSession:
+    def __init__(self, *, fail_persist=False):
+        self.fail_persist = fail_persist
+        self.executions = []
+        self.transaction_entries = 0
+        self.transaction_exits = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return None
+
+    def begin(self):
+        return FakeTransaction(self)
+
+    def execute(self, statement, parameters=None):
+        sql = str(statement)
+        params = dict(parameters or {})
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult()
+        self.executions.append((sql, params))
+        if "FROM pg_catalog.pg_roles AS role" in sql:
+            return FakeResult(({"role_name": "erp_runtime", "rolsuper": False, "rolbypassrls": False},))
+        if "resolve_inventory_transfer_prepare" in sql:
+            request = json.loads(params["request_json"])
+            resolved_lines = []
+            sources = [
+                {"resource_type": "branch", "role": "source", "id": request["source_branch_id"], "row_version": 2},
+                {"resource_type": "branch", "role": "destination", "id": request["destination_branch_id"], "row_version": 4},
+            ]
+            for product_line in request["lines"]:
+                for allocation in product_line["batch_allocations"]:
+                    resolved_lines.append({
+                        "inventory_document_line_id": allocation["inventory_document_line_id"],
+                        "product_id": product_line["product_id"],
+                        "batch_id": allocation["batch_id"],
+                        "base_quantity": allocation["entered_quantity"],
+                        "unit_cost": "2.5000",
+                        "extended_cost": "0.25",
+                    })
+                    sources.append({
+                        "resource_type": "stock_balance",
+                        "id": str(uuid4()),
+                        "batch_id": allocation["batch_id"],
+                        "row_version": 8,
+                    })
+            return FakeResult(({"resolution": {
+                "source_branch_id": request["source_branch_id"],
+                "destination_branch_id": request["destination_branch_id"],
+                "source_location_id": request["source_location_id"],
+                "destination_location_id": request["destination_location_id"],
+                "lines": resolved_lines,
+                "source_versions": sources,
+                "legal_scope": {"allocation_policy": "strict_fefo_earliest_expiry_tier"},
+            }},))
+        if "persist_inventory_transfer_prepare" in sql:
+            if self.fail_persist:
+                raise RuntimeError("inventory transfer persistence failed")
+            return FakeResult(({"command_request_id": {
+                "command_request_id": str(params["command_request_id"]),
+                "expires_at": params["expires_at"].isoformat(),
+                "preview_hash": hashlib.sha256(params["preview_bytes"]).hexdigest(),
+                "replayed": False,
+            }},))
+        raise AssertionError(f"Unexpected inventory transfer SQL: {sql}")
+
+
 class FakeInventoryAdjustmentSession:
     def __init__(self, *, fail_persist=False):
         self.fail_persist = fail_persist
@@ -1721,6 +1789,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_advance.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_payment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.adjustment.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"].available is True
     assert all(
         not ACTION_ADAPTER_BINDINGS[key].available
         for key in prepare_keys
@@ -1730,13 +1799,14 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "sales.invoice.prepare",
             "procurement.purchase_order.prepare",
             "procurement.goods_receipt.prepare",
-                "procurement.supplier_invoice.prepare",
-                "sales.return.prepare",
-                "procurement.purchase_return.prepare",
-                "finance.customer_receipt.prepare",
-                "finance.supplier_advance.prepare",
-                    "finance.supplier_payment.prepare",
-                    "inventory.adjustment.prepare",
+            "procurement.supplier_invoice.prepare",
+            "sales.return.prepare",
+            "procurement.purchase_return.prepare",
+            "finance.customer_receipt.prepare",
+            "finance.supplier_advance.prepare",
+            "finance.supplier_payment.prepare",
+            "inventory.adjustment.prepare",
+            "inventory.transfer.prepare",
         }
     )
     assert all(
@@ -1751,11 +1821,12 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "procurement.goods_receipt.prepare",
             "procurement.supplier_invoice.prepare",
             "sales.return.prepare",
-                "procurement.purchase_return.prepare",
-                "finance.customer_receipt.prepare",
-                "finance.supplier_advance.prepare",
-                "finance.supplier_payment.prepare",
-                "inventory.adjustment.prepare",
+            "procurement.purchase_return.prepare",
+            "finance.customer_receipt.prepare",
+            "finance.supplier_advance.prepare",
+            "finance.supplier_payment.prepare",
+            "inventory.adjustment.prepare",
+            "inventory.transfer.prepare",
         }
     )
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].prepare_function == (
@@ -1867,23 +1938,11 @@ def test_runtime_session_proof_rejects_superuser_or_bypassrls():
     assert error.value.metadata["reason"] == "RUNTIME_DATABASE_PRINCIPAL_INVALID"
 
 
-def test_unavailable_prepare_never_opens_a_database_session():
-    calls = []
-    service = SqlAlchemyOperatorActionService(lambda: calls.append("opened"))
-    policy = ACTION_POLICIES["inventory.transfer.prepare"]
-
-    with pytest.raises(OperatorActionError) as error:
-        service.prepare(
-            policy=policy,
-            payload={},
-            idempotency_key="prepare:test:0001",
-            context=_context(),
-        )
-
-    assert error.value.code is ActionErrorCode.POLICY_BLOCKED
-    assert error.value.metadata["reason"] == "COMMAND_ADAPTER_UNAVAILABLE"
-    assert "action-specific resolver" in error.value.metadata["coverage_reason"]
-    assert calls == []
+def test_inventory_transfer_adapter_is_reviewed_and_available():
+    binding = ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"]
+    assert binding.available is True
+    assert binding.prepare_function == "erp_automation_commands.persist_inventory_transfer_prepare"
+    assert binding.execute_function == "erp_automation_commands.execute_approved_command:inventory_transfer"
 
 
 @pytest.mark.parametrize(
@@ -2849,6 +2908,82 @@ def test_supplier_payment_prepare_failure_rolls_back_the_only_transaction():
     assert session.transaction_failures == 1
 
 
+def _inventory_transfer_service_payload():
+    source_branch, destination_branch = uuid4(), uuid4()
+    return {
+        "source_branch_id": source_branch,
+        "destination_branch_id": destination_branch,
+        "source_location_id": uuid4(),
+        "destination_location_id": uuid4(),
+        "transfer_date": datetime.now(timezone(timedelta(hours=5, minutes=30))).date(),
+        "lines": [{
+            "product_id": uuid4(),
+            "uom_conversion_id": uuid4(),
+            "batch_allocations": [
+                {"batch_id": uuid4(), "entered_quantity": "0.100000"},
+                {"batch_id": uuid4(), "entered_quantity": "0.200000"},
+            ],
+        }],
+        "logistics": {"transport_mode": "in_person", "distance_km": "0.00"},
+    }
+
+
+def test_inventory_transfer_prepare_is_one_runtime_transaction_and_preserves_tied_allocations():
+    session = FakeInventoryTransferSession()
+    payload = _inventory_transfer_service_payload()
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["source_branch_id"], payload["destination_branch_id"])).__dict__,
+            "operation_key": "inventory.transfer.prepare",
+            "permission": "inventory.transfer.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(lambda: session, runtime_principal_configured=True)
+
+    prepared = service.prepare(
+        policy=ACTION_POLICIES["inventory.transfer.prepare"],
+        payload=payload,
+        idempotency_key="prepare:inventory-transfer:0001",
+        context=context,
+    )
+
+    assert prepared.command_type == "inventory.document.post"
+    assert prepared.required_approvals == ({"policy": "actor_confirmation", "count": 1},)
+    assert len(prepared.inventory_impact) == 2
+    assert [item["base_quantity"] for item in prepared.inventory_impact] == ["0.100000", "0.200000"]
+    assert all(item["source_branch_id"] == str(payload["source_branch_id"]) for item in prepared.inventory_impact)
+    assert all(item["destination_branch_id"] == str(payload["destination_branch_id"]) for item in prepared.inventory_impact)
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert len(session.executions) == 3
+    request = json.loads(session.executions[1][1]["request_json"])
+    assert len(request["lines"][0]["batch_allocations"]) == 2
+    assert all(allocation["inventory_document_line_id"] for allocation in request["lines"][0]["batch_allocations"])
+    preview = json.loads(session.executions[2][1]["preview_bytes"])
+    assert preview["legal_scope"]["allocation_policy"] == "strict_fefo_earliest_expiry_tier"
+
+
+def test_inventory_transfer_prepare_failure_rolls_back_the_only_transaction():
+    session = FakeInventoryTransferSession(fail_persist=True)
+    payload = _inventory_transfer_service_payload()
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["source_branch_id"], payload["destination_branch_id"])).__dict__,
+            "operation_key": "inventory.transfer.prepare",
+            "permission": "inventory.transfer.create",
+        }
+    )
+    service = SqlAlchemyOperatorActionService(lambda: session, runtime_principal_configured=True)
+    with pytest.raises(RuntimeError, match="inventory transfer persistence failed"):
+        service.prepare(
+            policy=ACTION_POLICIES["inventory.transfer.prepare"],
+            payload=payload,
+            idempotency_key="prepare:inventory-transfer:rollback",
+            context=context,
+        )
+    assert session.transaction_entries == session.transaction_exits == 1
+    assert session.transaction_failures == 1
+
+
 def _inventory_adjustment_service_payload():
     counted_at = datetime.now(timezone.utc)
     return {
@@ -3349,7 +3484,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 13
+    assert source.count("_lock_prepare_idempotency(") == 14
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):

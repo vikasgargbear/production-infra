@@ -4,8 +4,7 @@
   "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
   "dispatcher": {
     "blocked_prepare_capabilities": [
-      "inventory.destruction.prepare",
-      "inventory.transfer.prepare"
+      "inventory.destruction.prepare"
     ],
     "capability_operation_map": {
       "finance.customer_receipt.prepare": "finance.payment.post",
@@ -53,6 +52,7 @@
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
       "inventory.adjustment.prepare",
+      "inventory.transfer.prepare",
       "procurement.goods_receipt.prepare",
       "procurement.purchase_order.prepare",
       "procurement.purchase_return.prepare",
@@ -138,22 +138,29 @@
       "nominal_zero_tax_pilot_rejected": "unreachable_from_current_eligible_only_supplier_invoice_operator_slice",
       "status": "unavailable_fail_closed"
     },
-    "inventory_transfer_blockers": {
-      "distinct_gst_registration_missing_authorities": [
-        "schedule_i_distinct_person_supply_classification",
-        "rule_28_valuation_and_output_gst_calculation",
-        "outward_tax_invoice_and_destination_itc_evidence"
+    "inventory_transfer_pilot_scope": {
+      "approval_policy": "actor_confirmation",
+      "required_matching": [
+        "organization_scoped_authority_for_both_distinct_branches",
+        "active_locations_belonging_to_their_explicit_branches",
+        "released_nonexpired_unrecalled_manufacturer_batch",
+        "strict_fefo_earliest_expiry_tier",
+        "positive_exact_six_decimal_quantity_with_locked_available_stock",
+        "preserved_locked_moving_weighted_average_value",
+        "one_inventory_document_and_balanced_transfer_out_transfer_in_ledger",
+        "execute_time_source_version_and_pending_movement_recheck"
       ],
-      "missing_authorities": [
-        "dispatch_stock_in_transit_and_destination_acceptance_lifecycle",
-        "pre_movement_eway_provider_authority",
-        "exact_source_and_destination_branch_consent",
-        "atomic_branch_inventory_asset_accounting_event",
-        "paired_source_and_destination_drug_licence_and_cold_chain_evidence",
-        "typed_physical_return_or_compensating_reversal"
-      ],
-      "nominal_same_registration_pilot_rejected": "atomic_transfer_out_and_transfer_in_cannot_prove_transit_or_destination_acceptance",
-      "status": "unavailable_fail_closed"
+      "status": "available_reviewed_atomic_interbranch",
+      "unsupported_fail_closed": [
+        "same_branch_or_same_location_transfer",
+        "cold_chain_product",
+        "expired_unreleased_or_recalled_batch",
+        "later_expiry_batch_when_earlier_stock_exists",
+        "insufficient_or_pending_source_stock",
+        "backdated_transfer",
+        "negative_stock_or_unbalanced_valuation",
+        "transfer_reversal"
+      ]
     },
     "mcp_mounted": false,
     "purchase_order_pilot_scope": {
@@ -356,7 +363,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "820f7c7ecc409691837a5075f781cc80f2ce13dafe5ab9d39afc2eb16a5bd911",
+  "mapping_sha256": "1b92a3fae387d19fc5a1cf13c4db00a16ed3f8f25e5f3b260afe871c8b7896cf",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [
@@ -390,12 +397,14 @@
       "persist_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "persist_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "persist_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_inventory_transfer_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "persist_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_inventory_transfer_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_supplier_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",

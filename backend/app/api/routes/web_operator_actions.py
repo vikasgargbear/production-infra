@@ -790,3 +790,25 @@ def execute_command(
     except OperatorActionError as exc:
         _raise_action(exc)
     return ExecutionResponse(**result.__dict__)
+
+
+@router.get("/commands/{command_request_id}", response_model=ExecutionResponse)
+def get_command_status(
+    command_request_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+    service: OperatorActionService = Depends(get_operator_action_service),
+) -> ExecutionResponse:
+    """GET-only recovery after an ambiguous execute response; never retries a write."""
+
+    operation = "automation.command.status.get"
+    _ready(service, operation)
+    context = _command_context(db, user, operation, command_request_id)
+    try:
+        result = service.get_status(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action(exc)
+    return ExecutionResponse(**result.__dict__)
