@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260825_0022_branch_scoped_evidence_attachments.sql"
 )
-EXPECTED_SQL_SHA256 = "5ec98de14d3e5cd1942bf611c6572391fb94b877bda201a9dd04cf183fc6758a"
+EXPECTED_SQL_SHA256 = "25ebd3465b1e80175294cc0a4978d999d34e31c9ad1684c043a7d37596b29e99"
 
 
 def _reviewed_sql() -> str:

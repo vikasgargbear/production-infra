@@ -145,6 +145,48 @@ CREATE TRIGGER attachments_evidence_guard
     BEFORE UPDATE OR DELETE ON core.attachments
     FOR EACH ROW EXECUTE FUNCTION erp_stable_invariants.guard_attachment_evidence();
 
+CREATE OR REPLACE FUNCTION erp_stable_invariants.guard_expense_receipt_branch()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path=''
+AS $function$
+DECLARE
+    receipt_branch_id uuid;
+BEGIN
+    IF NEW.receipt_attachment_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    SELECT attachment.branch_id
+      INTO STRICT receipt_branch_id
+      FROM core.attachments AS attachment
+     WHERE attachment.org_id=NEW.org_id
+       AND attachment.id=NEW.receipt_attachment_id
+     FOR SHARE;
+    IF receipt_branch_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+          FROM automation.command_requests AS command
+         WHERE command.org_id=NEW.org_id
+           AND command.capability_code='finance.expense_claim.prepare'
+           AND command.target_resource_type='expense_claim'
+           AND command.target_resource_id=NEW.expense_claim_id
+           AND command.branch_id=receipt_branch_id
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE='23514',
+            MESSAGE='expense receipt branch must match the canonical expense claim command';
+    END IF;
+    RETURN NEW;
+END
+$function$;
+ALTER FUNCTION erp_stable_invariants.guard_expense_receipt_branch()
+    OWNER TO erp_migration_owner;
+REVOKE ALL ON FUNCTION erp_stable_invariants.guard_expense_receipt_branch()
+    FROM PUBLIC,erp_app,erp_runtime;
+CREATE TRIGGER expense_claim_lines_receipt_branch_guard
+    BEFORE INSERT OR UPDATE OF expense_claim_id,receipt_attachment_id
+    ON finance.expense_claim_lines
+    FOR EACH ROW EXECUTE FUNCTION erp_stable_invariants.guard_expense_receipt_branch();
+
 DROP POLICY erp_select ON core.attachments;
 DROP POLICY erp_insert ON core.attachments;
 DROP POLICY erp_update ON core.attachments;

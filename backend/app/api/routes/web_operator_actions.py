@@ -947,8 +947,9 @@ def expense_claim_context(
                    attachment.status,attachment.verified_at,
                    attachment.retention_until,
                    pg_catalog.encode(attachment.sha256,'hex') AS sha256
-              FROM core.attachments attachment
+             FROM core.attachments attachment
              WHERE attachment.org_id=:org_id
+               AND attachment.branch_id=:branch_id
                AND attachment.evidence_kind='expense_receipt'
                AND attachment.status IN ('verified','retained')
                AND attachment.verified_at IS NOT NULL
@@ -972,6 +973,7 @@ def expense_claim_context(
         ),
         {
             "org_id": context.organization_id,
+            "branch_id": branch_id,
             "business_date": header_value["business_date"],
         },
     ).fetchall()
