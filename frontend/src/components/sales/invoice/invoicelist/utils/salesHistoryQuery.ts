@@ -3,7 +3,9 @@ import type {
     SalesHistoryDocumentType,
 } from '../types/invoicelist.types';
 
-export type SalesHistoryRequestParams = Record<string, string | number>;
+import type { CanonicalDocumentHistoryParams } from '../../../../../services/api/modules/history/canonicalDocumentHistory.api';
+
+export type SalesHistoryRequestParams = CanonicalDocumentHistoryParams;
 
 /**
  * Keep each list request inside the canonical contract exposed for that
@@ -16,21 +18,18 @@ export const buildSalesHistoryRequestParams = (
     page: number,
     perPage: number,
 ): SalesHistoryRequestParams => {
-    const offset = Math.max(page - 1, 0) * perPage;
     const params: SalesHistoryRequestParams = {
-        limit: perPage,
-        ...(documentType === 'invoice' ? { offset } : { skip: offset }),
+        document_kind: documentType === 'invoice' ? 'sales_invoice'
+            : documentType === 'challan' ? 'sales_dispatch' : 'sales_order',
+        page,
+        page_size: perPage,
     };
     const search = filters.searchQuery.trim();
 
-    if (documentType === 'invoice') {
-        if (search) params.search = search;
-        if (filters.statusFilter !== 'all') params.payment_status = filters.statusFilter;
-        if (filters.dateFrom) params.date_from = filters.dateFrom;
-        if (filters.dateTo) params.date_to = filters.dateTo;
-    } else if (documentType === 'sales_order' && search) {
-        params.search = search;
-    }
+    if (search) params.search = search;
+    if (filters.statusFilter !== 'all') params.status = filters.statusFilter;
+    if (filters.dateFrom) params.date_from = filters.dateFrom;
+    if (filters.dateTo) params.date_to = filters.dateTo;
 
     return params;
 };

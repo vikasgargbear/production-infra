@@ -14,24 +14,22 @@ const filters: InvoiceFilters = {
 
 test('keeps all supported invoice filters during pagination and refresh', () => {
     expect(buildSalesHistoryRequestParams('invoice', filters, 3, 25)).toEqual({
-        limit: 25,
-        offset: 50,
+        document_kind: 'sales_invoice', page: 3, page_size: 25,
         search: 'DEMO',
-        payment_status: 'pending',
+        status: 'pending',
         date_from: '2026-08-17',
         date_to: '2026-08-24',
     });
 });
 
-test('only sends supported parameters for orders and challans', () => {
+test('sends the same server-side filters for orders and challans', () => {
     expect(buildSalesHistoryRequestParams('sales_order', filters, 2, 25)).toEqual({
-        limit: 25,
-        skip: 25,
-        search: 'DEMO',
+        document_kind: 'sales_order', page: 2, page_size: 25, search: 'DEMO', status: 'pending',
+        date_from: '2026-08-17', date_to: '2026-08-24',
     });
     expect(buildSalesHistoryRequestParams('challan', filters, 2, 25)).toEqual({
-        limit: 25,
-        skip: 25,
+        document_kind: 'sales_dispatch', page: 2, page_size: 25, search: 'DEMO', status: 'pending',
+        date_from: '2026-08-17', date_to: '2026-08-24',
     });
 });
 

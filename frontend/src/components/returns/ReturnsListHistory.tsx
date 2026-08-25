@@ -4,10 +4,11 @@ import {
   X, AlertCircle, RefreshCw, Users, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
-import { returnsApi } from '../../services/api';
+import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
+import { formatExactCurrency } from '../../utils/exactDecimal';
+import { resolvePurchaseHistoryDates } from '../purchase/purchaselisthistory/utils/purchaseHistoryProjection';
 import {
   normalizeReturnStatus,
-  projectReturnsHistoryRows,
   returnsHistoryCsv,
   ReturnsHistoryRow,
 } from './utils/returnsHistoryProjection';
@@ -137,9 +138,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       type: 'select' as const,
       options: [
         { value: 'all', label: 'All Statuses' },
-        { value: 'draft', label: 'Draft' },
-        { value: 'submitted', label: 'Submitted' },
-        { value: 'approved', label: 'Approved' },
         { value: 'posted', label: 'Posted' },
         { value: 'cancelled', label: 'Cancelled' },
         { value: 'reversed', label: 'Reversed' }
@@ -164,67 +162,40 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     setError(null);
 
     try {
-      // Prepare search parameters
-      const searchParams: any = {
-        limit: pagination.per_page,
-        offset: (page - 1) * pagination.per_page,
-        ...filters,
-        from_date: filters.dateFrom,
-        to_date: filters.dateTo,
-      };
-      delete searchParams.dateFrom;
-      delete searchParams.dateTo;
-      delete searchParams.date_preset;
-      delete searchParams.return_type;
-      if (searchParams.status === 'all') delete searchParams.status;
-
-      // If there's a search query, add it to the filters
-      if (filters.search && filters.search.trim()) {
-        searchParams.search = filters.search.trim();
-      }
-
-      // Fetch both sales and purchase returns
-      // Using Promise.allSettled to handle if one endpoint fails
-      const [salesResult, purchaseResult] = await Promise.allSettled([
-        returnsApi.getSaleReturns(searchParams),
-        returnsApi.getPurchaseReturns(searchParams)
-      ]);
-
-      // Handle responses based on their status
-      const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : null;
-      const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : null;
-
-      const salesReturnsList = salesResponse?.data?.returns || salesResponse?.data?.sales_returns || [];
-      const purchaseReturnsList = purchaseResponse?.data?.returns || purchaseResponse?.data?.purchase_returns || [];
-
-      const salesReturns = projectReturnsHistoryRows(salesReturnsList, 'sales');
-      const purchaseReturns = projectReturnsHistoryRows(purchaseReturnsList, 'purchase');
-
-      // Combine and filter based on type filter if specified
-      let allReturns = [...salesReturns, ...purchaseReturns];
-
-      if (filters.return_type && filters.return_type !== 'all') {
-        allReturns = allReturns.filter(ret => ret.return_type === filters.return_type);
-      }
-
-      const salesTotal = Number(salesResponse?.data?.total || 0);
-      const purchaseTotal = Number(purchaseResponse?.data?.total || 0);
-      const filteredTotal = filters.return_type === 'sales'
-        ? salesTotal
-        : filters.return_type === 'purchase' ? purchaseTotal : salesTotal + purchaseTotal;
+      const selectedType = filters.return_type || returnType;
+      const response = await canonicalDocumentHistoryApi.get({
+        document_kind: selectedType === 'sales' ? 'sales_return'
+          : selectedType === 'purchase' ? 'purchase_return' : undefined,
+        document_group: selectedType === 'all' ? 'returns' : undefined,
+        page,
+        page_size: pagination.per_page,
+        search: filters.search?.trim() || undefined,
+        status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+        date_from: filters.dateFrom || undefined,
+        date_to: filters.dateTo || undefined,
+      });
+      const allReturns = response.items.map(row => ({
+        id: row.document_id,
+        return_no: row.document_number,
+        return_type: row.document_kind === 'sales_return' ? 'sales' as const : 'purchase' as const,
+        customer_name: row.document_kind === 'sales_return' ? row.party_name : undefined,
+        supplier_name: row.document_kind === 'purchase_return' ? row.party_name : undefined,
+        original_document_no: row.source_document_number || 'Not available',
+        return_date: row.document_date,
+        total_amount: requireCanonicalHistoryAmount(row.total_amount, `${row.document_kind} total`),
+        status: row.status,
+        reason: 'Not available',
+        created_at: row.created_at,
+        items_count: row.line_count,
+      }));
 
       setReturns(allReturns);
       setPagination({
-        total: filteredTotal,
+        total: response.total,
         page: page,
         per_page: pagination.per_page,
-        total_pages: Math.ceil(filteredTotal / pagination.per_page)
+        total_pages: Math.ceil(response.total / pagination.per_page)
       });
-
-      // If both endpoints failed, show a message
-      if (salesResult.status === 'rejected' && purchaseResult.status === 'rejected') {
-        setError('Returns feature is currently being deployed. Please try again later.');
-      }
     } catch (error) {
       // Log error for debugging if needed
       setError('Failed to fetch returns. Please try again.');
@@ -252,9 +223,17 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
-    setActiveFilters(filters);
+    const preset = resolvePurchaseHistoryDates(
+      String(filters.date_preset || 'all'), String(filters.dateFrom || ''), String(filters.dateTo || ''),
+    );
+    const resolvedFilters = {
+      ...filters,
+      dateFrom: filters.dateFrom || preset.from_date || '',
+      dateTo: filters.dateTo || preset.to_date || '',
+    };
+    setActiveFilters(resolvedFilters);
     // Reset to first page when filters change
-    fetchReturns(1, { ...filters, search: searchQuery });
+    fetchReturns(1, { ...resolvedFilters, search: searchQuery });
   };
 
   // Handle search changes with auto-search
@@ -282,15 +261,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const handleExportSelected = () => exportRows(
     returns.filter(item => selectedReturns.includes(item.id)),
   );
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const formatDate = (value: string) => {
     if (!value) return 'N/A';
@@ -358,9 +328,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       key: 'total_amount',
       header: 'Amount',
       align: 'right' as const,
-      render: (value: number, returnItem: ReturnsHistoryRow) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="font-semibold text-gray-900 text-right">
-          {formatCurrency(returnItem.total_amount)}
+          {formatExactCurrency(returnItem.total_amount, 'Return history amount')}
         </div>
       ),
       width: '120px',

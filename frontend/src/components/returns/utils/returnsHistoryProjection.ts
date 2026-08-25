@@ -1,3 +1,5 @@
+import { normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
+
 export type HistoryReturnType = 'sales' | 'purchase';
 
 export interface ReturnsHistoryRow {
@@ -8,7 +10,7 @@ export interface ReturnsHistoryRow {
     supplier_name?: string;
     original_document_no: string;
     return_date: string;
-    total_amount: number;
+    total_amount: string;
     status: string;
     reason: string;
     created_at?: string;
@@ -55,12 +57,14 @@ export function projectReturnsHistoryRows(value: unknown, type: HistoryReturnTyp
                 ?? row.original_purchase_no ?? row.invoice_number ?? row.purchase_no ?? 'Not available',
             ),
             return_date: String(row.return_date ?? ''),
-            total_amount: Number.isFinite(Number(row.total_amount)) ? Number(row.total_amount) : 0,
+            total_amount: normalizeAuthoritativeDecimal(row.total_amount, 'Return history amount', {
+                scale: 2, maximumWholeDigits: 20, allowNegative: true,
+            }),
             status: normalizeReturnStatus(row.approval_status ?? row.status).status,
             reason: String(row.return_reason ?? row.reason ?? 'Not available'),
             created_at: row.created_at ? String(row.created_at) : undefined,
-            items_count: Number.isFinite(Number(row.items_count))
-                ? Number(row.items_count)
+            items_count: typeof row.items_count === 'number' && Number.isSafeInteger(row.items_count) && row.items_count >= 0
+                ? row.items_count
                 : (Array.isArray(row.items) ? row.items.length : 0),
         };
     });

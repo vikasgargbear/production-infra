@@ -9,10 +9,10 @@ export interface PurchaseOrder {
     po_date: string;
     supplier_id: string;
     supplier_name: string;
-    total_amount: number;
-    paid_amount: number;
-    pending_amount: number;
-    payment_status: 'paid' | 'partial' | 'pending' | 'overdue';
+    total_amount: string | null;
+    paid_amount: string | null;
+    pending_amount: string | null;
+    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled' | null;
     status: string;
     items_count: number;
     created_at: string;

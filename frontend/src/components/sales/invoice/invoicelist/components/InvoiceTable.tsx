@@ -3,11 +3,13 @@ import { Download, Eye, Mail, MessageCircle, Printer, X } from 'lucide-react';
 import { DataTable, StatusBadge } from '../../../../global';
 import { useCompany } from '../../../../../contexts/CompanyContext';
 import type { InvoiceTableProps, Invoice } from '../types/invoicelist.types';
+import { compareExactDecimals, formatExactCurrency } from '../../../../../utils/exactDecimal';
 import {
     salesDocumentLabel,
     salesDocumentNumberLabel,
     salesDocumentStatus,
     salesHistoryDocumentCsv,
+    salesHistoryAmountLabel,
     salesHistoryPrintHtml,
     salesStatusLabel,
     salesStatusTone,
@@ -43,10 +45,11 @@ Your ${label.toLowerCase()} from ${companyName} is ready.
 
 ${label} #: ${document.invoice_number}
 Date: ${formatDate(document.invoice_date)}
-Amount: ₹${document.total_amount.toLocaleString('en-IN')}
+${document.total_amount === null ? '' : `Amount: ${formatExactCurrency(document.total_amount, 'Sales history amount')}\n`}
 ${document.due_date ? `Due/Delivery Date: ${formatDate(document.due_date)}\n` : ''}
-${document.document_type === 'invoice' && document.pending_amount > 0
-                ? `Pending: ₹${document.pending_amount.toLocaleString('en-IN')}\n`
+${document.document_type === 'invoice' && document.pending_amount !== null
+                && compareExactDecimals(document.pending_amount, '0.00', 'Outstanding amount', { scale: 2, maximumWholeDigits: 20 }) > 0
+                ? `Pending: ${formatExactCurrency(document.pending_amount, 'Outstanding amount')}\n`
                 : ''}Status: ${salesStatusLabel(salesDocumentStatus(document))}
 
 Thank you for your business.
@@ -70,7 +73,8 @@ ${companyName}`;
     const handleEmail = (document: Invoice) => {
         if (!document.customer_email) return;
         const label = salesDocumentLabel(document.document_type);
-        const subject = `${label} ${document.invoice_number} - ₹${document.total_amount.toLocaleString('en-IN')}`;
+        const subject = `${label} ${document.invoice_number}`
+            + (document.total_amount === null ? '' : ` - ${formatExactCurrency(document.total_amount, 'Sales history amount')}`);
         window.location.href = `mailto:${encodeURIComponent(document.customer_email)}`
             + `?subject=${encodeURIComponent(subject)}`
             + `&body=${encodeURIComponent(createDocumentMessage(document))}`;
@@ -137,11 +141,12 @@ ${companyName}`;
             render: (_: unknown, document: Invoice) => (
                 <div className="text-right">
                     <div className="font-semibold text-gray-900">
-                        ₹{document.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {salesHistoryAmountLabel(document.total_amount)}
                     </div>
-                    {document.document_type === 'invoice' && document.pending_amount > 0 && (
+                    {document.document_type === 'invoice' && document.pending_amount !== null
+                        && compareExactDecimals(document.pending_amount, '0.00', 'Outstanding amount', { scale: 2, maximumWholeDigits: 20 }) > 0 && (
                         <div className="text-xs text-red-700">
-                            ₹{document.pending_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} pending
+                            {formatExactCurrency(document.pending_amount, 'Outstanding amount')} pending
                         </div>
                     )}
                 </div>
@@ -162,11 +167,7 @@ ${companyName}`;
             width: '100px',
             render: (_: unknown, document: Invoice) => {
                 if (!document.due_date) return <div className="text-gray-400">—</div>;
-                const dueDate = new Date(document.due_date);
-                const overdue = document.document_type === 'invoice'
-                    && !Number.isNaN(dueDate.getTime())
-                    && dueDate < new Date()
-                    && document.payment_status !== 'paid';
+                const overdue = document.document_type === 'invoice' && document.payment_status === 'overdue';
                 return <div className={overdue ? 'text-red-700' : 'text-gray-700'}>{formatDate(document.due_date)}</div>;
             },
         },
@@ -240,7 +241,7 @@ ${companyName}`;
                             {[
                                 ['Date', formatDate(viewingDocument.invoice_date)],
                                 ['Customer', viewingDocument.customer_name || 'Not available'],
-                                ['Amount', `₹${viewingDocument.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`],
+                                ['Amount', salesHistoryAmountLabel(viewingDocument.total_amount)],
                                 ['Status', salesStatusLabel(salesDocumentStatus(viewingDocument))],
                                 ['Items', String(viewingDocument.items_count)],
                             ].map(([term, description]) => (

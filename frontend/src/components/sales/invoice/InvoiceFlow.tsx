@@ -20,6 +20,7 @@ import {
     invoicePreviewValidationError,
 } from './utils/canonicalInvoiceCommand';
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
+import { formatExactCurrency } from '../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -191,7 +192,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             .catch((err: Error) => toast.error(`PDF generation failed: ${err.message}`));
     }, []);
 
-    const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: number) => {
+    const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: string) => {
         if (!phone) {
             toast.error('No phone number available for WhatsApp');
             return;
@@ -211,7 +212,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         const invoiceDate = new Date(invoice.invoice_date).toLocaleDateString('en-IN', {
             day: '2-digit', month: 'short', year: 'numeric'
         });
-        const formattedAmount = amount ? `₹${amount.toLocaleString('en-IN')}` : '';
+        const formattedAmount = amount ? formatExactCurrency(amount, 'Posted invoice total') : '';
 
         const whatsappMessage = `Dear ${customerName || 'Customer'},
 

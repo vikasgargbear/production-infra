@@ -212,7 +212,7 @@ export interface CreatedChallanData {
     customer_name: string;
     customer_details?: CustomerDetails;
     items: ChallanItem[];
-    total_amount: number;
+    total_amount: string;
 }
 
 // ==================== COMPANY INFO ====================

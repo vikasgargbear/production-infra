@@ -182,7 +182,7 @@ export interface CreatedOrderData {
     orderId: number | string;
     orderNumber: string;
     customerName: string;
-    totalAmount: number;
+    totalAmount: string;
 }
 
 /**

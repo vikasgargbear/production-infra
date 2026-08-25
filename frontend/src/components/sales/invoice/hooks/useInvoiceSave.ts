@@ -16,7 +16,7 @@ import { clientUuid } from '../../../../utils/clientUuid';
 import type { Invoice } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
-import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
 import {
     buildCanonicalInvoicePreparePayload,
     invoicePreviewValidationError,
@@ -166,14 +166,11 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 throw new Error('Invoice posted, but authoritative readback omitted its invoice number.');
             }
 
-            const authoritativeTotal = normalizeExactDecimal(
+            const authoritativeTotal = normalizeAuthoritativeDecimal(
                 readback.invoice_total,
                 'Posted invoice total',
                 { scale: 2 },
             );
-            // GenericSuccessModal and the transient toast are presentation-only
-            // consumers; the canonical readback remains the exact string above.
-            const presentationTotal = Number(authoritativeTotal);
             setInvoice(previous => ({ ...previous, invoice_number: invoiceNumber }));
             setCreatedInvoiceData({
                 invoiceId: String(invoiceId),
@@ -181,7 +178,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 customerName: selectedCustomer!.customer_name,
                 customerPhone: selectedCustomer!.primary_phone || '',
                 customerEmail: selectedCustomer!.primary_email || '',
-                totalAmount: presentationTotal,
+                totalAmount: authoritativeTotal,
                 items: invoice.items,
                 isOffline: false,
             });
@@ -189,7 +186,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             showFinancialEntryNotification({
                 title: 'Sales Invoice Posted',
                 reference: invoiceNumber,
-                amount: presentationTotal,
+                amount: authoritativeTotal,
                 status: 'confirmed',
                 impacts: [
                     'The invoice is committed to the backend sales ledger.',

@@ -20,10 +20,10 @@ export interface Invoice {
     customer_name: string;
     customer_phone?: string;
     customer_email?: string;
-    total_amount: number;
-    paid_amount: number;
-    pending_amount: number;
-    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled';
+    total_amount: string | null;
+    paid_amount: string | null;
+    pending_amount: string | null;
+    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled' | null;
     items_count: number;
     created_at: string;
     updated_at: string;

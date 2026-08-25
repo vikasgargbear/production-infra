@@ -14,7 +14,8 @@ import {
   FileText, ClipboardList, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
-import { supplierInvoicesApi, purchasesApi, grnApi } from '../../services/api';
+import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
+import { formatExactCurrency } from '../../utils/exactDecimal';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
@@ -70,107 +71,31 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      const pageOffset = (page - 1) * pagination.per_page;
-      const searchParams: any = {
-        limit: pagination.per_page,
-        ...(docType === 'purchase_order' ? { offset: pageOffset } : { skip: pageOffset }),
-        ...searchFilters
-      };
-
-      if (searchFilters.search?.trim()) {
-        searchParams.search = searchFilters.search.trim();
-      }
-
-      let response;
-      let transformedData: PurchaseOrder[] = [];
-
-      if (docType === 'supplier_invoice') {
-        response = await supplierInvoicesApi.getAll(searchParams);
-        const responseData = response?.data;
-        const invoicesData = Array.isArray(responseData) ? responseData :
-          (responseData?.invoices || []);
-
-        transformedData = invoicesData.map((invoice: any) => ({
-          id: String(invoice.supplier_invoice_id),
-          po_number: invoice.invoice_number,
-          po_date: invoice.invoice_date,
-          supplier_id: String(invoice.supplier_id),
-          supplier_name: invoice.supplier_name,
-          total_amount: Number(invoice.invoice_total || invoice.total_amount || 0),
-          paid_amount: Number(invoice.paid_amount || 0),
-          pending_amount: Number(invoice.pending_amount ?? ((invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0))),
-          payment_status: invoice.payment_status || 'pending',
-          status: invoice.status || 'confirmed',
-          items_count: invoice.items_count || 0,
-          created_at: invoice.created_at,
-          updated_at: invoice.updated_at
-        }));
-
-        const total = responseData?.total || transformedData.length;
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-
-      } else if (docType === 'purchase_order') {
-        response = await purchasesApi.getOrders(searchParams);
-        const responseData = response?.data;
-        const ordersData = Array.isArray(responseData) ? responseData :
-          (responseData?.orders || responseData?.purchases || []);
-
-        transformedData = ordersData.map((order: any) => ({
-          id: String(order.po_id || order.purchase_order_id),
-          po_number: order.po_number || order.order_number,
-          po_date: order.po_date || order.order_date,
-          supplier_id: String(order.supplier_id),
-          supplier_name: order.supplier_name,
-          total_amount: Number(order.total_amount || order.final_amount || 0),
-          paid_amount: Number(order.paid_amount || 0),
-          pending_amount: Number(order.pending_amount || 0),
-          payment_status: order.payment_status || 'pending',
-          status: order.status || order.po_status || 'draft',
-          items_count: order.items_count || order.items?.length || 0,
-          created_at: order.created_at,
-          updated_at: order.updated_at
-        }));
-
-        const total = responseData?.total || transformedData.length;
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-
-      } else if (docType === 'grn') {
-        response = await grnApi.getAll(searchParams);
-        const responseData = response?.data;
-        const grnData = Array.isArray(responseData) ? responseData :
-          (responseData?.grns || responseData?.data || []);
-
-        transformedData = grnData.map((grn: any) => ({
-          id: String(grn.grn_id),
-          po_number: grn.grn_number,
-          po_date: grn.grn_date,
-          supplier_id: String(grn.supplier_id),
-          supplier_name: grn.supplier_name,
-          total_amount: Number(grn.total_amount || 0),
-          paid_amount: 0,
-          pending_amount: Number(grn.total_amount || 0),
-          payment_status: 'pending',
-          status: grn.grn_status,
-          items_count: grn.items_count || grn.items?.length || 0,
-          created_at: grn.created_at,
-          updated_at: grn.updated_at
-        }));
-
-        const total = responseData?.total || transformedData.length;
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-      }
+      const response = await canonicalDocumentHistoryApi.get({
+        document_kind: docType === 'grn' ? 'goods_receipt' : docType,
+        page,
+        page_size: pagination.per_page,
+        ...searchFilters,
+      });
+      const transformedData: PurchaseOrder[] = response.items.map(row => ({
+        id: row.document_id,
+        po_number: row.document_number,
+        po_date: row.document_date,
+        supplier_id: row.party_account_id,
+        supplier_name: row.party_name,
+        total_amount: requireCanonicalHistoryAmount(row.total_amount, `${row.document_kind} total`),
+        paid_amount: row.paid_amount,
+        pending_amount: row.outstanding_amount,
+        payment_status: row.payment_status,
+        status: row.status,
+        items_count: row.line_count,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
+      dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
+      dispatch({ type: 'SET_PAGINATION', pagination: {
+        total: response.total, page, total_pages: Math.ceil(response.total / pagination.per_page),
+      } });
 
     } catch (error) {
       console.error(`Failed to fetch ${docType}:`, error);
@@ -198,39 +123,30 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     } });
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && onClose) {
-        onClose();
-        return;
-      }
+  const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => (
+    buildPurchaseHistoryParams({ ...filters, ...overrides }, documentType)
+  ), [filters, documentType]);
 
-      if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
-        event.preventDefault();
-        handleRefresh();
-        return;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  // Event handlers
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     dispatch({ type: 'SET_REFRESHING', refreshing: true });
-
     try {
       await fetchDocuments(pagination.page, buildSearchParams(), documentType);
     } finally {
       dispatch({ type: 'SET_REFRESHING', refreshing: false });
     }
-  };
+  }, [buildSearchParams, dispatch, documentType, fetchDocuments, pagination.page]);
 
-  const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => (
-    buildPurchaseHistoryParams({ ...filters, ...overrides }, documentType)
-  ), [filters, documentType]);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && onClose) onClose();
+      if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
+        event.preventDefault();
+        handleRefresh();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleRefresh, onClose]);
 
   const handleSearchChange = (query: string) => {
     dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
@@ -255,7 +171,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       : purchases;
     if (selected.length === 0) return;
     const csvContent = purchaseHistoryCsv(
-      selected as unknown as Array<Record<string, unknown>>,
+      selected,
       documentTypeConfig[documentType].numberLabel,
     );
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -342,9 +258,12 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           paid: { status: 'success', label: 'Paid' },
           partial: { status: 'warning', label: 'Partial' },
           pending: { status: 'info', label: 'Pending' },
-          overdue: { status: 'error', label: 'Overdue' }
+          overdue: { status: 'error', label: 'Overdue' },
+          cancelled: { status: 'error', label: 'Cancelled' }
         };
-        const config = statusMap[purchase.payment_status] || { status: 'default', label: purchase.payment_status };
+        const config = purchase.payment_status
+          ? statusMap[purchase.payment_status] || { status: 'default', label: purchase.payment_status }
+          : { status: 'default', label: purchase.status };
         return <StatusBadge status={config.status} label={config.label} />;
       },
       width: '100px'
@@ -354,7 +273,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       header: 'Amount',
       align: 'right' as const,
       render: (_: any, purchase: PurchaseOrder) => (
-        <span className="font-medium text-gray-900">₹{purchase.total_amount.toLocaleString('en-IN')}</span>
+        <span className="font-medium text-gray-900">
+          {purchase.total_amount === null ? 'Not available' : formatExactCurrency(purchase.total_amount, 'Purchase history amount')}
+        </span>
       ),
       width: '120px'
     },
@@ -379,7 +300,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
           <button
             onClick={() => {
               const noun = documentTypeConfig[documentType].singular;
-              const message = `Dear ${purchase.supplier_name},\n\n${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              const amount = purchase.total_amount === null
+                ? '' : `\nAmount: ${formatExactCurrency(purchase.total_amount, 'Purchase history amount')}`;
+              const message = `Dear ${purchase.supplier_name},\n\n${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}${amount}\n\nThank you!`;
               window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
             }}
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
@@ -392,7 +315,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
             onClick={() => {
               const noun = documentTypeConfig[documentType].singular;
               const subject = `${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}`;
-              const body = `Dear ${purchase.supplier_name},\n\n${subject}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              const amount = purchase.total_amount === null
+                ? '' : `\nAmount: ${formatExactCurrency(purchase.total_amount, 'Purchase history amount')}`;
+              const body = `Dear ${purchase.supplier_name},\n\n${subject}${amount}\n\nThank you!`;
               window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             }}
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
@@ -498,17 +423,15 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                   options: documentType === 'supplier_invoice' ? [
                     { value: 'all', label: 'All Status' }, { value: 'paid', label: 'Paid' },
                     { value: 'partial', label: 'Partial' }, { value: 'pending', label: 'Pending' },
-                    { value: 'overdue', label: 'Overdue' }
+                    { value: 'overdue', label: 'Overdue' }, { value: 'cancelled', label: 'Cancelled' }
                   ] : documentType === 'purchase_order' ? [
-                    { value: 'all', label: 'All Status' }, { value: 'draft', label: 'Draft' },
-                    { value: 'submitted', label: 'Submitted' }, { value: 'approved', label: 'Approved' },
+                    { value: 'all', label: 'All Status' }, { value: 'submitted', label: 'Submitted' },
+                    { value: 'approved', label: 'Approved' },
                     { value: 'partially_received', label: 'Partially Received' },
                     { value: 'received', label: 'Received' }, { value: 'cancelled', label: 'Cancelled' }
                   ] : [
-                    { value: 'all', label: 'All Status' }, { value: 'draft', label: 'Draft' },
-                    { value: 'submitted', label: 'Submitted' }, { value: 'inspected', label: 'Inspected' },
-                    { value: 'approved', label: 'Approved' }, { value: 'posted', label: 'Posted' },
-                    { value: 'rejected', label: 'Rejected' }, { value: 'cancelled', label: 'Cancelled' },
+                    { value: 'all', label: 'All Status' }, { value: 'posted', label: 'Posted' },
+                    { value: 'cancelled', label: 'Cancelled' },
                     { value: 'reversed', label: 'Reversed' }
                   ],
                 },

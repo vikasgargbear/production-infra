@@ -12,7 +12,7 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { FileText, RefreshCw, Package, ShoppingCart } from 'lucide-react';
 import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
-import { invoicesApi, challansApi, ordersApi } from '../../../services/api';
+import { canonicalDocumentHistoryApi } from '../../../services/api';
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
 import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
 import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
@@ -52,7 +52,7 @@ const documentTypeConfig = {
 };
 
 // Filter configuration for InlineFilterPanel
-const filterOptions = [
+const commonFilterOptions = [
   {
     key: 'date_preset',
     label: 'Period',
@@ -70,19 +70,6 @@ const filterOptions = [
     defaultValue: 'all'
   },
   {
-    key: 'payment_status',
-    label: 'Status',
-    type: 'select' as const,
-    options: [
-      { value: 'all', label: 'All Status' },
-      { value: 'paid', label: 'Paid' },
-      { value: 'partial', label: 'Partial' },
-      { value: 'pending', label: 'Pending' },
-      { value: 'overdue', label: 'Overdue' }
-    ],
-    defaultValue: 'all'
-  },
-  {
     key: 'dateFrom',
     label: 'From Date',
     type: 'date' as const
@@ -93,6 +80,22 @@ const filterOptions = [
     type: 'date' as const
   }
 ];
+
+const historyFilterOptions = (type: DocumentType) => [{
+  key: 'payment_status', label: 'Status', type: 'select' as const, defaultValue: 'all',
+  options: type === 'invoice' ? [
+    { value: 'all', label: 'All Status' }, { value: 'paid', label: 'Paid' },
+    { value: 'partial', label: 'Partial' }, { value: 'pending', label: 'Pending' },
+    { value: 'overdue', label: 'Overdue' }, { value: 'cancelled', label: 'Cancelled' },
+  ] : type === 'sales_order' ? [
+    { value: 'all', label: 'All Status' }, { value: 'submitted', label: 'Submitted' },
+    { value: 'approved', label: 'Approved' }, { value: 'partially_fulfilled', label: 'Partially Fulfilled' },
+    { value: 'fulfilled', label: 'Fulfilled' }, { value: 'cancelled', label: 'Cancelled' },
+  ] : [
+    { value: 'all', label: 'All Status' }, { value: 'posted', label: 'Posted' },
+    { value: 'cancelled', label: 'Cancelled' }, { value: 'reversed', label: 'Reversed' },
+  ],
+}, ...commonFilterOptions];
 
 const emptyFilters = (): InvoiceFilters => ({
   searchQuery: '',
@@ -126,74 +129,11 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
     try {
       const searchParams = buildSalesHistoryRequestParams(docType, activeFilters, page, perPage);
-      let response;
-      let transformedData: Invoice[] = [];
-      let total = 0;
-
-      if (docType === 'invoice') {
-        // Invoices API returns { invoices: [], total }
-        response = await invoicesApi.getAll(searchParams);
-        const responseData = response?.data;
-        console.log('[Invoice API] Raw response:', responseData);
-
-        // Backend returns: { invoices: [...], total }
-        const invoicesData = responseData?.invoices;
-
-        if (!Array.isArray(invoicesData)) {
-          throw new Error(`Expected invoices array, got ${typeof invoicesData}`);
-        }
-
-        // Map invoice fields to display format
-        // Backend fields: invoice_id, invoice_number, invoice_date, customer_name, final_amount, paid_amount, pending_amount, payment_status, due_date
-        transformedData = invoicesData.map(projectInvoiceListRow);
-
-        total = responseData?.total ?? transformedData.length;
-
-      } else if (docType === 'challan') {
-        // Challans API returns DIRECT ARRAY (not wrapped in { challans: [] })
-        response = await challansApi.getAll(searchParams);
-
-        // Backend returns direct array: [{ challan_id, challan_number, ... }]
-        const challansData = response?.data;
-        console.log('[Challan API] Raw response:', challansData);
-
-        if (!Array.isArray(challansData)) {
-          throw new Error(`Expected challan array, got ${typeof challansData}`);
-        }
-
-        // Map challan fields to display format
-        // Backend fields: challan_id, challan_number, challan_date, customer_name, total_amount, challan_status, delivery_status
-        transformedData = challansData.map((challan: any) =>
-          projectSalesHistoryRow(challan, 'challan'));
-
-        const offset = (page - 1) * perPage;
-        total = offset + transformedData.length + (transformedData.length === perPage ? 1 : 0);
-
-      } else if (docType === 'sales_order') {
-        // Sales Orders API returns { orders: [], total, page, per_page }
-        response = await ordersApi.getAll(searchParams);
-
-        const responseData = response?.data;
-        console.log('[Sales Orders API] Raw response:', responseData);
-
-        // Backend returns: { orders: [...], total, page, per_page }
-        const ordersData = responseData?.orders;
-
-        if (!Array.isArray(ordersData)) {
-          throw new Error(`Expected orders array, got ${typeof ordersData}`);
-        }
-
-        // Map order fields to display format
-        // Backend fields: order_id, order_number, order_date, customer_name, total_amount, order_status, paid_amount, balance_amount
-        transformedData = ordersData.map((order: any) =>
-          projectSalesHistoryRow(order, 'sales_order'));
-
-        const offset = (page - 1) * perPage;
-        total = Math.max(
-          Number(responseData?.total ?? 0),
-          offset + transformedData.length + (transformedData.length === perPage ? 1 : 0),
-        );
-      }
+      const response = await canonicalDocumentHistoryApi.get(searchParams);
+      const transformedData: Invoice[] = docType === 'invoice'
+        ? response.items.map(projectInvoiceListRow)
+        : response.items.map(row => projectSalesHistoryRow(row, docType));
+      const total = response.total;
 
       if (requestSequence !== requestSequenceRef.current) return;
       dispatch({ type: 'SET_INVOICES', invoices: transformedData });
@@ -447,24 +387,22 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           <div className="max-w-7xl mx-auto px-6 py-6">
 
             {/* Global Inline Filter Panel */}
-            {documentType !== 'challan' && <div className="mb-6">
+            <div className="mb-6">
               <InlineFilterPanel
                 key={documentType}
-                filters={documentType === 'invoice'
-                  ? filterOptions
-                  : []}
+                filters={historyFilterOptions(documentType)}
                 onFilterChange={handleFilterChange}
                 searchQuery={filters.searchQuery}
                 onSearchChange={handleSearchChange}
                 searchPlaceholder={documentType === 'sales_order'
                   ? 'Search order number or customer name...'
                   : 'Search invoice number or customer name...'}
-                showFilterToggle={documentType === 'invoice'}
+                showFilterToggle={true}
                 showFilters={ui.showFilters}
                 onToggleFilters={(show: boolean) => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
                 onClearFilters={handleClearFilters}
               />
-            </div>}
+            </div>
 
             {/* Bulk Actions */}
             <InvoiceBulkActions

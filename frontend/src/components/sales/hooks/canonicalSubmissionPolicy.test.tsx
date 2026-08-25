@@ -28,12 +28,12 @@ describe('reviewed canonical sales-document lifecycles', () => {
         (ordersApi.prepareCanonical as jest.Mock).mockResolvedValue({ data: preview });
         (ordersApi.executePreparedCanonical as jest.Mock).mockResolvedValue({ data: { resource_id: '10000000-0000-4000-8000-000000000002' } });
         (ordersApi.getCanonical as jest.Mock).mockResolvedValue({ data: {
-            sales_order_id: '10000000-0000-4000-8000-000000000002', order_number: 'SO-1', customer_name: 'Customer', total_amount: '168.00',
+            sales_order_id: '10000000-0000-4000-8000-000000000002', order_number: 'SO-1', customer_name: 'Customer', total_amount: '9007199254740993.30',
         } });
         (challansApi.prepareCanonical as jest.Mock).mockResolvedValue({ data: preview });
         (challansApi.executePreparedCanonical as jest.Mock).mockResolvedValue({ data: { resource_id: '10000000-0000-4000-8000-000000000003' } });
         (challansApi.getCanonical as jest.Mock).mockResolvedValue({ data: {
-            dispatch_id: '10000000-0000-4000-8000-000000000003', challan_number: 'DC-1', customer_name: 'Customer', items: [], total_amount: '168.00',
+            dispatch_id: '10000000-0000-4000-8000-000000000003', challan_number: 'DC-1', customer_name: 'Customer', items: [], total_amount: '9007199254740993.30',
         } });
     });
 
@@ -52,6 +52,9 @@ describe('reviewed canonical sales-document lifecycles', () => {
         await act(async () => result.current.confirmPreparedOrder());
         expect(ordersApi.executePreparedCanonical).toHaveBeenCalledWith(preview, '10000000-0000-4000-8000-000000000099');
         expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
+        expect(props.setCreatedOrderData).toHaveBeenCalledWith(expect.objectContaining({
+            totalAmount: '9007199254740993.30',
+        }));
     });
 
     it('retries dispatch response loss with the same command/lifecycle and no duplicate prepare', async () => {
@@ -73,5 +76,8 @@ describe('reviewed canonical sales-document lifecycles', () => {
         expect((challansApi.executePreparedCanonical as jest.Mock).mock.calls[0])
             .toEqual((challansApi.executePreparedCanonical as jest.Mock).mock.calls[1]);
         expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
+        expect(props.setCreatedChallanData).toHaveBeenCalledWith(expect.objectContaining({
+            total_amount: '9007199254740993.30',
+        }));
     });
 });

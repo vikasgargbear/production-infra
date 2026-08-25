@@ -53,16 +53,21 @@ export function buildPurchaseHistoryParams(
   return {
     search: filters.searchQuery.trim() || undefined,
     ...(documentType === 'supplier_invoice'
-      ? { payment_status: status }
+      ? { status }
       : { status }),
-    ...resolvePurchaseHistoryDates(filters.dateFilter, filters.dateFrom, filters.dateTo),
+    ...Object.fromEntries(Object.entries(resolvePurchaseHistoryDates(filters.dateFilter, filters.dateFrom, filters.dateTo))
+      .map(([key, value]) => [key === 'from_date' ? 'date_from' : 'date_to', value])),
   };
 }
 
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 export function purchaseHistoryCsv(
-  rows: Array<Record<string, unknown>>,
+  rows: Array<{
+    po_number: string; supplier_name: string; po_date: string;
+    total_amount: string | null; paid_amount: string | null; pending_amount: string | null;
+    payment_status?: string | null; status?: string;
+  }>,
   numberLabel: string,
 ): string {
   const header = [numberLabel, 'Supplier', 'Date', 'Amount', 'Paid', 'Pending', 'Status'];

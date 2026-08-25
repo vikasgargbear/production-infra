@@ -1,11 +1,7 @@
 import type { Invoice, SalesHistoryDocumentType } from '../types/invoicelist.types';
+import type { CanonicalDocumentHistoryItem } from '../../../../../services/api/modules/history/canonicalDocumentHistory.api';
 
-const amount = (value: unknown, fallback = 0): number => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const paymentStatus = (row: any): Invoice['payment_status'] => {
+const paymentStatus = (row: CanonicalDocumentHistoryItem): Invoice['payment_status'] => {
     const status = String(row.payment_status || row.status || 'pending').toLowerCase();
     if (status === 'paid') return 'paid';
     if (status === 'partial' || status === 'partially_paid') return 'partial';
@@ -15,49 +11,32 @@ const paymentStatus = (row: any): Invoice['payment_status'] => {
     return 'pending';
 };
 
-export function projectInvoiceListRow(row: any): Invoice {
+export function projectInvoiceListRow(row: CanonicalDocumentHistoryItem): Invoice {
     return projectSalesHistoryRow(row, 'invoice');
 }
 
-const canonicalDocumentStatus = (row: any): string =>
-    String(row.document_status || row.invoice_status || row.order_status
-        || row.challan_status || row.delivery_status || row.status || 'pending').toLowerCase();
+const canonicalDocumentStatus = (row: CanonicalDocumentHistoryItem): string =>
+    row.status.toLowerCase();
 
 export function projectSalesHistoryRow(
-    row: any,
+    row: CanonicalDocumentHistoryItem,
     documentType: SalesHistoryDocumentType,
 ): Invoice {
-    const total = amount(row.total_amount ?? row.final_amount);
-    const paid = amount(row.paid_amount);
-    const pending = amount(row.pending_amount, Math.max(total - paid, 0));
-    const id = row.invoice_id ?? row.order_id ?? row.challan_id ?? row.document_id ?? row.id;
-    const number = row.invoice_number ?? row.order_number ?? row.challan_number
-        ?? row.document_number ?? '';
-    const documentDate = row.invoice_date ?? row.order_date ?? row.challan_date
-        ?? row.dispatch_date ?? row.document_date ?? '';
-    const dueDate = documentType === 'sales_order'
-        ? row.requested_delivery_date ?? row.delivery_date
-        : documentType === 'challan'
-            ? row.dispatch_date
-            : row.due_date;
-
     return {
-        id: String(id || ''),
+        id: row.document_id,
         document_type: documentType,
         document_status: canonicalDocumentStatus(row),
-        invoice_number: String(number),
-        customer_id: String(row.customer_id || ''),
-        customer_name: String(row.customer_name || ''),
-        customer_phone: typeof row.customer_phone === 'string' ? row.customer_phone : undefined,
-        customer_email: typeof row.customer_email === 'string' ? row.customer_email : undefined,
-        invoice_date: String(documentDate),
-        due_date: String(dueDate || ''),
-        total_amount: total,
-        paid_amount: documentType === 'invoice' ? paid : 0,
-        pending_amount: documentType === 'invoice' ? pending : 0,
-        payment_status: documentType === 'invoice' ? paymentStatus(row) : 'pending',
-        items_count: amount(row.items_count, Array.isArray(row.items) ? row.items.length : 0),
-        created_at: String(row.created_at || ''),
-        updated_at: String(row.updated_at || ''),
+        invoice_number: row.document_number,
+        customer_id: row.party_account_id,
+        customer_name: row.party_name,
+        invoice_date: row.document_date,
+        due_date: row.due_date || '',
+        total_amount: row.total_amount,
+        paid_amount: documentType === 'invoice' ? row.paid_amount : null,
+        pending_amount: documentType === 'invoice' ? row.outstanding_amount : null,
+        payment_status: documentType === 'invoice' ? paymentStatus(row) : null,
+        items_count: row.line_count,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     };
 }

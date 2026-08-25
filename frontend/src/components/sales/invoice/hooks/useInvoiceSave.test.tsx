@@ -35,7 +35,7 @@ const preview = {
 const posted = {
     sales_invoice_id: '10000000-0000-4000-8000-000000000002',
     invoice_number: 'INV-2026-0001',
-    invoice_total: '150.00',
+    invoice_total: '9007199254740993.30',
 };
 
 const createProps = (isOnline: boolean) => ({
@@ -113,12 +113,14 @@ describe('useInvoiceSave reviewed canonical lifecycle', () => {
         expect(props.setCreatedInvoiceData).toHaveBeenCalledWith(expect.objectContaining({
             invoiceId: posted.sales_invoice_id,
             invoiceNumber: posted.invoice_number,
+            totalAmount: '9007199254740993.30',
             isOffline: false,
         }));
         expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
         expect(showFinancialEntryNotification).toHaveBeenCalledWith(expect.objectContaining({
             status: 'confirmed',
             reference: posted.invoice_number,
+            amount: '9007199254740993.30',
         }));
     });
 

@@ -92,6 +92,10 @@ import utilsApi from './modules/settings/utils.api';
 // SYSTEM
 // =========================================================================
 import { documentsApi } from './modules/system/documents.api';
+import {
+  canonicalDocumentHistoryApi,
+  requireCanonicalHistoryAmount,
+} from './modules/history/canonicalDocumentHistory.api';
 
 // =========================================================================
 // EXPORTS
@@ -167,6 +171,8 @@ export {
 
   // System
   documentsApi,
+  canonicalDocumentHistoryApi,
+  requireCanonicalHistoryAmount,
 
   // Utilities
   dataUtils,

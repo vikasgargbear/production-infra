@@ -5,6 +5,7 @@ import { ordersApi } from '../../../../services/api/modules/sales/orders.api';
 import { buildCanonicalSalesOrderCommand } from '../../utils/canonicalSalesChainCommand';
 import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
 
 export interface UseSalesOrderSaveProps {
     order: Order;
@@ -77,12 +78,13 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
             if (!detail || String(detail.sales_order_id ?? detail.order_id ?? detail.id) !== resourceId) {
                 throw new Error('Order posted, but authoritative readback could not be verified. Refresh history before retrying.');
             }
-            // The success modal is presentation-only; the strict readback keeps exact decimal strings.
             setCreatedOrderData({
                 orderId: String(detail.sales_order_id ?? detail.order_id ?? detail.id),
                 orderNumber: String(detail.order_number),
                 customerName: String(detail.customer_name),
-                totalAmount: Number(detail.total_amount),
+                totalAmount: normalizeAuthoritativeDecimal(detail.total_amount, 'Posted order total', {
+                    scale: 2, maximumWholeDigits: 20,
+                }),
             });
             setShowSuccessModal(true);
             setMessage('Sales order posted and verified from the canonical API.');
@@ -100,7 +102,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
         } finally {
             setSaving(false);
         }
-    }, [preparedPreview, saving, selectedCustomer, setCreatedOrderData, setMessage, setMessageType, setShowSuccessModal]);
+    }, [preparedPreview, saving, setCreatedOrderData, setMessage, setMessageType, setShowSuccessModal]);
 
     return {
         saving,

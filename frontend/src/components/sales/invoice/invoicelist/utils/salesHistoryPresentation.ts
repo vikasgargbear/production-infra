@@ -1,4 +1,5 @@
 import type { Invoice, SalesHistoryDocumentType } from '../types/invoicelist.types';
+import { formatExactCurrency } from '../../../../../utils/exactDecimal';
 
 const labels: Record<SalesHistoryDocumentType, string> = {
     invoice: 'Invoice',
@@ -16,8 +17,11 @@ export const salesDocumentNumberLabel = (type: SalesHistoryDocumentType): string
 
 export const salesDocumentStatus = (document: Invoice): string =>
     document.document_type === 'invoice'
-        ? document.payment_status
+        ? document.payment_status || document.document_status
         : document.document_status;
+
+export const salesHistoryAmountLabel = (amount: string | null): string =>
+    amount === null ? 'Not available' : formatExactCurrency(amount, 'Sales history amount');
 
 export const salesStatusLabel = (status: string): string => {
     const normalized = status.trim().toLowerCase();
@@ -92,10 +96,10 @@ export const salesHistoryListCsv = (
                 document.customer_name,
                 document.invoice_date,
                 document.due_date,
-                document.total_amount.toFixed(2),
-                document.paid_amount.toFixed(2),
-                document.pending_amount.toFixed(2),
-                salesStatusLabel(document.payment_status),
+                document.total_amount,
+                document.paid_amount,
+                document.pending_amount,
+                salesStatusLabel(document.payment_status || document.document_status),
             ]),
         ]
         : type === 'sales_order'
@@ -106,7 +110,7 @@ export const salesHistoryListCsv = (
                     document.customer_name,
                     document.invoice_date,
                     document.due_date,
-                    document.total_amount.toFixed(2),
+                    document.total_amount,
                     salesStatusLabel(document.document_status),
                 ]),
             ]
@@ -117,7 +121,7 @@ export const salesHistoryListCsv = (
                     document.customer_name,
                     document.invoice_date,
                     document.due_date,
-                    document.total_amount.toFixed(2),
+                    document.total_amount,
                     salesStatusLabel(document.document_status),
                 ]),
             ];
@@ -132,7 +136,7 @@ export const salesHistoryDocumentCsv = (document: Invoice): string => {
         document.invoice_number,
         document.invoice_date,
         document.customer_name,
-        document.total_amount.toFixed(2),
+        document.total_amount,
         salesStatusLabel(salesDocumentStatus(document)),
     ];
     return `${headers.map(csvCell).join(',')}\n${values.map(csvCell).join(',')}\n`;
@@ -155,6 +159,6 @@ export const salesHistoryPrintHtml = (document: Invoice): string => {
         + `<h1>${escapeHtml(type)} ${escapeHtml(document.invoice_number)}</h1><dl>`
         + `<dt>Date</dt><dd>${escapeHtml(document.invoice_date)}</dd>`
         + `<dt>Customer</dt><dd>${escapeHtml(document.customer_name)}</dd>`
-        + `<dt>Amount</dt><dd>₹${escapeHtml(document.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}</dd>`
+        + `<dt>Amount</dt><dd>${escapeHtml(salesHistoryAmountLabel(document.total_amount))}</dd>`
         + `<dt>Status</dt><dd>${escapeHtml(status)}</dd></dl></body></html>`;
 };

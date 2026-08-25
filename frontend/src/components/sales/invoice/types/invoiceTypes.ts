@@ -575,7 +575,7 @@ export interface CreatedInvoiceData {
     customerName: string;
     customerPhone: string;
     customerEmail: string;
-    totalAmount: number;
+    totalAmount: string;
     items: InvoiceItem[];
     isOffline: boolean;
 }

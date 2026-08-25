@@ -5,6 +5,7 @@ import { challansApi } from '../../../../services/api/modules/sales/challans.api
 import { buildCanonicalSalesDispatchCommand } from '../../utils/canonicalSalesChainCommand';
 import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
 
 export interface UseChallanSaveProps {
     challan: Challan;
@@ -78,14 +79,15 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
             if (!detail || String(detail.dispatch_id ?? detail.challan_id ?? detail.id) !== resourceId) {
                 throw new Error('Dispatch posted, but authoritative readback could not be verified. Refresh history before retrying.');
             }
-            // CreatedChallanData is presentation-only; acceptance uses the exact inventory readback above.
             setCreatedChallanData({
                 challan_id: String(detail.dispatch_id ?? detail.challan_id ?? detail.id),
                 challan_number: String(detail.challan_number),
                 customer_name: String(detail.customer_name),
                 customer_details: selectedCustomer,
                 items: detail.items ?? challan.items,
-                total_amount: Number(detail.total_amount ?? challan.total_amount),
+                total_amount: normalizeAuthoritativeDecimal(detail.total_amount, 'Posted dispatch total', {
+                    scale: 2, maximumWholeDigits: 20,
+                }),
             });
             setShowSuccessModal(true);
             executedResourceId.current = null;
