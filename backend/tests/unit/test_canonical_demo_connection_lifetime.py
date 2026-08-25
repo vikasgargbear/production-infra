@@ -106,7 +106,7 @@ def test_provisioner_has_no_implicit_psycopg_contexts_or_retained_preflight_pool
     # The sole driver connect is owned by database_connection(), whose finally
     # closes the client. Every call site uses that explicit-closing boundary.
     assert len(raw_connect_calls) == 1
-    assert source.count('database_connection("') == 25
+    assert source.count('database_connection("') == 26
     assert "connection.close()" in source
 
     preflight_action = source.split("def preflight_action", 1)[1].split(

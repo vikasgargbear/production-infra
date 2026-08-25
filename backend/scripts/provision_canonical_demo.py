@@ -2201,7 +2201,46 @@ def assert_unavailable_actions(connection) -> dict[str, Any]:
     }
 
 
-def sales_order_payload() -> dict[str, Any]:
+def selected_customer_delivery_address_row_version(connection) -> int:
+    """Resolve the exact active delivery-address version used by sales writes."""
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT address.row_version
+              FROM parties.addresses AS address
+             WHERE address.org_id=%s AND address.id=%s AND address.party_id=%s
+               AND address.address_kind IN ('registered','billing','shipping')
+               AND address.status='active'
+               AND address.valid_from<=%s
+               AND (address.valid_until IS NULL OR address.valid_until>=%s)
+            """,
+            (
+                IDS["org"],
+                IDS["customer_address"],
+                IDS["customer_party"],
+                SOURCE_RETRIEVED_ON,
+                SOURCE_RETRIEVED_ON,
+            ),
+        )
+        rows = cursor.fetchall()
+    if len(rows) != 1 or not isinstance(rows[0][0], int) or rows[0][0] < 1:
+        raise RuntimeError(
+            "demo customer lacks one exact active delivery-address version"
+        )
+    return rows[0][0]
+
+
+def sales_order_payload(delivery_address_row_version: int) -> dict[str, Any]:
+    if (
+        isinstance(delivery_address_row_version, bool)
+        or delivery_address_row_version < 1
+    ):
+        raise ValueError("delivery address row version must be a positive integer")
     return {
         "idempotency_key": f"demo-sales-order-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
@@ -2214,6 +2253,8 @@ def sales_order_payload() -> dict[str, Any]:
         "rounding_policy": "nearest_rupee",
         "zero_rated_payment_mode": "not_applicable",
         "customer_account_id": IDS["customer_account"],
+        "delivery_address_id": IDS["customer_address"],
+        "delivery_address_row_version": str(delivery_address_row_version),
         "lines": [
             {
                 "product_id": IDS["product"],
@@ -3755,14 +3796,22 @@ def reconcile_sales_dispatch(
         return result
 
 
-def sales_invoice_payload(dispatch_lines: list[dict[str, str]]) -> dict[str, Any]:
+def sales_invoice_payload(
+    dispatch_lines: list[dict[str, str]], delivery_address_row_version: int
+) -> dict[str, Any]:
+    if (
+        isinstance(delivery_address_row_version, bool)
+        or delivery_address_row_version < 1
+    ):
+        raise ValueError("delivery address row version must be a positive integer")
     return {
         "idempotency_key": f"demo-sales-invoice-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
         "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
         "customer_account_id": IDS["customer_account"],
+        "delivery_address_id": IDS["customer_address"],
+        "delivery_address_row_version": str(delivery_address_row_version),
         "tax_charge_mechanism": "normal",
-        "place_of_supply_state_code": "27",
         "document_discount": {
             "document_discount_kind": "amount",
             "document_discount_basis": "taxable_value",
@@ -4688,7 +4737,11 @@ def main() -> int:
             supplier_payment_request["gross_amount"],
         )
 
-    payload = sales_order_payload()
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
+        delivery_address_row_version = selected_customer_delivery_address_row_version(
+            runtime
+        )
+    payload = sales_order_payload(delivery_address_row_version)
     preflight_sales_order(payload, evidence_dir)
     journey = exercise_sales_order(evidence_dir, payload)
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
@@ -4718,7 +4771,9 @@ def main() -> int:
             expected_free_quantity=dispatch_request["lines"][0]["free_quantity"],
         )
 
-    invoice_request = sales_invoice_payload(dispatch_reconciliation["dispatch_lines"])
+    invoice_request = sales_invoice_payload(
+        dispatch_reconciliation["dispatch_lines"], delivery_address_row_version
+    )
     preflight_action("sales.invoice.prepare", invoice_request)
     invoice_journey = exercise_action(
         evidence_dir,
