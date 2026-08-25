@@ -69,7 +69,9 @@ def test_fefo_migration_is_surgical_and_fails_closed_on_source_drift() -> None:
     assert "ORDER BY batch_row.expires_on,stock.batch_id" not in sql.split(
         "new_fefo constant text", 1
     )[1].split("BEGIN", 1)[0]
-    assert baseline.count(old_fefo) == 1
+    assert baseline.count(old_fefo) == 0
+    assert "sales_invoice_fefo_expiry_date_equivalence_v1" in baseline
+    assert "ORDER BY batch_row.expires_on,stock.batch_id" not in baseline
     assert "sales_invoice_fefo_expiry_date_equivalence_v1" in new_fefo
 
 

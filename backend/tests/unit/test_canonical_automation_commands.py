@@ -38,6 +38,7 @@ def test_generated_automation_artifacts_are_current() -> None:
     assert "pg_catalog.least(" not in mapping
     assert "pg_catalog.greatest(" not in mapping
     assert "pg_catalog.date_part('month'" in mapping
+    assert "Asia/Kolkata" not in mapping
 
 
 def test_exactly_three_automation_invariants_are_resolved() -> None:
@@ -257,7 +258,8 @@ def test_inventory_cycle_count_gain_prepare_and_execute_are_closed_and_atomic() 
         "SESSION_USER<>'erp_runtime'",
         "capability.capability_code='inventory.adjustment.prepare'",
         "evidence_kind='inventory_cycle_count_sheet'",
-        "adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE 'Asia/Kolkata')::date",
+        "adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE organization.timezone)::date",
+        "adjustment_date IS DISTINCT FROM (pg_catalog.transaction_timestamp() AT TIME ZONE organization.timezone)::date",
         "candidate_location.location_type='saleable' AND candidate_location.allows_sale",
         "candidate_location.branch_id=branch.id",
         "stock_balance.branch_id=branch.id",
@@ -614,7 +616,9 @@ def test_sales_dispatch_prepare_and_execute_are_closed_typed_and_atomic() -> Non
         "eligible_batch.lot_kind='manufacturer_batch'",
         "eligible_batch.status='released'",
         "dispatch_date<eligible_batch.expires_on",
-        "requested.requested_batch_id=eligible.eligible_batch_id",
+        "sales_dispatch_fefo_expiry_date_equivalence_v1",
+        "GROUP BY eligible_lot.eligible_product_id,eligible_lot.expires_on",
+        "ORDER BY expiry_group.expires_on",
         "dispatch batch allocations do not reconcile billed and free quantities separately",
         "explicit dispatch batches do not follow FEFO",
         "current_unit_cost:=CASE WHEN current_quantity=0 THEN 0",
@@ -662,6 +666,8 @@ def test_sales_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "batch.lot_kind='manufacturer_batch'",
         "batch.status='released'",
         "invoice_date<expires_on",
+        "sales_invoice_fefo_expiry_date_equivalence_v1",
+        "GROUP BY eligible_lot.product_id,eligible_lot.expires_on",
         "direct invoice batches do not follow FEFO",
         "invoice exceeds separate dispatch billed or free ceiling",
         "INSERT INTO sales.invoice_dispatch_allocations",
@@ -754,6 +760,7 @@ def test_goods_receipt_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "erp_security.has_permission('procurement.receipt.post',requested_branch_id)",
         "status IN ('approved','partially_received')",
         "receipt.status='posted' AND receipt.id<>goods_receipt_id",
+        "received_day:=(received_at AT TIME ZONE organization.timezone)::date",
         "requested_accepted+requested_rejected<>requested_received",
         "requested_accepted+requested_free<=0",
         "requested_base_billed>order_line.base_billed_quantity",
@@ -764,6 +771,7 @@ def test_goods_receipt_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "location.location_type<>'cold_storage'",
         "product_id=product.id AND to_uom_code=product.base_uom_code",
         "existing manufacturer batch immutable facts differ from receipt evidence",
+        "mrp_conversion.valid_from<=received_day",
         "pg_catalog.to_jsonb(order_line)::text",
         "'purchase_order_line_version_hash',order_line_version_hash",
         "'version_hash',order_line_version_hash",

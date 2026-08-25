@@ -7,6 +7,10 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
   it('uses server-resolved cycle-count authority and exact command payloads', () => {
     expect(source).toContain('loadCycleCountEligibility');
     expect(source).toContain('buildCycleCountGainPayload');
+    expect(source).toContain('canonicalBusinessContextApi.get()');
+    expect(source).toContain('adjustment_date: context.business_date');
+    expect(source).not.toContain('indiaLocalDate');
+    expect(source).not.toContain("timeZone: 'Asia/Kolkata'");
     expect(source).toContain("reason: 'cycle_count'");
     expect(source).not.toContain('parseInt(');
     expect(source).not.toContain('adjustment_type: adjustmentData.adjustment_type');

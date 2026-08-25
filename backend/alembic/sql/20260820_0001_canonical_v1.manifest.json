@@ -1,8 +1,8 @@
 {
-  "alembic_body_sha256": "da4f10665367ba27618a64dcc867f2bbf81cae03c6af52292fbd0ee86a65085c",
+  "alembic_body_sha256": "41ed2a26cdbabf1acad4a9cb47e7c072f23b963552a3e0c230d0892692da3b79",
   "format_version": 1,
   "generator_command": "python3 backend/scripts/generate_canonical_baseline.py --enforcement-root database/canonical",
   "revision": "20260820_0001",
-  "source_sql_sha256": "c1f85a35f1ea1884f2fec873b676d6ed979a1338510a16a1a8b6947efe25b418",
+  "source_sql_sha256": "89c69a8af6d21f61578ece5fc8ba798aedbe5b388dd5002e74f47b0c4f368fd6",
   "transaction_wrapper": "generator_outer_pair_removed_by_alembic_runner_v1"
 }

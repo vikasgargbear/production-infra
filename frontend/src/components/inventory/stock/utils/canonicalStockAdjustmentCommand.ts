@@ -131,17 +131,6 @@ const multipliedBaseUnits = (quantity: string, multiplier: string): bigint => {
   return rounded;
 };
 
-export const indiaLocalDate = (instant: Date = new Date()): string => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(instant);
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value;
-  return `${value('year')}-${value('month')}-${value('day')}`;
-};
-
 export const loadCycleCountEligibility = async (params: {
   branchId: string;
   locationId: string;
@@ -192,8 +181,12 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
   if (!/^erp-web-inventory-adjustment-prepare:[A-Za-z0-9-]{8,}$/.test(input.idempotencyKey)) {
     throw new Error('Cycle-count idempotency identity is invalid.');
   }
-  if (input.adjustmentDate !== indiaLocalDate(new Date(input.countedAt))) {
-    throw new Error('Cycle count must use the India-local date of the physical count.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.adjustmentDate)) {
+    throw new Error('Cycle count requires the canonical organization business date.');
+  }
+  const countedAtMillis = Date.parse(input.countedAt);
+  if (!Number.isFinite(countedAtMillis) || new Date(countedAtMillis).toISOString() !== input.countedAt) {
+    throw new Error('Cycle count requires a canonical UTC count timestamp.');
   }
   if (!isCanonicalUuid(input.countedByMembershipId) || !isCanonicalUuid(input.evidenceAttachmentId)) {
     throw new Error('Cycle-count membership and evidence are required from the live API.');

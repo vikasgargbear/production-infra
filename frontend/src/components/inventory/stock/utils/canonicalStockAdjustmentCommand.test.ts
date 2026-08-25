@@ -3,7 +3,6 @@ import {
   approveCycleCountReview,
   buildCycleCountGainPayload,
   executeApprovedCycleCount,
-  indiaLocalDate,
   loadAndVerifyCycleCountReadback,
   loadCycleCountEligibility,
   loadCycleCountReview,
@@ -78,8 +77,17 @@ describe('canonical cycle-count gain command', () => {
     jest.clearAllMocks();
   });
 
-  it('uses India-local dates instead of the browser UTC date', () => {
-    expect(indiaLocalDate(instant)).toBe('2026-08-25');
+  it('accepts the server-owned business date independently of the browser UTC date', () => {
+    expect(() => buildCycleCountGainPayload(validInput)).not.toThrow();
+  });
+
+  it.each([
+    { adjustmentDate: '', countedAt: validInput.countedAt },
+    { adjustmentDate: '25-08-2026', countedAt: validInput.countedAt },
+    { adjustmentDate: validInput.adjustmentDate, countedAt: 'not-an-instant' },
+    { adjustmentDate: validInput.adjustmentDate, countedAt: '2026-08-25T00:00:00+05:30' },
+  ])('fails closed for malformed business date or UTC timestamp: %p', override => {
+    expect(() => buildCycleCountGainPayload({ ...validInput, ...override })).toThrow();
   });
 
   it('preserves exact six-decimal counts and canonical identities', () => {

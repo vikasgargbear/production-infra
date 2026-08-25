@@ -7018,7 +7018,6 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         requested_rejected numeric(20,6); requested_free numeric(20,6);
         license_type_count integer;
 BEGIN
-    received_day:=(received_at AT TIME ZONE 'Asia/Kolkata')::date;
     IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL
        OR application_user_id IS NULL OR grant_id IS NULL OR goods_receipt_id IS NULL
        OR requested_branch_id IS NULL OR requested_purchase_order_id IS NULL
@@ -7028,6 +7027,9 @@ BEGIN
        OR pg_catalog.jsonb_typeof(request_document->'lines')<>'array'
        OR pg_catalog.jsonb_array_length(request_document->'lines') NOT BETWEEN 1 AND 500 THEN
       RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='goods-receipt input is incomplete or invalid'; END IF;
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=organization_id AND status='active' AND country_code='IN' AND base_currency='INR' FOR SHARE;
+    received_day:=(received_at AT TIME ZONE organization.timezone)::date;
     IF (NULLIF(request_document->>'supplier_challan_number','') IS NULL) IS DISTINCT FROM
        (NULLIF(request_document->>'supplier_challan_date','') IS NULL) THEN
       RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier challan number and date must be supplied together'; END IF;
@@ -7062,10 +7064,6 @@ BEGIN
        OR erp_security.has_permission('inventory.document.post',requested_branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('automation.command.execute',requested_branch_id) IS DISTINCT FROM true THEN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='goods-receipt branch permission is inactive'; END IF;
-    SELECT * INTO STRICT organization FROM core.organizations
-     WHERE id=organization_id AND status='active' FOR SHARE;
-    IF organization.country_code<>'IN' OR organization.base_currency<>'INR' THEN
-      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='goods-receipt pilot supports only Indian INR organizations'; END IF;
     SELECT * INTO STRICT branch FROM core.branches
      WHERE org_id=organization_id AND id=requested_branch_id AND status='active' FOR SHARE;
     SELECT * INTO STRICT purchase_order FROM procurement.purchase_orders
@@ -7185,9 +7183,8 @@ BEGIN
             THEN 'command_candidate' ELSE 'preexisting' END;
           batch_status:=existing_batch.status;
         ELSE
-          IF NOT (mrp_conversion.valid_from<=(pg_catalog.transaction_timestamp() AT TIME ZONE 'Asia/Kolkata')::date
-             AND (mrp_conversion.valid_until IS NULL
-               OR mrp_conversion.valid_until>=(pg_catalog.transaction_timestamp() AT TIME ZONE 'Asia/Kolkata')::date)) THEN
+          IF NOT (mrp_conversion.valid_from<=received_day
+             AND (mrp_conversion.valid_until IS NULL OR mrp_conversion.valid_until>=received_day)) THEN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='new batch MRP conversion is not effective on creation date'; END IF;
           batch_origin:='command_candidate';
           batch_status:='quarantined';
@@ -8272,12 +8269,9 @@ BEGIN
     ), totals AS (
       SELECT requested_product_id,sum(requested_base) AS total_requested_base
         FROM requested GROUP BY requested_product_id
-    ), eligible AS (
+    ), eligible_lots AS (
       SELECT stock.product_id AS eligible_product_id,stock.batch_id AS eligible_batch_id,
-             stock.on_hand_quantity,eligible_batch.expires_on,
-             coalesce(sum(stock.on_hand_quantity) OVER (
-               PARTITION BY stock.product_id ORDER BY eligible_batch.expires_on,stock.batch_id
-               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_available
+             stock.on_hand_quantity,eligible_batch.expires_on
         FROM inventory.stock_balances AS stock
         JOIN inventory.batches AS eligible_batch
           ON eligible_batch.org_id=stock.org_id AND eligible_batch.id=stock.batch_id
@@ -8286,14 +8280,27 @@ BEGIN
          AND stock.on_hand_quantity>0 AND eligible_batch.lot_kind='manufacturer_batch'
          AND eligible_batch.status='released' AND eligible_batch.released_at IS NOT NULL
          AND eligible_batch.expires_on IS NOT NULL AND dispatch_date<eligible_batch.expires_on
+    ), expiry_groups AS (
+      /* sales_dispatch_fefo_expiry_date_equivalence_v1 */
+      SELECT eligible_lot.eligible_product_id,eligible_lot.expires_on,
+             sum(eligible_lot.on_hand_quantity) expiry_available,
+             coalesce(sum(requested.requested_base),0) expiry_requested
+        FROM eligible_lots AS eligible_lot
+        LEFT JOIN requested
+          ON requested.requested_product_id=eligible_lot.eligible_product_id
+         AND requested.requested_batch_id=eligible_lot.eligible_batch_id
+       GROUP BY eligible_lot.eligible_product_id,eligible_lot.expires_on
+    ), eligible AS (
+      SELECT expiry_group.*,
+             coalesce(sum(expiry_group.expiry_available) OVER (
+               PARTITION BY expiry_group.eligible_product_id ORDER BY expiry_group.expires_on
+               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_available
+        FROM expiry_groups AS expiry_group
     )
     SELECT count(*) INTO bad_count FROM eligible
       JOIN totals ON totals.requested_product_id=eligible.eligible_product_id
-      LEFT JOIN requested
-        ON requested.requested_product_id=eligible.eligible_product_id
-       AND requested.requested_batch_id=eligible.eligible_batch_id
-     WHERE coalesce(requested.requested_base,0) IS DISTINCT FROM
-       greatest(least(totals.total_requested_base-eligible.prior_available,eligible.on_hand_quantity),0);
+     WHERE eligible.expiry_requested IS DISTINCT FROM
+       greatest(least(totals.total_requested_base-eligible.prior_available,eligible.expiry_available),0);
     IF bad_count<>0 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='explicit dispatch batches do not follow FEFO across available released stock';
     END IF;
@@ -9001,17 +9008,30 @@ BEGIN
         WHERE line.value->>'fulfillment_source'='direct_issue'
         GROUP BY (line.value->>'product_id')::uuid,(allocation.value->>'batch_id')::uuid
       ), totals AS (SELECT product_id,sum(requested_base) requested_base FROM requested GROUP BY product_id),
-      eligible AS (
-        SELECT stock.product_id,stock.batch_id,stock.on_hand_quantity,batch_row.expires_on,
-          coalesce(sum(stock.on_hand_quantity) OVER (PARTITION BY stock.product_id ORDER BY batch_row.expires_on,stock.batch_id
-            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_available
+      /* sales_invoice_fefo_expiry_date_equivalence_v1 */
+      eligible_lots AS (
+        SELECT stock.product_id,stock.batch_id,stock.on_hand_quantity,batch_row.expires_on
         FROM inventory.stock_balances stock JOIN inventory.batches batch_row ON batch_row.org_id=stock.org_id AND batch_row.id=stock.batch_id
         JOIN totals ON totals.product_id=stock.product_id WHERE stock.org_id=organization_id AND stock.location_id=from_location_id
           AND stock.on_hand_quantity>0 AND batch_row.lot_kind='manufacturer_batch' AND batch_row.status='released'
-          AND batch_row.released_at IS NOT NULL AND batch_row.expires_on IS NOT NULL AND invoice_date<batch_row.expires_on)
-      SELECT count(*) INTO bad_count FROM eligible JOIN totals USING(product_id) LEFT JOIN requested USING(product_id,batch_id)
-       WHERE coalesce(requested.requested_base,0) IS DISTINCT FROM
-         greatest(least(totals.requested_base-eligible.prior_available,eligible.on_hand_quantity),0);
+          AND batch_row.released_at IS NOT NULL AND batch_row.expires_on IS NOT NULL AND invoice_date<batch_row.expires_on),
+      expiry_groups AS (
+        SELECT eligible_lot.product_id,eligible_lot.expires_on,
+          sum(eligible_lot.on_hand_quantity) expiry_available,
+          coalesce(sum(requested.requested_base),0) expiry_requested
+        FROM eligible_lots eligible_lot
+        LEFT JOIN requested ON requested.product_id=eligible_lot.product_id AND requested.batch_id=eligible_lot.batch_id
+        GROUP BY eligible_lot.product_id,eligible_lot.expires_on),
+      eligible AS (
+        SELECT expiry_group.product_id,expiry_group.expires_on,
+          expiry_group.expiry_available,expiry_group.expiry_requested,
+          coalesce(sum(expiry_group.expiry_available) OVER (
+            PARTITION BY expiry_group.product_id ORDER BY expiry_group.expires_on
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_available
+        FROM expiry_groups expiry_group)
+      SELECT count(*) INTO bad_count FROM eligible JOIN totals USING(product_id)
+       WHERE eligible.expiry_requested IS DISTINCT FROM
+         greatest(least(totals.requested_base-eligible.prior_available,eligible.expiry_available),0);
       IF bad_count<>0 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='direct invoice batches do not follow FEFO'; END IF;
     END IF;
     RETURN pg_catalog.jsonb_build_object(
@@ -11547,11 +11567,13 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'lines')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'lines') NOT BETWEEN 1 AND 500 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count gain input is incomplete'; END IF;
-  IF adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE 'Asia/Kolkata')::date
-     OR adjustment_date IS DISTINCT FROM (pg_catalog.transaction_timestamp() AT TIME ZONE 'Asia/Kolkata')::date
+  SELECT * INTO STRICT organization FROM core.organizations WHERE id=organization_id AND status='active'
+    AND country_code='IN' AND base_currency='INR' FOR SHARE;
+  IF adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE organization.timezone)::date
+     OR adjustment_date IS DISTINCT FROM (pg_catalog.transaction_timestamp() AT TIME ZONE organization.timezone)::date
      OR counted_at>pg_catalog.transaction_timestamp()
      OR counted_at<pg_catalog.transaction_timestamp()-interval '24 hours' THEN
-    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='cycle count must be recent, nonfuture, and posted on the same India-local date'; END IF;
+    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='cycle count must be recent, nonfuture, and posted on the organization business date'; END IF;
   IF EXISTS(SELECT 1 FROM pg_catalog.jsonb_array_elements(request_document->'lines') item(value)
       WHERE pg_catalog.jsonb_typeof(item.value->'batch_counts')<>'array'
          OR pg_catalog.jsonb_array_length(item.value->'batch_counts') NOT BETWEEN 1 AND 500) THEN
@@ -11582,8 +11604,6 @@ BEGIN
      OR erp_security.has_permission('finance.journal.post',branch_id) IS DISTINCT FROM true
      OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='cycle-count verified context or cross-domain permission is inactive'; END IF;
-  SELECT * INTO STRICT organization FROM core.organizations WHERE id=organization_id AND status='active'
-    AND country_code='IN' AND base_currency='INR' FOR SHARE;
   SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=branch_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT location FROM inventory.locations AS candidate_location
    WHERE candidate_location.org_id=organization_id AND candidate_location.id=location_id

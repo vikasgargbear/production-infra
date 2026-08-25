@@ -11,13 +11,13 @@ import {
   prepareCanonicalAction,
 } from '../../../services/api/canonicalOperatorActions';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
+import { canonicalBusinessContextApi } from '../../../services/api/modules/org/canonicalBusinessContext.api';
 import { parseStockAdjustmentCsv, type StockAdjustmentCsvResult } from './utils/stockAdjustmentCsv';
 import { clientUuid } from '../../../utils/clientUuid';
 import {
   buildCycleCountGainPayload,
   approveCycleCountReview,
   executeApprovedCycleCount,
-  indiaLocalDate,
   loadAndVerifyCycleCountReadback,
   loadCycleCountEligibility,
   loadCycleCountReview,
@@ -65,7 +65,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     adjustment_no: '',
     adjustment_type: 'increase',
     reason: 'cycle_count',
-    adjustment_date: indiaLocalDate(),
+    adjustment_date: '',
     notes: '',
     items: []
   });
@@ -103,12 +103,29 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     }));
   }, []);
 
+  // The organization clock, not the browser clock, owns the command business date.
+  useEffect(() => {
+    let active = true;
+    canonicalBusinessContextApi.get()
+      .then(context => {
+        if (!active) return;
+        setAdjustmentData(prev => ({ ...prev, adjustment_date: context.business_date }));
+      })
+      .catch((cause: any) => {
+        if (!active) return;
+        setError(cause?.message || 'Could not load the organization business date.');
+      });
+    return () => { active = false; };
+  }, []);
+
   // Auto-open product search when both adjustment type and reason are selected
   useEffect(() => {
-    if (adjustmentData.adjustment_type && adjustmentData.reason && !adjustmentData.items.length && !showBulkUpload) {
+    if (adjustmentData.adjustment_type && adjustmentData.reason && adjustmentData.adjustment_date
+        && !adjustmentData.items.length && !showBulkUpload) {
       setShowProductSearch(true);
     }
-  }, [adjustmentData.adjustment_type, adjustmentData.reason, adjustmentData.items.length, showBulkUpload]);
+  }, [adjustmentData.adjustment_type, adjustmentData.reason, adjustmentData.adjustment_date,
+    adjustmentData.items.length, showBulkUpload]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -121,7 +138,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             break;
           case 'a':
             e.preventDefault();
-            if (adjustmentData.adjustment_type && adjustmentData.reason) {
+            if (adjustmentData.adjustment_type && adjustmentData.reason && adjustmentData.adjustment_date) {
               setShowProductSearch(true);
               setShowBulkUpload(false);
             }
@@ -157,7 +174,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, showProductSearch, showBulkUpload, showBatchSelector, showConfirmModal, adjustmentData.adjustment_type, adjustmentData.reason, onClose]);
+  }, [currentStep, showProductSearch, showBulkUpload, showBatchSelector, showConfirmModal,
+    adjustmentData.adjustment_type, adjustmentData.reason, adjustmentData.adjustment_date, onClose]);
 
   // Step 1: Product selection - just store the product and show batch selector
   const handleProductSelect = (product) => {
@@ -177,6 +195,10 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   // Resolve the server-owned membership, evidence, location, stock, and UOM facts.
   const handleBatchSelect = async (batch) => {
     if (!batch || !selectedProduct) return;
+    if (!adjustmentData.adjustment_date) {
+      toast.error('Wait for the organization business date before selecting stock.');
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -320,6 +342,10 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   };
 
   const validateAdjustment = () => {
+    if (!adjustmentData.adjustment_date) {
+      toast.error('The organization business date is unavailable.');
+      return false;
+    }
     if (adjustmentData.items.length === 0) {
       toast.error('Please add at least one product');
       return false;
@@ -336,7 +362,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   };
 
   const isAdjustmentValid = () => Boolean(
-    adjustmentData.items.length > 0
+    Boolean(adjustmentData.adjustment_date)
+    && adjustmentData.items.length > 0
     && Boolean(countedByMembershipId)
     && Boolean(selectedEvidenceId)
     && adjustmentData.items.every(item => Boolean(item.counted_quantity))
@@ -574,9 +601,9 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">India-local count date</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Organization business date</label>
               <div className="flex min-h-11 items-center rounded-lg border border-gray-300 bg-gray-50 px-3 font-mono text-sm text-gray-800">
-                {adjustmentData.adjustment_date}
+                {adjustmentData.adjustment_date || 'Loading…'}
               </div>
             </div>
             <div>
@@ -728,7 +755,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                   setShowProductSearch(true);
                   setShowBulkUpload(false);
                 }}
-                disabled={!adjustmentData.reason}
+                disabled={!adjustmentData.reason || !adjustmentData.adjustment_date}
                 className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
