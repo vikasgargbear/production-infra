@@ -39,5 +39,7 @@ it('documents the no-default and no-fallback business-data boundary', () => {
 
 it('does not present a hard-coded e-invoice legal threshold as backend truth', () => {
   expect(invoicePreview).not.toContain('mandatory for B2B transactions above');
-  expect(invoicePreview).toContain('confirmed by the canonical backend');
+  expect(invoicePreview).toContain('canonicalInvoicePreviewUnavailableReason');
+  expect(invoicePreview).toContain('Authoritative preview unavailable');
+  expect(invoicePreview).toContain('No compliance status is inferred in the browser');
 });

@@ -4,7 +4,6 @@ import path from 'path';
 const calculationConsumers = [
   'invoiceCalculationService.ts',
   'salesOrderCalculationService.ts',
-  'challanCalculationService.ts',
   'purchaseOrderCalculationService.ts',
   'returnCalculationService.ts',
   'noteCalculationService.ts',
@@ -42,5 +41,23 @@ describe('exact calculation consumer boundaries', () => {
     ].map(relative => fs.readFileSync(path.join(__dirname, relative), 'utf8')).join('\n');
     expect(consumers).not.toMatch(/as unknown as (?:number|InvoiceTotals|OrderItem|ChallanItem)/);
     expect(consumers).not.toContain('preview may return JSON numbers');
+  });
+
+  it('keeps sales dispatch valuation at the canonical command/readback boundary', () => {
+    const retiredCalculator = path.join(__dirname, 'challanCalculationService.ts');
+    const dispatchHook = fs.readFileSync(
+      path.join(__dirname, '../../components/sales/challan/hooks/useChallanLogic.ts'),
+      'utf8',
+    );
+    const dispatchApi = fs.readFileSync(
+      path.join(__dirname, '../api/modules/sales/challans.api.ts'),
+      'utf8',
+    );
+
+    expect(fs.existsSync(retiredCalculator)).toBe(false);
+    expect(dispatchHook).not.toContain('/calculations/challan');
+    expect(dispatchApi).toContain("prepareCanonicalAction('sales.dispatch.prepare'");
+    expect(dispatchApi).toMatch(/\/canonical\/sales-dispatches\/\$\{id\}\/acceptance-readback/);
+    expect(dispatchApi).toContain('inventory_value');
   });
 });
