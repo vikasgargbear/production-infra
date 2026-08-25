@@ -8,7 +8,7 @@ from app.core.read_only_router import (
     include_explicit_non_persistent_post_utilities,
     include_legacy_read_only_router,
 )
-from app.main import api
+import app.main as main_module
 
 
 MUTATION_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -96,7 +96,10 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
 
 
 def _routes():
-    return [route for route in api.routes if isinstance(route, APIRoute)]
+    # The CORS contract intentionally reloads app.main to verify environment-
+    # derived middleware.  Resolve the router from the live module object so
+    # this fence never audits the detached pre-reload APIRouter instance.
+    return [route for route in main_module.api.routes if isinstance(route, APIRoute)]
 
 
 def _direct_durable_side_effects(route: APIRoute):
