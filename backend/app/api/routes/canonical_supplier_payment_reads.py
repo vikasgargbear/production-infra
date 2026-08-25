@@ -7,11 +7,10 @@ payment, infer a balance in the browser, or fall back to legacy finance rows.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Any, Literal, Optional
 from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from fastapi.security import HTTPBearer
@@ -29,10 +28,6 @@ router = APIRouter(
     tags=["Canonical Supplier Payment Reads"],
 )
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
-
-
-def _india_today() -> date:
-    return datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
 
 def _activate(db: Session, user: dict[str, Any]) -> UUID:
@@ -64,6 +59,21 @@ def _scope(user: dict[str, Any]) -> tuple[bool, list[UUID]]:
 
 def _rows(db: Session, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     return [dict(row._mapping) for row in db.execute(text(sql), params).fetchall()]
+
+
+def _organization_business_date(db: Session, org_id: UUID) -> date:
+    rows = _rows(db, """
+        SELECT (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AS business_date
+          FROM core.organizations organization
+         WHERE organization.id=:org_id AND organization.status='active'
+    """, {"org_id": org_id})
+    if len(rows) != 1 or not isinstance(rows[0].get("business_date"), date):
+        raise HTTPException(
+            status_code=503,
+            detail="The active organization has no authoritative business clock",
+        )
+    return rows[0]["business_date"]
 
 
 class SupplierPaymentBranch(BaseModel):
@@ -236,18 +246,20 @@ class PostedSupplierPaymentResponse(BaseModel):
 
 @router.get("/context", response_model=SupplierPaymentContextResponse)
 def supplier_payment_context(
-    payment_date: date = Query(default_factory=_india_today),
+    payment_date: Optional[date] = Query(default=None),
     user: dict[str, Any] = FINANCE_USER,
     db: Session = Depends(get_db),
 ):
     """Return only command-eligible supplier payables for the chosen local date."""
-    if payment_date > _india_today():
-        raise HTTPException(status_code=422, detail="Supplier payment date cannot be in the future")
     org_id = _activate(db, user)
+    business_date = _organization_business_date(db, org_id)
+    effective_payment_date = payment_date or business_date
+    if effective_payment_date > business_date:
+        raise HTTPException(status_code=422, detail="Supplier payment date cannot be in the future")
     organization_scope, branch_ids = _scope(user)
     params = {
         "org_id": org_id,
-        "payment_date": payment_date,
+        "payment_date": effective_payment_date,
         "organization_scope": organization_scope,
         "branch_ids": branch_ids,
     }
@@ -441,7 +453,7 @@ def supplier_payment_context(
     return {
         "ready": not reasons,
         "blocking_reasons": reasons,
-        "payment_date": payment_date,
+        "payment_date": effective_payment_date,
         "branches": branches,
         "bank_accounts": banks,
         "suppliers": list(suppliers.values()),

@@ -1,7 +1,9 @@
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
@@ -63,6 +65,33 @@ def test_uuid_only_context_and_readback_routes_are_registered():
     assert paths["/api/canonical/supplier-payments/{payment_id}"]["get"]["operationId"].startswith(
         "posted_supplier_payment"
     )
+
+
+def test_organization_business_date_uses_the_authenticated_organization_timezone(monkeypatch):
+    organization_id = uuid4()
+    captured = {}
+
+    def fake_rows(_db, sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{"business_date": date(2026, 8, 25)}]
+
+    monkeypatch.setattr(reads, "_rows", fake_rows)
+
+    assert reads._organization_business_date(object(), organization_id) == date(2026, 8, 25)
+    assert "AT TIME ZONE organization.timezone" in captured["sql"]
+    assert captured["params"] == {"org_id": organization_id}
+
+
+@pytest.mark.parametrize("rows", [[], [{"business_date": "2026-08-25"}]])
+def test_organization_business_date_fails_closed_without_a_valid_clock(monkeypatch, rows):
+    monkeypatch.setattr(reads, "_rows", lambda *_args, **_kwargs: rows)
+
+    with pytest.raises(HTTPException) as exc:
+        reads._organization_business_date(object(), uuid4())
+
+    assert exc.value.status_code == 503
+    assert "authoritative business clock" in exc.value.detail
 
 
 def test_posted_readback_preserves_exact_decimals_and_reconciles():
