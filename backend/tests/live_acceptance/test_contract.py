@@ -45,6 +45,24 @@ def test_published_matrix_matches_the_reviewed_mcp_registry() -> None:
     assert all(item.mcp_readback_tool in read_tools for item in published)
 
 
+def test_matrix_cannot_drift_from_the_central_core_authority_matrix() -> None:
+    contracts = load_operation_matrix()
+    authority = _json(ROOT / "docs/architecture/core-operation-authority-matrix.json")
+    authority_by_id = {row["id"]: row for row in authority["operations"]}
+    aliases = {
+        "delivery_challan": "sales_dispatch",
+        "stock_adjustment": "inventory_adjustment",
+        "stock_transfer": "inventory_transfer",
+        "destruction": "inventory_destruction",
+    }
+    for contract in contracts:
+        row = authority_by_id[aliases.get(contract.id, contract.id)]
+        assert contract.command_operation == row["operation_key"]
+        assert contract.prepare_tool == row["mcp_prepare_tool"]
+        assert contract.rest_readback == row["rest_readback"]
+        assert set(contract.database_relations) <= set(row["authoritative_tables"])
+
+
 def test_every_claimed_scenario_is_present_and_owned_by_the_same_command() -> None:
     contracts = load_operation_matrix()
     scenario = _json(ROOT / "backend/tests/live_canonical/scenario_matrix.json")

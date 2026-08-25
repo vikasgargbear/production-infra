@@ -105,7 +105,7 @@
       "command_operation": "finance.supplier_advance.prepare",
       "prepare_tool": "erp_supplier_advance_prepare",
       "approval_policy": "separate_approver",
-      "rest_readback": "/api/web/actions/commands/{command_request_id}",
+      "rest_readback": "/api/canonical/supplier-payments/{resource_id}",
       "mcp_readback_tool": "erp_operation_status_get",
       "database_relations": ["finance.payments", "procurement.purchase_order_advance_allocations", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["supplier_advance_no_withholding"],
@@ -118,7 +118,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/canonical/returns/sales/{resource_id}",
       "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["sales.returns", "sales.return_lines", "inventory.inventory_ledger"],
+      "database_relations": ["sales.returns", "sales.return_lines", "inventory.stock_ledger_entries"],
       "scenario_steps": ["sales_return_partial", "sales_return_final", "sales_return_commercial_only"],
       "availability": "published"
     },
@@ -129,7 +129,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/canonical/returns/purchases/{resource_id}",
       "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["procurement.purchase_returns", "procurement.purchase_return_lines", "inventory.inventory_ledger"],
+      "database_relations": ["procurement.purchase_returns", "procurement.purchase_return_lines", "inventory.stock_ledger_entries"],
       "scenario_steps": ["purchase_return_partial", "purchase_return_final"],
       "availability": "published"
     },
@@ -140,7 +140,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/web/actions/inventory-adjustment/commands/{command_request_id}/readback",
       "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.inventory_ledger"],
+      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances"],
       "scenario_steps": ["inventory_adjustment_cycle_count_gain"],
       "availability": "published"
     },
@@ -151,7 +151,7 @@
       "approval_policy": "actor_confirmation",
       "rest_readback": "/api/canonical/inventory-transfers/{resource_id}",
       "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.inventory_ledger"],
+      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_balances"],
       "scenario_steps": ["inventory_transfer_inter_branch_fefo"],
       "availability": "published"
     },
@@ -162,7 +162,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/web/actions/inventory-destruction/commands/{command_request_id}/readback",
       "mcp_readback_tool": "erp_inventory_destruction_readback_get",
-      "database_relations": ["compliance.destructions", "inventory.inventory_documents", "inventory.inventory_ledger", "finance.journal_entries"],
+      "database_relations": ["compliance.destructions", "inventory.inventory_documents", "inventory.stock_ledger_entries", "finance.journal_entries"],
       "scenario_steps": ["inventory_destruction_certified_full_balance"],
       "availability": "published"
     },
