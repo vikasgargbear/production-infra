@@ -15,7 +15,6 @@ import { suppliersApi } from '../../../services/api';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
-import { AddressInput, AddressInputData } from '../../global';
 import { validateSupplierMandatoryFields } from './supplierValidation';
 
 // ==================== TYPES ====================
@@ -33,7 +32,6 @@ interface SupplierFormData {
     // Basic Info
     supplier_name: string;
     supplier_code: string;
-    supplier_type: string;
     // Contact
     phone: string;
     whatsapp_number: string;
@@ -45,34 +43,14 @@ interface SupplierFormData {
     address_line1: string;
     address_line2: string;
     city: string;
-    state: string;
+    state_code: string;
     pincode: string;
     // Compliance
     gst_number: string;
     pan_number: string;
     // Terms
-    payment_terms: string;
     credit_days: number | '';
 }
-
-// ==================== CONSTANTS ====================
-
-const SUPPLIER_TYPES = [
-    { value: 'distributor', label: 'Distributor' },
-    { value: 'manufacturer', label: 'Manufacturer' },
-    { value: 'stockist', label: 'Stockist' },
-    { value: 'wholesaler', label: 'Wholesaler' },
-    { value: 'importer', label: 'Importer' }
-];
-
-const PAYMENT_TERMS = [
-    { value: 'CASH', label: 'Cash', days: 0 },
-    { value: 'NET7', label: 'Net 7 Days', days: 7 },
-    { value: 'NET15', label: 'Net 15 Days', days: 15 },
-    { value: 'NET30', label: 'Net 30 Days', days: 30 },
-    { value: 'NET45', label: 'Net 45 Days', days: 45 },
-    { value: 'NET60', label: 'Net 60 Days', days: 60 }
-];
 
 // ==================== COMPONENT ====================
 
@@ -96,7 +74,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         // Basic Info
         supplier_name: '',
         supplier_code: '',
-        supplier_type: 'distributor',
         // Contact
         phone: '',
         whatsapp_number: '',
@@ -108,13 +85,12 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         address_line1: '',
         address_line2: '',
         city: '',
-        state: 'Maharashtra',
+        state_code: '',
         pincode: '',
         // Compliance
         gst_number: '',
         pan_number: '',
         // Terms
-        payment_terms: '',
         credit_days: '',
         ...initialData
     });
@@ -142,16 +118,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         }
     }, [useBusinessPhone, formData.phone]);
 
-    // Auto-calculate credit days from payment terms
-    const handlePaymentTermsChange = (value: string) => {
-        const term = PAYMENT_TERMS.find(t => t.value === value);
-        setFormData({
-            ...formData,
-            payment_terms: value,
-            credit_days: term?.days ?? ''
-        });
-    };
-
     // Save supplier
     const handleSave = async () => {
         setSaving(true);
@@ -160,7 +126,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         // Validation
         const validationErrors = validateSupplierMandatoryFields(formData);
         if (formData.credit_days === '') {
-            validationErrors.push('Payment terms are required');
+            validationErrors.push('Payment days are required');
         }
 
         if (validationErrors.length > 0) {
@@ -173,7 +139,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             const supplierData = {
                 supplier_name: formData.supplier_name,
                 supplier_code: formData.supplier_code || undefined,
-                supplier_type: formData.supplier_type,
                 primary_phone: formData.phone,
                 secondary_phone: formData.whatsapp_number !== formData.phone ? formData.whatsapp_number : undefined,
                 primary_email: formData.email || undefined,
@@ -182,7 +147,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                 address_line1: formData.address_line1 || undefined,
                 address_line2: formData.address_line2 || undefined,
                 city: formData.city,
-                state: formData.state,
+                state_code: formData.state_code,
                 pincode: formData.pincode || undefined,
                 gst_number: formData.gst_number || undefined,
                 pan_number: formData.pan_number || undefined,
@@ -268,8 +233,8 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <Building2 className="w-5 h-5 text-blue-600" />
                             Basic Information
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="md:col-span-2">
+                        <div className="grid grid-cols-1 gap-4">
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Supplier Name <span className="text-red-500">*</span>
                                 </label>
@@ -281,18 +246,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     className={inputClass}
                                     placeholder="e.g., ABC Pharmaceuticals"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Type</label>
-                                <select
-                                    value={formData.supplier_type}
-                                    onChange={(e) => setFormData({ ...formData, supplier_type: e.target.value })}
-                                    className={inputClass}
-                                >
-                                    {SUPPLIER_TYPES.map(t => (
-                                        <option key={t.value} value={t.value}>{t.label}</option>
-                                    ))}
-                                </select>
                             </div>
                         </div>
                     </section>
@@ -377,35 +330,29 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </div>
                     </section>
 
-                    {/* Address - Using shared AddressInput component */}
+                    {/* Address */}
                     <section className="bg-white rounded-xl border border-gray-200 p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <MapPin className="w-5 h-5 text-blue-600" />
                             Address
                         </h2>
-                        <AddressInput
-                            value={{
-                                address_line1: formData.address_line1,
-                                address_line2: formData.address_line2,
-                                city: formData.city,
-                                state: formData.state,
-                                pincode: formData.pincode
-                            }}
-                            onChange={(address: AddressInputData) => setFormData({
-                                ...formData,
-                                address_line1: address.address_line1,
-                                address_line2: address.address_line2 || '',
-                                city: address.city,
-                                state: address.state,
-                                pincode: address.pincode
-                            })}
-                            inputClassName={inputClass}
-                            showLandmark={true}
-                            labels={{
-                                address_line1: 'Building / Street Address',
-                                address_line2: 'Area / Additional'
-                            }}
-                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <label className="text-sm font-medium text-gray-700">Building / Street Address *
+                                <input value={formData.address_line1} onChange={(event) => setFormData({ ...formData, address_line1: event.target.value })} className={`${inputClass} mt-1`} />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">Area / Additional
+                                <input value={formData.address_line2} onChange={(event) => setFormData({ ...formData, address_line2: event.target.value })} className={`${inputClass} mt-1`} />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">City *
+                                <input value={formData.city} onChange={(event) => setFormData({ ...formData, city: event.target.value })} className={`${inputClass} mt-1`} />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">GST state code (2 digits) *
+                                <input type="text" inputMode="numeric" pattern="[0-9]{2}" maxLength={2} value={formData.state_code} onChange={(event) => setFormData({ ...formData, state_code: event.target.value.replace(/\D/g, '').slice(0, 2) })} className={`${inputClass} mt-1`} placeholder="e.g. 27" />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">Pincode *
+                                <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={formData.pincode} onChange={(event) => setFormData({ ...formData, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })} className={`${inputClass} mt-1`} />
+                            </label>
+                        </div>
                     </section>
 
                     {/* Tax & Compliance */}
@@ -451,17 +398,17 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </h2>
                         <div className="max-w-sm">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
-                                <select
-                                    value={formData.payment_terms}
-                                    onChange={(e) => handlePaymentTermsChange(e.target.value)}
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Payment days *</label>
+                                <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    max={180}
+                                    value={formData.credit_days}
+                                    onChange={(e) => setFormData({ ...formData, credit_days: e.target.value === '' ? '' : Number(e.target.value) })}
                                     className={inputClass}
-                                >
-                                    <option value="" disabled>Select payment terms</option>
-                                    {PAYMENT_TERMS.map(t => (
-                                        <option key={t.value} value={t.value}>{t.label}</option>
-                                    ))}
-                                </select>
+                                    placeholder="Enter 0–180"
+                                />
                             </div>
                         </div>
                         <p className="mt-3 text-xs text-gray-500">

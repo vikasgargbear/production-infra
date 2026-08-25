@@ -10,7 +10,6 @@ import { employeesApi } from '../api/modules/master/employees.api';
 import settingsApi from '../api/modules/settings/settings.api';
 import organizationsApi from '../api/modules/org/organizations.api';
 import { setupApi } from '../api/modules/settings/setup.api';
-import { metadataApi } from '../api/modules/settings/metadata.api';
 import utilsApi from '../api/modules/settings/utils.api';
 import { createCrudApi } from '../api/utils/createCrudApi';
 import { updateFeatureFlag } from '../../hooks/useFeatureFlags';
@@ -38,7 +37,6 @@ describe('legacy mutation adapters fail before transport', () => {
     ['stock settings update', () => settingsApi.updateStock({ allow_negative_stock: false })],
     ['organization creation', () => organizationsApi.create({ org_name: 'Legacy' })],
     ['legacy setup', () => setupApi.completeSetup()],
-    ['metadata creation', () => metadataApi.createProductCategory({ category_name: 'Legacy' })],
     ['utility messaging', () => utilsApi.sendWhatsApp('9999999999', 'Legacy')],
     ['feature flag update', () => updateFeatureFlag('offline_mode', true)],
     ['generic CRUD mutation', () => createCrudApi({ basePath: '/legacy' }).create({})],

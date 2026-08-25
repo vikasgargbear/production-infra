@@ -17,11 +17,11 @@ const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
   address_line1: formData.address_line1 || null,
   address_line2: formData.address_line2 || null,
   city: formData.city || null,
-  state: formData.state || null,
+  state_code: formData.state_code || null,
   pincode: formData.pincode || null,
   gst_number: formData.gst_number || null,
   pan_number: formData.pan_number || null,
-  payment_days: parseInt(String(formData.payment_terms), 10),
+  payment_days: parseInt(String(formData.payment_days), 10),
 });
 
 /**
@@ -31,23 +31,10 @@ const transformSupplierResponse = (supplier: Record<string, unknown>) => ({
   supplier_id: String(supplier.supplier_id || supplier.id || ''),
   supplier_name: String(supplier.supplier_name || supplier.name || ''),
   supplier_code: String(supplier.supplier_code || ''),
-  supplier_type: String(supplier.supplier_type || ''),
   primary_phone: String(supplier.primary_phone || supplier.phone || ''),
   primary_email: String(supplier.primary_email || supplier.email || ''),
   is_active: supplier.is_active !== false,
 });
-
-// Indian states for dropdown
-const INDIAN_STATES = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
-  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
-  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
-  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep',
-  'Puducherry'
-];
 
 /**
  * Supplier Creation Form - Extracted from global component for inline use
@@ -80,7 +67,7 @@ const SupplierCreationForm = ({
     address_line1: '',
     address_line2: '',
     city: '',
-    state: 'Maharashtra',
+    state_code: '',
     pincode: '',
     country: 'India',
 
@@ -91,33 +78,19 @@ const SupplierCreationForm = ({
     drug_license_validity: '',
 
     // Banking Details
-    payment_terms: '',
+    payment_days: '',
     bank_name: '',
     bank_account_no: '',
     bank_ifsc_code: '',
     account_holder_name: '',
 
     // Additional Info
-    supplier_type: 'distributor',
     notes: '',
     is_active: true,
     ...initialData
   });
 
   const [errors, setErrors] = useState<Record<string, string | null>>({});
-
-  // Auto-generate supplier code
-  useEffect(() => {
-    if (formData.supplier_name && !formData.supplier_code) {
-      const code = formData.supplier_name
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, '')
-        .slice(0, 6) +
-        '-' +
-        Date.now().toString().slice(-4);
-      setFormData(prev => ({ ...prev, supplier_code: code }));
-    }
-  }, [formData.supplier_name, formData.supplier_code]);
 
   // Copy phone to WhatsApp if checkbox is checked
   useEffect(() => {
@@ -156,8 +129,8 @@ const SupplierCreationForm = ({
       newErrors.phone = 'Phone number is required';
     }
 
-    if (!formData.address_line1 || !formData.city || !formData.state || !/^\d{6}$/.test(formData.pincode)) {
-      newErrors.address = 'Complete address, city, state, and 6-digit pincode are required';
+    if (!formData.address_line1 || !formData.city || !/^\d{2}$/.test(formData.state_code) || !/^\d{6}$/.test(formData.pincode)) {
+      newErrors.address = 'Complete address, city, 2-digit GST state code, and 6-digit pincode are required';
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -167,8 +140,12 @@ const SupplierCreationForm = ({
     if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
       newErrors.gst_number = 'Invalid GSTIN format';
     }
-    if (formData.payment_terms === '' || !Number.isInteger(Number(formData.payment_terms))) {
-      newErrors.payment_terms = 'Payment days are required';
+    if (formData.gst_number && /^\d{2}$/.test(formData.state_code)
+      && formData.gst_number.slice(0, 2) !== formData.state_code) {
+      newErrors.gst_number = 'GSTIN state code must match the address GST state code';
+    }
+    if (formData.payment_days === '' || !Number.isInteger(Number(formData.payment_days))) {
+      newErrors.payment_days = 'Payment days are required';
     }
 
     setErrors(newErrors);
@@ -236,19 +213,14 @@ const SupplierCreationForm = ({
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Type
+                Canonical party kind
               </label>
-              <select
-                value={formData.supplier_type}
-                onChange={(e) => handleInputChange('supplier_type', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="distributor">Distributor</option>
-                <option value="manufacturer">Manufacturer</option>
-                <option value="stockist">Stockist</option>
-                <option value="wholesaler">Wholesaler</option>
-                <option value="importer">Importer</option>
-              </select>
+              <input
+                value="Organization"
+                disabled
+                aria-label="Canonical party kind"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
+              />
             </div>
           </div>
 
@@ -424,17 +396,18 @@ const SupplierCreationForm = ({
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                State
+                GST state code (2 digits)
               </label>
-              <select
-                value={formData.state}
-                onChange={(e) => handleInputChange('state', e.target.value)}
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{2}"
+                maxLength={2}
+                value={formData.state_code}
+                onChange={(e) => handleInputChange('state_code', e.target.value.replace(/\D/g, '').slice(0, 2))}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              >
-                {INDIAN_STATES.map(state => (
-                  <option key={state} value={state}>{state}</option>
-                ))}
-              </select>
+                placeholder="e.g. 27"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -585,17 +558,17 @@ const SupplierCreationForm = ({
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Payment Terms (Days)
+                Payment days
               </label>
               <input
                 type="text"
                 inputMode="numeric"
-                value={formData.payment_terms}
-                onChange={(e) => handleInputChange('payment_terms', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                value={formData.payment_days}
+                onChange={(e) => handleInputChange('payment_days', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                 placeholder="Enter payment days"
               />
-              {errors.payment_terms && <p className="mt-1 text-xs text-red-600">{errors.payment_terms}</p>}
+              {errors.payment_days && <p className="mt-1 text-xs text-red-600">{errors.payment_days}</p>}
             </div>
           </div>
         </div>

@@ -5,7 +5,7 @@ const validSupplier = {
     phone: '9876543210',
     address_line1: '101 Test Lane',
     city: 'Mumbai',
-    state: 'Maharashtra',
+    state_code: '27',
     pincode: '400001',
 };
 
@@ -21,12 +21,21 @@ describe('supplier creation client contract', () => {
     it('requires every address fact before making an API request', () => {
         expect(validateSupplierMandatoryFields({
             ...validSupplier,
-            address_line1: '', city: '', state: '', pincode: '',
+            address_line1: '', city: '', state_code: '', pincode: '',
         })).toEqual([
             'Building / street address is required',
             'City is required',
-            'State is required',
+            'GST state code must contain exactly 2 digits',
             'Pincode is required',
+        ]);
+    });
+
+    it('rejects a GSTIN whose prefix differs from the address state code', () => {
+        expect(validateSupplierMandatoryFields({
+            ...validSupplier,
+            gst_number: '29AAPFU0939F1ZV',
+        })).toEqual([
+            'GSTIN state code must match the address GST state code',
         ]);
     });
 

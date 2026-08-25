@@ -3,7 +3,7 @@ export interface SupplierMandatoryFields {
     phone: string;
     address_line1: string;
     city: string;
-    state: string;
+    state_code: string;
     pincode: string;
     whatsapp_number?: string;
     contact_person_phone?: string;
@@ -31,7 +31,9 @@ export const validateSupplierMandatoryFields = (
     }
     if (!form.address_line1.trim()) errors.push('Building / street address is required');
     if (!form.city.trim()) errors.push('City is required');
-    if (!form.state.trim()) errors.push('State is required');
+    if (!/^\d{2}$/.test(form.state_code.trim())) {
+        errors.push('GST state code must contain exactly 2 digits');
+    }
     if (!form.pincode.trim()) {
         errors.push('Pincode is required');
     } else if (!/^\d{6}$/.test(form.pincode.trim())) {
@@ -45,6 +47,10 @@ export const validateSupplierMandatoryFields = (
     }
     if (form.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gst_number)) {
         errors.push('Invalid GSTIN format');
+    }
+    if (form.gst_number && /^\d{2}$/.test(form.state_code.trim())
+        && form.gst_number.slice(0, 2) !== form.state_code.trim()) {
+        errors.push('GSTIN state code must match the address GST state code');
     }
     if (form.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan_number)) {
         errors.push('Invalid PAN format');

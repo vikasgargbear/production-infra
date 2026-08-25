@@ -15,9 +15,6 @@ export * from './masters';
 // ==================== SETTINGS ====================
 export * from './settings';
 
-// ==================== MODALS ====================
-export * from './modals';
-
 // Note: utilities merged into utils
 
 // ==================== PRODUCTS (Subdirectory) ====================

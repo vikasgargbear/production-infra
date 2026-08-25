@@ -26,18 +26,16 @@ describe('canonical party creation contracts', () => {
       customer_name: ' Browser Customer ',
       customer_type: 'organization',
       primary_phone: '+91 98765-43210',
-      email: 'buyer@example.com',
+      primary_email: 'buyer@example.com',
       whatsapp_number: '9876543210',
       drug_license_number: 'UI-ONLY-LICENCE',
       org_id: 'must-not-cross-the-boundary',
       credit_limit: '0.00',
       credit_days: 0,
-      address: {
-        address_line1: 'Test Lane 1',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        pincode: '400001',
-      },
+      address_line1: 'Test Lane 1',
+      city: 'Mumbai',
+      state_code: '27',
+      pincode: '400001',
     });
 
     expect(payload).toEqual({
@@ -47,7 +45,7 @@ describe('canonical party creation contracts', () => {
       primary_email: 'buyer@example.com',
       address_line1: 'Test Lane 1',
       city: 'Mumbai',
-      state: 'Maharashtra',
+      state_code: '27',
       pincode: '400001',
       credit_limit: '0.00',
       credit_days: 0,
@@ -72,17 +70,17 @@ describe('canonical party creation contracts', () => {
     }
   });
 
-  it('maps legacy supplier aliases to only reviewed canonical fields', () => {
+  it('maps only reviewed canonical supplier fields', () => {
     const payload = toCanonicalSupplierCreate({
-      name: 'Browser Supplier',
-      code: 'SUP-E2E',
-      phone: '98765 43210',
-      email: 'supplier@example.com',
-      address: 'Supplier Lane 1',
+      supplier_name: 'Browser Supplier',
+      supplier_code: 'SUP-E2E',
+      primary_phone: '98765 43210',
+      primary_email: 'supplier@example.com',
+      address_line1: 'Supplier Lane 1',
       city: 'Mumbai',
-      state: 'Maharashtra',
+      state_code: '27',
       pincode: '400001',
-      payment_terms: '45',
+      payment_days: '45',
       bank_name: 'must not cross',
       internal_notes: 'must not cross',
       org_id: 'must not cross',
@@ -95,7 +93,7 @@ describe('canonical party creation contracts', () => {
       primary_email: 'supplier@example.com',
       address_line1: 'Supplier Lane 1',
       city: 'Mumbai',
-      state: 'Maharashtra',
+      state_code: '27',
       pincode: '400001',
       payment_days: 45,
     });
@@ -107,6 +105,48 @@ describe('canonical party creation contracts', () => {
     expect(() => toCanonicalSupplierCreate({ supplier_name: 'No terms' })).toThrow(
       'Supplier payment days must be selected explicitly.',
     );
+  });
+
+  it('rejects state names and GSTIN/address state-code mismatches before transport', () => {
+    const customer = {
+      customer_name: 'Mismatch Customer',
+      customer_type: 'organization',
+      primary_phone: '9876543210',
+      credit_limit: '0.00',
+      credit_days: 0,
+      state_code: 'Maharashtra',
+    };
+    expect(() => toCanonicalCustomerCreate(customer)).toThrow(
+      'GST state code must contain exactly 2 digits.',
+    );
+    expect(() => toCanonicalCustomerCreate({
+      ...customer,
+      state_code: undefined,
+      state: 'Maharashtra',
+    })).toThrow('State names are not accepted; enter the 2-digit GST state code.');
+
+    expect(() => toCanonicalSupplierCreate({
+      supplier_name: 'Mismatch Supplier',
+      payment_days: 0,
+      state_code: '29',
+      gst_number: '27AAPFU0939F1ZV',
+    })).toThrow('GSTIN state code must match the address GST state code.');
+    expect(apiHelpers.post).not.toHaveBeenCalled();
+  });
+
+  it('requires canonical state_code for customer address mutations', () => {
+    expect(() => customersApi.createAddress('customer-uuid', {
+      address_line1: 'Test Lane', city: 'Mumbai', state: 'Maharashtra', pincode: '400001',
+    })).toThrow('GST state code is required.');
+
+    customersApi.createAddress('customer-uuid', {
+      address_line1: 'Test Lane', city: 'Mumbai', state_code: '27', pincode: '400001',
+      address_type: 'billing', is_default: true,
+    });
+    expect(apiHelpers.post).toHaveBeenCalledWith('/customers/customer-uuid/addresses/', {
+      address_line1: 'Test Lane', city: 'Mumbai', state_code: '27', pincode: '400001',
+      address_type: 'billing', is_default: true,
+    });
   });
 
   it('turns FastAPI validation arrays into render-safe strings', () => {

@@ -10,6 +10,7 @@ import { cleanData } from '../../utils/dataUtils';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
 import { decodeCanonicalCustomerList } from './canonicalMasterReads';
+import { canonicalStateCode, gstinStateCodeError } from './partyStateCode';
 
 // ============================================================================
 // TYPES
@@ -33,7 +34,7 @@ export interface CanonicalCustomerCreateInput {
   address_line1?: string;
   address_line2?: string;
   city?: string;
-  state?: string;
+  state_code?: string;
   pincode?: string;
   gst_number?: string;
   pan_number?: string;
@@ -41,7 +42,6 @@ export interface CanonicalCustomerCreateInput {
   credit_days: number;
 }
 
-const firstDefined = (...values: unknown[]): unknown => values.find(value => value !== undefined && value !== null);
 const optionalText = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim() ? value.trim() : undefined
 );
@@ -52,7 +52,9 @@ const canonicalPhone = (value: unknown): string => {
 
 /** Keep the browser write boundary aligned with the reviewed canonical schema. */
 export const toCanonicalCustomerCreate = (input: Record<string, any>): CanonicalCustomerCreateInput => {
-  const address = input.address && typeof input.address === 'object' ? input.address : {};
+  if (input.state !== undefined || input.address?.state !== undefined) {
+    throw new Error('State names are not accepted; enter the 2-digit GST state code.');
+  }
   if (input.customer_type !== 'individual' && input.customer_type !== 'organization') {
     throw new Error('Customer type must be selected explicitly.');
   }
@@ -62,19 +64,23 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
   if (input.credit_days === undefined || input.credit_days === null || input.credit_days === '') {
     throw new Error('Customer credit days must be entered explicitly.');
   }
+  const stateCode = canonicalStateCode(input.state_code);
+  const gstNumber = optionalText(input.gst_number)?.toUpperCase();
+  const mismatch = gstinStateCodeError(stateCode, gstNumber);
+  if (mismatch) throw new Error(mismatch);
   const payload = {
     customer_name: input.customer_name,
     customer_code: input.customer_code,
     customer_type: input.customer_type,
     primary_phone: canonicalPhone(input.primary_phone),
-    primary_email: firstDefined(input.primary_email, input.email),
+    primary_email: input.primary_email,
     contact_person_name: input.contact_person_name,
-    address_line1: firstDefined(input.address_line1, address.address_line1),
-    address_line2: firstDefined(input.address_line2, address.address_line2),
-    city: firstDefined(input.city, address.city),
-    state: firstDefined(input.state, address.state),
-    pincode: firstDefined(input.pincode, address.pincode),
-    gst_number: optionalText(input.gst_number)?.toUpperCase(),
+    address_line1: input.address_line1,
+    address_line2: input.address_line2,
+    city: input.city,
+    state_code: stateCode,
+    pincode: input.pincode,
+    gst_number: gstNumber,
     pan_number: optionalText(input.pan_number)?.toUpperCase(),
     credit_limit: normalizeExactDecimal(
       input.credit_limit,
@@ -108,12 +114,24 @@ export const customersApi = {
 
   // Create a customer address through the live API
   createAddress: (customerId: string, addressData: any) => {
-    const cleanedData = cleanData(addressData);
+    const stateCode = canonicalStateCode(addressData?.state_code);
+    if (!stateCode) throw new Error('GST state code is required.');
+    const cleanedData = cleanData({
+      ...addressData,
+      state_code: stateCode,
+      state: undefined,
+    });
     return apiHelpers.post(`/customers/${customerId}/addresses/`, cleanedData);
   },
 
   updateAddress: (customerId: string, addressId: string, addressData: any) => {
-    const cleanedData = cleanData(addressData);
+    const stateCode = canonicalStateCode(addressData?.state_code);
+    if (!stateCode) throw new Error('GST state code is required.');
+    const cleanedData = cleanData({
+      ...addressData,
+      state_code: stateCode,
+      state: undefined,
+    });
     return apiHelpers.put(`/customers/${customerId}/addresses/${addressId}`, cleanedData);
   },
 

@@ -46,25 +46,11 @@ interface CustomerFormData {
         address_line1: string;
         address_line2: string;
         city: string;
-        state: string;
+        state_code: string;
         pincode: string;
         country: string;
     };
 }
-
-// ==================== CONSTANTS ====================
-
-const INDIAN_STATES = [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
-    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
-];
 
 // ==================== COMPONENT ====================
 
@@ -106,7 +92,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             address_line1: '',
             address_line2: '',
             city: '',
-            state: '',
+            state_code: '',
             pincode: '',
             country: 'India'
         }
@@ -161,7 +147,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         }
         if (!formData.address.address_line1.trim()) newErrors.push('Address is required');
         if (!formData.address.city.trim()) newErrors.push('City is required');
-        if (!formData.address.state) newErrors.push('State is required');
+        if (!/^\d{2}$/.test(formData.address.state_code)) {
+            newErrors.push('GST state code must contain exactly 2 digits');
+        }
         if (!formData.address.pincode.trim()) {
             newErrors.push('Pincode is required');
         } else if (!/^\d{6}$/.test(formData.address.pincode)) {
@@ -174,6 +162,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             }
             if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
                 newErrors.push('Invalid GST number format');
+            }
+            if (formData.gst_number && /^\d{2}$/.test(formData.address.state_code)
+                && formData.gst_number.slice(0, 2) !== formData.address.state_code) {
+                newErrors.push('GSTIN state code must match the address GST state code');
             }
         }
         if (formData.credit_limit === '') newErrors.push('Credit limit is required; enter 0 for no credit');
@@ -213,7 +205,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 address_line1: formData.address.address_line1,
                 address_line2: formData.address.address_line2 || '',
                 city: formData.address.city,
-                state: formData.address.state,
+                state_code: formData.address.state_code,
                 pincode: formData.address.pincode,
             };
 
@@ -492,7 +484,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Row 3: City, State, Pincode */}
+                                {/* Row 3: City, GST state code, Pincode */}
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
                                         <label className={labelClass}>City *</label>
@@ -505,17 +497,18 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         />
                                     </div>
                                     <div>
-                                        <label className={labelClass}>State *</label>
-                                        <select
-                                            value={formData.address.state}
-                                            onChange={(e) => updateAddress('state', e.target.value)}
+                                        <label htmlFor="customer-state-code" className={labelClass}>GST state code (2 digits) *</label>
+                                        <input
+                                            id="customer-state-code"
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]{2}"
+                                            maxLength={2}
+                                            value={formData.address.state_code}
+                                            onChange={(e) => updateAddress('state_code', e.target.value.replace(/\D/g, '').slice(0, 2))}
                                             className={inputNoIconClass}
-                                        >
-                                            <option value="">Select</option>
-                                            {INDIAN_STATES.map(state => (
-                                                <option key={state} value={state}>{state}</option>
-                                            ))}
-                                        </select>
+                                            placeholder="e.g. 27"
+                                        />
                                     </div>
                                     <div>
                                         <label className={labelClass}>Pincode *</label>

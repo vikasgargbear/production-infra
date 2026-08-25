@@ -57,8 +57,12 @@ describe('canonical master mutation endpoints', () => {
       credit_limit: '0.00',
       credit_days: 0,
     });
-    customersApi.createAddress(customerId, { address_line1: 'Test lane' });
-    customersApi.updateAddress(customerId, addressId, { city: 'Pune' });
+    const address = {
+      address_line1: 'Test lane', city: 'Pune', state_code: '27', pincode: '411001',
+      address_type: 'billing', is_default: true,
+    };
+    customersApi.createAddress(customerId, address);
+    customersApi.updateAddress(customerId, addressId, address);
 
     expect(apiHelpers.put).toHaveBeenNthCalledWith(1, `/products/${productId}`, {
       product_name: 'Renamed draft',
@@ -72,10 +76,10 @@ describe('canonical master mutation endpoints', () => {
       credit_days: 0,
     });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(
-      2, `/customers/${customerId}/addresses/`, { address_line1: 'Test lane' },
+      2, `/customers/${customerId}/addresses/`, address,
     );
     expect(apiHelpers.put).toHaveBeenNthCalledWith(
-      2, `/customers/${customerId}/addresses/${addressId}`, { city: 'Pune' },
+      2, `/customers/${customerId}/addresses/${addressId}`, address,
     );
   });
 });

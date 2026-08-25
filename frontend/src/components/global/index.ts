@@ -5,10 +5,8 @@
 
 // ============== CREATION COMPONENTS ==============
 export {
-    CustomerCreationModal,
     SupplierCreationModal,
     ProductCreationModal,
-    CustomerCreationB2B,
     CustomerCreation
 } from './creation';
 
@@ -58,8 +56,6 @@ export { default as ProceedToReviewComponent } from './ui/ProceedToReviewCompone
 // ============== FORM COMPONENTS ==============
 export { default as MonthYearPicker } from './ui/forms/MonthYearPicker';
 export { default as AddressForm } from './ui/AddressForm';
-export { default as AddressInput } from './ui/AddressInput';
-export type { AddressData as AddressInputData } from './ui/AddressInput';
 export { default as SplitPayment } from './ui/SplitPayment';
 export { default as PrintUtility } from './ui/PrintUtility';
 export { default as CloseButton } from './ui/CloseButton';

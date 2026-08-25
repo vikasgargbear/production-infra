@@ -9,6 +9,7 @@ import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
 import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { decodeCanonicalSupplierList } from './canonicalMasterReads';
+import { canonicalStateCode, gstinStateCodeError } from './partyStateCode';
 
 // ============================================================================
 // TYPES
@@ -30,14 +31,13 @@ export interface CanonicalSupplierCreateInput {
   address_line1?: string;
   address_line2?: string;
   city?: string;
-  state?: string;
+  state_code?: string;
   pincode?: string;
   gst_number?: string;
   pan_number?: string;
   payment_days: number;
 }
 
-const firstDefined = (...values: unknown[]): unknown => values.find(value => value !== undefined && value !== null);
 const optionalText = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim() ? value.trim() : undefined
 );
@@ -50,7 +50,10 @@ const canonicalPhone = (value: unknown): string | undefined => {
 
 /** Strip legacy UI aliases and fields owned by separate reviewed workflows. */
 export const toCanonicalSupplierCreate = (input: Record<string, any>): CanonicalSupplierCreateInput => {
-  const rawPaymentDays = firstDefined(input.payment_days, input.credit_days, input.payment_terms);
+  if (input.state !== undefined) {
+    throw new Error('State names are not accepted; enter the 2-digit GST state code.');
+  }
+  const rawPaymentDays = input.payment_days;
   if (rawPaymentDays === undefined || rawPaymentDays === '') {
     throw new Error('Supplier payment days must be selected explicitly.');
   }
@@ -58,18 +61,22 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
   if (!Number.isInteger(parsedPaymentDays) || parsedPaymentDays < 0 || parsedPaymentDays > 180) {
     throw new Error('Supplier payment days must be an integer from 0 to 180.');
   }
+  const stateCode = canonicalStateCode(input.state_code);
+  const gstNumber = optionalText(input.gst_number)?.toUpperCase();
+  const mismatch = gstinStateCodeError(stateCode, gstNumber);
+  if (mismatch) throw new Error(mismatch);
   return cleanData({
-    supplier_name: firstDefined(input.supplier_name, input.name),
-    supplier_code: firstDefined(input.supplier_code, input.code),
-    primary_phone: canonicalPhone(firstDefined(input.primary_phone, input.phone)),
-    primary_email: firstDefined(input.primary_email, input.email),
+    supplier_name: input.supplier_name,
+    supplier_code: input.supplier_code,
+    primary_phone: canonicalPhone(input.primary_phone),
+    primary_email: input.primary_email,
     contact_person: input.contact_person,
-    address_line1: firstDefined(input.address_line1, input.address),
+    address_line1: input.address_line1,
     address_line2: input.address_line2,
     city: input.city,
-    state: input.state,
+    state_code: stateCode,
     pincode: input.pincode,
-    gst_number: optionalText(input.gst_number)?.toUpperCase(),
+    gst_number: gstNumber,
     pan_number: optionalText(input.pan_number)?.toUpperCase(),
     payment_days: parsedPaymentDays,
   }) as CanonicalSupplierCreateInput;

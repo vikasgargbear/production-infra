@@ -70,7 +70,6 @@ import { challanCalculationsApi, invoiceCalculationsApi, salesOrderCalculationsA
 // SETTINGS
 // =========================================================================
 import settingsApi from './modules/settings/settings.api';
-import { metadataApi } from './modules/settings/metadata.api';
 import { setupApi } from './modules/settings/setup.api';
 import utilsApi from './modules/settings/utils.api';
 
@@ -135,7 +134,6 @@ export {
 
   // Settings
   settingsApi,
-  metadataApi,
   setupApi,
   utilsApi,
 
@@ -184,7 +182,7 @@ const apiModules = {
   sales: { invoices: invoicesApi, calculations: invoiceCalculationsApi, orderCalculations: salesOrderCalculationsApi, orders: ordersApi, challans: challansApi },
 
   // Settings
-  settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi },
+  settings: { settings: settingsApi, setup: setupApi, utils: utilsApi },
 
 };
 
