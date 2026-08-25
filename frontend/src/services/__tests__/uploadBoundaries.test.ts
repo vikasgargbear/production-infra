@@ -41,21 +41,9 @@ function syntheticFile(
   return new File([blob], filename, { type: mimeType });
 }
 
-/** Minimal valid XLSX magic bytes (PK\x03\x04 ZIP header). */
-const XLSX_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]);
-
-// Product batch import has no reviewed canonical command.  The client must
-// reject before transport instead of reviving the retired legacy mutation.
-describe('productsApi.batchUpload — canonical write boundary', () => {
-  it.each([
-    ['valid spreadsheet', syntheticFile(XLSX_MAGIC, 'products.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
-    ['corrupt spreadsheet', syntheticFile(new Uint8Array([0xde, 0xad]), 'corrupt.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
-    ['wrong type', syntheticFile('MZ', 'malware.exe', 'application/octet-stream')],
-    ['oversized input', syntheticFile(XLSX_MAGIC, 'oversized.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
-  ])('fails closed for %s before any upload request', async (_case, file) => {
-    await expect(productsApi.batchUpload(file)).rejects.toMatchObject({
-      code: 'CANONICAL_WRITE_UNAVAILABLE',
-    });
+describe('retired product batch upload surface', () => {
+  it('is absent instead of retaining a callable legacy placeholder', () => {
+    expect(productsApi).not.toHaveProperty('batchUpload');
     expect(mockedPost).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,6 @@ import { conversionsApi } from '../api/modules/inventory/conversions.api';
 import { taxEntriesApi } from '../api/modules/compliance/taxEntries.api';
 import { complianceApi } from '../api/modules/compliance/compliance.api';
 import { employeesApi } from '../api/modules/master/employees.api';
-import { departmentsApi } from '../api/modules/org/departments.api';
 import { documentsApi } from '../api/modules/system/documents.api';
 import settingsApi from '../api/modules/settings/settings.api';
 import organizationsApi from '../api/modules/org/organizations.api';
@@ -45,7 +44,6 @@ describe('legacy mutation adapters fail before transport', () => {
     ['tax entry', () => taxEntriesApi.create({})],
     ['drug license', () => complianceApi.updateDrugLicense({})],
     ['employee', () => employeesApi.create({})],
-    ['department', () => departmentsApi.create({ department_name: 'Legacy' })],
     ['document-number reservation', () => documentsApi.reserveNumber('INV')],
     ['stock settings update', () => settingsApi.updateStock({ allow_negative_stock: false })],
     ['organization creation', () => organizationsApi.create({ org_name: 'Legacy' })],

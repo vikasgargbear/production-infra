@@ -111,10 +111,8 @@ describe('canonical party creation contracts', () => {
       .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
     await expect(customersApi.delete('customer-uuid'))
       .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
-    await expect(customersApi.updateCreditLimit('customer-uuid', 1000))
-      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
-    await expect(customersApi.sendSMS('customer-uuid', 'message'))
-      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    expect(customersApi).not.toHaveProperty('updateCreditLimit');
+    expect(customersApi).not.toHaveProperty('sendSMS');
     await expect(suppliersApi.update('supplier-uuid', { supplier_name: 'Changed' }))
       .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
     await expect(suppliersApi.delete('supplier-uuid'))

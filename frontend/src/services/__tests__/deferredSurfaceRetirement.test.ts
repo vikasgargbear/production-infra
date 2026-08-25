@@ -45,11 +45,12 @@ describe('deferred production surfaces', () => {
     expect(fs.existsSync(path.join(srcRoot, 'components/compliance/NarcoticRegister.tsx'))).toBe(false);
   });
 
-  test('employee and department APIs remain exported', () => {
+  test('employee reads remain exported while unused department CRUD is retired', () => {
     const apiIndex = read('services/api/index.ts');
 
     expect(apiIndex).toContain('employeesApi');
-    expect(apiIndex).toContain('departmentsApi');
+    expect(apiIndex).not.toContain('departmentsApi');
+    expect(fs.existsSync(path.join(srcRoot, 'services/api/modules/org/departments.api.ts'))).toBe(false);
   });
 
   test('legacy cache-first workers are retired and their caches are purged', () => {
