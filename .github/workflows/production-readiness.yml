@@ -34,6 +34,16 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_railway_staging:
+        description: Deploy only the three Railway pilot services at one exact reviewed SHA
+        required: true
+        default: false
+        type: boolean
+      railway_reviewed_sha:
+        description: Exact reviewed application SHA for a Railway-only deployment
+        required: false
+        default: ""
+        type: string
       provision_canonical_demo:
         description: Provision and exercise the disposable free-staging demo organization
         required: true
@@ -140,11 +150,12 @@ jobs:
   railway-canonical-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      inputs.deploy_canonical_staging && inputs.live18_provider == 'railway' &&
+      ((inputs.deploy_canonical_staging && inputs.live18_provider == 'railway') ||
+       inputs.deploy_railway_staging) &&
       vars.DEPLOY_RAILWAY_PILOT == 'true'
     uses: ./.github/workflows/railway-canonical-staging.yml
     with:
-      reviewed_sha: ${{ inputs.canonical_staging_render_sha }}
+      reviewed_sha: ${{ inputs.deploy_railway_staging && inputs.railway_reviewed_sha || inputs.canonical_staging_render_sha }}
     secrets: inherit
 
   canonical-application-promotion-evidence:

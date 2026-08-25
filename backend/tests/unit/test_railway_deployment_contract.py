@@ -158,6 +158,28 @@ def test_workflow_exposes_a_railway_only_exact_sha_dispatch() -> None:
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in workflow
 
 
+def test_production_readiness_dispatch_can_select_railway_without_database_or_render() -> None:
+    production = (
+        ROOT / ".github/workflows/production-readiness.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "deploy_railway_staging:" in production
+    assert "railway_reviewed_sha:" in production
+    assert (
+        "((inputs.deploy_canonical_staging && inputs.live18_provider == 'railway') ||"
+        in production
+    )
+    assert (
+        "reviewed_sha: ${{ inputs.deploy_railway_staging && "
+        "inputs.railway_reviewed_sha || inputs.canonical_staging_render_sha }}"
+        in production
+    )
+    canonical_job = production.split("  canonical-free-staging:", 1)[1].split(
+        "  railway-canonical-staging:", 1
+    )[0]
+    assert "inputs.deploy_railway_staging" not in canonical_job
+
+
 def test_evidence_storage_is_explicit_restricted_and_fail_closed() -> None:
     workflow = _workflow()
     variable_step = workflow[
