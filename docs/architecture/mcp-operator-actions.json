@@ -396,9 +396,72 @@
       "allowed_fields": ["command_request_id"]
     },
     {
+      "tool": "erp_sales_dispatch_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "dispatch",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_sales_return_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "sales_return",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_purchase_return_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "purchase_return",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_customer_receipt_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "payments",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_supplier_payment_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "payments",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
       "tool": "erp_supplier_advance_readback",
       "operation_key": "automation.command.status.get",
       "resource": "payments",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_inventory_transfer_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "inventory",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_inventory_adjustment_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "inventory",
       "mode": "read",
       "risk": "read_only",
       "permission": "automation.command.view",
