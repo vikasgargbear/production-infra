@@ -105,13 +105,13 @@ describe('canonical expense claim browser boundary', () => {
     await expect(canonicalExpenseClaimsApi.uploadReceipt(
       ids.branch, '2026-08-24', file,
     )).resolves.toEqual({ data: uploaded });
-    const [path, form, config] = (apiHelpers.post as jest.Mock).mock.calls[0];
+    const [path, form] = (apiHelpers.post as jest.Mock).mock.calls[0];
     expect(path).toBe('/web/evidence/expense-receipts');
     expect(form).toBeInstanceOf(FormData);
     expect(form.get('branch_id')).toBe(ids.branch);
     expect(form.get('document_date')).toBe('2026-08-24');
     expect((form.get('file') as File).name).toBe('receipt.pdf');
-    expect(config).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } });
+    expect((apiHelpers.post as jest.Mock).mock.calls[0]).toHaveLength(2);
   });
 
   it('reconciles exact posted line, receipt and balanced journal totals', async () => {

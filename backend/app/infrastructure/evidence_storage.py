@@ -7,19 +7,26 @@ bounded cleanup.  Canonical metadata and tenant authority remain in PostgreSQL.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+from io import BytesIO
+import json
 import os
 import re
 from urllib.parse import quote, urlparse
 
 import httpx
+from pdfminer.pdfdocument import PDFDocument, PDFNoValidXRef, PDFSyntaxError
+from pdfminer.pdfpage import PDFPage
+from pdfminer.pdfparser import PDFParser
+from pdfminer.psparser import PSEOF, PSException
 
 
 EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 MAX_EVIDENCE_BYTES = 10 * 1024 * 1024
 PDF_MEDIA_TYPE = "application/pdf"
 PROJECT_REF_PATTERN = re.compile(r"[a-z0-9]{20}")
-RETIRED_SUPABASE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
+EVIDENCE_STORAGE_JWT_ROLE = "erp_evidence_storage"
 
 
 class EvidenceStorageError(RuntimeError):
@@ -58,7 +65,7 @@ class EvidenceStorageConfig:
         if os.getenv("EVIDENCE_STORAGE_ENABLED", "").strip().lower() != "true":
             raise EvidenceStorageUnavailable("Canonical evidence storage is not enabled")
         base_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
-        project_ref = os.getenv("CANONICAL_STAGING_PROJECT_REF", "").strip()
+        project_ref = os.getenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "").strip()
         anon_key = os.getenv("SUPABASE_ANON_KEY", "").strip()
         server_jwt = os.getenv("EVIDENCE_STORAGE_SERVER_JWT", "").strip()
         parsed = urlparse(base_url)
@@ -68,15 +75,18 @@ class EvidenceStorageConfig:
             )
         if (
             PROJECT_REF_PATTERN.fullmatch(project_ref) is None
-            or project_ref == RETIRED_SUPABASE_PROJECT_REF
             or parsed.hostname != f"{project_ref}.supabase.co"
         ):
             raise EvidenceStorageUnavailable(
-                "Canonical evidence storage project authority does not match reviewed staging"
+                "Canonical evidence storage project authority does not match the reviewed environment"
             )
         if not anon_key or not server_jwt:
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage server authority is not configured"
+            )
+        if _unverified_jwt_role(server_jwt) != EVIDENCE_STORAGE_JWT_ROLE:
+            raise EvidenceStorageUnavailable(
+                "Canonical evidence storage requires the restricted erp_evidence_storage JWT role"
             )
         return cls(
             base_url=base_url,
@@ -86,8 +96,25 @@ class EvidenceStorageConfig:
         )
 
 
+def _unverified_jwt_role(token: str) -> str | None:
+    """Read only the role hint; Supabase still authenticates the JWT signature."""
+
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        encoded = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    role = payload.get("role")
+    return role if isinstance(role, str) else None
+
+
 def validate_pdf(filename: str | None, media_type: str | None, content: bytes) -> ValidatedPdf:
-    """Validate the bounded PDF envelope used by the evidence API."""
+    """Validate a bounded PDF container and require at least one parseable page."""
 
     name = (filename or "").strip()
     if not name or "/" in name or "\\" in name or "\x00" in name:
@@ -104,6 +131,14 @@ def validate_pdf(filename: str | None, media_type: str | None, content: bytes) -
         raise EvidenceIntegrityError("Evidence bytes do not have a PDF signature")
     if b"%%EOF" not in content[-2048:]:
         raise EvidenceIntegrityError("Evidence PDF is incomplete or corrupt")
+    try:
+        document = PDFDocument(PDFParser(BytesIO(content)))
+        if next(PDFPage.create_pages(document), None) is None:
+            raise EvidenceIntegrityError("Evidence PDF contains no document page")
+    except EvidenceIntegrityError:
+        raise
+    except (PDFSyntaxError, PDFNoValidXRef, PSEOF, PSException, TypeError, ValueError, KeyError) as exc:
+        raise EvidenceIntegrityError("Evidence PDF structure is corrupt") from exc
     return ValidatedPdf(filename=name, content=content)
 
 

@@ -325,7 +325,6 @@ export const canonicalExpenseClaimsApi = {
     form.append('file', file, file.name);
     const response = await apiHelpers.post<VerifiedExpenseReceiptUpload>(
       '/web/evidence/expense-receipts', form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     );
     decodeVerifiedExpenseReceipt(response.data);
     return response;

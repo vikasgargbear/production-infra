@@ -14,7 +14,8 @@ CONTRACT_PATH = REPO_ROOT / "docs" / "architecture" / "runtime-environment-contr
 RETIRED_NAMES = {"DEBUG", "ENVIRONMENT", "SECRET_KEY", "ALLOWED_ORIGINS"}
 RENDER_REQUIRED_CLASSES = {
     "backend_api": {
-        "all", "production", "canonical_operator_writes", "mcp_feature", "tax_provider_feature"
+        "all", "production", "canonical_operator_writes", "evidence_storage_feature",
+        "mcp_feature", "tax_provider_feature"
     },
     "frontend": {"all", "production_build"},
     "mcp": {"all"},

@@ -16,8 +16,9 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
    whose `role` claim is exactly `erp_evidence_storage`. Store it only in the
    backend secret `EVIDENCE_STORAGE_SERVER_JWT`. Never use or expose the
    Supabase service-role key.
-4. Set `CANONICAL_STAGING_PROJECT_REF` and its exact matching `SUPABASE_URL`.
-   The adapter rejects the retired project even when both values match it.
+4. Set `EVIDENCE_STORAGE_EXPECTED_PROJECT_REF` for the reviewed environment and
+   its exact matching `SUPABASE_URL`. Keep retired-project denial in the
+   deployment/promotion allowlist rather than in application source.
 5. Add an active organization-scoped canonical setting with namespace
    `evidence_retention`, key `expense_receipt_months`, and a positive integral
    numeric value reviewed for that organization's applicable retention rules.
@@ -32,7 +33,8 @@ The object key is immutable and content-addressed:
 ```
 
 The backend creates without upsert, fetches the bytes back through the
-bucket-restricted role, validates the PDF envelope, recomputes SHA-256, and
+bucket-restricted role, parses the bounded PDF structure and at least one page,
+recomputes SHA-256, and
 only then changes canonical metadata from `pending_upload` to `verified`.
 Missing configuration, storage errors, and integrity mismatches fail closed.
 

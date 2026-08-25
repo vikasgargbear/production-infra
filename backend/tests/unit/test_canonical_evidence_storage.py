@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 
 import httpx
 import pytest
@@ -18,15 +20,48 @@ from app.infrastructure.evidence_storage import (
 )
 
 
-PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+def _jwt(role: str) -> str:
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"role": role}, separators=(",", ":")).encode("utf-8")
+    ).rstrip(b"=").decode("ascii")
+    return f"e30.{payload}.test-signature"
+
+
+def _blank_pdf() -> bytes:
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] /Resources << >> /Contents 4 0 R >>",
+        b"<< /Length 0 >>\nstream\n\nendstream",
+    ]
+    content = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(content))
+        content.extend(f"{number} 0 obj\n".encode("ascii"))
+        content.extend(body)
+        content.extend(b"\nendobj\n")
+    xref_offset = len(content)
+    content.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    content.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        content.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    content.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(content)
+
+
+PDF = _blank_pdf()
 
 
 def test_storage_configuration_fails_closed_without_explicit_enable(monkeypatch):
     monkeypatch.delenv("EVIDENCE_STORAGE_ENABLED", raising=False)
     monkeypatch.setenv("SUPABASE_URL", "https://canonical.supabase.co")
-    monkeypatch.setenv("CANONICAL_STAGING_PROJECT_REF", "canonicalcanonical12")
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "canonicalcanonical12")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", "server-only")
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt("erp_evidence_storage"))
 
     with pytest.raises(EvidenceStorageUnavailable, match="not enabled"):
         EvidenceStorageConfig.from_environment()
@@ -35,7 +70,7 @@ def test_storage_configuration_fails_closed_without_explicit_enable(monkeypatch)
 def test_storage_configuration_requires_https_and_server_only_authority(monkeypatch):
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://canonical.supabase.co")
-    monkeypatch.setenv("CANONICAL_STAGING_PROJECT_REF", "canonicalcanonical12")
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "canonicalcanonical12")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
     monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_JWT", raising=False)
 
@@ -46,10 +81,10 @@ def test_storage_configuration_requires_https_and_server_only_authority(monkeypa
 def test_storage_configuration_binds_the_exact_reviewed_staging_project(monkeypatch):
     project_ref = "rgihahbmkrmhitjdjvev"
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("CANONICAL_STAGING_PROJECT_REF", project_ref)
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
     monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", "server-only")
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt("erp_evidence_storage"))
 
     config = EvidenceStorageConfig.from_environment()
 
@@ -60,7 +95,7 @@ def test_storage_configuration_binds_the_exact_reviewed_staging_project(monkeypa
 @pytest.mark.parametrize(
     ("project_ref", "base_url"),
     [
-        ("jfrairkkzxwkhbtqejnz", "https://jfrairkkzxwkhbtqejnz.supabase.co"),
+        ("short", "https://short.supabase.co"),
         ("rgihahbmkrmhitjdjvev", "https://differentprojectref1.supabase.co"),
     ],
 )
@@ -68,12 +103,27 @@ def test_storage_rejects_retired_or_mismatched_project_authority(
     monkeypatch, project_ref, base_url
 ):
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("CANONICAL_STAGING_PROJECT_REF", project_ref)
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
     monkeypatch.setenv("SUPABASE_URL", base_url)
     monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", "server-only")
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt("erp_evidence_storage"))
 
-    with pytest.raises(EvidenceStorageUnavailable, match="reviewed staging"):
+    with pytest.raises(EvidenceStorageUnavailable, match="reviewed environment"):
+        EvidenceStorageConfig.from_environment()
+
+
+@pytest.mark.parametrize("role", ["service_role", "authenticated", "", "erp_runtime"])
+def test_storage_rejects_any_jwt_role_except_bucket_restricted_authority(
+    monkeypatch, role
+):
+    project_ref = "canonicalcanonical12"
+    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
+    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt(role))
+
+    with pytest.raises(EvidenceStorageUnavailable, match="erp_evidence_storage"):
         EvidenceStorageConfig.from_environment()
 
 
@@ -85,6 +135,12 @@ def test_storage_rejects_retired_or_mismatched_project_authority(
         ("../receipt.pdf", "application/pdf", PDF, "plain PDF filename"),
         ("receipt.pdf", "application/pdf", b"not-a-pdf", "PDF signature"),
         ("receipt.pdf", "application/pdf", b"%PDF-1.7\n", "incomplete"),
+        (
+            "receipt.pdf",
+            "application/pdf",
+            b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n",
+            "structure is corrupt",
+        ),
     ],
 )
 def test_pdf_validation_rejects_wrong_type_path_and_corrupt_content(
