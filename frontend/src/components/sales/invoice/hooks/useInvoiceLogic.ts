@@ -3,8 +3,9 @@ import { toast } from 'react-toastify';
 import { calculateInvoicePreview } from '../../../../services/calculations/invoiceCalculationService';
 import { employeesApi } from '../../../../services/api';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
 import { useCompany } from '../../../../contexts/CompanyContext';
-import { getTodayBusinessDate, getDaysFromToday } from '../../../../utils/indianDateUtils';
+import { addCalendarDays } from '../../../../utils/calendarDate';
 import { Customer } from '../../../../types/models/customer';
 import { determineGstType } from '../../../gst/utils/gstCalculations';
 
@@ -191,10 +192,10 @@ export interface UseInvoiceLogicReturn {
 // ==================== HELPER FUNCTIONS ====================
 // (Moved to ../utils/invoiceItemUtils.ts)
 
-export const createInitialInvoice = (): Invoice => ({
+export const createInitialInvoice = (businessDate = ''): Invoice => ({
     invoice_number: '',
-    invoice_date: getTodayBusinessDate(),
-    due_date: getDaysFromToday(30),
+    invoice_date: businessDate,
+    due_date: businessDate ? addCalendarDays(businessDate, 30) : '',
     items: [],
     customer_details: null,
     billing_address: '',
@@ -238,6 +239,11 @@ export const useInvoiceLogic = (
 
     // Company Info (for GST type determination)
     const { companyInfo } = useCompany();
+    const {
+        businessDate,
+        loading: businessDateLoading,
+        error: businessDateError,
+    } = useCanonicalBusinessDate();
 
     // Core State - using canonical backend names
     const [invoice, setInvoice] = useState<Invoice>(createInitialInvoice);
@@ -249,6 +255,20 @@ export const useInvoiceLogic = (
     const [sameAsShipping, setSameAsShipping] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (businessDate) {
+            setInvoice(previous => ({
+                ...previous,
+                invoice_date: previous.invoice_date || businessDate,
+                due_date: previous.due_date || addCalendarDays(businessDate, 30),
+            }));
+            return;
+        }
+        if (!businessDateLoading && businessDateError) {
+            setError(previous => previous || businessDateError);
+        }
+    }, [businessDate, businessDateError, businessDateLoading]);
 
     // Save state and logic managed by useInvoiceSave
     const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -604,14 +624,14 @@ export const useInvoiceLogic = (
     }, []);
 
     const resetInvoice = useCallback(() => {
-        setInvoice(createInitialInvoice());
+        setInvoice(createInitialInvoice(businessDate));
         setSelectedCustomer(null);
         setSelectedMR(null);
         setSameAsShipping(true);
         setCreatedInvoiceData(null);
         setShowSuccessModal(false);
         setError(null);
-    }, []);
+    }, [businessDate]);
 
 
 
@@ -628,7 +648,7 @@ export const useInvoiceLogic = (
         setSelectedMR,
         sameAsShipping,
         setSameAsShipping,
-        isLoading,
+        isLoading: isLoading || businessDateLoading,
         isOnline,
         error,
         setError,

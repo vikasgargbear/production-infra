@@ -120,7 +120,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
 }) => {
     // Ctrl+Enter → Continue shortcut
     const batchAllocationError = invoiceBatchAllocationValidationError(invoice as any);
-    const continueDisabled = !selectedCustomer || !invoice.items || invoice.items.length === 0
+    const continueDisabled = isLoading || !selectedCustomer || !invoice.items || invoice.items.length === 0
         || Boolean(batchAllocationError);
     const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.ctrlKey && e.key === 'Enter' && !continueDisabled) {

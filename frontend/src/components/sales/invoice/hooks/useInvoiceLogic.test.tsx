@@ -18,6 +18,14 @@ jest.mock('../../../../contexts/CompanyContext', () => ({
 jest.mock('../../../../hooks/useNetworkStatus', () => ({
     useNetworkStatus: () => ({ isOnline: true }),
 }));
+jest.mock('../../../../hooks/useCanonicalBusinessDate', () => ({
+    useCanonicalBusinessDate: () => ({
+        businessDate: '2026-08-25',
+        organizationTimezone: 'Asia/Kolkata',
+        loading: false,
+        error: '',
+    }),
+}));
 jest.mock('../../../../services/api', () => ({
     employeesApi: { getAll: jest.fn().mockResolvedValue({ data: [] }) },
 }));
@@ -78,6 +86,14 @@ describe('useInvoiceLogic selected quantity boundary', () => {
             },
             gst_type: 'CGST/SGST',
         } as any);
+    });
+
+    it('initializes invoice and due dates from the server-owned organization business date', async () => {
+        const { result } = renderHook(() => useInvoiceLogic());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        expect(result.current.invoice.invoice_date).toBe('2026-08-25');
+        expect(result.current.invoice.due_date).toBe('2026-09-24');
     });
 
     it.each([
