@@ -165,6 +165,10 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
         'test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != '
         '"$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"'
     ) in two_user_job
+    assert "npm run test:e2e:live:approvals -- --retries=0" in two_user_job
+    assert "Require one passed maker/checker journey and complete browser evidence" in two_user_job
+    assert 'if len(cases) != 1 or failures or errors or skipped:' in two_user_job
+    assert 'if len(screenshots) < 9 or len(traces) < 2:' in two_user_job
     assert 'cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"' in two_user_job
     cleanup_step = two_user_job.split(
         "Always restore seeded identities and remove disposable Auth users", 1

@@ -1008,7 +1008,34 @@ jobs:
           test -n "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
           test -n "$PLAYWRIGHT_LIVE_REVIEWER_PASSWORD"
           test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
-      - run: npm run test:e2e:live:approvals
+      - run: npm run test:e2e:live:approvals -- --retries=0
+      - name: Require one passed maker/checker journey and complete browser evidence
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          results = Path("test-results")
+          junit = results / "e2e-junit.xml"
+          root = ElementTree.parse(junit).getroot()
+          cases = root.findall(".//testcase")
+          failures = root.findall(".//failure")
+          errors = root.findall(".//error")
+          skipped = root.findall(".//skipped")
+          if len(cases) != 1 or failures or errors or skipped:
+              raise SystemExit(
+                  "Two-user approval certification requires exactly one passed, "
+                  "non-skipped, non-flaky journey"
+              )
+          screenshots = list(results.rglob("*.png"))
+          traces = list(results.rglob("*-trace.zip"))
+          if len(screenshots) < 9 or len(traces) < 2:
+              raise SystemExit(
+                  "Two-user approval certification is missing its nine screenshots "
+                  "or two actor traces"
+              )
+          PY
       - name: Always restore seeded identities and remove disposable Auth users
         if: always()
         working-directory: ${{ github.workspace }}
