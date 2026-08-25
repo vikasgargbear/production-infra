@@ -410,7 +410,7 @@ describe('canonical invoice command', () => {
         const alternateDelivery = {
             ...invoice,
             shipping_address: '2 Alternate Road, Bengaluru, Karnataka, 560001',
-            shipping_address_data: { state: 'Karnataka' },
+            shipping_address_data: { state_code: '29' },
         } as Invoice;
 
         expect(invoicePlaceOfSupplyStateCode(alternateDelivery, customer)).toBe('29');
@@ -442,7 +442,7 @@ describe('canonical invoice command', () => {
         [{ ...invoice, billing_address: '' }, /billing address/i],
         [{ ...invoice, shipping_address: '' }, /delivery address/i],
         [{ ...invoice, shipping_address: 'Unsaved alternate delivery text' }, /delivery address state/i],
-        [{ ...invoice, shipping_address_data: { state: 'Unknown state' } }, /delivery address state/i],
+        [{ ...invoice, shipping_address_data: { state_code: '' } }, /delivery address state/i],
         [{ ...invoice, items: [{ ...invoice.items[0], hsn_code: '' }] }, /HSN code/i],
     ])('blocks a canonical invoice when a mandatory document field is missing', (invalid, message) => {
         expect(canonicalInvoiceValidationError(invalid as Invoice, customer)).toMatch(message);
