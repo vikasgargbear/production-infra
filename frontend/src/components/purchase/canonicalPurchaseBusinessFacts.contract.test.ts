@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 const read = (relativePath: string) => readFileSync(join(__dirname, relativePath), 'utf8');
@@ -51,5 +51,14 @@ describe('active canonical purchase desktop facts', () => {
         expect(read('PDFVerificationFlow.tsx')).not.toMatch(/\.reduce\(|\.toFixed\(/);
         expect(read('ui/PurchaseItemEditModal.tsx')).not.toContain('calculatePurchaseItemTotal');
         expect(read('../../services/calculations/purchaseOrderCalculationService.ts')).toContain('requiredFact');
+    });
+
+    it('retires browser tax catalogs and legacy purchase editors', () => {
+        expect(existsSync(join(__dirname, '../../config/gstRates.ts'))).toBe(false);
+        expect(existsSync(join(__dirname, 'modals/PDFUploadModal.tsx'))).toBe(false);
+        expect(existsSync(join(__dirname, 'ui/PurchaseHeader.tsx'))).toBe(false);
+        expect(read('../../config/purchase.config.ts')).not.toContain('GST_RATES');
+        expect(read('../../config/purchase.config.ts')).not.toContain('generateBatchNumber');
+        expect(read('../../config/constants.ts')).not.toContain('MIN_ORDER_AMOUNT');
     });
 });

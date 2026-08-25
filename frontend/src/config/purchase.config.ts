@@ -12,33 +12,7 @@ export interface ValidationRule {
     message: string;
 }
 
-export interface PaymentMode {
-    value: string;
-    label: string;
-}
-
-export interface GSTRate {
-    value: number;
-    label: string;
-}
-
 export interface PurchaseConfigType {
-    DEFAULTS: {
-        PAYMENT_MODE: string;
-        EXPIRY_YEARS: number;
-        BATCH_PREFIX: string;
-        TAX_RATE: number;
-        DISCOUNT: number;
-    };
-    API_ENDPOINTS: {
-        SUPPLIERS: string;
-        PRODUCTS: string;
-        PURCHASES: string;
-        PURCHASES_ENHANCED: string;
-        PURCHASE_UPLOAD: string;
-        PENDING_RECEIPTS: string;
-        RECEIVE_ITEMS: (purchaseId: string | number) => string;
-    };
     VALIDATION: {
         INVOICE_NUMBER: ValidationRule;
         SUPPLIER: ValidationRule;
@@ -52,46 +26,15 @@ export interface PurchaseConfigType {
         ALLOWED_TYPES: string[];
         ALLOWED_EXTENSIONS: string[];
     };
-    SEARCH: {
-        DEBOUNCE_DELAY: number;
-        MIN_SEARCH_LENGTH: number;
-        CACHE_DURATION: number;
-        MAX_RESULTS: number;
-    };
     UI: {
         DATE_FORMAT: string;
         CURRENCY_SYMBOL: string;
         DECIMAL_PLACES: number;
         ITEMS_PER_PAGE: number;
     };
-    PAYMENT_MODES: PaymentMode[];
-    GST_RATES: GSTRate[];
-    MESSAGES: {
-        SUCCESS: Record<string, string>;
-        ERROR: Record<string, string>;
-        CONFIRM: Record<string, string>;
-    };
 }
 
 export const PURCHASE_CONFIG: PurchaseConfigType = {
-    DEFAULTS: {
-        PAYMENT_MODE: 'credit',
-        EXPIRY_YEARS: 2,
-        BATCH_PREFIX: 'BATCH',
-        TAX_RATE: 18,
-        DISCOUNT: 0,
-    },
-
-    API_ENDPOINTS: {
-        SUPPLIERS: '/api/suppliers/',
-        PRODUCTS: '/api/products/',
-        PURCHASES: '/api/purchases/',
-        PURCHASES_ENHANCED: '/api/purchases-enhanced/',
-        PURCHASE_UPLOAD: '/api/purchase-upload/',
-        PENDING_RECEIPTS: '/api/purchases-enhanced/pending-receipts',
-        RECEIVE_ITEMS: (purchaseId) => `/api/purchases-enhanced/${purchaseId}/receive-fixed`,
-    },
-
     VALIDATION: {
         INVOICE_NUMBER: {
             pattern: /^[A-Za-z0-9\-\/]+$/,
@@ -132,13 +75,6 @@ export const PURCHASE_CONFIG: PurchaseConfigType = {
         ALLOWED_EXTENSIONS: ['.pdf'],
     },
 
-    SEARCH: {
-        DEBOUNCE_DELAY: 300,
-        MIN_SEARCH_LENGTH: 2,
-        CACHE_DURATION: 5 * 60 * 1000,
-        MAX_RESULTS: 50,
-    },
-
     UI: {
         DATE_FORMAT: 'YYYY-MM-DD',
         CURRENCY_SYMBOL: '₹',
@@ -146,59 +82,6 @@ export const PURCHASE_CONFIG: PurchaseConfigType = {
         ITEMS_PER_PAGE: 20,
     },
 
-    PAYMENT_MODES: [
-        { value: 'cash', label: 'Cash' },
-        { value: 'credit', label: 'Credit' },
-        { value: 'upi', label: 'UPI' },
-        { value: 'card', label: 'Card' },
-        { value: 'cheque', label: 'Cheque' },
-        { value: 'bank_transfer', label: 'Bank Transfer' },
-    ],
-
-    GST_RATES: [
-        { value: 0, label: '0%' },
-        { value: 5, label: '5%' },
-        { value: 12, label: '12%' },
-        { value: 18, label: '18%' },
-        { value: 28, label: '28%' },
-    ],
-
-    MESSAGES: {
-        SUCCESS: {
-            PURCHASE_CREATED: 'Purchase entry created successfully!',
-            PURCHASE_UPDATED: 'Purchase entry updated successfully!',
-            PDF_PARSED: 'Invoice parsed successfully!',
-        },
-        ERROR: {
-            PURCHASE_CREATE_FAILED: 'Failed to create purchase entry. Please try again.',
-            PURCHASE_UPDATE_FAILED: 'Failed to update purchase entry. Please try again.',
-            PDF_PARSE_FAILED: 'Failed to parse PDF. Please check the file and try again.',
-            NETWORK_ERROR: 'Network error. Please check your connection and try again.',
-            VALIDATION_FAILED: 'Please fix the validation errors before submitting.',
-            DUPLICATE_INVOICE: 'This invoice number already exists for the selected supplier.',
-        },
-        CONFIRM: {
-            DELETE_ITEM: 'Are you sure you want to remove this item?',
-            CANCEL_PURCHASE: 'Are you sure you want to cancel? All unsaved data will be lost.',
-            OVERRIDE_PDF_DATA: 'This will override the current form data. Continue?',
-        }
-    }
-};
-
-// Helper function to generate batch number
-export const generateBatchNumber = (): string => {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `${PURCHASE_CONFIG.DEFAULTS.BATCH_PREFIX}${year}${month}${random}`;
-};
-
-// Helper function to calculate default expiry date
-export const calculateDefaultExpiryDate = (): string => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() + PURCHASE_CONFIG.DEFAULTS.EXPIRY_YEARS);
-    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-01`;
 };
 
 // Helper function to format currency

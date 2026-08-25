@@ -2,6 +2,8 @@
 Unified Invoice Parser
 Modern, production-ready PDF invoice parser for pharmaceutical purchases
 """
+from __future__ import annotations
+
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
@@ -230,17 +232,22 @@ class InvoiceParser:
             r'tax\s*amount\s*[:=]?\s*([\d,]+\.?\d*)',
         ]
         
-        total_tax = Decimal("0")
+        tax_amounts: List[Decimal] = []
         for pattern in tax_patterns:
             for match in re.finditer(pattern, self._text, re.IGNORECASE):
                 amount = self._parse_amount(match.group(1))
-                if amount > 0 and amount < data.grand_total:
-                    total_tax += amount
-        data.tax_amount = total_tax
+                if (
+                    amount is not None
+                    and amount > 0
+                    and (data.grand_total is None or amount < data.grand_total)
+                ):
+                    tax_amounts.append(amount)
+        data.tax_amount = sum(tax_amounts, Decimal("0")) if tax_amounts else None
         
         # Calculate subtotal from items if not extracted
-        if data.items and data.subtotal == 0:
-            data.subtotal = sum(item.amount for item in data.items)
+        item_amounts = [item.amount for item in data.items]
+        if data.items and data.subtotal is None and all(value is not None for value in item_amounts):
+            data.subtotal = sum((value for value in item_amounts if value is not None), Decimal("0"))
     
     def _score_company_name(self, line: str) -> int:
         """Score a line for likelihood of being a company name"""
@@ -392,9 +399,10 @@ class InvoiceParser:
             return None
         
         try:
-            quantity = int(self._parse_amount(get_cell('quantity')))
+            parsed_quantity = self._parse_amount(get_cell('quantity'))
+            quantity = int(parsed_quantity) if parsed_quantity is not None else None
         except (ValueError, TypeError):
-            quantity = 0
+            quantity = None
         
         return ParsedItem(
             product_name=product_name,
@@ -407,15 +415,15 @@ class InvoiceParser:
             amount=self._parse_amount(get_cell('amount'))
         )
     
-    def _parse_amount(self, value: str) -> Decimal:
+    def _parse_amount(self, value: str) -> Optional[Decimal]:
         """Parse amount string to Decimal"""
         if not value:
-            return Decimal("0")
+            return None
         try:
             cleaned = value.replace(',', '').replace('₹', '').strip()
             return Decimal(cleaned)
         except Exception:
-            return Decimal("0")
+            return None
     
     def _parse_expiry(self, value: str) -> Optional[date]:
         """Parse expiry date"""

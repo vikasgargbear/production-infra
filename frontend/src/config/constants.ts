@@ -6,66 +6,6 @@
 // API Configuration - import from api.config.ts (single source of truth)
 export { API_CONFIG } from './api.config';
 
-// Order Status Constants
-export const ORDER_STATUS = {
-  PENDING: 'pending',
-  CONFIRMED: 'confirmed',
-  PROCESSING: 'processing',
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled'
-};
-
-// Payment Constants
-export const PAYMENT_STATUS = {
-  PAID: 'paid',
-  PARTIAL: 'partial',
-  PENDING: 'pending'
-};
-
-export const PAYMENT_METHODS = {
-  CASH: 'cash',
-  CARD: 'card',
-  UPI: 'upi',
-  BANK: 'bank',
-  CHECK: 'check'
-};
-
-// Credit/Debit Note Reasons
-export const NOTE_REASONS = {
-  EXPIRED: 'EXPIRED_GOODS',
-  DAMAGED: 'DAMAGED_GOODS',
-  WRONG_PRODUCT: 'WRONG_BILLING',
-  QUALITY: 'QUALITY_ISSUE',
-  OVERCHARGE: 'OVERCHARGE',
-  OTHER: 'OTHER'
-};
-
-// Settlement Types
-export const SETTLEMENT_TYPES = {
-  REFUND: 'refund',
-  CREDIT_NOTE: 'credit_note',
-  EXCHANGE: 'exchange'
-};
-
-// GST Rates
-export const GST_RATES = {
-  RATE_0: 0,
-  RATE_5: 5,
-  RATE_12: 12,
-  RATE_18: 18,
-  RATE_28: 28
-};
-
-// Business Rules
-export const BUSINESS_RULES = {
-  MAX_DISCOUNT_PERCENT: 50,
-  MIN_ORDER_AMOUNT: 100,
-  MAX_CREDIT_DAYS: 90,
-  DEFAULT_CREDIT_DAYS: 30,
-  ITEMS_PER_PAGE: 50,
-  MAX_ITEMS_PER_PAGE: 200
-};
-
 // UI Constants
 export const UI = {
   DEBOUNCE_DELAY: 300,

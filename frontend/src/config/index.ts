@@ -15,8 +15,6 @@ export { PURCHASE_CONFIG } from './purchase.config';
 export { default as DESIGN_SYSTEM } from './design-system.config';
 export { default as THEME_CONFIG } from './theme.config';
 
-// Business rules
-export { GST_RATES } from './gstRates';
 export { default as USER_ROLES_CONFIG } from './userRoles.config';
 export { ALL_FIELD_ALIASES as FIELD_ALIASES } from './fieldAliases';
 

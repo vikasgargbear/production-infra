@@ -154,17 +154,17 @@ async def parse_purchase_invoice_safe(
                 response_data = {
                     "success": items_found, "extracted_data": {
                         "invoice_number": getattr(invoice_data, 'invoice_number', ''),
-                        "invoice_date": invoice_data.invoice_date.isoformat() if hasattr(invoice_data, 'invoice_date') and invoice_data.invoice_date else date.today().isoformat(),
+                        "invoice_date": invoice_data.invoice_date.isoformat() if hasattr(invoice_data, 'invoice_date') and invoice_data.invoice_date else None,
                         "supplier_name": getattr(invoice_data, 'supplier_name', ''),
                         "supplier_gstin": getattr(invoice_data, 'supplier_gstin', ''),
                         "supplier_address": getattr(invoice_data, 'supplier_address', ''),
                         "drug_license": getattr(invoice_data, 'drug_license_number', ''),
-                        "subtotal": money_json(getattr(invoice_data, 'subtotal', 0) or 0),
-                        "tax_amount": money_json(getattr(invoice_data, 'tax_amount', 0) or 0),
-                        "discount_amount": money_json(getattr(invoice_data, 'discount_amount', 0) or 0),
-                        "grand_total": money_json(getattr(invoice_data, 'grand_total', 0) or 0),
+                        "subtotal": money_json(invoice_data.subtotal) if getattr(invoice_data, 'subtotal', None) is not None else None,
+                        "tax_amount": money_json(invoice_data.tax_amount) if getattr(invoice_data, 'tax_amount', None) is not None else None,
+                        "discount_amount": money_json(invoice_data.discount_amount) if getattr(invoice_data, 'discount_amount', None) is not None else None,
+                        "grand_total": money_json(invoice_data.grand_total) if getattr(invoice_data, 'grand_total', None) is not None else None,
                         "items": []
-                    }, "confidence_score": getattr(invoice_data, 'confidence', 0.5), "manual_review_required": True
+                    }, "confidence_score": getattr(invoice_data, 'confidence', None), "manual_review_required": True
                 }
                 
                 if hasattr(invoice_data, 'items') and invoice_data.items:
@@ -173,11 +173,13 @@ async def parse_purchase_invoice_safe(
                             response_data["extracted_data"]["items"].append({
                                 "product_name": getattr(item, 'description', ''), "hsn_code": getattr(item, 'hsn_code', ''),
                                 "batch_number": getattr(item, 'batch_number', ''), "expiry_date": getattr(item, 'expiry_date', ''),
-                                "quantity": int(getattr(item, 'quantity', 0) or 0), "unit": getattr(item, 'unit', ''),
-                                "cost_price": money_json(getattr(item, 'rate', 0) or 0), "mrp": money_json(getattr(item, 'mrp', 0) or 0),
-                                "discount_percent": float(getattr(item, 'discount_percent', 0) or 0),
-                                "tax_percent": float(getattr(item, 'tax_percent', 12) or 12),
-                                "amount": money_json(getattr(item, 'amount', 0) or 0)
+                                "quantity": int(item.quantity) if getattr(item, 'quantity', None) is not None else None,
+                                "unit": getattr(item, 'unit', None),
+                                "cost_price": money_json(item.rate) if getattr(item, 'rate', None) is not None else None,
+                                "mrp": money_json(item.mrp) if getattr(item, 'mrp', None) is not None else None,
+                                "discount_percent": float(item.discount_percent) if getattr(item, 'discount_percent', None) is not None else None,
+                                "tax_percent": float(item.tax_percent) if getattr(item, 'tax_percent', None) is not None else None,
+                                "amount": money_json(item.amount) if getattr(item, 'amount', None) is not None else None,
                             })
                         except Exception as e:
                             logger.warning(f"Error processing item: {e}")
@@ -227,9 +229,9 @@ async def parse_purchase_invoice_safe(
                         pass
                 return {
                     "success": False, "message": "Could not extract data automatically.",
-                    "extracted_data": {"invoice_number": "", "invoice_date": date.today().isoformat(),
+                    "extracted_data": {"invoice_number": "", "invoice_date": None,
                                       "supplier_name": "", "supplier_gstin": "", "items": []},
-                    "confidence_score": 0, "manual_review_required": True
+                    "confidence_score": None, "manual_review_required": True
                 }
         finally:
             if os.path.exists(tmp_path):
