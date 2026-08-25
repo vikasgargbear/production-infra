@@ -167,6 +167,39 @@ def test_workflow_sets_the_reviewed_sha_without_variable_deploys() -> None:
         )
 
 
+def test_workflow_reconciles_one_reviewed_oauth_authority_before_deploy() -> None:
+    workflow = _workflow()
+    authority = "Reconcile the reviewed staging MCP OAuth client authority"
+    variables = "Populate canonical service variables without triggering stale deploys"
+    upload = "Force-upload the exact source tree"
+
+    assert (
+        workflow.index("Fail closed on Railway service configuration drift")
+        < workflow.index(authority)
+        < workflow.index(variables)
+        < workflow.index(upload)
+    )
+    authority_step = workflow[workflow.index(authority) : workflow.index(variables)]
+    assert "provision_staging_mcp_oauth.py" in authority_step
+    assert "--mode client-authority-only" in authority_step
+    assert "SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}" in authority_step
+    assert "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID" not in authority_step
+
+    variable_step = workflow[workflow.index(variables) : workflow.index(upload)]
+    assert 'test -n "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"' in variable_step
+    assert "disabled-unissued-canonical-staging" in variable_step
+    assert ".reviewed_sha == $sha" in variable_step
+    assert ".client_id == $client_id" in variable_step
+    assert '.provisioning_mode == "client-authority-only"' in variable_step
+    assert ".test_identity_reconciled == false" in variable_step
+    assert "RAILWAY_OAUTH_EVIDENCE_SHA256" in variable_step
+    assert 'set_variable "$RAILWAY_API_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS' in variable_step
+    assert 'set_variable "$RAILWAY_MCP_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS' in variable_step
+    assert "vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" not in workflow
+    assert "railway-oauth-evidence/canonical-staging-oauth-client.json" in workflow
+    assert "evidence_sha256:$oauth_evidence_sha256" in workflow
+
+
 def test_workflow_enables_only_api_ipv6_and_commits_the_exact_staged_patch() -> None:
     workflow = _workflow()
     ipv6_step = workflow[

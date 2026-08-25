@@ -245,10 +245,12 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         "mcp_url": "https://mcp.example.test/mcp",
         "secrets": {key: f"secret-{key}" for key in phase.SECRET_KEYS},
     }
+    deployed_client_id = "reviewed-public-client"
     generated = {
         key: f"generated-{index}"
         for index, key in enumerate(sorted(phase.IDENTITY_ENVIRONMENT_KEYS))
     }
+    generated["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] = deployed_client_id
 
     def provision_browser(state_path, _profile):
         state_path.write_text('{"version":1}\n', encoding="utf-8")
@@ -257,10 +259,22 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
                 handle.write(f"{key}={value}\n")
 
     def provision_mcp(state_path, _browser_state_path):
-        state_path.write_text('{"version":1}\n', encoding="utf-8")
+        state_path.write_text(
+            json.dumps({"version": 1, "client_id": deployed_client_id}) + "\n",
+            encoding="utf-8",
+        )
         phase.Path(
             os.environ["PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH"]
-        ).write_text('{"organization_id":"fixture"}\n', encoding="utf-8")
+        ).write_text(
+            json.dumps(
+                {
+                    "organization_id": "fixture",
+                    "oauth_client_id": deployed_client_id,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
     monkeypatch.setattr(
@@ -270,6 +284,7 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
     monkeypatch.setattr(phase, "provision_mcp_identities", provision_mcp)
     for key in phase.IDENTITY_ENVIRONMENT_KEYS:
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", deployed_client_id)
 
     response = phase._identity_provision(request)
 
@@ -281,7 +296,88 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         "mcp-state.json",
     ]
     assert phase._decrypt_environment(request, response["encrypted_environment"]) == generated
-    assert all(key not in os.environ for key in phase.IDENTITY_ENVIRONMENT_KEYS)
+    assert all(
+        key not in os.environ
+        for key in phase.IDENTITY_ENVIRONMENT_KEYS
+        if key != "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+    )
+    assert os.environ["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] == deployed_client_id
+
+
+@pytest.mark.parametrize(
+    "client_id",
+    ["", "disabled-unissued-canonical-staging", "one,two", "one two", " padded"],
+)
+def test_remote_phase_rejects_unreviewed_deployed_oauth_authority(
+    monkeypatch, client_id
+):
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", client_id)
+    with pytest.raises(phase.RailwayDatabasePhaseError, match="one reviewed OAuth"):
+        phase._deployed_oauth_client_id()
+
+
+def test_remote_identity_client_mismatch_fails_through_cleanup(monkeypatch, tmp_path):
+    request = {
+        **_boundary_request(),
+        "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "mcp_url": "https://mcp.example.test/mcp",
+        "secrets": {key: f"secret-{key}" for key in phase.SECRET_KEYS},
+    }
+    deployed_client_id = "reviewed-public-client"
+    cleaned = []
+
+    def provision_browser(state_path, _profile):
+        state_path.write_text('{"version":1}\n', encoding="utf-8")
+        with phase.Path(os.environ["GITHUB_ENV"]).open(
+            "a", encoding="utf-8"
+        ) as handle:
+            for key in sorted(phase.IDENTITY_ENVIRONMENT_KEYS):
+                value = (
+                    "different-client"
+                    if key == "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+                    else f"generated-{key}"
+                )
+                handle.write(f"{key}={value}\n")
+
+    def provision_mcp(state_path, _browser_state_path):
+        state_path.write_text(
+            '{"version":1,"client_id":"different-client"}\n', encoding="utf-8"
+        )
+        phase.Path(
+            os.environ["PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH"]
+        ).write_text(
+            '{"organization_id":"fixture","oauth_client_id":"different-client"}\n',
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setattr(phase, "provision_browser_identities", provision_browser)
+    monkeypatch.setattr(phase, "provision_mcp_identities", provision_mcp)
+    monkeypatch.setattr(
+        phase,
+        "cleanup_mcp_identities",
+        lambda path: cleaned.append(("mcp", path.name)) or path.unlink(),
+    )
+    monkeypatch.setattr(
+        phase,
+        "cleanup_browser_identities",
+        lambda path: cleaned.append(("browser", path.name)) or path.unlink(),
+    )
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", deployed_client_id)
+
+    with pytest.raises(phase.RailwayDatabasePhaseError, match="differs from the exact"):
+        phase._identity_provision(request)
+
+    assert cleaned == [("mcp", "mcp-state.json"), ("browser", "browser-state.json")]
+    assert not (
+        tmp_path / ("live18-railway-identities-" + request["request_nonce"])
+    ).exists()
 
 
 def test_remote_execution_is_bound_to_exact_deployment_and_provenance(

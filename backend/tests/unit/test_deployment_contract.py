@@ -1117,7 +1117,9 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "web_bindings = cursor.fetchall()" in provisioner
     assert "if len(web_bindings) != 1:" in provisioner
     assert "web_auth_user_id == auth_user_id" in provisioner
-    assert 'choices=("complete", "client-only", "bind-existing-demo")' in provisioner
+    assert '"client-authority-only",' in provisioner
+    assert '"client-only",' in provisioner
+    assert '"bind-existing-demo",' in provisioner
     assert "Deferred demo grant binding until canonical demo provisioning" in provisioner
     assert "Canonical demo organization must exist before OAuth grant binding" in provisioner
     assert "canonical-staging-web-membership:" in provisioner

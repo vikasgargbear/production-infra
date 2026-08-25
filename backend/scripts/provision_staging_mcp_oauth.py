@@ -22,6 +22,7 @@ CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
 WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
+UNISSUED_CLIENT_ID = "disabled-unissued-canonical-staging"
 TEST_CALLBACK = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
 REDIRECT_URIS = (
     TEST_CALLBACK,
@@ -692,9 +693,59 @@ def _write_github_env(values: dict[str, str]) -> None:
     path = os.getenv("GITHUB_ENV")
     if not path:
         raise ProvisioningError("GITHUB_ENV is required")
+    for key, value in values.items():
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
+            raise ProvisioningError("GITHUB_ENV variable name is invalid")
+        if "\r" in value or "\n" in value:
+            raise ProvisioningError("GITHUB_ENV variable value contains a newline")
     with Path(path).open("a", encoding="utf-8") as handle:
         for key, value in values.items():
             handle.write(f"{key}={value}\n")
+
+
+def _reviewed_client_id(client: dict[str, Any]) -> str:
+    value = client.get("client_id")
+    if not isinstance(value, str):
+        raise ProvisioningError("OAuth client response omitted client_id")
+    client_id = value.strip()
+    if (
+        not client_id
+        or client_id != value
+        or len(client_id) > 255
+        or client_id == UNISSUED_CLIENT_ID
+        or "," in client_id
+        or any(character.isspace() for character in client_id)
+    ):
+        raise ProvisioningError("OAuth client response did not contain one reviewed client ID")
+    return client_id
+
+
+def _write_client_evidence(
+    *, client_id: str, mode: str, demo_bound: bool, reviewed_sha: str | None = None
+) -> None:
+    evidence_path = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))
+    evidence_path.mkdir(parents=True, exist_ok=True)
+    evidence: dict[str, Any] = {
+        "project_ref": PROJECT_REF,
+        "client_id": client_id,
+        "client_name": CLIENT_NAME,
+        "client_type": "public",
+        "token_endpoint_auth_method": "none",
+        "redirect_uris": list(REDIRECT_URIS),
+        "dynamic_client_registration": False,
+        "provisioning_mode": mode,
+        "demo_grant_bound": demo_bound,
+        "web_test_grant_bound": demo_bound,
+        "test_identity_reconciled": mode != "client-authority-only",
+    }
+    if reviewed_sha is not None:
+        if not re.fullmatch(r"[0-9a-f]{40}", reviewed_sha):
+            raise ProvisioningError("REVIEWED_SHA must be one exact lowercase commit SHA")
+        evidence["reviewed_sha"] = reviewed_sha
+    (evidence_path / "canonical-staging-oauth-client.json").write_text(
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _redacted_annotation(exc: BaseException) -> str:
@@ -709,7 +760,12 @@ def _mode(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=("complete", "client-only", "bind-existing-demo"),
+        choices=(
+            "complete",
+            "client-authority-only",
+            "client-only",
+            "bind-existing-demo",
+        ),
         default="complete",
     )
     return parser.parse_args(argv).mode
@@ -722,21 +778,47 @@ def main(argv: list[str] | None = None) -> int:
     if _required("SUPABASE_URL") != SUPABASE_URL:
         raise ProvisioningError("SUPABASE_URL does not match the reviewed staging project")
     management_token = _required("SUPABASE_ACCESS_TOKEN")
-    database_url = (
-        _required("PSYCOPG_DATABASE_URL") if mode != "client-only" else ""
-    )
-    service_key = _service_role_key(management_token)
-    print(f"::add-mask::{service_key}")
-    print("Resolved the staging project admin key")
+    reviewed_sha = _required("REVIEWED_SHA") if mode == "client-authority-only" else None
+    if reviewed_sha is not None and not re.fullmatch(r"[0-9a-f]{40}", reviewed_sha):
+        raise ProvisioningError("REVIEWED_SHA must be one exact lowercase commit SHA")
     existing_password = os.getenv("CANONICAL_STAGING_MCP_TEST_PASSWORD", "").strip()
     if mode == "bind-existing-demo" and not existing_password:
         raise ProvisioningError(
             "CANONICAL_STAGING_MCP_TEST_PASSWORD is required when binding an existing demo"
         )
+    database_url = (
+        _required("PSYCOPG_DATABASE_URL")
+        if mode not in {"client-authority-only", "client-only"}
+        else ""
+    )
+    service_key = _service_role_key(management_token)
+    print(f"::add-mask::{service_key}")
+    print("Resolved the staging project admin key")
+    client = _reconcile_client(service_key)
+    client_id = _reviewed_client_id(client)
+    print("Reconciled the reviewed public OAuth client")
+    if mode == "client-authority-only":
+        _write_github_env({"MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client_id})
+        _write_client_evidence(
+            client_id=client_id,
+            mode=mode,
+            demo_bound=False,
+            reviewed_sha=reviewed_sha,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ready",
+                    "client_id": client_id,
+                    "demo_grant_bound": False,
+                    "web_test_grant_bound": False,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     password = existing_password or secrets.token_urlsafe(32)
     print(f"::add-mask::{password}")
-    client = _reconcile_client(service_key)
-    print("Reconciled the reviewed public OAuth client")
     auth_user_id = _reconcile_test_user(service_key, password)
     print("Reconciled the disposable OAuth test identity")
     try:
@@ -753,7 +835,7 @@ def main(argv: list[str] | None = None) -> int:
     if mode != "client-only":
         demo_bound = _bind_demo(
             database_url,
-            client["client_id"],
+            client_id,
             auth_user_id,
             web_auth_user_id,
         )
@@ -766,38 +848,21 @@ def main(argv: list[str] | None = None) -> int:
         print("Deferred demo grant binding until canonical demo provisioning")
     _write_github_env(
         {
-            "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client["client_id"],
+            "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client_id,
             "CANONICAL_STAGING_MCP_TEST_EMAIL": TEST_EMAIL,
             "CANONICAL_STAGING_MCP_TEST_PASSWORD": password,
         }
     )
-    evidence_path = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))
-    evidence_path.mkdir(parents=True, exist_ok=True)
-    (evidence_path / "canonical-staging-oauth-client.json").write_text(
-        json.dumps(
-            {
-                "project_ref": PROJECT_REF,
-                "client_id": client["client_id"],
-                "client_name": CLIENT_NAME,
-                "client_type": "public",
-                "token_endpoint_auth_method": "none",
-                "redirect_uris": list(REDIRECT_URIS),
-                "dynamic_client_registration": False,
-                "provisioning_mode": mode,
-                "demo_grant_bound": demo_bound,
-                "web_test_grant_bound": demo_bound,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_client_evidence(
+        client_id=client_id,
+        mode=mode,
+        demo_bound=demo_bound,
     )
     print(
         json.dumps(
             {
                 "status": "ready",
-                "client_id": client["client_id"],
+                "client_id": client_id,
                 "demo_grant_bound": demo_bound,
                 "web_test_grant_bound": demo_bound,
             },

@@ -68,7 +68,6 @@ jobs:
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
-      MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
       EVIDENCE_STORAGE_ENABLED: ${{ vars.EVIDENCE_STORAGE_ENABLED }}
       EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.EVIDENCE_STORAGE_EXPECTED_PROJECT_REF }}
       SUPABASE_DIRECT_DATABASE_HOST: db.rgihahbmkrmhitjdjvev.supabase.co
@@ -102,6 +101,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install the pinned Railway CLI
         run: npm install --global @railway/cli@5.43.4
@@ -289,6 +292,18 @@ jobs:
             exit 1
           fi
 
+      - name: Reconcile the reviewed staging MCP OAuth client authority
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CANONICAL_DEMO_EVIDENCE_DIR: ${{ runner.temp }}/railway-oauth-evidence
+        run: |
+          set -euo pipefail
+          python3 -m pip install \
+            psycopg2-binary==2.9.9 \
+            requests==2.34.2
+          python3 backend/scripts/provision_staging_mcp_oauth.py \
+            --mode client-authority-only
+
       - name: Populate canonical service variables without triggering stale deploys
         env:
           ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
@@ -302,6 +317,34 @@ jobs:
           EVIDENCE_STORAGE_SERVER_JWT: ${{ secrets.EVIDENCE_STORAGE_SERVER_JWT }}
         run: |
           set -euo pipefail
+
+          test -n "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+          test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" != disabled-unissued-canonical-staging
+          case "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" in
+            *','*|*[[:space:]]*)
+              echo "OAuth authority must resolve to exactly one reviewed client ID" >&2
+              exit 2
+              ;;
+          esac
+          oauth_evidence="$RUNNER_TEMP/railway-oauth-evidence/canonical-staging-oauth-client.json"
+          jq -e \
+            --arg sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg client_id "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" \
+            '.reviewed_sha == $sha and
+             .project_ref == $project_ref and
+             .client_id == $client_id and
+             .client_type == "public" and
+             .token_endpoint_auth_method == "none" and
+             .dynamic_client_registration == false and
+             .provisioning_mode == "client-authority-only" and
+             .test_identity_reconciled == false and
+             .demo_grant_bound == false and
+             .web_test_grant_bound == false' \
+            "$oauth_evidence" >/dev/null
+          oauth_evidence_sha256=$(sha256sum "$oauth_evidence" | cut -d' ' -f1)
+          test "${#oauth_evidence_sha256}" = 64
+          echo "RAILWAY_OAUTH_EVIDENCE_SHA256=$oauth_evidence_sha256" >> "$GITHUB_ENV"
 
           set_variable() {
             local service=$1
@@ -546,15 +589,18 @@ jobs:
                jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1 && \
                test "$frontend_health" = ok && \
                jq -e --arg sha "$REVIEWED_SHA" '.service == "aasopharma-erp" and .git_commit == $sha' <<<"$frontend_metadata" >/dev/null 2>&1; then
+              oauth_client_id=$(jq -er '.client_id | select(type == "string" and length > 0)' "$RUNNER_TEMP/railway-oauth-evidence/canonical-staging-oauth-client.json")
               jq -n \
                 --arg git_commit "$REVIEWED_SHA" \
+                --arg oauth_client_id "$oauth_client_id" \
+                --arg oauth_evidence_sha256 "$RAILWAY_OAUTH_EVIDENCE_SHA256" \
                 --arg api_deployment_id "$(<api-deployment-id)" \
                 --arg mcp_deployment_id "$(<mcp-deployment-id)" \
                 --arg frontend_deployment_id "$(<frontend-deployment-id)" \
                 --arg api_url "$RAILWAY_API_URL" \
                 --arg mcp_url "$RAILWAY_MCP_URL" \
                 --arg frontend_url "$RAILWAY_FRONTEND_URL" \
-                '{provider:"railway",git_commit:$git_commit,status:"live",services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:"ready"},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:"ready"},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
+                '{provider:"railway",git_commit:$git_commit,status:"live",oauth:{client_id:$oauth_client_id,client_type:"public",dynamic_registration:false,evidence_sha256:$oauth_evidence_sha256},services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:"ready"},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:"ready"},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
                 > railway-pilot-evidence.json
               exit 0
             fi
@@ -584,5 +630,6 @@ jobs:
           path: |
             railway-pilot-evidence.json
             railway-supabase-auth-redirect.json
+            ${{ runner.temp }}/railway-oauth-evidence/canonical-staging-oauth-client.json
           if-no-files-found: error
           retention-days: 14

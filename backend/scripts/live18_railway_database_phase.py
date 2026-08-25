@@ -106,6 +106,23 @@ class RailwayDatabasePhaseError(RuntimeError):
     """The remote database phase failed closed."""
 
 
+def _deployed_oauth_client_id() -> str:
+    value = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "")
+    client_id = value.strip()
+    if (
+        not client_id
+        or client_id != value
+        or len(client_id) > 255
+        or client_id == "disabled-unissued-canonical-staging"
+        or "," in client_id
+        or any(character.isspace() for character in client_id)
+    ):
+        raise RailwayDatabasePhaseError(
+            "The exact API deployment does not expose one reviewed OAuth client ID"
+        )
+    return client_id
+
+
 def _read_request(path: str) -> dict[str, Any]:
     if path == "-":
         raw = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
@@ -453,6 +470,7 @@ def _temporary_admin_owner_delegation(admin_url: str):
 
 def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
+    _deployed_oauth_client_id()
     secrets = _exact_secret_environment(request, DEMO_SECRET_KEYS)
     api_origin = _required_text(request, "api_origin").rstrip("/")
     if api_origin != "https://aasopharma-api-pilot-production.up.railway.app":
@@ -626,6 +644,7 @@ def _decrypt_environment(
 
 def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
+    deployed_client_id = _deployed_oauth_client_id()
     environment = _secret_environment(request)
     environment.update(
         {
@@ -665,10 +684,19 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                     provision_mcp_identities(mcp_state, browser_state)
                 mcp_provisioned = True
                 generated = _parse_environment_file(github_environment)
-            encrypted_environment = _encrypt_environment(request, generated)
             browser_payload = json.loads(browser_state.read_text(encoding="utf-8"))
             mcp_payload = json.loads(mcp_state.read_text(encoding="utf-8"))
             fixture_payload = json.loads(fixture_evidence.read_text(encoding="utf-8"))
+            observed_client_ids = {
+                generated.get("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"),
+                mcp_payload.get("client_id"),
+                fixture_payload.get("oauth_client_id"),
+            }
+            if observed_client_ids != {deployed_client_id}:
+                raise RailwayDatabasePhaseError(
+                    "Ephemeral OAuth authority differs from the exact API deployment"
+                )
+            encrypted_environment = _encrypt_environment(request, generated)
             github_environment.unlink()
             fixture_evidence.unlink()
             response = {
