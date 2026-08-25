@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.api.routes import web_operator_actions
+from app.infrastructure.operator_actions import service as operator_action_service
 
 
 ORG_ID = UUID("d3000000-0000-7000-8000-000000000001")
@@ -87,14 +88,13 @@ def main() -> None:
             ).fetchall()
             assert readback_rows == []
             review_rows = session.execute(
-                text(_sql(
-                    web_operator_actions.inventory_adjustment_review,
-                    "FROM automation.command_requests AS command",
-                )),
+                operator_action_service._COMMAND_REVIEW_SQL,
                 {
                     "org_id": ORG_ID,
                     "command_request_id": COMMAND_ID,
                     "membership_id": MEMBERSHIP_ID,
+                    "organization_scope": True,
+                    "branch_ids": [],
                 },
             ).fetchall()
             assert review_rows == []
