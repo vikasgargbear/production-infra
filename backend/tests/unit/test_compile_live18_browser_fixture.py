@@ -437,6 +437,57 @@ def test_bank_reconciliation_template_targets_exact_run_scoped_pair() -> None:
     assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
 
 
+def test_customer_credit_note_targets_exact_invoice_and_post_return_ceiling() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/customer_credit_note.json").read_text()
+    )
+    scalars = {
+        "sales_invoice_quantity": "12.000000",
+        "sales_invoice_free_quantity": "2.000000",
+        "sales_return_billed_quantity": "4.000000",
+        "sales_return_free_quantity": "1.000000",
+        "customer_credit_note_billed_quantity": "2.000000",
+        "customer_credit_note_free_quantity": "1.000000",
+        "customer_credit_note_reason": "Reviewed post-sale price correction",
+    }
+    facts = {
+        "identity": {
+            "sales_adjustment_rule_id": "d3000000-0000-7000-8000-000000000050",
+            "recipient_itc_evidence_attachment_id": "d3000000-0000-7000-8000-000000000051",
+        },
+        "display": {"product_name": "Demo Product"},
+        "clock": {"recipient_itc_confirmed_at_utc": "2026-08-25T10:15:30.000Z"},
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        _operation_facts("customer_credit_note", facts, scalars, used),
+        scalars,
+        used,
+    )
+    _validate_compiled_steps(
+        "customer_credit_note", operation, "separate_approver"
+    )
+    assert used == {
+        "customer_credit_note_billed_quantity",
+        "customer_credit_note_free_quantity",
+        "customer_credit_note_reason",
+    }
+    assert operation["prepare_steps"][1]["value"] == "{{resource_sales_invoice}}"
+    assert operation["prepare_steps"][6]["value"] == (
+        "d3000000-0000-7000-8000-000000000051"
+    )
+
+    with pytest.raises(FixtureCompileError, match="post-return source ceiling"):
+        _operation_facts(
+            "customer_credit_note",
+            facts,
+            {**scalars, "customer_credit_note_billed_quantity": "9.000000"},
+            set(),
+        )
+
+
 def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(

@@ -183,6 +183,7 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
       {workspace === 'prepare' && <>
         <section className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Choose the posted source</h2><p className="text-sm text-slate-600">Sales creates a customer credit; Purchase creates a supplier debit. Only documents with an authoritative open balance are shown.</p></div><button type="button" onClick={() => void loadDocuments(side)} disabled={busy} className="min-h-11 rounded-lg border px-4"><RefreshCw className="mr-2 inline h-4 w-4" />Refresh</button></div>
+          <p className="mt-3 text-sm text-slate-600">Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason.</p>
           <fieldset className="mt-4 flex flex-wrap gap-3" aria-label="Adjustment side">
             <label className="flex min-h-11 items-center gap-2 rounded-lg border px-4"><input type="radio" checked={side === 'sales'} onChange={() => setSide('sales')} />Customer credit</label>
             <label className="flex min-h-11 items-center gap-2 rounded-lg border px-4"><input type="radio" checked={side === 'purchase'} onChange={() => setSide('purchase')} />Supplier debit</label>

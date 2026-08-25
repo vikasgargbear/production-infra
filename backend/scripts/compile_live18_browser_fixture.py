@@ -314,6 +314,63 @@ def resolve_authoritative_facts(
                        AND reversal.reversal_of_match_id=matched.id))
        ORDER BY statement_line.id,journal.id
     """
+    adjustment_evidence_sql = """
+      SELECT sales_rule.id::text,sales_rule.reason_code,
+             purchase_rule.id::text,purchase_rule.reason_code,
+             recipient_evidence.id::text,
+             to_char(recipient_evidence.verified_at AT TIME ZONE 'UTC',
+                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+             portal_line.id::text,portal_line.invoice_number
+        FROM tax.gst_adjustment_rule_versions sales_rule
+        JOIN core.organizations organization
+          ON organization.id=%s AND organization.status='active'
+        JOIN tax.gst_adjustment_rule_versions purchase_rule
+          ON purchase_rule.status='active'
+         AND purchase_rule.side='purchase'
+         AND purchase_rule.direction='debit'
+         AND purchase_rule.document_effect='decrease'
+         AND purchase_rule.tax_effect='statutory'
+         AND purchase_rule.effective_from<=
+             (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+         AND (purchase_rule.effective_to IS NULL OR purchase_rule.effective_to>=
+             (transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+        JOIN core.attachments recipient_evidence
+          ON recipient_evidence.org_id=organization.id
+         AND recipient_evidence.evidence_kind='recipient_itc_reversal'
+         AND recipient_evidence.status IN ('verified','retained')
+         AND recipient_evidence.verified_at IS NOT NULL
+         AND recipient_evidence.verified_at<=transaction_timestamp()
+         AND recipient_evidence.retention_until>=
+             (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+         AND recipient_evidence.sha256 IS NOT NULL
+        JOIN parties.supplier_accounts supplier
+          ON supplier.org_id=organization.id AND supplier.id=%s
+         AND supplier.status='active'
+        JOIN parties.tax_registrations supplier_registration
+          ON supplier_registration.org_id=supplier.org_id
+         AND supplier_registration.party_id=supplier.party_id
+         AND supplier_registration.status='active'
+        JOIN tax.portal_document_lines portal_line
+          ON portal_line.org_id=organization.id
+         AND portal_line.document_type='credit_note'
+         AND portal_line.supplier_gstin=supplier_registration.registration_number
+         AND portal_line.invoice_number=%s
+        JOIN tax.portal_documents portal_document
+          ON portal_document.org_id=portal_line.org_id
+         AND portal_document.id=portal_line.portal_document_id
+         AND portal_document.portal_document_type IN ('gstr2a','gstr2b')
+         AND portal_document.status='parsed'
+         AND portal_document.parsed_at IS NOT NULL
+       WHERE sales_rule.status='active'
+         AND sales_rule.side='sales'
+         AND sales_rule.direction='credit'
+         AND sales_rule.document_effect='decrease'
+         AND sales_rule.tax_effect='statutory'
+         AND sales_rule.effective_from<=
+             (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+         AND (sales_rule.effective_to IS NULL OR sales_rule.effective_to>=
+             (transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+    """
     cycle_count_sql = """
       SELECT membership.id::text, attachment.id::text,
              to_char(attachment.verified_at AT TIME ZONE 'UTC',
@@ -416,6 +473,12 @@ def resolve_authoritative_facts(
                 ),
             )
             bank_reconciliation_rows = cursor.fetchall()
+            run_id = run_token.split("-", 1)[0]
+            cursor.execute(
+                adjustment_evidence_sql,
+                (org_id, identities["supplier_account_id"], f"DEMO-SUP-CN-{run_id}"),
+            )
+            adjustment_evidence_rows = cursor.fetchall()
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
@@ -441,6 +504,12 @@ def resolve_authoritative_facts(
             "run-scoped supplier-invoice GRN/GSTR-2B authority resolved "
             f"{len(supplier_invoice_rows)} rows, expected one"
         )
+    if len(adjustment_evidence_rows) != 1:
+        raise FixtureCompileError(
+            "canonical statutory adjustment rules, retained recipient evidence, "
+            "and run-scoped supplier credit-note evidence resolved "
+            f"{len(adjustment_evidence_rows)} rows, expected one"
+        )
     goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
@@ -465,6 +534,16 @@ def resolve_authoritative_facts(
         raise FixtureCompileError("run-scoped bank statement authority drifted")
     resolved = dict(zip(keys, rows[0][:-2]))
     (
+        sales_adjustment_rule_id,
+        sales_adjustment_reason_code,
+        purchase_adjustment_rule_id,
+        purchase_adjustment_reason_code,
+        recipient_itc_evidence_id,
+        recipient_itc_confirmed_at,
+        supplier_credit_note_portal_line_id,
+        supplier_credit_note_number,
+    ) = adjustment_evidence_rows[0]
+    (
         cycle_count_membership_id,
         cycle_count_evidence_id,
         cycle_count_completed_at,
@@ -486,6 +565,10 @@ def resolve_authoritative_facts(
             "bank_reconciliation_statement_id": bank_statement_id,
             "bank_reconciliation_statement_line_id": bank_statement_line_id,
             "bank_reconciliation_journal_entry_id": bank_journal_entry_id,
+            "sales_adjustment_rule_id": sales_adjustment_rule_id,
+            "purchase_adjustment_rule_id": purchase_adjustment_rule_id,
+            "recipient_itc_evidence_attachment_id": recipient_itc_evidence_id,
+            "supplier_credit_note_portal_line_id": supplier_credit_note_portal_line_id,
         },
         "display": {
             **resolved,
@@ -502,11 +585,19 @@ def resolve_authoritative_facts(
                 f"{resolved_statement_reference} line {bank_statement_line_number} · "
                 f"{bank_journal_number} · ₹{Decimal(bank_matched_amount):,.2f}"
             ),
+            "sales_adjustment_rule_label": (
+                f"{sales_adjustment_reason_code} — statutory"
+            ),
+            "purchase_adjustment_rule_label": (
+                f"{purchase_adjustment_reason_code} — statutory"
+            ),
+            "supplier_credit_note_number": supplier_credit_note_number,
         },
         "clock": {
             "business_date": rows[0][-2],
             "business_datetime_local": rows[0][-1],
             "cycle_count_completed_at_utc": cycle_count_completed_at,
+            "recipient_itc_confirmed_at_utc": recipient_itc_confirmed_at,
         },
         "choice": {
             "supplier_invoice_number": resolved_invoice_number,
@@ -537,6 +628,69 @@ def _operation_facts(
             "purchase_order_expected_delivery_date",
         ),
     }
+    adjustment_limits = {
+        "customer_credit_note": (
+            "sales_invoice_quantity",
+            "sales_invoice_free_quantity",
+            "sales_return_billed_quantity",
+            "sales_return_free_quantity",
+            "customer_credit_note_billed_quantity",
+            "customer_credit_note_free_quantity",
+        ),
+        "supplier_debit_note": (
+            "goods_receipt_accepted_quantity",
+            "goods_receipt_free_quantity",
+            "purchase_return_billed_quantity",
+            "purchase_return_free_quantity",
+            "supplier_debit_note_billed_quantity",
+            "supplier_debit_note_free_quantity",
+        ),
+    }
+    if operation_id in adjustment_limits:
+        (
+            original_billed_key,
+            original_free_key,
+            prior_billed_key,
+            prior_free_key,
+            note_billed_key,
+            note_free_key,
+        ) = adjustment_limits[operation_id]
+        values: dict[str, Decimal] = {}
+        for key in (
+            original_billed_key,
+            original_free_key,
+            prior_billed_key,
+            prior_free_key,
+            note_billed_key,
+            note_free_key,
+        ):
+            rendered = _leaf(scalars, key, "reviewed scalar")
+            if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", rendered):
+                raise FixtureCompileError(
+                    f"{key} must be a non-negative plain decimal with at most 6 fractional digits"
+                )
+            values[key] = Decimal(rendered)
+        remaining_billed = values[original_billed_key] - values[prior_billed_key]
+        remaining_free = values[original_free_key] - values[prior_free_key]
+        if remaining_billed < 0 or remaining_free < 0:
+            raise FixtureCompileError(
+                f"{operation_id} prior return quantities exceed the reviewed source quantities"
+            )
+        if (
+            values[note_billed_key] + values[note_free_key] <= 0
+            or values[note_billed_key] > remaining_billed
+            or values[note_free_key] > remaining_free
+        ):
+            raise FixtureCompileError(
+                f"{operation_id} billed/free quantities exceed the exact post-return source ceiling"
+            )
+        reason_key = f"{operation_id}_reason"
+        reason = _leaf(scalars, reason_key, "reviewed scalar").strip()
+        if not reason or len(reason) > 1024:
+            raise FixtureCompileError(
+                f"{reason_key} must be a specific non-empty reason of at most 1024 characters"
+            )
+        return facts
     if operation_id == "sales_invoice":
         decimal_rules = {
             "sales_invoice_quantity": (6, Decimal("0"), None, False),

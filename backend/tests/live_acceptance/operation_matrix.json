@@ -173,7 +173,7 @@
       "approval_policy": "separate_approver",
       "rest_readback": "/api/canonical/adjustment-notes/{resource_id}",
       "mcp_readback_tool": "erp_adjustment_note_readback_get",
-      "database_relations": ["finance.adjustment_notes", "finance.adjustment_note_lines", "finance.open_items", "finance.allocations", "finance.journal_entries"],
+      "database_relations": ["finance.adjustment_notes", "finance.adjustment_note_lines", "finance.open_items", "finance.allocations", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "tax.documents"],
       "scenario_steps": ["standalone_sales_credit_note"],
       "availability": "published"
     },
