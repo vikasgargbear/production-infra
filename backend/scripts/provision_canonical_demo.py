@@ -19,7 +19,7 @@ from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import NAMESPACE_URL, UUID, uuid5
 from zoneinfo import ZoneInfo
 
@@ -1104,24 +1104,70 @@ def itc_reversal_dataset_bytes(connection) -> bytes:
         return cursor.fetchone()[0].encode("utf-8")
 
 
-def demo_itc_reversal_release_exists(connection) -> bool:
+class ExistingItcReversalAuthority(NamedTuple):
+    release_id: str
+    rule_version_id: str
+    dataset_sha256: bytes
+
+
+def resolve_existing_itc_reversal_authority(
+    connection, source: bytes
+) -> ExistingItcReversalAuthority | None:
+    """Reuse one exact active legal authority across disposable UI runs.
+
+    Transaction and evidence identities are deliberately run-scoped.  A
+    regulatory release is not: its identity belongs to the reviewed source and
+    ruleset.  Resolve the already imported exact authority before building the
+    canonical dataset so a later workflow run cannot fabricate a replacement
+    release with the same legal effective date.
+    """
+
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT count(*)
+            SELECT release.id::text,rule.id::text,release.dataset_sha256
               FROM tax.itc_reversal_rule_versions rule
               JOIN core.reference_data_releases release ON release.id=rule.release_id
-             WHERE release.id=%s AND rule.id=%s AND release.status='active'
+             WHERE release.dataset_kind='gst_itc_reversal_rules'
+               AND release.ruleset_version=%s
+               AND release.source_authority='cbic' AND release.source_uri=%s
+               AND release.source_media_type='application/pdf'
+               AND release.source_document_sha256=%s
+               AND release.dataset_media_type='application/json'
+               AND release.record_count=1
+               AND release.publication_date=%s AND release.effective_from=%s
+               AND release.effective_to IS NULL AND release.status='active'
                AND rule.status='active' AND rule.legal_section='17(5)(h)'
                AND rule.event_kind='goods_destroyed'
                AND rule.gstr3b_table_code='4' AND rule.gstr3b_row_code='B(1)'
+               AND rule.rule_code='CGST_SECTION_17_5_H_GOODS_DESTROYED'
+               AND rule.rule_version=%s AND rule.effective_from=%s
+               AND rule.effective_to IS NULL
             """,
-            (IDS["destruction_itc_rule_release"], IDS["destruction_itc_rule_version"]),
+            (
+                ITC_REVERSAL_RULESET_VERSION,
+                ITC_REVERSAL_SOURCE_URI,
+                psycopg2.Binary(hashlib.sha256(source).digest()),
+                ITC_REVERSAL_SOURCE_PUBLICATION_DATE,
+                ITC_REVERSAL_EFFECTIVE_FROM,
+                ITC_REVERSAL_RULESET_VERSION,
+                ITC_REVERSAL_EFFECTIVE_FROM,
+            ),
         )
-        count = cursor.fetchone()[0]
-    if count not in (0, 1):
+        rows = cursor.fetchall()
+    if len(rows) > 1:
         raise RuntimeError("demo ITC reversal release is ambiguous")
-    return count == 1
+    if not rows:
+        return None
+    release_id, rule_version_id, dataset_sha256 = rows[0]
+    authority = ExistingItcReversalAuthority(
+        release_id=str(release_id),
+        rule_version_id=str(rule_version_id),
+        dataset_sha256=bytes(dataset_sha256),
+    )
+    IDS["destruction_itc_rule_release"] = authority.release_id
+    IDS["destruction_itc_rule_version"] = authority.rule_version_id
+    return authority
 
 
 def import_itc_reversal_release(connection, source: bytes, dataset_bytes: bytes) -> None:
@@ -5123,12 +5169,22 @@ def main() -> int:
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
         gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
-        itc_reversal_release_exists = demo_itc_reversal_release_exists(bootstrap)
+        existing_itc_reversal_authority = resolve_existing_itc_reversal_authority(
+            bootstrap, itc_reversal_source
+        )
     with database_connection("ERP_REGULATORY_IMPORTER_DATABASE_URL") as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
         adjustment_bytes = adjustment_dataset_bytes(importer)
         gstr1_reporting_bytes = gstr1_reporting_dataset_bytes(importer)
         itc_reversal_bytes = itc_reversal_dataset_bytes(importer)
+        if (
+            existing_itc_reversal_authority is not None
+            and hashlib.sha256(itc_reversal_bytes).digest()
+            != existing_itc_reversal_authority.dataset_sha256
+        ):
+            raise RuntimeError(
+                "active demo ITC reversal release differs from the reviewed exact dataset"
+            )
         (evidence_dir / "hsn-481910-demo.json").write_bytes(dataset_bytes)
         (evidence_dir / "gst-adjustment-rules-demo.json").write_bytes(adjustment_bytes)
         (evidence_dir / "gstr1-reporting-rules.json").write_bytes(
@@ -5145,7 +5201,7 @@ def main() -> int:
             import_gstr1_reporting_release(
                 importer, gstr1_reporting_source, gstr1_reporting_bytes
             )
-        if not itc_reversal_release_exists:
+        if existing_itc_reversal_authority is None:
             import_itc_reversal_release(
                 importer, itc_reversal_source, itc_reversal_bytes
             )

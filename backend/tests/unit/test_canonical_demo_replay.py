@@ -20,8 +20,9 @@ def _module():
 
 
 class _Cursor:
-    def __init__(self) -> None:
+    def __init__(self, rows=None) -> None:
         self.executions: list[tuple[str, tuple]] = []
+        self.rows = [(7,)] if rows is None else rows
 
     def __enter__(self):
         return self
@@ -33,7 +34,7 @@ class _Cursor:
         self.executions.append((statement, parameters))
 
     def fetchall(self):
-        return [(7,)]
+        return self.rows
 
 
 class _Connection:
@@ -64,6 +65,48 @@ def test_sales_order_uses_exact_database_address_identity_and_version() -> None:
     assert invoice_payload["delivery_address_id"] == module.IDS["customer_address"]
     assert invoice_payload["delivery_address_row_version"] == "7"
     assert "place_of_supply_state_code" not in invoice_payload
+
+
+def test_existing_itc_authority_reuses_content_identity_across_ui_runs() -> None:
+    module = _module()
+    release_id = "d3400000-0000-7000-8000-000000000001"
+    rule_id = "d3400000-0000-7000-8000-000000000002"
+    dataset_sha256 = bytes.fromhex("ab" * 32)
+    connection = _Connection()
+    connection.cursor_value = _Cursor([(release_id, rule_id, dataset_sha256)])
+
+    authority = module.resolve_existing_itc_reversal_authority(
+        connection, b"reviewed CBIC source bytes"
+    )
+
+    assert authority == module.ExistingItcReversalAuthority(
+        release_id=release_id,
+        rule_version_id=rule_id,
+        dataset_sha256=dataset_sha256,
+    )
+    assert module.IDS["destruction_itc_rule_release"] == release_id
+    assert module.IDS["destruction_itc_rule_version"] == rule_id
+    statement, parameters = connection.cursor_value.executions[0]
+    assert "release.source_document_sha256=%s" in statement
+    assert "release.dataset_kind='gst_itc_reversal_rules'" in statement
+    assert "rule.rule_version=%s" in statement
+    assert len(parameters) == 7
+
+
+def test_existing_itc_authority_fails_closed_when_ambiguous() -> None:
+    module = _module()
+    row = (
+        "d3400000-0000-7000-8000-000000000001",
+        "d3400000-0000-7000-8000-000000000002",
+        bytes.fromhex("cd" * 32),
+    )
+    connection = _Connection()
+    connection.cursor_value = _Cursor([row, row])
+
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        module.resolve_existing_itc_reversal_authority(
+            connection, b"reviewed CBIC source bytes"
+        )
 
 
 def test_replay_reconciliation_accepts_only_valid_forward_order_states() -> None:

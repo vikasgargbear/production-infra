@@ -316,9 +316,50 @@ def _assert_setting_replacement_replay() -> None:
         connection.close()
 
 
+def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
+    _configure_fixture_ids()
+    source = b"reviewed PostgreSQL ITC reversal authority"
+    first_release_id = fixture.IDS["destruction_itc_rule_release"]
+    first_rule_id = fixture.IDS["destruction_itc_rule_version"]
+    connection = _connect()
+    try:
+        fixture.bootstrap_identity(connection, organization_pan="YYYYY8888Y")
+        dataset_bytes = fixture.itc_reversal_dataset_bytes(connection)
+        fixture.import_itc_reversal_release(connection, source, dataset_bytes)
+
+        fixture.IDS["destruction_itc_rule_release"] = str(uuid4())
+        fixture.IDS["destruction_itc_rule_version"] = str(uuid4())
+        authority = fixture.resolve_existing_itc_reversal_authority(
+            connection, source
+        )
+        assert authority is not None
+        assert authority.release_id == first_release_id
+        assert authority.rule_version_id == first_rule_id
+        assert fixture.IDS["destruction_itc_rule_release"] == first_release_id
+        assert fixture.IDS["destruction_itc_rule_version"] == first_rule_id
+        replay_dataset = fixture.itc_reversal_dataset_bytes(connection)
+        assert hashlib.sha256(replay_dataset).digest() == authority.dataset_sha256
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT count(*),count(DISTINCT rule.release_id),count(DISTINCT rule.id)
+                  FROM tax.itc_reversal_rule_versions rule
+                  JOIN core.reference_data_releases release ON release.id=rule.release_id
+                 WHERE release.dataset_kind='gst_itc_reversal_rules'
+                   AND release.status='active' AND rule.status='active'
+                """
+            )
+            assert cursor.fetchone() == (1, 1, 1)
+    finally:
+        connection.rollback()
+        connection.close()
+
+
 def main() -> None:
     _assert_numeric_multi_allocation_ceiling()
     _assert_setting_replacement_replay()
+    _assert_itc_reversal_authority_replays_across_ui_runs()
 
 
 if __name__ == "__main__":
