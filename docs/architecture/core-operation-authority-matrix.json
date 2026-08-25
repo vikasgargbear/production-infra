@@ -15,6 +15,45 @@
     "erp_operation_status_get"
   ],
   "forbidden_runtime_database_namespaces": ["financial", "master"],
+  "business_fact_policy": {
+    "forbidden_fixture_markers": ["demo", "codex-e2e", "example org", "sample total"],
+    "forbidden_silent_defaults": ["amount", "balance", "quantity", "rate", "tax", "total", "trend"],
+    "allowed_numeric_invariants": {
+      "zero": ["empty-set aggregation identity", "no-impact preview", "opposite side of a balanced debit/credit line"],
+      "one": ["INR functional-currency FX identity", "document line-number origin", "minimum approval count"],
+      "statuses_and_enums": "Only schema-constrained lifecycle predicates and transitions are allowed; they are not computed business facts."
+    },
+    "diagnostics": "Missing or contradictory source facts must raise a typed HTTP/operator/SQL error. They must never synthesize a record or a numeric business value."
+  },
+  "provenance_classes": {
+    "commercial_calculation": ["calculation.artifacts", "catalog.uom_conversions", "tax.tax_code_versions"],
+    "inventory_quantity_value": ["inventory.batches", "inventory.stock_balances", "inventory.stock_ledger_entries", "catalog.uom_conversions"],
+    "open_item_settlement": ["finance.open_items", "finance.allocations", "finance.accounting_events"],
+    "journal_accounting": ["finance.accounts", "finance.journal_entries", "finance.journal_lines", "finance.accounting_events"],
+    "statutory_tax": ["tax.documents", "tax.registrations", "tax.tax_code_versions", "tax.gst_adjustment_rule_versions", "tax.return_periods"],
+    "bank_statement_match": ["finance.bank_statements", "finance.bank_statement_lines", "finance.bank_accounts", "finance.journal_entries", "finance.journal_lines", "finance.reconciliation_matches"],
+    "expense_evidence": ["finance.expense_claims", "finance.expense_claim_lines", "core.attachments", "finance.accounts"]
+  },
+  "business_fact_provenance_by_operation": {
+    "sales_order": ["commercial_calculation", "statutory_tax"],
+    "sales_dispatch": ["inventory_quantity_value", "journal_accounting"],
+    "sales_invoice": ["commercial_calculation", "inventory_quantity_value", "open_item_settlement", "journal_accounting", "statutory_tax"],
+    "sales_return": ["commercial_calculation", "inventory_quantity_value", "open_item_settlement", "journal_accounting", "statutory_tax"],
+    "purchase_order": ["commercial_calculation", "statutory_tax"],
+    "goods_receipt": ["inventory_quantity_value"],
+    "supplier_invoice": ["commercial_calculation", "inventory_quantity_value", "open_item_settlement", "journal_accounting", "statutory_tax"],
+    "purchase_return": ["commercial_calculation", "inventory_quantity_value", "open_item_settlement", "journal_accounting", "statutory_tax"],
+    "customer_receipt": ["open_item_settlement", "journal_accounting"],
+    "supplier_payment": ["open_item_settlement", "journal_accounting", "statutory_tax"],
+    "supplier_advance": ["open_item_settlement", "journal_accounting", "statutory_tax"],
+    "customer_credit_note": ["commercial_calculation", "open_item_settlement", "journal_accounting", "statutory_tax"],
+    "supplier_debit_note": ["commercial_calculation", "open_item_settlement", "journal_accounting", "statutory_tax"],
+    "inventory_transfer": ["inventory_quantity_value"],
+    "inventory_adjustment": ["inventory_quantity_value", "journal_accounting"],
+    "inventory_destruction": ["inventory_quantity_value", "journal_accounting", "statutory_tax"],
+    "bank_reconciliation": ["bank_statement_match"],
+    "expense_claim": ["expense_evidence", "journal_accounting", "statutory_tax"]
+  },
   "operations": [
     {
       "id": "sales_order",

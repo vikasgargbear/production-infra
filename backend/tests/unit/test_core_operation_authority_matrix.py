@@ -8,6 +8,7 @@ readback path.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 import re
@@ -71,6 +72,15 @@ TABLE_REFERENCE = re.compile(
     r"\"?([a-z_]\w*)\"?\.\"?([a-z_]\w*)\"?",
     re.IGNORECASE,
 )
+BUSINESS_FACT_NAME = re.compile(
+    r"(?:amount|balance|quantity|rate|tax|total|trend|percent|gst|cgst|sgst|igst|cess|business_date)",
+    re.IGNORECASE,
+)
+FIXED_ISO_DATE = re.compile(r"(?<![0-9])20[2-9][0-9]-[01][0-9]-[0-3][0-9](?![0-9])")
+FIXTURE_UUID = re.compile(
+    r"\b(?:00000000-0000-[0-9a-f-]{23}|[0-9a-f]{8}-0000-0000-0000-[0-9a-f]{12})\b",
+    re.IGNORECASE,
+)
 
 
 def _matrix() -> dict:
@@ -128,6 +138,22 @@ def test_matrix_names_exactly_eighteen_logical_core_operations() -> None:
     assert all("legacy_dependencies" not in operation for operation in operations)
 
 
+def test_every_business_fact_has_named_canonical_provenance() -> None:
+    matrix = _matrix()
+    operation_ids = {operation["id"] for operation in matrix["operations"]}
+    provenance = matrix["business_fact_provenance_by_operation"]
+    assert set(provenance) == operation_ids
+    assert all(classes for classes in provenance.values())
+    assert {
+        name for classes in provenance.values() for name in classes
+    } <= set(matrix["provenance_classes"])
+    for tables in matrix["provenance_classes"].values():
+        assert tables
+        assert all(
+            table.split(".", 1)[0] in CANONICAL_TABLE_SCHEMAS for table in tables
+        )
+
+
 def test_integrated_operations_map_to_reviewed_sql_and_canonical_tables() -> None:
     functions = _sql_functions()
     for operation in _matrix()["operations"]:
@@ -146,6 +172,9 @@ def test_integrated_operations_map_to_reviewed_sql_and_canonical_tables() -> Non
         assert not missing, f"{operation['id']} table mapping drifted: {sorted(missing)}"
         assert "financial." not in closure.lower()
         assert "master.organizations" not in closure.lower()
+        assert "RAISE EXCEPTION" in closure, (
+            f"{operation['id']} has no actionable database diagnostic boundary"
+        )
 
 
 def test_rest_and_mcp_command_authority_has_no_old_schema_or_data_client() -> None:
@@ -235,3 +264,76 @@ def test_all_declared_tables_are_canonical_objects() -> None:
             assert quoted in ddl or unquoted in ddl, (
                 f"{operation['id']} names a missing canonical table: {qualified_name}"
             )
+
+
+def test_core_authority_contains_no_fixture_identity_or_fixed_business_date() -> None:
+    matrix = _matrix()
+    markers = tuple(matrix["business_fact_policy"]["forbidden_fixture_markers"])
+    sources = [
+        *(path.read_text(encoding="utf-8") for path in _python_sources()),
+        *(path.read_text(encoding="utf-8") for path in (BASELINE_PATH, *MIGRATION_SQL)),
+    ]
+    joined = "\n".join(sources)
+    lowered = joined.lower()
+    assert not FIXED_ISO_DATE.search(joined)
+    assert not FIXTURE_UUID.search(joined)
+    assert not {marker for marker in markers if marker in lowered}
+
+
+def test_core_python_never_silently_defaults_a_business_fact_to_a_number() -> None:
+    findings: list[tuple[str, int, str]] = []
+    # canonical_erp_reads also owns unrelated reporting projections.  Its two
+    # payment allocation functions are SQL-derived and separately covered by
+    # the operation/table and route gates above; do not make report defaults a
+    # dependency of the core command audit.
+    for path in _python_sources():
+        if path.name == "canonical_erp_reads.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                for key, value in zip(node.keys, node.values):
+                    if (
+                        isinstance(key, ast.Constant)
+                        and isinstance(key.value, str)
+                        and BUSINESS_FACT_NAME.search(key.value)
+                        and isinstance(value, ast.Constant)
+                        and isinstance(value.value, (int, float))
+                        and not isinstance(value.value, bool)
+                    ):
+                        findings.append((str(path.relative_to(ROOT)), node.lineno, key.value))
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and len(node.args) >= 2
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and BUSINESS_FACT_NAME.search(node.args[0].value)
+                and isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, (int, float))
+                and not isinstance(node.args[1].value, bool)
+            ):
+                findings.append(
+                    (str(path.relative_to(ROOT)), node.lineno, node.args[0].value)
+                )
+    assert findings == []
+
+
+def test_sql_never_embeds_a_nonzero_tax_rate_or_trend() -> None:
+    functions = _sql_functions()
+    forbidden_assignment = re.compile(
+        r"\b(?:gst|cgst|sgst|igst|cess|tax|trend)[a-z_]*\s*(?::=|=)\s*"
+        r"(?:[2-9]|[1-9][0-9]+)(?:\.[0-9]+)?\b",
+        re.IGNORECASE,
+    )
+    findings: list[tuple[str, str]] = []
+    for operation in _matrix()["operations"]:
+        if operation.get("integration_state"):
+            continue
+        _, closure = _function_closure(
+            functions, [operation["prepare_sql"], *operation["execute_sql"]]
+        )
+        if match := forbidden_assignment.search(closure):
+            findings.append((operation["id"], match.group(0)))
+    assert findings == []
