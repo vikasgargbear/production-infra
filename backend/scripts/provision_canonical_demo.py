@@ -160,6 +160,8 @@ REQUIRED_PERMISSIONS = (
     "finance.customer_receipt.create",
     "finance.supplier_advance.create",
     "finance.supplier_payment.create",
+    "finance.adjustment_note.manage",
+    "finance.journal.post",
     "inventory.adjustment.create",
     "inventory.transfer.create",
     "inventory.document.post",
@@ -189,6 +191,7 @@ PREPARE_CAPABILITIES = (
     ("finance.customer_receipt.prepare", "actor_confirmation"),
     ("finance.supplier_advance.prepare", "separate_approver"),
     ("finance.supplier_payment.prepare", "actor_confirmation"),
+    ("finance.adjustment_note.prepare", "separate_approver"),
     ("inventory.adjustment.prepare", "separate_approver"),
     ("inventory.transfer.prepare", "actor_confirmation"),
 )

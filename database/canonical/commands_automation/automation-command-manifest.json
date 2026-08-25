@@ -3,9 +3,29 @@
   "blocked_invariants": {},
   "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
   "dispatcher": {
-    "blocked_prepare_capabilities": [
-      "finance.adjustment_note.prepare"
-    ],
+    "adjustment_note_pilot_scope": {
+      "required_matching": [
+        "posted_original_invoice_tax_document_and_consumed_calculation_artifact",
+        "exact_original_product_line_and_cumulative_quantity_ceiling",
+        "exact_original_accounting_event_and_open_item_allocation_state",
+        "effective_reviewed_gst_adjustment_rule",
+        "side_specific_statutory_itc_or_portal_evidence",
+        "separate_unexpired_exact_preview_approval",
+        "balanced_journal_tax_document_allocation_and_residual_open_item"
+      ],
+      "supported_currency": "INR",
+      "supported_effect": "decrease_against_posted_original_invoice_open_item",
+      "supported_pairs": [
+        "sales_credit",
+        "purchase_debit"
+      ],
+      "unsupported_fail_closed": [
+        "sales_debit_or_purchase_credit",
+        "increase_reversal_or_return_linked_note",
+        "charge_line_foreign_currency_zero_rated_or_reverse_charge"
+      ]
+    },
+    "blocked_prepare_capabilities": [],
     "capability_operation_map": {
       "finance.adjustment_note.prepare": "finance.adjustment_note.post",
       "finance.customer_receipt.prepare": "finance.payment.post",
@@ -49,6 +69,7 @@
     },
     "dynamic_sql": false,
     "executable_prepare_capabilities": [
+      "finance.adjustment_note.prepare",
       "finance.customer_receipt.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
@@ -67,6 +88,7 @@
     "execution_operations": [
       "automation.agent_grant.revoke",
       "compliance.destruction.post",
+      "finance.adjustment_note.post",
       "finance.payment.post",
       "finance.supplier_advance.post",
       "inventory.document.post",
@@ -387,7 +409,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "f1d19b0a76fa606122075d7b3ee444b98506a3d11b15bc4e1a7d815e3998524d",
+  "mapping_sha256": "511c6059166a97923c806c47f60072432571e8980e9c70a98f5dd6525305f2a4",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [
@@ -398,6 +420,8 @@
   "reviewed_count": 3,
   "security": {
     "calculator_commands": [
+      "persist_adjustment_note_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "resolve_adjustment_note_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "persist_sales_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "persist_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
@@ -424,6 +448,7 @@
       "persist_inventory_transfer_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "persist_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
       "resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_adjustment_note_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
       "resolve_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",

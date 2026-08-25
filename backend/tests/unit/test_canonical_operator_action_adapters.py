@@ -1882,6 +1882,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["finance.customer_receipt.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_advance.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_payment.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.adjustment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.destruction.prepare"].available is True
@@ -1900,6 +1901,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "finance.customer_receipt.prepare",
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
+            "finance.adjustment_note.prepare",
             "inventory.adjustment.prepare",
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
@@ -1921,6 +1923,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "finance.customer_receipt.prepare",
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
+            "finance.adjustment_note.prepare",
             "inventory.adjustment.prepare",
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
@@ -1953,6 +1956,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS[
         "inventory.destruction.prepare"
     ].prepare_function == "erp_automation_commands.persist_inventory_destruction_prepare"
+    assert ACTION_ADAPTER_BINDINGS[
+        "finance.adjustment_note.prepare"
+    ].prepare_function == "erp_automation_commands.persist_adjustment_note_prepare"
     assert ACTION_ADAPTER_BINDINGS["automation.command.approve"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.execute"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.status.get"].available is True

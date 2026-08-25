@@ -52,7 +52,6 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_gst_settings_get",
 }
 EXPECTED_UNAVAILABLE_PREPARE_TOOLS = {
-    "erp_adjustment_note_prepare",
     "erp_inventory_transfer_prepare",
 }
 EXPECTED_RESOLUTION_TOOLS = {
@@ -850,10 +849,20 @@ def validate(
             issues.append(f"{tool}: planned resolution read metadata drifted")
     for tool in EXPECTED_PREPARE_TOOLS:
         app_operation = app_by_tool.get(tool, {})
+        expected_approval = (
+            "separate_approver"
+            if tool == "erp_adjustment_note_prepare"
+            else "actor_confirmation"
+        )
+        expected_risk = (
+            "consequential_write"
+            if tool == "erp_adjustment_note_prepare"
+            else "reversible_write"
+        )
         if (
             app_operation.get("mode") != "write"
-            or app_operation.get("risk") != "reversible_write"
-            or app_operation.get("approval") != "actor_confirmation"
+            or app_operation.get("risk") != expected_risk
+            or app_operation.get("approval") != expected_approval
             or app_operation.get("idempotency") != "required"
         ):
             issues.append(f"{tool}: prepare metadata drifted from non-posting preview semantics")

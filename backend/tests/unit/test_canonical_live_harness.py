@@ -531,6 +531,7 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         "sales.return",
         "procurement.purchase_return",
         "finance.supplier_advance",
+        "finance.adjustment_note",
         "inventory.adjustment",
         "inventory.destruction",
     }

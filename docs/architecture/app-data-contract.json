@@ -174,7 +174,7 @@
     {"tool":"erp_customer_receipt_prepare","resource":"payments","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_supplier_payment_prepare","resource":"payments","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_supplier_advance_prepare","resource":"payments","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
-    {"tool":"erp_adjustment_note_prepare","resource":"adjustment_note","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
+    {"tool":"erp_adjustment_note_prepare","resource":"adjustment_note","mode":"write","risk":"consequential_write","idempotency":"required","approval":"separate_approver"},
     {"tool":"erp_inventory_transfer_prepare","resource":"inventory","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_inventory_adjustment_prepare","resource":"inventory","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_inventory_destruction_prepare","resource":"inventory","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},

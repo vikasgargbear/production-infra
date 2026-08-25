@@ -13,6 +13,7 @@ from app.domain.operator_actions.contract import (
 )
 from app.api.routes import canonical_adjustment_note_reads as reads
 from app.infrastructure.operator_actions.registry import ACTION_ADAPTER_BINDINGS
+from app.infrastructure.operator_actions.adjustment_note import calculation_documents
 from mcp_runtime.aasopharma_mcp.operator_actions import (
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
@@ -59,16 +60,17 @@ def validate(value):
     validate_prepare_payload_semantics("finance.adjustment_note.prepare", model)
 
 
-def test_standalone_adjustment_contract_is_typed_but_not_published() -> None:
+def test_standalone_adjustment_contract_is_typed_published_and_durable() -> None:
     action = PREPARE_ACTIONS["erp_adjustment_note_prepare"]
     binding = ACTION_ADAPTER_BINDINGS[action.operation_key]
 
     assert action.permission == "finance.adjustment_note.manage"
     assert action.approval_policy == "separate_approver"
-    assert action.tool_name not in PUBLISHED_PREPARE_TOOL_NAMES
-    assert binding.available is False
+    assert action.tool_name in PUBLISHED_PREPARE_TOOL_NAMES
+    assert binding.available is True
+    assert binding.prepare_function == "erp_automation_commands.persist_adjustment_note_prepare"
     assert binding.execute_function == "erp_commercial_commands.post_adjustment_note"
-    assert "no complete action-specific resolver" in binding.unavailable_reason
+    assert binding.unavailable_reason is None
 
 
 def test_only_exact_customer_credit_and_supplier_debit_pairs_are_accepted() -> None:
@@ -109,7 +111,43 @@ def test_lines_require_unique_original_identity_and_positive_quantity() -> None:
         validate(zero)
 
 
-def test_database_has_exact_poster_but_shared_command_halves_are_absent() -> None:
+@pytest.mark.parametrize(
+    ("treatment", "expected_gst"),
+    (("statutory", "18.00"), ("commercial_only", "0.00")),
+)
+def test_adjustment_calculation_is_typed_and_treatment_exact(
+    treatment: str, expected_gst: str
+) -> None:
+    value = payload(treatment=treatment)
+    line_id = uuid4()
+    value["lines"][0]["line_id"] = str(line_id)
+    resolution = {
+        "supply_type": "inter_state",
+        "zero_rated_payment_mode": "not_applicable",
+        "ruleset_version": "gst-ruleset-test-v1",
+        "lines": [{
+            "line_id": str(line_id),
+            "line_kind": "product",
+            "multiplier": "1.000000",
+            "gst_rate": "18.000000",
+            "cess_rate": "0.000000",
+            "taxability": "taxable",
+            "input": value["lines"][0],
+        }],
+    }
+
+    input_document, output_document = calculation_documents(
+        value, resolution, adjustment_note_id=uuid4()
+    )
+
+    assert input_document["operation"] == "finance.adjustment_note.post"
+    assert input_document["resource_type"] == "adjustment_note"
+    assert input_document["document"]["gst_tax_treatment"] == treatment
+    assert output_document["gst_tax_treatment"] == treatment
+    assert output_document["totals"]["igst_total"] == expected_gst
+
+
+def test_database_has_exact_resolve_prepare_dispatch_and_post_lifecycle() -> None:
     root = Path(__file__).resolve().parents[3]
     sql = (root / "backend/alembic/sql/20260820_0001_canonical_v1.sql").read_text()
     registry = (root / "backend/app/infrastructure/operator_actions/registry.py").read_text()
@@ -123,18 +161,18 @@ def test_database_has_exact_poster_but_shared_command_halves_are_absent() -> Non
     assert "INSERT INTO finance.accounting_events" in sql
     assert "'finance.adjustment_note.post'" in sql
 
-    # Recording the posting primitive in the unavailable binding is deliberate:
-    # a poster cannot substitute for source resolution, immutable prepare, or a
-    # reviewed automation dispatcher.
-    assert '"finance.adjustment_note.prepare": _missing_action_resolver' in registry
+    assert '"finance.adjustment_note.prepare": ActionAdapterBinding' in registry
     execute_function = sql.split(
         'CREATE FUNCTION "erp_automation_commands"."execute_approved_command"', 1
     )[1].split(
         'ALTER FUNCTION "erp_automation_commands"."execute_approved_command"', 1
     )[0]
-    assert "WHEN 'finance.adjustment_note.post'" not in execute_function
-    assert 'resolve_adjustment_note_prepare' not in sql
-    assert 'persist_adjustment_note_prepare' not in sql
+    assert "WHEN 'finance.adjustment_note.post'" in execute_function
+    assert 'resolve_adjustment_note_prepare' in sql
+    assert 'persist_adjustment_note_prepare' in sql
+    assert "sales credit quantity exceeds remaining original invoice quantity" in sql
+    assert "purchase debit quantity exceeds remaining original supplier-invoice quantity" in sql
+    assert "adjustment-note approval transition lost its draft state" in sql
 
 
 def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:

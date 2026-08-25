@@ -64,7 +64,6 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
     published = set(PUBLISHED_PREPARE_TOOL_NAMES) | set(SHARED_ACTION_SCHEMAS)
     assert set(planned_operator_action_tool_names()) & set(live_tools) == published
     assert EXPECTED_PREPARES - set(PUBLISHED_PREPARE_TOOL_NAMES) == {
-        "erp_adjustment_note_prepare",
         "erp_inventory_transfer_prepare",
     }
     assert require_operator_action_publication_ready() is None

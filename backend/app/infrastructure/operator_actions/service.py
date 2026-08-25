@@ -95,6 +95,11 @@ from .inventory_destruction import (
     PERSIST_INVENTORY_DESTRUCTION_SQL,
     RESOLVE_INVENTORY_DESTRUCTION_SQL,
 )
+from .adjustment_note import (
+    PERSIST_ADJUSTMENT_NOTE_SQL,
+    RESOLVE_ADJUSTMENT_NOTE_SQL,
+    calculation_documents as adjustment_note_calculation_documents,
+)
 from .runtime_database import (
     assert_runtime_principal,
     runtime_database_configured,
@@ -534,6 +539,7 @@ class SqlAlchemyOperatorActionService:
             "procurement.supplier_invoice.prepare",
             "sales.return.prepare",
             "procurement.purchase_return.prepare",
+            "finance.adjustment_note.prepare",
         ):
             readiness[operation_key] = (
                 self._bindings[operation_key].available
@@ -659,6 +665,13 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "inventory.transfer.prepare":
             return self._prepare_inventory_transfer(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key == "finance.adjustment_note.prepare":
+            return self._prepare_adjustment_note(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -2231,6 +2244,161 @@ class SqlAlchemyOperatorActionService:
                     required_approvals=(
                         {"policy": policy.approval_policy, "count": 1},
                     ),
+                )
+
+    def _prepare_adjustment_note(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"finance.adjustment_note.prepare:{idempotency_key}"
+        )
+        identifiers = {
+            name: uuid5(NAMESPACE_URL, identity + f":{name}")
+            for name in (
+                "adjustment_note_id", "command_request_id", "artifact_id",
+                "request_id", "journal_id", "event_id", "allocation_id",
+                "residual_open_item_id",
+            )
+        }
+        normalized = {key: _json_value(value) for key, value in payload.items()}
+        normalized.update({key: str(value) for key, value in identifiers.items()})
+        normalized["tax_document_id"] = (
+            str(uuid5(NAMESPACE_URL, identity + ":tax_document_id"))
+            if payload["gst_tax_treatment"] == "statutory"
+            else None
+        )
+        normalized["lines"] = [
+            {
+                **{key: _json_value(value) for key, value in dict(line).items()},
+                "line_id": str(uuid5(NAMESPACE_URL, identity + f":line:{index}")),
+            }
+            for index, line in enumerate(payload["lines"], start=1)
+        ]
+        request_bytes = canonical_json_bytes(normalized)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "membership_id": context.membership_id,
+            "auth_user_id": context.auth_user_id,
+            "user_id": context.user_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
+            **identifiers,
+            "tax_document_id": (
+                UUID(normalized["tax_document_id"])
+                if normalized["tax_document_id"] is not None else None
+            ),
+            "idempotency_key_hash": hashlib.sha256(idempotency_key.encode()).digest(),
+            "note_sequence_key_hash": hashlib.sha256(
+                (idempotency_key + ":adjustment-note-number").encode()
+            ).digest(),
+            "request_json": request_bytes.decode(),
+            "request_bytes": request_bytes,
+            "expires_at": expires_at,
+        }
+        factory = self._calculator_factory or calculator_session_factory()
+        with factory() as session:
+            with session.begin():
+                _lock_prepare_idempotency(session, params, policy.operation_key)
+                rows = _mapping_rows(session.execute(RESOLVE_ADJUSTMENT_NOTE_SQL, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical adjustment-note resolution is unavailable",
+                    )
+                resolution = _json_document(rows[0]["resolution"])
+                try:
+                    calculation_input, calculation_output = adjustment_note_calculation_documents(
+                        normalized, resolution,
+                        adjustment_note_id=identifiers["adjustment_note_id"],
+                    )
+                except (TypeError, ValueError, KeyError) as exc:
+                    raise OperatorActionError(
+                        ActionErrorCode.VALIDATION_FAILED,
+                        "Adjustment-note calculation input is invalid",
+                        metadata={"reason": str(exc)},
+                    ) from exc
+                totals = calculation_output["totals"]
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {key: value for key, value in source.items()
+                     if key in {"resource_type", "id", "role"}}
+                    for source in source_versions if source.get("id") is not None
+                )
+                tax_impact = ({
+                    "gst_tax_treatment": resolution["gst_tax_treatment"],
+                    "gst_taxable_total": totals["gst_taxable_total"],
+                    "cgst_total": totals["cgst_total"],
+                    "sgst_total": totals["sgst_total"],
+                    "igst_total": totals["igst_total"],
+                    "cess_total": totals["cess_total"],
+                },)
+                financial_impact = ({
+                    "currency_code": "INR",
+                    "effect": "receivable_credit" if payload["side"] == "sales" else "payable_debit",
+                    "amount": totals["grand_total"],
+                    "original_open_item_id": resolution["original_open_item_id"],
+                    "original_outstanding": resolution["original_open_item_outstanding"],
+                },)
+                preview = {
+                    "branch_id": resolution["branch_id"],
+                    "calculation_artifact_id": str(identifiers["artifact_id"]),
+                    "calculation_ruleset": [{
+                        "engine_version": calculation_output["engine_version"],
+                        "ruleset_version": calculation_output["ruleset_version"],
+                    }],
+                    "capability_code": policy.operation_key,
+                    "command_request_id": str(identifiers["command_request_id"]),
+                    "destination_branch_id": None,
+                    "financial_impact": list(financial_impact),
+                    "inventory_impact": [],
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": "finance.adjustment_note.post",
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(identifiers["adjustment_note_id"]),
+                    "target_resource_type": "adjustment_note",
+                    "tax_impact": list(tax_impact),
+                }
+                params.update({
+                    "resolved_bytes": canonical_json_bytes(resolution),
+                    "preview_bytes": canonical_json_bytes(preview),
+                    "calculation_input_bytes": canonical_json_bytes(calculation_input),
+                    "calculation_output_bytes": canonical_json_bytes(calculation_output),
+                })
+                persisted = _mapping_rows(session.execute(PERSIST_ADJUSTMENT_NOTE_SQL, params))
+                if len(persisted) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical adjustment-note prepare did not persist exactly once",
+                    )
+                result = _json_document(persisted[0]["command_request_id"])
+                if UUID(str(result["command_request_id"])) != identifiers["command_request_id"]:
+                    raise OperatorActionError(
+                        ActionErrorCode.IDEMPOTENCY_CONFLICT,
+                        "Canonical adjustment-note idempotency replay differs",
+                    )
+                return PreparedCommand(
+                    command_request_id=identifiers["command_request_id"],
+                    command_type="finance.adjustment_note.post",
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=datetime.fromisoformat(str(result["expires_at"]).replace("Z", "+00:00")),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=tuple(preview["calculation_ruleset"]),
+                    inventory_impact=(), financial_impact=financial_impact,
+                    tax_impact=tax_impact,
+                    required_approvals=({"policy": policy.approval_policy, "count": 1},),
                 )
 
     def _prepare_customer_receipt(

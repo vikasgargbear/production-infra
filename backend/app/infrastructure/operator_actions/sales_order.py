@@ -93,6 +93,7 @@ def commercial_calculation_documents(
     resource_id: UUID,
     operation: str,
     resource_type: str,
+    gst_tax_treatment: GstTaxTreatment = GstTaxTreatment.STATUTORY,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     products = []
     charges = []
@@ -155,7 +156,7 @@ def commercial_calculation_documents(
         rounding_policy=RoundingPolicy(request["rounding_policy"]),
         tax_charge_mechanism=TaxChargeMechanism.NORMAL,
         document_discount=_discount(request["document_discount"], "document"),
-        gst_tax_treatment=GstTaxTreatment.STATUTORY,
+        gst_tax_treatment=gst_tax_treatment,
     )
     result = calculate_document(document)
     input_document = {
