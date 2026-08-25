@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Provision and always remove two disposable canonical-staging browser identities.
+"""Provision and always remove disposable canonical-staging browser identities.
 
 This is intentionally a short-lived GitHub Actions boundary.  It never writes
 the generated passwords or the resolved Supabase service-role key to its state
@@ -45,7 +45,9 @@ DEMO_REVIEWER_USER_ID = "d3000000-0000-7000-8000-000000000003"
 DEMO_REVIEWER_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000004"
 DEMO_OPERATOR_USER_ID = "d3000000-0000-7000-8000-000000000023"
 DEMO_OPERATOR_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000024"
-PURPOSE = "canonical-staging-two-user-browser-e2e"
+LOCK_KEY = "canonical-staging-live-browser-identities"
+TWO_USER_PURPOSE = "canonical-staging-two-user-browser-e2e"
+CORE_OPERATOR_PURPOSE = "canonical-staging-core-browser-e2e"
 STATE_VERSION = 1
 
 REQUESTER_CAPABILITIES = (
@@ -95,9 +97,133 @@ IDENTITIES = (
     ("reviewer", DEMO_REVIEWER_USER_ID, DEMO_REVIEWER_MEMBERSHIP_ID),
 )
 
+CORE_OPERATOR_CAPABILITIES = (
+    ("sales.order.prepare", "write", "consequential_write", "actor_confirmation"),
+    ("sales.dispatch.prepare", "write", "consequential_write", "actor_confirmation"),
+    ("sales.invoice.prepare", "write", "consequential_write", "actor_confirmation"),
+    (
+        "procurement.purchase_order.prepare",
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    ),
+    (
+        "procurement.goods_receipt.prepare",
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    ),
+    (
+        "procurement.supplier_invoice.prepare",
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    ),
+    (
+        "finance.customer_receipt.prepare",
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    ),
+    (
+        "finance.supplier_payment.prepare",
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    ),
+    ("sales.return.prepare", "write", "consequential_write", "separate_approver"),
+    ("inventory.adjustment.prepare", "write", "consequential_write", "separate_approver"),
+    ("automation.command.approve", "write", "consequential_write", "actor_confirmation"),
+    ("automation.command.execute", "write", "consequential_write", "actor_confirmation"),
+    ("automation.command.status.get", "read", "read_only", "none"),
+)
+CORE_OPERATOR_PERMISSIONS = (
+    "sales.order.create",
+    "sales.order.manage",
+    "sales.dispatch.create",
+    "sales.dispatch.post",
+    "sales.invoice.create",
+    "sales.invoice.post",
+    "procurement.order.manage",
+    "procurement.receipt.post",
+    "procurement.supplier_invoice.create",
+    "procurement.invoice.post",
+    "finance.customer_receipt.create",
+    "finance.supplier_payment.create",
+    "finance.payment.manage",
+    "finance.payment.allocate",
+    "finance.journal.post",
+    "sales.return.create",
+    "sales.return.post",
+    "inventory.adjustment.create",
+    "inventory.document.post",
+    "inventory.reservation.manage",
+    "catalog.product.manage",
+    "parties.party.manage",
+    "parties.customer.manage",
+    "parties.supplier.manage",
+    "internal.sequence.allocate",
+    "automation.command.approve",
+    "automation.command.execute",
+    "automation.command.view",
+)
+CORE_IDENTITIES = (
+    ("operator", DEMO_OPERATOR_USER_ID, DEMO_OPERATOR_MEMBERSHIP_ID),
+)
+
+PROFILE_TWO_USER = "two-user-approvals"
+PROFILE_CORE_OPERATOR = "core-operator"
+PROFILES = (PROFILE_TWO_USER, PROFILE_CORE_OPERATOR)
+
 
 class EphemeralIdentityError(RuntimeError):
     pass
+
+
+def _profile_purpose(profile: str) -> str:
+    if profile == PROFILE_TWO_USER:
+        return TWO_USER_PURPOSE
+    if profile == PROFILE_CORE_OPERATOR:
+        return CORE_OPERATOR_PURPOSE
+    raise EphemeralIdentityError(f"Unsupported browser identity profile: {profile}")
+
+
+def _profile_identities(profile: str):
+    _profile_purpose(profile)
+    return IDENTITIES if profile == PROFILE_TWO_USER else CORE_IDENTITIES
+
+
+def _permissions_for(role: str, profile: str):
+    if profile == PROFILE_CORE_OPERATOR:
+        if role != "operator":
+            raise EphemeralIdentityError("Core browser profile only supports operator")
+        return CORE_OPERATOR_PERMISSIONS
+    if role == "requester":
+        return REQUESTER_PERMISSIONS
+    if role == "reviewer":
+        return REVIEWER_PERMISSIONS
+    raise EphemeralIdentityError(f"Unsupported two-user browser role: {role}")
+
+
+def _capabilities_for(role: str, profile: str):
+    if profile == PROFILE_CORE_OPERATOR:
+        if role != "operator":
+            raise EphemeralIdentityError("Core browser profile only supports operator")
+        return CORE_OPERATOR_CAPABILITIES
+    if role == "requester":
+        return REQUESTER_CAPABILITIES
+    if role == "reviewer":
+        return REVIEWER_CAPABILITIES
+    raise EphemeralIdentityError(f"Unsupported two-user browser role: {role}")
+
+
+def _profile_from_state(state: dict[str, Any]) -> str:
+    purpose = state.get("purpose")
+    if purpose == TWO_USER_PURPOSE:
+        return PROFILE_TWO_USER
+    if purpose == CORE_OPERATOR_PURPOSE:
+        return PROFILE_CORE_OPERATOR
+    raise EphemeralIdentityError("Unsupported ephemeral browser identity purpose")
 
 
 def _required(name: str) -> str:
@@ -184,6 +310,9 @@ def _clear_browser_environment() -> None:
         return
     with Path(destination).open("a", encoding="utf-8") as handle:
         for key in (
+            "PLAYWRIGHT_LIVE_EMAIL",
+            "PLAYWRIGHT_LIVE_PASSWORD",
+            "PLAYWRIGHT_SALES_CHAIN_FIXTURE",
             "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
             "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
             "PLAYWRIGHT_LIVE_REVIEWER_EMAIL",
@@ -223,6 +352,7 @@ def _admin_request(
 def _create_auth_user(
     service_key: str,
     *,
+    purpose: str,
     role: str,
     run_token: str,
     email: str,
@@ -237,7 +367,7 @@ def _create_auth_user(
             "password": password,
             "email_confirm": True,
             "app_metadata": {
-                "purpose": PURPOSE,
+                "purpose": purpose,
                 "ephemeral_run_token": run_token,
                 "browser_role": role,
                 "organization_id": DEMO_ORG_ID,
@@ -262,7 +392,9 @@ def _create_auth_user(
         ) from exc
 
 
-def _list_run_auth_user_ids(service_key: str, run_token: str) -> set[str]:
+def _list_run_auth_user_ids(
+    service_key: str, run_token: str, purpose: str
+) -> set[str]:
     matches: set[str] = set()
     for page in range(1, 11):
         result = _admin_request(
@@ -275,7 +407,7 @@ def _list_run_auth_user_ids(service_key: str, run_token: str) -> set[str]:
             metadata = user.get("app_metadata", {}) if isinstance(user, dict) else {}
             if (
                 isinstance(metadata, dict)
-                and metadata.get("purpose") == PURPOSE
+                and metadata.get("purpose") == purpose
                 and metadata.get("ephemeral_run_token") == run_token
             ):
                 matches.add(str(UUID(str(user["id"]))))
@@ -338,15 +470,105 @@ def _set_reviewer_context(cursor) -> None:
         cursor.execute("SELECT set_config(%s,%s,true)", (name, value))
 
 
-def _capabilities_for(role: str):
-    return REQUESTER_CAPABILITIES if role == "requester" else REVIEWER_CAPABILITIES
+def _resolve_core_sales_fixture(cursor) -> str:
+    """Resolve the non-secret sales fixture from the reviewed seeded dataset."""
+    cursor.execute(
+        """
+        SELECT branch.id::text,
+               customer.id::text,
+               product.id::text,
+               conversion.id::text,
+               eligible.batch_id::text,
+               shipping.state_code
+          FROM core.organizations AS organization
+          JOIN core.branches AS branch
+            ON branch.org_id=organization.id AND branch.id=%s AND branch.status='active'
+          JOIN parties.customer_accounts AS customer
+            ON customer.org_id=organization.id AND customer.id=%s AND customer.status='active'
+          JOIN LATERAL (
+              SELECT address.state_code,address.address_kind
+                FROM parties.addresses AS address
+               WHERE address.org_id=customer.org_id AND address.party_id=customer.party_id
+                 AND address.is_primary AND address.status='active'
+                 AND address.address_kind IN ('shipping','billing','registered')
+                 AND address.valid_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AND (address.valid_until IS NULL OR address.valid_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+               ORDER BY CASE address.address_kind
+                          WHEN 'shipping' THEN 0 WHEN 'billing' THEN 1 ELSE 2
+                        END,address.id
+               LIMIT 1
+          ) AS shipping ON true
+          JOIN catalog.products AS product
+            ON product.org_id=organization.id AND product.id=%s AND product.status='active'
+          JOIN catalog.uom_conversions AS conversion
+            ON conversion.org_id=product.org_id AND conversion.id=%s
+           AND conversion.product_id=product.id AND conversion.status='active'
+          JOIN LATERAL (
+              SELECT stock.batch_id
+                FROM inventory.stock_balances AS stock
+                JOIN inventory.locations AS location
+                  ON location.org_id=stock.org_id AND location.id=stock.location_id
+                 AND location.branch_id=stock.branch_id AND location.status='active'
+                 AND location.allows_sale AND NOT location.allows_negative_stock
+                JOIN inventory.batches AS batch
+                  ON batch.org_id=stock.org_id AND batch.id=stock.batch_id
+                 AND batch.product_id=stock.product_id
+               WHERE stock.org_id=organization.id AND stock.branch_id=branch.id
+                 AND stock.product_id=product.id AND stock.on_hand_quantity>0
+                 AND inventory.available_quantity(
+                       stock.org_id,stock.location_id,stock.product_id,stock.batch_id
+                     )>=conversion.multiplier
+                 AND batch.lot_kind='manufacturer_batch'
+                 AND batch.status='released' AND batch.released_at IS NOT NULL
+                 AND batch.expires_on IS NOT NULL
+                 AND batch.expires_on>(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+               ORDER BY batch.expires_on,stock.batch_id,stock.location_id
+               LIMIT 1
+          ) AS eligible ON true
+         WHERE organization.id=%s AND organization.status='active'
+           AND conversion.multiplier>0
+         LIMIT 2
+        """,
+        (
+            "d3000000-0000-7000-8000-000000000005",
+            "d3000000-0000-7000-8000-000000000011",
+            "d3000000-0000-7000-8000-000000000015",
+            "d3000000-0000-7000-8000-000000000016",
+            DEMO_ORG_ID,
+        ),
+    )
+    rows = cursor.fetchall()
+    if len(rows) != 1:
+        raise EphemeralIdentityError(
+            "Canonical staging did not resolve exactly one usable sales-chain fixture"
+        )
+    branch_id, customer_id, product_id, conversion_id, batch_id, state_code = rows[0]
+    return json.dumps(
+        {
+            "branch_id": branch_id,
+            "customer_account_id": customer_id,
+            "product_id": product_id,
+            "uom_conversion_id": conversion_id,
+            "expected_fefo_batch_id": batch_id,
+            "billed_quantity": "1.000000",
+            "free_quantity": "0.000000",
+            "unit_rate": "84.0000",
+            "place_of_supply_state_code": state_code,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def _provision_database(
     management_token: str,
     state_path: Path,
     state: dict[str, Any],
-) -> None:
+    profile: str,
+) -> str | None:
+    identities = _profile_identities(profile)
+    membership_ids = [membership_id for _, _, membership_id in identities]
+    user_ids = [user_id for _, user_id, _ in identities]
     auth_by_role = {
         entry["role"]: entry["auth_user_id"] for entry in state["auth_users"]
     }
@@ -354,7 +576,7 @@ def _provision_database(
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                ("canonical-staging-two-user-browser-identities",),
+                (LOCK_KEY,),
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_reviewer_context(cursor)
@@ -368,7 +590,8 @@ def _provision_database(
                    AND membership.org_id=%s
                   JOIN core.organizations AS organization
                     ON organization.id=membership.org_id
-                 WHERE (user_row.id,membership.id) IN ((%s,%s),(%s,%s))
+                 WHERE user_row.id=ANY(CAST(%s AS uuid[]))
+                   AND membership.id=ANY(CAST(%s AS uuid[]))
                    AND user_row.status='active'
                    AND membership.status='active'
                    AND organization.status='active'
@@ -376,20 +599,18 @@ def _provision_database(
                 """,
                 (
                     DEMO_ORG_ID,
-                    DEMO_OPERATOR_USER_ID,
-                    DEMO_OPERATOR_MEMBERSHIP_ID,
-                    DEMO_REVIEWER_USER_ID,
-                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    user_ids,
+                    membership_ids,
                 ),
             )
             binding_rows = cursor.fetchall()
             expected_pairs = {
-                (DEMO_OPERATOR_USER_ID, DEMO_OPERATOR_MEMBERSHIP_ID),
-                (DEMO_REVIEWER_USER_ID, DEMO_REVIEWER_MEMBERSHIP_ID),
+                (user_id, membership_id)
+                for _, user_id, membership_id in identities
             }
             if {(row[0], row[1]) for row in binding_rows} != expected_pairs:
                 raise EphemeralIdentityError(
-                    "Seeded demo operator and reviewer memberships are not both active"
+                    "Seeded browser profile memberships are not exactly active"
                 )
             cursor.execute(
                 """
@@ -419,20 +640,20 @@ def _provision_database(
                 """,
                 (
                     DEMO_ORG_ID,
-                    [DEMO_OPERATOR_MEMBERSHIP_ID, DEMO_REVIEWER_MEMBERSHIP_ID],
+                    membership_ids,
                 ),
             )
             permissions = {row[0]: set(row[1]) for row in cursor.fetchall()}
             required_permissions = {
-                DEMO_OPERATOR_MEMBERSHIP_ID: set(REQUESTER_PERMISSIONS),
-                DEMO_REVIEWER_MEMBERSHIP_ID: set(REVIEWER_PERMISSIONS),
+                membership_id: set(_permissions_for(role, profile))
+                for role, _, membership_id in identities
             }
             if any(
                 not required.issubset(permissions.get(membership_id, set()))
                 for membership_id, required in required_permissions.items()
             ):
                 raise EphemeralIdentityError(
-                    "Seeded memberships lack the required maker/checker role permissions"
+                    "Seeded memberships lack the required browser-profile permissions"
                 )
             state["prior_bindings"] = [
                 {
@@ -455,7 +676,7 @@ def _provision_database(
                 (
                     DEMO_ORG_ID,
                     WEB_CLIENT_ID,
-                    [DEMO_OPERATOR_MEMBERSHIP_ID, DEMO_REVIEWER_MEMBERSHIP_ID],
+                    membership_ids,
                 ),
             )
             state["prior_active_grants"] = [
@@ -482,10 +703,10 @@ def _provision_database(
                     DEMO_REVIEWER_MEMBERSHIP_ID,
                     DEMO_ORG_ID,
                     WEB_CLIENT_ID,
-                    [DEMO_OPERATOR_MEMBERSHIP_ID, DEMO_REVIEWER_MEMBERSHIP_ID],
+                    membership_ids,
                 ),
             )
-            for role, user_id, membership_id in IDENTITIES:
+            for role, user_id, membership_id in identities:
                 cursor.execute(
                     """
                     UPDATE core.users
@@ -522,7 +743,7 @@ def _provision_database(
                         membership_id,
                         WEB_CLIENT_ID,
                         f"Ephemeral staging browser {role}",
-                        f"{PURPOSE}:{state['run_token']}:{role}",
+                        f"{state['purpose']}:{state['run_token']}:{role}",
                         membership_id,
                         DEMO_REVIEWER_MEMBERSHIP_ID,
                         DEMO_REVIEWER_MEMBERSHIP_ID,
@@ -555,7 +776,7 @@ def _provision_database(
                             DEMO_REVIEWER_MEMBERSHIP_ID,
                         )
                         for capability, operation_mode, risk_class, approval_policy
-                        in _capabilities_for(role)
+                        in _capabilities_for(role, profile)
                     ],
                 )
 
@@ -583,39 +804,48 @@ def _provision_database(
                 (
                     DEMO_ORG_ID,
                     WEB_CLIENT_ID,
-                    [DEMO_OPERATOR_MEMBERSHIP_ID, DEMO_REVIEWER_MEMBERSHIP_ID],
+                    membership_ids,
                 ),
             )
             actual = {
                 row[0]: (row[1], row[2], tuple(row[3])) for row in cursor.fetchall()
             }
             expected = {
-                DEMO_OPERATOR_MEMBERSHIP_ID: (
-                    auth_by_role["requester"],
-                    state["temporary_grants"]["requester"],
-                    tuple(sorted(capability[0] for capability in REQUESTER_CAPABILITIES)),
-                ),
-                DEMO_REVIEWER_MEMBERSHIP_ID: (
-                    auth_by_role["reviewer"],
-                    state["temporary_grants"]["reviewer"],
-                    tuple(sorted(capability[0] for capability in REVIEWER_CAPABILITIES)),
-                ),
+                membership_id: (
+                    auth_by_role[role],
+                    state["temporary_grants"][role],
+                    tuple(
+                        sorted(
+                            capability[0]
+                            for capability in _capabilities_for(role, profile)
+                        )
+                    ),
+                )
+                for role, _, membership_id in identities
             }
             if actual != expected:
                 raise EphemeralIdentityError(
                     "Disposable browser identities did not reconcile to exactly one "
                     "correctly bounded active web authority each"
                 )
+            fixture = (
+                _resolve_core_sales_fixture(cursor)
+                if profile == PROFILE_CORE_OPERATOR
+                else None
+            )
     state["database_provisioned"] = True
     _write_state(state_path, state)
+    return fixture
 
 
 def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
+    profile = _profile_from_state(state)
+    identities = _profile_identities(profile)
     with _database_connection(management_token) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                ("canonical-staging-two-user-browser-identities",),
+                (LOCK_KEY,),
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_reviewer_context(cursor)
@@ -642,8 +872,7 @@ def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
                 for entry in state.get("auth_users", [])
             }
             membership_to_role = {
-                DEMO_OPERATOR_MEMBERSHIP_ID: "requester",
-                DEMO_REVIEWER_MEMBERSHIP_ID: "reviewer",
+                membership_id: role for role, _, membership_id in identities
             }
             for binding in state.get("prior_bindings", []):
                 role = membership_to_role[binding["membership_id"]]
@@ -720,12 +949,14 @@ def _cleanup_database(management_token: str, state: dict[str, Any]) -> None:
                     )
 
 
-def provision(state_path: Path) -> None:
+def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
     if state_path.exists():
         raise EphemeralIdentityError(
             "Ephemeral identity state already exists; clean it before provisioning"
         )
     management_token = _required("SUPABASE_ACCESS_TOKEN")
+    purpose = _profile_purpose(profile)
+    identities = _profile_identities(profile)
     _validate_target(management_token)
     service_key = _service_role_key(management_token)
     _mask(service_key)
@@ -733,26 +964,24 @@ def provision(state_path: Path) -> None:
     state: dict[str, Any] = {
         "version": STATE_VERSION,
         "project_ref": EXPECTED_PROJECT_REF,
-        "purpose": PURPOSE,
+        "purpose": purpose,
         "run_token": run_token,
         "auth_users": [],
         "prior_bindings": [],
         "prior_active_grants": [],
-        "temporary_grants": {
-            "requester": str(uuid4()),
-            "reviewer": str(uuid4()),
-        },
+        "temporary_grants": {role: str(uuid4()) for role, _, _ in identities},
         "database_provisioned": False,
     }
     _write_state(state_path, state)
     credentials: dict[str, str] = {}
-    for role, _, _ in IDENTITIES:
+    for role, _, _ in identities:
         email = f"erp-{role}-{run_token}@canonical-staging.aasopharma.invalid"
         password = secrets.token_urlsafe(48)
         _mask(email)
         _mask(password)
         auth_user_id = _create_auth_user(
             service_key,
+            purpose=purpose,
             role=role,
             run_token=run_token,
             email=email,
@@ -765,16 +994,25 @@ def provision(state_path: Path) -> None:
         prefix = f"PLAYWRIGHT_LIVE_{role.upper()}"
         credentials[f"{prefix}_EMAIL"] = email
         credentials[f"{prefix}_PASSWORD"] = password
-    if len({entry["auth_user_id"] for entry in state["auth_users"]}) != 2:
+    if len({entry["auth_user_id"] for entry in state["auth_users"]}) != len(
+        identities
+    ):
         raise EphemeralIdentityError(
-            "Supabase returned the same Auth identity for requester and reviewer"
+            "Supabase returned duplicate disposable Auth identities"
         )
-    _provision_database(management_token, state_path, state)
+    fixture = _provision_database(management_token, state_path, state, profile)
+    if profile == PROFILE_CORE_OPERATOR:
+        credentials["PLAYWRIGHT_LIVE_EMAIL"] = credentials.pop(
+            "PLAYWRIGHT_LIVE_OPERATOR_EMAIL"
+        )
+        credentials["PLAYWRIGHT_LIVE_PASSWORD"] = credentials.pop(
+            "PLAYWRIGHT_LIVE_OPERATOR_PASSWORD"
+        )
+        if not fixture:
+            raise EphemeralIdentityError("Core browser fixture was not resolved")
+        credentials["PLAYWRIGHT_SALES_CHAIN_FIXTURE"] = fixture
     _append_job_environment(credentials)
-    print(
-        "Provisioned two confirmed disposable browser identities with isolated "
-        "maker/checker web authorities"
-    )
+    print(f"Provisioned confirmed disposable {profile} browser identity profile")
 
 
 def cleanup(state_path: Path) -> None:
@@ -797,7 +1035,11 @@ def cleanup(state_path: Path) -> None:
                 entry["auth_user_id"] for entry in state.get("auth_users", [])
             }
             auth_user_ids.update(
-                _list_run_auth_user_ids(service_key, str(state["run_token"]))
+                _list_run_auth_user_ids(
+                    service_key,
+                    str(state["run_token"]),
+                    str(state["purpose"]),
+                )
             )
             for auth_user_id in sorted(auth_user_ids):
                 _delete_auth_user(service_key, auth_user_id)
@@ -830,9 +1072,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("provision", "cleanup"))
     parser.add_argument("--state", required=True, type=Path)
+    parser.add_argument("--profile", choices=PROFILES, default=PROFILE_TWO_USER)
     arguments = parser.parse_args(argv)
     if arguments.action == "provision":
-        provision(arguments.state)
+        provision(arguments.state, arguments.profile)
     else:
         cleanup(arguments.state)
     return 0

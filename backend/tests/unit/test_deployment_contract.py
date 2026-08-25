@@ -30,6 +30,10 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev" in live_job
     assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" in live_job
     assert "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" in live_job
+    assert "environment: canonical-staging" in live_job
+    assert "environment: live-erp-test" not in live_job
+    assert "Canonical live API reconciliation is securely blocked" in live_job
+    assert "PHARMA_CANONICAL_LIVE_TEST_ORG_ID: d3000000-0000-7000-8000-000000000001" in live_job
 
     browser_job = production.split("\n  live-browser-erp:", 1)[1].split(
         "\n  live-browser-erp-two-user-approvals:", 1
@@ -38,10 +42,28 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com" in browser_job
     assert "PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" in browser_job
     assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
+    assert "environment: canonical-staging" in browser_job
+    assert "environment: live-erp-test" not in browser_job
+    assert "canonical-staging-live-browser-identities" in browser_job
+    assert "provision --profile core-operator" in browser_job
+    assert "Always restore seeded identity and remove disposable Auth user" in browser_job
+    for removed_secret in (
+        "PLAYWRIGHT_LIVE_EMAIL",
+        "PLAYWRIGHT_LIVE_PASSWORD",
+        "PLAYWRIGHT_SALES_CHAIN_FIXTURE",
+    ):
+        assert f"secrets.{removed_secret}" not in browser_job
+    browser_environment = browser_job.split("    steps:", 1)[0]
+    for admin_secret in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD"):
+        reference = f"{admin_secret}: ${{{{ secrets.{admin_secret} }}}}"
+        assert reference not in browser_environment
+        assert browser_job.count(reference) == 2
 
     two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1]
     assert "verify_render_pilot_sha.py" in two_user_job
     assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
+    assert browser_job.count("group: canonical-staging-live-browser-identities") == 1
+    assert two_user_job.count("group: canonical-staging-live-browser-identities") == 1
 
 
 def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
@@ -71,9 +93,9 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
         assert reference not in job_environment
         assert two_user_job.count(reference) == 2
     assert "SUPABASE_SERVICE_ROLE_KEY" not in two_user_job
-    assert "canonical-staging-two-user-browser-identities" in two_user_job
+    assert "canonical-staging-live-browser-identities" in two_user_job
     assert "provision_ephemeral_browser_identities.py" in two_user_job
-    assert 'provision --state "$RUNNER_TEMP/canonical-browser-identities.json"' in two_user_job
+    assert "provision --profile two-user-approvals" in two_user_job
     assert 'cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"' in two_user_job
     cleanup_step = two_user_job.split(
         "Always restore seeded identities and remove disposable Auth users", 1

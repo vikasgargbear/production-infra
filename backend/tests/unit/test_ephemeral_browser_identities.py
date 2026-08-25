@@ -72,6 +72,7 @@ def test_auth_creation_requires_confirmed_identity(monkeypatch):
     with pytest.raises(identities.EphemeralIdentityError, match="not confirmed"):
         identities._create_auth_user(
             "service-key",
+            purpose=identities.TWO_USER_PURPOSE,
             role="requester",
             run_token="run-token",
             email="masked@example.invalid",
@@ -106,9 +107,11 @@ def test_provision_exports_credentials_only_to_masked_same_job_environment(
         identities, "_create_auth_user", lambda *args, **kwargs: next(created)
     )
 
-    def provision_database(token, path, state):
+    def provision_database(token, path, state, profile):
+        assert profile == identities.PROFILE_TWO_USER
         state["database_provisioned"] = True
         identities._write_state(path, state)
+        return None
 
     monkeypatch.setattr(identities, "_provision_database", provision_database)
 
@@ -180,7 +183,7 @@ def test_partial_second_user_failure_remains_fully_cleanable(
     monkeypatch.setattr(
         identities,
         "_list_run_auth_user_ids",
-        lambda key, run_token: {first_user_id},
+        lambda key, run_token, purpose: {first_user_id},
     )
     monkeypatch.setattr(
         identities, "_delete_auth_user", lambda key, user_id: deleted.append(user_id)
@@ -207,7 +210,7 @@ def test_auth_users_are_deleted_even_when_database_cleanup_fails(
         {
             "version": identities.STATE_VERSION,
             "project_ref": identities.EXPECTED_PROJECT_REF,
-            "purpose": identities.PURPOSE,
+            "purpose": identities.TWO_USER_PURPOSE,
             "run_token": run_token,
             "auth_users": [{"role": "requester", "auth_user_id": auth_user_id}],
             "prior_bindings": [],
@@ -269,3 +272,116 @@ def test_browser_grants_have_exact_minimum_maker_checker_capabilities():
     for _, user_id, membership_id in identities.IDENTITIES:
         UUID(user_id)
         UUID(membership_id)
+
+
+def test_core_operator_profile_exports_one_ephemeral_login_and_derived_fixture(
+    monkeypatch, tmp_path
+):
+    state_path, github_env = _environment(monkeypatch, tmp_path)
+    auth_user_id = "d4000000-0000-7000-8000-000000000001"
+    fixture = json.dumps({"branch_id": "d3000000-0000-7000-8000-000000000005"})
+    monkeypatch.setattr(
+        identities, "_create_auth_user", lambda *args, **kwargs: auth_user_id
+    )
+
+    def provision_database(token, path, state, profile):
+        assert profile == identities.PROFILE_CORE_OPERATOR
+        assert list(state["temporary_grants"]) == ["operator"]
+        state["database_provisioned"] = True
+        identities._write_state(path, state)
+        return fixture
+
+    monkeypatch.setattr(identities, "_provision_database", provision_database)
+
+    identities.provision(state_path, identities.PROFILE_CORE_OPERATOR)
+
+    state = _assert_state_has_no_credentials(state_path)
+    assert state["purpose"] == identities.CORE_OPERATOR_PURPOSE
+    assert state["auth_users"] == [
+        {"role": "operator", "auth_user_id": auth_user_id}
+    ]
+    exported = github_env.read_text(encoding="utf-8")
+    assert "PLAYWRIGHT_LIVE_EMAIL=" in exported
+    assert "PLAYWRIGHT_LIVE_PASSWORD=" in exported
+    assert f"PLAYWRIGHT_SALES_CHAIN_FIXTURE={fixture}\n" in exported
+    assert "PLAYWRIGHT_LIVE_OPERATOR_" not in exported
+    assert "PLAYWRIGHT_LIVE_REQUESTER_" not in exported
+    assert "PLAYWRIGHT_LIVE_REVIEWER_" not in exported
+
+
+def test_core_operator_capabilities_cover_unified_writes_and_keep_separate_approval():
+    capabilities = {
+        capability: approval
+        for capability, _, _, approval in identities.CORE_OPERATOR_CAPABILITIES
+    }
+
+    assert set(capabilities) == {
+        "sales.order.prepare",
+        "sales.dispatch.prepare",
+        "sales.invoice.prepare",
+        "procurement.purchase_order.prepare",
+        "procurement.goods_receipt.prepare",
+        "procurement.supplier_invoice.prepare",
+        "finance.customer_receipt.prepare",
+        "finance.supplier_payment.prepare",
+        "sales.return.prepare",
+        "inventory.adjustment.prepare",
+        "automation.command.approve",
+        "automation.command.execute",
+        "automation.command.status.get",
+    }
+    for capability in (
+        "sales.return.prepare",
+        "inventory.adjustment.prepare",
+    ):
+        assert capabilities[capability] == "separate_approver"
+    assert capabilities["automation.command.approve"] == "actor_confirmation"
+    assert len(identities.CORE_IDENTITIES) == 1
+    assert identities.CORE_IDENTITIES[0][2] == identities.DEMO_OPERATOR_MEMBERSHIP_ID
+    assert len(identities.CORE_OPERATOR_PERMISSIONS) == len(
+        set(identities.CORE_OPERATOR_PERMISSIONS)
+    )
+    assert {
+        "automation.command.approve",
+        "automation.command.execute",
+        "automation.command.view",
+        "catalog.product.manage",
+        "parties.party.manage",
+        "parties.customer.manage",
+        "parties.supplier.manage",
+        "inventory.document.post",
+        "inventory.reservation.manage",
+        "finance.journal.post",
+        "finance.payment.allocate",
+    }.issubset(identities.CORE_OPERATOR_PERMISSIONS)
+
+
+def test_core_fixture_is_resolved_from_available_live_fefo_stock():
+    class Cursor:
+        sql = ""
+        parameters = ()
+
+        def execute(self, sql, parameters):
+            self.sql = sql
+            self.parameters = parameters
+
+        def fetchall(self):
+            return [(
+                "d3000000-0000-7000-8000-000000000005",
+                "d3000000-0000-7000-8000-000000000011",
+                "d3000000-0000-7000-8000-000000000015",
+                "d3000000-0000-7000-8000-000000000016",
+                "d5000000-0000-7000-8000-000000000001",
+                "27",
+            )]
+
+    cursor = Cursor()
+    fixture = json.loads(identities._resolve_core_sales_fixture(cursor))
+
+    assert "inventory.available_quantity" in cursor.sql
+    assert "location.allows_sale" in cursor.sql
+    assert "NOT location.allows_negative_stock" in cursor.sql
+    assert "ORDER BY batch.expires_on" in cursor.sql
+    assert fixture["expected_fefo_batch_id"] == "d5000000-0000-7000-8000-000000000001"
+    assert fixture["billed_quantity"] == "1.000000"
+    assert fixture["unit_rate"] == "84.0000"
