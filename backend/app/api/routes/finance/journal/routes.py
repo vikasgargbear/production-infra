@@ -3,15 +3,12 @@ Journal Entry management endpoints
 REFACTORED: Uses JournalService for database operations
 """
 from typing import Optional, List
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 import logging
-from ....services.document_number_service import (
-    DocumentNumberService,
-    document_number_reservation_openapi,
-)
+from ....services.document_number_service import DocumentNumberService
 from ....services.finance.journal.service import JournalService
 from ....schemas.finance.mutations import JournalEntryCreateResponse
 
@@ -52,28 +49,6 @@ class JournalEntryCreate(BaseModel):
 class JournalReversalCreate(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)
     reversal_date: date = Field(default_factory=date.today)
-
-@router.post(
-    "/generate-journal-number",
-    operation_id="finance_reserve_journal_number_v1",
-    summary="Reserve a journal entry number",
-    openapi_extra=document_number_reservation_openapi("finance.create"),
-)
-@with_tenant_context
-async def generate_journal_number(
-    _: dict = Depends(PermissionChecker("finance", "create")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Reserve and commit the next organization-scoped journal entry number."""
-    try:
-        journal_number = DocumentNumberService.reserve_number(
-            db, "journal_entry", str(context.org_id)
-        )
-        return {"journal_number": journal_number, "generated_at": datetime.now(timezone.utc).isoformat()}
-    except Exception as e:
-        logger.error(f"Error generating journal number: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to reserve journal number")
 
 @router.get("/chart-of-accounts")
 @with_tenant_context

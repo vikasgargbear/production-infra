@@ -26,11 +26,12 @@ describe('product mutation contract', () => {
     })).toThrow();
   });
 
-  it('applies only documented server-aligned defaults', () => {
-    expect(productCreateSchema.parse({ product_name: 'Draft product' })).toEqual({
+  it('requires an explicit product classification', () => {
+    expect(() => productCreateSchema.parse({ product_name: 'Draft product' })).toThrow();
+    expect(productCreateSchema.parse({
       product_name: 'Draft product',
       product_kind: 'medicine',
-    });
+    })).toEqual({ product_name: 'Draft product', product_kind: 'medicine' });
   });
 
   it('rejects legacy aliases instead of dropping them', () => {

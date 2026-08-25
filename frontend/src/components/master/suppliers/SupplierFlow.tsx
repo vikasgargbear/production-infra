@@ -7,7 +7,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-    Building2, Phone, Mail, MapPin, FileText,
+    Building2, Phone, MapPin, FileText,
     AlertTriangle, ArrowLeft, Loader2, Save,
     Banknote
 } from 'lucide-react';
@@ -52,22 +52,10 @@ interface SupplierFormData {
     pan_number: string;
     // Terms
     payment_terms: string;
-    credit_days: number;
+    credit_days: number | '';
 }
 
 // ==================== CONSTANTS ====================
-
-const INDIAN_STATES = [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
-    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
-];
 
 const SUPPLIER_TYPES = [
     { value: 'distributor', label: 'Distributor' },
@@ -126,8 +114,8 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         gst_number: '',
         pan_number: '',
         // Terms
-        payment_terms: 'NET30',
-        credit_days: 30,
+        payment_terms: '',
+        credit_days: '',
         ...initialData
     });
 
@@ -160,7 +148,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         setFormData({
             ...formData,
             payment_terms: value,
-            credit_days: term?.days ?? 30
+            credit_days: term?.days ?? ''
         });
     };
 
@@ -171,6 +159,9 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
 
         // Validation
         const validationErrors = validateSupplierMandatoryFields(formData);
+        if (formData.credit_days === '') {
+            validationErrors.push('Payment terms are required');
+        }
 
         if (validationErrors.length > 0) {
             setErrors(validationErrors);
@@ -466,6 +457,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     onChange={(e) => handlePaymentTermsChange(e.target.value)}
                                     className={inputClass}
                                 >
+                                    <option value="" disabled>Select payment terms</option>
                                     {PAYMENT_TERMS.map(t => (
                                         <option key={t.value} value={t.value}>{t.label}</option>
                                     ))}

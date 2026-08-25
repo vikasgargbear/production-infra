@@ -174,7 +174,7 @@ class CanonicalSupplierCreate(BaseModel):
     pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
     gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
     pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
-    payment_days: int = Field(default=30, ge=0, le=180)
+    payment_days: int = Field(ge=0, le=180)
 
     @field_validator("gst_number")
     @classmethod

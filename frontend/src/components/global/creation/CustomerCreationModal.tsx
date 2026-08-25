@@ -20,11 +20,11 @@ const prepareCustomerForAPI = (customerData: CustomerFormData & { org_id?: strin
     customer_name: customerData.customer_name,
     primary_phone: customerData.primary_phone,
     primary_email: customerData.primary_email || undefined,
-    customer_type: customerData.customer_type || 'retail',
+    customer_type: customerData.customer_type,
     gst_number: customerData.gst_number || null,
     pan_number: customerData.pan_number || null,
-    credit_limit: parseFloat(String(customerData.credit_limit || 0)),
-    credit_days: parseInt(String(customerData.credit_days || 0)),
+    credit_limit: String(customerData.credit_limit),
+    credit_days: Number(customerData.credit_days),
     address_line1: customerData.address?.address_line1 || '',
     address_line2: customerData.address?.address_line2 || '',
     city: customerData.address?.city || '',
@@ -63,7 +63,7 @@ interface CustomerCreationModalProps {
 
 const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onClose, onCustomerCreated }) => {
     // Feature flags for customer mode configuration
-    const { customerMode, isB2BOnly, isB2COnly, features } = useFeatureFlags();
+    const { customerMode, isB2BOnly, isB2COnly } = useFeatureFlags();
 
     // Determine initial customer type based on mode
     const [isBusinessCustomer, setIsBusinessCustomer] = useState<boolean>(true);
@@ -72,12 +72,12 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
         primary_phone: '',
         primary_email: '',
         whatsapp_number: '',
-        customer_type: 'pharmacy',
+        customer_type: 'organization',
         gst_number: '',
         pan_number: '',
         drug_license_number: '',
         drug_license_validity: '',
-        credit_limit: 5000,
+        credit_limit: 0,
         credit_days: 0,
         credit_rating: 'B',
         address: {
@@ -98,14 +98,14 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
             setIsBusinessCustomer(true);
             setNewCustomer(prev => ({
                 ...prev,
-                customer_type: features.default_customer_type || 'pharmacy'
+                customer_type: 'organization'
             }));
         } else if (isB2COnly) {
             setIsBusinessCustomer(false);
             setNewCustomer(prev => ({ ...prev, customer_type: 'individual' }));
         }
         // For hybrid mode, keep the current selection
-    }, [customerMode, isB2BOnly, isB2COnly, features.default_customer_type]);
+    }, [customerMode, isB2BOnly, isB2COnly]);
 
     const saveCustomer = async (): Promise<void> => {
         const validationErrors: string[] = [];
@@ -153,12 +153,12 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
                     primary_phone: '',
                     primary_email: '',
                     whatsapp_number: '',
-                    customer_type: isBusinessCustomer ? 'pharmacy' : 'individual',
+                    customer_type: isBusinessCustomer ? 'organization' : 'individual',
                     gst_number: '',
                     pan_number: '',
                     drug_license_number: '',
                     drug_license_validity: '',
-                    credit_limit: 5000,
+                    credit_limit: 0,
                     credit_days: 0,
                     credit_rating: 'B',
                     address: {
@@ -241,7 +241,7 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
                                 type="button"
                                 onClick={() => {
                                     setIsBusinessCustomer(true);
-                                    setNewCustomer({ ...newCustomer, customer_type: features.default_customer_type || 'pharmacy' });
+                                    setNewCustomer({ ...newCustomer, customer_type: 'organization' });
                                 }}
                                 className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${isBusinessCustomer
                                     ? 'bg-white text-blue-600 shadow-sm'
@@ -411,22 +411,10 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
                                     />
                                 </div>
 
-                                {isBusinessCustomer && (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Business Type *</label>
-                                        <select
-                                            value={newCustomer.customer_type}
-                                            onChange={(e) => setNewCustomer({ ...newCustomer, customer_type: e.target.value })}
-                                            className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                        >
-                                            <option value="pharmacy">Pharmacy</option>
-                                            <option value="hospital">Hospital</option>
-                                            <option value="clinic">Clinic</option>
-                                            <option value="institution">Institution</option>
-                                            <option value="doctor">Doctor</option>
-                                        </select>
-                                    </div>
-                                )}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Account Type</label>
+                                    <input value={isBusinessCustomer ? 'Organization' : 'Individual'} readOnly className="w-full bg-gray-100 px-3 py-3 border border-gray-200 rounded-xl" />
+                                </div>
                             </div>
                         </div>
                     </div>

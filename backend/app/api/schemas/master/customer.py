@@ -2,7 +2,7 @@
 Customer schemas for enterprise pharma system
 Handles GST-compliant customer management with credit limits
 """
-from typing import Optional, List, Annotated
+from typing import Optional, List, Annotated, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, EmailStr
 from datetime import datetime, date
 from decimal import Decimal
@@ -171,7 +171,7 @@ class CanonicalCustomerCreate(BaseModel):
 
     customer_name: str = Field(min_length=1, max_length=200)
     customer_code: Optional[str] = Field(default=None, min_length=1, max_length=50)
-    customer_type: str = Field(default="retail", min_length=1, max_length=50)
+    customer_type: Literal["individual", "organization"]
     primary_phone: str = Field(pattern=r"^\d{10}$")
     primary_email: Optional[EmailStr] = None
     contact_person_name: Optional[str] = Field(default=None, max_length=100)
@@ -182,8 +182,8 @@ class CanonicalCustomerCreate(BaseModel):
     pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
     gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
     pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
-    credit_limit: Decimal = Field(default=Decimal("0.00"), ge=0)
-    credit_days: int = Field(default=0, ge=0, le=365)
+    credit_limit: Decimal = Field(ge=0)
+    credit_days: int = Field(ge=0, le=365)
 
     @field_validator("gst_number")
     @classmethod

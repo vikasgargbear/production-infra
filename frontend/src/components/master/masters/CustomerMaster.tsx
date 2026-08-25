@@ -76,19 +76,19 @@ const CUSTOMER_TYPES = [
 // ============================================================================
 
 const getCreditStatus = (customer: Customer) => {
-  if (!customer.credit_limit) return null;
+  if (customer.credit_limit == null) {
+    return <span className="text-xs text-gray-500">Credit limit unavailable</span>;
+  }
+  if (customer.credit_limit === 0) {
+    return <span className="text-xs text-gray-500">No credit limit</span>;
+  }
   if (customer.outstanding_available === false || customer.current_outstanding == null) {
     return <span className="text-xs text-gray-500">Balance unavailable</span>;
   }
-  const utilization = (customer.current_outstanding || 0) / customer.credit_limit * 100;
-
-  if (utilization >= 100) {
+  if (customer.current_outstanding > customer.credit_limit) {
     return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">Over Limit</span>;
-  } else if (utilization >= 80) {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700">Near Limit</span>;
-  } else {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Good</span>;
   }
+  return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Within Limit</span>;
 };
 
 // ============================================================================
@@ -156,16 +156,18 @@ const getColumns = (): Column<Customer>[] => [
       align: 'right' as const,
       render: (_, customer) => {
         if (!customer) return <div className="text-gray-400">No Credit</div>;
-        const creditLimit = customer.credit_limit || 0;
-        const creditDays = customer.credit_days || 0;
+        const creditLimit = customer.credit_limit;
+        const creditDays = customer.credit_days;
 
-        if (!creditLimit) return <div className="text-gray-400">No Credit</div>;
+        if (creditLimit == null || creditDays == null) {
+          return <div className="text-gray-500">Unavailable</div>;
+        }
 
         return (
           <div>
             <div className="font-medium">₹{creditLimit.toLocaleString()}</div>
             <div className="text-sm text-gray-500">{creditDays} days</div>
-            {getCreditStatus({ ...customer, credit_limit: creditLimit })}
+            {getCreditStatus(customer)}
           </div>
         );
       }

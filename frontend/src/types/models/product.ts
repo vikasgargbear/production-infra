@@ -137,7 +137,7 @@ export const productDraftBaseSchema = z.object({
   product_code: z.string().trim().min(1).max(64)
     .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/).optional(),
   generic_name: z.string().trim().max(255).optional(),
-  product_kind: productKindSchema.default('medicine'),
+  product_kind: productKindSchema,
 }).strict();
 
 export const productCreateSchema = productDraftBaseSchema;

@@ -236,7 +236,7 @@ class CanonicalProductDraftCreate(BaseModel):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
     )
     generic_name: Optional[str] = Field(default=None, max_length=255)
-    product_kind: str = Field(default="medicine", pattern=r"^(medicine|medical_device|consumable)$")
+    product_kind: str = Field(pattern=r"^(medicine|medical_device|consumable)$")
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -248,8 +248,8 @@ class CanonicalCustomerAddressWrite(BaseModel):
     city: str = Field(min_length=1, max_length=128)
     state: str = Field(min_length=1, max_length=128)
     pincode: str = Field(pattern=r"^[0-9]{6}$")
-    address_type: Literal["billing", "shipping", "other"] = "shipping"
-    is_default: bool = False
+    address_type: Literal["billing", "shipping", "other"]
+    is_default: bool
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

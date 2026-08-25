@@ -85,7 +85,6 @@ export const API_CONFIG: APIConfig = {
       UPDATE: (id) => `invoices/${id}/`,
       DELETE: (id) => `invoices/${id}/`,
       DETAILS: (id) => `invoices/${id}`,
-      GENERATE_NUMBER: 'invoices/generate-number/',
       DRAFTS: 'invoices/drafts/',
       PDF: (id) => `invoices/${id}/pdf/`,
       WHATSAPP: (id) => `invoices/${id}/whatsapp/`,

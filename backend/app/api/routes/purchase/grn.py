@@ -16,34 +16,10 @@ from uuid import UUID
 from ....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from ....core.auth.org_context import OrgContext, get_org_context
 from ....core.security.permissions import PermissionChecker
-from ...services.document_number_service import (
-    DocumentNumberService,
-    document_number_reservation_openapi,
-)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["goods-receipt-notes"])
-
-@router.post(
-    "/generate-number",
-    operation_id="procurement_reserve_grn_number_v1",
-    summary="Reserve a goods receipt number",
-    openapi_extra=document_number_reservation_openapi("inventory.create"),
-)
-@with_tenant_context
-def generate_grn_number(
-    _: dict = Depends(PermissionChecker("inventory", "create")),  # RBAC
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Reserve and commit the next organization-scoped GRN number."""
-    try:
-        new_number = DocumentNumberService.reserve_number(db, "grn", str(context.org_id))
-        return {"grn_number": new_number}
-    except Exception as e:
-        logger.error(f"Failed to generate GRN number: {e}")
-        raise HTTPException(status_code=500, detail="Failed to reserve GRN number")
 
 @router.post("")
 @with_tenant_context

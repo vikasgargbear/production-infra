@@ -34,7 +34,7 @@ export interface CanonicalSupplierCreateInput {
   pincode?: string;
   gst_number?: string;
   pan_number?: string;
-  payment_days?: number;
+  payment_days: number;
 }
 
 const firstDefined = (...values: unknown[]): unknown => values.find(value => value !== undefined && value !== null);
@@ -50,8 +50,14 @@ const canonicalPhone = (value: unknown): string | undefined => {
 
 /** Strip legacy UI aliases and fields owned by separate reviewed workflows. */
 export const toCanonicalSupplierCreate = (input: Record<string, any>): CanonicalSupplierCreateInput => {
-  const rawPaymentDays = firstDefined(input.payment_days, input.credit_days, input.payment_terms, 30);
+  const rawPaymentDays = firstDefined(input.payment_days, input.credit_days, input.payment_terms);
+  if (rawPaymentDays === undefined || rawPaymentDays === '') {
+    throw new Error('Supplier payment days must be selected explicitly.');
+  }
   const parsedPaymentDays = Number.parseInt(String(rawPaymentDays), 10);
+  if (!Number.isInteger(parsedPaymentDays) || parsedPaymentDays < 0 || parsedPaymentDays > 180) {
+    throw new Error('Supplier payment days must be an integer from 0 to 180.');
+  }
   return cleanData({
     supplier_name: firstDefined(input.supplier_name, input.name),
     supplier_code: firstDefined(input.supplier_code, input.code),
@@ -65,7 +71,7 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
     pincode: input.pincode,
     gst_number: optionalText(input.gst_number)?.toUpperCase(),
     pan_number: optionalText(input.pan_number)?.toUpperCase(),
-    payment_days: Number.isFinite(parsedPaymentDays) ? parsedPaymentDays : 30,
+    payment_days: parsedPaymentDays,
   }) as CanonicalSupplierCreateInput;
 };
 

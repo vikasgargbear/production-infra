@@ -76,7 +76,11 @@ const SUPPLIER_TYPES = [
 // ============================================================================
 
 const getPaymentTermsBadge = (supplier: Supplier) => {
-  const days = supplier.payment_days || 0;
+  const days = supplier.payment_days;
+
+  if (days == null) {
+    return <span className="text-xs text-gray-500">Unavailable</span>;
+  }
 
   if (days === 0) {
     return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">COD</span>;
@@ -149,12 +153,12 @@ const getColumns = (): Column<Supplier>[] => [
       header: 'Payable',
       align: 'right' as const,
       render: (_, supplier) => {
-        if (supplier?.outstanding_available === false) {
+        const rawAmount = supplier?.current_outstanding ?? supplier?.outstanding;
+        if (supplier?.outstanding_available !== true || rawAmount == null) {
           return <span className="text-gray-500">Unavailable</span>;
         }
-        const amount = parseFloat(String(supplier?.current_outstanding || supplier?.outstanding || 0));
-        if (!amount) return <span className="text-gray-400">-</span>;
-        return <span className="font-medium text-red-600">{'\u20B9'}{amount.toLocaleString()}</span>;
+        const amount = parseFloat(String(rawAmount));
+        return <span className={`font-medium ${amount > 0 ? 'text-red-600' : 'text-green-600'}`}>{'\u20B9'}{amount.toLocaleString()}</span>;
       }
     },
     {

@@ -31,7 +31,7 @@ interface CustomerFormData {
     primary_email: string;
     whatsapp_number: string;
     secondary_phone: string;
-    customer_type: string;
+    customer_type: 'individual' | 'organization';
     // Contact Person
     contact_person_name: string;
     contact_person_phone: string;
@@ -40,7 +40,7 @@ interface CustomerFormData {
     pan_number: string;
     // Credit
     credit_limit: string;
-    credit_days: number;
+    credit_days: number | '';
     // Address
     address: {
         address_line1: string;
@@ -66,16 +66,6 @@ const INDIAN_STATES = [
     'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
 ];
 
-const BUSINESS_TYPES = [
-    { value: 'pharmacy', label: 'Retail Pharmacy' },
-    { value: 'wholesale', label: 'Wholesale' },
-    { value: 'hospital', label: 'Hospital' },
-    { value: 'clinic', label: 'Clinic' },
-    { value: 'institution', label: 'Institution' },
-    { value: 'doctor', label: 'Doctor' },
-    { value: 'distributor', label: 'Distributor' }
-];
-
 // ==================== COMPONENT ====================
 
 const CustomerFlow: React.FC<CustomerFlowProps> = ({
@@ -89,9 +79,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
 
-    const getInitialCustomerType = () => {
+    const getInitialCustomerType = (): CustomerFormData['customer_type'] => {
         if (isB2COnly) return 'individual';
-        return features.default_customer_type || 'pharmacy';
+        return 'organization';
     };
 
     const [isBusinessCustomer, setIsBusinessCustomer] = useState(!isB2COnly);
@@ -109,8 +99,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         gst_number: '',
         pan_number: '',
         // Credit
-        credit_limit: '5000.00',
-        credit_days: 0,
+        credit_limit: '',
+        credit_days: '',
         // Address
         address: {
             address_line1: '',
@@ -127,7 +117,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             setIsBusinessCustomer(true);
             setFormData(prev => ({
                 ...prev,
-                customer_type: features.default_customer_type || 'pharmacy'
+                customer_type: 'organization'
             }));
         } else if (isB2COnly) {
             setIsBusinessCustomer(false);
@@ -186,6 +176,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 newErrors.push('Invalid GST number format');
             }
         }
+        if (formData.credit_limit === '') newErrors.push('Credit limit is required; enter 0 for no credit');
+        if (formData.credit_days === '') newErrors.push('Credit days are required; enter 0 for immediate payment');
 
         setErrors(newErrors);
         return newErrors.length === 0;
@@ -215,8 +207,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 gst_number: formData.gst_number || null,
                 pan_number: formData.pan_number || null,
                 // Credit
-                credit_limit: formData.credit_limit || '0.00',
-                credit_days: parseInt(String(formData.credit_days || 0)),
+                credit_limit: formData.credit_limit,
+                credit_days: formData.credit_days,
                 // Address
                 address_line1: formData.address.address_line1,
                 address_line2: formData.address.address_line2 || '',
@@ -316,7 +308,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     type="button"
                                     onClick={() => {
                                         setIsBusinessCustomer(true);
-                                        updateField('customer_type', features.default_customer_type || 'pharmacy');
+                                        updateField('customer_type', 'organization');
                                     }}
                                     className={`px-4 py-1.5 text-sm rounded-md transition-all ${isBusinessCustomer ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600'
                                         }`}
@@ -366,20 +358,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     </div>
                                 </div>
 
-                                {isBusinessCustomer && (
-                                    <div>
-                                        <label className={labelClass}>Business Type *</label>
-                                        <select
-                                            value={formData.customer_type}
-                                            onChange={(e) => updateField('customer_type', e.target.value)}
-                                            className={inputNoIconClass}
-                                        >
-                                            {BUSINESS_TYPES.map(type => (
-                                                <option key={type.value} value={type.value}>{type.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
+                                <div>
+                                    <label className={labelClass}>Account Type</label>
+                                    <input value={isBusinessCustomer ? 'Organization' : 'Individual'} readOnly className={`${inputNoIconClass} bg-gray-100`} />
+                                </div>
 
                                 <div>
                                     <label className={labelClass}>Phone *</label>
@@ -625,7 +607,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         <input
                                             type="number"
                                             value={formData.credit_days}
-                                            onChange={(e) => updateField('credit_days', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => updateField('credit_days', e.target.value === '' ? '' : Number(e.target.value))}
                                             className={inputNoIconClass}
                                             min={0}
                                             max={365}

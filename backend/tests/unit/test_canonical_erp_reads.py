@@ -593,7 +593,7 @@ def test_party_creation_activates_party_before_active_account_commit() -> None:
 def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> None:
     customer = canonical_erp_reads.CanonicalCustomerCreate.model_validate({
         "customer_name": "E2E Browser Customer",
-        "customer_type": "pharmacy",
+        "customer_type": "organization",
         "primary_phone": "9876543210",
         "primary_email": "buyer@example.com",
         "address_line1": "Test Lane 1",
@@ -607,7 +607,7 @@ def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> No
     assert customer.primary_phone == "9876543210"
     assert customer.model_dump(exclude_none=True) == {
         "customer_name": "E2E Browser Customer",
-        "customer_type": "pharmacy",
+        "customer_type": "organization",
         "primary_phone": "9876543210",
         "primary_email": "buyer@example.com",
         "address_line1": "Test Lane 1",
@@ -623,8 +623,10 @@ def test_reviewed_party_create_contracts_reject_unowned_and_partial_facts() -> N
     try:
         canonical_erp_reads.CanonicalCustomerCreate.model_validate({
             "customer_name": "Bad Boundary",
-            "customer_type": "retail",
+            "customer_type": "organization",
             "primary_phone": "9876543210",
+            "credit_limit": "0.00",
+            "credit_days": 0,
             "org_id": str(uuid4()),
         })
     except ValidationError as exc:
@@ -637,6 +639,7 @@ def test_reviewed_party_create_contracts_reject_unowned_and_partial_facts() -> N
             "supplier_name": "Partial Address Supplier",
             "primary_phone": "9876543210",
             "city": "Mumbai",
+            "payment_days": 30,
         })
     except ValidationError as exc:
         assert "must be supplied together" in str(exc)
@@ -689,6 +692,9 @@ def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch
         canonical_erp_reads.CanonicalCustomerCreate(
             customer_name="Active Customer",
             primary_phone="9876543210",
+            customer_type="organization",
+            credit_limit="0.00",
+            credit_days=0,
         ),
         user={},
         db=customer_db,
@@ -705,6 +711,7 @@ def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch
         canonical_erp_reads.CanonicalSupplierCreate(
             supplier_name="Active Supplier",
             primary_phone="9876543210",
+            payment_days=30,
         ),
         user={},
         db=supplier_db,
@@ -1471,7 +1478,10 @@ class ProductDraftDatabase:
 def test_product_draft_write_uses_canonical_catalog_and_returns_uuid() -> None:
     database = ProductDraftDatabase()
     result = canonical_erp_reads.create_product_draft(
-        canonical_erp_reads.CanonicalProductDraftCreate(product_name="E2E draft"),
+        canonical_erp_reads.CanonicalProductDraftCreate(
+            product_name="E2E draft",
+            product_kind="medicine",
+        ),
         user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
         db=database,
     )
@@ -1482,6 +1492,43 @@ def test_product_draft_write_uses_canonical_catalog_and_returns_uuid() -> None:
     sql = "\n".join(database.statements)
     assert "catalog.products" in sql
     assert "inventory.products" not in sql
+
+
+def test_master_write_classifications_have_no_hidden_business_defaults() -> None:
+    with pytest.raises(ValidationError) as product_error:
+        canonical_erp_reads.CanonicalProductDraftCreate(product_name="Unclassified")
+    assert {error["loc"] for error in product_error.value.errors()} == {
+        ("product_kind",),
+    }
+
+    with pytest.raises(ValidationError) as address_error:
+        canonical_erp_reads.CanonicalCustomerAddressWrite(
+            address_line1="202 Synthetic Retail Lane",
+            city="Pune",
+            state="Maharashtra",
+            pincode="411001",
+        )
+    assert {error["loc"] for error in address_error.value.errors()} == {
+        ("address_type",),
+        ("is_default",),
+    }
+
+    with pytest.raises(ValidationError) as customer_error:
+        canonical_erp_reads.CanonicalCustomerCreate(
+            customer_name="Unclassified customer",
+            primary_phone="9876543210",
+        )
+    assert {error["loc"] for error in customer_error.value.errors()} == {
+        ("customer_type",),
+        ("credit_limit",),
+        ("credit_days",),
+    }
+
+    with pytest.raises(ValidationError) as supplier_error:
+        canonical_erp_reads.CanonicalSupplierCreate(supplier_name="Unclassified supplier")
+    assert {error["loc"] for error in supplier_error.value.errors()} == {
+        ("payment_days",),
+    }
 
 
 class ProductDraftDeleteDatabase:

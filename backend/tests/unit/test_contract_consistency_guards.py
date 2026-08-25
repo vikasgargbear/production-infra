@@ -7,7 +7,6 @@ from uuid import UUID
 import pytest
 from fastapi import HTTPException
 
-from app.api.routes.documents import DOC_TYPE_MAPPING
 from app.api.services.document_number_service import (
     DOCUMENT_CONFIGS,
     DocumentNumberService,
@@ -76,14 +75,15 @@ def test_document_number_generation_requires_tenant_before_database_access():
 
 
 def test_document_number_registry_has_only_owned_types_and_canonical_targets():
-    retired_types = {"purchase", "quotation", "stock_adjustment", "stock_count", "scheme"}
+    retired_types = {
+        "purchase", "quotation", "stock_adjustment", "stock_count", "scheme",
+        "stock_receipt", "stock_issue", "writeoff", "gst_filing",
+        "adjustment", "credit_note", "debit_note", "purchase_return",
+        "sales_return", "stock_transfer",
+    }
     assert retired_types.isdisjoint(DOCUMENT_CONFIGS)
-    assert set(DOC_TYPE_MAPPING.values()).issubset(DOCUMENT_CONFIGS)
     assert DOCUMENT_CONFIGS["receipt"]["table"] == "financial.payments"
     assert DOCUMENT_CONFIGS["receipt"]["column"] == "payment_number"
-    for document_type in {"adjustment", "stock_receipt", "stock_issue", "stock_transfer"}:
-        assert DOCUMENT_CONFIGS[document_type]["table"] == "inventory.inventory_movements"
-        assert DOCUMENT_CONFIGS[document_type]["column"] == "reference_number"
 
 
 def test_stock_transfer_persists_same_reference_on_both_movements(monkeypatch):
@@ -151,53 +151,35 @@ def test_purchase_service_barrels_resolve_to_mounted_canonical_modules():
     assert all(not (REPOSITORY_ROOT / path).exists() for path in retired)
 
 
-def test_document_number_reservation_commits_exactly_once(monkeypatch):
-    class Database:
-        commits = 0
-        rollbacks = 0
+def test_standalone_document_number_reservation_source_is_retired():
+    retired_route_functions = {
+        "backend/app/api/routes/sales/invoices/routes.py": "generate_invoice_number",
+        "backend/app/api/routes/sales/orders/routes.py": "generate_sales_order_number",
+        "backend/app/api/routes/purchase/grn.py": "generate_grn_number",
+        "backend/app/api/routes/finance/payments/routes.py": "generate_receipt_number",
+        "backend/app/api/routes/finance/journal/routes.py": "generate_journal_number",
+        "backend/app/api/routes/finance/expenses/routes.py": "generate_claim_number",
+    }
 
-        def commit(self):
-            self.commits += 1
-
-        def rollback(self):
-            self.rollbacks += 1
-
-    database = Database()
-    monkeypatch.setattr(
-        DocumentNumberService,
-        "generate_number",
-        lambda _db, _document_type, _org_id: "INV-202608190001",
-    )
-
-    result = DocumentNumberService.reserve_number(database, "invoice", "org-1")
-
-    assert result == "INV-202608190001"
-    assert database.commits == 1
-    assert database.rollbacks == 0
+    assert not (REPOSITORY_ROOT / "backend/app/api/routes/documents.py").exists()
+    assert not hasattr(DocumentNumberService, "reserve_number")
+    for relative_path, function_name in retired_route_functions.items():
+        source = (REPOSITORY_ROOT / relative_path).read_text()
+        assert f"def {function_name}(" not in source
 
 
-def test_document_number_reservation_rolls_back_failed_generation(monkeypatch):
-    class Database:
-        commits = 0
-        rollbacks = 0
+def test_canonical_document_allocation_is_tenant_scoped_and_idempotent():
+    core_commands = (
+        REPOSITORY_ROOT
+        / "database/canonical/commands_core/generate_core_commands_contract.py"
+    ).read_text()
 
-        def commit(self):
-            self.commits += 1
-
-        def rollback(self):
-            self.rollbacks += 1
-
-    def fail_generation(*_args):
-        raise ValueError("sequence unavailable")
-
-    database = Database()
-    monkeypatch.setattr(DocumentNumberService, "generate_number", fail_generation)
-
-    with pytest.raises(ValueError, match="sequence unavailable"):
-        DocumentNumberService.reserve_number(database, "invoice", "org-1")
-
-    assert database.commits == 0
-    assert database.rollbacks == 1
+    assert (
+        '"allocate_document_number"(organization_id uuid, sequence_id uuid, '
+        "idempotency_key_hash bytea, idempotency_expires_at timestamptz)"
+    ) in core_commands
+    assert '"claim"(organization_id,actor_id' in core_commands
+    assert '"finish_claim"(organization_id,claim.id' in core_commands
 
 
 def test_jwt_branch_ids_are_parsed_as_checked_in_integer_keys(monkeypatch):
@@ -365,13 +347,13 @@ def test_consistency_audit_keeps_unresolved_contracts_release_visible():
     assert "COMPETING_DOCUMENT_SEQUENCE_AUTHORITIES" not in codes
     assert "NULLABLE_DOCUMENT_SEQUENCE_TENANT" not in codes
     assert "DOCUMENT_TYPE_ALIAS_PREFIX_DIVERGENCE" not in codes
-    assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" in codes
+    assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" not in codes
     assert "DOCUMENT_CONFIG_WITHOUT_PROVEN_CALLER" not in codes
     assert "AD_HOC_REFERENCE_GENERATORS" not in codes
     assert "DUPLICATE_PURCHASE_SERVICE_SURFACES" not in codes
     assert "DOCUMENT_NUMBER_MUTATION_USES_GET" not in codes
     assert "DOCUMENT_NUMBER_RESERVATION_NOT_COMMITTED" not in codes
-    assert "DOCUMENT_NUMBER_RESERVATION_IDEMPOTENCY_UNBASELINED" in codes
+    assert "DOCUMENT_NUMBER_RESERVATION_IDEMPOTENCY_UNBASELINED" not in codes
     assert "DIVERGENT_ENUM_CONTRACTS" not in codes
     assert "CLIENT_SUPPLIED_GST_RATE_AUTHORITY" in codes
     assert "MISSING_BRANCH_SCOPE_FAILS_OPEN" not in codes

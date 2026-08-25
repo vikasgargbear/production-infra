@@ -298,7 +298,10 @@ def _naive_timestamp_evidence(paths: Iterable[Path]) -> List[str]:
 
 
 def _literal_assignment(relative_path: str, variable_name: str) -> Dict:
-    tree = ast.parse(_read(relative_path))
+    path = REPOSITORY_ROOT / relative_path
+    if not path.exists():
+        return {}
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
@@ -321,7 +324,10 @@ def _line_for_token(relative_path: str, token: str) -> int:
 
 
 def _route_block(relative_path: str, function_name: str) -> Tuple[int, str]:
-    source = _read(relative_path)
+    path = REPOSITORY_ROOT / relative_path
+    if not path.exists():
+        return 0, ""
+    source = path.read_text(encoding="utf-8")
     function_match = re.search(rf"^(?:async )?def {re.escape(function_name)}\(", source, re.MULTILINE)
     if not function_match:
         return 0, ""
@@ -547,7 +553,11 @@ def collect_issues() -> List[ConsistencyIssue]:
         ))
 
     sequence_schema = _read("database/migrations/create_number_sequences.sql")
-    if "idempotency_key" not in sequence_schema:
+    has_standalone_reservation = any(
+        _route_block(path, function_name)[1]
+        for path, function_name in number_routes
+    )
+    if has_standalone_reservation and "idempotency_key" not in sequence_schema:
         issues.append(ConsistencyIssue(
             "DOCUMENT_NUMBER_RESERVATION_IDEMPOTENCY_UNBASELINED",
             "standalone number reservations cannot replay a client retry because the checked-in "

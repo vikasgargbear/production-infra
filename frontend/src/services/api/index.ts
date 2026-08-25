@@ -74,10 +74,6 @@ import { metadataApi } from './modules/settings/metadata.api';
 import { setupApi } from './modules/settings/setup.api';
 import utilsApi from './modules/settings/utils.api';
 
-// =========================================================================
-// SYSTEM
-// =========================================================================
-import { documentsApi } from './modules/system/documents.api';
 import {
   canonicalDocumentHistoryApi,
   requireCanonicalHistoryAmount,
@@ -144,7 +140,6 @@ export {
   utilsApi,
 
   // System
-  documentsApi,
   canonicalDocumentHistoryApi,
   requireCanonicalHistoryAmount,
 
@@ -191,8 +186,6 @@ const apiModules = {
   // Settings
   settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi },
 
-  // System
-  system: { documents: documentsApi }
 };
 
 // For backward compatibility: export the raw axios instance as default

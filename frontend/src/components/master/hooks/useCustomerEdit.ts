@@ -28,9 +28,9 @@ export interface CustomerFormData {
     country: string;
     shipping_address: string;
     payment_terms: string;
-    credit_limit: number;
-    credit_days: number;
-    discount_percentage: number;
+    credit_limit: number | '';
+    credit_days: number | '';
+    discount_percentage: number | '';
     is_active: boolean;
     notes: string;
 }
@@ -54,9 +54,9 @@ const getInitialFormData = (): CustomerFormData => ({
     country: 'India',
     shipping_address: '',
     payment_terms: 'Immediate',
-    credit_limit: 0,
-    credit_days: 0,
-    discount_percentage: 0,
+    credit_limit: '',
+    credit_days: '',
+    discount_percentage: '',
     is_active: true,
     notes: ''
 });
@@ -94,9 +94,9 @@ export function useCustomerEdit(
             country: c.country || 'India',
             shipping_address: c.shipping_address || '',
             payment_terms: c.payment_terms || 'Immediate',
-            credit_limit: c.credit_limit || 0,
-            credit_days: c.credit_days || 0,
-            discount_percentage: c.discount_percentage || 0,
+            credit_limit: c.credit_limit ?? '',
+            credit_days: c.credit_days ?? '',
+            discount_percentage: c.discount_percentage ?? '',
             is_active: c.is_active !== false,
             notes: c.notes || ''
         }),

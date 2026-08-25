@@ -32,9 +32,9 @@ export interface SupplierFormData {
     bank_ifsc_code: string;
     bank_branch: string;
     payment_terms: string;
-    credit_limit: number;
-    credit_days: number;
-    discount_percentage: number;
+    credit_limit: number | '';
+    credit_days: number | '';
+    discount_percentage: number | '';
     is_active: boolean;
     notes: string;
 }
@@ -61,10 +61,10 @@ const getInitialFormData = (): SupplierFormData => ({
     bank_account_number: '',
     bank_ifsc_code: '',
     bank_branch: '',
-    payment_terms: 'Net 30',
-    credit_limit: 0,
-    credit_days: 30,
-    discount_percentage: 0,
+    payment_terms: '',
+    credit_limit: '',
+    credit_days: '',
+    discount_percentage: '',
     is_active: true,
     notes: ''
 });
@@ -105,10 +105,10 @@ export function useSupplierEdit(
             bank_account_number: s.bank_account_number || '',
             bank_ifsc_code: s.bank_ifsc_code || '',
             bank_branch: s.bank_branch || '',
-            payment_terms: s.payment_terms || 'Net 30',
-            credit_limit: s.credit_limit || 0,
-            credit_days: s.credit_days || 30,
-            discount_percentage: s.discount_percentage || 0,
+            payment_terms: s.payment_terms ?? '',
+            credit_limit: s.credit_limit ?? '',
+            credit_days: s.credit_days ?? '',
+            discount_percentage: s.discount_percentage ?? '',
             is_active: s.is_active !== false,
             notes: s.notes || ''
         }),

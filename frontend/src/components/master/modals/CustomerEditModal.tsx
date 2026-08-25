@@ -29,7 +29,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
   const getInitialFormData = () => ({
     customer_code: customer?.customer_code || '',
     customer_name: customer?.customer_name || '',
-    customer_type: customer?.customer_type || 'retail',
+    customer_type: customer?.customer_type ?? 'organization',
     business_type: customer?.business_type || '',
     customer_category: customer?.customer_category || '',
     primary_phone: customer?.primary_phone || '',
@@ -49,12 +49,12 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     drug_license_number: customer?.drug_license_number || '',
     drug_license_validity: customer?.drug_license_validity || '',
     fssai_number: customer?.fssai_number || '',
-    credit_limit: customer?.credit_limit || 0,
-    credit_days: customer?.credit_days || 0,
+    credit_limit: customer?.credit_limit ?? '',
+    credit_days: customer?.credit_days ?? '',
     credit_rating: customer?.credit_rating || 'B',
     payment_terms: customer?.payment_terms || 'NET30',
-    current_outstanding: customer?.current_outstanding || 0,
-    security_deposit: customer?.security_deposit || 0,
+    current_outstanding: customer?.current_outstanding ?? '',
+    security_deposit: customer?.security_deposit ?? '',
     preferred_payment_mode: customer?.preferred_payment_mode || 'cash',
     preferred_delivery_time: customer?.preferred_delivery_time || '',
     prefer_sms: customer?.prefer_sms !== false,
@@ -138,6 +138,11 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
       setActiveSection('basic');
       return false;
     }
+    if (!customer && (formData.credit_limit === '' || formData.credit_days === '')) {
+      setError('Credit limit and credit days are required; enter 0 to select no credit.');
+      setActiveSection('credit');
+      return false;
+    }
     return true;
   };
 
@@ -151,10 +156,6 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
 
       const dataToSave = {
         ...formData,
-        credit_limit: parseFloat(String(formData.credit_limit)) || 0,
-        credit_days: parseInt(String(formData.credit_days)) || 0,
-        current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
-        security_deposit: parseFloat(String(formData.security_deposit)) || 0,
         gst_number: formData.gst_number
       };
 
@@ -446,37 +447,6 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
             </div>
           </div>
 
-          {/* Credit Analysis */}
-          {formData.credit_limit > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Credit Analysis</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Available Credit:</span>
-                  <span className="ml-2 font-medium">
-                    &#8377;{((formData.credit_limit || 0) - (formData.current_outstanding || 0)).toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Credit Utilization:</span>
-                  <span className="ml-2 font-medium">
-                    {formData.credit_limit ? (((formData.current_outstanding || 0) / formData.credit_limit) * 100).toFixed(1) : 0}%
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Credit Status:</span>
-                  <span className={`ml-2 font-medium ${(formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
-                      (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
-                        'text-green-600'
-                    }`}>
-                    {(formData.current_outstanding || 0) > formData.credit_limit ? 'Over Limit' :
-                      (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :
-                        'Good'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

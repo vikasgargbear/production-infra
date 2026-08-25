@@ -26,7 +26,7 @@ export interface CustomerParams {
 export interface CanonicalCustomerCreateInput {
   customer_name: string;
   customer_code?: string;
-  customer_type?: string;
+  customer_type: 'individual' | 'organization';
   primary_phone: string;
   primary_email?: string;
   contact_person_name?: string;
@@ -37,8 +37,8 @@ export interface CanonicalCustomerCreateInput {
   pincode?: string;
   gst_number?: string;
   pan_number?: string;
-  credit_limit?: string;
-  credit_days?: number;
+  credit_limit: string;
+  credit_days: number;
 }
 
 const firstDefined = (...values: unknown[]): unknown => values.find(value => value !== undefined && value !== null);
@@ -53,10 +53,19 @@ const canonicalPhone = (value: unknown): string => {
 /** Keep the browser write boundary aligned with the reviewed canonical schema. */
 export const toCanonicalCustomerCreate = (input: Record<string, any>): CanonicalCustomerCreateInput => {
   const address = input.address && typeof input.address === 'object' ? input.address : {};
+  if (input.customer_type !== 'individual' && input.customer_type !== 'organization') {
+    throw new Error('Customer type must be selected explicitly.');
+  }
+  if (input.credit_limit === undefined || input.credit_limit === null || input.credit_limit === '') {
+    throw new Error('Customer credit limit must be entered explicitly.');
+  }
+  if (input.credit_days === undefined || input.credit_days === null || input.credit_days === '') {
+    throw new Error('Customer credit days must be entered explicitly.');
+  }
   const payload = {
     customer_name: input.customer_name,
     customer_code: input.customer_code,
-    customer_type: input.customer_type || 'retail',
+    customer_type: input.customer_type,
     primary_phone: canonicalPhone(input.primary_phone),
     primary_email: firstDefined(input.primary_email, input.email),
     contact_person_name: input.contact_person_name,
@@ -68,11 +77,11 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
     gst_number: optionalText(input.gst_number)?.toUpperCase(),
     pan_number: optionalText(input.pan_number)?.toUpperCase(),
     credit_limit: normalizeExactDecimal(
-      input.credit_limit ?? '0',
+      input.credit_limit,
       'Customer credit limit',
       { scale: 2, maximumWholeDigits: 18 },
     ),
-    credit_days: input.credit_days ?? 0,
+    credit_days: input.credit_days,
   };
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined && value !== null),

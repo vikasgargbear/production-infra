@@ -3,15 +3,12 @@ Expense Claims management endpoints
 REFACTORED: Uses ExpenseService for database operations
 """
 from typing import Optional, List
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 import logging
-from ....services.document_number_service import (
-    DocumentNumberService,
-    document_number_reservation_openapi,
-)
+from ....services.document_number_service import DocumentNumberService
 from ....services.finance.expense.service import ExpenseService
 from ....schemas.finance.mutations import ExpenseClaimCreateResponse
 
@@ -39,28 +36,6 @@ class ExpenseClaimCreate(BaseModel):
     purpose: str
     expenses: List[ExpenseLineCreate] = Field(..., min_length=1)
     created_by: Optional[int] = None
-
-@router.post(
-    "/generate-claim-number",
-    operation_id="finance_reserve_expense_claim_number_v1",
-    summary="Reserve an expense claim number",
-    openapi_extra=document_number_reservation_openapi("finance.create"),
-)
-@with_tenant_context
-async def generate_claim_number(
-    _: dict = Depends(PermissionChecker("finance", "create")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)
-):
-    """Reserve and commit the next organization-scoped expense claim number."""
-    try:
-        claim_number = DocumentNumberService.reserve_number(
-            db, "expense_claim", str(context.org_id)
-        )
-        return {"claim_number": claim_number, "generated_at": datetime.now(timezone.utc).isoformat()}
-    except Exception as e:
-        logger.error(f"Error generating claim number: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to reserve expense claim number")
 
 @router.get("/expense-types")
 @with_tenant_context

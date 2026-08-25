@@ -15,10 +15,6 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.utils.api_utils import handle_error
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMethod
-from ....services.document_number_service import (
-    DocumentNumberService,
-    document_number_reservation_openapi,
-)
 from ....services.compliance.gst_service import GSTService
 from ....services.sales.invoice import InvoiceService
 from ....schemas.inventory.inventory import StockMovementCreate
@@ -30,27 +26,6 @@ from ....schemas.sales.billing import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
-
-@router.post(
-    "/generate-number",
-    operation_id="sales_reserve_invoice_number_v1",
-    summary="Reserve an invoice number",
-    openapi_extra=document_number_reservation_openapi("sales.create"),
-)
-@with_tenant_context
-async def generate_invoice_number(
-    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
-):
-    """Generate and reserve next invoice number atomically"""
-    try:
-        org_id = str(context.org_id)
-        new_number = DocumentNumberService.reserve_number(db, "invoice", org_id)
-        return {"invoice_number": new_number}
-    except Exception as e:
-        logger.error(f"Failed to generate invoice number: {e}")
-        raise HTTPException(status_code=500, detail="Failed to reserve invoice number")
 
 # REMOVED: /simple endpoint - legacy fallback no longer needed
 # Use main POST /invoices/ endpoint with offline-first approach

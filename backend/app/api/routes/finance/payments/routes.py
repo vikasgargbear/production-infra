@@ -4,8 +4,8 @@ Handles invoice payments, tracking, and reconciliation
 
 MODERNIZED: Uses centralized schemas from schemas/billing.py
 """
-from typing import Literal, Optional, List
-from datetime import date, datetime, timezone
+from typing import Optional, List
+from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -20,10 +20,6 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
 from ....services.finance.payment.service import PaymentService
-from ....services.document_number_service import (
-    DocumentNumberService,
-    document_number_reservation_openapi,
-)
 from .....core.idempotency import (
     IdempotencyConflictError,
     IdempotencyStateError,
@@ -198,41 +194,6 @@ async def get_outstanding_invoices(
         logger.error(f"Error getting outstanding invoices: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
 
-
-@router.post(
-    "/generate-receipt-number",
-    operation_id="finance_reserve_payment_number_v1",
-    summary="Reserve a receipt or payment number",
-    openapi_extra=document_number_reservation_openapi("finance.create"),
-)
-@with_tenant_context
-async def generate_receipt_number(
-    payment_type: Literal["receipt", "payment"] = Query(
-        "receipt", description="Type of number to reserve"
-    ),
-    _: dict = Depends(PermissionChecker("finance", "create")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-):
-    """
-    Reserve and commit a unique receipt/payment number.
-    
-    Uses atomic sequence to prevent duplicates
-    Format: RCT-YYYYMMDDNNNN or PAY-YYYYMMDDNNNN
-    """
-    try:
-        reserved_number = DocumentNumberService.reserve_number(
-            db, payment_type, str(context.org_id)
-        )
-        return {
-            "receipt_number": reserved_number,
-            "payment_type": payment_type,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        
-    except Exception as e:
-        logger.error(f"Error generating receipt number: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to reserve payment number")
 
 # Note: Schema classes moved to schemas/billing.py
 # - GeneralPaymentCreate

@@ -27,7 +27,7 @@ type DraftForm = {
   product_name: string;
   product_code: string;
   generic_name: string;
-  product_kind: ProductCreateInput['product_kind'];
+  product_kind: ProductCreateInput['product_kind'] | '';
 };
 
 const initialForm = (product?: Partial<Product> | CanonicalProductRead | null, name = ''): DraftForm => ({
@@ -35,9 +35,11 @@ const initialForm = (product?: Partial<Product> | CanonicalProductRead | null, n
   product_code: product?.product_code ?? '',
   generic_name: product?.generic_name ?? '',
   product_kind: (
-    product?.product_type === 'medical_device' || product?.product_type === 'consumable'
+    product?.product_type === 'medicine'
+    || product?.product_type === 'medical_device'
+    || product?.product_type === 'consumable'
       ? product.product_type
-      : 'medicine'
+      : ''
   ),
 });
 
@@ -66,7 +68,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
     if (isOpen) setForm(initialForm(product, initialProductName));
   }, [isOpen, product, initialProductName]);
 
-  const payload = useMemo<ProductCreateInput>(() => ({
+  const payload = useMemo(() => ({
     product_name: form.product_name,
     product_code: optionalText(form.product_code),
     generic_name: optionalText(form.generic_name),
@@ -153,6 +155,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             </label>
             <label className="text-sm font-medium text-gray-700">Product kind
               <select value={form.product_kind} onChange={event => set('product_kind', event.target.value as DraftForm['product_kind'])} className="mt-1 w-full border border-gray-300 px-3 py-2">
+                <option value="" disabled>Select product kind</option>
                 <option value="medicine">Medicine</option>
                 <option value="medical_device">Medical device</option>
                 <option value="consumable">Consumable</option>

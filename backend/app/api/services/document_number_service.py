@@ -9,7 +9,6 @@ Format: PREFIX-YYYYMMDDNNNN
 
 Scoped by: document_type + org_id + date → each org gets its own 0001 per type per day
 """
-from typing import Dict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -17,27 +16,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-# Standalone number endpoints consume a sequence even when the document is not
-# subsequently created. Keep that contract explicit for OpenAPI/agent clients.
-DOCUMENT_NUMBER_RESERVATION_OPENAPI = {
-    "x-erp-risk": "consequential_write",
-    "x-erp-tenant-scope": "organization",
-    "x-erp-branch-scope": "none",
-    "x-erp-side-effects": "reserves_document_number",
-    "x-erp-approval": "none",
-    "x-erp-idempotency": "requires_durable_reservation_key_store",
-    "x-erp-mcp-export": False,
-    "x-erp-contract-status": "internal_release_blocked",
-}
-
-
-def document_number_reservation_openapi(permission: str) -> Dict[str, object]:
-    """Return consistent OpenAPI policy metadata for one reservation route."""
-    return {
-        **DOCUMENT_NUMBER_RESERVATION_OPENAPI,
-        "x-erp-permission": permission,
-    }
 
 # Document type configurations
 DOCUMENT_CONFIGS = {
@@ -77,18 +55,6 @@ DOCUMENT_CONFIGS = {
         "column": "challan_number",
         "id_column": "challan_id"
     },
-    "sales_return": {
-        "prefix": "SRN",
-        "table": "sales.sales_returns",
-        "column": "return_number",
-        "id_column": "return_id"
-    },
-    "purchase_return": {
-        "prefix": "PRN",
-        "table": "procurement.purchase_returns",
-        "column": "return_number",
-        "id_column": "return_id"
-    },
     "payment": {
         "prefix": "PAY",
         "table": "financial.payments",
@@ -100,18 +66,6 @@ DOCUMENT_CONFIGS = {
         "table": "financial.payments",
         "column": "payment_number",
         "id_column": "payment_id"
-    },
-    "credit_note": {
-        "prefix": "CN",
-        "table": "financial.credit_notes",
-        "column": "credit_note_number",
-        "id_column": "credit_note_id"
-    },
-    "debit_note": {
-        "prefix": "DN",
-        "table": "financial.debit_notes",
-        "column": "debit_note_number",
-        "id_column": "debit_note_id"
     },
     "journal_entry": {
         "prefix": "JV",
@@ -125,37 +79,7 @@ DOCUMENT_CONFIGS = {
         "column": "claim_number",
         "id_column": "claim_id"
     },
-    "adjustment": {
-        "prefix": "ADJ",
-        "table": "inventory.inventory_movements",
-        "column": "reference_number",
-        "id_column": "movement_id"
-    },
     # New document types added for service consolidation
-    "stock_receipt": {
-        "prefix": "SR",
-        "table": "inventory.inventory_movements",
-        "column": "reference_number",
-        "id_column": "movement_id"
-    },
-    "stock_issue": {
-        "prefix": "SI",
-        "table": "inventory.inventory_movements",
-        "column": "reference_number",
-        "id_column": "movement_id"
-    },
-    "stock_transfer": {
-        "prefix": "ST",
-        "table": "inventory.inventory_movements",
-        "column": "reference_number",
-        "id_column": "movement_id"
-    },
-    "writeoff": {
-        "prefix": "WO",
-        "table": "inventory.stock_writeoffs",
-        "column": "writeoff_number",
-        "id_column": "writeoff_id"
-    },
     "product": {
         "prefix": "PROD",
         "table": "inventory.products",
@@ -192,12 +116,6 @@ DOCUMENT_CONFIGS = {
         "column": "employee_code",
         "id_column": "employee_id"
     },
-    "gst_filing": {
-        "prefix": "GST",
-        "table": "gst.return_filing_status",
-        "column": "reference_number",
-        "id_column": "filing_id"
-    }
 }
 
 class DocumentNumberService:
@@ -260,23 +178,6 @@ class DocumentNumberService:
         except Exception as e:
             logger.error(f"Error generating {document_type} number: {e}")
             raise ValueError(f"Failed to generate {document_type} number: {e}")
-
-    @staticmethod
-    def reserve_number(db: Session, document_type: str, org_id: str) -> str:
-        """Generate and commit a standalone reservation.
-
-        Document creation flows should continue to call ``generate_number`` so
-        the identifier and document are committed in the same transaction.
-        """
-        try:
-            document_number = DocumentNumberService.generate_number(
-                db, document_type, org_id
-            )
-            db.commit()
-            return document_number
-        except Exception:
-            db.rollback()
-            raise
 
     @staticmethod
     def generate_batch_number(db: Session, org_id: str) -> str:

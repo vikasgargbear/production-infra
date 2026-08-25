@@ -48,10 +48,10 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     drug_license_number: supplier?.drug_license_number || '',
     drug_license_validity: supplier?.drug_license_validity || '',
     fssai_number: supplier?.fssai_number || '',
-    payment_days: supplier?.payment_days || 30,
+    payment_days: supplier?.payment_days ?? '',
     payment_terms: supplier?.payment_terms || '',
-    credit_limit: supplier?.credit_limit || 0,
-    current_outstanding: supplier?.current_outstanding || 0,
+    credit_limit: supplier?.credit_limit ?? '',
+    current_outstanding: supplier?.current_outstanding ?? '',
     bank_name: supplier?.bank_name || '',
     bank_branch: supplier?.bank_branch || '',
     account_number: supplier?.account_number || '',
@@ -60,7 +60,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     upi_id: supplier?.upi_id || '',
     preferred_payment_mode: supplier?.preferred_payment_mode || '',
     preferred_delivery_time: supplier?.preferred_delivery_time || '',
-    minimum_order_value: supplier?.minimum_order_value || 0,
+    minimum_order_value: supplier?.minimum_order_value ?? '',
     delivery_lead_time: supplier?.delivery_lead_time || '',
     is_active: supplier?.is_active !== false,
     is_verified: supplier?.is_verified || false,
@@ -143,6 +143,11 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
       setActiveSection('basic');
       return false;
     }
+    if (formData.payment_days === '') {
+      setError('Payment days are required');
+      setActiveSection('payment');
+      return false;
+    }
     return true;
   };
 
@@ -156,10 +161,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
 
       const dataToSave = {
         ...formData,
-        payment_days: parseInt(String(formData.payment_days)) || 30,
-        credit_limit: parseFloat(String(formData.credit_limit)) || 0,
-        current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
-        minimum_order_value: parseFloat(String(formData.minimum_order_value)) || 0,
+        payment_days: Number(formData.payment_days),
         gst_number: formData.gst_number
       };
 
@@ -420,7 +422,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                 onChange={(e) => handleInputChange('payment_days', e.target.value)}
                 min="0"
                 max="365"
-                placeholder="30"
+                placeholder="Enter payment days"
               />
             </div>
 
@@ -509,37 +511,6 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
             </div>
           </div>
 
-          {/* Payment Analysis */}
-          {formData.credit_limit > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Payment Analysis</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Available Credit:</span>
-                  <span className="ml-2 font-medium">
-                    &#8377;{((formData.credit_limit || 0) - (formData.current_outstanding || 0)).toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Credit Utilization:</span>
-                  <span className="ml-2 font-medium">
-                    {formData.credit_limit ? (((formData.current_outstanding || 0) / formData.credit_limit) * 100).toFixed(1) : 0}%
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Payment Status:</span>
-                  <span className={`ml-2 font-medium ${(formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
-                    (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
-                      'text-green-600'
-                    }`}>
-                    {(formData.current_outstanding || 0) > formData.credit_limit ? 'Over Limit' :
-                      (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :
-                        'Good'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

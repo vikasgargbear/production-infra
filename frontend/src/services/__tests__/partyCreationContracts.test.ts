@@ -24,12 +24,14 @@ describe('canonical party creation contracts', () => {
   it('maps the active customer form without legacy or tenant-owned fields', () => {
     const payload = toCanonicalCustomerCreate({
       customer_name: ' Browser Customer ',
-      customer_type: 'pharmacy',
+      customer_type: 'organization',
       primary_phone: '+91 98765-43210',
       email: 'buyer@example.com',
       whatsapp_number: '9876543210',
       drug_license_number: 'UI-ONLY-LICENCE',
       org_id: 'must-not-cross-the-boundary',
+      credit_limit: '0.00',
+      credit_days: 0,
       address: {
         address_line1: 'Test Lane 1',
         city: 'Mumbai',
@@ -40,7 +42,7 @@ describe('canonical party creation contracts', () => {
 
     expect(payload).toEqual({
       customer_name: ' Browser Customer ',
-      customer_type: 'pharmacy',
+      customer_type: 'organization',
       primary_phone: '9876543210',
       primary_email: 'buyer@example.com',
       address_line1: 'Test Lane 1',
@@ -52,6 +54,22 @@ describe('canonical party creation contracts', () => {
     });
     customersApi.create(payload);
     expect(apiHelpers.post).toHaveBeenCalledWith('/customers/', payload);
+  });
+
+  it('rejects missing customer classifications and commercial terms', () => {
+    const complete = {
+      customer_name: 'Explicit Customer',
+      customer_type: 'organization',
+      primary_phone: '9876543210',
+      credit_limit: '0.00',
+      credit_days: 0,
+    };
+
+    for (const field of ['customer_type', 'credit_limit', 'credit_days'] as const) {
+      const input = { ...complete } as Record<string, unknown>;
+      delete input[field];
+      expect(() => toCanonicalCustomerCreate(input)).toThrow();
+    }
   });
 
   it('maps legacy supplier aliases to only reviewed canonical fields', () => {
@@ -83,6 +101,12 @@ describe('canonical party creation contracts', () => {
     });
     suppliersApi.create(payload);
     expect(apiHelpers.post).toHaveBeenCalledWith('/suppliers/', payload);
+  });
+
+  it('rejects a supplier without explicit payment days', () => {
+    expect(() => toCanonicalSupplierCreate({ supplier_name: 'No terms' })).toThrow(
+      'Supplier payment days must be selected explicitly.',
+    );
   });
 
   it('turns FastAPI validation arrays into render-safe strings', () => {

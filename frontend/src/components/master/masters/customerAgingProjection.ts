@@ -22,11 +22,18 @@ export const mergeCustomersWithCanonicalAging = <T extends object>(
   }
 
   const outstandingByCustomer = new Map(
-    agingRows.map(row => [customerKey(row), Number(row.total_outstanding ?? 0)]),
+    agingRows
+      .filter(row => row.total_outstanding !== undefined && row.total_outstanding !== null)
+      .map(row => [customerKey(row), Number(row.total_outstanding)]),
   );
-  return customers.map(customer => ({
-    ...customer,
-    current_outstanding: outstandingByCustomer.get(customerKey(customer)) ?? 0,
-    outstanding_available: true,
-  }));
+  return customers.map(customer => {
+    const key = customerKey(customer);
+    return {
+      ...customer,
+      current_outstanding: outstandingByCustomer.has(key)
+        ? outstandingByCustomer.get(key)!
+        : null,
+      outstanding_available: outstandingByCustomer.has(key),
+    };
+  });
 };

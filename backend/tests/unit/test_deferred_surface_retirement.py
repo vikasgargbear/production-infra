@@ -17,11 +17,11 @@ def test_deferred_routes_are_absent_from_openapi() -> None:
     assert "post" not in paths.get("/api/compliance/compliance/inspector-visits", {})
 
 
-def test_employee_and_department_reads_remain_mounted_without_legacy_writes() -> None:
+def test_employee_read_remains_canonical_and_department_surface_is_retired() -> None:
     paths = app.openapi()["paths"]
 
     assert set(paths["/api/employees"]) == {"get"}
-    assert set(paths["/api/departments/"]) == {"get"}
+    assert "/api/departments/" not in paths
 
 
 def test_deferred_backend_modules_cannot_be_imported_accidentally() -> None:
