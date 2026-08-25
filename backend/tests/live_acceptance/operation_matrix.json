@@ -105,7 +105,7 @@
       "command_operation": "finance.supplier_advance.prepare",
       "prepare_tool": "erp_supplier_advance_prepare",
       "approval_policy": "separate_approver",
-      "rest_readback": "/api/canonical/supplier-payments/{resource_id}",
+      "rest_readback": "/api/canonical/supplier-advances/{resource_id}",
       "mcp_readback_tool": "erp_operation_status_get",
       "database_relations": ["finance.payments", "procurement.purchase_order_advance_allocations", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["supplier_advance_no_withholding"],
