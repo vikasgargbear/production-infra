@@ -64,7 +64,6 @@ export interface ChallanItem {
     unit_price?: string | number;
     sale_price?: string | number;
     gst_percent?: string | number;
-    tax_percent?: string | number;
     discount_percent?: string | number;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     taxable_amount?: EditableDecimalValue;

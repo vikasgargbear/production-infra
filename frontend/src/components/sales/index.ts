@@ -7,8 +7,7 @@
 export interface InvoiceItem {
     quantity: number;
     unit_price?: number;
-    tax_rate?: number;
-    tax_percent?: number;
+    gst_percent?: number;
     product_id?: number;
     [key: string]: unknown;
 }
@@ -27,7 +26,7 @@ export interface ValidationResult {
 // Main Components
 export { default as InvoiceFlow } from './invoice/InvoiceFlow';
 export { default as InvoiceList } from './invoice/InvoiceList';
-export { SalesOrderFlow, SalesOrderManagement } from './order';
+export { SalesOrderFlow } from './order';
 export { ChallanFlow } from './challan';
 export { default as SalesHub } from './SalesHub';
 

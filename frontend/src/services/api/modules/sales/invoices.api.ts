@@ -220,16 +220,6 @@ export const invoicesApi = {
     },
 
     // =========================================================================
-    // ANALYTICS
-    // =========================================================================
-
-    /** Get last deals for a product (Marg ERP style - Alt+L) */
-    getLastDeals: (productId: number | string, customerId: number | string | null = null) => {
-        const params = customerId ? { customer_id: customerId } : {};
-        return apiHelpers.get(`${ENDPOINTS.BASE}/last-deals/${productId}`, { params });
-    },
-
-    // =========================================================================
     // DRAFTS (migrated from invoiceApiService.ts)
     // =========================================================================
 

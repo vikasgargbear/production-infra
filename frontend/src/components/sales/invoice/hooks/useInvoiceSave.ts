@@ -161,10 +161,10 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             if (!readback || String(readback.sales_invoice_id) !== invoiceId) {
                 throw new Error('Invoice posted, but authoritative readback could not be verified. Retry to perform GET-only reconciliation.');
             }
-            const invoiceNumber = String(readback.invoice_number || '');
-            if (!invoiceNumber) {
+            if (typeof readback.invoice_number !== 'string' || !readback.invoice_number.trim()) {
                 throw new Error('Invoice posted, but authoritative readback omitted its invoice number.');
             }
+            const invoiceNumber = readback.invoice_number.trim();
 
             const authoritativeTotal = normalizeAuthoritativeDecimal(
                 readback.invoice_total,

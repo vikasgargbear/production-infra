@@ -78,6 +78,11 @@ const string = (value: unknown, label: string): string => {
   if (typeof value !== 'string') throw new Error(`${label} must be a string.`);
   return value;
 };
+const nonEmptyString = (value: unknown, label: string): string => {
+  const result = string(value, label).trim();
+  if (!result) throw new Error(`${label} must not be empty.`);
+  return result;
+};
 const uuid = (value: unknown, label: string): string => {
   const result = string(value, label);
   if (!UUID.test(result)) throw new Error(`${label} must be a canonical UUID.`);
@@ -119,12 +124,12 @@ export function normalizeCanonicalDocumentHistory(value: unknown): CanonicalDocu
       document_kind: kind,
       document_id: uuid(row.document_id, 'Document id'),
       branch_id: uuid(row.branch_id, 'Branch id'),
-      document_number: string(row.document_number, 'Document number'),
+      document_number: nonEmptyString(row.document_number, 'Document number'),
       document_date: documentDate,
       due_date: dueDate,
-      status: string(row.status, 'Document status'),
+      status: nonEmptyString(row.status, 'Document status'),
       party_account_id: uuid(row.party_account_id, 'Party account id'),
-      party_name: string(row.party_name, 'Party name'),
+      party_name: nonEmptyString(row.party_name, 'Party name'),
       source_document_type: nullableString(row.source_document_type, 'Source document type'),
       source_document_id: nullableUuid(row.source_document_id, 'Source document id'),
       source_document_number: nullableString(row.source_document_number, 'Source document number'),

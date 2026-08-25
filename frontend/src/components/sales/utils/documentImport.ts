@@ -75,7 +75,6 @@ export interface CanonicalImportLine {
     manufacturer?: string;
     category?: string;
     gst_percent: string;
-    tax_percent?: string;
     discount_percent: string;
     free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     branch_id?: string;
@@ -372,8 +371,7 @@ const projectExecutedAllocations = (
         uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
         manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
         category: typeof item.category === 'string' ? item.category : undefined,
-        gst_percent: exactRequired(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6),
-        tax_percent: exactOptional(item.tax_percent ?? item.tax_rate, `Line ${index + 1} tax percent`, 6) ?? undefined,
+        gst_percent: exactRequired(item.gst_percent, `Line ${index + 1} GST percent`, 6),
         discount_percent: exactRequired(item.discount_percent, `Line ${index + 1} discount percent`, 6),
         free_supply_tax_treatment: freeTreatment as FreeSupplyTaxTreatment,
     }));
@@ -463,8 +461,7 @@ export function projectCanonicalImportLines(
             uom_code: typeof item.uom_code === 'string' ? item.uom_code : undefined,
             manufacturer: typeof item.manufacturer === 'string' ? item.manufacturer : undefined,
             category: typeof item.category === 'string' ? item.category : undefined,
-            gst_percent: exactRequired(item.gst_percent ?? item.tax_percent ?? item.tax_rate, `Line ${index + 1} GST percent`, 6),
-            tax_percent: exactOptional(item.tax_percent ?? item.tax_rate, `Line ${index + 1} tax percent`, 6) ?? undefined,
+            gst_percent: exactRequired(item.gst_percent, `Line ${index + 1} GST percent`, 6),
             free_quantity: freeQuantity,
             discount_percent: exactRequired(item.discount_percent, `Line ${index + 1} discount percent`, 6),
             free_supply_tax_treatment: requiredFreeSupplyTaxTreatment(

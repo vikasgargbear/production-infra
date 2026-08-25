@@ -7,22 +7,15 @@ import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardSho
 
 // Modals
 import CustomerCreation from '../../../global/creation/CustomerCreation';
-import { ProductCreationModal, GSTCalculator, DocumentImportModal } from '../../../global';
-import BillDiscountModal from '../../modals/BillDiscountModal';
-import TaxDetailModal from '../../modals/TaxDetailModal';
-import CashCalculatorModal from '../../modals/CashCalculatorModal';
-import LastDealModal from '../../modals/LastDealModal';
-import ItemProfitModal from '../../modals/ItemProfitModal';
+import { ProductCreationModal, DocumentImportModal } from '../../../global';
 
 // Utils
 import { toast } from 'react-toastify';
 import { challansApi } from '../../../../services/api';
 import { extractDocumentDetail } from '../../utils/documentImport';
 import { invoiceBatchAllocationValidationError } from '../utils/canonicalInvoiceCommand';
-import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
-
 // Shared Types
-import { Customer, Invoice, InvoiceItem, Employee, ProductForLastDeal } from '../types/invoiceTypes';
+import { Customer, Invoice, InvoiceItem, Employee } from '../types/invoiceTypes';
 import InvoiceItemsFooter from './InvoiceItemsFooter';
 
 interface InvoiceItemsStepProps {
@@ -49,27 +42,13 @@ interface InvoiceItemsStepProps {
     handleUpdateItem: (index: number, updates: Partial<InvoiceItem>) => void;
     handleRemoveItem: (index: number) => void;
     handleImport: (data: unknown) => void;
-    handleApplyBillDiscount: (discount: EditableDecimalValue, discountType?: 'percentage' | 'amount', discountValue?: EditableDecimalValue) => void;
     // Modal states
     showCustomerModal: boolean;
     setShowCustomerModal: React.Dispatch<React.SetStateAction<boolean>>;
     showProductModal: boolean;
     setShowProductModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showGSTCalculator: boolean;
-    setShowGSTCalculator: React.Dispatch<React.SetStateAction<boolean>>;
     showImportModal: boolean;
     setShowImportModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showBillDiscountModal: boolean;
-    setShowBillDiscountModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showTaxDetailModal: boolean;
-    setShowTaxDetailModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showCashCalculatorModal: boolean;
-    setShowCashCalculatorModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showLastDealModal: boolean;
-    setShowLastDealModal: React.Dispatch<React.SetStateAction<boolean>>;
-    selectedProductForLastDeal: ProductForLastDeal | null;
-    showItemProfitModal: boolean;
-    setShowItemProfitModal: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
@@ -96,27 +75,13 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     handleUpdateItem,
     handleRemoveItem,
     handleImport,
-    handleApplyBillDiscount,
     // Modal states
     showCustomerModal,
     setShowCustomerModal,
     showProductModal,
     setShowProductModal,
-    showGSTCalculator,
-    setShowGSTCalculator,
     showImportModal,
     setShowImportModal,
-    showBillDiscountModal,
-    setShowBillDiscountModal,
-    showTaxDetailModal,
-    setShowTaxDetailModal,
-    showCashCalculatorModal,
-    setShowCashCalculatorModal,
-    showLastDealModal,
-    setShowLastDealModal,
-    selectedProductForLastDeal,
-    showItemProfitModal,
-    setShowItemProfitModal
 }) => {
     // Ctrl+Enter → Continue shortcut
     const batchAllocationError = invoiceBatchAllocationValidationError(invoice as any);
@@ -348,14 +313,6 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 />
             )}
 
-            {showGSTCalculator && (
-                <GSTCalculator
-                    orderData={invoice as any}
-                    onClose={() => setShowGSTCalculator(false)}
-                    showDetails={true}
-                />
-            )}
-
             {/* Import Document Modal */}
             {showImportModal && (
                 <DocumentImportModal
@@ -377,41 +334,6 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     ]}
                 />
             )}
-
-            {/* Marg ERP Style Shortcut Modals */}
-            <BillDiscountModal
-                isOpen={showBillDiscountModal}
-                onClose={() => setShowBillDiscountModal(false)}
-                currentDiscount={invoice.bill_discount || 0}
-                billAmount={invoice.totals?.subtotal || 0}
-                onApply={handleApplyBillDiscount}
-            />
-
-            <TaxDetailModal
-                isOpen={showTaxDetailModal}
-                onClose={() => setShowTaxDetailModal(false)}
-                invoice={invoice as any}
-            />
-
-            <CashCalculatorModal
-                isOpen={showCashCalculatorModal}
-                onClose={() => setShowCashCalculatorModal(false)}
-                billAmount={invoice.totals?.total_amount || 0}
-            />
-
-            <LastDealModal
-                isOpen={showLastDealModal}
-                onClose={() => setShowLastDealModal(false)}
-                productId={typeof selectedProductForLastDeal?.id === 'number' ? selectedProductForLastDeal.id : undefined}
-                productName={selectedProductForLastDeal?.name}
-                customerId={typeof selectedCustomer?.id === 'number' ? selectedCustomer.id : undefined}
-            />
-
-            <ItemProfitModal
-                isOpen={showItemProfitModal}
-                onClose={() => setShowItemProfitModal(false)}
-                items={invoice.items}
-            />
 
         </div>
     );

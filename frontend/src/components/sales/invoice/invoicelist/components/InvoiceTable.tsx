@@ -31,7 +31,7 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     const [viewingDocument, setViewingDocument] = useState<Invoice | null>(null);
     const [documentActionError, setDocumentActionError] = useState<string | null>(null);
 
-    const formatDate = (dateString: string) => {
+    const formatDate = (dateString: string | null) => {
         if (!dateString) return 'Not specified';
         try {
             return formatCalendarDate(dateString);
@@ -121,7 +121,7 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         const url = URL.createObjectURL(blob);
         const link = window.document.createElement('a');
         link.href = url;
-        link.download = `${document.document_type}-${document.invoice_number || document.id}.csv`
+        link.download = `${document.document_type}-${document.invoice_number}.csv`
             .replace(/[^a-zA-Z0-9._-]/g, '-');
         window.document.body.appendChild(link);
         link.click();
@@ -154,13 +154,13 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         {
             key: 'invoice_number', header: salesDocumentNumberLabel(documentType), width: '150px',
             render: (_: unknown, document: Invoice) => (
-                <div className="text-sm text-gray-700">{document.invoice_number || 'Not assigned'}</div>
+                <div className="text-sm text-gray-700">{document.invoice_number}</div>
             ),
         },
         {
             key: 'customer_name', header: 'Customer',
             render: (_: unknown, document: Invoice) => (
-                <div className="font-medium text-gray-900">{document.customer_name || 'Not available'}</div>
+                <div className="font-medium text-gray-900">{document.customer_name}</div>
             ),
         },
         {
@@ -274,7 +274,7 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
                         <dl className="grid grid-cols-[9rem_1fr] px-5 py-3 text-sm">
                             {[
                                 ['Date', formatDate(viewingDocument.invoice_date)],
-                                ['Customer', viewingDocument.customer_name || 'Not available'],
+                                ['Customer', viewingDocument.customer_name],
                                 ['Amount', salesHistoryAmountLabel(viewingDocument.total_amount)],
                                 ['Status', salesStatusLabel(salesDocumentStatus(viewingDocument))],
                                 ['Items', String(viewingDocument.items_count)],

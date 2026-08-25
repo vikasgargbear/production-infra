@@ -55,13 +55,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
   // NO fallbacks, NO independent calculations - SINGLE SOURCE OF TRUTH!
 
   const previewUnavailableReason = canonicalInvoicePreviewUnavailableReason(invoice);
-  const companyName = String(companyInfo?.company_name ?? companyInfo?.name ?? '').trim();
-  const customerName = String(
-    invoice.customer_name
-      ?? invoice.customer_details?.customer_name
-      ?? invoice.customer_details?.name
-      ?? '',
-  ).trim();
+  const companyName = String(companyInfo?.name ?? '').trim();
+  const customerName = String(invoice.customer_name ?? '').trim();
   const contextUnavailableReason = !companyName
     ? 'The canonical company name is unavailable.'
     : !customerName
@@ -222,25 +217,21 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               {/* Compact address */}
               {(() => {
                 // Build address line — prefer structured data (has state) over plain string
-                const addrData = (invoice as any).shipping_address_data || (invoice as any).billing_address_data;
+                const addrData = invoice.billing_address_data;
                 let addressLine = '';
                 if (addrData && (addrData.address_line1 || addrData.city)) {
-                  addressLine = [addrData.address_line1, addrData.address_line2, addrData.city, addrData.state || addrData.state_name, addrData.pincode].filter(Boolean).join(', ');
+                  addressLine = [addrData.address_line1, addrData.address_line2, addrData.city, addrData.state, addrData.pincode].filter(Boolean).join(', ');
                 } else if (typeof invoice.billing_address === 'string' && invoice.billing_address) {
                   addressLine = invoice.billing_address;
                 } else if (invoice.billing_address && typeof invoice.billing_address === 'object') {
                   const addr = invoice.billing_address as any;
                   addressLine = [addr.address_line1, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ');
-                } else if (invoice.customer_details?.address) {
-                  addressLine = typeof invoice.customer_details.address === 'string'
-                    ? invoice.customer_details.address
-                    : [(invoice.customer_details.address as any).address_line1, (invoice.customer_details.address as any).city, (invoice.customer_details.address as any).state].filter(Boolean).join(', ');
                 }
                 return addressLine ? <p className="text-[11px] text-gray-600 mt-2 leading-relaxed">{addressLine}</p> : null;
               })()}
               <div className="text-[11px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
-                {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                  <span>Ph. {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</span>
+                {invoice.customer_details?.primary_phone && (
+                  <span>Ph. {invoice.customer_details.primary_phone}</span>
                 )}
                 {invoice.customer_details?.gst_number && (
                   <span><span className="font-semibold text-gray-700">GST:</span> {invoice.customer_details.gst_number}</span>
@@ -248,8 +239,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               </div>
               {/* Place of Supply — GST compliance requirement */}
               {(() => {
-                const addrData = (invoice as any).shipping_address_data || (invoice as any).billing_address_data;
-                const posState = addrData?.state || addrData?.state_name;
+                const posState = invoice.shipping_address_data?.state;
                 if (!posState) return null;
                 return (
                   <div className="text-[11px] text-gray-600 mt-1">
@@ -275,7 +265,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <div className="flex-1">
                       <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Bank Details</div>
                       {(() => {
-                        const bankAccounts = (companyInfo as any)?.bank_accounts || companyInfo?.bankAccounts;
+                        const bankAccounts = companyInfo?.bankAccounts;
                         const selectedBank = invoice.bank_account_id && bankAccounts
                           ? bankAccounts.find((acc: any) => acc.id === invoice.bank_account_id)
                           : bankAccounts?.[0];

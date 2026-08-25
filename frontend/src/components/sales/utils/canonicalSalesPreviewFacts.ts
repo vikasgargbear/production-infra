@@ -50,6 +50,9 @@ const lineArray = (value: unknown, label: string): RecordValue[] | string => {
 export const canonicalInvoicePreviewUnavailableReason = (value: unknown): string | null => {
     const invoice = record(value);
     if (!invoice) return 'Invoice preview is unavailable.';
+    if (!['CGST/SGST', 'IGST'].includes(String(invoice.gst_type))) {
+        return 'Invoice GST treatment is unavailable from the canonical calculation API.';
+    }
     const totals = record(invoice.totals);
     if (!totals) return 'Invoice totals are unavailable from the canonical calculation API.';
     const totalsError = exactFields(totals, [
@@ -61,6 +64,20 @@ export const canonicalInvoicePreviewUnavailableReason = (value: unknown): string
     const lines = lineArray(invoice.items, 'Invoice preview');
     if (typeof lines === 'string') return lines;
     for (const [index, line] of lines.entries()) {
+        for (const [field, label] of [
+            ['product_id', 'product'],
+            ['batch_id', 'batch'],
+        ] as const) {
+            if (!isCanonicalUuid(String(line[field] ?? ''))) {
+                return `Invoice line ${index + 1} ${label} identity is unavailable.`;
+            }
+        }
+        if (String(line.product_name ?? '').trim() === '') {
+            return `Invoice line ${index + 1} product name is unavailable.`;
+        }
+        if (String(line.batch_number ?? '').trim() === '') {
+            return `Invoice line ${index + 1} batch number is unavailable.`;
+        }
         const quantityError = exactFields(
             line,
             ['quantity', 'free_quantity'],
@@ -87,6 +104,9 @@ export const canonicalInvoicePreviewUnavailableReason = (value: unknown): string
 export const canonicalOrderPreviewUnavailableReason = (value: unknown): string | null => {
     const order = record(value);
     if (!order) return 'Sales-order preview is unavailable.';
+    if (!['CGST/SGST', 'IGST'].includes(String(order.gst_type))) {
+        return 'Sales-order GST treatment is unavailable from the canonical calculation API.';
+    }
     const totalError = exactFields(order, [
         'subtotal_amount', 'discount_amount', 'tax_amount', 'cgst_amount',
         'sgst_amount', 'igst_amount', 'total_amount',
@@ -95,6 +115,34 @@ export const canonicalOrderPreviewUnavailableReason = (value: unknown): string |
     const lines = lineArray(order.items, 'Sales-order preview');
     if (typeof lines === 'string') return lines;
     for (const [index, line] of lines.entries()) {
+        for (const [field, label] of [
+            ['product_id', 'product'],
+            ['batch_id', 'batch'],
+        ] as const) {
+            if (!isCanonicalUuid(String(line[field] ?? ''))) {
+                return `Sales-order line ${index + 1} ${label} identity is unavailable.`;
+            }
+        }
+        if (String(line.product_name ?? '').trim() === '') {
+            return `Sales-order line ${index + 1} product name is unavailable.`;
+        }
+        if (String(line.batch_number ?? '').trim() === '') {
+            return `Sales-order line ${index + 1} batch number is unavailable.`;
+        }
+        const quantityError = exactFields(
+            line,
+            ['quantity', 'free_quantity'],
+            `Sales-order line ${index + 1}`,
+            quantityOptions,
+        );
+        if (quantityError) return quantityError;
+        const rateError = exactFields(
+            line,
+            ['unit_price', 'discount_percent', 'gst_percent'],
+            `Sales-order line ${index + 1}`,
+            rateOptions,
+        );
+        if (rateError) return rateError;
         const error = exactFields(
             line,
             ['calculated_total', 'taxable_amount', 'tax_amount'],
@@ -135,7 +183,7 @@ export const canonicalDispatchPreviewUnavailableReason = (value: unknown): strin
         if (String(line.batch_number ?? '').trim() === '') {
             return `Delivery-challan line ${index + 1} batch number is unavailable.`;
         }
-        if (String(line.uom_code ?? line.unit ?? '').trim() === '') {
+        if (String(line.uom_code ?? '').trim() === '') {
             return `Delivery-challan line ${index + 1} unit is unavailable.`;
         }
         const error = exactFields(

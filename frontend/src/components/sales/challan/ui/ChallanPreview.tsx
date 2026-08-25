@@ -17,7 +17,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
     challan,
     companyInfo,
 }) => {
-    const companyName = String(companyInfo?.company_name ?? companyInfo?.name ?? '').trim();
+    const companyName = String(companyInfo?.name ?? '').trim();
     const previewUnavailableReason = canonicalDispatchPreviewUnavailableReason(challan)
         || (!companyName ? 'The canonical company name is unavailable.' : null);
     if (previewUnavailableReason) {
@@ -129,7 +129,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                                     <td className="border-r px-3 py-2 text-right text-sm">
                                         {formatExactDecimal(item.free_quantity, 'Dispatch free quantity', { scale: 6 })}
                                     </td>
-                                    <td className="px-3 py-2 text-sm">{item.uom_code || item.unit}</td>
+                                    <td className="px-3 py-2 text-sm">{item.uom_code}</td>
                                 </tr>
                             ))}
                         </tbody>

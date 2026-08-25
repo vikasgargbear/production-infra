@@ -56,7 +56,11 @@ test.each([
     ['sales_order' as const, 'Sales Order Number', 'Order Status', 'sales-orders-export-2026-08-24.csv'],
     ['challan' as const, 'Delivery Challan Number', 'Challan Status', 'delivery-challans-export-2026-08-24.csv'],
 ])('exports document-specific headings, status, and filenames for %s', (type, numberHeading, statusHeading, filename) => {
-    const document = { ...order, document_type: type };
+    const document: Invoice = {
+        ...order,
+        document_type: type,
+        payment_status: type === 'invoice' ? 'pending' : null,
+    };
     const csv = salesHistoryListCsv(type, [document]);
 
     expect(csv).toContain(`"${numberHeading}"`);

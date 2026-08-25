@@ -16,10 +16,13 @@ export const salesDocumentNumberLabel = (type: SalesHistoryDocumentType): string
     return 'Invoice #';
 };
 
-export const salesDocumentStatus = (document: Invoice): string =>
-    document.document_type === 'invoice'
-        ? document.payment_status || document.document_status
-        : document.document_status;
+export const salesDocumentStatus = (document: Invoice): string => {
+    if (document.document_type !== 'invoice') return document.document_status;
+    if (document.payment_status === null) {
+        throw new Error('Sales invoice payment status is unavailable.');
+    }
+    return document.payment_status;
+};
 
 export const salesHistoryAmountLabel = (amount: string | null): string =>
     amount === null ? 'Not available' : formatExactCurrency(amount, 'Sales history amount');
@@ -29,7 +32,6 @@ export const salesStatusLabel = (status: string): string => {
     const known: Record<string, string> = {
         paid: 'Paid',
         partial: 'Partially Paid',
-        partially_paid: 'Partially Paid',
         pending: 'Pending',
         overdue: 'Overdue',
         draft: 'Draft',
@@ -49,7 +51,7 @@ export const salesStatusLabel = (status: string): string => {
         .split(/[_\s-]+/)
         .filter(Boolean)
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ') || 'Unknown';
+        .join(' ') || 'Unavailable';
 };
 
 export const salesStatusTone = (
@@ -59,7 +61,7 @@ export const salesStatusTone = (
     if (['paid', 'approved', 'posted', 'dispatched', 'delivered', 'fulfilled', 'completed', 'closed'].includes(normalized)) {
         return 'success';
     }
-    if (['partial', 'partially_paid', 'partially_dispatched', 'overdue'].includes(normalized)) {
+    if (['partial', 'partially_dispatched', 'overdue'].includes(normalized)) {
         return 'warning';
     }
     if (['cancelled', 'reversed'].includes(normalized)) return 'error';
@@ -94,7 +96,7 @@ export const salesHistoryListCsv = (
                 document.total_amount,
                 document.paid_amount,
                 document.pending_amount,
-                salesStatusLabel(document.payment_status || document.document_status),
+                salesStatusLabel(salesDocumentStatus(document)),
             ]),
         ]
         : type === 'sales_order'

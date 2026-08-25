@@ -32,7 +32,7 @@ const exactWireValue = (key: string, value: unknown): unknown => {
 const projectCanonicalImportLines = (lines: Array<Record<string, unknown>>) => (
     projectCanonicalImportLinesFromWire(exactWireValue('', lines.map(line => ({
         ...line,
-        gst_percent: line.gst_percent ?? line.tax_percent ?? line.tax_rate ?? '0.000000',
+        gst_percent: line.gst_percent ?? '0.000000',
         discount_percent: line.discount_percent ?? '0.000000',
     }))) as Array<Record<string, unknown>>)
 );
@@ -81,7 +81,7 @@ describe('Sales document import envelope normalization', () => {
             free_quantity: 0,
             free_supply_tax_treatment: 'excluded_from_taxable_value',
             unit_price: '150.25',
-            tax_rate: '12',
+            gst_percent: '12',
         }])).toEqual([expect.objectContaining({
             product_id: '10000000-0000-7000-8000-000000000001',
             batch_id: '20000000-0000-7000-8000-000000000001',
@@ -113,10 +113,23 @@ describe('Sales document import envelope normalization', () => {
         }])).toThrow(/is missing/i);
     });
 
+    it.each([
+        ['tax_percent', '12.000000'],
+        ['tax_rate', '12.000000'],
+    ])('does not accept legacy %s as canonical GST authority', (field, value) => {
+        expect(() => projectCanonicalImportLinesFromWire([{
+            product_id: 'product-1', product_name: 'Product',
+            quantity: '1.000000', free_quantity: '0.000000', unit_price: '10.0000',
+            free_supply_tax_treatment: 'excluded_from_taxable_value',
+            batch_id: 'batch-1', batch_number: 'BATCH-1',
+            discount_percent: '0.000000', [field]: value,
+        }])).toThrow(/GST percent is missing/i);
+    });
+
     it('accepts one evidenced direct allocation, including null expiry, without scalar batch fields', () => {
         const result = projectCanonicalImportLines([{
             id: 'invoice-line-1', product_id: 'product-1', product_name: 'Product',
-            quantity: 1, free_quantity: 0, unit_price: 150, tax_rate: 12,
+            quantity: 1, free_quantity: 0, unit_price: 150, gst_percent: 12,
             free_supply_tax_treatment: 'excluded_from_taxable_value',
             batch_id: null, batch_number: null,
             batch_allocations: [allocation()],
@@ -137,7 +150,7 @@ describe('Sales document import envelope normalization', () => {
     it('expands evidenced multi-batch direct allocations and preserves quantities and money', () => {
         const result = projectCanonicalImportLines([{
             id: 'invoice-line-1', product_id: 'product-1', product_name: 'Product',
-            quantity: 3, free_quantity: 1, unit_price: 100, tax_rate: 12,
+            quantity: 3, free_quantity: 1, unit_price: 100, gst_percent: 12,
             free_supply_tax_treatment: 'excluded_from_taxable_value',
             taxable_amount: 100, cgst_amount: 6, sgst_amount: 6, cess_amount: 1,
             line_total: 113,

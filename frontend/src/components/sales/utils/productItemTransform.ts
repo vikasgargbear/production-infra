@@ -41,7 +41,6 @@ export interface ProductInput {
     total_stock?: number | string;
     total_quantity_available?: number | string;
     gst_percent?: string;
-    tax_rate?: string;
     hsn_code?: string;
     quantity: string | number;
     free_quantity: string | number;
@@ -188,7 +187,7 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         product_code: product.product_code || '',
         manufacturing_date: manufacturingDate,
         available_quantity: availableQty,
-        gst_percent: authoritativeRate(product.gst_percent ?? product.tax_rate, 'Product GST rate'),
+        gst_percent: authoritativeRate(product.gst_percent, 'Product GST rate'),
         hsn_code: product.hsn_code || '',
         product_type: product.product_type,
         requires_prescription: Boolean(product.requires_prescription),

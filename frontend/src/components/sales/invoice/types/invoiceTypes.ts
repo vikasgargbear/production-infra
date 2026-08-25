@@ -245,7 +245,6 @@ export interface InvoiceItem {
 
     // Taxes
     gst_percent?: number | string;
-    tax_percent?: number | string;
     cgst_percent?: number;
     sgst_percent?: number;
     igst_percent?: number;
@@ -424,7 +423,6 @@ export interface Invoice {
     // Sales info
     salesperson_id?: number | null;
     org_name?: string;
-    company_name?: string;
 
     // GST
     gst_type?: GstType | string;
@@ -528,7 +526,6 @@ export interface ProductInput {
     mrp?: number;
     // Tax
     gst_percent?: number;
-    tax_rate?: number;  // Alias from product search
     hsn_code?: string;
     // Quantities
     quantity?: number;
@@ -561,13 +558,6 @@ export interface ImportData {
     source?: string;
 }
 
-/** Discount configuration */
-export interface DiscountData {
-    type: 'percentage' | 'fixed';
-    amount?: number;
-    percentage?: number;
-}
-
 /** Data returned after invoice creation */
 export interface CreatedInvoiceData {
     invoiceId: string | number;
@@ -589,12 +579,4 @@ export interface InvoiceDisplay {
     amount: string;
     status?: string;
     itemCount: number;
-}
-
-/** Product for last deal lookup */
-export interface ProductForLastDeal {
-    id?: number;
-    name?: string;
-    product_id?: number | string;
-    product_name?: string;
 }

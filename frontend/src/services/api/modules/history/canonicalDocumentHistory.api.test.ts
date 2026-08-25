@@ -46,6 +46,16 @@ it('rejects overprecision and inconsistent pagination', () => {
   })).toThrow(/provenance/i);
 });
 
+it.each([
+  ['document_number', '   '],
+  ['party_name', ''],
+  ['status', '  '],
+])('rejects blank canonical identity field %s', (field, value) => {
+  expect(() => normalizeCanonicalDocumentHistory({
+    items: [{ ...row, [field]: value }], business_date, page: 1, page_size: 25, total: 1,
+  })).toThrow(/must not be empty/i);
+});
+
 it('keeps non-settlement and dispatch monetary semantics explicit', () => {
   const dispatch = {
     ...row,

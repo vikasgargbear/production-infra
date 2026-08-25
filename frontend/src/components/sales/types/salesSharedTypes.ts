@@ -205,7 +205,6 @@ export interface BaseImportData<TCustomer extends BaseCustomer = BaseCustomer, T
 /** Company information for previews and prints */
 export interface BaseCompanyInfo {
     name?: string;
-    company_name?: string;
     address?: string;
     gst_number?: string;
     phone?: string;

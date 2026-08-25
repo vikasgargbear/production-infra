@@ -43,7 +43,6 @@ export interface CanonicalSalesDocumentLine {
     | 'included_at_unit_rate';
   unit_price: ExactDecimalString;
   discount_percent: ExactDecimalString;
-  tax_rate: ExactDecimalString;
   gst_percent: ExactDecimalString;
   taxable_amount: ExactDecimalString;
   cgst_amount: ExactDecimalString;

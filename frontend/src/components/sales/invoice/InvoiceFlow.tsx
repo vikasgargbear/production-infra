@@ -78,21 +78,8 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         setShowCustomerModal,
         showProductModal,
         setShowProductModal,
-        showGSTCalculator,
-        setShowGSTCalculator,
         showImportModal,
         setShowImportModal,
-        showBillDiscountModal,
-        setShowBillDiscountModal,
-        showTaxDetailModal,
-        setShowTaxDetailModal,
-        showCashCalculatorModal,
-        setShowCashCalculatorModal,
-        showLastDealModal,
-        setShowLastDealModal,
-        selectedProductForLastDeal,
-        showItemProfitModal,
-        setShowItemProfitModal,
 
         // Refs
         productSearchRef,
@@ -108,7 +95,6 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         handleUpdateItem,
         handleRemoveItem,
         handleImport,
-        handleApplyBillDiscount,
         resetInvoice,
         handleSaveInvoice,
         confirmPreparedInvoice,
@@ -124,9 +110,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     });
 
     // ESC key handling for modal hierarchy
-    const anyModalOpen = showGSTCalculator || showCustomerModal || showProductModal || showImportModal ||
-        showBillDiscountModal || showTaxDetailModal || showCashCalculatorModal ||
-        showLastDealModal || showItemProfitModal || reviewOpen;
+    const anyModalOpen = showCustomerModal || showProductModal || showImportModal || reviewOpen;
 
     useEscapeKey(
         useCallback(() => {
@@ -332,26 +316,12 @@ ${companyInfo.name}`;
                     handleUpdateItem={handleUpdateItem as any}
                     handleRemoveItem={handleRemoveItem}
                     handleImport={handleImport as any}
-                    handleApplyBillDiscount={handleApplyBillDiscount as any}
                     showCustomerModal={showCustomerModal}
                     setShowCustomerModal={setShowCustomerModal}
                     showProductModal={showProductModal}
                     setShowProductModal={setShowProductModal}
-                    showGSTCalculator={showGSTCalculator}
-                    setShowGSTCalculator={setShowGSTCalculator}
                     showImportModal={showImportModal}
                     setShowImportModal={setShowImportModal}
-                    showBillDiscountModal={showBillDiscountModal}
-                    setShowBillDiscountModal={setShowBillDiscountModal}
-                    showTaxDetailModal={showTaxDetailModal}
-                    setShowTaxDetailModal={setShowTaxDetailModal}
-                    showCashCalculatorModal={showCashCalculatorModal}
-                    setShowCashCalculatorModal={setShowCashCalculatorModal}
-                    showLastDealModal={showLastDealModal}
-                    setShowLastDealModal={setShowLastDealModal}
-                    selectedProductForLastDeal={selectedProductForLastDeal as any}
-                    showItemProfitModal={showItemProfitModal}
-                    setShowItemProfitModal={setShowItemProfitModal}
                 />
             )}
 

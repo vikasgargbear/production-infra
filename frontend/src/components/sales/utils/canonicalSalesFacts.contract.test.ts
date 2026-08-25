@@ -7,6 +7,21 @@ const source = (relativePath: string) => fs.readFileSync(
 );
 
 describe('canonical desktop sales business-fact boundaries', () => {
+  it('keeps retired compatibility reports and synthetic helper modals deleted', () => {
+    for (const relativePath of [
+      'UnifiedSalesHistory.tsx',
+      'order/SalesOrderList.tsx',
+      'modals/ImportDocumentModal.tsx',
+      'modals/BillDiscountModal.tsx',
+      'modals/CashCalculatorModal.tsx',
+      'modals/ItemProfitModal.tsx',
+      'modals/LastDealModal.tsx',
+      'modals/TaxDetailModal.tsx',
+    ]) {
+      expect(fs.existsSync(path.resolve(__dirname, '..', relativePath))).toBe(false);
+    }
+  });
+
   it('does not invent document dates or payment state in creation/history', () => {
     const invoiceLogic = source('invoice/hooks/useInvoiceLogic.ts');
     const orderLogic = source('order/hooks/useSalesOrderLogic.ts');
@@ -40,9 +55,29 @@ describe('canonical desktop sales business-fact boundaries', () => {
 
   it('requires exact imported tax, discount, quantity, and rate fields', () => {
     const imports = source('utils/documentImport.ts');
-    expect(imports).toContain("exactRequired(item.gst_percent ?? item.tax_percent ?? item.tax_rate");
+    expect(imports).toContain("exactRequired(item.gst_percent");
+    expect(imports).not.toMatch(/gst_percent[^\n]*(?:tax_percent|tax_rate)/);
     expect(imports).toContain("exactRequired(item.discount_percent");
     expect(imports).not.toMatch(/gst_percent[^\n]*(?:\?\?|\|\|)\s*['"]0/);
     expect(imports).not.toMatch(/discount_percent[^\n]*(?:\?\?|\|\|)\s*['"]0/);
+  });
+
+  it('does not reintroduce readback identity, status, or company aliases', () => {
+    const orderSave = source('order/hooks/useSalesOrderSave.ts');
+    const invoiceSave = source('invoice/hooks/useInvoiceSave.ts');
+    const history = source('invoice/invoicelist/utils/salesHistoryPresentation.ts');
+    const invoicePreview = source('invoice/ui/InvoicePreviewEnterprise.tsx');
+    const orderReview = source('order/steps/OrderReviewStep.tsx');
+    const invoiceApi = fs.readFileSync(
+      path.resolve(__dirname, '../../../services/api/modules/sales/invoices.api.ts'),
+      'utf8',
+    );
+
+    expect(orderSave).not.toMatch(/sales_order_id\s*(?:\?\?|\|\|)/);
+    expect(invoiceSave).not.toMatch(/invoice_number[^\n]*(?:\?\?|\|\|)\s*['"]{2}/);
+    expect(history).not.toMatch(/payment_status[^\n]*(?:\?\?|\|\|)[^\n]*document_status/);
+    expect(invoicePreview).not.toMatch(/company_name|state_name|bank_accounts/);
+    expect(orderReview).not.toMatch(/calculated_total[^\n]*(?:\?\?|\|\|)[^\n]*\.total/);
+    expect(invoiceApi).not.toContain('getLastDeals');
   });
 });

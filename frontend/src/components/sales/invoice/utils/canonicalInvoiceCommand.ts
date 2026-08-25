@@ -161,7 +161,7 @@ export function companyInvoiceValidationError(
     company: CompanyInfo | null,
     invoice?: Invoice,
 ): string | null {
-    if (!company || !nonEmpty(company.name || company.company_name)) {
+    if (!company || !nonEmpty(company.name)) {
         return 'Company legal name is missing. Complete Company Settings before generating an invoice.';
     }
     if (!nonEmpty(company.address)) {

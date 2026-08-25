@@ -17,7 +17,6 @@ import {
     ProductInput,
     PrefilledData,
     ImportData,
-    DiscountData,
     CreatedInvoiceData,
     GstType,
     CustomerAddress,
@@ -119,7 +118,7 @@ export interface Invoice {
 }
 
 // Re-export shared types for consumers of this hook
-export type { CreatedInvoiceData, Employee, ProductInput, PrefilledData, ImportData, DiscountData, Payment };
+export type { CreatedInvoiceData, Employee, ProductInput, PrefilledData, ImportData, Payment };
 
 export interface UseInvoiceLogicReturn {
     // State
@@ -149,22 +148,8 @@ export interface UseInvoiceLogicReturn {
     setShowCustomerModal: Dispatch<SetStateAction<boolean>>;
     showProductModal: boolean;
     setShowProductModal: Dispatch<SetStateAction<boolean>>;
-    showGSTCalculator: boolean;
-    setShowGSTCalculator: Dispatch<SetStateAction<boolean>>;
     showImportModal: boolean;
     setShowImportModal: Dispatch<SetStateAction<boolean>>;
-    showBillDiscountModal: boolean;
-    setShowBillDiscountModal: Dispatch<SetStateAction<boolean>>;
-    showTaxDetailModal: boolean;
-    setShowTaxDetailModal: Dispatch<SetStateAction<boolean>>;
-    showCashCalculatorModal: boolean;
-    setShowCashCalculatorModal: Dispatch<SetStateAction<boolean>>;
-    showLastDealModal: boolean;
-    setShowLastDealModal: Dispatch<SetStateAction<boolean>>;
-    selectedProductForLastDeal: InvoiceItem | null;
-    setSelectedProductForLastDeal: Dispatch<SetStateAction<InvoiceItem | null>>;
-    showItemProfitModal: boolean;
-    setShowItemProfitModal: Dispatch<SetStateAction<boolean>>;
 
     // Refs
     productSearchRef: RefObject<HTMLInputElement | null>;
@@ -180,7 +165,6 @@ export interface UseInvoiceLogicReturn {
     handleUpdateItem: (index: number, field: string, value: unknown) => void;
     handleRemoveItem: (index: number) => void;
     handleImport: (importData: ImportData) => Promise<void>;
-    handleApplyBillDiscount: (discountData: DiscountData) => void;
     resetInvoice: () => void;
     handleSaveInvoice: () => Promise<void>;
     confirmPreparedInvoice: () => Promise<void>;
@@ -273,14 +257,7 @@ export const useInvoiceLogic = (
     // Modal States
     const [showCustomerModal, setShowCustomerModal] = useState(false);
     const [showProductModal, setShowProductModal] = useState(false);
-    const [showGSTCalculator, setShowGSTCalculator] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
-    const [showBillDiscountModal, setShowBillDiscountModal] = useState(false);
-    const [showTaxDetailModal, setShowTaxDetailModal] = useState(false);
-    const [showCashCalculatorModal, setShowCashCalculatorModal] = useState(false);
-    const [showLastDealModal, setShowLastDealModal] = useState(false);
-    const [selectedProductForLastDeal, setSelectedProductForLastDeal] = useState<InvoiceItem | null>(null);
-    const [showItemProfitModal, setShowItemProfitModal] = useState(false);
 
     // Refs
     const productSearchRef = useRef<HTMLInputElement | null>(null);
@@ -605,23 +582,6 @@ export const useInvoiceLogic = (
         }
     }, [handleCustomerSelect]);
 
-    const handleApplyBillDiscount = useCallback((discountData: DiscountData) => {
-        if (discountData.type === 'fixed' && discountData.amount === undefined) {
-            toast.error('Enter the exact fixed discount amount.');
-            return;
-        }
-        if (discountData.type === 'percentage' && discountData.percentage === undefined) {
-            toast.error('Enter the exact discount percentage.');
-            return;
-        }
-        setInvoice(prev => ({
-            ...prev,
-            discount_type: discountData.type,
-            discount_amount: discountData.type === 'fixed' ? discountData.amount! : 0,
-            discount_percent: discountData.type === 'percentage' ? discountData.percentage! : 0
-        }));
-    }, []);
-
     const resetInvoice = useCallback(() => {
         setInvoice(createInitialInvoice(businessDate));
         setSelectedCustomer(null);
@@ -664,22 +624,8 @@ export const useInvoiceLogic = (
         setShowCustomerModal,
         showProductModal,
         setShowProductModal,
-        showGSTCalculator,
-        setShowGSTCalculator,
         showImportModal,
         setShowImportModal,
-        showBillDiscountModal,
-        setShowBillDiscountModal,
-        showTaxDetailModal,
-        setShowTaxDetailModal,
-        showCashCalculatorModal,
-        setShowCashCalculatorModal,
-        showLastDealModal,
-        setShowLastDealModal,
-        selectedProductForLastDeal,
-        setSelectedProductForLastDeal,
-        showItemProfitModal,
-        setShowItemProfitModal,
 
         // Refs
         productSearchRef,
@@ -695,7 +641,6 @@ export const useInvoiceLogic = (
         handleUpdateItem,
         handleRemoveItem,
         handleImport,
-        handleApplyBillDiscount,
         resetInvoice,
         handleSaveInvoice,
         confirmPreparedInvoice,

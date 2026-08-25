@@ -75,13 +75,17 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
             }
             const resourceId = executedResourceId.current;
             const detail = (await ordersApi.getCanonical(resourceId)).data;
-            if (!detail || String(detail.sales_order_id ?? detail.order_id ?? detail.id) !== resourceId) {
+            if (!detail || String(detail.sales_order_id) !== resourceId) {
                 throw new Error('Order posted, but authoritative readback could not be verified. Refresh history before retrying.');
             }
+            if (typeof detail.order_number !== 'string' || !detail.order_number.trim()
+                || typeof detail.customer_name !== 'string' || !detail.customer_name.trim()) {
+                throw new Error('Order posted, but authoritative identity readback is incomplete.');
+            }
             setCreatedOrderData({
-                orderId: String(detail.sales_order_id ?? detail.order_id ?? detail.id),
-                orderNumber: String(detail.order_number),
-                customerName: String(detail.customer_name),
+                orderId: String(detail.sales_order_id),
+                orderNumber: detail.order_number.trim(),
+                customerName: detail.customer_name.trim(),
                 totalAmount: normalizeAuthoritativeDecimal(detail.total_amount, 'Posted order total', {
                     scale: 2, maximumWholeDigits: 20,
                 }),

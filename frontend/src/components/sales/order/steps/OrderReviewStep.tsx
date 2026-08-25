@@ -82,7 +82,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                     date: order.order_date,
                     customer: {
                         name: order.customer_name,
-                        phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
+                        phone: selectedCustomer?.primary_phone,
                         gst_number: selectedCustomer?.gst_number,
                         drug_license_number: selectedCustomer?.drug_license_number
                     },
@@ -208,7 +208,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     addressType="shipping"
                                     onChange={(address: string) => setOrder(prev => ({ ...prev, shipping_address: address }))}
                                     onSave={(addressData: any) => {
-                                        const addrState = addressData?.state || addressData?.state_name;
+                                        const addrState = addressData?.state;
                                         const gstType = determineGstTypeForSupply(
                                             companyInfo?.state, addrState,
                                             companyInfo?.gst_number, selectedCustomer?.gst_number
@@ -217,7 +217,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                             ...prev,
                                             shipping_address_data: addressData,
                                             gst_type: gstType,
-                                            place_of_supply: addrState || companyInfo?.state || ''
+                                            place_of_supply: addrState || ''
                                         }));
                                     }}
                                     sameAsBilling={sameAsBilling}
@@ -225,7 +225,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     onSameAsBillingChange={(same: boolean) => {
                                         setSameAsBilling(same);
                                         if (same) {
-                                            const billingState = (order.billing_address_data as any)?.state || (order.billing_address_data as any)?.state_name;
+                                            const billingState = (order.billing_address_data as any)?.state;
                                             const gstType = determineGstTypeForSupply(
                                                 companyInfo?.state, billingState,
                                                 companyInfo?.gst_number, selectedCustomer?.gst_number
@@ -235,7 +235,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                                 shipping_address: prev.billing_address,
                                                 shipping_address_data: prev.billing_address_data,
                                                 gst_type: gstType,
-                                                place_of_supply: billingState || companyInfo?.state || ''
+                                                place_of_supply: billingState || ''
                                             }));
                                         }
                                     }}
@@ -264,7 +264,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                         <tr key={index} className="border-b hover:bg-gray-50">
                                             <td className="py-2 px-3">
                                                 <p className="text-sm font-medium">{item.product_name}</p>
-                                                <p className="text-xs text-gray-500">Batch: {item.batch_number || 'Not available'}</p>
+                                                <p className="text-xs text-gray-500">Batch: {item.batch_number}</p>
                                             </td>
                                             <td className="text-center py-2 px-3 text-sm font-medium">{item.quantity}</td>
                                             <td className="text-right py-2 px-3 text-sm">₹{formatExactDecimal(
@@ -274,7 +274,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                                 2,
                                             )}</td>
                                             <td className="text-right py-2 px-3 text-sm">{item.gst_percent}%</td>
-                                            <td className="text-right py-2 px-3 text-sm font-medium">₹{money(item.calculated_total || item.total, `Order item ${index + 1} total`)}</td>
+                                            <td className="text-right py-2 px-3 text-sm font-medium">₹{money(item.calculated_total, `Order item ${index + 1} total`)}</td>
                                         </tr>
                                     ))}
                                 </tbody>

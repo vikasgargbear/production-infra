@@ -7,7 +7,10 @@ import {
 const id = (suffix: string) => `10000000-0000-7000-8000-${suffix.padStart(12, '0')}`;
 
 const invoice = {
+  gst_type: 'CGST/SGST',
   items: [{
+    product_id: id('7'), batch_id: id('8'), product_name: 'Canonical Product',
+    batch_number: 'BATCH-2',
     quantity: '1.000000', free_quantity: '0.000000', unit_price: '100.0000',
     discount_percent: '0.000000', gst_percent: '12.000000',
     taxable_amount: '100.00', cgst_amount: '6.00', sgst_amount: '6.00',
@@ -22,7 +25,13 @@ const invoice = {
 };
 
 const order = {
-  items: [{ calculated_total: '112.00', taxable_amount: '100.00', tax_amount: '12.00' }],
+  gst_type: 'CGST/SGST',
+  items: [{
+    product_id: id('9'), batch_id: id('10'), product_name: 'Canonical Product',
+    batch_number: 'BATCH-3', quantity: '1.000000', free_quantity: '0.000000',
+    unit_price: '100.0000', discount_percent: '0.000000', gst_percent: '12.000000',
+    calculated_total: '112.00', taxable_amount: '100.00', tax_amount: '12.00',
+  }],
   subtotal_amount: '100.00', discount_amount: '0.00', tax_amount: '12.00',
   cgst_amount: '6.00', sgst_amount: '6.00', igst_amount: '0.00', total_amount: '112.00',
 };

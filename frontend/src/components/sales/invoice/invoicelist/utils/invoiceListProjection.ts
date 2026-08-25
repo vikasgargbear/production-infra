@@ -6,7 +6,7 @@ const paymentStatus = (row: CanonicalDocumentHistoryItem): Invoice['payment_stat
     const status = row.payment_status.toLowerCase();
     if (status === 'paid') return 'paid';
     if (status === 'pending') return 'pending';
-    if (status === 'partial' || status === 'partially_paid') return 'partial';
+    if (status === 'partial') return 'partial';
     if (status === 'overdue') return 'overdue';
     if (status === 'cancelled' || status === 'reversed') return 'cancelled';
     return null;
@@ -23,6 +23,16 @@ export function projectSalesHistoryRow(
     row: CanonicalDocumentHistoryItem,
     documentType: SalesHistoryDocumentType,
 ): Invoice {
+    const expectedKind = documentType === 'invoice'
+        ? 'sales_invoice'
+        : documentType === 'challan' ? 'sales_dispatch' : 'sales_order';
+    if (row.document_kind !== expectedKind) {
+        throw new Error(`Sales history expected ${expectedKind}, received ${row.document_kind}.`);
+    }
+    const canonicalPaymentStatus = documentType === 'invoice' ? paymentStatus(row) : null;
+    if (documentType === 'invoice' && canonicalPaymentStatus === null) {
+        throw new Error('Sales invoice history is missing its canonical payment status.');
+    }
     return {
         id: row.document_id,
         document_type: documentType,
@@ -31,11 +41,11 @@ export function projectSalesHistoryRow(
         customer_id: row.party_account_id,
         customer_name: row.party_name,
         invoice_date: row.document_date,
-        due_date: row.due_date || '',
+        due_date: row.due_date,
         total_amount: row.total_amount,
         paid_amount: documentType === 'invoice' ? row.paid_amount : null,
         pending_amount: documentType === 'invoice' ? row.outstanding_amount : null,
-        payment_status: documentType === 'invoice' ? paymentStatus(row) : null,
+        payment_status: canonicalPaymentStatus,
         items_count: row.line_count,
         created_at: row.created_at,
         updated_at: row.updated_at,

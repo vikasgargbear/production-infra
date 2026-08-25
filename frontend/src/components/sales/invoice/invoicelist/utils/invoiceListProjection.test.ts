@@ -40,7 +40,7 @@ test.each([
         document_number: 'DEMO-SD-000003', document_date: '2026-08-21', due_date: null,
         status: 'posted',
         total_amount: null,
-    }, 'posted', 'DEMO-SD-000003', ''],
+    }, 'posted', 'DEMO-SD-000003', null],
 ])('projects %s identity and authoritative lifecycle status', (
     documentType,
     sourceRow,
