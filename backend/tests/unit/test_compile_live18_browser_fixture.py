@@ -626,16 +626,21 @@ def test_supplier_debit_note_reuses_portal_reconciled_return_quantities() -> Non
         )
 
 
-def test_expense_claim_targets_exact_receipt_accounts_and_reviewed_amount() -> None:
+def test_expense_claim_uploads_exact_pdf_and_targets_reviewed_accounts_and_amount(
+    tmp_path: Path,
+) -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(
         (root / "frontend/e2e/live18/templates/expense_claim.json").read_text()
     )
+    receipt_path = tmp_path / "reviewed-expense-receipt.pdf"
+    receipt_path.write_bytes(b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n")
     scalars = {
         "expense_claim_amount": "168.00",
         "expense_claim_purpose": "Reviewed customer-site visit",
         "expense_claim_merchant": "Reviewed Taxi Private Limited",
         "expense_claim_description": "Taxi from branch to customer site",
+        "expense_receipt_pdf_path": str(receipt_path),
     }
     facts = {
         "identity": {
@@ -658,13 +663,12 @@ def test_expense_claim_targets_exact_receipt_accounts_and_reviewed_amount() -> N
     assert operation["prepare_steps"][1]["value"] == (
         "d3000000-0000-7000-8000-000000000005"
     )
-    assert operation["prepare_steps"][6]["value"] == (
-        "d3000000-0000-7000-8000-000000000061"
-    )
-    assert operation["prepare_steps"][7]["value"] == (
+    assert operation["prepare_steps"][3]["action"] == "setInputFiles"
+    assert operation["prepare_steps"][3]["value"] == str(receipt_path)
+    assert operation["prepare_steps"][10]["value"] == (
         "d3000000-0000-7000-8000-000000000062"
     )
-    assert operation["prepare_steps"][10]["value"] == "168.00"
+    assert operation["prepare_steps"][13]["value"] == "168.00"
 
     with pytest.raises(FixtureCompileError, match="greater than zero"):
         _operation_facts(

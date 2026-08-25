@@ -14,7 +14,7 @@ jest.mock('../../../services/api', () => ({
   branchesApi: { getAll: jest.fn() },
 }));
 jest.mock('../../../services/api/modules/finance/canonicalExpenseClaims.api', () => ({
-  canonicalExpenseClaimsApi: { context: jest.fn(), readback: jest.fn() },
+  canonicalExpenseClaimsApi: { context: jest.fn(), readback: jest.fn(), uploadReceipt: jest.fn() },
   buildExpenseClaimPayload: jest.requireActual('../../../services/api/modules/finance/canonicalExpenseClaims.api').buildExpenseClaimPayload,
   prepareExpenseClaim: jest.fn(),
   executeApprovedExpenseClaim: jest.fn(),
@@ -50,6 +50,13 @@ beforeEach(() => {
   } });
   (prepareExpenseClaim as jest.Mock).mockResolvedValue({ data: {
     command_request_id: ids.command, preview_hash: `sha256:${'a'.repeat(64)}`,
+  } });
+  (canonicalExpenseClaimsApi.uploadReceipt as jest.Mock).mockResolvedValue({ data: {
+    organization_id: ids.org, branch_id: ids.branch, attachment_id: ids.receipt,
+    evidence_kind: 'expense_receipt', original_filename: 'receipt.pdf', media_type: 'application/pdf',
+    byte_size: 38, sha256: 'b'.repeat(64), document_date: '2026-08-25',
+    retention_until: '2034-08-25', legal_hold: false, status: 'verified',
+    verified_at: '2026-08-25T00:00:00Z', idempotency_replayed: false,
   } });
 });
 
@@ -90,4 +97,24 @@ it('treats a blank amount as invalid rather than inventing zero', async () => {
   expect(await screen.findByText('Exact total: Invalid amount')).not.toBeNull();
   expect((screen.getByRole('button', { name: 'Prepare immutable preview' }) as HTMLButtonElement).disabled).toBe(true);
   expect(prepareExpenseClaim).not.toHaveBeenCalled();
+});
+
+it('uploads a PDF through the canonical server boundary and selects verified readback', async () => {
+  render(<ExpenseClaimsFlow onClose={jest.fn()} />);
+  await waitFor(() => expect((screen.getByLabelText('Branch') as HTMLSelectElement).options.length).toBe(2));
+  fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
+  expect(await screen.findByDisplayValue('Canonical Claimant')).not.toBeNull();
+
+  fireEvent.change(screen.getByLabelText('Receipt date'), { target: { value: '2026-08-25' } });
+  const pdf = new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])], 'receipt.pdf', {
+    type: 'application/pdf',
+  });
+  fireEvent.change(screen.getByLabelText('Receipt PDF'), { target: { files: [pdf] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Upload and verify receipt' }));
+
+  await waitFor(() => expect(canonicalExpenseClaimsApi.uploadReceipt).toHaveBeenCalledWith(
+    ids.branch, '2026-08-25', pdf,
+  ));
+  expect((await screen.findByRole('status', { name: 'Receipt upload verified' })).textContent).toContain('Receipt verified and selected.');
+  expect((screen.getByLabelText('Verified unused receipt') as HTMLSelectElement).value).toBe(ids.receipt);
 });

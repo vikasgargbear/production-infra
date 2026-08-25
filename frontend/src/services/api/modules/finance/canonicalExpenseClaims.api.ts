@@ -52,6 +52,23 @@ export interface ExpenseClaimContext {
   unsupported_modes: string[];
 }
 
+export interface VerifiedExpenseReceiptUpload {
+  organization_id: string;
+  branch_id: string;
+  attachment_id: string;
+  evidence_kind: 'expense_receipt';
+  original_filename: string;
+  media_type: 'application/pdf';
+  byte_size: number;
+  sha256: string;
+  document_date: string;
+  retention_until: string;
+  legal_hold: boolean;
+  status: 'verified' | 'retained';
+  verified_at: string;
+  idempotency_replayed: boolean;
+}
+
 export interface ExpenseClaimPreparePayload {
   idempotency_key: string;
   branch_id: string;
@@ -115,6 +132,7 @@ export interface PostedExpenseClaim {
 const MONEY = { scale: 2, maximumWholeDigits: 20 } as const;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SHA256 = /^[0-9a-f]{64}$/i;
+const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
 
 const requireUuid = (value: unknown, label: string): string => {
   const text = String(value || '');
@@ -168,6 +186,24 @@ export function decodeExpenseClaimContext(value: unknown): ExpenseClaimContext {
     }
     receiptIds.add(receiptId);
   });
+  return row;
+}
+
+export function decodeVerifiedExpenseReceipt(value: unknown): VerifiedExpenseReceiptUpload {
+  if (!value || typeof value !== 'object') throw new Error('Verified receipt response is unavailable.');
+  const row = value as VerifiedExpenseReceiptUpload;
+  requireUuid(row.organization_id, 'Receipt organization');
+  requireUuid(row.branch_id, 'Receipt branch');
+  requireUuid(row.attachment_id, 'Receipt attachment');
+  requireDate(row.document_date, 'Receipt document date');
+  requireDate(row.retention_until, 'Receipt retention date');
+  if (row.evidence_kind !== 'expense_receipt' || row.media_type !== 'application/pdf'
+      || !['verified', 'retained'].includes(row.status) || !row.verified_at
+      || !Number.isSafeInteger(row.byte_size) || row.byte_size <= 0
+      || row.byte_size > MAX_RECEIPT_BYTES || !SHA256.test(row.sha256)
+      || !row.original_filename?.toLowerCase().endsWith('.pdf')) {
+    throw new Error('Receipt upload did not return verified canonical PDF integrity metadata.');
+  }
   return row;
 }
 
@@ -271,6 +307,27 @@ export const canonicalExpenseClaimsApi = {
       `/web/actions/expense-claims/commands/${commandRequestId}/readback`,
     );
     decodePostedExpenseClaim(response.data);
+    return response;
+  },
+  uploadReceipt: async (
+    branchId: string, documentDate: string, file: File,
+  ): Promise<AxiosResponse<VerifiedExpenseReceiptUpload>> => {
+    requireUuid(branchId, 'Expense receipt branch');
+    requireDate(documentDate, 'Expense receipt date');
+    if (!(file instanceof File) || file.type !== 'application/pdf'
+        || !file.name.toLowerCase().endsWith('.pdf') || file.size <= 0
+        || file.size > MAX_RECEIPT_BYTES) {
+      throw new Error('Select one non-empty PDF receipt no larger than 10 MiB.');
+    }
+    const form = new FormData();
+    form.append('branch_id', branchId);
+    form.append('document_date', documentDate);
+    form.append('file', file, file.name);
+    const response = await apiHelpers.post<VerifiedExpenseReceiptUpload>(
+      '/web/evidence/expense-receipts', form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    decodeVerifiedExpenseReceipt(response.data);
     return response;
   },
 };

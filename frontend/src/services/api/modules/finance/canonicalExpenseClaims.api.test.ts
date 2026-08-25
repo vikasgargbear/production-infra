@@ -91,6 +91,29 @@ describe('canonical expense claim browser boundary', () => {
     await expect(prepareExpenseClaim(payload())).rejects.toThrow(/does not match.*evidence/i);
   });
 
+  it('uploads PDF bytes only through authenticated multipart API and verifies metadata', async () => {
+    const file = new File(['%PDF-1.7\n%%EOF\n'], 'receipt.pdf', { type: 'application/pdf' });
+    const uploaded = {
+      organization_id: ids.org, branch_id: ids.branch, attachment_id: ids.receipt,
+      evidence_kind: 'expense_receipt', original_filename: 'receipt.pdf', media_type: 'application/pdf',
+      byte_size: file.size, sha256: 'b'.repeat(64), document_date: '2026-08-24',
+      retention_until: '2034-08-25', legal_hold: false, status: 'verified',
+      verified_at: '2026-08-25T00:00:00Z', idempotency_replayed: false,
+    } as const;
+    (apiHelpers.post as jest.Mock).mockResolvedValueOnce({ data: uploaded });
+
+    await expect(canonicalExpenseClaimsApi.uploadReceipt(
+      ids.branch, '2026-08-24', file,
+    )).resolves.toEqual({ data: uploaded });
+    const [path, form, config] = (apiHelpers.post as jest.Mock).mock.calls[0];
+    expect(path).toBe('/web/evidence/expense-receipts');
+    expect(form).toBeInstanceOf(FormData);
+    expect(form.get('branch_id')).toBe(ids.branch);
+    expect(form.get('document_date')).toBe('2026-08-24');
+    expect((form.get('file') as File).name).toBe('receipt.pdf');
+    expect(config).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } });
+  });
+
   it('reconciles exact posted line, receipt and balanced journal totals', async () => {
     const readback = {
       command_request_id: ids.command, expense_claim_id: ids.claim, claim_number: 'EXP-2026-000001',
