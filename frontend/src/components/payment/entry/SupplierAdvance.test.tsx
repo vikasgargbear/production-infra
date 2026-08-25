@@ -51,7 +51,8 @@ test('exposes the complete mandatory PO-line flow and keeps prepare disabled unt
   const prepare = screen.getByRole('button', { name: 'Prepare immutable preview' });
   expect((prepare as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: ids.supplier } });
-  fireEvent.change(screen.getByLabelText('Approved PO product line'), { target: { value: ids.line } });
+  fireEvent.change(screen.getByLabelText('Approved purchase order'), { target: { value: ids.order } });
+  expect((screen.getByLabelText('Approved PO product line') as HTMLSelectElement).value).toBe(ids.line);
   fireEvent.change(screen.getByLabelText('Bank and settlement ledger'), { target: { value: ids.bank } });
   fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'upi' } });
   fireEvent.change(screen.getByLabelText('Gross advance amount'), { target: { value: '168.01' } });
@@ -60,4 +61,5 @@ test('exposes the complete mandatory PO-line flow and keeps prepare disabled unt
   expect(screen.getByText('₹168.01')).not.toBeNull();
   expect((prepare as HTMLButtonElement).disabled).toBe(false);
   expect(screen.getByText(/backend-verified not applicable/i)).not.toBeNull();
+  expect(screen.getByText(/required: select supplier, approved purchase order/i)).not.toBeNull();
 });

@@ -71,6 +71,13 @@ Purchase order reviews its quantity, rate, line discount, free quantity,
 document discount, freight charge, and a bounded delivery offset. Its supplier,
 product/UOM, branch, business date, GST facts, and immutable preview remain
 canonical API authority.
+Supplier advance reviews `supplier_advance_amount`,
+`supplier_advance_method`, `supplier_advance_approval_attestation`, and
+`supplier_advance_execution_attestation`. The supplier, bank, business date,
+exact purchase-order UUID, and its sole eligible product-line UUID remain
+canonical runtime authority. The purchase order runs before its advance and
+before goods receipt so the context can prove it is still approved; ambiguous
+multi-line selection fails closed instead of selecting an arbitrary line.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

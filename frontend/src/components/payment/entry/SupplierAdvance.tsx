@@ -37,6 +37,7 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
   const [workspace, setWorkspace] = useState<Workspace>('prepare');
   const [context, setContext] = useState<SupplierAdvanceContext | null>(null);
   const [supplierId, setSupplierId] = useState('');
+  const [purchaseOrderId, setPurchaseOrderId] = useState('');
   const [lineId, setLineId] = useState('');
   const [bankId, setBankId] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
@@ -85,6 +86,21 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
   useEffect(() => { void loadContext(); }, [loadContext]);
 
   const supplier = context?.suppliers.find(row => row.supplier_account_id === supplierId) || null;
+  const purchaseOrders = useMemo(() => {
+    const unique = new Map<string, { id: string; number: string; orderDate: string }>();
+    for (const line of supplier?.lines || []) {
+      unique.set(line.purchase_order_id, {
+        id: line.purchase_order_id,
+        number: line.purchase_order_number,
+        orderDate: line.order_date,
+      });
+    }
+    return [...unique.values()];
+  }, [supplier]);
+  const purchaseOrderLines = useMemo(
+    () => supplier?.lines.filter(row => row.purchase_order_id === purchaseOrderId) || [],
+    [purchaseOrderId, supplier],
+  );
   const selectedLine = supplier?.lines.find(row => row.purchase_order_line_id === lineId) || null;
   const previewImpact = useMemo(() => {
     if (!prepared || !Array.isArray(prepared.financial_impact)) return null;
@@ -175,9 +191,11 @@ const SupplierAdvance: React.FC<SupplierAdvanceProps> = ({ onClose }) => {
         {context && !context.ready && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900"><p className="font-medium">Advance unavailable</p><ul className="mt-2 list-disc pl-5">{context.blocking_reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div>}
         {context && <section className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Advance source</h2><p className="text-sm text-slate-600">Only approved INR goods PO lines with verified supplier and fiscal evidence are shown.</p></div><button type="button" onClick={() => void loadContext(paymentDate || undefined)} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 px-4"><RefreshCw className="mr-2 inline h-4 w-4" />Refresh</button></div>
+          <p className="mt-3 text-sm text-slate-600">Required: select supplier, approved purchase order, product line, bank, method, reference, and a positive amount.</p>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-medium">Supplier<select value={supplierId} onChange={event => { invalidatePrepare(); setSupplierId(event.target.value); setLineId(''); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select supplier</option>{context.suppliers.map(row => <option key={row.supplier_account_id} value={row.supplier_account_id}>{row.supplier_code} — {row.supplier_name}</option>)}</select></label>
-            <label className="text-sm font-medium">Approved PO product line<select value={lineId} onChange={event => { invalidatePrepare(); setLineId(event.target.value); setAmount(''); }} disabled={!supplier} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select PO line</option>{supplier?.lines.map(line => <option key={line.purchase_order_line_id} value={line.purchase_order_line_id}>{line.purchase_order_number} · line {line.line_number} · {line.product_code} · available ₹{line.remaining_advance_amount}</option>)}</select></label>
+            <label className="text-sm font-medium">Supplier<select value={supplierId} onChange={event => { invalidatePrepare(); setSupplierId(event.target.value); setPurchaseOrderId(''); setLineId(''); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select supplier</option>{context.suppliers.map(row => <option key={row.supplier_account_id} value={row.supplier_account_id}>{row.supplier_code} — {row.supplier_name}</option>)}</select></label>
+            <label className="text-sm font-medium">Approved purchase order<select value={purchaseOrderId} onChange={event => { invalidatePrepare(); const next = event.target.value; setPurchaseOrderId(next); const matches = supplier?.lines.filter(row => row.purchase_order_id === next) || []; setLineId(matches.length === 1 ? matches[0].purchase_order_line_id : ''); setAmount(''); }} disabled={!supplier} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select purchase order</option>{purchaseOrders.map(order => <option key={order.id} value={order.id}>{order.number} · {order.orderDate}</option>)}</select></label>
+            <label className="text-sm font-medium">Approved PO product line<select value={lineId} onChange={event => { invalidatePrepare(); setLineId(event.target.value); setAmount(''); }} disabled={!purchaseOrderId} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select PO line</option>{purchaseOrderLines.map(line => <option key={line.purchase_order_line_id} value={line.purchase_order_line_id}>line {line.line_number} · {line.product_code} · available ₹{line.remaining_advance_amount}</option>)}</select></label>
             <label className="text-sm font-medium">Organization payment date<input type="date" max={maximumDate || undefined} value={paymentDate} onChange={event => { const next = event.target.value; invalidatePrepare(); setPaymentDate(next); if (next) void loadContext(next); else setContext(null); }} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
             <label className="text-sm font-medium">Bank and settlement ledger<select value={bankId} onChange={event => { invalidatePrepare(); setBankId(event.target.value); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select INR bank</option>{context.bank_accounts.map(row => <option key={row.bank_account_id} value={row.bank_account_id}>{row.bank_name} — {row.account_holder_name} ({row.ifsc})</option>)}</select></label>
             <label className="text-sm font-medium">Method<select value={method} onChange={event => { invalidatePrepare(); setMethod(event.target.value as SupplierAdvanceMethod | ''); }} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select payment method</option><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option></select></label>

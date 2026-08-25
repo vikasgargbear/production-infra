@@ -57,6 +57,17 @@
       "availability": "published"
     },
     {
+      "id": "supplier_advance",
+      "command_operation": "finance.supplier_advance.prepare",
+      "prepare_tool": "erp_supplier_advance_prepare",
+      "approval_policy": "separate_approver",
+      "rest_readback": "/api/canonical/supplier-advances/{resource_id}",
+      "mcp_readback_tool": "erp_operation_status_get",
+      "database_relations": ["finance.payments", "procurement.purchase_order_advance_allocations", "finance.journal_entries", "finance.journal_lines"],
+      "scenario_steps": ["supplier_advance_no_withholding"],
+      "availability": "published"
+    },
+    {
       "id": "goods_receipt",
       "command_operation": "procurement.goods_receipt.prepare",
       "prepare_tool": "erp_goods_receipt_prepare",
@@ -98,17 +109,6 @@
       "mcp_readback_tool": "erp_operation_status_get",
       "database_relations": ["finance.payments", "finance.allocations", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["supplier_payment_balance_no_withholding"],
-      "availability": "published"
-    },
-    {
-      "id": "supplier_advance",
-      "command_operation": "finance.supplier_advance.prepare",
-      "prepare_tool": "erp_supplier_advance_prepare",
-      "approval_policy": "separate_approver",
-      "rest_readback": "/api/canonical/supplier-advances/{resource_id}",
-      "mcp_readback_tool": "erp_operation_status_get",
-      "database_relations": ["finance.payments", "procurement.purchase_order_advance_allocations", "finance.journal_entries", "finance.journal_lines"],
-      "scenario_steps": ["supplier_advance_no_withholding"],
       "availability": "published"
     },
     {

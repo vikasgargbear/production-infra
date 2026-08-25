@@ -1,0 +1,36 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "supplier_advance",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/supplier-advance"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select supplier, approved purchase order, product line, bank, method, reference, and a positive amount.","exact":true},"value":"Required: select supplier, approved purchase order, product line, bank, method, reference, and a positive amount."}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/supplier-advance"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Supplier","exact":true},"value":"{{fact.identity.supplier_account_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Approved purchase order","exact":true},"value":"{{resource_purchase_order}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Bank and settlement ledger","exact":true},"value":"{{fact.identity.bank_account_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Method","exact":true},"value":"{{scalar.supplier_advance_method}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Bank / UPI reference","exact":true},"value":"LIVE18-SADV-{{run_token}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Gross advance amount","exact":true},"value":"{{scalar.supplier_advance_amount}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/payment/supplier-advance"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"2. Independent approval","exact":true}},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load immutable review","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"{{scalar.supplier_advance_approval_attestation}}","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"3. Execute & verify","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Check status / recover","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"{{scalar.supplier_advance_execution_attestation}}","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute approved advance","exact":true}}
+    ]
+  }
+}

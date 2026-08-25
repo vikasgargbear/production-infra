@@ -435,3 +435,46 @@ def test_supplier_payment_template_targets_prior_certified_supplier_invoice() ->
     assert used == set(scalars)
     assert operation["prepare_steps"][7]["locator"]["name"] == "{{resource_supplier_invoice}}"
     assert operation["execute_steps"][1]["locator"]["name"] == "Post ₹0.01"
+
+
+def test_supplier_advance_template_targets_prior_purchase_order_and_split_review() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/supplier_advance.json").read_text()
+    )
+    approval = (
+        "I independently reviewed the exact PO lineage, bank, gross amount, "
+        "cash, and withholding and approve this command."
+    )
+    execution = (
+        "I am the requester and authorize one idempotent execution of this "
+        "approved preview."
+    )
+    scalars = {
+        "supplier_advance_amount": "0.01",
+        "supplier_advance_method": "bank_transfer",
+        "supplier_advance_approval_attestation": approval,
+        "supplier_advance_execution_attestation": execution,
+    }
+    facts = {
+        "identity": {
+            "supplier_account_id": "d3000000-0000-7000-8000-000000000042",
+            "bank_account_id": "d3000000-0000-7000-8000-000000000044",
+        },
+    }
+    used: set[str] = set()
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("supplier_advance", operation, "separate_approver")
+    assert used == set(scalars)
+    assert operation["lifecycle_mode"] == "split"
+    assert operation["prepare_steps"][2]["value"] == "{{resource_purchase_order}}"
+    assert operation["prepare_steps"][5]["value"] == "LIVE18-SADV-{{run_token}}"
+    assert operation["approval_steps"][2]["value"] == "{{command_request_id}}"
+    assert operation["approval_steps"][4]["locator"]["name"] == approval
+    assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"
+    assert operation["execute_steps"][3]["locator"]["name"] == execution
