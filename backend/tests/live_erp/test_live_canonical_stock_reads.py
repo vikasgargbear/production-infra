@@ -65,7 +65,8 @@ def test_live_stock_hub_pages_match_visible_authoritative_ledger(
         SELECT product_id, sum(quantity) AS quantity, sum(value) AS value,
                count(*)::integer AS batch_count,
                count(*) FILTER (WHERE quantity>0)::integer AS positive_stock_batch_count,
-               count(*) FILTER (WHERE quantity=0)::integer AS exhausted_batch_count
+               count(*) FILTER (WHERE quantity=0)::integer AS exhausted_batch_count,
+               count(*) FILTER (WHERE quantity<0)::integer AS negative_stock_batch_count
           FROM batch_stock GROUP BY product_id ORDER BY product_id
     """, (
         str(live_config.test_org_id), str(live_config.test_branch_id),
@@ -80,6 +81,7 @@ def test_live_stock_hub_pages_match_visible_authoritative_ledger(
         assert item["batch_count"] == direct["batch_count"]
         assert item["positive_stock_batch_count"] == direct["positive_stock_batch_count"]
         assert item["exhausted_batch_count"] == direct["exhausted_batch_count"]
+        assert item["negative_stock_batch_count"] == direct["negative_stock_batch_count"]
     assert current_page["summary"]["product_count"] == len(direct_current)
     assert Decimal(current_page["summary"]["total_quantity"]) == sum(
         (row["quantity"] for row in direct_current), Decimal("0")
@@ -107,6 +109,7 @@ def test_live_stock_hub_pages_match_visible_authoritative_ledger(
     for item, direct in zip(movement_items, direct_movements):
         assert Decimal(item["quantity_delta"]) == direct["quantity_delta"]
         assert Decimal(item["value_delta"]) == direct["value_delta"]
+        assert item["reversal_reconciled"] is True
 
     batch_page, batch_items = _load_every_page(
         api_json, "/api/canonical/inventory/batches", params,

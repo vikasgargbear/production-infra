@@ -123,6 +123,7 @@ class CurrentStockRow(BaseModel):
     )
     positive_stock_batch_count: int = Field(ge=0)
     exhausted_batch_count: int = Field(ge=0)
+    negative_stock_batch_count: int = Field(ge=0)
     expired_batch_count: int = Field(
         ge=0,
         description="Expired batches whose scoped net on-hand quantity is positive.",
@@ -132,6 +133,16 @@ class CurrentStockRow(BaseModel):
         description="Unexpired batches with positive stock expiring in the next 90 days.",
     )
     requires_cold_chain: bool
+
+    @model_validator(mode="after")
+    def validate_batch_partition(self):
+        if self.batch_count != (
+            self.positive_stock_batch_count
+            + self.exhausted_batch_count
+            + self.negative_stock_batch_count
+        ):
+            raise ValueError("tracked batch count does not reconcile by stock sign")
+        return self
 
 
 class CurrentStockSummary(BaseModel):
@@ -145,6 +156,17 @@ class CurrentStockSummary(BaseModel):
     )
     positive_stock_batch_count: int = Field(ge=0)
     exhausted_batch_count: int = Field(ge=0)
+    negative_stock_batch_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_batch_partition(self):
+        if self.batch_count != (
+            self.positive_stock_batch_count
+            + self.exhausted_batch_count
+            + self.negative_stock_batch_count
+        ):
+            raise ValueError("tracked batch count does not reconcile by stock sign")
+        return self
 
 
 class CurrentStockPage(BaseModel):
@@ -191,6 +213,16 @@ class BatchSummary(BaseModel):
     expiring_30d_count: int = Field(ge=0)
     near_expiry_90d_count: int = Field(ge=0)
 
+    @model_validator(mode="after")
+    def validate_batch_partition(self):
+        if self.batch_count != (
+            self.positive_stock_count
+            + self.exhausted_batch_count
+            + self.negative_stock_count
+        ):
+            raise ValueError("tracked batch count does not reconcile by stock sign")
+        return self
+
 
 class BatchPage(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -234,6 +266,7 @@ class MovementRow(BaseModel):
     document_number: str
     reverses_entry_id: Optional[UUID]
     reversed_entry_kind: Optional[EntryKind]
+    reversal_reconciled: Literal[True]
     posted_by: Optional[str]
 
     @model_validator(mode="after")
@@ -496,7 +529,8 @@ def current_stock(
                to_char(COALESCE(sum(stock.value),0),'FM999999999999999999.00') AS total_value,
                count(*) AS batch_count,
                count(*) FILTER (WHERE stock.quantity>0) AS positive_stock_batch_count,
-               count(*) FILTER (WHERE stock.quantity=0) AS exhausted_batch_count
+               count(*) FILTER (WHERE stock.quantity=0) AS exhausted_batch_count,
+               count(*) FILTER (WHERE stock.quantity<0) AS negative_stock_batch_count
         {base}
     """, params)[0]
     rows = _mappings(db, f"""
@@ -511,6 +545,7 @@ def current_stock(
                count(*) AS batch_count,
                count(*) FILTER (WHERE stock.quantity>0) AS positive_stock_batch_count,
                count(*) FILTER (WHERE stock.quantity=0) AS exhausted_batch_count,
+               count(*) FILTER (WHERE stock.quantity<0) AS negative_stock_batch_count,
                count(*) FILTER (
                  WHERE stock.quantity>0 AND batch.expires_on<=:business_date
                ) AS expired_batch_count,
@@ -523,7 +558,7 @@ def current_stock(
         GROUP BY stock.product_id, product.sku, product.name, product.generic_name,
                  product.hsn_code, product.product_kind, product.base_uom_code,
                  category.name, product.cold_chain_required
-        ORDER BY balance.product_id LIMIT :limit
+        ORDER BY stock.product_id LIMIT :limit
     """, params)
     has_more = len(rows) > limit
     items = rows[:limit]
@@ -576,7 +611,10 @@ def batches(
         LEFT JOIN LATERAL (
           SELECT sum(balance.quantity_delta) AS quantity, sum(balance.value_delta) AS value,
                  sum(balance.quantity_delta) FILTER (
-                   WHERE location.status='active' AND location.allows_sale
+                   WHERE location.status='active'
+                     AND location.location_type='saleable'
+                     AND location.allows_sale
+                     AND NOT location.allows_negative_stock
                  ) AS saleable_quantity
             FROM inventory.stock_ledger_entries balance
             JOIN inventory.locations location
@@ -731,7 +769,17 @@ def movements(
                entry.product_id, product.sku AS product_code, product.name AS product_name,
                entry.batch_id, batch.batch_number, entry.inventory_document_id,
                document.document_number, entry.reverses_entry_id,
-               reversed.entry_kind AS reversed_entry_kind, actor.display_name AS posted_by
+               reversed.entry_kind AS reversed_entry_kind,
+               CASE WHEN entry.entry_kind<>'reversal' THEN true ELSE
+                 reversed.id IS NOT NULL
+                 AND entry.quantity_delta=-reversed.quantity_delta
+                 AND entry.value_delta=-reversed.value_delta
+                 AND entry.branch_id=reversed.branch_id
+                 AND entry.location_id=reversed.location_id
+                 AND entry.product_id=reversed.product_id
+                 AND entry.batch_id=reversed.batch_id
+               END AS reversal_reconciled,
+               actor.display_name AS posted_by
         {base}
           AND (:after_at IS NULL OR (entry.posted_at,entry.id)<(:after_at,:after_id))
         ORDER BY entry.posted_at DESC, entry.id DESC LIMIT :limit

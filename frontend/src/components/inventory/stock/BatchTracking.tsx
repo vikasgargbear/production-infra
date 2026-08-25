@@ -5,7 +5,7 @@ import { canonicalInventoryReadsApi } from '../../../services/api/modules/invent
 import { InventoryScopeSelector } from './components/InventoryScopeSelector';
 import { useInventoryScope } from './hooks/useInventoryScope';
 import {
-  compareQuantity, decodeBatchPage, decodeMovementPage, displayDate, displayMoney,
+  batchItemsCsv, compareQuantity, decodeBatchPage, decodeMovementPage, displayDate, displayMoney,
   displayOrganizationTimestamp, displayQuantity, exhaustCursorPages, movementLabel,
   type BatchItem, type BatchSummary, type MovementItem,
 } from './utils/canonicalStockReads';
@@ -86,11 +86,7 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
   }).sort((left, right) => compareQuantity(right.total_quantity, left.total_quantity)), [items, query, status]);
 
   const exportCsv = () => {
-    const rows = [['Batch', 'Product', 'Quantity', 'Value', 'Expiry', 'Status'], ...visible.map(item => [
-      item.batch_number, item.product_name, item.total_quantity, item.total_value,
-      item.expires_on || '', item.status,
-    ])];
-    const blob = new Blob([rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
+    const blob = new Blob([batchItemsCsv(visible)], { type: 'text/csv;charset=utf-8' });
     const anchor = document.createElement('a');
     anchor.href = URL.createObjectURL(blob); anchor.download = 'canonical-batches.csv'; anchor.click();
     URL.revokeObjectURL(anchor.href);
@@ -142,7 +138,9 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
         </tr></thead><tbody className="divide-y divide-gray-100">{visible.map(item => <tr key={item.batch_id} data-batch-id={item.batch_id}>
           <td className="px-4 py-3 font-medium">{item.batch_number}</td><td className="px-4 py-3">{item.product_name}<div className="text-xs text-gray-500">{item.product_code}</div></td>
           <td className="px-4 py-3 text-right">{displayQuantity(item.total_quantity)}</td><td className="px-4 py-3 text-right">{displayMoney(item.total_value)}</td>
-          <td className="px-4 py-3">{displayDate(item.expires_on)}</td><td className="px-4 py-3 capitalize">{item.expiry_state.replace(/_/g, ' ')}</td>
+          <td className="px-4 py-3">{displayDate(item.expires_on)}</td><td className="px-4 py-3 capitalize">
+            {item.expiry_state.replace(/_/g, ' ')}<div className="text-xs text-gray-500">{item.status}</div>
+          </td>
           <td className="px-4 py-3 text-center"><button aria-label={`View movements for batch ${item.batch_number}`}
             onClick={event => void openMovements(item, event.currentTarget)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-gray-300">
             <Eye className="h-4 w-4" /></button></td>
@@ -156,7 +154,7 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
           <button ref={closeRef} onClick={closeMovements} className="min-h-11 rounded-lg border border-gray-300 px-4">Close</button></div>
         {movements.length === 0 ? <div className="p-10 text-center text-gray-500"><Package className="mx-auto mb-2 h-10 w-10" />No movement history found.</div>
           : <table className="mt-5 min-w-full divide-y divide-gray-200"><thead><tr><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Kind</th><th className="px-3 py-2 text-right">Quantity delta</th><th className="px-3 py-2 text-right">Value delta</th><th className="px-3 py-2 text-left">Location</th><th className="px-3 py-2 text-left">Document</th></tr></thead>
-            <tbody>{movements.map(movement => <tr key={movement.movement_id}><td className="px-3 py-2">{displayOrganizationTimestamp(movement.posted_at, scope.context!.organization_timezone)}</td><td className="px-3 py-2 capitalize">{movementLabel(movement)}</td><td className="px-3 py-2 text-right">{displayQuantity(movement.quantity_delta)}</td><td className="px-3 py-2 text-right">{displayMoney(movement.value_delta)}</td><td className="px-3 py-2">{movement.location_code} — {movement.location_name}</td><td className="px-3 py-2">{movement.document_number}</td></tr>)}</tbody>
+            <tbody>{movements.map(movement => <tr key={movement.movement_id} data-movement-id={movement.movement_id}><td className="px-3 py-2">{displayOrganizationTimestamp(movement.posted_at, scope.context!.organization_timezone)}</td><td className="px-3 py-2 capitalize">{movementLabel(movement)}</td><td className="px-3 py-2 text-right">{displayQuantity(movement.quantity_delta)}</td><td className="px-3 py-2 text-right">{displayMoney(movement.value_delta)}</td><td className="px-3 py-2">{movement.location_code} — {movement.location_name}</td><td className="px-3 py-2">{movement.document_number}</td></tr>)}</tbody>
           </table>}
       </div>
     </div>}

@@ -1,5 +1,6 @@
 import type { Invoice, SalesHistoryDocumentType } from '../types/invoicelist.types';
 import { formatExactCurrency } from '../../../../../utils/exactDecimal';
+import { safeCsvCell } from '../../../../../utils/safeCsv';
 
 const labels: Record<SalesHistoryDocumentType, string> = {
     invoice: 'Invoice',
@@ -66,12 +67,6 @@ export const salesStatusTone = (
     return 'default';
 };
 
-const csvCell = (value: unknown): string => {
-    let text = String(value ?? '');
-    if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
-    return `"${text.replace(/"/g, '""')}"`;
-};
-
 const exportPrefix: Record<SalesHistoryDocumentType, string> = {
     invoice: 'invoices',
     sales_order: 'sales-orders',
@@ -126,7 +121,7 @@ export const salesHistoryListCsv = (
                 ]),
             ];
 
-    return `${rows.map(row => row.map(csvCell).join(',')).join('\n')}\n`;
+    return `${rows.map(row => row.map(safeCsvCell).join(',')).join('\n')}\n`;
 };
 
 export const salesHistoryDocumentCsv = (document: Invoice): string => {
@@ -139,7 +134,7 @@ export const salesHistoryDocumentCsv = (document: Invoice): string => {
         document.total_amount,
         salesStatusLabel(salesDocumentStatus(document)),
     ];
-    return `${headers.map(csvCell).join(',')}\n${values.map(csvCell).join(',')}\n`;
+    return `${headers.map(safeCsvCell).join(',')}\n${values.map(safeCsvCell).join(',')}\n`;
 };
 
 const escapeHtml = (value: unknown): string => String(value ?? '')

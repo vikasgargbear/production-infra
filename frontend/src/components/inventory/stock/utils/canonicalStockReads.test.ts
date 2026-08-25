@@ -1,6 +1,6 @@
 import {
-  decodeCurrentStockPage, decodeInventoryContext, decodeMovementPage,
-  displayOrganizationTimestamp, exhaustCursorPages, movementLabel,
+  batchItemsCsv, decodeCurrentStockPage, decodeInventoryContext, decodeMovementPage,
+  displayOrganizationTimestamp, exhaustCursorPages, movementItemsCsv, movementLabel,
 } from './canonicalStockReads';
 
 const ids = {
@@ -21,7 +21,8 @@ const item = (movement_id: string, overrides = {}) => ({
   location_code: 'SALE', location_name: 'Saleable', product_id: ids.product,
   product_code: 'BOX', product_name: 'Carton', batch_id: ids.batch,
   batch_number: 'B-1', inventory_document_id: ids.document, document_number: 'ADJ-1',
-  reverses_entry_id: null, reversed_entry_kind: null, posted_by: null, ...overrides,
+  reverses_entry_id: null, reversed_entry_kind: null, reversal_reconciled: true,
+  posted_by: null, ...overrides,
 });
 const response = (items: unknown[], total_count: number, next_cursor: string | null) => ({
   scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25', items, total_count,
@@ -42,6 +43,7 @@ test('preserves signed authoritative value adjustments and reversal lineage', ()
 test.each([
   ['numeric quantity', { quantity_delta: 0 }],
   ['numeric value', { value_delta: -5 }],
+  ['unproven reversal reconciliation', { reversal_reconciled: false }],
   ['derived wrong reversal value', { entry_kind: 'reversal', quantity_delta: '0.000000', value_delta: '0.00', absolute_value: '0.00', reverses_entry_id: ids.movement1, reversed_entry_kind: 'value_adjustment' }],
 ])('rejects %s at the strict wire boundary', (_label, override) => {
   expect(() => decodeMovementPage(response([item(ids.movement1, override)], 1, null))).toThrow();
@@ -69,17 +71,20 @@ test('decodes explicit tracked, positive-stock, and exhausted batch counts', () 
       generic_name: null, hsn_code: null, product_type: 'goods', unit: 'EA', category: null,
       total_quantity: '1.000000', total_value: '95.24', average_unit_cost: '95.2400',
       batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
+      negative_stock_batch_count: 0,
       expired_batch_count: 0, near_expiry_batch_count: 1, requires_cold_chain: false,
     }],
     total_count: 1,
     summary: {
       product_count: 1, total_quantity: '1.000000', total_value: '95.24',
       batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
+      negative_stock_batch_count: 0,
     },
     next_cursor: null,
   });
   expect(decoded.summary).toMatchObject({
     batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
+    negative_stock_batch_count: 0,
   });
 });
 
@@ -90,4 +95,24 @@ test('validates and uses the organization IANA timezone for movement timestamps'
   })).toThrow('IANA time zone');
   expect(displayOrganizationTimestamp('2026-08-25T20:00:00Z', 'Asia/Kolkata'))
     .toContain('26 Aug 2026');
+});
+
+test('neutralizes spreadsheet formulas in batch and movement CSV exports', () => {
+  const hostile = '  =HYPERLINK("bad")';
+  const batchCsv = batchItemsCsv([{
+    batch_id: ids.batch, product_id: ids.product, product_code: 'BOX',
+    product_name: hostile, batch_number: '+FORMULA', manufactured_on: null,
+    expires_on: '2027-08-25', expiry_state: 'current', mrp: '100.0000',
+    status: 'released', is_saleable: true, total_quantity: '1.000000',
+    total_value: '100.00', average_unit_cost: '100.0000',
+  }]);
+  const movementCsv = movementItemsCsv([
+    decodeMovementPage(response([
+      item(ids.movement1, { document_number: '@FORMULA', product_name: hostile }),
+    ], 1, null)).items[0],
+  ]);
+  expect(batchCsv).toContain('"\'+FORMULA"');
+  expect(batchCsv).toContain('"\'  =HYPERLINK(""bad"")"');
+  expect(movementCsv).toContain('"\'@FORMULA"');
+  expect(movementCsv).toContain('"\'  =HYPERLINK(""bad"")"');
 });

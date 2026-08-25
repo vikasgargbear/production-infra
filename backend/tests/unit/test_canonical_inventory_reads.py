@@ -21,7 +21,7 @@ def movement(**overrides):
         location_code="SALE", location_name="Saleable", product_id=ids[3],
         product_code="BOX", product_name="Carton", batch_id=ids[4], batch_number="B-1",
         inventory_document_id=ids[5], document_number="ADJ-1", reverses_entry_id=None,
-        reversed_entry_kind=None, posted_by=None,
+        reversed_entry_kind=None, reversal_reconciled=True, posted_by=None,
     )
     values.update(overrides)
     return values
@@ -43,6 +43,8 @@ def test_movement_wire_preserves_signed_value_adjustment_and_reversal_authority(
     {"entry_kind": "value_adjustment", "value_delta": "0.00", "absolute_value": "0.00"},
     {"entry_kind": "reversal", "value_delta": "-5.00", "reverses_entry_id": None,
      "reversed_entry_kind": "value_adjustment"},
+    {"entry_kind": "reversal", "value_delta": "-5.00", "reverses_entry_id": uuid4(),
+     "reversed_entry_kind": "value_adjustment", "reversal_reconciled": False},
     {"entry_kind": "transfer_out", "quantity_delta": "1.000000", "value_delta": "5.00",
      "absolute_quantity": "1.000000", "absolute_value": "5.00"},
     {"entry_kind": "issue", "quantity_delta": "-1.000000", "value_delta": "-5.00",
@@ -64,6 +66,10 @@ def test_movement_sql_reads_signed_value_delta_and_never_recomputes_value():
     assert "reversed.entry_kind AS reversed_entry_kind" in source
     assert "entry.branch_id=:branch_id" in source
     assert "entry.location_id=:location_id" in source
+    assert "entry.quantity_delta=-reversed.quantity_delta" in source
+    assert "entry.value_delta=-reversed.value_delta" in source
+    assert "entry.location_id=reversed.location_id" in source
+    assert "END AS reversal_reconciled" in source
 
 
 def test_stock_routes_require_explicit_branch_and_expose_cursor_envelopes():
@@ -150,7 +156,10 @@ def test_batch_saleability_requires_release_future_expiry_positive_active_saleab
     assert "batch.status='released'" in source
     assert "batch.released_at IS NOT NULL" in source
     assert "batch.expires_on>:business_date" in source
-    assert "location.status='active' AND location.allows_sale" in source
+    assert "location.status='active'" in source
+    assert "location.location_type='saleable'" in source
+    assert "location.allows_sale" in source
+    assert "NOT location.allows_negative_stock" in source
     assert "COALESCE(stock.saleable_quantity,0)>0" in source
     assert "compliance.recall_batches" in source
     assert "recall.status IN ('initiated','in_progress')" in source
@@ -162,7 +171,35 @@ def test_current_stock_counts_tracked_positive_and_exhausted_batches_after_ledge
     assert "count(*) AS batch_count" in source
     assert "count(*) FILTER (WHERE stock.quantity>0) AS positive_stock_batch_count" in source
     assert "count(*) FILTER (WHERE stock.quantity=0) AS exhausted_batch_count" in source
+    assert "count(*) FILTER (WHERE stock.quantity<0) AS negative_stock_batch_count" in source
     assert "stock.quantity>0 AND batch.expires_on<=:business_date" in source
+    assert "ORDER BY stock.product_id LIMIT :limit" in source
+    assert "ORDER BY balance.product_id" not in source
+
+
+def test_stock_count_models_reject_unreconciled_sign_partitions():
+    with pytest.raises(ValueError, match="does not reconcile"):
+        reads.CurrentStockSummary(
+            product_count=1,
+            total_quantity="1.000000",
+            total_value="1.00",
+            batch_count=3,
+            positive_stock_batch_count=1,
+            exhausted_batch_count=1,
+            negative_stock_batch_count=0,
+        )
+    with pytest.raises(ValueError, match="does not reconcile"):
+        reads.BatchSummary(
+            batch_count=2,
+            positive_stock_count=1,
+            exhausted_batch_count=0,
+            negative_stock_count=0,
+            total_quantity="1.000000",
+            total_value="1.00",
+            expired_count=0,
+            expiring_30d_count=0,
+            near_expiry_90d_count=0,
+        )
 
 
 def test_movement_date_filters_use_organization_timezone_and_full_snapshot_summary():

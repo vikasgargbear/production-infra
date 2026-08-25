@@ -7,7 +7,7 @@ import { useInventoryScope } from './hooks/useInventoryScope';
 import {
   compareMoney, compareQuantity, decodeMovementPage, displayMoney, displayOrganizationTimestamp,
   displayQuantity, displayRate, exhaustCursorPages, movementLabel, type EntryKind,
-  type MovementItem, type MovementSummary,
+  movementItemsCsv, type MovementItem, type MovementSummary,
 } from './utils/canonicalStockReads';
 
 type Props = { open?: boolean; onClose?: () => void };
@@ -72,12 +72,8 @@ const StockMovement: React.FC<Props> = ({ open = true, onClose }) => {
   }));
 
   const exportCsv = () => {
-    const rows = [['Posted At', 'Document', 'Entry Kind', 'Product', 'Batch', 'Location', 'Quantity Delta', 'Value Delta', 'Unit Cost'],
-      ...visible.map(item => [item.posted_at, item.document_number, item.entry_kind, item.product_name,
-        item.batch_number, item.location_name, item.quantity_delta, item.value_delta, item.unit_cost])];
-    const content = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
     const anchor = document.createElement('a');
-    anchor.href = URL.createObjectURL(new Blob([content], { type: 'text/csv' }));
+    anchor.href = URL.createObjectURL(new Blob([movementItemsCsv(visible)], { type: 'text/csv;charset=utf-8' }));
     anchor.download = 'canonical-stock-movements.csv'; anchor.click(); URL.revokeObjectURL(anchor.href);
   };
 

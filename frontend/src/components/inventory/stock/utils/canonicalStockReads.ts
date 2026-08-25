@@ -1,4 +1,5 @@
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import { safeCsvRows } from '../../../../utils/safeCsv';
 import {
   addExactDecimals,
   compareExactDecimals,
@@ -167,6 +168,7 @@ export type CurrentStockItem = {
   batch_count: number;
   positive_stock_batch_count: number;
   exhausted_batch_count: number;
+  negative_stock_batch_count: number;
   expired_batch_count: number;
   near_expiry_batch_count: number;
   requires_cold_chain: boolean;
@@ -179,6 +181,7 @@ export type CurrentStockSummary = {
   batch_count: number;
   positive_stock_batch_count: number;
   exhausted_batch_count: number;
+  negative_stock_batch_count: number;
 };
 
 export type BatchItem = {
@@ -237,6 +240,7 @@ export type MovementItem = {
   document_number: string;
   reverses_entry_id: string | null;
   reversed_entry_kind: EntryKind | null;
+  reversal_reconciled: true;
   posted_by: string | null;
 };
 
@@ -273,7 +277,7 @@ const page = <T, S>(
 
 const currentItem = (value: unknown, label: string): CurrentStockItem => {
   const row = record(value, label);
-  return {
+  const result = {
     product_id: uuid(row.product_id, `${label} product_id`),
     product_code: requiredString(row.product_code, `${label} product_code`),
     product_name: requiredString(row.product_name, `${label} product_name`),
@@ -288,15 +292,21 @@ const currentItem = (value: unknown, label: string): CurrentStockItem => {
     batch_count: count(row.batch_count, `${label} batch_count`),
     positive_stock_batch_count: count(row.positive_stock_batch_count, `${label} positive_stock_batch_count`),
     exhausted_batch_count: count(row.exhausted_batch_count, `${label} exhausted_batch_count`),
+    negative_stock_batch_count: count(row.negative_stock_batch_count, `${label} negative_stock_batch_count`),
     expired_batch_count: count(row.expired_batch_count, `${label} expired_batch_count`),
     near_expiry_batch_count: count(row.near_expiry_batch_count, `${label} near_expiry_batch_count`),
     requires_cold_chain: boolean(row.requires_cold_chain, `${label} requires_cold_chain`),
   };
+  if (result.batch_count !== result.positive_stock_batch_count
+    + result.exhausted_batch_count + result.negative_stock_batch_count) {
+    throw new Error(`${label} batch counts do not reconcile by stock sign.`);
+  }
+  return result;
 };
 
 const currentSummary = (value: unknown): CurrentStockSummary => {
   const row = record(value, 'Current stock summary');
-  return {
+  const result = {
     product_count: count(row.product_count, 'Current stock summary product_count'),
     total_quantity: exact(row.total_quantity, 'Current stock summary total_quantity', QUANTITY),
     total_value: exact(row.total_value, 'Current stock summary total_value', MONEY),
@@ -305,7 +315,15 @@ const currentSummary = (value: unknown): CurrentStockSummary => {
       row.positive_stock_batch_count, 'Current stock summary positive_stock_batch_count',
     ),
     exhausted_batch_count: count(row.exhausted_batch_count, 'Current stock summary exhausted_batch_count'),
+    negative_stock_batch_count: count(
+      row.negative_stock_batch_count, 'Current stock summary negative_stock_batch_count',
+    ),
   };
+  if (result.batch_count !== result.positive_stock_batch_count
+    + result.exhausted_batch_count + result.negative_stock_batch_count) {
+    throw new Error('Current stock summary batch counts do not reconcile by stock sign.');
+  }
+  return result;
 };
 
 const batchItem = (value: unknown, label: string): BatchItem => {
@@ -334,7 +352,7 @@ const batchItem = (value: unknown, label: string): BatchItem => {
 
 const batchSummary = (value: unknown): BatchSummary => {
   const row = record(value, 'Batch summary');
-  return {
+  const result = {
     batch_count: count(row.batch_count, 'Batch summary batch_count'),
     positive_stock_count: count(row.positive_stock_count, 'Batch summary positive_stock_count'),
     exhausted_batch_count: count(row.exhausted_batch_count, 'Batch summary exhausted_batch_count'),
@@ -345,6 +363,11 @@ const batchSummary = (value: unknown): BatchSummary => {
     expiring_30d_count: count(row.expiring_30d_count, 'Batch summary expiring_30d_count'),
     near_expiry_90d_count: count(row.near_expiry_90d_count, 'Batch summary near_expiry_90d_count'),
   };
+  if (result.batch_count !== result.positive_stock_count
+    + result.exhausted_batch_count + result.negative_stock_count) {
+    throw new Error('Batch summary counts do not reconcile by stock sign.');
+  }
+  return result;
 };
 
 const ENTRY_KINDS: EntryKind[] = [
@@ -386,8 +409,12 @@ const movementItem = (value: unknown, label: string): MovementItem => {
       ? null : uuid(row.reverses_entry_id, `${label} reverses_entry_id`),
     reversed_entry_kind: row.reversed_entry_kind === null
       ? null : entryKind(row.reversed_entry_kind, `${label} reversed_entry_kind`),
+    reversal_reconciled: boolean(row.reversal_reconciled, `${label} reversal_reconciled`) as true,
     posted_by: nullableString(row.posted_by, `${label} posted_by`),
   };
+  if (result.reversal_reconciled !== true) {
+    throw new Error(`${label} reversal reconciliation was not proven by the server.`);
+  }
   const quantity = exactDecimalUnits(result.quantity_delta, `${label} quantity_delta`, SIGNED_QUANTITY);
   const valueDelta = exactDecimalUnits(result.value_delta, `${label} value_delta`, SIGNED_MONEY);
   const absoluteQuantity = exactDecimalUnits(result.absolute_quantity, `${label} absolute_quantity`, QUANTITY);
@@ -507,3 +534,21 @@ export const movementLabel = (movement: MovementItem): string => {
   }
   return movement.entry_kind.replace(/_/g, ' ');
 };
+
+export const batchItemsCsv = (items: readonly BatchItem[]): string => `${safeCsvRows([
+  ['Batch', 'Product', 'Quantity', 'Value', 'Expiry', 'Status'],
+  ...items.map(item => [
+    item.batch_number, item.product_name, item.total_quantity, item.total_value,
+    item.expires_on || '', item.status,
+  ]),
+])}\n`;
+
+export const movementItemsCsv = (items: readonly MovementItem[]): string => `${safeCsvRows([
+  ['Posted At', 'Document', 'Entry Kind', 'Product', 'Batch', 'Location',
+    'Quantity Delta', 'Value Delta', 'Unit Cost'],
+  ...items.map(item => [
+    item.posted_at, item.document_number, item.entry_kind, item.product_name,
+    item.batch_number, item.location_name, item.quantity_delta, item.value_delta,
+    item.unit_cost,
+  ]),
+])}\n`;

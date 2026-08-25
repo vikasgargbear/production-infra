@@ -51,7 +51,8 @@ beforeEach(() => {
       quantity_delta: '0.000000', value_delta: '-5.00', absolute_quantity: '0.000000', absolute_value: '5.00', unit_cost: '90.2400',
       branch_id: ids.branch, branch_code: 'MAIN', branch_name: 'Main', location_id: ids.location, location_code: 'SALE', location_name: 'Saleable',
       product_id: ids.product, product_code: 'BOX', product_name: 'Carton', batch_id: ids.batch2, batch_number: 'B-2',
-      inventory_document_id: ids.document, document_number: 'REV-1', reverses_entry_id: ids.movement, reversed_entry_kind: 'value_adjustment', posted_by: null }],
+      inventory_document_id: ids.document, document_number: 'REV-1', reverses_entry_id: ids.movement,
+      reversed_entry_kind: 'value_adjustment', reversal_reconciled: true, posted_by: null }],
     next_cursor: null,
   } });
 });

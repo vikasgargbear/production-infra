@@ -117,6 +117,9 @@ const CurrentStock: React.FC<Props> = ({ open = true, onClose }) => {
             <span>Tracked batches: <strong>{summary.batch_count}</strong></span>
             <span>With positive stock: <strong>{summary.positive_stock_batch_count}</strong></span>
             <span>Exhausted: <strong>{summary.exhausted_batch_count}</strong></span>
+            {summary.negative_stock_batch_count > 0 && <span className="text-red-700">
+              Negative: <strong>{summary.negative_stock_batch_count}</strong>
+            </span>}
           </div>}
         </section>
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
