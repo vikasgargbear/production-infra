@@ -21,6 +21,7 @@ function gitHead() {
 
 const gitCommit = (
   process.env.RENDER_GIT_COMMIT
+  || process.env.RAILWAY_GIT_COMMIT_SHA
   || process.env.GITHUB_SHA
   || gitHead()
 ).trim().toLowerCase();

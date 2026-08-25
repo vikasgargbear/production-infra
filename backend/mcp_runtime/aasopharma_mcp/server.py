@@ -285,11 +285,14 @@ def create_app(
 
     @server.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
-        git_commit = os.getenv("RENDER_GIT_COMMIT", "").strip().lower()
-        if len(git_commit) != 40 or any(
-            character not in "0123456789abcdef" for character in git_commit
-        ):
-            git_commit = None
+        git_commit = None
+        for variable_name in ("RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA"):
+            candidate = os.getenv(variable_name, "").strip().lower()
+            if len(candidate) == 40 and all(
+                character in "0123456789abcdef" for character in candidate
+            ):
+                git_commit = candidate
+                break
         return JSONResponse(
             {"status": "ok", "service": "aasopharma-mcp", "git_commit": git_commit}
         )

@@ -169,11 +169,14 @@ app.router.redirect_slashes = False
 # FastAPI's CORSMiddleware automatically handles OPTIONS requests properly
 
 def _deployed_git_commit() -> Optional[str]:
-    """Return the immutable Render build identity when the platform provides it."""
+    """Return the immutable build identity supplied by a supported platform."""
 
-    value = os.getenv("RENDER_GIT_COMMIT", "").strip().lower()
-    if len(value) == 40 and all(character in "0123456789abcdef" for character in value):
-        return value
+    for variable_name in ("RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA"):
+        value = os.getenv(variable_name, "").strip().lower()
+        if len(value) == 40 and all(
+            character in "0123456789abcdef" for character in value
+        ):
+            return value
     return None
 
 
