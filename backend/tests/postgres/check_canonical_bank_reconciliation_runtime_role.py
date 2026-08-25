@@ -205,7 +205,11 @@ def _context(*, checker: bool = False) -> ActionContext:
 def _runtime_service(engine) -> tuple[SqlAlchemyOperatorActionService, object]:
     connection = engine.connect()
     connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
-    factory = sessionmaker(bind=connection, expire_on_commit=False)
+    factory = sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
     return SqlAlchemyOperatorActionService(factory, runtime_principal_configured=True), connection
 
 
