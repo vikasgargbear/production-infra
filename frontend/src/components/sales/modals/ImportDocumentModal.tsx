@@ -234,6 +234,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
         <div className="px-6 py-4 border-b">
           <div className="flex gap-4">
             <button
+              type="button"
               onClick={() => setDocumentType('sales-order')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${documentType === 'sales-order'
                 ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
@@ -244,6 +245,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               Sales Orders
             </button>
             <button
+              type="button"
               onClick={() => setDocumentType('challan')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${documentType === 'challan'
                 ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
@@ -271,6 +273,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               />
             </div>
             <button
+              type="button"
               onClick={handleSearch}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
@@ -296,10 +299,12 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
                   : (doc.challan_number || `DC-${doc.challan_id}`);
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={docId || `doc-${index}`}
                     onClick={() => setSelectedDoc(doc)}
-                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id
+                    aria-pressed={selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id}
+                    className={`w-full p-4 text-left border rounded-lg cursor-pointer transition-all ${selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
@@ -327,7 +332,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -337,12 +342,14 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
         {/* Footer */}
         <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-2 text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleImport}
             disabled={!selectedDoc || loading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"

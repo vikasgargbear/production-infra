@@ -18,11 +18,21 @@ const PaymentReports: React.FC<PaymentReportsProps> = ({ onClose }) => {
                 <h1 className="text-xl font-semibold text-gray-900">Payment Reports</h1>
               </div>
               <div className="flex items-center gap-3">
-                <button className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled
+                  title="Date range filtering is unavailable until the canonical report contract is implemented"
+                  className="flex cursor-not-allowed items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-gray-400"
+                >
                   <Calendar className="w-4 h-4" />
                   Date Range
                 </button>
-                <button className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled
+                  title="Export is unavailable until the canonical report contract is implemented"
+                  className="flex cursor-not-allowed items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-gray-400"
+                >
                   <Download className="w-4 h-4" />
                   Export
                 </button>

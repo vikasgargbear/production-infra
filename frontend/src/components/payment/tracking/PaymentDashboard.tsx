@@ -94,7 +94,12 @@ const PaymentDashboard: React.FC = () => {
                     >
                         <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
                     </button>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                    <button
+                        type="button"
+                        disabled
+                        title="Export is unavailable until the canonical report contract is implemented"
+                        className="flex cursor-not-allowed items-center rounded-lg border border-gray-200 bg-gray-100 px-4 py-2 text-gray-400"
+                    >
                         <Download className="w-4 h-4 mr-2" />
                         Export Report
                     </button>

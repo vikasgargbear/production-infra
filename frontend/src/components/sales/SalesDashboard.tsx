@@ -457,7 +457,12 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-app-800">Sales Trend</h2>
             <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled
+                title="Export is unavailable until the canonical report contract is implemented"
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
