@@ -348,6 +348,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 type="button"
                 key={String(batch.batch_id)}
                 data-batch-id={batch.batch_id}
+                data-testid={`select-batch-${batch.batch_id}`}
                 ref={(el) => { if (typeof index === 'number') batchRefs.current[index] = el; }}
                 onClick={() => handleBatchSelect(batch)}
                 disabled={Boolean(disabledReason)}

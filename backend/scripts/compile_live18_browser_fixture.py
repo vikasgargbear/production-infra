@@ -13,6 +13,7 @@ import json
 import os
 import re
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -132,18 +133,46 @@ def resolve_authoritative_facts(
              destination_branch.code,destination_branch.name,
              destination.code,destination.name,bank.bank_name,bank.account_holder_name,
              ledger.code,ledger.name,
+             delivery_address.id::text,delivery_address.row_version,
+             direct_issue_batch.id::text,direct_issue_batch.batch_number,
+             direct_issue_batch.available_base_quantity,uom.multiplier,
              to_char((transaction_timestamp() AT TIME ZONE organization.timezone)::date,'YYYY-MM-DD'),
              to_char(transaction_timestamp() AT TIME ZONE organization.timezone,'YYYY-MM-DD"T"HH24:MI')
         FROM core.branches branch
         JOIN core.organizations organization ON organization.id=branch.org_id AND organization.status='active'
         JOIN parties.customer_accounts customer ON customer.org_id=branch.org_id AND customer.id=%s
         JOIN parties.parties customer_party ON customer_party.org_id=customer.org_id AND customer_party.id=customer.party_id
+        JOIN LATERAL (
+            SELECT address.id,address.row_version
+              FROM parties.addresses address
+             WHERE address.org_id=customer.org_id
+               AND address.party_id=customer.party_id
+               AND address.status='active' AND address.is_primary
+             ORDER BY (address.address_kind='shipping') DESC,address.id
+             LIMIT 2
+        ) delivery_address ON true
         JOIN parties.supplier_accounts supplier ON supplier.org_id=branch.org_id AND supplier.id=%s
         JOIN parties.parties supplier_party ON supplier_party.org_id=supplier.org_id AND supplier_party.id=supplier.party_id
         JOIN catalog.products product ON product.org_id=branch.org_id AND product.id=%s
         JOIN catalog.uom_conversions uom ON uom.org_id=product.org_id AND uom.id=%s AND uom.product_id=product.id
         JOIN catalog.uom_conversions count_uom ON count_uom.org_id=product.org_id AND count_uom.id=%s AND count_uom.product_id=product.id
         JOIN inventory.locations source ON source.org_id=branch.org_id AND source.id=%s AND source.branch_id=branch.id
+        JOIN LATERAL (
+            SELECT batch.id,batch.batch_number,
+                   balance.on_hand_quantity AS available_base_quantity
+              FROM inventory.batches batch
+              JOIN inventory.stock_balances balance
+                ON balance.org_id=batch.org_id AND balance.batch_id=batch.id
+               AND balance.product_id=batch.product_id
+               AND balance.branch_id=source.branch_id
+               AND balance.location_id=source.id
+               AND balance.on_hand_quantity>0
+             WHERE batch.org_id=product.org_id AND batch.product_id=product.id
+               AND batch.status='released' AND batch.released_at IS NOT NULL
+               AND batch.expires_on>(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+             ORDER BY batch.expires_on,batch.id
+             LIMIT 1
+        ) direct_issue_batch ON true
         JOIN inventory.locations quarantine ON quarantine.org_id=branch.org_id AND quarantine.id=%s AND quarantine.branch_id=branch.id
         JOIN core.branches destination_branch ON destination_branch.org_id=branch.org_id AND destination_branch.id=%s
         JOIN inventory.locations destination ON destination.org_id=destination_branch.org_id AND destination.id=%s AND destination.branch_id=destination_branch.id
@@ -239,6 +268,9 @@ def resolve_authoritative_facts(
         "destination_branch_code", "destination_branch_name",
         "destination_location_code", "destination_location_name",
         "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
+        "delivery_address_id", "delivery_address_row_version",
+        "direct_issue_batch_id", "direct_issue_batch_number",
+        "direct_issue_available_base_quantity", "sales_uom_multiplier",
     )
     if len(supplier_invoice_rows) != 1:
         raise FixtureCompileError(
@@ -248,12 +280,16 @@ def resolve_authoritative_facts(
     goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
+    resolved = dict(zip(keys, rows[0][:-2]))
     return {
         "identity": {
             **identities,
             "supplier_invoice_goods_receipt_id": goods_receipt_id,
+            "delivery_address_id": resolved.pop("delivery_address_id"),
+            "delivery_address_row_version": resolved.pop("delivery_address_row_version"),
+            "direct_issue_batch_id": resolved.pop("direct_issue_batch_id"),
         },
-        "display": dict(zip(keys, rows[0][:-2])),
+        "display": resolved,
         "clock": {
             "business_date": rows[0][-2],
             "business_datetime_local": rows[0][-1],
@@ -282,6 +318,56 @@ def _operation_facts(
             "purchase_order_expected_delivery_date",
         ),
     }
+    if operation_id == "sales_invoice":
+        decimal_rules = {
+            "sales_invoice_quantity": (6, Decimal("0"), None, False),
+            "sales_invoice_rate": (4, Decimal("0"), None, False),
+            "sales_invoice_discount_percent": (6, Decimal("0"), Decimal("100"), True),
+            "sales_invoice_free_quantity": (6, Decimal("0"), None, False),
+            "sales_invoice_distance_km": (2, Decimal("0"), None, False),
+        }
+        for key, (scale, minimum, maximum, minimum_inclusive) in decimal_rules.items():
+            rendered = _leaf(scalars, key, "reviewed scalar")
+            if not re.fullmatch(rf"(?:0|[1-9][0-9]{{0,13}})(?:\.[0-9]{{1,{scale}}})?", rendered):
+                raise FixtureCompileError(
+                    f"{key} must be a non-negative plain decimal with at most {scale} fractional digits"
+                )
+            try:
+                numeric = Decimal(rendered)
+            except InvalidOperation as exc:
+                raise FixtureCompileError(f"{key} is not a valid reviewed decimal") from exc
+            if (numeric < minimum if minimum_inclusive else numeric <= minimum) or (
+                maximum is not None and numeric > maximum
+            ):
+                comparator = "at least" if minimum_inclusive else "greater than"
+                ceiling = f" and no greater than {maximum}" if maximum is not None else ""
+                raise FixtureCompileError(
+                    f"{key} must be {comparator} {minimum}{ceiling}"
+                )
+        treatment = _leaf(
+            scalars, "sales_invoice_free_supply_tax_treatment", "reviewed scalar"
+        )
+        if treatment not in {
+            "excluded_from_taxable_value", "included_at_unit_rate",
+        }:
+            raise FixtureCompileError(
+                "sales_invoice_free_supply_tax_treatment must be an explicit canonical treatment"
+            )
+        available_base = Decimal(_leaf(
+            facts, "display.direct_issue_available_base_quantity", "canonical fact"
+        ))
+        uom_multiplier = Decimal(_leaf(
+            facts, "display.sales_uom_multiplier", "canonical fact"
+        ))
+        requested_base = (
+            Decimal(_leaf(scalars, "sales_invoice_quantity", "reviewed scalar"))
+            + Decimal(_leaf(scalars, "sales_invoice_free_quantity", "reviewed scalar"))
+        ) * uom_multiplier
+        if uom_multiplier <= 0 or requested_base > available_base:
+            raise FixtureCompileError(
+                "sales_invoice reviewed billed/free quantities exceed the exact selected batch stock"
+            )
+        return facts
     if operation_id == "goods_receipt":
         offset_text = _leaf(
             scalars, "goods_receipt_expiry_offset_days", "reviewed scalar"

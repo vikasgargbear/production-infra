@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle, RefObject, ForwardRefRenderFunction } from 'react';
 import { Trash2 } from 'lucide-react';
 import EditableCell, { EditableCellRef } from './EditableCell';
+import { exactDecimalUnits } from '../../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -19,6 +20,7 @@ export interface ItemsTableItem {
     tax_rate?: number | string;
     free_quantity?: number | string;
     free?: number | string;
+    free_supply_tax_treatment?: 'excluded_from_taxable_value' | 'included_at_unit_rate';
     expiry_date?: string;
     packages_per_box?: number;
     units_per_pack?: number;
@@ -50,6 +52,7 @@ export interface ItemsTableProps {
     title?: string;
     className?: string;
     preserveExactDecimals?: boolean;
+    showFreeSupplyTaxTreatment?: boolean;
 }
 
 type NavigationDirection = 'right' | 'next' | 'left' | 'down' | 'up';
@@ -82,6 +85,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     title = 'Items',
     className = '',
     preserveExactDecimals = false,
+    showFreeSupplyTaxTreatment = false,
 }, ref) => {
 
     const readOnly = readOnlyProp !== undefined ? readOnlyProp : mode === 'preview';
@@ -198,6 +202,48 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
         return Math.round(taxable * (1 + taxRate / 100) * 100) / 100;
     };
 
+    const hasPositiveFreeQuantity = (item: ItemsTableItem): boolean => {
+        try {
+            return exactDecimalUnits(
+                item.free_quantity ?? item.free ?? '0',
+                'Free quantity',
+                { scale: QUANTITY_DECIMAL_PLACES, maximumWholeDigits: 14 },
+            ) > 0n;
+        } catch {
+            return false;
+        }
+    };
+
+    const freeSupplyTreatmentSelect = (
+        item: ItemsTableItem,
+        index: number,
+        surface: 'mobile' | 'desktop',
+    ) => {
+        const productName = item.product_name || item.name || `Item ${index + 1}`;
+        const positiveFreeQuantity = hasPositiveFreeQuantity(item);
+        return (
+            <label className="block text-xs font-medium text-gray-600">
+                <span className="sr-only">{productName} free supply tax treatment</span>
+                <select
+                    data-testid={`${surface}-free-supply-treatment-${item.batch_id || index}`}
+                    aria-label={`${productName} free supply tax treatment`}
+                    value={positiveFreeQuantity ? (item.free_supply_tax_treatment || '') : 'excluded_from_taxable_value'}
+                    disabled={readOnly || !positiveFreeQuantity}
+                    onChange={(event) => onUpdateItem?.(
+                        index,
+                        'free_supply_tax_treatment',
+                        event.target.value,
+                    )}
+                    className="min-h-11 w-full rounded border border-gray-300 bg-white px-2 text-sm text-gray-900 disabled:bg-gray-100 disabled:text-gray-600"
+                >
+                    {positiveFreeQuantity && <option value="">Choose treatment</option>}
+                    <option value="excluded_from_taxable_value">Exclude from taxable value</option>
+                    <option value="included_at_unit_rate">Include at unit rate</option>
+                </select>
+            </label>
+        );
+    };
+
     useEffect(() => {
         const desktopLayout = typeof window === 'undefined'
             || typeof window.matchMedia !== 'function'
@@ -258,6 +304,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-free_quantity`] && <span id={`mobile-free-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-free_quantity`]}</span>}
                             </label>
+                            {showFreeSupplyTaxTreatment && (
+                                <div className="col-span-2">
+                                    {freeSupplyTreatmentSelect(item, index, 'mobile')}
+                                </div>
+                            )}
                         </div>
 
                         <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
@@ -284,6 +335,9 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Disc %</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Free</th>
+                        {showFreeSupplyTaxTreatment && (
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Free tax treatment</th>
+                        )}
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Tax %</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Total</th>
                         {!readOnly && (
@@ -294,7 +348,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 <tbody>
                     {items.length === 0 ? (
                         <tr>
-                            <td colSpan={readOnly ? 11 : 12} className="px-3 py-8 text-center text-gray-500">
+                            <td colSpan={(readOnly ? 11 : 12) + (showFreeSupplyTaxTreatment ? 1 : 0)} className="px-3 py-8 text-center text-gray-500">
                                 <div className="flex flex-col items-center">
                                     <p className="text-sm">No items added yet</p>
                                     <p className="text-xs text-gray-400 mt-1">Search and select products to add</p>
@@ -407,6 +461,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} free quantity`}
                                     />
                                 </td>
+                                {showFreeSupplyTaxTreatment && (
+                                    <td className="min-w-52 px-3 py-2">
+                                        {freeSupplyTreatmentSelect(item, index, 'desktop')}
+                                    </td>
+                                )}
                                 <td className="px-3 py-2 text-center">
                                     <span className="text-sm text-gray-900 font-medium" title="Tax percentage from product master data (read-only)">
                                         {item.gst_percent || item.tax_rate || 0}%

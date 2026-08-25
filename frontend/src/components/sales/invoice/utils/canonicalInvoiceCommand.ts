@@ -137,6 +137,34 @@ const freeSupplyTaxTreatment = (value: unknown): FreeSupplyTaxTreatment => {
     throw new Error('Invoice free-supply tax treatment is missing or invalid');
 };
 
+const reviewedFreeSupplyTaxTreatment = (
+    value: unknown,
+    freeQuantity: string,
+    label: string,
+): FreeSupplyTaxTreatment => {
+    const treatment = freeSupplyTaxTreatment(value);
+    if (exactDecimalUnits(freeQuantity, `${label} free quantity`, { scale: 6 }) === 0n
+        && treatment !== 'excluded_from_taxable_value') {
+        throw new Error(`${label} with zero free quantity must exclude free supply from taxable value`);
+    }
+    return treatment;
+};
+
+export const freeSupplyTreatmentAfterQuantityEdit = (
+    value: unknown,
+): FreeSupplyTaxTreatment | undefined => {
+    try {
+        return exactDecimalUnits(value, 'Invoice free quantity', {
+            scale: 6,
+            maximumWholeDigits: 14,
+        }) === 0n
+            ? 'excluded_from_taxable_value'
+            : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
 const selectedDeliveryAddress = (invoice: Invoice): { id: string; rowVersion: string } => {
     const address = invoice.shipping_address_data;
     const id = requiredUuid(address?.address_id, 'Delivery address');
@@ -274,7 +302,11 @@ export function canonicalInvoiceValidationError(
             const freeQuantity = quantity(item.free_quantity, `Item ${index + 1} free quantity`);
             rate(item.unit_price, `Item ${index + 1} unit rate`);
             discount(item.discount_percent, `Item ${index + 1} discount`);
-            freeSupplyTaxTreatment(item.free_supply_tax_treatment);
+            reviewedFreeSupplyTaxTreatment(
+                item.free_supply_tax_treatment,
+                freeQuantity,
+                `Item ${index + 1}`,
+            );
             if (exactDecimalUnits(billedQuantity, `Item ${index + 1} billed quantity`, { scale: 6 }) <= 0n
                 && exactDecimalUnits(freeQuantity, `Item ${index + 1} free quantity`, { scale: 6 }) <= 0n) {
                 return `Item ${index + 1} billed or free quantity must be greater than zero`;
@@ -359,8 +391,10 @@ export function buildCanonicalInvoicePreparePayload(
                 uom_conversion_id: requiredUuid(item.uom_conversion_id, `Item ${index + 1} UOM`),
                 billed_quantity: billedQuantity,
                 free_quantity: freeQuantity,
-                free_supply_tax_treatment: freeSupplyTaxTreatment(
+                free_supply_tax_treatment: reviewedFreeSupplyTaxTreatment(
                     item.free_supply_tax_treatment,
+                    freeQuantity,
+                    `Item ${index + 1}`,
                 ),
                 quoted_unit_rate: rate(item.unit_price, `Item ${index + 1} unit rate`),
                 price_basis: policy.default_price_basis,

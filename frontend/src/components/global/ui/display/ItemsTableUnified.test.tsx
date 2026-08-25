@@ -176,3 +176,55 @@ test('exact-decimal mode preserves canonical input strings while default mode st
   fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } });
   expect(defaultUpdate).toHaveBeenCalledWith(0, 'quantity', 2);
 });
+
+test('requires an explicit free-supply treatment only when free quantity is positive', () => {
+  const onUpdateItem = jest.fn();
+  const { rerender } = render(
+    <ItemsTable
+      items={[{
+        product_name: 'Reviewed Carton',
+        quantity: '1.000000',
+        free_quantity: '0.000000',
+        unit_price: '10.0000',
+        free_supply_tax_treatment: 'excluded_from_taxable_value',
+      }]}
+      onUpdateItem={onUpdateItem}
+      showFreeSupplyTaxTreatment
+      preserveExactDecimals
+    />,
+  );
+
+  const zeroTreatment = screen.getAllByLabelText(
+    'Reviewed Carton free supply tax treatment',
+  ) as HTMLSelectElement[];
+  expect(zeroTreatment).toHaveLength(2);
+  expect(zeroTreatment.every(select => select.disabled)).toBe(true);
+  expect(zeroTreatment[0].value).toBe('excluded_from_taxable_value');
+
+  rerender(
+    <ItemsTable
+      items={[{
+        product_name: 'Reviewed Carton',
+        quantity: '1.000000',
+        free_quantity: '0.250000',
+        unit_price: '10.0000',
+      }]}
+      onUpdateItem={onUpdateItem}
+      showFreeSupplyTaxTreatment
+      preserveExactDecimals
+    />,
+  );
+  const positiveTreatment = screen.getAllByLabelText(
+    'Reviewed Carton free supply tax treatment',
+  ) as HTMLSelectElement[];
+  expect(positiveTreatment.every(select => !select.disabled)).toBe(true);
+  expect(positiveTreatment[0].value).toBe('');
+  fireEvent.change(positiveTreatment[0], {
+    target: { value: 'included_at_unit_rate' },
+  });
+  expect(onUpdateItem).toHaveBeenCalledWith(
+    0,
+    'free_supply_tax_treatment',
+    'included_at_unit_rate',
+  );
+});

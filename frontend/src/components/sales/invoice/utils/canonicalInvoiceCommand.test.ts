@@ -2,6 +2,7 @@ import {
     buildCanonicalInvoicePreparePayload as buildCanonicalInvoicePreparePayloadRaw,
     canonicalInvoiceValidationError,
     companyInvoiceValidationError,
+    freeSupplyTreatmentAfterQuantityEdit,
     invoicePreviewValidationError,
 } from './canonicalInvoiceCommand';
 import type { Invoice } from '../hooks/useInvoiceLogic';
@@ -407,6 +408,42 @@ describe('canonical invoice command', () => {
                 }],
             }],
         });
+    });
+
+    it('uses only the deterministic excluded treatment when free quantity is zero', () => {
+        const zeroFree = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                free_quantity: '0.000000',
+                free_supply_tax_treatment: 'included_at_unit_rate',
+            }],
+        } as Invoice;
+        expect(canonicalInvoiceValidationError(zeroFree, customer)).toMatch(
+            /zero free quantity must exclude free supply/i,
+        );
+
+        const reviewed = {
+            ...zeroFree,
+            items: [{
+                ...zeroFree.items[0],
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
+            }],
+        } as Invoice;
+        expect(canonicalInvoiceValidationError(reviewed, customer)).toBeNull();
+        expect((buildCanonicalInvoicePreparePayload(
+            reviewed,
+            customer,
+            'erp-web-invoice:zero-free-reviewed',
+        ).lines as Array<Record<string, unknown>>)[0].free_supply_tax_treatment)
+            .toBe('excluded_from_taxable_value');
+    });
+
+    it('clears treatment after a positive free-quantity edit and derives zero deterministically', () => {
+        expect(freeSupplyTreatmentAfterQuantityEdit('0.000000'))
+            .toBe('excluded_from_taxable_value');
+        expect(freeSupplyTreatmentAfterQuantityEdit('1.250000')).toBeUndefined();
+        expect(freeSupplyTreatmentAfterQuantityEdit('not-a-quantity')).toBeUndefined();
     });
 
     it.each([

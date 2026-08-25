@@ -159,7 +159,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customer]);
 
-    const fetchCustomerAddresses = async (customerId: string | number): Promise<void> => {
+    const fetchCustomerAddresses = async (
+        customerId: string | number,
+        preferredAddressId?: string,
+    ): Promise<SavedAddress[]> => {
         setLoadingAddresses(true);
         setAddressLoadError('');
         try {
@@ -174,17 +177,24 @@ const AddressForm: React.FC<AddressFormProps> = ({
             );
             setSavedAddresses(filteredAddresses.length > 0 ? filteredAddresses : allAddresses);
 
-            const defaultAddr = filteredAddresses.find(addr =>
-                addr.address_type === addressType && addr.is_default
-            ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
+            const availableAddresses = filteredAddresses.length > 0
+                ? filteredAddresses
+                : allAddresses;
+            const defaultAddr = preferredAddressId
+                ? availableAddresses.find(addr => String(addr.address_id) === preferredAddressId)
+                : filteredAddresses.find(addr =>
+                    addr.address_type === addressType && addr.is_default
+                ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
 
             if (defaultAddr) {
                 selectAddress(defaultAddr);
             }
+            return availableAddresses;
         } catch (error) {
             console.error('[AddressForm] Failed to fetch addresses:', error);
             setSavedAddresses([]);
             setAddressLoadError('Saved addresses could not be loaded from the server.');
+            return [];
         } finally {
             setLoadingAddresses(false);
         }
@@ -309,7 +319,11 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 if (!response.data?.success || !response.data?.address_id) {
                     throw new Error('The server did not confirm the saved address.');
                 }
-                await fetchCustomerAddresses(customerId);
+                const addressId = String(response.data.address_id);
+                const refreshed = await fetchCustomerAddresses(customerId, addressId);
+                if (!refreshed.some(address => String(address.address_id) === addressId)) {
+                    throw new Error('The saved address was not present in the authoritative address readback.');
+                }
                 accepted = true;
             } else if (isEditing && selectedAddressId) {
                 const addressIdStr = String(selectedAddressId);
@@ -324,17 +338,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 if (!response.data?.success) {
                     throw new Error('The server did not confirm the address update.');
                 }
-                await fetchCustomerAddresses(customerId);
-                const updatedAddress = {
-                    ...addressPayload,
-                    mobile: formData.mobile,
-                    address_id: selectedAddressId,
-                };
-                setSavedAddresses(previous => previous.map(address =>
-                    address.address_id === selectedAddressId
-                        ? { ...address, ...updatedAddress }
-                        : address,
-                ));
+                const refreshed = await fetchCustomerAddresses(customerId, addressIdStr);
+                if (!refreshed.some(address => String(address.address_id) === addressIdStr)) {
+                    throw new Error('The updated address was not present in the authoritative address readback.');
+                }
                 accepted = true;
             }
         } catch (error: any) {
@@ -346,19 +353,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
         if (!accepted) return;
 
-        const addressString = buildAddressString(formData);
         setIsEditing(false);
         setIsAddingNew(false);
         setIsDefault(false);
         setFieldErrors({});
-
-        if (onChange) {
-            onChange(addressString);
-        }
-
-        if (onSave) {
-            onSave({ ...formData, state_code: formData.state, is_default: isDefault });
-        }
     };
 
     const handleCancel = (): void => {
@@ -467,10 +465,10 @@ const AddressForm: React.FC<AddressFormProps> = ({
                     ) : (
                         <>
                             {/* Filter to only shipping addresses for Indian GST compliance - billing comes from backend */}
-                            {savedAddresses.filter(a => a.address_type !== 'billing').length > 0 && (
+                            {savedAddresses.length > 0 && (
                                 <div className="p-2">
                                     <div className="text-xs text-gray-500 uppercase px-2 py-1">Saved Addresses</div>
-                                    {savedAddresses.filter(a => a.address_type !== 'billing').map((addr) => {
+                                    {savedAddresses.map((addr) => {
                                         const Icon = getAddressIcon('shipping');
 
                                         return (
@@ -482,6 +480,12 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                 {/* Select button (main click area) */}
                                                 <button
                                                     onClick={() => selectAddress(addr)}
+                                                    data-testid={addr.address_id
+                                                        && addr.row_version !== undefined
+                                                        && addr.row_version !== null
+                                                        ? `select-address-${addr.address_id}-v${addr.row_version}`
+                                                        : undefined}
+                                                    aria-label={`Select ${addr.label || addr.address_type || 'delivery'} address ${String(addr.address_id || 'without canonical identity')}`}
                                                     className="flex-1 text-left flex items-start gap-2"
                                                 >
                                                     <Icon className="w-4 h-4 text-gray-400 mt-0.5" />

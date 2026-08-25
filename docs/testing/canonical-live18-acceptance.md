@@ -61,6 +61,15 @@ six-place quantity within the server-returned FEFO tier) and
 `stock_transfer_distance_km` (an exact positive two-place distance). Branch,
 location, product, UOM, business date, transport mode, and eligible batch facts
 remain canonical runtime facts and are forbidden in the scalar secret.
+Sales invoice reviews billed/free quantities, quoted rate, line discount,
+free-supply tax treatment, and measured direct-issue distance. It selects the
+exact canonical FEFO batch and primary saved delivery-address UUID plus row
+version resolved after provisioning. A zero free quantity is deterministically
+`excluded_from_taxable_value`; every positive free quantity clears that
+deterministic value and requires the operator to select one of the two command
+contract treatments. The sole `in_person` logistics mode is visibly sourced
+from the authenticated server policy; no carrier, vehicle, or transport
+document is synthesized.
 Sales order additionally reviews `sales_order_quantity`, `sales_order_rate`,
 and `sales_order_delivery_offset_days`. The compiler combines the bounded
 1–30-day offset with the canonical organization business date; no calendar

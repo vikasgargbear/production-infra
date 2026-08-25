@@ -129,7 +129,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Transport Mode</label>
-                                            <div className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-800">
+                                            <div
+                                                data-testid={documentPolicy?.default_transport_mode
+                                                    ? `invoice-logistics-mode-${documentPolicy.default_transport_mode}`
+                                                    : 'invoice-logistics-mode-unavailable'}
+                                                className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-800"
+                                            >
                                                 {documentPolicy?.logistics_modes[0]?.display_name
                                                     || 'Waiting for server policy'}
                                             </div>

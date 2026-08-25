@@ -261,6 +261,73 @@ def test_sales_order_delivery_date_is_derived_from_canonical_clock_and_reviewed_
         )
 
 
+def test_sales_invoice_template_compiles_exact_canonical_selectors_and_reviewed_choices() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/sales_invoice.json").read_text()
+    )
+    scalars = {
+        "sales_invoice_quantity": "1.125000",
+        "sales_invoice_rate": "84.1250",
+        "sales_invoice_discount_percent": "0.000000",
+        "sales_invoice_free_quantity": "1.000000",
+        "sales_invoice_free_supply_tax_treatment": "excluded_from_taxable_value",
+        "sales_invoice_distance_km": "1.25",
+    }
+    facts = {
+        "identity": {
+            "delivery_address_id": "d3000000-0000-7000-8000-000000000041",
+            "delivery_address_row_version": "7",
+            "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000042",
+        },
+        "display": {
+            "customer_code": "DEMO-CUSTOMER",
+            "customer_name": "Demo Customer",
+            "product_code": "DEMO-PRODUCT",
+            "product_name": "Demo Product",
+            "direct_issue_available_base_quantity": "100.000000",
+            "sales_uom_multiplier": "10.000000",
+        },
+    }
+    used: set[str] = set()
+    operation_facts = _operation_facts(
+        "sales_invoice", facts, scalars, used,
+    )
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        operation_facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("sales_invoice", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][5]["locator"]["name"] == (
+        "select-batch-d3000000-0000-7000-8000-000000000042"
+    )
+    assert operation["prepare_steps"][11]["locator"]["name"] == (
+        "desktop-free-supply-treatment-d3000000-0000-7000-8000-000000000042"
+    )
+    assert operation["prepare_steps"][14]["locator"]["name"] == (
+        "select-address-d3000000-0000-7000-8000-000000000041-v7"
+    )
+    assert operation["prepare_steps"][15]["locator"]["name"] == (
+        "invoice-logistics-mode-in_person"
+    )
+
+    bad_scalars = {**scalars, "sales_invoice_free_quantity": "0.000000"}
+    with pytest.raises(FixtureCompileError, match="free_quantity must be greater than"):
+        _operation_facts("sales_invoice", facts, bad_scalars, set())
+    bad_treatment = {
+        **scalars,
+        "sales_invoice_free_supply_tax_treatment": "implicit-default",
+    }
+    with pytest.raises(FixtureCompileError, match="explicit canonical treatment"):
+        _operation_facts("sales_invoice", facts, bad_treatment, set())
+    insufficient_stock = {**scalars, "sales_invoice_quantity": "10.000000"}
+    with pytest.raises(FixtureCompileError, match="exceed the exact selected batch stock"):
+        _operation_facts("sales_invoice", facts, insufficient_stock, set())
+
+
 def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(

@@ -13,9 +13,12 @@ import { ProductCreationModal, DocumentImportModal } from '../../../global';
 import { toast } from 'react-toastify';
 import { challansApi } from '../../../../services/api';
 import { extractDocumentDetail } from '../../utils/documentImport';
-import { invoiceBatchAllocationValidationError } from '../utils/canonicalInvoiceCommand';
+import {
+    freeSupplyTreatmentAfterQuantityEdit,
+    invoiceBatchAllocationValidationError,
+} from '../utils/canonicalInvoiceCommand';
 // Shared Types
-import { Customer, Invoice, InvoiceItem, Employee } from '../types/invoiceTypes';
+import { Customer, Invoice, Employee } from '../types/invoiceTypes';
 import InvoiceItemsFooter from './InvoiceItemsFooter';
 
 interface InvoiceItemsStepProps {
@@ -39,7 +42,7 @@ interface InvoiceItemsStepProps {
     // Handlers
     handleCustomerSelect: (customer: Customer) => void;
     handleAddItem: (product: unknown) => void;
-    handleUpdateItem: (index: number, updates: Partial<InvoiceItem>) => void;
+    handleUpdateItem: (index: number, field: string, value: unknown) => void;
     handleRemoveItem: (index: number) => void;
     handleImport: (data: unknown) => void;
     // Modal states
@@ -99,6 +102,20 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
         return () => document.removeEventListener('keydown', handleGlobalKeyDown);
     }, [handleGlobalKeyDown]);
 
+    const handleCanonicalItemUpdate = useCallback((
+        index: number,
+        field: string,
+        value: unknown,
+    ) => {
+        handleUpdateItem(index, field, value);
+        if (field !== 'free_quantity') return;
+        handleUpdateItem(
+            index,
+            'free_supply_tax_treatment',
+            freeSupplyTreatmentAfterQuantityEdit(value),
+        );
+    }, [handleUpdateItem]);
+
     return (
         <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
@@ -142,7 +159,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
-
+                        <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                            Required: select a customer, exact saved delivery address, product batch, billed and free quantities, free-supply tax treatment when free quantity is positive, and direct-issue distance.
+                        </p>
 
                         {/* Date Section */}
                         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -255,11 +274,12 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 <ItemsTableKeyboard
                                     ref={itemsTableRef as any}
                                     items={(invoice.items || []) as any}
-                                    onUpdateItem={handleUpdateItem as any}
+                                    onUpdateItem={handleCanonicalItemUpdate}
                                     onRemoveItem={handleRemoveItem}
                                     productSearchRef={productSearchRef as any}
                                     currencySymbol="₹"
                                     preserveExactDecimals
+                                    showFreeSupplyTaxTreatment
                                 />
                                 {batchAllocationError && (
                                     <div
