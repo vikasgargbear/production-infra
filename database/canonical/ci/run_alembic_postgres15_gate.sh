@@ -146,6 +146,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_expense_claim_lifecycle_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_evidence_attachment_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_gst_jurisdiction_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_runtime_deployment_readiness.py

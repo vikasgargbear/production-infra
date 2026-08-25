@@ -152,6 +152,7 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/web/actions/{command_type}/prepare"),
     ("POST", "/api/web/actions/commands/{command_request_id}/approve"),
     ("POST", "/api/web/actions/commands/{command_request_id}/execute"),
+    ("POST", "/api/web/evidence/expense-receipts"),
     ("POST", "/api/internal/tax-provider/requests:fetch"),
     ("POST", "/api/internal/tax-provider/completions"),
     *CANONICAL_MASTER_WRITES,
@@ -396,7 +397,19 @@ def test_canonical_command_and_calculation_posts_remain_mounted():
         "/api/web/actions/{command_type}/prepare",
         "/api/web/actions/commands/{command_request_id}/approve",
         "/api/web/actions/commands/{command_request_id}/execute",
+        "/api/web/evidence/expense-receipts",
         "/api/calculations/invoice",
         "/api/calculations/sales-order",
     } <= posts
     assert "/api/documents/generate-number" not in posts
+
+
+def test_canonical_evidence_upload_has_one_reviewed_owner():
+    matches = [
+        route for route in _routes()
+        if route.path == "/api/web/evidence/expense-receipts"
+        and "POST" in (route.methods or set())
+    ]
+    assert len(matches) == 1
+    assert matches[0].endpoint.__module__ == "app.api.routes.canonical_evidence_uploads"
+    assert matches[0].endpoint.__name__ == "upload_expense_receipt"
