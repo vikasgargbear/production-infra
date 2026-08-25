@@ -43,7 +43,11 @@ def _payload(**overrides):
                 "product_id": uuid4(),
                 "uom_conversion_id": uuid4(),
                 "batch_allocations": [
-                    {"batch_id": uuid4(), "entered_quantity": "3.000000"}
+                    {
+                        "inventory_document_line_id": uuid4(),
+                        "batch_id": uuid4(),
+                        "entered_quantity": "3.000000",
+                    }
                 ],
             }
         ],
@@ -88,6 +92,12 @@ def test_destruction_schema_is_narrow_and_evidence_typed() -> None:
         "witness_credential",
         "certificate_attachment_id",
     } <= set(properties)
+    allocation = properties["lines"]["items"]["properties"][
+        "batch_allocations"
+    ]["items"]
+    assert set(allocation["required"]) == {
+        "inventory_document_line_id", "batch_id", "entered_quantity",
+    }
 
 
 def test_destruction_semantics_reject_blank_authority_duplicate_and_zero_quantity() -> None:

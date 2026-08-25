@@ -194,6 +194,18 @@ MOVEMENT_BATCH_ALLOCATION = _object(
     "Explicit physical movement allocation; automatic or unspecified batch selection is forbidden.",
 )
 
+DESTRUCTION_BATCH_ALLOCATION = _object(
+    {
+        "inventory_document_line_id": _uuid(
+            "Client-generated immutable identity for the destruction inventory-document line."
+        ),
+        "batch_id": _uuid("Canonical manufacturer batch selected for this movement."),
+        "entered_quantity": _decimal("Exact movement quantity in the selected UOM."),
+    },
+    ("inventory_document_line_id", "batch_id", "entered_quantity"),
+    "Explicit full-balance destruction allocation with its stable line identity.",
+)
+
 COMMERCIAL_LINE_PROPERTIES = {
     "product_id": _uuid("Canonical product selected by a bounded search."),
     "uom_conversion_id": _uuid(
@@ -973,7 +985,10 @@ def _prepare_actions() -> dict[str, OperatorAction]:
                     {
                         "product_id": _uuid("Canonical product."),
                         "uom_conversion_id": _uuid("Effective canonical product UOM conversion for destruction."),
-                        "batch_allocations": _array(MOVEMENT_BATCH_ALLOCATION, "Explicit batches destroyed."),
+                        "batch_allocations": _array(
+                            DESTRUCTION_BATCH_ALLOCATION,
+                            "Explicit batches destroyed.",
+                        ),
                     },
                     ("product_id", "uom_conversion_id", "batch_allocations"),
                     "Destroyed product and exact batches.",

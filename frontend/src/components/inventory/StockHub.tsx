@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Package, ArrowDownToLine, ArrowUpFromLine,
-  BarChart3, ArrowRightLeft, Archive, List
+  BarChart3, ArrowRightLeft, Archive, List, ShieldAlert
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import type { ModuleItem } from '../global/navigation/ModuleHub.d';
@@ -10,6 +10,7 @@ import StockTransfer from './stock/StockTransfer';
 import CurrentStock from './stock/CurrentStock';
 import BatchTracking from './stock/BatchTracking';
 import EnhancedStockAdjustmentFlow from './stock/StockAdjustmentFlow';
+import InventoryDestructionFlow from './stock/InventoryDestructionFlow';
 
 /**
  * Sub-module IDs used in the URL hash for deep-linking into StockHub.
@@ -21,6 +22,7 @@ export const STOCK_SUBPAGE_IDS = [
   'batch-tracking',
   'stock-movement',
   'stock-transfer',
+  'inventory-destruction',
 ] as const;
 export type StockSubpage = typeof STOCK_SUBPAGE_IDS[number];
 
@@ -97,6 +99,15 @@ const StockHub: React.FC<StockHubProps> = ({
       icon: ArrowRightLeft,
       color: 'purple',
       component: StockTransfer
+    },
+    {
+      id: 'inventory-destruction',
+      label: 'Destruction',
+      fullLabel: 'Certified Destruction',
+      description: 'Post witnessed stock destruction',
+      icon: ShieldAlert,
+      color: 'red',
+      component: InventoryDestructionFlow
     }
   ];
 

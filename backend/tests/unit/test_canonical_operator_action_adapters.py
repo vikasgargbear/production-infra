@@ -3194,7 +3194,11 @@ def _inventory_destruction_service_payload():
             "product_id": uuid4(),
             "uom_conversion_id": uuid4(),
             "batch_allocations": [
-                {"batch_id": uuid4(), "entered_quantity": "3.000000"}
+                {
+                    "inventory_document_line_id": uuid4(),
+                    "batch_id": uuid4(),
+                    "entered_quantity": "3.000000",
+                }
             ],
         }],
     }
