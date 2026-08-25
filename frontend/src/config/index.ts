@@ -8,7 +8,6 @@ export { API_CONFIG } from './api.config';
 export { getApiBaseUrl } from './apiBase';
 
 // Domain configs
-export { PURCHASE_CONFIG } from './purchase.config';
 
 // Design & Theme
 export { default as DESIGN_SYSTEM } from './design-system.config';

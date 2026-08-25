@@ -57,8 +57,9 @@ describe('active canonical purchase desktop facts', () => {
         expect(existsSync(join(__dirname, '../../config/gstRates.ts'))).toBe(false);
         expect(existsSync(join(__dirname, 'modals/PDFUploadModal.tsx'))).toBe(false);
         expect(existsSync(join(__dirname, 'ui/PurchaseHeader.tsx'))).toBe(false);
-        expect(read('../../config/purchase.config.ts')).not.toContain('GST_RATES');
-        expect(read('../../config/purchase.config.ts')).not.toContain('generateBatchNumber');
+        expect(existsSync(join(__dirname, '../../config/purchase.config.ts'))).toBe(false);
+        expect(existsSync(join(__dirname, '../../utils/purchaseValidation.ts'))).toBe(false);
+        expect(read('../../utils/purchaseUploadValidation.ts')).toContain('backend repeats byte-size and magic-byte checks');
         expect(read('../../config/constants.ts')).not.toContain('MIN_ORDER_AMOUNT');
     });
 });

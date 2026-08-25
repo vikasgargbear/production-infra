@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, FileText, Loader, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { purchasesApi } from '../../../services/api';
-import { validatePDFFile } from '../../../config/purchase.config';
+import { validatePurchasePDF } from '../../../utils/purchaseUploadValidation';
 
 interface PDFUploadModalProps {
   isOpen: boolean;
@@ -80,7 +80,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
-    const validation = validatePDFFile(selectedFile);
+    const validation = validatePurchasePDF(selectedFile);
     if (validation.valid && selectedFile) {
       setFile(selectedFile);
       setError('');
