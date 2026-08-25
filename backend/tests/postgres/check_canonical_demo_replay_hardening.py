@@ -421,7 +421,8 @@ def _assert_deterministic_authority_renews_after_expiry() -> None:
             cursor.execute(
                 """
                 UPDATE automation.agent_grants
-                   SET consented_at=transaction_timestamp()-interval '61 days',
+                   SET created_at=transaction_timestamp()-interval '62 days',
+                       consented_at=transaction_timestamp()-interval '61 days',
                        granted_at=transaction_timestamp()-interval '61 days',
                        expires_at=transaction_timestamp()-interval '31 days',
                        status='expired'
