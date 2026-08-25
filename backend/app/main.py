@@ -72,7 +72,6 @@ from .api.routes.inventory import writeoff as stock_writeoff
 from .api.routes.finance import payments
 from .api.routes.finance import allocation as payment_allocation
 from .api.routes.finance import ledger
-from .api.routes.finance import journal as journal_entries
 from .api.routes.finance import tax as tax_entries
 from .api.routes.finance.tax import routes as tax_entries_routes
 from .api.routes.finance import credit_notes as credit_debit_notes
@@ -344,7 +343,6 @@ include_legacy_read_only_router(api, stock_writeoff.router, tags=["Stock Write-o
 include_legacy_read_only_router(api, payments.router, prefix="/payments", tags=["Payments"])
 include_legacy_read_only_router(api, payment_allocation.router, tags=["Payment Allocation"])
 api.include_router(ledger.router, tags=["Ledger"])
-include_legacy_read_only_router(api, journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
 include_legacy_read_only_router(api, tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
 include_explicit_non_persistent_post_utilities(
     api,
