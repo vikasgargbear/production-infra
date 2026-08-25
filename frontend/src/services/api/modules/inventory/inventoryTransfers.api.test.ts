@@ -54,4 +54,21 @@ describe('canonical inventory transfer readback', () => {
     (invalid.lines[0] as any).transfer_in_quantity = '0.299999';
     expect(() => decodeTransferReadback(invalid)).toThrow(/not exactly quantity\/value balanced/);
   });
+
+  it.each([
+    ['total_abs_base_quantity', '0.000000'],
+    ['total_value', '0.00'],
+  ])('rejects zero required header evidence %s', (field, value) => {
+    expect(() => decodeTransferReadback(readback({ [field]: value }))).toThrow(/greater than zero/);
+  });
+
+  it.each([
+    ['base_quantity', '0.000000'],
+    ['unit_cost', '0.0000'],
+    ['extended_cost', '0.00'],
+  ])('rejects zero required line evidence %s', (field, value) => {
+    const invalid = readback();
+    (invalid.lines[0] as any)[field] = value;
+    expect(() => decodeTransferReadback(invalid)).toThrow(/greater than zero/);
+  });
 });

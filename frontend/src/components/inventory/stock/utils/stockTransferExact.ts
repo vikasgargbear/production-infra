@@ -6,11 +6,24 @@ import {
   exactDecimalUnits,
   normalizeAuthoritativeDecimal,
   normalizeExactDecimal,
+  type ExactDecimalOptions,
 } from '../../../../utils/exactDecimal';
 
 export const transferQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const transferMoneyOptions = { scale: 2, maximumWholeDigits: 20 } as const;
 const transferCostOptions = { scale: 4, maximumWholeDigits: 16 } as const;
+
+const positiveAuthority = (
+  value: unknown,
+  label: string,
+  options: ExactDecimalOptions,
+): string => {
+  const normalized = normalizeAuthoritativeDecimal(value, label, options);
+  if (exactDecimalUnits(normalized, label, options) <= 0n) {
+    throw new Error(`${label} must be greater than zero.`);
+  }
+  return normalized;
+};
 
 export function normalizeEligibleTransferBatches(value: unknown): EligibleTransferBatch[] {
   if (!Array.isArray(value)) throw new Error('Eligible transfer batches must be an array.');
@@ -27,11 +40,11 @@ export function normalizeEligibleTransferBatches(value: unknown): EligibleTransf
     }
     return {
       ...batch,
-      uom_multiplier: normalizeAuthoritativeDecimal(batch.uom_multiplier, `Eligible batch ${index + 1} UOM multiplier`, transferQuantityOptions),
-      available_base_quantity: normalizeAuthoritativeDecimal(batch.available_base_quantity, `Eligible batch ${index + 1} base quantity`, transferQuantityOptions),
-      available_selected_quantity: normalizeAuthoritativeDecimal(batch.available_selected_quantity, `Eligible batch ${index + 1} selected quantity`, transferQuantityOptions),
-      average_unit_cost: normalizeAuthoritativeDecimal(batch.average_unit_cost, `Eligible batch ${index + 1} average unit cost`, transferCostOptions),
-      inventory_value: normalizeAuthoritativeDecimal(batch.inventory_value, `Eligible batch ${index + 1} inventory value`, transferMoneyOptions),
+      uom_multiplier: positiveAuthority(batch.uom_multiplier, `Eligible batch ${index + 1} UOM multiplier`, transferQuantityOptions),
+      available_base_quantity: positiveAuthority(batch.available_base_quantity, `Eligible batch ${index + 1} base quantity`, transferQuantityOptions),
+      available_selected_quantity: positiveAuthority(batch.available_selected_quantity, `Eligible batch ${index + 1} selected quantity`, transferQuantityOptions),
+      average_unit_cost: positiveAuthority(batch.average_unit_cost, `Eligible batch ${index + 1} average unit cost`, transferCostOptions),
+      inventory_value: positiveAuthority(batch.inventory_value, `Eligible batch ${index + 1} inventory value`, transferMoneyOptions),
     };
   });
   if (rows.length && rows.some((row) => row.expires_on !== rows[0].expires_on)) {

@@ -72,6 +72,50 @@ def test_readback_model_preserves_exact_strings_and_rejects_numeric_json():
         reads.TransferReadbackResponse(**{**_header(total_value=9007199254740993), "lines": [_line()]})
 
 
+@pytest.mark.parametrize("field,value", [
+    ("total_abs_base_quantity", "0.000000"),
+    ("total_value", "0.00"),
+])
+def test_readback_model_rejects_zero_totals(field, value):
+    header = _header(**{field: value})
+    with pytest.raises(ValidationError, match="greater than zero"):
+        reads.TransferReadbackResponse(**{**header, "lines": [_line(header)]})
+
+
+@pytest.mark.parametrize("field,value", [
+    ("base_quantity", "0.000000"),
+    ("unit_cost", "0.0000"),
+    ("extended_cost", "0.00"),
+])
+def test_readback_model_rejects_zero_line_evidence(field, value):
+    header = _header()
+    with pytest.raises(ValidationError, match="greater than zero"):
+        reads.TransferReadbackResponse(**{
+            **header,
+            "lines": [_line(header, **{field: value})],
+        })
+
+
+@pytest.mark.parametrize("field,value", [
+    ("uom_multiplier", "0.000000"),
+    ("available_base_quantity", "0.000000"),
+    ("available_selected_quantity", "0.000000"),
+    ("average_unit_cost", "0.0000"),
+    ("inventory_value", "0.00"),
+])
+def test_eligible_batch_model_rejects_zero_authority(field, value):
+    batch = {
+        "batch_id": uuid4(), "batch_number": "B-1", "expires_on": "2027-08-25",
+        "product_id": uuid4(), "uom_conversion_id": uuid4(),
+        "selected_uom_code": "EA", "base_uom_code": "EA",
+        "uom_multiplier": "1.000000", "available_base_quantity": "1.000000",
+        "available_selected_quantity": "1.000000", "average_unit_cost": "10.0000",
+        "inventory_value": "10.00", "is_default": True,
+    }
+    with pytest.raises(ValidationError, match="greater than zero"):
+        reads.EligibleTransferBatch(**{**batch, field: value})
+
+
 class _Result:
     def __init__(self, rows=()):
         self.rows = list(rows)
@@ -139,6 +183,7 @@ def test_eligibility_query_is_business_clock_scoped_strict_fefo_and_fixed_scale(
     for fragment in (
         "organization.timezone",
         "source_branch.id<>destination_branch.id",
+        "source_location.allows_sale AND destination_location.allows_sale",
         "can_access_branch(source_branch.id)",
         "can_access_branch(destination_branch.id)",
         "min(expires_on)",

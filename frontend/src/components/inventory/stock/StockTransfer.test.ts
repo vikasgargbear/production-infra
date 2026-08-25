@@ -40,6 +40,16 @@ describe('canonical inter-branch transfer exactness', () => {
     expect(() => validateTransferQuantity('0.300001', '0.300000', 'Transfer quantity')).toThrow(/within available/);
   });
 
+  it.each([
+    { uom_multiplier: '0.000000' },
+    { available_base_quantity: '0.000000' },
+    { available_selected_quantity: '0.000000' },
+    { average_unit_cost: '0.0000' },
+    { inventory_value: '0.00' },
+  ])('rejects zero eligible stock authority: %p', override => {
+    expect(() => normalizeEligibleTransferBatches([batch(override)])).toThrow(/greater than zero/);
+  });
+
   it('uses the whole exact remainder below one as the default', () => {
     expect(defaultTransferQuantity(batch({ available_selected_quantity: '0.300000' }))).toBe('0.300000');
   });

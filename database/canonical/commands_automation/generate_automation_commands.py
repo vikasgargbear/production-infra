@@ -3833,7 +3833,7 @@ BEGIN
     AND branch_id=source_branch.id AND status='active' AND location_type='saleable' AND allows_sale
     AND NOT allows_negative_stock FOR SHARE;
   SELECT * INTO STRICT destination_location FROM inventory.locations WHERE org_id=organization_id AND id=destination_location_id
-    AND branch_id=destination_branch.id AND status='active' AND location_type='saleable'
+    AND branch_id=destination_branch.id AND status='active' AND location_type='saleable' AND allows_sale
     AND NOT allows_negative_stock FOR SHARE;
   IF ROW(source_location.temperature_min_c,source_location.temperature_max_c)
      IS DISTINCT FROM ROW(destination_location.temperature_min_c,destination_location.temperature_max_c) THEN

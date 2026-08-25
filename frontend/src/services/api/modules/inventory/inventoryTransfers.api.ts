@@ -3,7 +3,9 @@ import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import {
   addExactDecimals,
   compareExactDecimals,
+  exactDecimalUnits,
   normalizeAuthoritativeDecimal,
+  type ExactDecimalOptions,
 } from '../../../../utils/exactDecimal';
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14, allowNegative: true } as const;
@@ -73,6 +75,18 @@ function requireUuid(value: unknown, label: string): string {
   return String(value);
 }
 
+function requirePositiveDecimal(
+  value: unknown,
+  label: string,
+  options: ExactDecimalOptions,
+): string {
+  const normalized = normalizeAuthoritativeDecimal(value, label, options);
+  if (exactDecimalUnits(normalized, label, options) <= 0n) {
+    throw new Error(`${label} must be greater than zero.`);
+  }
+  return normalized;
+}
+
 export function decodeTransferReadback(value: unknown): TransferReadback {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Canonical transfer readback is missing.');
@@ -88,8 +102,8 @@ export function decodeTransferReadback(value: unknown): TransferReadback {
     id: requireUuid(document.id, 'Transfer'),
     branch_id: requireUuid(document.branch_id, 'Source branch'),
     destination_branch_id: requireUuid(document.destination_branch_id, 'Destination branch'),
-    total_abs_base_quantity: normalizeAuthoritativeDecimal(document.total_abs_base_quantity, 'Transfer total quantity', positiveQuantityOptions),
-    total_value: normalizeAuthoritativeDecimal(document.total_value, 'Transfer total value', positiveMoneyOptions),
+    total_abs_base_quantity: requirePositiveDecimal(document.total_abs_base_quantity, 'Transfer total quantity', positiveQuantityOptions),
+    total_value: requirePositiveDecimal(document.total_value, 'Transfer total value', positiveMoneyOptions),
     lines: document.lines.map((line, index) => ({
       ...line,
       inventory_document_line_id: requireUuid(line.inventory_document_line_id, `Transfer line ${index + 1}`),
@@ -107,9 +121,9 @@ export function decodeTransferReadback(value: unknown): TransferReadback {
       transfer_in_product_id: requireUuid(line.transfer_in_product_id, `Transfer line ${index + 1} inbound product`),
       transfer_out_batch_id: requireUuid(line.transfer_out_batch_id, `Transfer line ${index + 1} outbound batch`),
       transfer_in_batch_id: requireUuid(line.transfer_in_batch_id, `Transfer line ${index + 1} inbound batch`),
-      base_quantity: normalizeAuthoritativeDecimal(line.base_quantity, `Transfer line ${index + 1} quantity`, positiveQuantityOptions),
-      unit_cost: normalizeAuthoritativeDecimal(line.unit_cost, `Transfer line ${index + 1} cost`, costOptions),
-      extended_cost: normalizeAuthoritativeDecimal(line.extended_cost, `Transfer line ${index + 1} value`, positiveMoneyOptions),
+      base_quantity: requirePositiveDecimal(line.base_quantity, `Transfer line ${index + 1} quantity`, positiveQuantityOptions),
+      unit_cost: requirePositiveDecimal(line.unit_cost, `Transfer line ${index + 1} cost`, costOptions),
+      extended_cost: requirePositiveDecimal(line.extended_cost, `Transfer line ${index + 1} value`, positiveMoneyOptions),
       transfer_out_quantity: normalizeAuthoritativeDecimal(line.transfer_out_quantity, `Transfer line ${index + 1} outbound quantity`, quantityOptions),
       transfer_out_unit_cost: normalizeAuthoritativeDecimal(line.transfer_out_unit_cost, `Transfer line ${index + 1} outbound cost`, costOptions),
       transfer_out_value: normalizeAuthoritativeDecimal(line.transfer_out_value, `Transfer line ${index + 1} outbound value`, moneyOptions),

@@ -29,6 +29,12 @@ MoneyString = Annotated[str, StringConstraints(pattern=r"^-?(?:0|[1-9]\d{0,17})\
 PositiveMoneyString = Annotated[str, StringConstraints(pattern=r"^(?:0|[1-9]\d{0,17})\.\d{2}$")]
 
 
+def _require_positive_decimal(value: str) -> str:
+    if Decimal(value) <= 0:
+        raise ValueError("canonical transfer evidence must be greater than zero")
+    return value
+
+
 def _activate(db: Session, user: Dict[str, Any]) -> UUID:
     org_id = UUID(str(user["org_id"]))
     db.execute(
@@ -57,6 +63,14 @@ class EligibleTransferBatch(BaseModel):
     is_default: bool
     model_config = ConfigDict(extra="forbid")
 
+    _positive_evidence = field_validator(
+        "uom_multiplier",
+        "available_base_quantity",
+        "available_selected_quantity",
+        "average_unit_cost",
+        "inventory_value",
+    )(_require_positive_decimal)
+
 
 class TransferReadbackLine(BaseModel):
     inventory_document_line_id: UUID
@@ -84,6 +98,10 @@ class TransferReadbackLine(BaseModel):
     transfer_in_unit_cost: CostString
     transfer_in_value: MoneyString
 
+    _positive_evidence = field_validator(
+        "base_quantity", "unit_cost", "extended_cost"
+    )(_require_positive_decimal)
+
 
 class TransferReadbackResponse(BaseModel):
     id: UUID
@@ -97,6 +115,10 @@ class TransferReadbackResponse(BaseModel):
     row_version: int
     lines: list[TransferReadbackLine]
     model_config = ConfigDict(extra="forbid")
+
+    _positive_totals = field_validator(
+        "total_abs_base_quantity", "total_value"
+    )(_require_positive_decimal)
 
     @field_validator("status")
     @classmethod
@@ -136,7 +158,8 @@ def get_eligible_transfer_batches(
              AND source_branch.id<>destination_branch.id AND source_location.id<>destination_location.id
              AND source_location.status='active' AND destination_location.status='active'
              AND source_location.location_type='saleable' AND destination_location.location_type='saleable'
-             AND source_location.allows_sale AND NOT source_location.allows_negative_stock
+             AND source_location.allows_sale AND destination_location.allows_sale
+             AND NOT source_location.allows_negative_stock
              AND NOT destination_location.allows_negative_stock
              AND ROW(source_location.temperature_min_c,source_location.temperature_max_c)
                  IS NOT DISTINCT FROM ROW(destination_location.temperature_min_c,destination_location.temperature_max_c)

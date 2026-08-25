@@ -84,6 +84,7 @@ def test_generated_sql_authorizes_both_branches_and_balances_ledger():
         "has_permission('inventory.transfer.create',source_branch_id)",
         "has_permission('inventory.transfer.create',destination_branch_id)",
         "source_branch_id=destination_branch_id",
+        "location_type='saleable' AND allows_sale",
         "strict_fefo_earliest_expiry_tier",
         "FOR UPDATE",
         "transfer_out_count",
@@ -97,6 +98,7 @@ def test_generated_sql_authorizes_both_branches_and_balances_ledger():
         "destination_entry.unit_cost=(expected.value->>'unit_cost')::numeric",
     ):
         assert fragment in sql
+    assert sql.count("location_type='saleable' AND allows_sale") >= 2
 
 
 def test_missing_stock_transfer_sequence_fails_closed():
@@ -119,3 +121,23 @@ def test_demo_provisions_transfer_authority_route_and_numbering():
         '"stock_transfer": "DEMO-ST-"',
     ):
         assert fragment in source
+
+
+def test_postgres_route_fixture_uses_real_runtime_role_and_useful_rows():
+    root = Path(__file__).resolve().parents[3]
+    fixture = (root / "backend/tests/postgres/check_canonical_inventory_transfer_runtime_role.py").read_text()
+    gate = (root / "database/canonical/ci/run_alembic_postgres15_gate.sh").read_text()
+    for fragment in (
+        'SET LOCAL ROLE "erp_runtime"',
+        "available_base_quantity",
+        "transfer_out_branch_id == SOURCE_BRANCH",
+        "transfer_in_branch_id == DESTINATION_BRANCH",
+        'transfer_out_value == "-10.00"',
+        'transfer_in_value == "10.00"',
+        "SELECT count(*) FROM core.organizations WHERE id=:other_org",
+        "source-only actor read destination transfer evidence",
+        "transaction.rollback()",
+    ):
+        assert fragment in fixture
+    assert 'SET LOCAL ROLE "erp_app"' not in fixture
+    assert "check_canonical_inventory_transfer_runtime_role.py" in gate

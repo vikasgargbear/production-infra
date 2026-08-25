@@ -35,13 +35,13 @@ def test_gst_reporting_rule_migration_is_hash_bound_linear_and_unseeded() -> Non
     assert sql.rstrip().endswith("RESET ROLE;")
 
 
-def test_staging_gate_tracks_the_importer_head_and_table_count() -> None:
+def test_staging_gate_tracks_the_canonical_head_and_table_count() -> None:
     workflow = (REPO_ROOT / ".github/workflows/canonical-staging.yml").read_text(encoding="utf-8")
     authority = json.loads((REPO_ROOT / "database/schema-authority.json").read_text(encoding="utf-8"))
     required = set(authority["required_migration_files"])
 
-    assert "revision.version_num='20260825_0004'" in workflow
-    assert 'version_num? == "20260825_0004"' in workflow
+    assert "revision.version_num='20260825_0005'" in workflow
+    assert 'version_num? == "20260825_0005"' in workflow
     assert "canonical_table_count: 111" in workflow
     assert REVISION.relative_to(REPO_ROOT).as_posix() in required
     assert SQL.relative_to(REPO_ROOT).as_posix() in required

@@ -385,7 +385,7 @@ jobs:
                    ) AND (rolsuper OR rolcreaterole OR rolbypassrls)
                  ) AS unsafe_role_count
             FROM public.alembic_version AS revision
-           WHERE revision.version_num='20260825_0004'
+           WHERE revision.version_num='20260825_0005'
           SQL
           )
           if curl --fail --silent --show-error \
@@ -395,7 +395,7 @@ jobs:
             --data "$(jq -nc --arg query "$baseline_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$baseline_state" \
-            && jq -e '.. | objects | select(.version_num? == "20260825_0004" and ((.table_count? // "") | tostring) == "111" and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
+            && jq -e '.. | objects | select(.version_num? == "20260825_0005" and ((.table_count? // "") | tostring) == "111" and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
               "$baseline_state" >/dev/null; then
             echo "Control plane verified exact canonical revision and topology; Alembic is already current"
             baseline_applied=true
@@ -1441,7 +1441,7 @@ jobs:
           mkdir -p staging-evidence
           jq -n \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --arg revision "20260825_0004" \
+            --arg revision "20260825_0005" \
             --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
             --arg commit_sha "$GITHUB_SHA" \
             --arg render_deploy_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
