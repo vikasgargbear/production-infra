@@ -16,8 +16,11 @@ export type CanonicalOperationKey =
   | 'finance.customer_receipt.prepare'
   | 'finance.supplier_payment.prepare'
   | 'finance.supplier_advance.prepare'
+  | 'finance.adjustment_note.prepare'
+  | 'finance.bank_reconciliation.prepare'
   | 'inventory.adjustment.prepare'
-  | 'inventory.transfer.prepare';
+  | 'inventory.transfer.prepare'
+  | 'inventory.destruction.prepare';
 
 export interface CanonicalCommandPreview {
   command_request_id: string;
@@ -26,9 +29,25 @@ export interface CanonicalCommandPreview {
 }
 
 export interface CanonicalCommandExecution {
+  command_request_id: string;
+  preview_hash: string;
   status: string;
   resource_id?: string;
   [key: string]: unknown;
+}
+
+export interface CanonicalCommandReview extends CanonicalCommandPreview {
+  status: string;
+  capability_code: CanonicalOperationKey;
+  command_type: string;
+  requested_by_membership_id: string;
+  branch_id?: string | null;
+  destination_branch_id?: string | null;
+  target_resource_type: string;
+  target_resource_id: string;
+  preview_canonical_json: string;
+  approval_policy: string;
+  required_approval_count: number;
 }
 
 export interface CanonicalCommandResult {
@@ -156,6 +175,22 @@ export async function getCanonicalCommandStatus(
     `/web/actions/commands/${commandRequestId}`,
   );
   requireExecution(response.data);
+  return response;
+}
+
+export async function getCanonicalCommandReview(
+  commandRequestId: string,
+): Promise<AxiosResponse<CanonicalCommandReview>> {
+  if (!isCanonicalUuid(commandRequestId)) {
+    throw new Error('Canonical command review requires a valid command identity.');
+  }
+  const response = await apiHelpers.get<CanonicalCommandReview>(
+    `/web/actions/commands/${commandRequestId}/review`,
+  );
+  const review = requirePreview(response.data) as CanonicalCommandReview;
+  if (!review.capability_code || !review.target_resource_type || !isCanonicalUuid(review.target_resource_id)) {
+    throw new Error('Canonical command review returned incomplete immutable authority.');
+  }
   return response;
 }
 

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2, Settings } from 'lucide-react';
 import { CanonicalWriteNotice, ModuleHeader } from '../../global';
 import { bankAccountsApi } from '../../../services/api';
+import { useCanonicalBusinessDate } from '../../../hooks/useCanonicalBusinessDate';
+import { exactDecimalString, exactDecimalUnits, formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
 
 interface BankReconciliationFlowProps {
@@ -9,11 +11,14 @@ interface BankReconciliationFlowProps {
 }
 
 interface BankAccount {
+  bank_account_id: string;
+  settlement_account_id: string;
   code: string;
-  name: string;
-  balance: number;
+  account_name: string;
+  balance: string;
   account_type: string;
   bank_name: string;
+  allows_bank_reconciliation: boolean;
 }
 
 interface UnreconciledTransaction {
@@ -29,15 +34,16 @@ interface UnreconciledTransaction {
 
 const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose }) => {
   const [selectedBank, setSelectedBank] = useState('');
-  const [reconciliationDate, setReconciliationDate] = useState(new Date().toISOString().split('T')[0]);
-  const [bankStatementBalance, setBankStatementBalance] = useState(0);
-  const [bookBalance, setBookBalance] = useState(0);
+  const [reconciliationDate, setReconciliationDate] = useState('');
+  const [bankStatementBalance, setBankStatementBalance] = useState('');
+  const [bookBalance, setBookBalance] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [unreconciledTransactions, setUnreconciledTransactions] = useState<UnreconciledTransaction[]>([]);
+  const business = useCanonicalBusinessDate();
 
   // Load only from the live API. Stale local snapshots are intentionally unsupported.
   const loadReconciliationData = async () => {
@@ -49,7 +55,23 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
 
       const accountsData = accountsResponse?.data?.accounts || accountsResponse?.data || [];
       if (Array.isArray(accountsData)) {
-        setBankAccounts(accountsData);
+        setBankAccounts(accountsData.map((raw: Record<string, unknown>, index: number) => {
+          const bankAccountId = String(raw.bank_account_id || raw.id || '');
+          const settlementAccountId = String(raw.settlement_account_id || '');
+          if (!bankAccountId || !settlementAccountId || typeof raw.balance !== 'string') {
+            throw new Error(`Bank account ${index + 1} is missing canonical identities or an exact balance.`);
+          }
+          return {
+            bank_account_id: bankAccountId,
+            settlement_account_id: settlementAccountId,
+            code: String(raw.code || ''),
+            account_name: String(raw.account_name || raw.name || ''),
+            balance: normalizeAuthoritativeDecimal(raw.balance, `Bank account ${index + 1} balance`, { scale: 2, maximumWholeDigits: 20, allowNegative: true }),
+            account_type: String(raw.account_type || ''),
+            bank_name: String(raw.bank_name || ''),
+            allows_bank_reconciliation: raw.allows_bank_reconciliation === true,
+          };
+        }));
       } else {
         setBankAccounts([]);
       }
@@ -82,19 +104,33 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
 
   // Load data when component mounts or date changes
   useEffect(() => {
-    loadReconciliationData();
-  }, [reconciliationDate]);
+    if (business.error) {
+      setLoading(false);
+      setError(`Unable to load the canonical organization date: ${business.error}`);
+      return;
+    }
+    if (!business.businessDate) return;
+    if (!reconciliationDate) {
+      setReconciliationDate(business.businessDate);
+      return;
+    }
+    void loadReconciliationData();
+  }, [business.businessDate, business.error, reconciliationDate]);
 
   // Update book balance when bank account changes
-  const handleBankAccountChange = (accountCode: string) => {
-    setSelectedBank(accountCode);
-    const account = bankAccounts.find(acc => acc.code === accountCode);
+  const handleBankAccountChange = (accountId: string) => {
+    setSelectedBank(accountId);
+    const account = bankAccounts.find(acc => acc.bank_account_id === accountId);
     if (account) {
       setBookBalance(account.balance);
-    }
+    } else setBookBalance('');
   };
 
-  const difference = bankStatementBalance - bookBalance;
+  const statementBalanceValid = /^-?(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(bankStatementBalance);
+  const difference = statementBalanceValid && bookBalance
+    ? exactDecimalUnits(bankStatementBalance, 'Bank statement balance', { scale: 2, maximumWholeDigits: 20, allowNegative: true })
+      - exactDecimalUnits(bookBalance, 'Book balance', { scale: 2, maximumWholeDigits: 20, allowNegative: true })
+    : null;
 
   if (loading) {
     return (
@@ -111,8 +147,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
         {/* Header */}
         <ModuleHeader
           title="Bank Reconciliation"
-          documentNumber={`REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`}
-          status={difference === 0 ? 'Balanced' : `Difference: ₹${Math.abs(difference).toFixed(2)}`}
+          status={difference === null ? 'Select source facts' : difference === 0n ? 'Balanced' : `Difference: ${formatExactCurrency(exactDecimalString(difference < 0n ? -difference : difference, 2), 'Reconciliation difference')}`}
           icon={RefreshCw}
           iconColor="text-teal-600"
           onClose={onClose}
@@ -176,8 +211,8 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                   >
                     <option value="">Select bank account...</option>
                     {bankAccounts.map(account => (
-                      <option key={account.code} value={account.code}>
-                        {account.name} - ₹{account.balance.toLocaleString()}
+                      <option key={account.bank_account_id} value={account.bank_account_id} disabled={!account.allows_bank_reconciliation}>
+                        {account.account_name} — {formatExactCurrency(account.balance, 'Book balance')}{!account.allows_bank_reconciliation ? ' — reconciliation unavailable' : ''}
                       </option>
                     ))}
                   </select>
@@ -195,8 +230,8 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                   <label className="block text-sm font-medium text-gray-600 mb-2">Bank Statement Balance</label>
                   <input
                     type="number"
-                    value={bankStatementBalance || ''}
-                    onChange={(e) => setBankStatementBalance(parseFloat(e.target.value) || 0)}
+                    value={bankStatementBalance}
+                    onChange={(e) => setBankStatementBalance(e.target.value)}
                     placeholder="Enter bank statement balance"
                     step="0.01"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
@@ -214,16 +249,16 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-2">Book Balance</p>
-                  <p className="text-2xl font-bold text-blue-600">₹{bookBalance.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-blue-600">{bookBalance ? formatExactCurrency(bookBalance, 'Book balance') : 'Unavailable'}</p>
                 </div>
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-2">Bank Statement Balance</p>
-                  <p className="text-2xl font-bold text-green-600">₹{bankStatementBalance.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-600">{statementBalanceValid ? formatExactCurrency(bankStatementBalance, 'Statement balance') : bankStatementBalance ? 'Invalid amount' : 'Not entered'}</p>
                 </div>
-                <div className={`text-center p-4 rounded-lg ${difference === 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className={`text-center p-4 rounded-lg ${difference === 0n ? 'bg-green-50' : difference === null ? 'bg-slate-50' : 'bg-red-50'}`}>
                   <p className="text-sm text-gray-600 mb-2">Difference</p>
-                  <p className={`text-2xl font-bold ${difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {difference === 0 ? (
+                  <p className={`text-2xl font-bold ${difference === 0n ? 'text-green-600' : difference === null ? 'text-slate-500' : 'text-red-600'}`}>
+                    {difference === null ? 'Unavailable' : difference === 0n ? (
                       <span className="flex items-center justify-center gap-2">
                         <CheckCircle className="w-6 h-6" />
                         Balanced
@@ -231,7 +266,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                     ) : (
                       <span className="flex items-center justify-center gap-2">
                         <AlertCircle className="w-6 h-6" />
-                        ₹{Math.abs(difference).toLocaleString()}
+                        {formatExactCurrency(exactDecimalString(difference < 0n ? -difference : difference, 2), 'Reconciliation difference')}
                       </span>
                     )}
                   </p>

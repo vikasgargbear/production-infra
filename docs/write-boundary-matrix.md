@@ -39,8 +39,11 @@ ambiguity. It must fail closed instead of selecting one arbitrarily.
 | Supplier advance | `finance.supplier_advance.prepare` | no primary desktop entry yet | canonical command supports it | backend available; UI absent |
 | Cycle-count adjustment | `inventory.adjustment.prepare` | exact count review → independent approval → execute | inventory document, stock ledger and valuation | active; separate approver |
 | Stock transfer | `inventory.transfer.prepare` | explicit source/destination branches and locations → requested quantity → tied-earliest FEFO allocation → exact review → actor confirmation → execute once | posted transfer UUID, exact lines, paired `transfer_out`/`transfer_in` quantities and values | active; inter-branch only |
-| Bank reconciliation | `finance.bank_reconciliation.prepare` | choose one imported statement line and one posted bank-ledger journal → exact review → independent approval → execute | immutable full-amount match, statement lifecycle, unchanged posted journal, audit and outbox | backend active; desktop candidate selection, review/checker handoff, execute recovery and readback rendering not yet wired; statement import remains a separate unavailable UI boundary |
-| Destruction | `inventory.destruction.prepare` | no entry | none | backend resolver unavailable |
+| Standalone customer credit | `finance.adjustment_note.prepare` (`side=sales`, `direction=credit`) | posted invoice/open balance → line quantities and reviewed GST rule → immutable preview → independent approval → requester execute | posted note, exact original lines, tax document when statutory, allocation/residual and balanced journal | active |
+| Standalone supplier debit | `finance.adjustment_note.prepare` (`side=purchase`, `direction=debit`) | posted supplier invoice/open balance → line quantities and reviewed GST rule → immutable preview → independent approval → requester execute | posted note, exact original lines, tax document when statutory, allocation/residual and balanced journal | active |
+| Bank reconciliation | `finance.bank_reconciliation.prepare` | choose one imported statement line and one posted bank-ledger journal → exact review → independent approval → execute | immutable full-amount match, statement lifecycle, unchanged posted journal, audit and outbox | backend active; desktop candidate-selection projection is absent, so matching stays fail-closed rather than accepting opaque IDs or legacy transaction lists |
+| Destruction | `inventory.destruction.prepare` | no primary desktop entry | exact destruction certificate, stock ledger, remaining balance, valuation and balanced loss journal | backend active; desktop eligibility/certificate-selection projection is absent and unsafe opaque-ID entry is intentionally not exposed |
+| Expense claim | `finance.expense_claim.prepare` | no primary desktop entry | claim, receipt evidence, expense lines and balanced journal | pending integration; existing desktop CTA remains fail-closed |
 
 The browser never retries `execute` after an ambiguous response. Once an
 execution returns a resource UUID, recovery is GET-only against canonical
@@ -64,7 +67,7 @@ runtime code silently create one.
 The following surfaces have no reviewed canonical command and therefore remain
 disabled or reject before transport:
 
-- standalone credit/debit notes and expense claims;
+- expense claims until the pending canonical command is integrated;
 - direct journal authoring;
 - notification rules, campaigns, reminder sending, SMS and email sending;
 - direct collection-center payment recording;

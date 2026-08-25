@@ -2,10 +2,11 @@ import { apiHelpers } from './apiClient';
 import {
   canonicalExecutionCompleted,
   executeCanonicalAction,
+  getCanonicalCommandReview,
 } from './canonicalOperatorActions';
 
 jest.mock('./apiClient', () => ({
-  apiHelpers: { post: jest.fn() },
+  apiHelpers: { get: jest.fn(), post: jest.fn() },
 }));
 
 jest.mock('../../utils/clientUuid', () => ({
@@ -24,6 +25,8 @@ describe('canonical browser command transport', () => {
       .mockResolvedValueOnce({ data: { command_request_id: commandId, preview_hash: previewHash } })
       .mockResolvedValueOnce({ data: { status: 'approved' } })
       .mockResolvedValueOnce({ data: {
+        command_request_id: commandId,
+        preview_hash: previewHash,
         status: 'succeeded',
         resource_id: '10000000-0000-4000-8000-000000000002',
       } });
@@ -75,5 +78,21 @@ describe('canonical browser command transport', () => {
 
     await expect(executeCanonicalAction('sales.invoice.prepare', {}))
       .rejects.toThrow(/invalid status.*confirm server status/i);
+  });
+
+  it('loads immutable review authority from the one generic reviewer endpoint', async () => {
+    const get = apiHelpers.get as jest.Mock;
+    get.mockResolvedValueOnce({ data: {
+      command_request_id: commandId,
+      preview_hash: previewHash,
+      capability_code: 'finance.adjustment_note.prepare',
+      target_resource_type: 'adjustment_note',
+      target_resource_id: '10000000-0000-7000-8000-000000000002',
+    } });
+
+    const response = await getCanonicalCommandReview(commandId);
+
+    expect(get).toHaveBeenCalledWith(`/web/actions/commands/${commandId}/review`);
+    expect(response.data.capability_code).toBe('finance.adjustment_note.prepare');
   });
 });

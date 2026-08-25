@@ -386,7 +386,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
                 <p className="text-sm font-semibold text-gray-900">Inventory impact</p>
                 {(preview.inventory_impact as any[]).map((impact, index) => (
                   <div key={index} className="rounded-lg border border-gray-200 p-3 text-xs text-gray-700">
-                    {String(impact.base_accepted_quantity || '0')} accepted + {String(impact.base_free_quantity || '0')} free base units · ₹{String(impact.extended_cost)} · {String(impact.location_id)}
+                    {String(impact.base_accepted_quantity)} accepted + {String(impact.base_free_quantity)} free base units · ₹{String(impact.extended_cost)} · {String(impact.location_id)}
                   </div>
                 ))}
               </div>

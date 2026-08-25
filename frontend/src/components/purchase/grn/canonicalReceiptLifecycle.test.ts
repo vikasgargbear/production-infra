@@ -93,6 +93,16 @@ describe('canonical goods-receipt prepare lifecycle', () => {
       data: {
         command_request_id: '10000000-0000-7000-8000-000000000008',
         preview_hash: `sha256:${'a'.repeat(64)}`,
+        branch_id: context.branch_id,
+        resolved_references: [{ resource_type: 'purchase_order', id: context.purchase_order_id }],
+        financial_impact: [], tax_impact: [],
+        inventory_impact: [{
+          product_id: context.lines[0].product_id,
+          batch_id: '10000000-0000-7000-8000-000000000009',
+          location_id: context.lines[0].eligible_locations[0].id,
+          base_accepted_quantity: '1.000000', base_free_quantity: '0.000000',
+          extended_cost: '100.00',
+        }],
       },
     });
     const retryDraft = draft();
@@ -106,6 +116,27 @@ describe('canonical goods-receipt prepare lifecycle', () => {
     expect(secondPayload.idempotency_key).toBe(
       'CODEX-E2E-PUR-RET-20260825:receipt:retry-0001',
     );
+    expect(approveAndExecuteCanonicalAction).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing authoritative impact values instead of rendering silent zeroes', async () => {
+    (prepareCanonicalAction as jest.Mock).mockResolvedValue({ data: {
+      command_request_id: '10000000-0000-7000-8000-000000000008',
+      preview_hash: `sha256:${'a'.repeat(64)}`,
+      branch_id: context.branch_id,
+      resolved_references: [{ id: context.purchase_order_id }],
+      financial_impact: [], tax_impact: [],
+      inventory_impact: [{
+        product_id: context.lines[0].product_id,
+        batch_id: '10000000-0000-7000-8000-000000000009',
+        location_id: context.lines[0].eligible_locations[0].id,
+        base_accepted_quantity: undefined,
+        base_free_quantity: '0.000000', extended_cost: '100.00',
+      }],
+    } });
+
+    await expect(prepareCanonicalGoodsReceipt(context, draft()))
+      .rejects.toThrow(/accepted quantity.*exact decimal/i);
     expect(approveAndExecuteCanonicalAction).not.toHaveBeenCalled();
   });
 

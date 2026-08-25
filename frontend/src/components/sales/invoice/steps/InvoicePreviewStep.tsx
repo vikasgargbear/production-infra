@@ -284,7 +284,7 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
 
                                     <div className="mt-2 text-xs text-orange-600">
                                         <AlertCircle className="w-3 h-3 inline mr-1" />
-                                        E-Invoice is mandatory for B2B transactions above ₹500 with registered businesses
+                                        E-Invoice applicability and identifiers are confirmed by the canonical backend; this preview does not infer a legal threshold.
                                     </div>
                                 </div>
                             </div>
