@@ -26,7 +26,10 @@ rows = []
 for route in app.routes:
     endpoint = getattr(route, 'endpoint', None)
     methods = sorted(getattr(route, 'methods', None) or ())
-    if endpoint is None or not methods or not hasattr(route, 'dependant'):
+    # Restrict the probe to the public API contract.  Do not key this audit to
+    # FastAPI's private APIRoute internals: the attribute layout changed in
+    # 0.141 even though the mounted HTTP contract did not.
+    if endpoint is None or not methods or not route.path.startswith('/api'):
         continue
     rows.append({{
         'path': route.path,
