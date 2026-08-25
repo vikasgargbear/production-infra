@@ -14,7 +14,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     production = _read(".github/workflows/production-readiness.yml")
     staging = _read(".github/workflows/canonical-staging.yml")
 
-    assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging }}" in production
+    assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}" in production
     assert "if: inputs.deploy_render_pilot == true" in staging
     assert staging.count("if: inputs.deploy_render_pilot == true") == 3
     provision = staging.split("Provision and exercise the disposable demo organization", 1)[1]
@@ -1123,17 +1123,26 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
 def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     workflow = _read(".github/workflows/production-readiness.yml")
     assert "run_live18:" in workflow
+    assert "live18_provider:" in workflow
+    assert "- render" in workflow
+    assert "- railway" in workflow
     live18 = workflow.split("\n  live18-acceptance:", 1)[1]
 
     assert "github.event_name == 'workflow_dispatch' && inputs.run_live18" in live18
-    assert "needs: [canonical-free-staging]" in live18
+    assert "needs: [canonical-free-staging, railway-canonical-staging]" in live18
     assert "needs.canonical-free-staging.result == 'success'" in live18
+    assert "needs.railway-canonical-staging.result" in live18
     assert "inputs.provision_canonical_demo }}' != true" in live18
     assert "same-run canonical demo provision" in live18
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live18
-    assert "verify_render_pilot_sha.py" in live18
+    assert "verify_live18_deployment_sha.py" in live18
+    assert '--provider "$LIVE18_PROVIDER"' in live18
     assert "build-metadata.json" in live18
-    assert "aasopharma-api-pilot.onrender.com/health" in live18
+    assert "aasopharma-api-pilot.onrender.com" in live18
+    assert '$api+"/health"' in live18
+    assert "vars.RAILWAY_FRONTEND_URL" in live18
+    assert "vars.RAILWAY_API_URL" in live18
+    assert "vars.RAILWAY_MCP_URL" in live18
     assert (
         'echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"'
         in live18
@@ -1143,7 +1152,15 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         in live18
     )
     assert "secrets.LIVE18_REVIEWED_SCALARS_JSON" in live18
-    assert 'printf \'%s\' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_PATH"' in live18
+    assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" in live18
+    assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" in live18
+    assert 'printf \'%s\' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_INPUT_PATH"' in live18
+    assert ".values.expense_receipt_pdf_path=$path" in live18
+    assert "has(\"expense_receipt_pdf_path\")|not" in live18
+    assert 'sha256sum "$LIVE18_EXPENSE_RECEIPT_PATH"' in live18
+    assert live18.index('sha256sum "$LIVE18_EXPENSE_RECEIPT_PATH"') < live18.index(
+        "compile_live18_browser_fixture.py"
+    )
     assert "compile_live18_browser_fixture.py" in live18
     assert "--readiness docs/testing/live18-ui-template-readiness.json" in live18
     assert live18.index("provision_ephemeral_canonical_live.py provision") < live18.index(
@@ -1162,7 +1179,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "provision_ephemeral_browser_identities.py cleanup"
     )
     assert live18.count("if: always()") >= 4
-    assert 'rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_PATH"' in live18
+    assert 'rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH"' in live18
     assert "secrets.LIVE18_REQUESTER" not in live18
     assert "secrets.LIVE18_REVIEWER" not in live18
     assert "secrets.LIVE18_DENIAL_ACCESS_TOKEN" not in live18

@@ -21,6 +21,14 @@ on:
         required: true
         default: false
         type: boolean
+      live18_provider:
+        description: Exact-SHA staging application provider to certify
+        required: true
+        default: render
+        type: choice
+        options:
+          - render
+          - railway
       deploy_canonical_staging:
         description: Apply and verify the canonical baseline on the pinned free staging project
         required: true
@@ -120,7 +128,7 @@ jobs:
     uses: ./.github/workflows/canonical-staging.yml
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
-      deploy_render_pilot: ${{ inputs.deploy_canonical_staging }}
+      deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}
       provision_demo_data: ${{ inputs.provision_canonical_demo }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
       restart_staging_database: ${{ inputs.restart_canonical_staging }}
@@ -132,7 +140,7 @@ jobs:
   railway-canonical-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      inputs.deploy_canonical_staging &&
+      inputs.deploy_canonical_staging && inputs.live18_provider == 'railway' &&
       vars.DEPLOY_RAILWAY_PILOT == 'true'
     uses: ./.github/workflows/railway-canonical-staging.yml
     with:
@@ -1109,7 +1117,7 @@ jobs:
           retention-days: 30
 
   live18-acceptance:
-    needs: [canonical-free-staging]
+    needs: [canonical-free-staging, railway-canonical-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live18 &&
       (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
@@ -1122,10 +1130,9 @@ jobs:
       cancel-in-progress: false
     env:
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
+      LIVE18_PROVIDER: ${{ inputs.live18_provider }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-      PHARMA_CANONICAL_LIVE_API_BASE_URL: https://aasopharma-api-pilot.onrender.com
-      PHARMA_CANONICAL_MCP_URL: https://aasopharma-mcp-pilot.onrender.com/mcp
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
       PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
       PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
@@ -1135,10 +1142,6 @@ jobs:
       LIVE18_REQUIRED: "true"
       LIVE18_WRITE_ACK: canonical-disposable-only
       LIVE18_EXPECTED_DEPLOYED_SHA: ${{ inputs.canonical_staging_render_sha }}
-      LIVE18_APP_ORIGIN: https://aasopharma-erp-pilot.onrender.com
-      LIVE18_API_ORIGIN: https://aasopharma-api-pilot.onrender.com
-      LIVE18_MCP_ORIGIN: https://aasopharma-mcp-pilot.onrender.com
-      LIVE18_METADATA_URLS_JSON: '["https://aasopharma-erp-pilot.onrender.com/build-metadata.json","https://aasopharma-api-pilot.onrender.com/health"]'
       LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -1157,23 +1160,70 @@ jobs:
       - name: Bind live18 evidence paths to the runner temporary directory
         run: |
           set -euo pipefail
-          echo "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json" >> "$GITHUB_ENV"
-          echo "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH=$RUNNER_TEMP/live18-fixture-identities.json" >> "$GITHUB_ENV"
-          echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json" >> "$GITHUB_ENV"
-          echo "LIVE18_REVIEWED_SCALARS_PATH=$RUNNER_TEMP/live18-reviewed-scalars.json" >> "$GITHUB_ENV"
-          echo "LIVE18_TEMPLATE_DIRECTORY=$GITHUB_WORKSPACE/frontend/e2e/live18/templates" >> "$GITHUB_ENV"
-          echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence" >> "$GITHUB_ENV"
-          echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright" >> "$GITHUB_ENV"
-      - name: Bind live18 to the exact reviewed deployed SHA
+          {
+            echo "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"
+            echo "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH=$RUNNER_TEMP/live18-fixture-identities.json"
+            echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"
+            echo "LIVE18_REVIEWED_SCALARS_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-scalars-input.json"
+            echo "LIVE18_REVIEWED_SCALARS_PATH=$RUNNER_TEMP/live18-reviewed-scalars.json"
+            echo "LIVE18_EXPENSE_RECEIPT_PATH=$RUNNER_TEMP/live18-reviewed-expense-receipt.pdf"
+            echo "LIVE18_TEMPLATE_DIRECTORY=$GITHUB_WORKSPACE/frontend/e2e/live18/templates"
+            echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"
+            echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright"
+          } >> "$GITHUB_ENV"
+      - name: Bind live18 to one reviewed staging provider
         env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RAILWAY_APP_ORIGIN: ${{ vars.RAILWAY_FRONTEND_URL }}
+          RAILWAY_API_ORIGIN: ${{ vars.RAILWAY_API_URL }}
+          RAILWAY_MCP_ORIGIN: ${{ vars.RAILWAY_MCP_URL }}
+        run: |
+          set -euo pipefail
+          test '${{ inputs.deploy_canonical_staging }}' = true
+          test '${{ inputs.provision_canonical_demo }}' = true
+          test '${{ needs.canonical-free-staging.result }}' = success
+          case "$LIVE18_PROVIDER" in
+            render)
+              test '${{ needs.railway-canonical-staging.result }}' = skipped
+              app_origin=https://aasopharma-erp-pilot.onrender.com
+              api_origin=https://aasopharma-api-pilot.onrender.com
+              mcp_origin=https://aasopharma-mcp-pilot.onrender.com
+              ;;
+            railway)
+              test '${{ needs.railway-canonical-staging.result }}' = success
+              app_origin=$RAILWAY_APP_ORIGIN
+              api_origin=$RAILWAY_API_ORIGIN
+              mcp_origin=$RAILWAY_MCP_ORIGIN
+              ;;
+            *) exit 2 ;;
+          esac
+          for origin in "$app_origin" "$api_origin" "$mcp_origin"; do
+            case "$origin" in
+              https://*/*|*localhost*|*127.0.0.1*|http://*|'') exit 2 ;;
+            esac
+          done
+          metadata_urls=$(jq -cn --arg app "$app_origin" --arg api "$api_origin" --arg mcp "$mcp_origin" \
+            '[$app+"/build-metadata.json",$api+"/health",$mcp+"/health"]')
+          {
+            echo "LIVE18_APP_ORIGIN=$app_origin"
+            echo "LIVE18_API_ORIGIN=$api_origin"
+            echo "LIVE18_MCP_ORIGIN=$mcp_origin"
+            echo "PHARMA_CANONICAL_LIVE_API_BASE_URL=$api_origin"
+            echo "PHARMA_CANONICAL_MCP_URL=$mcp_origin/mcp"
+            echo "LIVE18_METADATA_URLS_JSON=$metadata_urls"
+          } >> "$GITHUB_ENV"
+
+      - name: Bind live18 to the exact reviewed deployed SHA
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
           test "${#REVIEWED_DEPLOY_SHA}" = 40
-          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+          PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+            --provider "$LIVE18_PROVIDER" \
             --commit-sha "$REVIEWED_DEPLOY_SHA" \
-            > "$RUNNER_TEMP/live18-render-sha.json"
+            --frontend-origin "$LIVE18_APP_ORIGIN" \
+            --api-origin "$LIVE18_API_ORIGIN" \
+            --mcp-origin "$LIVE18_MCP_ORIGIN" \
+            > "$RUNNER_TEMP/live18-deployed-sha.json"
       - name: Refuse any target except canonical disposable staging
         run: |
           set -euo pipefail
@@ -1196,12 +1246,23 @@ jobs:
       - name: Write compact externally reviewed scalar choices outside the repository
         env:
           LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
         run: |
           set -euo pipefail
           test -n "$LIVE18_REVIEWED_SCALARS_JSON"
+          test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64"
+          [[ "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
           umask 077
-          printf '%s' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_PATH"
-          python3 -m json.tool "$LIVE18_REVIEWED_SCALARS_PATH" >/dev/null
+          printf '%s' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_INPUT_PATH"
+          python3 -m json.tool "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" >/dev/null
+          test "$(jq -r 'has("values") and (.values|type=="object") and (.values|has("expense_receipt_pdf_path")|not)' "$LIVE18_REVIEWED_SCALARS_INPUT_PATH")" = true
+          printf '%s' "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" | base64 --decode > "$LIVE18_EXPENSE_RECEIPT_PATH"
+          test -s "$LIVE18_EXPENSE_RECEIPT_PATH"
+          test "$(wc -c < "$LIVE18_EXPENSE_RECEIPT_PATH")" -le 10485760
+          test "$(sha256sum "$LIVE18_EXPENSE_RECEIPT_PATH" | cut -d' ' -f1)" = "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          jq --arg path "$LIVE18_EXPENSE_RECEIPT_PATH" '.values.expense_receipt_pdf_path=$path' \
+            "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" > "$LIVE18_REVIEWED_SCALARS_PATH"
           test "$(wc -c < "$LIVE18_REVIEWED_SCALARS_PATH")" -le 32768
           case "$LIVE18_REVIEWED_SCALARS_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
       - name: Build the masked exact erp_runtime connection
@@ -1294,14 +1355,14 @@ jobs:
             --state "$RUNNER_TEMP/live18-browser-identities.json"
       - name: Always remove external reviewed choices and compiled fixture
         if: always()
-        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_PATH"
+        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH"
       - name: Upload live18 SHA, browser, REST, MCP, and PostgreSQL evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: canonical-live18-acceptance-evidence
           path: |
-            ${{ runner.temp }}/live18-render-sha.json
+            ${{ runner.temp }}/live18-deployed-sha.json
             ${{ runner.temp }}/live18-fixture-identities.json
             ${{ runner.temp }}/live18-playwright-list.txt
             ${{ runner.temp }}/live18-reconciliation.txt

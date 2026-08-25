@@ -333,7 +333,7 @@ jobs:
                    (.[0].meta.serviceManifest.build.dockerfilePath == $dockerfile) and
                    ((.[0].meta.serviceManifest.deploy.startCommand // "") == $expected_start) and
                    (.[0].meta.serviceManifest.deploy.healthcheckPath == $healthcheck) and
-                   (.[0].meta.serviceManifest.deploy.sleepApplication == false)' >/dev/null
+                   (.[0].meta.serviceManifest.deploy.sleepApplication == true)' >/dev/null
           }
 
           api_deployment_id=$(<api-deployment-id)

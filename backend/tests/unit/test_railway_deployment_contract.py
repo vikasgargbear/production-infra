@@ -42,7 +42,7 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
         assert config["build"]["builder"] == "DOCKERFILE"
         assert config["build"]["dockerfilePath"] == dockerfile
         assert config["deploy"]["startCommand"] == expected_start_commands[service]
-        assert config["deploy"]["sleepApplication"] is False
+        assert config["deploy"]["sleepApplication"] is True
         assert config["deploy"]["multiRegionConfig"] == {
             SINGAPORE_REGION: {"numReplicas": 1}
         }
@@ -50,7 +50,12 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
     mcp_dockerfile = (ROOT / "deploy/railway/mcp.Dockerfile").read_text(
         encoding="utf-8"
     )
-    assert expected_start_commands["mcp"] in mcp_dockerfile
+    mcp_cmd = next(
+        json.loads(line.removeprefix("CMD "))
+        for line in mcp_dockerfile.splitlines()
+        if line.startswith("CMD ")
+    )
+    assert mcp_cmd == ["sh", "-c", expected_start_commands["mcp"]]
 
 
 def test_railway_healthchecks_match_service_readiness_boundaries() -> None:
@@ -205,7 +210,7 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert ".meta.serviceManifest.deploy.startCommand" in workflow
     assert 'require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command"' in workflow
     assert ".meta.serviceManifest.deploy.healthcheckPath" in workflow
-    assert ".meta.serviceManifest.deploy.sleepApplication" in workflow
+    assert ".meta.serviceManifest.deploy.sleepApplication == true" in workflow
 
 
 def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
