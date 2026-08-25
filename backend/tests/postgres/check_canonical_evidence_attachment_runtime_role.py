@@ -41,6 +41,10 @@ def _expect_denied(connection, statement: str, parameters: dict) -> None:
 
 
 def _seed(connection) -> None:
+    connection.execute(
+        text("INSERT INTO auth.users(id) VALUES (:auth_a),(:auth_b)"),
+        {"auth_a": AUTH_A, "auth_b": AUTH_B},
+    )
     connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
     connection.exec_driver_sql("SET CONSTRAINTS ALL DEFERRED")
     for table_name in (
@@ -48,10 +52,6 @@ def _seed(connection) -> None:
         "core.roles", "core.role_permissions", "core.access_grants",
     ):
         connection.exec_driver_sql(f"ALTER TABLE {table_name} DISABLE TRIGGER USER")
-    connection.execute(
-        text("INSERT INTO auth.users(id) VALUES (:auth_a),(:auth_b)"),
-        {"auth_a": AUTH_A, "auth_b": AUTH_B},
-    )
     connection.execute(
         text(
             """
@@ -158,6 +158,12 @@ def main() -> None:
             assert tuple(rls) == (True, True)
 
             connection.execute(
+                text(
+                    "SELECT pg_catalog.set_config("
+                    "'app.request_id',pg_catalog.gen_random_uuid()::text,true)"
+                )
+            )
+            connection.execute(
                 text("SELECT erp_security.activate_context(:auth,:org)"),
                 {"auth": AUTH_A, "org": ORG_A},
             )
@@ -218,8 +224,8 @@ def main() -> None:
                 connection, _insert_sql(), _parameters(ORG_A, BRANCH_A, PENDING, "d")
             )
         finally:
-            connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
             transaction.rollback()
+            connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
             engine.dispose()
 
 
