@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "evidence_state": "incomplete",
   "source_disposition": {
     "state": "missing",
@@ -39,6 +39,12 @@
     "table_content_digests_reconciled": null,
     "backup_verified": null,
     "restore_tested": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "live18_acceptance": {
+    "state": "missing",
+    "operation_count": null,
     "artifact": null,
     "artifact_sha256": null
   },

@@ -733,6 +733,7 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
             "identity": {
                 "customer_account_id": "d3000000-0000-7000-8000-000000000041",
                 "product_id": "d3000000-0000-7000-8000-000000000042",
+                "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000043",
             },
             "display": {
                 "customer_code": "DEMO-CUSTOMER",
@@ -753,8 +754,56 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     _validate_compiled_steps("sales_order", operation, "actor_confirmation")
     assert used == set(scalars)
     assert operation["prepare_steps"][1]["value"] == "2026-08-27"
+    assert operation["prepare_steps"][6]["action"] == "click"
+    assert operation["prepare_steps"][6]["locator"] == {
+        "kind": "testId",
+        "name": "select-batch-d3000000-0000-7000-8000-000000000043",
+    }
     assert operation["prepare_steps"][7]["value"] == "1.125000"
     assert operation["prepare_steps"][8]["value"] == "84.1250"
+
+
+def test_live18_templates_use_only_canonical_hash_routes() -> None:
+    root = Path(__file__).resolve().parents[3]
+    allowed = {
+        "/#/sales/invoice",
+        "/#/sales/sales-order",
+        "/#/sales/challan",
+        "/#/purchase/purchase-order",
+        "/#/purchase/purchase-history",
+        "/#/purchase/supplier-invoice",
+        "/#/payment/payment-entry",
+        "/#/payment/supplier-payment",
+        "/#/payment/supplier-advance",
+        "/#/payment/bank-reconciliation",
+        "/#/payment/expense-claims",
+        "/#/returns/sales-return",
+        "/#/returns/purchase-return",
+        "/#/returns/approval-inbox",
+        "/#/returns/resume-post",
+        "/#/stock-management/stock-adjustment",
+        "/#/stock-management/stock-transfer",
+        "/#/stock-management/inventory-destruction",
+        "/#/credit-debit-note",
+    }
+    observed: set[str] = set()
+    phases = (
+        "missing_required_steps",
+        "prepare_steps",
+        "approval_steps",
+        "execute_steps",
+    )
+    for template_path in sorted(
+        (root / "frontend/e2e/live18/templates").glob("*.json")
+    ):
+        template = json.loads(template_path.read_text())
+        for phase in phases:
+            observed.update(
+                step["value"]
+                for step in template["steps"][phase]
+                if step["action"] == "goto"
+            )
+    assert observed == allowed
 
 
 def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:

@@ -44,6 +44,10 @@ export async function loginAndCaptureSession(
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json() as { access_token?: string };
   if (!body.access_token) throw new Error('ERP session exchange omitted its access token.');
+  await expect(
+    page.getByText('Core Operations', { exact: true }),
+    'successful session exchange must finish rendering the authenticated ERP before navigation',
+  ).toBeVisible({ timeout: 45_000 });
   const identity = sessionIdentityFromToken(body.access_token);
   return {
     token: body.access_token,

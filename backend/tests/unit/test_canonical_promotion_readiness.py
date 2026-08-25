@@ -87,12 +87,20 @@ def _fixture_root(
         }
         for index, name in enumerate(sorted(promotion_evidence.RENDER_SERVICE_NAMES), 1)
     }
-    binding = {
-        "project_ref": promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
-        "git_commit": git_commit,
-        "deployed_render_sha": git_commit,
-        "render_services": render_services,
+    deployment_evidence = {
+        "provider": "render", "commit_sha": git_commit,
+        "services": render_services,
     }
+    binding = promotion_evidence.build_binding(
+        project_ref=promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
+        git_commit=git_commit,
+        deployment_evidence=deployment_evidence,
+        deployment_evidence_sha256=hashlib.sha256(
+            promotion_evidence._json_bytes(deployment_evidence)
+        ).hexdigest(),
+        deployment_artifact_id=123,
+        deployment_artifact_digest="sha256:" + "9" * 64,
+    )
 
     def artifact(kind: str, payload: dict) -> dict:
         return {
@@ -158,6 +166,15 @@ def _fixture_root(
             "backup_sha256": "b" * 64,
             "backup_size_bytes": 1,
         }),
+        "live18.json": artifact("canonical_live18_acceptance", {
+            "workflow_run_id": 123,
+            "workflow_run_attempt": 1,
+            "artifact_id": 456,
+            "artifact_sha256": "c" * 64,
+            "artifact_digest": "sha256:" + "d" * 64,
+            "operation_count": 18,
+            "operation_ids": [f"operation-{index}" for index in range(18)],
+        }),
         "rollback.json": artifact("rollback_plan", {
             "state": "reviewed", "owner": "release-owner",
             "trigger_conditions": ["readiness fails"],
@@ -182,7 +199,7 @@ def _fixture_root(
         artifact_hashes[name] = hashlib.sha256((tmp_path / relative).read_bytes()).hexdigest()
     state = "verified" if promotion_evidence_ready else "missing"
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "evidence_state": state if state == "verified" else "incomplete",
         "source_disposition": {
             "state": state, "strategy": "reset",
@@ -215,6 +232,11 @@ def _fixture_root(
             "backup_verified": True,
             "restore_tested": True, "artifact": "evidence/reconciliation.json",
             "artifact_sha256": artifact_hashes["reconciliation.json"],
+        },
+        "live18_acceptance": {
+            "state": state, "operation_count": 18,
+            "artifact": "evidence/live18.json",
+            "artifact_sha256": artifact_hashes["live18.json"],
         },
         "rollback_decommission": {
             "state": state, "rollback_artifact": "evidence/rollback.json",

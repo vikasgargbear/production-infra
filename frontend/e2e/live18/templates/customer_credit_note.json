@@ -4,12 +4,12 @@
   "lifecycle_mode": "split",
   "steps": {
     "missing_required_steps": [
-      {"actor":"requester","action":"goto","value":"/#/notes"},
+      {"actor":"requester","action":"goto","value":"/#/credit-debit-note"},
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason.","exact":true},"value":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason."},
       {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
     ],
     "prepare_steps": [
-      {"actor":"requester","action":"goto","value":"/#/notes"},
+      {"actor":"requester","action":"goto","value":"/#/credit-debit-note"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted sales invoice","exact":true},"value":"{{resource_sales_invoice}}"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Reviewed GST rule","exact":true},"value":"{{fact.identity.sales_adjustment_rule_id}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Business reason","exact":true},"value":"{{scalar.customer_credit_note_reason}}"},
@@ -20,7 +20,7 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
     ],
     "approval_steps": [
-      {"actor":"reviewer","action":"goto","value":"/#/notes"},
+      {"actor":"reviewer","action":"goto","value":"/#/credit-debit-note"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"2. Independent approval","exact":true}},
       {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},

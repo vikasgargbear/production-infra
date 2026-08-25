@@ -11,6 +11,10 @@ on:
         description: Exact deployed 40-character commit to evidence
         required: true
         type: string
+      deployment_workflow_run_id:
+        description: Exact Production readiness run containing Railway deploy and Live18 evidence
+        required: true
+        type: number
       source_disposition:
         description: Repository path to the reviewed reset disposition JSON
         required: true
@@ -36,6 +40,10 @@ on:
         description: Exact deployed 40-character commit to evidence
         required: true
         type: string
+      deployment_workflow_run_id:
+        description: Exact Production readiness run containing Railway deploy and Live18 evidence
+        required: true
+        type: number
       source_disposition:
         description: Repository path to the reviewed reset disposition JSON
         required: true
@@ -51,6 +59,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: canonical-application-promotion-evidence
@@ -80,8 +89,8 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      DEPLOYMENT_WORKFLOW_RUN_ID: ${{ inputs.deployment_workflow_run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,13 +136,62 @@ jobs:
           sudo apt-get install -y --no-install-recommends postgresql-client
           pip install -r backend/requirements.txt
 
-      - name: Verify all Render services are live on the exact SHA
+      - name: Bind exact successful Railway deployment and Live18 artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p staging-evidence
-          python3 backend/scripts/verify_render_pilot_sha.py \
-            --commit-sha "$REVIEWED_SHA" \
-            > staging-evidence/render-deployment.json
+          [[ "$DEPLOYMENT_WORKFLOW_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          run_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID")
+          test "$(jq -r .head_sha <<<"$run_json")" = "$REVIEWED_SHA"
+          test "$(jq -r .path <<<"$run_json")" = .github/workflows/production-readiness.yml
+          test "$(jq -r .event <<<"$run_json")" = workflow_dispatch
+          run_attempt=$(jq -er '.run_attempt | select(. > 0)' <<<"$run_json")
+          jobs_json=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID/jobs?per_page=100" \
+            --slurp | jq '{jobs: map(.jobs[]) }')
+          test "$(jq '[.jobs[] | select(.name == "railway-canonical-staging / deploy" and .conclusion == "success")] | length' <<<"$jobs_json")" = 1
+          test "$(jq '[.jobs[] | select(.name == "live18-acceptance" and .conclusion == "success")] | length' <<<"$jobs_json")" = 1
+          artifacts_json=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID/artifacts?per_page=100" \
+            --slurp | jq '{artifacts: map(.artifacts[]) }')
+          deployment_name="railway-canonical-staging-$REVIEWED_SHA"
+          deployment_id=$(jq -er --arg name "$deployment_name" \
+            '[.artifacts[] | select(.name == $name and .expired == false)] | select(length == 1) | .[0].id' \
+            <<<"$artifacts_json")
+          deployment_digest=$(jq -er --arg name "$deployment_name" \
+            '[.artifacts[] | select(.name == $name and .expired == false)] | select(length == 1) | .[0].digest | select(test("^sha256:[0-9a-f]{64}$"))' \
+            <<<"$artifacts_json")
+          live18_id=$(jq -er \
+            '[.artifacts[] | select(.name == "canonical-live18-acceptance-evidence" and .expired == false)] | select(length == 1) | .[0].id' \
+            <<<"$artifacts_json")
+          live18_digest=$(jq -er \
+            '[.artifacts[] | select(.name == "canonical-live18-acceptance-evidence" and .expired == false)] | select(length == 1) | .[0].digest | select(test("^sha256:[0-9a-f]{64}$"))' \
+            <<<"$artifacts_json")
+          deployment_zip="$RUNNER_TEMP/railway-deployment.zip"
+          live18_zip="$RUNNER_TEMP/live18-acceptance.zip"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$deployment_id/zip" > "$deployment_zip"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$live18_id/zip" > "$live18_zip"
+          test "$(unzip -Z1 "$deployment_zip" | sort | tr '\n' ' ')" = \
+            "_temp/railway-oauth-evidence/canonical-staging-oauth-client.json production-infra/production-infra/railway-pilot-evidence.json production-infra/production-infra/railway-supabase-auth-redirect.json "
+          test "$(unzip -Z1 "$live18_zip")" = live18-evidence-manifest.json
+          unzip -p "$deployment_zip" \
+            production-infra/production-infra/railway-pilot-evidence.json \
+            > staging-evidence/deployment.json
+          unzip -p "$live18_zip" live18-evidence-manifest.json \
+            > staging-evidence/live18-evidence-manifest.json
+          test -s staging-evidence/deployment.json
+          test -s staging-evidence/live18-evidence-manifest.json
+          {
+            echo "LIVE18_WORKFLOW_RUN_ATTEMPT=$run_attempt"
+            echo "DEPLOYMENT_ARTIFACT_ID=$deployment_id"
+            echo "DEPLOYMENT_ARTIFACT_DIGEST=$deployment_digest"
+            echo "LIVE18_ARTIFACT_ID=$live18_id"
+            echo "LIVE18_ARTIFACT_DIGEST=$live18_digest"
+            echo "LIVE18_ARTIFACT_SHA256=$(sha256sum staging-evidence/live18-evidence-manifest.json | cut -d' ' -f1)"
+          } >> "$GITHUB_ENV"
+          rm -f -- "$deployment_zip" "$live18_zip"
 
       - name: Resolve read-only canonical staging connections
         run: |
@@ -171,13 +229,17 @@ jobs:
           python3 backend/scripts/audit/application_promotion_evidence.py route-graph \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --git-commit "$REVIEWED_SHA" \
-            --render-evidence staging-evidence/render-deployment.json \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
             --repo-root "$GITHUB_WORKSPACE" \
             --output staging-evidence/mounted-route-graph.json
           python3 backend/scripts/audit/application_promotion_evidence.py database \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --git-commit "$REVIEWED_SHA" \
-            --render-evidence staging-evidence/render-deployment.json \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
             --runtime-database-url "$PROMOTION_RUNTIME_DATABASE_URL" \
             --admin-database-url "$PROMOTION_ADMIN_DATABASE_URL" \
             --expected-head "$expected_head" \
@@ -239,14 +301,18 @@ jobs:
           python3 backend/scripts/audit/application_promotion_evidence.py snapshot \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --git-commit "$REVIEWED_SHA" \
-            --render-evidence staging-evidence/render-deployment.json \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
             --database-url postgresql://postgres:postgres@localhost:5432/promotion_restore \
             --source restored_postgresql_15 \
             --output staging-evidence/restored-postgresql-15.json
           python3 backend/scripts/audit/application_promotion_evidence.py reconcile-backup \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --git-commit "$REVIEWED_SHA" \
-            --render-evidence staging-evidence/render-deployment.json \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
             --source-artifact staging-evidence/canonical-database-runtime.json \
             --restored-artifact staging-evidence/restored-postgresql-15.json \
             --backup-file staging-evidence/canonical-staging-backup.sql \
@@ -258,8 +324,19 @@ jobs:
           common=(
             --project-ref "$CANONICAL_STAGING_PROJECT_REF"
             --git-commit "$REVIEWED_SHA"
-            --render-evidence staging-evidence/render-deployment.json
+            --deployment-evidence staging-evidence/deployment.json
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID"
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST"
           )
+          python3 backend/scripts/audit/application_promotion_evidence.py capture-live18 \
+            "${common[@]}" \
+            --manifest staging-evidence/live18-evidence-manifest.json \
+            --workflow-run-id "$DEPLOYMENT_WORKFLOW_RUN_ID" \
+            --workflow-run-attempt "$LIVE18_WORKFLOW_RUN_ATTEMPT" \
+            --artifact-id "$LIVE18_ARTIFACT_ID" \
+            --artifact-sha256 "$LIVE18_ARTIFACT_SHA256" \
+            --artifact-digest "$LIVE18_ARTIFACT_DIGEST" \
+            --output staging-evidence/live18-acceptance.json
           python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
             "${common[@]}" --kind source_disposition \
             --repo-root "$GITHUB_WORKSPACE" \
@@ -282,12 +359,15 @@ jobs:
           python3 backend/scripts/audit/application_promotion_evidence.py assemble \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --git-commit "$REVIEWED_SHA" \
-            --render-evidence staging-evidence/render-deployment.json \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
             --repo-root "$GITHUB_WORKSPACE" \
             --source-disposition staging-evidence/source-disposition.json \
             --route-graph staging-evidence/mounted-route-graph.json \
             --database staging-evidence/canonical-database-runtime.json \
             --reconciliation-backup staging-evidence/reconciliation-backup-restore.json \
+            --live18-acceptance staging-evidence/live18-acceptance.json \
             --rollback staging-evidence/rollback-plan.json \
             --decommission staging-evidence/decommission-plan.json \
             --reviewer "$GITHUB_ACTOR" \

@@ -173,7 +173,7 @@ def test_promotion_manifest_is_hash_bound(tmp_path):
     manifest = tmp_path / "promotion.json"
     manifest.write_text(
         json.dumps({
-            "schema_version": 1,
+            "schema_version": 2,
             "evidence_state": "incomplete",
             **{
                 section: {"state": "missing"}

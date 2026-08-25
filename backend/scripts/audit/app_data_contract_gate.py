@@ -66,6 +66,7 @@ PROMOTION_EVIDENCE_SECTIONS = {
     "migration_head",
     "runtime_tenant_isolation",
     "reconciliation_backup",
+    "live18_acceptance",
     "rollback_decommission",
     "review",
 }
@@ -161,8 +162,8 @@ def validate_promotion_evidence(
         evidence = _load_json(manifest_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         return None, errors + [f"promotion evidence cannot be loaded: {exc}"]
-    if evidence.get("schema_version") != 1:
-        errors.append("promotion evidence schema_version must equal 1")
+    if evidence.get("schema_version") != 2:
+        errors.append("promotion evidence schema_version must equal 2")
     missing_sections = PROMOTION_EVIDENCE_SECTIONS - set(evidence)
     for section_name in sorted(missing_sections):
         errors.append(f"promotion evidence lacks {section_name}")
@@ -249,6 +250,9 @@ def validate_promotion_evidence(
             ):
                 if section.get(predicate) is not True:
                     errors.append(f"promotion evidence reconciliation_backup.{predicate} is not verified")
+        elif section_name == "live18_acceptance":
+            if section.get("operation_count") != 18:
+                errors.append("promotion evidence live18_acceptance must verify exactly 18 operations")
     verified = all(
         isinstance(evidence.get(name), dict)
         and evidence[name].get("state") == "verified"

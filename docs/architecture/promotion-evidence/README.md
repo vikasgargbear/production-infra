@@ -11,6 +11,8 @@ write business data. It proves one common project and commit binding across:
 
 - the effective mounted FastAPI route graph and its reachable local import
   graph;
+- the exact successful Railway deployment artifact and the scrubbed exact-run
+  Live18 evidence for all 18 browser, REST, MCP, RLS, and PostgreSQL paths;
 - the deployed Alembic revision, runtime role posture, every tenant table's
   forced-RLS catalog state, a same-tenant read, and a cross-tenant denial;
 - exact row counts and exact PostgreSQL `NUMERIC` sums before and after a
@@ -23,7 +25,7 @@ reconciliation artifact retains the dump hash and size after the PostgreSQL 15
 restore succeeds. Promotion still requires a separate review commit
 that places the artifacts at the manifest paths, updates the manifest hash in
 `app-data-contract.json`, and then runs both application-contract gates. Any
-draft input, stale Render service, wrong project, mixed commit, missing tenant,
+draft input, stale deployment, incomplete Live18 run, wrong project, mixed commit, missing tenant,
 RLS gap, restore difference, or altered artifact stops the workflow.
 
 The source-disposition review must reference the exact

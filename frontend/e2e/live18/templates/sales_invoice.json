@@ -4,7 +4,7 @@
   "lifecycle_mode": "combined_actor_confirmation",
   "steps": {
     "missing_required_steps": [
-      {"actor":"requester","action":"goto","value":"/#/sales/create-invoice"},
+      {"actor":"requester","action":"goto","value":"/#/sales/invoice"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
@@ -23,7 +23,7 @@
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Invoice free-supply tax treatment is missing or invalid","exact":true},"value":"Invoice free-supply tax treatment is missing or invalid"}
     ],
     "prepare_steps": [
-      {"actor":"requester","action":"goto","value":"/#/sales/create-invoice"},
+      {"actor":"requester","action":"goto","value":"/#/sales/invoice"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},

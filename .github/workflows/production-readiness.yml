@@ -74,6 +74,11 @@ on:
         required: false
         default: ""
         type: string
+      canonical_promotion_deployment_run_id:
+        description: Exact completed Production readiness run containing Railway deploy and Live18 artifacts
+        required: false
+        default: 0
+        type: number
       canonical_promotion_source_disposition:
         description: Repository path to the reviewed reset disposition JSON
         required: false
@@ -112,6 +117,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   canonical-conversion-preflight:
@@ -159,6 +165,7 @@ jobs:
     with:
       confirmation: CAPTURE_CANONICAL_PROMOTION_EVIDENCE
       reviewed_sha: ${{ inputs.canonical_promotion_reviewed_sha }}
+      deployment_workflow_run_id: ${{ inputs.canonical_promotion_deployment_run_id }}
       source_disposition: ${{ inputs.canonical_promotion_source_disposition }}
       rollback_plan: ${{ inputs.canonical_promotion_rollback_plan }}
       decommission_plan: ${{ inputs.canonical_promotion_decommission_plan }}

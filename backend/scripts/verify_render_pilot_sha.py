@@ -41,7 +41,9 @@ def verify(client: RenderClient, owner_id: str, commit_sha: str) -> dict[str, An
     if not SHA_RE.fullmatch(commit_sha):
         raise ProvisioningError("reviewed Render SHA must be 40 lowercase hexadecimal characters")
 
-    evidence: dict[str, Any] = {"commit_sha": commit_sha, "services": {}}
+    evidence: dict[str, Any] = {
+        "provider": "render", "commit_sha": commit_sha, "services": {}
+    }
     for name, service_type in SERVICE_TYPES.items():
         service = client.find_service(owner_id, name, service_type)
         if service is None:

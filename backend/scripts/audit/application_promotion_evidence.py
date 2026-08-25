@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from collections import Counter
 from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
@@ -22,14 +23,17 @@ import subprocess
 import sys
 import textwrap
 from typing import Any, Iterable, Mapping
+from urllib.parse import urlsplit
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
 RETIRED_SOURCE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "2.0.0"
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+PREVIEW_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+ARTIFACT_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 SQL_RELATION = re.compile(
     r"(?i)\b(?:from|join|update|into|delete\s+from)\s+"
     r"((?:analytics|compliance|financial|gst|inventory|master|parties|"
@@ -40,6 +44,20 @@ RENDER_SERVICE_NAMES = {
     "aasopharma-erp-pilot",
     "aasopharma-mcp-pilot",
 }
+RENDER_SERVICE_ROLES = {
+    "aasopharma-api-pilot": "api",
+    "aasopharma-erp-pilot": "frontend",
+    "aasopharma-mcp-pilot": "mcp",
+}
+RAILWAY_SERVICE_NAMES = {"api", "frontend", "mcp"}
+DEPLOYMENT_PROVIDERS = {"render", "railway"}
+UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+LIVE18_MATRIX_PATH = (
+    REPOSITORY_ROOT / "backend" / "tests" / "live_acceptance" / "operation_matrix.json"
+)
 CANONICAL_SCHEMAS = (
     "automation",
     "calculation",
@@ -172,15 +190,125 @@ def _verify_render_evidence(
             "service_id", "deploy_id", "url"
         )):
             raise EvidenceError(f"Render service {name} lacks immutable deployment identity")
-        normalized[name] = {
+        normalized_row = {
             field: row[field]
             for field in ("service_id", "deploy_id", "status", "commit_sha", "url")
+        }
+        normalized_row["url"] = _https_origin(row["url"], f"Render service {name}")
+        normalized_row["service_name"] = name
+        normalized[RENDER_SERVICE_ROLES[name]] = normalized_row
+    return normalized
+
+
+def _https_origin(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise EvidenceError(f"{label} must be an HTTPS URL")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        raise EvidenceError(f"{label} must be an HTTPS origin without credentials")
+    return value.rstrip("/")
+
+
+def _verify_railway_evidence(
+    railway_evidence: Mapping[str, Any], expected_sha: str
+) -> dict[str, Any]:
+    if railway_evidence.get("provider") != "railway":
+        raise EvidenceError("Railway evidence has the wrong provider")
+    if railway_evidence.get("git_commit") != expected_sha:
+        raise EvidenceError("Railway evidence is not bound to the reviewed commit")
+    if railway_evidence.get("status") != "live":
+        raise EvidenceError("Railway evidence is not live")
+    services = railway_evidence.get("services")
+    if not isinstance(services, dict) or set(services) != RAILWAY_SERVICE_NAMES:
+        raise EvidenceError("Railway evidence must identify exactly api, frontend, and mcp")
+    normalized: dict[str, Any] = {}
+    origins: set[str] = set()
+    expected_health = {"api": "healthy", "frontend": "ok", "mcp": "ok"}
+    for name in sorted(RAILWAY_SERVICE_NAMES):
+        row = services.get(name)
+        if not isinstance(row, dict):
+            raise EvidenceError(f"Railway service evidence is invalid for {name}")
+        deployment_id = row.get("deployment_id")
+        if not isinstance(deployment_id, str) or UUID.fullmatch(deployment_id) is None:
+            raise EvidenceError(f"Railway service {name} lacks immutable deployment identity")
+        origin = _https_origin(row.get("url"), f"Railway service {name}")
+        if origin in origins:
+            raise EvidenceError("Railway service origins must be distinct")
+        origins.add(origin)
+        if row.get("health") != expected_health[name]:
+            raise EvidenceError(f"Railway service {name} is not healthy")
+        if name in {"api", "mcp"} and row.get("readiness") != "ready":
+            raise EvidenceError(f"Railway service {name} is not ready")
+        normalized[name] = {
+            "deployment_id": deployment_id,
+            "url": origin,
+            "health": row["health"],
+            **({"readiness": row["readiness"]} if name in {"api", "mcp"} else {}),
         }
     return normalized
 
 
+def _verify_deployment_evidence(
+    deployment_evidence: Mapping[str, Any], expected_sha: str
+) -> tuple[str, dict[str, Any]]:
+    provider = deployment_evidence.get("provider")
+    if provider == "railway":
+        return provider, _verify_railway_evidence(deployment_evidence, expected_sha)
+    if provider == "render":
+        return provider, _verify_render_evidence(deployment_evidence, expected_sha)
+    raise EvidenceError("Deployment evidence has an unsupported provider")
+
+
+def _verify_normalized_deployment_binding(binding: Mapping[str, Any]) -> None:
+    provider = binding.get("deployment_provider")
+    services = binding.get("deployment_services")
+    if not isinstance(services, dict):
+        raise EvidenceError("promotion artifacts lack deployment services")
+    if provider == "railway":
+        if set(services) != RAILWAY_SERVICE_NAMES:
+            raise EvidenceError("Railway binding has the wrong service set")
+        origins: set[str] = set()
+        expected_health = {"api": "healthy", "frontend": "ok", "mcp": "ok"}
+        for name, row in services.items():
+            if not isinstance(row, dict):
+                raise EvidenceError("Railway binding has invalid service evidence")
+            if not isinstance(row.get("deployment_id"), str) or UUID.fullmatch(row["deployment_id"]) is None:
+                raise EvidenceError("Railway binding lacks immutable deployment identity")
+            origin = _https_origin(row.get("url"), f"Railway binding {name}")
+            if origin in origins or row.get("health") != expected_health[name]:
+                raise EvidenceError("Railway binding has unhealthy or duplicate services")
+            origins.add(origin)
+            if name in {"api", "mcp"} and row.get("readiness") != "ready":
+                raise EvidenceError("Railway binding service is not ready")
+    elif provider == "render":
+        if set(services) != RAILWAY_SERVICE_NAMES or {
+            row.get("service_name") for row in services.values() if isinstance(row, dict)
+        } != RENDER_SERVICE_NAMES:
+            raise EvidenceError("Render binding has the wrong service set")
+        for name, row in services.items():
+            if not isinstance(row, dict) or row.get("status") != "live":
+                raise EvidenceError(f"Render binding is invalid for {name}")
+            if row.get("commit_sha") != binding.get("git_commit"):
+                raise EvidenceError(f"Render binding is stale for {name}")
+            if not all(isinstance(row.get(field), str) and row[field] for field in ("service_id", "deploy_id")):
+                raise EvidenceError(f"Render binding lacks immutable identity for {name}")
+            _https_origin(row.get("url"), f"Render binding {name}")
+    else:
+        raise EvidenceError("promotion artifacts lack a supported deployment provider")
+
+
 def build_binding(
-    *, project_ref: str, git_commit: str, render_evidence: Mapping[str, Any]
+    *, project_ref: str, git_commit: str, deployment_evidence: Mapping[str, Any],
+    deployment_evidence_sha256: str, deployment_artifact_id: int,
+    deployment_artifact_digest: str,
 ) -> dict[str, Any]:
     git_commit = _exact_sha(git_commit, "git_commit")
     if project_ref != CANONICAL_STAGING_PROJECT_REF:
@@ -189,11 +317,20 @@ def build_binding(
         )
     if project_ref == RETIRED_SOURCE_PROJECT_REF:
         raise EvidenceError("retired Supabase project evidence is forbidden")
+    if SHA256.fullmatch(deployment_evidence_sha256) is None:
+        raise EvidenceError("deployment evidence must provide a lowercase SHA-256")
+    if deployment_artifact_id <= 0 or ARTIFACT_DIGEST.fullmatch(deployment_artifact_digest) is None:
+        raise EvidenceError("deployment artifact identity or digest is invalid")
+    provider, services = _verify_deployment_evidence(deployment_evidence, git_commit)
     return {
         "project_ref": project_ref,
         "git_commit": git_commit,
-        "deployed_render_sha": git_commit,
-        "render_services": _verify_render_evidence(render_evidence, git_commit),
+        "deployment_provider": provider,
+        "deployed_sha": git_commit,
+        "deployment_evidence_sha256": deployment_evidence_sha256,
+        "deployment_artifact_id": deployment_artifact_id,
+        "deployment_artifact_digest": deployment_artifact_digest,
+        "deployment_services": services,
     }
 
 
@@ -758,6 +895,263 @@ def reconcile_backup(
     })
 
 
+def _live18_http_rows(value: Any, label: str) -> list[Mapping[str, Any]]:
+    if not isinstance(value, list):
+        raise EvidenceError(f"Live18 {label} HTTP evidence must be an array")
+    rows: list[Mapping[str, Any]] = []
+    expected_keys = {"actor", "method", "path", "status", "request_id"}
+    for row in value:
+        if not isinstance(row, dict) or set(row) != expected_keys:
+            raise EvidenceError(f"Live18 {label} HTTP evidence row is invalid")
+        status = row.get("status")
+        request_id = row.get("request_id")
+        if (
+            row.get("actor") not in {"requester", "reviewer"}
+            or row.get("method") not in {
+                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
+            }
+            or not isinstance(row.get("path"), str)
+            or not row["path"].startswith("/api/")
+            or "?" in row["path"]
+            or not isinstance(status, int)
+            or isinstance(status, bool)
+            or status < 100
+            or status > 599
+            or (request_id is not None and not isinstance(request_id, str))
+        ):
+            raise EvidenceError(f"Live18 {label} HTTP evidence row is invalid")
+        rows.append(row)
+    return rows
+
+
+def _validate_live18_http_lifecycle(
+    row: Mapping[str, Any], command_operation: str, approval_policy: str
+) -> None:
+    command_id = row["command_request_id"]
+    prepare_path = f"/api/web/actions/{command_operation}/prepare"
+    approval_path = f"/api/web/actions/commands/{command_id}/approve"
+    execute_path = f"/api/web/actions/commands/{command_id}/execute"
+    http = _live18_http_rows(row.get("http"), "browser")
+    missing = _live18_http_rows(
+        row.get("missing_required_http"), "missing-required"
+    )
+
+    def fingerprint(item: Mapping[str, Any]) -> tuple[Any, ...]:
+        return tuple(
+            item[key]
+            for key in ("actor", "method", "path", "status", "request_id")
+        )
+
+    http_counts = Counter(fingerprint(item) for item in http)
+    missing_counts = Counter(fingerprint(item) for item in missing)
+    if any(count > http_counts[key] for key, count in missing_counts.items()):
+        raise EvidenceError(
+            "Live18 missing-required HTTP evidence is not part of the browser capture"
+        )
+    if any(
+        item["actor"] != "requester"
+        or item["method"] != "POST"
+        or item["path"] != prepare_path
+        or item["status"] < 400
+        for item in missing
+    ):
+        raise EvidenceError("Live18 missing-required UI path did not fail closed")
+
+    def successful(method: str, path: str) -> list[Mapping[str, Any]]:
+        return [
+            item for item in http
+            if item["method"] == method
+            and item["path"] == path
+            and 200 <= item["status"] < 300
+        ]
+
+    prepare = successful("POST", prepare_path)
+    approval = successful("POST", approval_path)
+    execute = successful("POST", execute_path)
+    expected_approval_actor = (
+        "reviewer" if approval_policy == "separate_approver" else "requester"
+    )
+    if len(prepare) != 1 or prepare[0]["actor"] != "requester":
+        raise EvidenceError("Live18 UI did not prepare exactly once as requester")
+    if len(approval) != 1 or approval[0]["actor"] != expected_approval_actor:
+        raise EvidenceError("Live18 UI approval actor or cardinality is invalid")
+    if len(execute) != 1 or execute[0]["actor"] != "requester":
+        raise EvidenceError("Live18 UI did not execute exactly once as requester")
+
+
+def capture_live18_acceptance(
+    *, manifest: Mapping[str, Any], binding: Mapping[str, Any],
+    workflow_run_id: int, workflow_run_attempt: int,
+    artifact_id: int, artifact_sha256: str, artifact_digest: str,
+) -> dict[str, Any]:
+    """Validate and retain only scrubbed, exact-run Live18 acceptance evidence."""
+
+    if workflow_run_id <= 0 or workflow_run_attempt <= 0 or artifact_id <= 0:
+        raise EvidenceError("Live18 workflow and artifact identities must be positive")
+    if SHA256.fullmatch(artifact_sha256) is None:
+        raise EvidenceError("Live18 artifact must provide a lowercase SHA-256")
+    if ARTIFACT_DIGEST.fullmatch(artifact_digest) is None:
+        raise EvidenceError("Live18 artifact digest is invalid")
+    if manifest.get("schema") != "aasopharma.live18.upload-manifest.v1":
+        raise EvidenceError("Live18 manifest has an unsupported schema")
+    run = manifest.get("run")
+    if not isinstance(run, dict) or run != {
+        "id": str(workflow_run_id),
+        "attempt": str(workflow_run_attempt),
+        "browser_outcome": "success",
+    }:
+        raise EvidenceError("Live18 manifest is not a successful exact-run acceptance")
+    deployment = manifest.get("deployment")
+    if not isinstance(deployment, dict):
+        raise EvidenceError("Live18 deployment evidence is missing")
+    if (
+        deployment.get("provider") != binding.get("deployment_provider")
+        or deployment.get("commit_sha") != binding.get("git_commit")
+    ):
+        raise EvidenceError("Live18 deployment differs from the promotion binding")
+    if SHA256.fullmatch(str(deployment.get("raw_evidence_sha256", ""))) is None:
+        raise EvidenceError("Live18 deployment lacks its raw evidence hash")
+    origins = deployment.get("origins")
+    services = binding.get("deployment_services")
+    if not isinstance(origins, dict) or not isinstance(services, dict):
+        raise EvidenceError("Live18 deployment origins are missing")
+    expected_origins = {
+        name: row.get("url") for name, row in services.items()
+        if isinstance(row, dict)
+    }
+    if origins != expected_origins:
+        raise EvidenceError("Live18 service origins differ from the exact deployment")
+
+    matrix = _load_json(LIVE18_MATRIX_PATH)
+    operations = matrix.get("operations")
+    if matrix.get("required_operation_count") != 18 or not isinstance(operations, list):
+        raise EvidenceError("Live18 operation authority is invalid")
+    required = {
+        row["id"]: (row["command_operation"], row.get("approval_policy"))
+        for row in operations
+        if isinstance(row, dict)
+    }
+    if len(required) != 18:
+        raise EvidenceError("Live18 operation authority must contain exactly 18 operations")
+    browser = manifest.get("browser")
+    if not isinstance(browser, list) or len(browser) != 18:
+        raise EvidenceError("Live18 browser evidence must contain exactly 18 operations")
+    by_operation: dict[str, Mapping[str, Any]] = {}
+    requester: str | None = None
+    reviewer: str | None = None
+    organization: str | None = None
+    branch: str | None = None
+    for row in browser:
+        if not isinstance(row, dict):
+            raise EvidenceError("Live18 browser evidence row is invalid")
+        operation_id = row.get("operation_id")
+        if not isinstance(operation_id, str):
+            raise EvidenceError("Live18 browser operation identity is invalid")
+        if operation_id in by_operation:
+            raise EvidenceError("Live18 browser evidence contains a duplicate operation")
+        if operation_id not in required or row.get("command_operation") != required[operation_id][0]:
+            raise EvidenceError("Live18 browser evidence differs from the operation authority")
+        if row.get("tested_sha") != binding.get("git_commit"):
+            raise EvidenceError("Live18 browser evidence is not bound to the reviewed SHA")
+        for key in ("command_request_id", "resource_id", "requester_user_id", "reviewer_user_id", "organization_id", "branch_id"):
+            if not isinstance(row.get(key), str) or UUID.fullmatch(row[key]) is None:
+                raise EvidenceError(f"Live18 browser evidence has invalid {key}")
+        if row["requester_user_id"] == row["reviewer_user_id"]:
+            raise EvidenceError("Live18 requester and reviewer must be distinct")
+        if PREVIEW_SHA256.fullmatch(str(row.get("preview_hash", ""))) is None:
+            raise EvidenceError("Live18 browser evidence lacks an immutable preview hash")
+        current = (
+            row["requester_user_id"], row["reviewer_user_id"],
+            row["organization_id"], row["branch_id"],
+        )
+        expected_identity = (requester, reviewer, organization, branch)
+        if requester is None:
+            requester, reviewer, organization, branch = current
+        elif current != expected_identity:
+            raise EvidenceError("Live18 browser identities or tenant context drifted")
+        expected_self_approval = (
+            403 if required[operation_id][1] == "separate_approver" else None
+        )
+        if row.get("self_approval_status") != expected_self_approval:
+            raise EvidenceError("Live18 self-approval did not fail closed")
+        _validate_live18_http_lifecycle(
+            row, required[operation_id][0], required[operation_id][1]
+        )
+        if not SHA256.fullmatch(str(row.get("raw_evidence_sha256", ""))):
+            raise EvidenceError("Live18 browser evidence lacks a raw evidence hash")
+        by_operation[str(operation_id)] = row
+    if set(by_operation) != set(required):
+        raise EvidenceError("Live18 browser evidence does not cover the exact operation matrix")
+
+    database = manifest.get("database")
+    if not isinstance(database, dict):
+        raise EvidenceError("Live18 database reconciliation evidence is missing")
+    if SHA256.fullmatch(str(database.get("raw_evidence_sha256", ""))) is None:
+        raise EvidenceError("Live18 database reconciliation lacks its raw evidence hash")
+    runtime = database.get("runtime_role")
+    expected_runtime = {
+        "current_user": "erp_runtime",
+        "superuser": False,
+        "bypassrls": False,
+        "migration_owner_member": False,
+        "network_family": 6,
+        "transport": "supabase_direct_ipv6_from_railway",
+    }
+    if runtime != expected_runtime:
+        raise EvidenceError("Live18 database evidence did not use the isolated Railway runtime role")
+    if database.get("organization_id") != organization:
+        raise EvidenceError("Live18 database organization differs from browser evidence")
+    denial_organization = database.get("denial_organization_id")
+    if (
+        not isinstance(denial_organization, str)
+        or UUID.fullmatch(denial_organization) is None
+        or denial_organization == organization
+    ):
+        raise EvidenceError("Live18 denial organization is invalid")
+    resources = database.get("resources")
+    if not isinstance(resources, dict) or set(resources) != set(required):
+        raise EvidenceError("Live18 database evidence does not cover the exact operation matrix")
+    for operation_id, resource in resources.items():
+        if not isinstance(resource, dict):
+            raise EvidenceError("Live18 database resource evidence is invalid")
+        browser_row = by_operation[operation_id]
+        if (
+            resource.get("command_operation") != required[operation_id][0]
+            or resource.get("command_request_id") != browser_row["command_request_id"]
+            or resource.get("resource_id") != browser_row["resource_id"]
+            or resource.get("cross_tenant_denied") is not True
+            or not SHA256.fullmatch(str(resource.get("database_sha256", "")))
+        ):
+            raise EvidenceError("Live18 browser and database resource evidence did not reconcile")
+    demo = manifest.get("demo")
+    if (
+        not isinstance(demo, dict)
+        or demo.get("action") != "provision-demo"
+        or not SHA256.fullmatch(str(demo.get("content_sha256", "")))
+        or not SHA256.fullmatch(str(demo.get("raw_evidence_sha256", "")))
+    ):
+        raise EvidenceError("Live18 same-run demo evidence is missing")
+    return _artifact(
+        "canonical_live18_acceptance",
+        binding,
+        {
+            "workflow_run_id": workflow_run_id,
+            "workflow_run_attempt": workflow_run_attempt,
+            "artifact_id": artifact_id,
+            "artifact_sha256": artifact_sha256,
+            "artifact_digest": artifact_digest,
+            "operation_count": 18,
+            "operation_ids": sorted(required),
+            "requester_user_id": requester,
+            "reviewer_user_id": reviewer,
+            "organization_id": organization,
+            "branch_id": branch,
+            "deployment_raw_evidence_sha256": deployment.get("raw_evidence_sha256"),
+            "database_raw_evidence_sha256": database.get("raw_evidence_sha256"),
+        },
+    )
+
+
 def _require_binding(
     artifact: Mapping[str, Any], expected: Mapping[str, Any], label: str
 ) -> None:
@@ -779,7 +1173,7 @@ def _relative_artifact(root: Path, path: Path, label: str) -> str:
 def assemble_manifest(
     *, root: Path, binding: Mapping[str, Any], source_path: Path,
     route_path: Path, database_path: Path, reconciliation_path: Path,
-    rollback_path: Path, decommission_path: Path, reviewer: str,
+    live18_path: Path, rollback_path: Path, decommission_path: Path, reviewer: str,
     reviewed_at: str,
 ) -> dict[str, Any]:
     artifacts = {
@@ -788,6 +1182,7 @@ def assemble_manifest(
         "migration_head": _load_json(database_path),
         "runtime_tenant_isolation": _load_json(database_path),
         "reconciliation_backup": _load_json(reconciliation_path),
+        "live18_acceptance": _load_json(live18_path),
         "rollback": _load_json(rollback_path),
         "decommission": _load_json(decommission_path),
     }
@@ -803,11 +1198,12 @@ def assemble_manifest(
     route_ref, route_hash = reference(route_path)
     database_ref, database_hash = reference(database_path)
     reconciliation_ref, reconciliation_hash = reference(reconciliation_path)
+    live18_ref, live18_hash = reference(live18_path)
     rollback_ref, rollback_hash = reference(rollback_path)
     decommission_ref, decommission_hash = reference(decommission_path)
     database_payload = artifacts["migration_head"]["payload"]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "evidence_state": "verified",
         "source_disposition": {
             "state": "verified", "strategy": "reset",
@@ -837,6 +1233,10 @@ def assemble_manifest(
             "restore_tested": True, "table_content_digests_reconciled": True,
             "artifact": reconciliation_ref,
             "artifact_sha256": reconciliation_hash,
+        },
+        "live18_acceptance": {
+            "state": "verified", "operation_count": 18,
+            "artifact": live18_ref, "artifact_sha256": live18_hash,
         },
         "rollback_decommission": {
             "state": "verified", "rollback_artifact": rollback_ref,
@@ -935,6 +1335,21 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
             raise EvidenceError(f"backup reconciliation did not verify {field}")
     if not SHA256.fullmatch(str(rec.get("backup_sha256", ""))) or int(rec.get("backup_size_bytes", 0)) <= 0:
         raise EvidenceError("backup artifact identity is invalid")
+    live18 = artifacts["live18_acceptance"]
+    live18_payload = live18.get("payload", {})
+    if (
+        live18.get("evidence_kind") != "canonical_live18_acceptance"
+        or not isinstance(live18_payload, dict)
+        or live18_payload.get("operation_count") != 18
+        or not isinstance(live18_payload.get("operation_ids"), list)
+        or len(set(live18_payload["operation_ids"])) != 18
+        or int(live18_payload.get("workflow_run_id", 0)) <= 0
+        or int(live18_payload.get("workflow_run_attempt", 0)) <= 0
+        or int(live18_payload.get("artifact_id", 0)) <= 0
+        or not SHA256.fullmatch(str(live18_payload.get("artifact_sha256", "")))
+        or ARTIFACT_DIGEST.fullmatch(str(live18_payload.get("artifact_digest", ""))) is None
+    ):
+        raise EvidenceError("exact-run Live18 acceptance evidence is invalid")
     rollback = artifacts["rollback"]
     rollback_payload = rollback.get("payload", {})
     if rollback.get("evidence_kind") != "rollback_plan" or rollback_payload.get("state") != "reviewed" or not rollback_payload.get("steps"):
@@ -962,7 +1377,7 @@ def validate_manifest_artifacts(root: Path, manifest: Mapping[str, Any]) -> list
         paths: dict[str, Path] = {}
         for section_name in (
             "source_disposition", "route_graph", "migration_head",
-            "reconciliation_backup",
+            "reconciliation_backup", "live18_acceptance",
         ):
             paths[section_name] = root / manifest[section_name]["artifact"]
         paths["runtime_tenant_isolation"] = paths["migration_head"]
@@ -974,6 +1389,7 @@ def validate_manifest_artifacts(root: Path, manifest: Mapping[str, Any]) -> list
             "migration_head": manifest["migration_head"]["artifact_sha256"],
             "runtime_tenant_isolation": manifest["runtime_tenant_isolation"]["artifact_sha256"],
             "reconciliation_backup": manifest["reconciliation_backup"]["artifact_sha256"],
+            "live18_acceptance": manifest["live18_acceptance"]["artifact_sha256"],
             "rollback": manifest["rollback_decommission"]["rollback_artifact_sha256"],
             "decommission": manifest["rollback_decommission"]["decommission_artifact_sha256"],
         }
@@ -987,9 +1403,20 @@ def validate_manifest_artifacts(root: Path, manifest: Mapping[str, Any]) -> list
         binding = artifacts["source_disposition"].get("binding")
         if not isinstance(binding, dict):
             raise EvidenceError("source disposition lacks a deployment binding")
-        if binding.get("project_ref") != CANONICAL_STAGING_PROJECT_REF or binding.get("git_commit") != git_commit or binding.get("deployed_render_sha") != git_commit:
+        if binding.get("project_ref") != CANONICAL_STAGING_PROJECT_REF or binding.get("git_commit") != git_commit or binding.get("deployed_sha") != git_commit:
             raise EvidenceError("promotion artifacts are not bound to canonical staging and the reviewed SHA")
-        _verify_render_evidence({"commit_sha": git_commit, "services": binding.get("render_services")}, git_commit)
+        provider = binding.get("deployment_provider")
+        services = binding.get("deployment_services")
+        if provider not in DEPLOYMENT_PROVIDERS or not isinstance(services, dict):
+            raise EvidenceError("promotion artifacts lack a supported deployment binding")
+        if not SHA256.fullmatch(str(binding.get("deployment_evidence_sha256", ""))):
+            raise EvidenceError("promotion deployment evidence lacks an exact hash")
+        if (
+            int(binding.get("deployment_artifact_id", 0)) <= 0
+            or ARTIFACT_DIGEST.fullmatch(str(binding.get("deployment_artifact_digest", ""))) is None
+        ):
+            raise EvidenceError("promotion deployment artifact provenance is invalid")
+        _verify_normalized_deployment_binding(binding)
         for label, artifact in artifacts.items():
             _require_binding(artifact, binding, label)
         _validate_artifact_payloads(artifacts)
@@ -999,10 +1426,14 @@ def validate_manifest_artifacts(root: Path, manifest: Mapping[str, Any]) -> list
 
 
 def _binding_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    evidence_path = Path(args.deployment_evidence)
     return build_binding(
         project_ref=args.project_ref,
         git_commit=args.git_commit,
-        render_evidence=_load_json(Path(args.render_evidence)),
+        deployment_evidence=_load_json(evidence_path),
+        deployment_evidence_sha256=_sha256(evidence_path),
+        deployment_artifact_id=args.deployment_artifact_id,
+        deployment_artifact_digest=args.deployment_artifact_digest,
     )
 
 
@@ -1024,7 +1455,9 @@ def main() -> int:
         item = subparsers.add_parser(command)
         item.add_argument("--project-ref", required=True)
         item.add_argument("--git-commit", required=True)
-        item.add_argument("--render-evidence", required=True)
+        item.add_argument("--deployment-evidence", required=True)
+        item.add_argument("--deployment-artifact-id", required=True, type=int)
+        item.add_argument("--deployment-artifact-digest", required=True)
         item.add_argument("--output", required=True)
         return item
 
@@ -1041,6 +1474,13 @@ def main() -> int:
     reconcile.add_argument("--source-artifact", required=True)
     reconcile.add_argument("--restored-artifact", required=True)
     reconcile.add_argument("--backup-file", required=True)
+    live18 = bound("capture-live18")
+    live18.add_argument("--manifest", required=True)
+    live18.add_argument("--workflow-run-id", required=True, type=int)
+    live18.add_argument("--workflow-run-attempt", required=True, type=int)
+    live18.add_argument("--artifact-id", required=True, type=int)
+    live18.add_argument("--artifact-sha256", required=True)
+    live18.add_argument("--artifact-digest", required=True)
     wrap = bound("wrap-reviewed-input")
     wrap.add_argument(
         "--kind",
@@ -1055,6 +1495,7 @@ def main() -> int:
     assemble.add_argument("--route-graph", required=True)
     assemble.add_argument("--database", required=True)
     assemble.add_argument("--reconciliation-backup", required=True)
+    assemble.add_argument("--live18-acceptance", required=True)
     assemble.add_argument("--rollback", required=True)
     assemble.add_argument("--decommission", required=True)
     assemble.add_argument("--reviewer", required=True)
@@ -1106,6 +1547,15 @@ def main() -> int:
                 restored_artifact=_load_json(Path(args.restored_artifact)),
                 backup_file=Path(args.backup_file), binding=binding,
             )
+        elif args.command == "capture-live18":
+            value = capture_live18_acceptance(
+                manifest=_load_json(Path(args.manifest)), binding=binding,
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+                artifact_id=args.artifact_id,
+                artifact_sha256=args.artifact_sha256,
+                artifact_digest=args.artifact_digest,
+            )
         elif args.command == "wrap-reviewed-input":
             value = wrap_reviewed_input(
                 kind=args.kind,
@@ -1119,6 +1569,7 @@ def main() -> int:
                 source_path=Path(args.source_disposition),
                 route_path=Path(args.route_graph), database_path=Path(args.database),
                 reconciliation_path=Path(args.reconciliation_backup),
+                live18_path=Path(args.live18_acceptance),
                 rollback_path=Path(args.rollback), decommission_path=Path(args.decommission),
                 reviewer=args.reviewer, reviewed_at=args.reviewed_at,
             )
