@@ -42,20 +42,26 @@ def test_reviewed_expense_receipt_requires_exact_external_pdf_hash(
         module.reviewed_expense_receipt()
 
 
-def test_expense_fixture_ids_are_run_scoped_and_canonical(
+def test_expense_receipt_is_run_scoped_but_ledger_accounts_are_stable_master_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GITHUB_RUN_ID", "32850000000")
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
-    module = _module()
+    first = _module()
+    monkeypatch.setenv("GITHUB_RUN_ID", "32850000001")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    second = _module()
 
-    values = {
-        module.IDS["expense_receipt_evidence"],
-        module.IDS["expense_claim_expense_account"],
-        module.IDS["expense_claim_reimbursement_account"],
-    }
-    assert len(values) == 3
-    assert all(UUID(value).version == 5 for value in values)
+    assert first.IDS["expense_receipt_evidence"] != second.IDS[
+        "expense_receipt_evidence"
+    ]
+    assert UUID(first.IDS["expense_receipt_evidence"]).version == 5
+    for account_key in (
+        "expense_claim_expense_account",
+        "expense_claim_reimbursement_account",
+    ):
+        assert first.IDS[account_key] == second.IDS[account_key]
+        assert UUID(first.IDS[account_key]).version == 7
 
 
 class _ReceiptCursor:
@@ -122,6 +128,8 @@ def test_expense_prerequisites_use_only_canonical_evidence_accounts_and_role() -
 
     assert "'expense_receipt'" in source
     assert "member_reimbursement_liability" in source
+    assert "erp_core_commands.replace_setting" in source
+    assert "UPDATE core.settings" not in source
     assert 'INSERT INTO core.attachments' in source
     assert 'INSERT INTO finance.accounts' in source
     assert "financial." not in source

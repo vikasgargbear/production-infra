@@ -122,6 +122,8 @@ IDS = {
     "inventory_count_gain_account": "d3210000-0000-7000-8000-000000000011",
     "rounding_gain_account": "d3210000-0000-7000-8000-000000000012",
     "rounding_loss_account": "d3210000-0000-7000-8000-000000000013",
+    "expense_claim_expense_account": "d3210000-0000-7000-8000-000000000014",
+    "expense_claim_reimbursement_account": "d3210000-0000-7000-8000-000000000015",
 }
 INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
@@ -147,11 +149,7 @@ IDS["cycle_count_evidence"] = str(
         f"canonical-staging-cycle-count:{IDS['org']}:{DEMO_RUN_ID}:{INDIA_BUSINESS_DATE.isoformat()}",
     )
 )
-for resource_key in (
-    "expense_receipt_evidence",
-    "expense_claim_expense_account",
-    "expense_claim_reimbursement_account",
-):
+for resource_key in ("expense_receipt_evidence",):
     IDS[resource_key] = str(
         uuid5(
             NAMESPACE_URL,
@@ -1717,21 +1715,60 @@ def seed_end_to_end_master(
         )
         cursor.execute(
             """
-            UPDATE core.settings
-               SET value_text=%s,updated_at=transaction_timestamp(),
-                   updated_by_membership_id=%s,row_version=row_version+1
+            SELECT id,row_version,value_text
+              FROM core.settings
              WHERE org_id=%s AND status='active' AND branch_id IS NULL
                AND namespace='finance.account_roles'
                AND key='member_reimbursement_liability'
-               AND value_text IS DISTINCT FROM %s
+             FOR UPDATE
             """,
-            (
-                IDS["expense_claim_reimbursement_account"],
-                IDS["reviewer_membership"],
-                IDS["org"],
-                IDS["expense_claim_reimbursement_account"],
-            ),
+            (IDS["org"],),
         )
+        reimbursement_setting = cursor.fetchone()
+        if reimbursement_setting is None:
+            raise RuntimeError("member reimbursement account setting is unavailable")
+        if reimbursement_setting[2] != IDS["expense_claim_reimbursement_account"]:
+            replacement_id = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    (
+                        "aasopharma-demo-account-role:"
+                        "member_reimbursement_liability:canonical-v1"
+                    ),
+                )
+            )
+            replacement_request = json.dumps(
+                {
+                    "operation": "core.setting.replace",
+                    "organization_id": IDS["org"],
+                    "setting_id": str(reimbursement_setting[0]),
+                    "replacement_id": replacement_id,
+                    "expected_row_version": reimbursement_setting[1],
+                    "value_type": "text",
+                    "value_text": IDS["expense_claim_reimbursement_account"],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            cursor.execute(
+                """
+                SELECT erp_core_commands.replace_setting(
+                    %s,%s,%s,%s,'text',%s,NULL,NULL,NULL,NULL,
+                    extensions.digest(%s,'sha256'),
+                    transaction_timestamp()+interval '24 hours'
+                )
+                """,
+                (
+                    IDS["org"],
+                    reimbursement_setting[0],
+                    replacement_id,
+                    reimbursement_setting[1],
+                    IDS["expense_claim_reimbursement_account"],
+                    psycopg2.Binary(replacement_request),
+                ),
+            )
+            if str(cursor.fetchone()[0]) != replacement_id:
+                raise RuntimeError("member reimbursement setting replacement drifted")
 
         cursor.execute(
             """
