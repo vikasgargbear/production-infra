@@ -67,6 +67,11 @@ def test_business_context_uses_server_clock_in_organization_timezone(monkeypatch
 
     assert result.business_date == date(2026, 8, 25)
     assert result.organization_timezone == "Asia/Kolkata"
+    assert result.document_policy.default_rounding_policy == "none"
+    assert result.document_policy.default_zero_rated_payment_mode == "not_applicable"
+    assert result.document_policy.default_tax_charge_mechanism == "normal"
+    assert result.document_policy.default_price_basis == "tax_exclusive"
+    assert [mode.transport_mode for mode in result.document_policy.logistics_modes] == ["in_person"]
     assert "transaction_timestamp() AT TIME ZONE organization.timezone" in captured["sql"]
     assert captured["params"] == {"org_id": org_id}
 

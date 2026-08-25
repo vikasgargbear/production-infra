@@ -144,12 +144,38 @@ INVENTORY_USER = Depends(PermissionChecker("inventory", "view"))
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
 
 
+class CanonicalLogisticsModePolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transport_mode: Literal["in_person"]
+    display_name: str
+    requires_transporter_party: Literal[False]
+    requires_vehicle: Literal[False]
+    requires_transport_document: Literal[False]
+
+
+class CanonicalDocumentPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_rounding_policies: list[Literal["none"]]
+    default_rounding_policy: Literal["none"]
+    allowed_zero_rated_payment_modes: list[Literal["not_applicable"]]
+    default_zero_rated_payment_mode: Literal["not_applicable"]
+    allowed_tax_charge_mechanisms: list[Literal["normal"]]
+    default_tax_charge_mechanism: Literal["normal"]
+    allowed_price_bases: list[Literal["tax_exclusive"]]
+    default_price_basis: Literal["tax_exclusive"]
+    logistics_modes: list[CanonicalLogisticsModePolicy]
+    default_transport_mode: Literal["in_person"]
+
+
 class CanonicalBusinessContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     organization_id: UUID
     organization_timezone: str
     business_date: date
+    document_policy: CanonicalDocumentPolicy
 
 
 @router.get("/canonical/business-context", response_model=CanonicalBusinessContext)
@@ -177,7 +203,27 @@ def canonical_business_context(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="The active organization has no authoritative business clock",
         )
-    return CanonicalBusinessContext.model_validate(rows[0])
+    return CanonicalBusinessContext.model_validate({
+        **rows[0],
+        "document_policy": {
+            "allowed_rounding_policies": ["none"],
+            "default_rounding_policy": "none",
+            "allowed_zero_rated_payment_modes": ["not_applicable"],
+            "default_zero_rated_payment_mode": "not_applicable",
+            "allowed_tax_charge_mechanisms": ["normal"],
+            "default_tax_charge_mechanism": "normal",
+            "allowed_price_bases": ["tax_exclusive"],
+            "default_price_basis": "tax_exclusive",
+            "logistics_modes": [{
+                "transport_mode": "in_person",
+                "display_name": "In person (no carrier)",
+                "requires_transporter_party": False,
+                "requires_vehicle": False,
+                "requires_transport_document": False,
+            }],
+            "default_transport_mode": "in_person",
+        },
+    })
 
 def _validated_state_code(
     state_code: Optional[str], gstin: Optional[str]
