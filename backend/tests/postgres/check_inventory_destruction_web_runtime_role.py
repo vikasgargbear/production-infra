@@ -54,7 +54,12 @@ def main() -> None:
             )
             rows = session.execute(
                 text(_readback_sql()),
-                {"org_id": ORG_ID, "command_request_id": COMMAND_ID},
+                {
+                    "org_id": ORG_ID,
+                    "command_request_id": COMMAND_ID,
+                    "organization_scope": True,
+                    "branch_ids": [],
+                },
             ).fetchall()
             assert rows == []
             other_org_rows = session.execute(
@@ -62,6 +67,8 @@ def main() -> None:
                 {
                     "org_id": UUID("ed100000-0000-7000-8000-000000000001"),
                     "command_request_id": COMMAND_ID,
+                    "organization_scope": True,
+                    "branch_ids": [],
                 },
             ).fetchall()
             assert other_org_rows == []

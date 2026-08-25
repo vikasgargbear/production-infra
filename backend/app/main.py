@@ -91,9 +91,6 @@ from .api.routes.reports import outstanding as customer_outstanding
 # Organization Module
 from .api.routes.org import company_assets
 
-# Settings (already in folder)
-from .api.routes.settings import router as settings_router
-
 # Standalone utilities (remain at root level)
 from .api.routes import metadata
 from .api.routes import calculations
@@ -381,8 +378,9 @@ api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
 api.include_router(company_assets.router, prefix="/company", tags=["Company"])
 
 # --- Settings ---
-# Preserve settings projections without allowing direct state changes.
-include_legacy_read_only_router(api, settings_router, prefix="/settings", tags=["Settings"])
+# Canonical feature settings are mounted by canonical_erp_reads. Legacy nested
+# business-setting projections are deliberately not mounted: their behavior
+# differs across FastAPI router implementations and they are not authoritative.
 
 # --- Utilities ---
 include_legacy_read_only_router(api, documents.router, tags=["Documents"])

@@ -337,7 +337,7 @@ def test_every_effective_mutation_has_an_explicit_reviewed_owner():
     assert all(route.endpoint.__name__ == "reject_company_mutation" for route in company_routes)
 
 
-def test_collection_and_settings_reads_remain_available():
+def test_reviewed_collection_and_canonical_feature_reads_remain_available():
     reads = {
         route.path for route in _routes() if "GET" in (route.methods or set())
     }
@@ -345,10 +345,6 @@ def test_collection_and_settings_reads_remain_available():
         "/api/collection-center/collection/aging-data",
         "/api/collection-center/collection/hub-stats",
         "/api/settings/features",
-        "/api/settings/business/all",
-        "/api/settings/business/billing",
-        "/api/settings/business/inventory",
-        "/api/settings/business/compliance",
     } <= reads
 
 
