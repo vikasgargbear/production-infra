@@ -161,3 +161,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_demo_replay_hardening.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_application_promotion_content_digest.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_live18_ephemeral_identity_terminal_cleanup.py

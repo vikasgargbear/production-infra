@@ -139,6 +139,8 @@ def _orphan_reconciliation_is_clean(value: Any) -> bool:
         "remaining_auth_identity_count",
         "remaining_active_temporary_grant_count",
         "remaining_denial_role_count",
+        "remaining_active_denial_authority_count",
+        "remaining_denial_auth_binding_count",
     ):
         count = value.get(key)
         if type(count) is not int or count != 0:
@@ -690,12 +692,20 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
         {
             "CANONICAL_STAGING_PROJECT_REF": project_ref,
             "SUPABASE_URL": _required_text(request, "supabase_url"),
+            "PHARMA_CANONICAL_LIVE_API_BASE_URL": _required_text(
+                request, "api_origin"
+            ).rstrip("/"),
             "PHARMA_CANONICAL_MCP_URL": _required_text(request, "mcp_url"),
             "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH": "",
         }
     )
     if environment["SUPABASE_URL"] != f"https://{project_ref}.supabase.co":
         raise RailwayDatabasePhaseError("Supabase URL differs from the reviewed project")
+    if (
+        environment["PHARMA_CANONICAL_LIVE_API_BASE_URL"]
+        != "https://aasopharma-api-pilot-production.up.railway.app"
+    ):
+        raise RailwayDatabasePhaseError("Identity API origin is not the reviewed Railway API")
 
     directory = REMOTE_STATE_ROOT / (
         "live18-railway-identities-" + _required_text(request, "request_nonce")

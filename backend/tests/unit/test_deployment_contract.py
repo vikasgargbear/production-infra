@@ -1171,6 +1171,14 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "remaining_auth_identity_count" in recovery
     assert "remaining_active_temporary_grant_count" in recovery
     assert "remaining_denial_role_count" in recovery
+    assert "remaining_active_denial_authority_count" in recovery
+    assert "remaining_denial_auth_binding_count" in recovery
+    assert '"api_origin": os.environ["LIVE18_API_ORIGIN"]' in live18
+    assert '"PHARMA_CANONICAL_LIVE_API_BASE_URL": _required_text(' in _read(
+        "backend/scripts/live18_railway_database_phase.py"
+    )
+    postgres_gate = _read("database/canonical/ci/run_alembic_postgres15_gate.sh")
+    assert "check_live18_ephemeral_identity_terminal_cleanup.py" in postgres_gate
     assert live18.index(always_clean_step) > live18.index(identity_step)
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live18
     assert "verify_live18_deployment_sha.py" in live18

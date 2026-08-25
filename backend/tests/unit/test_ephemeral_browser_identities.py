@@ -330,11 +330,23 @@ def test_denial_cleanup_sets_exact_audit_context_and_escapes_like_pattern():
         "app.request_id": context["app.request_id"],
     }
     UUID(context["app.request_id"])
-    role_delete = next(
+    mutations = [
         statement for statement, _params in statements
-        if "DELETE FROM core.roles" in statement
+        if statement.startswith(("UPDATE ", "DELETE "))
+    ]
+    assert len(mutations) == 6
+    assert not any(statement.startswith("DELETE ") for statement in mutations)
+    role_update = next(
+        statement for statement, _params in statements
+        if statement.startswith("UPDATE core.roles")
     )
-    assert "LIKE 'live18_denial_%%'" in role_delete
+    assert "LIKE 'live18_denial_%%'" in role_update
+    assert all("status='active'" in statement for statement in mutations[:1])
+    assert "status IN ('active','suspended')" in mutations[1]
+    assert "status='active'" in mutations[2]
+    assert "status='active'" in mutations[3]
+    assert "status IN ('active','suspended')" in mutations[4]
+    assert "auth_user_id=NULL,status='disabled'" in mutations[5]
 
 
 def test_denial_provision_sets_context_before_reading_or_mutating_tenant(
@@ -400,7 +412,7 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
     class Cursor:
         def execute(self, statement, *_args, **_kwargs):
             normalized = " ".join(statement.split())
-            if normalized.startswith("DELETE FROM automation.agent_grant_capabilities"):
+            if normalized.startswith("UPDATE automation.agent_grant_capabilities"):
                 raise DenialBoundaryReached
 
         def __enter__(self):
@@ -841,6 +853,8 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
                 "d3000000-0000-7000-8000-000000000002",
                 0,
                 0,
+                0,
+                0,
             )
 
         def __enter__(self):
@@ -893,6 +907,8 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
         "remaining_denial_role_count": 0,
+        "remaining_active_denial_authority_count": 0,
+        "remaining_denial_auth_binding_count": 0,
     }
 
 
@@ -1053,7 +1069,8 @@ def test_live18_denial_cleanup_handles_commit_before_state_flag(monkeypatch):
         },
     )
 
-    assert any("DELETE FROM core.users" in statement for statement in statements)
+    assert any("UPDATE core.users" in statement for statement in statements)
+    assert not any(statement.startswith("DELETE ") for statement in statements)
 
 
 def test_live18_recovers_stale_purpose_users_before_creating_new_ones(

@@ -41,6 +41,7 @@ def _boundary_request() -> dict[str, str]:
         "request_nonce": "b" * 64,
         "deployment_id": "55555555-5555-4555-8555-555555555555",
         "deployment_instance_id": "66666666-6666-4666-8666-666666666666",
+        "api_origin": "https://aasopharma-api-pilot-production.up.railway.app",
     }
 
 
@@ -251,8 +252,12 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         for index, key in enumerate(sorted(phase.IDENTITY_ENVIRONMENT_KEYS))
     }
     generated["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] = deployed_client_id
+    observed_api_origins = []
 
     def provision_browser(state_path, _profile):
+        observed_api_origins.append(
+            os.environ["PHARMA_CANONICAL_LIVE_API_BASE_URL"]
+        )
         state_path.write_text('{"version":1}\n', encoding="utf-8")
         with phase.Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
             for key, value in generated.items():
@@ -302,6 +307,30 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         if key != "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
     )
     assert os.environ["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] == deployed_client_id
+    assert observed_api_origins == [request["api_origin"]]
+
+
+def test_remote_identity_rejects_nonreviewed_api_origin(monkeypatch, tmp_path):
+    request = {
+        **_boundary_request(),
+        "api_origin": "https://aasopharma-api-pilot.onrender.com",
+        "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "mcp_url": "https://mcp.example.test/mcp",
+        "secrets": {key: f"secret-{key}" for key in phase.SECRET_KEYS},
+    }
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "reviewed-client")
+
+    with pytest.raises(phase.RailwayDatabasePhaseError, match="reviewed Railway API"):
+        phase._identity_provision(request)
+
+    assert not any(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize(
@@ -489,6 +518,8 @@ def test_partial_remote_identity_state_is_still_cleaned(monkeypatch, tmp_path):
             "remaining_auth_identity_count": 0,
             "remaining_active_temporary_grant_count": 0,
             "remaining_denial_role_count": 0,
+            "remaining_active_denial_authority_count": 0,
+            "remaining_denial_auth_binding_count": 0,
         },
     )
 
@@ -510,6 +541,8 @@ def test_zero_remote_state_runs_durable_orphan_reconciliation(monkeypatch, tmp_p
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
         "remaining_denial_role_count": 0,
+        "remaining_active_denial_authority_count": 0,
+        "remaining_denial_auth_binding_count": 0,
     }
     monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
     monkeypatch.setattr(
@@ -543,6 +576,8 @@ def test_clean_orphan_reconciliation_supersedes_failed_stateful_cleanup(
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
         "remaining_denial_role_count": 0,
+        "remaining_active_denial_authority_count": 0,
+        "remaining_denial_auth_binding_count": 0,
     }
     monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
     monkeypatch.setattr(
@@ -578,6 +613,8 @@ def test_orphan_reconciliation_rejects_non_integer_zeroes(invalid_zero):
         "remaining_auth_identity_count": invalid_zero,
         "remaining_active_temporary_grant_count": 0,
         "remaining_denial_role_count": 0,
+        "remaining_active_denial_authority_count": 0,
+        "remaining_denial_auth_binding_count": 0,
     }
 
     assert phase._orphan_reconciliation_is_clean(reconciliation) is False
@@ -600,6 +637,8 @@ def test_browser_orphan_reconciliation_cannot_supersede_failed_mcp_cleanup(
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
         "remaining_denial_role_count": 0,
+        "remaining_active_denial_authority_count": 0,
+        "remaining_denial_auth_binding_count": 0,
     }
     monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
     monkeypatch.setattr(
