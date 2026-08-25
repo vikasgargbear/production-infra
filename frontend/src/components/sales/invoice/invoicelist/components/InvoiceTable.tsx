@@ -15,6 +15,7 @@ import {
     salesStatusTone,
 } from '../utils/salesHistoryPresentation';
 import { formatCalendarDate } from '../../../../../utils/calendarDate';
+import { invoicesApi } from '../../../../../services/api/modules/sales/invoices.api';
 
 export const InvoiceTable = React.memo<InvoiceTableProps>(({
     invoices,
@@ -26,8 +27,9 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     onToggleSelectAll,
 }) => {
     const { companyInfo } = useCompany();
-    const companyName = companyInfo?.name || 'Our Company';
+    const companyName = companyInfo?.name?.trim() || null;
     const [viewingDocument, setViewingDocument] = useState<Invoice | null>(null);
+    const [documentActionError, setDocumentActionError] = useState<string | null>(null);
 
     const formatDate = (dateString: string) => {
         if (!dateString) return 'Not specified';
@@ -42,7 +44,7 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
         const label = salesDocumentLabel(document.document_type);
         return `Dear ${document.customer_name},
 
-Your ${label.toLowerCase()} from ${companyName} is ready.
+Your ${label.toLowerCase()}${companyName ? ` from ${companyName}` : ''} is ready.
 
 ${label} #: ${document.invoice_number}
 Date: ${formatDate(document.invoice_date)}
@@ -55,8 +57,7 @@ ${document.document_type === 'invoice' && document.pending_amount !== null
 
 Thank you for your business.
 
----
-${companyName}`;
+${companyName ? `\n---\n${companyName}` : ''}`;
     };
 
     const handleWhatsApp = (document: Invoice) => {
@@ -81,16 +82,41 @@ ${companyName}`;
             + `&body=${encodeURIComponent(createDocumentMessage(document))}`;
     };
 
-    const handlePrint = (document: Invoice) => {
+    const handlePrint = async (document: Invoice) => {
+        setDocumentActionError(null);
+        if (document.document_type === 'invoice') {
+            try {
+                const response = await invoicesApi.getById(document.id);
+                const { printableCanonicalInvoice, printInvoice } = await import('../../../../../utils/invoicePdfGenerator');
+                printInvoice(printableCanonicalInvoice(response.data));
+            } catch (error) {
+                setDocumentActionError(error instanceof Error ? error.message : 'Invoice print is unavailable.');
+            }
+            return;
+        }
         const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-        if (!printWindow) return;
+        if (!printWindow) {
+            setDocumentActionError('The browser blocked the print window.');
+            return;
+        }
         printWindow.document.write(salesHistoryPrintHtml(document));
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
     };
 
-    const handleDownload = (document: Invoice) => {
+    const handleDownload = async (document: Invoice) => {
+        setDocumentActionError(null);
+        if (document.document_type === 'invoice') {
+            try {
+                const response = await invoicesApi.getById(document.id);
+                const { downloadInvoicePDF, printableCanonicalInvoice } = await import('../../../../../utils/invoicePdfGenerator');
+                await downloadInvoicePDF(printableCanonicalInvoice(response.data));
+            } catch (error) {
+                setDocumentActionError(error instanceof Error ? error.message : 'Invoice PDF is unavailable.');
+            }
+            return;
+        }
         const blob = new Blob([salesHistoryDocumentCsv(document)], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const link = window.document.createElement('a');
@@ -186,12 +212,14 @@ ${companyName}`;
                         </button>
                         <button type="button" onClick={() => handlePrint(document)}
                             className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                            title="Print summary" aria-label={`Print ${label} ${document.invoice_number}`}>
+                            title={document.document_type === 'invoice' ? 'Print canonical invoice' : 'Print summary'}
+                            aria-label={`Print ${label} ${document.invoice_number}`}>
                             <Printer className="h-4 w-4" />
                         </button>
                         <button type="button" onClick={() => handleDownload(document)}
                             className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                            title="Download summary CSV" aria-label={`Download ${label} ${document.invoice_number}`}>
+                            title={document.document_type === 'invoice' ? 'Download canonical invoice PDF' : 'Download summary CSV'}
+                            aria-label={`Download ${label} ${document.invoice_number}`}>
                             <Download className="h-4 w-4" />
                         </button>
                         <button type="button" onClick={() => handleWhatsApp(document)} disabled={!document.customer_phone}
@@ -214,6 +242,11 @@ ${companyName}`;
 
     return (
         <>
+            {documentActionError && (
+                <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    {documentActionError}
+                </div>
+            )}
             <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                 <DataTable columns={columns} data={invoices} keyField="id" loading={loading}
                     emptyMessage={`No ${salesDocumentLabel(documentType).toLowerCase()} records found`} />
@@ -255,11 +288,11 @@ ${companyName}`;
                         <footer className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
                             <button type="button" onClick={() => handlePrint(viewingDocument)}
                                 className="min-h-11 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                Print Summary
+                                {viewingDocument.document_type === 'invoice' ? 'Print Invoice' : 'Print Summary'}
                             </button>
                             <button type="button" onClick={() => handleDownload(viewingDocument)}
                                 className="min-h-11 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
-                                Download CSV
+                                {viewingDocument.document_type === 'invoice' ? 'Download PDF' : 'Download CSV'}
                             </button>
                         </footer>
                     </section>

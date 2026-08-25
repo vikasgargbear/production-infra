@@ -7,7 +7,7 @@ describe('desktop canonical sales and purchase UX boundaries', () => {
   it('contains no native alert or confirmation dialog in the active core paths', () => {
     const sources = [
       'invoice/InvoiceFlow.tsx',
-      'invoice/hooks/useInvoiceActions.ts',
+      'invoice/invoicelist/components/InvoiceTable.tsx',
       'challan/hooks/useChallanLogic.ts',
       'challan/ui/ChallanSuccess.tsx',
       'order/hooks/useSalesOrderLogic.ts',

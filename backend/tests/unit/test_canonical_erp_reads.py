@@ -1036,6 +1036,8 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     payload = {
         "invoice_id": uuid4(), "invoice_number": "INV-1",
         "invoice_date": date(2026, 8, 24), "status": "draft",
+        "seller_legal_name": "Canonical Seller Private Limited",
+        "seller_gstin": "27ABCDE1234F1Z5", "seller_address": "Seller Address",
         "customer_id": uuid4(), "customer_name": "Customer",
         "customer_phone": None, "customer_email": None,
         "customer_gst_number": None, "billing_address": "Address",

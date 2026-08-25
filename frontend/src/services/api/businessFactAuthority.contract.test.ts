@@ -16,6 +16,26 @@ test('live reports and documents never present invented business facts', () => {
   ].forEach(value => expect(financialReport).not.toContain(value));
   expect(customerAnalytics).not.toContain('<p className="text-xl font-bold">87%</p>');
   expect(invoicePdf).not.toMatch(/Interest\s*@\s*36%/);
+  [
+    'Your Company Name', 'Customer Name', 'Unknown Product', "'3004'", "'DOC-'",
+    'item.quantity || 1', 'item.gst_percent || 0', 'final_amount || 0',
+  ].forEach(value => expect(invoicePdf).not.toContain(value));
+  expect(invoicePdf).toContain('seller_legal_name');
+  expect(invoicePdf).toContain('normalizeAuthoritativeDecimal');
+  expect(fs.existsSync(path.join(root, 'frontend/src/utils/pdfHelpers.ts'))).toBe(false);
+  expect(fs.existsSync(path.join(
+    root,
+    'frontend/src/components/sales/invoice/hooks/useInvoiceActions.ts',
+  ))).toBe(false);
+
+  const invoiceTable = read('frontend/src/components/sales/invoice/invoicelist/components/InvoiceTable.tsx');
+  const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
+  expect(invoiceTable).toContain('invoicesApi.getById(document.id)');
+  expect(invoiceTable).toContain('downloadInvoicePDF');
+  expect(invoiceTable).toContain('Download canonical invoice PDF');
+  expect(canonicalReads).toContain('invoice.seller_legal_name_snapshot AS seller_legal_name');
+  expect(canonicalReads).toContain('invoice.seller_gstin_snapshot AS seller_gstin');
+  expect(canonicalReads).toContain('invoice.seller_address_snapshot AS seller_address');
   expect(orderReview).not.toMatch(/Interest\s*@\s*18%/);
 
   expect(financialReport).toContain('canonical reporting API');

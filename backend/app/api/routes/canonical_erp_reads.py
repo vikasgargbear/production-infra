@@ -2500,6 +2500,9 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     invoice_number: str
     invoice_date: date
     status: str
+    seller_legal_name: str
+    seller_gstin: str
+    seller_address: str
     customer_id: UUID
     customer_name: str
     customer_phone: Optional[str]
@@ -2534,6 +2537,9 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
     rows = _rows(db, """
         SELECT invoice.id AS invoice_id, invoice.invoice_number,
                invoice.invoice_date, invoice.status,
+               invoice.seller_legal_name_snapshot AS seller_legal_name,
+               invoice.seller_gstin_snapshot AS seller_gstin,
+               invoice.seller_address_snapshot AS seller_address,
                invoice.customer_account_id AS customer_id,
                party.legal_name AS customer_name,
                contact.phone AS customer_phone, contact.email AS customer_email,

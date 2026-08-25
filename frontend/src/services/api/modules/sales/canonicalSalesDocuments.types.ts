@@ -67,6 +67,9 @@ export interface CanonicalInvoiceDetail {
   invoice_number: string;
   invoice_date: string;
   status: string;
+  seller_legal_name: string;
+  seller_gstin: string;
+  seller_address: string;
   customer_id: string;
   customer_name: string;
   customer_phone: string | null;
