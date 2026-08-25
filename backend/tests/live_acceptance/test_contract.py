@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,19 @@ def test_every_claimed_scenario_is_present_and_owned_by_the_same_command() -> No
             assert steps[step_id] == contract.command_operation
 
 
+def test_every_published_rest_readback_is_mounted() -> None:
+    from app.main import app
+
+    shape = lambda value: re.sub(r"\{[^}]+\}", "{}", value)
+    mounted = {
+        shape(path) for path, methods in app.openapi()["paths"].items()
+        if "get" in methods
+    }
+    for contract in load_operation_matrix():
+        if contract.availability == "published":
+            assert shape(contract.rest_readback or "") in mounted, contract.id
+
+
 def test_expense_claim_is_the_only_fail_closed_contract_at_this_base() -> None:
     blocked = [item for item in load_operation_matrix() if item.availability == "blocked"]
     assert [item.id for item in blocked] == ["expense_claim"]
@@ -85,6 +99,7 @@ def test_browser_harness_has_no_local_or_legacy_authority() -> None:
     assert "LIVE18_FIXTURE_PATH" in source
     assert "LIVE18_EXPECTED_DEPLOYED_SHA" in source
     assert "LIVE18_DENIAL_ACCESS_TOKEN" in source
+    assert re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", source, re.I) is None
 
 
 def test_live_config_fails_before_io_when_incomplete() -> None:

@@ -22,7 +22,7 @@ A run is not live evidence unless all of the following are true:
    HTTP request IDs, screenshots, exact financial/tax/stock assertions, and a
    supported reversal or cleanup identifier where one exists.
 
-At base `079f5c12`, 17 business operations map to the 16 published canonical
+At the checked-in base, 17 business operations map to the 16 published canonical
 prepare commands. Customer credit note and supplier debit note are two bounded
 uses of `finance.adjustment_note.prepare`. Expense claim is the sole explicit
 blocker until canonical migration `0009`, REST/MCP adapters, and readback are
@@ -45,7 +45,7 @@ Run the non-live contract gates with:
 
 ```bash
 PYTHONPATH=backend python3 -m pytest -q backend/tests/live_acceptance
-python3 backend/scripts/live_acceptance/verify_scope.py --base 079f5c12d23d70d9872961e492b78b985bac0399
+python3 backend/scripts/live_acceptance/verify_scope.py --base "$(git merge-base HEAD origin/feat/canonical-erp-data-model)"
 ```
 
 Do not run live writes until the exact SHA is deployed and both metadata probes
