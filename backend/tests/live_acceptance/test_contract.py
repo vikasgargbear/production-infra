@@ -8,6 +8,7 @@ import pytest
 
 from .config import Live18GateError, load_live18_config
 from .contract import load_operation_matrix
+from .mcp_readback import mcp_readback_arguments
 from .scope import out_of_scope_paths
 
 
@@ -95,6 +96,17 @@ def test_all_18_operations_now_have_published_authority() -> None:
     assert expense.command_operation == "finance.expense_claim.prepare"
     assert expense.prepare_tool == "erp_expense_claim_prepare"
     assert expense.mcp_readback_tool == "erp_expense_claim_readback"
+
+
+def test_every_declared_mcp_readback_has_an_exact_argument_contract() -> None:
+    for operation in load_operation_matrix():
+        arguments = mcp_readback_arguments(
+            operation.mcp_readback_tool or "",
+            branch_id="branch-id",
+            command_id="command-id",
+            resource_id="resource-id",
+        )
+        assert arguments
 
 
 def test_scope_gate_rejects_product_edits() -> None:

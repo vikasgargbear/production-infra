@@ -10,7 +10,9 @@ import { loadBrowserConfig, verifyDeployedSha } from '../support/live18/config';
 import {
   loadFixture, loadOperationMatrix, OperationContract, OperationFixture, UiStep,
 } from '../support/live18/contracts';
-import { assertSessionIsolation, loginAndCaptureSession } from '../support/live18/session';
+import {
+  assertSessionIsolation, loginAndCaptureSession, sessionIdentityFromToken,
+} from '../support/live18/session';
 import { runUiStep } from '../support/live18/uiDriver';
 
 const requiredLiveRun = process.env.LIVE18_REQUIRED === 'true';
@@ -155,6 +157,10 @@ async function runOperation(
     const requesterSession = await loginAndCaptureSession(requesterPage, config.appOrigin, config.requester);
     const reviewerSession = await loginAndCaptureSession(reviewerPage, config.appOrigin, config.reviewer);
     assertSessionIsolation(config, requesterSession, reviewerSession);
+    const denialIdentity = sessionIdentityFromToken(config.denialAccessToken);
+    expect(denialIdentity.orgId, 'denial token must carry an organization claim').toBeTruthy();
+    expect(denialIdentity.orgId, 'denial token must belong to another organization')
+      .not.toBe(config.expectedOrgId);
     const requesterApi = await apiClient(config.apiOrigin, requesterSession.token);
     const reviewerApi = await apiClient(config.apiOrigin, reviewerSession.token);
     const denialApi = await apiClient(config.apiOrigin, config.denialAccessToken);

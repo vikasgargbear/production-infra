@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from .contract import load_operation_matrix
+from .mcp_readback import mcp_readback_arguments
 
 
 pytestmark = pytest.mark.integration
@@ -40,6 +41,14 @@ def _preview(evidence: dict[str, Any]) -> dict[str, Any]:
     ]
     assert len(candidates) == 1
     return candidates[0].get("preview", candidates[0])
+
+
+def _assert_mcp_identity(payload: Any, *, command_id: str, resource_id: str) -> None:
+    encoded = json.dumps(payload, sort_keys=True)
+    assert resource_id in encoded, "MCP readback omitted the canonical resource UUID"
+    discovered_command = _find(payload, "command_request_id")
+    if discovered_command is not None:
+        assert str(discovered_command) == command_id
 
 
 @pytest.mark.skipif(
@@ -77,7 +86,26 @@ def test_all_browser_resources_reconcile_through_mcp_and_postgresql(
         mcp_status = mcp_client.call(
             "erp_operation_status_get", {"command_request_id": command_id}
         )
-        assert str(_find(mcp_status, "resource_id") or _find(mcp_status, "result_resource_id")) == resource_id
+        _assert_mcp_identity(mcp_status, command_id=command_id, resource_id=resource_id)
+        declared_tool = contract.mcp_readback_tool
+        assert declared_tool
+        if declared_tool == "erp_operation_status_get":
+            declared_readback = mcp_status
+        else:
+            declared_readback = mcp_client.call(
+                declared_tool,
+                mcp_readback_arguments(
+                    declared_tool,
+                    branch_id=evidence["branch_id"],
+                    command_id=command_id,
+                    resource_id=resource_id,
+                ),
+            )
+        _assert_mcp_identity(
+            declared_readback,
+            command_id=command_id,
+            resource_id=resource_id,
+        )
         database = reconciler.reconcile(
             command_id,
             contract.command_operation.removesuffix(".prepare"),

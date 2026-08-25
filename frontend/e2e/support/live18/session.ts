@@ -15,6 +15,18 @@ const decodeClaims = (token: string): Record<string, unknown> => {
   return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Record<string, unknown>;
 };
 
+export function sessionIdentityFromToken(token: string): Omit<CapturedSession, 'token'> {
+  const claims = decodeClaims(token);
+  const branchIds = Array.isArray(claims.branch_ids)
+    ? claims.branch_ids.map(String)
+    : claims.branch_id ? [String(claims.branch_id)] : [];
+  return {
+    userId: String(claims.user_id || claims.sub || ''),
+    orgId: String(claims.org_id || claims.organization_id || ''),
+    branchIds,
+  };
+}
+
 export async function loginAndCaptureSession(
   page: Page,
   appOrigin: string,
@@ -32,15 +44,10 @@ export async function loginAndCaptureSession(
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json() as { access_token?: string };
   if (!body.access_token) throw new Error('ERP session exchange omitted its access token.');
-  const claims = decodeClaims(body.access_token);
-  const branchIds = Array.isArray(claims.branch_ids)
-    ? claims.branch_ids.map(String)
-    : claims.branch_id ? [String(claims.branch_id)] : [];
+  const identity = sessionIdentityFromToken(body.access_token);
   return {
     token: body.access_token,
-    userId: String(claims.user_id || claims.sub || ''),
-    orgId: String(claims.org_id || claims.organization_id || ''),
-    branchIds,
+    ...identity,
   };
 }
 
