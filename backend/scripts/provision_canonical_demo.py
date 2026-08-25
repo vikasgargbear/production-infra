@@ -582,7 +582,15 @@ def bootstrap_identity(
             """
             INSERT INTO core.users (id, auth_user_id, display_name, status)
             VALUES (%s, %s, 'Demo Independent Approver', 'active')
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT (id) DO UPDATE
+               SET auth_user_id=EXCLUDED.auth_user_id,
+                   display_name=EXCLUDED.display_name,
+                   status=EXCLUDED.status,
+                   updated_at=transaction_timestamp(),
+                   row_version=core.users.row_version+1
+             WHERE core.users.auth_user_id IS DISTINCT FROM EXCLUDED.auth_user_id
+                OR core.users.display_name IS DISTINCT FROM EXCLUDED.display_name
+                OR core.users.status IS DISTINCT FROM EXCLUDED.status
             """,
             (IDS["reviewer_user"], IDS["reviewer_auth_user"]),
         )
@@ -590,7 +598,15 @@ def bootstrap_identity(
             """
             INSERT INTO core.users (id, auth_user_id, display_name, status)
             VALUES (%s, %s, 'Demo Business Operator', 'active')
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT (id) DO UPDATE
+               SET auth_user_id=EXCLUDED.auth_user_id,
+                   display_name=EXCLUDED.display_name,
+                   status=EXCLUDED.status,
+                   updated_at=transaction_timestamp(),
+                   row_version=core.users.row_version+1
+             WHERE core.users.auth_user_id IS DISTINCT FROM EXCLUDED.auth_user_id
+                OR core.users.display_name IS DISTINCT FROM EXCLUDED.display_name
+                OR core.users.status IS DISTINCT FROM EXCLUDED.status
             """,
             (IDS["operator_user"], IDS["operator_auth_user"]),
         )

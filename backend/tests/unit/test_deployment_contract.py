@@ -1156,6 +1156,22 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "needs.railway-canonical-staging.result" in live18
     assert "inputs.provision_canonical_demo }}' != true" in live18
     assert "same-run canonical demo provision" in live18
+    recovery_step = "Recover stale Railway-direct identities before demo provisioning"
+    demo_step = "Verify exact migration head and provision same-run demo over Railway direct IPv6"
+    identity_step = "Provision disposable identities and MCP authority over Railway direct IPv6"
+    always_clean_step = "Always clean Railway-direct temporary identities and authorities"
+    assert live18.index(recovery_step) < live18.index(demo_step) < live18.index(identity_step)
+    recovery = live18[
+        live18.index(recovery_step):live18.index(demo_step)
+    ]
+    assert "live18_railway_database_phase.py cleanup-identities" in recovery
+    assert 'touch "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' in recovery
+    assert 'rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' not in recovery
+    assert "Railway pre-demo recovery left disposable authority behind" in recovery
+    assert "remaining_auth_identity_count" in recovery
+    assert "remaining_active_temporary_grant_count" in recovery
+    assert "remaining_denial_role_count" in recovery
+    assert live18.index(always_clean_step) > live18.index(identity_step)
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live18
     assert "verify_live18_deployment_sha.py" in live18
     assert '--provider "$LIVE18_PROVIDER"' in live18

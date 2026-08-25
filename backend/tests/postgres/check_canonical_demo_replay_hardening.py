@@ -226,6 +226,117 @@ def _set_owner_context(cursor) -> None:
         cursor.execute("SELECT set_config(%s,%s,true)", (setting, value))
 
 
+def _assert_bootstrap_repairs_stale_auth_bindings() -> None:
+    """A crash-bound ephemeral binding cannot block the next demo bootstrap."""
+
+    _configure_fixture_ids()
+    stale_reviewer_auth_user = uuid4()
+    stale_operator_auth_user = uuid4()
+    connection = _connect()
+    try:
+        fixture.bootstrap_identity(connection, organization_pan="VVVVV6666V")
+        with connection.cursor() as cursor:
+            cursor.execute("RESET ROLE")
+            cursor.execute(
+                "INSERT INTO auth.users(id) VALUES (%s),(%s)",
+                (stale_reviewer_auth_user, stale_operator_auth_user),
+            )
+            _set_owner_context(cursor)
+            cursor.execute(
+                """
+                UPDATE core.users
+                   SET auth_user_id=CASE id
+                         WHEN %s::uuid THEN %s::uuid
+                         WHEN %s::uuid THEN %s::uuid
+                       END,
+                       updated_at=transaction_timestamp(),row_version=row_version+1
+                 WHERE id IN (%s::uuid,%s::uuid)
+                """,
+                (
+                    fixture.IDS["reviewer_user"],
+                    stale_reviewer_auth_user,
+                    fixture.IDS["operator_user"],
+                    stale_operator_auth_user,
+                    fixture.IDS["reviewer_user"],
+                    fixture.IDS["operator_user"],
+                ),
+            )
+            assert cursor.rowcount == 2
+            cursor.execute(
+                "SELECT max(chain_sequence) FROM core.audit_events WHERE org_id=%s",
+                (fixture.IDS["org"],),
+            )
+            prior_audit_sequence = cursor.fetchone()[0]
+            assert isinstance(prior_audit_sequence, int)
+            # Model a fresh owner connection. bootstrap_identity supplies the
+            # organization/request audit boundary before repairing core.users;
+            # it must not depend on the stale membership being activatable.
+            for setting in (
+                "app.auth_user_id",
+                "app.user_id",
+                "app.membership_id",
+            ):
+                cursor.execute("SELECT set_config(%s,'',true)", (setting,))
+            cursor.execute("RESET ROLE")
+
+        fixture.bootstrap_identity(connection, organization_pan="VVVVV6666V")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id::text,auth_user_id::text,status
+                  FROM core.users
+                 WHERE id IN (%s::uuid,%s::uuid)
+                 ORDER BY id
+                """,
+                (fixture.IDS["reviewer_user"], fixture.IDS["operator_user"]),
+            )
+            assert set(cursor.fetchall()) == {
+                (
+                    fixture.IDS["reviewer_user"],
+                    fixture.IDS["reviewer_auth_user"],
+                    "active",
+                ),
+                (
+                    fixture.IDS["operator_user"],
+                    fixture.IDS["operator_auth_user"],
+                    "active",
+                ),
+            }
+            cursor.execute(
+                """
+                SELECT count(*),bool_and(actor_kind='migration'),
+                       bool_and(actor_membership_id IS NULL),
+                       bool_and(request_id=%s::uuid)
+                  FROM core.audit_events
+                 WHERE org_id=%s AND resource_type='core.users'
+                   AND resource_id IN (%s::uuid,%s::uuid)
+                   AND mutation_kind='update'
+                   AND request_id=%s::uuid
+                   AND chain_sequence>%s
+                """,
+                (
+                    fixture.IDS["request"],
+                    fixture.IDS["org"],
+                    fixture.IDS["reviewer_user"],
+                    fixture.IDS["operator_user"],
+                    fixture.IDS["request"],
+                    prior_audit_sequence,
+                ),
+            )
+            audit = cursor.fetchone()
+            assert audit[0] >= 2
+            assert audit[1:] == (True, True, True), audit
+            cursor.execute("RESET ROLE")
+            cursor.execute(
+                "SELECT count(*) FROM auth.users WHERE id IN (%s,%s)",
+                (stale_reviewer_auth_user, stale_operator_auth_user),
+            )
+            assert cursor.fetchone() == (2,)
+    finally:
+        connection.rollback()
+        connection.close()
+
+
 def _restore_user_triggers(control, tables: list[str]) -> None:
     """Attempt every restoration and prove no reviewed trigger remains disabled."""
 
@@ -605,6 +716,7 @@ def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
 
 def main() -> None:
     _assert_numeric_multi_allocation_ceiling()
+    _assert_bootstrap_repairs_stale_auth_bindings()
     _assert_setting_replacement_replay()
     _assert_deterministic_authority_renews_after_expiry()
     _assert_itc_reversal_authority_replays_across_ui_runs()
