@@ -13,6 +13,12 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from scripts.audit import application_promotion_evidence
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONTRACT = REPO_ROOT / "docs" / "architecture" / "app-data-contract.json"
@@ -249,6 +255,10 @@ def validate_promotion_evidence(
     )
     if evidence.get("evidence_state") != ("verified" if verified else "incomplete"):
         errors.append("promotion evidence evidence_state disagrees with its predicates")
+    if verified:
+        errors.extend(
+            application_promotion_evidence.validate_manifest_artifacts(root, evidence)
+        )
     return evidence, errors
 
 

@@ -2,6 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from scripts.audit import application_promotion_evidence as promotion_evidence
 from scripts.audit import canonical_promotion_readiness as readiness
 
 
@@ -75,49 +76,136 @@ def _fixture_root(
     }
     _write_json(tmp_path, "database/schema-authority.json", authority)
     _write_json(tmp_path, authority["source_classification_file"], classification)
-    evidence_artifact = tmp_path / "evidence/reviewed.json"
-    evidence_artifact.parent.mkdir(parents=True, exist_ok=True)
-    evidence_artifact.write_text('{"verified":true}\n', encoding="utf-8")
-    artifact_sha = hashlib.sha256(evidence_artifact.read_bytes()).hexdigest()
+    git_commit = "a" * 40
+    render_services = {
+        name: {
+            "service_id": f"srv-{index}",
+            "deploy_id": f"dep-{index}",
+            "status": "live",
+            "commit_sha": git_commit,
+            "url": f"https://service-{index}.onrender.com",
+        }
+        for index, name in enumerate(sorted(promotion_evidence.RENDER_SERVICE_NAMES), 1)
+    }
+    binding = {
+        "project_ref": promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
+        "git_commit": git_commit,
+        "deployed_render_sha": git_commit,
+        "render_services": render_services,
+    }
+
+    def artifact(kind: str, payload: dict) -> dict:
+        return {
+            "schema_version": promotion_evidence.SCHEMA_VERSION,
+            "evidence_kind": kind,
+            "binding": binding,
+            "captured_at": "2026-08-25T12:00:00+00:00",
+            "payload": payload,
+        }
+
+    artifact_values = {
+        "source.json": artifact("source_disposition", {
+            "strategy": "reset",
+            "source_identifier": promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
+            "retired_source_accessed": False,
+            "disposable_staging_reset_verified": True,
+            "reset_workflow_run_url": "https://github.com/acme/erp/actions/runs/123",
+            "reset_artifact_sha256": "d" * 64,
+            "reset_completed_at": "2026-08-25T11:00:00+00:00",
+        }),
+        "route.json": artifact("mounted_route_graph", {
+            "analyzer_kind": "mounted_route_graph",
+            "mounted_routes": [{"path": "/health", "methods": ["GET"]}],
+            "reachable_retired_dependency_count": 0,
+            "retired_dependency_findings": [],
+        }),
+        "database.json": artifact("canonical_database_runtime", {
+            "expected_alembic_head": "test_head",
+            "observed_alembic_head": "test_head",
+            "runtime_role": {
+                "session_user": "erp_runtime", "superuser": False,
+                "bypass_rls": False, "owns_business_relations": False,
+            },
+            "tenant_relation_count": 1,
+            "forced_rls_failures": [],
+            "tenant_positive_count": 1,
+            "cross_tenant_visible_count": 0,
+            "snapshot": {"relation_counts": {}, "exact_numeric_sums": {}},
+        }),
+        "reconciliation.json": artifact("reconciliation_backup_restore", {
+            "source_target_counts_reconciled": True,
+            "exact_totals_reconciled": True,
+            "backup_verified": True,
+            "restore_tested": True,
+            "backup_sha256": "b" * 64,
+            "backup_size_bytes": 1,
+        }),
+        "rollback.json": artifact("rollback_plan", {
+            "state": "reviewed", "owner": "release-owner",
+            "trigger_conditions": ["readiness fails"],
+            "verification_queries": ["SELECT version_num FROM public.alembic_version"],
+            "max_recovery_minutes": 30,
+            "steps": ["stop promotion and restore backup"],
+        }),
+        "decommission.json": artifact("retired_project_decommission_plan", {
+            "state": "reviewed",
+            "retired_project_ref": promotion_evidence.RETIRED_SOURCE_PROJECT_REF,
+            "owner": "data-owner", "prerequisites": ["rollback window elapsed"],
+            "final_backup_required": True,
+            "rollback_window_ends_at": "2026-09-25T12:00:00+00:00",
+            "retention_approval_reference": "RETENTION-123",
+            "steps": ["decommission only after the reviewed rollback window"],
+        }),
+    }
+    artifact_hashes = {}
+    for name, value in artifact_values.items():
+        relative = f"evidence/{name}"
+        _write_json(tmp_path, relative, value)
+        artifact_hashes[name] = hashlib.sha256((tmp_path / relative).read_bytes()).hexdigest()
     state = "verified" if promotion_evidence_ready else "missing"
     evidence = {
         "schema_version": 1,
         "evidence_state": state if state == "verified" else "incomplete",
         "source_disposition": {
-            "state": state, "strategy": "reset", "source_identifier": "source-test",
-            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+            "state": state, "strategy": "reset",
+            "source_identifier": promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
+            "artifact": "evidence/source.json",
+            "artifact_sha256": artifact_hashes["source.json"],
         },
         "route_graph": {
             "state": state, "analyzer_kind": "mounted_route_graph",
             "reachable_retired_dependency_count": 0,
-            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+            "artifact": "evidence/route.json",
+            "artifact_sha256": artifact_hashes["route.json"],
         },
         "migration_head": {
             "state": state, "expected_head": "test_head", "observed_head": "test_head",
-            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+            "artifact": "evidence/database.json",
+            "artifact_sha256": artifact_hashes["database.json"],
         },
         "runtime_tenant_isolation": {
             "state": state, "runtime_role_non_owner": True,
             "runtime_role_no_bypassrls": True, "forced_rls_verified": True,
             "tenant_positive_test": True, "cross_tenant_denial_test": True,
-            "artifact": "evidence/reviewed.json", "artifact_sha256": artifact_sha,
+            "artifact": "evidence/database.json",
+            "artifact_sha256": artifact_hashes["database.json"],
         },
         "reconciliation_backup": {
             "state": state, "source_target_counts_reconciled": True,
             "exact_totals_reconciled": True, "backup_verified": True,
-            "restore_tested": True, "artifact": "evidence/reviewed.json",
-            "artifact_sha256": artifact_sha,
+            "restore_tested": True, "artifact": "evidence/reconciliation.json",
+            "artifact_sha256": artifact_hashes["reconciliation.json"],
         },
         "rollback_decommission": {
-            "state": state, "rollback_artifact": "evidence/reviewed.json",
-            "rollback_artifact_sha256": artifact_sha,
-            "decommission_artifact": "evidence/reviewed.json",
-            "decommission_artifact_sha256": artifact_sha,
+            "state": state, "rollback_artifact": "evidence/rollback.json",
+            "rollback_artifact_sha256": artifact_hashes["rollback.json"],
+            "decommission_artifact": "evidence/decommission.json",
+            "decommission_artifact_sha256": artifact_hashes["decommission.json"],
         },
         "review": {
             "state": state, "reviewer": "release-reviewer",
             "reviewed_at": "2026-08-25T12:00:00+00:00",
-            "git_commit": "a" * 40,
+            "git_commit": git_commit,
         },
     }
     evidence_path = tmp_path / "docs/architecture/canonical-application-promotion-evidence.json"
