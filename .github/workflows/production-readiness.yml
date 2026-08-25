@@ -1041,8 +1041,6 @@ jobs:
       PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
       PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
-      PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH: ${{ runner.temp }}/live18-reviewed-fixture.json
-      PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH: ${{ runner.temp }}/live18-fixture-identities.json
       PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
       LIVE18_REQUIRED: "true"
       LIVE18_WRITE_ACK: canonical-disposable-only
@@ -1051,9 +1049,6 @@ jobs:
       LIVE18_API_ORIGIN: https://aasopharma-api-pilot.onrender.com
       LIVE18_MCP_ORIGIN: https://aasopharma-mcp-pilot.onrender.com
       LIVE18_METADATA_URLS_JSON: '["https://aasopharma-erp-pilot.onrender.com/build-metadata.json","https://aasopharma-api-pilot.onrender.com/health"]'
-      LIVE18_FIXTURE_PATH: ${{ runner.temp }}/live18-reviewed-fixture.json
-      LIVE18_EVIDENCE_DIR: ${{ runner.temp }}/live18-evidence
-      LIVE18_PLAYWRIGHT_ARTIFACT_DIR: ${{ runner.temp }}/live18-playwright
       LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -1069,6 +1064,14 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Bind live18 evidence paths to the runner temporary directory
+        run: |
+          set -euo pipefail
+          echo "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json" >> "$GITHUB_ENV"
+          echo "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH=$RUNNER_TEMP/live18-fixture-identities.json" >> "$GITHUB_ENV"
+          echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json" >> "$GITHUB_ENV"
+          echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence" >> "$GITHUB_ENV"
+          echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright" >> "$GITHUB_ENV"
       - name: Bind live18 to the exact reviewed deployed SHA
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}

@@ -1058,9 +1058,16 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "verify_render_pilot_sha.py" in live18
     assert "build-metadata.json" in live18
     assert "aasopharma-api-pilot.onrender.com/health" in live18
+    assert (
+        'echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"'
+        in live18
+    )
+    assert (
+        'echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"'
+        in live18
+    )
     assert "secrets.LIVE18_REVIEWED_FIXTURE_JSON" in live18
     assert 'printf \'%s\' "$LIVE18_REVIEWED_FIXTURE_JSON" > "$LIVE18_FIXTURE_PATH"' in live18
-    assert "${{ runner.temp }}/live18-reviewed-fixture.json" in live18
     assert 'case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*)' in live18
     assert "provision --profile live18" in live18
     assert "LIVE18_DENIAL_ACCESS_TOKEN" in live18
