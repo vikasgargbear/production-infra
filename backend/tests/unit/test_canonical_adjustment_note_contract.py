@@ -174,9 +174,25 @@ def test_database_has_exact_resolve_prepare_dispatch_and_post_lifecycle() -> Non
     assert "WHEN 'finance.adjustment_note.post'" in execute_function
     assert 'resolve_adjustment_note_prepare' in sql
     assert 'persist_adjustment_note_prepare' in sql
+    assert "WHEN 'finance.adjustment_note.prepare' THEN 'adjustment_note'" in sql
+    assert (
+        "WHEN 'finance.adjustment_note.prepare' THEN 'finance.adjustment_note.post'"
+        in sql
+    )
+    command_guard = sql.rsplit(
+        'CREATE OR REPLACE FUNCTION "erp_automation_commands"."guard_command_request_match"',
+        1,
+    )[1]
+    assert command_guard.count("'finance.adjustment_note.prepare'") >= 6
+    assert (
+        "'sales.return.prepare','procurement.purchase_return.prepare',"
+        "'finance.adjustment_note.prepare'"
+    ) in command_guard
     assert "sales credit quantity exceeds remaining original invoice quantity" in sql
     assert "purchase debit quantity exceeds remaining original supplier-invoice quantity" in sql
     assert "adjustment-note approval transition lost its draft state" in sql
+    assert "actual_status='draft' AND p_command_request_id IS NOT NULL" in sql
+    assert "adjustment note is neither approved nor a command-bound draft" in sql
 
 
 def test_incremental_adjustment_migration_is_hash_bound_linear_and_pg15_gated() -> None:
@@ -194,7 +210,7 @@ def test_incremental_adjustment_migration_is_hash_bound_linear_and_pg15_gated() 
     assert 'down_revision = "20260825_0006"' in revision
     assert digest in revision
     assert "CanonicalBaselineError" in revision.split("def downgrade", 1)[1]
-    assert sql.count("CREATE OR REPLACE FUNCTION") == 3
+    assert sql.count("CREATE OR REPLACE FUNCTION") == 6
     assert "TO \"erp_runtime\"" in sql
     assert "TO \"erp_calculator\"" in sql
     assert "check_canonical_adjustment_note_runtime_role.py" in gate

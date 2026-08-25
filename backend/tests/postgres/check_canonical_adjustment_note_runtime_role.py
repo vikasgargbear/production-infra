@@ -58,6 +58,15 @@ def main() -> None:
             execute = _function(
                 session, "erp_automation_commands", "execute_approved_command"
             )
+            command_guard = _function(
+                session, "erp_automation_commands", "guard_command_request_match"
+            )
+            command_prepare = _function(
+                session, "erp_automation_commands", "prepare_operator_command"
+            )
+            issue = _function(
+                session, "erp_calculation_authority", "issue_artifact"
+            )
             post = _function(
                 session, "erp_commercial_commands", "post_adjustment_note"
             )
@@ -72,6 +81,39 @@ def main() -> None:
             assert persist["app_execute"] is False
             assert execute["runtime_execute"] is True
             assert post["runtime_execute"] is True
+            assert command_guard["security_definer"] is True
+            assert command_guard["app_execute"] is False
+            assert command_prepare["security_definer"] is True
+            assert command_prepare["runtime_execute"] is False
+            assert issue["security_definer"] is True
+            assert issue["app_execute"] is False
+            assert "actual_status='draft' AND p_command_request_id IS NOT NULL" in issue[
+                "body"
+            ]
+            assert (
+                "adjustment note is neither approved nor a command-bound draft"
+                in issue["body"]
+            )
+
+            assert (
+                "WHEN 'finance.adjustment_note.prepare' THEN 'adjustment_note'"
+                in command_guard["body"]
+            )
+            assert (
+                "WHEN 'finance.adjustment_note.prepare' THEN "
+                "'finance.adjustment_note.post'"
+                in command_guard["body"]
+            )
+            assert command_guard["body"].count("'finance.adjustment_note.prepare'") >= 6
+            assert (
+                "WHEN 'finance.adjustment_note.prepare' THEN 'adjustment_note'"
+                in command_prepare["body"]
+            )
+            assert (
+                "WHEN 'finance.adjustment_note.prepare' THEN "
+                "'finance.adjustment_note.post'"
+                in command_prepare["body"]
+            )
 
             for fragment in (
                 "side='sales' AND direction='credit'",

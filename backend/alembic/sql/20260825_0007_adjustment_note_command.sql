@@ -1234,3 +1234,501 @@ ALTER FUNCTION "erp_automation_commands"."execute_approved_command"(organization
 REVOKE ALL ON FUNCTION "erp_automation_commands"."execute_approved_command"(organization_id uuid, command_request_id uuid) FROM PUBLIC, "erp_app", "erp_runtime";
 
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."execute_approved_command"(organization_id uuid, command_request_id uuid) TO "erp_runtime";
+
+-- Extend the immutable generic command boundary for the standalone
+-- adjustment-note capability.  The baseline functions deliberately fail
+-- closed for unknown operations, so both the insert helper and its trigger
+-- guard must advance together in this pre-deploy migration.
+CREATE OR REPLACE FUNCTION "erp_automation_commands"."guard_command_request_match"()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+#variable_conflict use_variable
+DECLARE
+    grant_row automation.agent_grants%ROWTYPE;
+    capability automation.agent_grant_capabilities%ROWTYPE;
+    request_document jsonb;
+    preview_document jsonb;
+    expected_request jsonb;
+    expected_preview jsonb;
+    expected_target_type text;
+    expected_operation text;
+    source_versions jsonb;
+BEGIN
+    IF NEW.status<>'prepared' OR NEW.row_version<>1
+       OR NEW.execution_started_at IS NOT NULL OR NEW.completed_at IS NOT NULL
+       OR NEW.response_bytes IS NOT NULL OR NEW.result_resource_id IS NOT NULL THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='new command request must be an unexecuted prepared snapshot';
+    END IF;
+    SELECT * INTO grant_row FROM automation.agent_grants
+     WHERE org_id=NEW.org_id AND id=NEW.agent_grant_id FOR SHARE;
+    SELECT * INTO capability FROM automation.agent_grant_capabilities
+     WHERE org_id=NEW.org_id AND agent_grant_id=NEW.agent_grant_id
+       AND capability_code=NEW.capability_code FOR SHARE;
+    IF grant_row.id IS NULL OR capability.capability_code IS NULL
+       OR grant_row.status<>'active' OR grant_row.expires_at<=pg_catalog.transaction_timestamp()
+       OR grant_row.subject_membership_id IS DISTINCT FROM NEW.requested_by_membership_id
+       OR capability.status<>'active'
+       OR NEW.operation_mode IS DISTINCT FROM capability.operation_mode
+       OR NEW.risk_class IS DISTINCT FROM capability.risk_class
+       OR NEW.approval_policy IS DISTINCT FROM capability.approval_policy
+       OR NEW.required_approval_count<>1
+       OR NEW.expires_at<=pg_catalog.transaction_timestamp()
+       OR NEW.expires_at>grant_row.expires_at THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='command request exceeds its active exact capability consent';
+    END IF;
+    IF NEW.operation='automation.agent_grant.revoke' THEN
+        IF NEW.branch_id IS DISTINCT FROM grant_row.branch_id
+           OR NEW.destination_branch_id IS NOT NULL THEN
+            RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='grant revocation branch scope changed';
+        END IF;
+    ELSIF NEW.capability_code IN ('finance.adjustment_note.prepare','finance.customer_receipt.prepare','finance.supplier_advance.prepare','finance.supplier_payment.prepare','inventory.adjustment.prepare','inventory.destruction.prepare','inventory.transfer.prepare','procurement.goods_receipt.prepare','procurement.purchase_order.prepare','procurement.purchase_return.prepare','procurement.supplier_invoice.prepare','sales.dispatch.prepare','sales.invoice.prepare','sales.order.prepare','sales.return.prepare') THEN
+        IF NEW.branch_id IS NULL
+           OR erp_security.can_access_branch(NEW.branch_id) IS DISTINCT FROM true
+           OR (NEW.destination_branch_id IS NOT NULL
+               AND erp_security.can_access_branch(NEW.destination_branch_id) IS DISTINCT FROM true)
+           OR (grant_row.branch_id IS NOT NULL AND
+               (NEW.branch_id IS DISTINCT FROM grant_row.branch_id
+                OR NEW.destination_branch_id IS NOT NULL))
+           OR (NEW.capability_code='inventory.transfer.prepare' AND
+               (NEW.destination_branch_id IS NULL OR NEW.destination_branch_id=NEW.branch_id))
+           OR (NEW.capability_code<>'inventory.transfer.prepare' AND NEW.destination_branch_id IS NOT NULL) THEN
+            RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='command branches exceed the active grant or actor access';
+        END IF;
+    ELSE
+        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='operation has no reviewed prepare boundary';
+    END IF;
+    IF NEW.requested_amount IS NOT NULL AND (
+          capability.maximum_amount IS NULL
+          OR NEW.requested_amount>capability.maximum_amount
+          OR NEW.currency_code IS DISTINCT FROM capability.currency_code
+       ) OR NEW.requested_amount IS NULL AND NEW.currency_code IS NOT NULL
+       OR NEW.requests_sensitive_read AND NOT capability.allow_sensitive_read THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='command amount, currency, or sensitive-read intent exceeds consent';
+    END IF;
+    IF NEW.serializer_version<>'aasopharma-pg-jsonb-v1'
+       OR NEW.request_media_type<>'application/vnd.aasopharma.command+json'
+       OR NEW.preview_media_type<>'application/vnd.aasopharma.command-preview+json'
+       OR NEW.request_hash IS DISTINCT FROM extensions.digest(NEW.request_bytes,'sha256')
+       OR NEW.preview_hash IS DISTINCT FROM extensions.digest(NEW.preview_bytes,'sha256') THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='command serializer, media type, or exact-byte hash is invalid';
+    END IF;
+    BEGIN
+        request_document := pg_catalog.convert_from(NEW.request_bytes,'UTF8')::jsonb;
+        preview_document := pg_catalog.convert_from(NEW.preview_bytes,'UTF8')::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='command request and preview must be UTF-8 JSON';
+    END;
+    IF NEW.operation='automation.agent_grant.revoke' THEN
+        IF NEW.operation_mode<>'write' OR NEW.target_resource_type<>'agent_grant'
+           OR NEW.target_resource_id IS DISTINCT FROM NEW.agent_grant_id
+           OR NEW.target_row_version IS DISTINCT FROM grant_row.row_version
+           OR NEW.requested_amount IS NOT NULL OR NEW.currency_code IS NOT NULL
+           OR NEW.requests_sensitive_read OR NEW.calculation_hash IS NOT NULL
+           OR NEW.request_reason IS NULL OR pg_catalog.btrim(NEW.request_reason)='' THEN
+            RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='incomplete typed grant revocation';
+        END IF;
+        expected_request := pg_catalog.jsonb_build_object(
+            'agent_grant_id',NEW.agent_grant_id,
+            'branch_id',NEW.branch_id,
+            'operation',NEW.operation,
+            'organization_id',NEW.org_id,
+            'reason',NEW.request_reason,
+            'serializer_version',NEW.serializer_version,
+            'target_row_version',NEW.target_row_version
+        );
+        expected_preview := pg_catalog.jsonb_build_object(
+            'effect','revoke_agent_grant',
+            'operation',NEW.operation,
+            'organization_id',NEW.org_id,
+            'reason',NEW.request_reason,
+            'serializer_version',NEW.serializer_version,
+            'target_resource_id',NEW.target_resource_id,
+            'target_resource_type',NEW.target_resource_type,
+            'target_row_version',NEW.target_row_version
+        );
+        IF request_document IS DISTINCT FROM expected_request
+           OR preview_document IS DISTINCT FROM expected_preview
+           OR NEW.aggregate_version_hash IS DISTINCT FROM "erp_automation_commands"."aggregate_version_hash"(
+                NEW.target_resource_type,NEW.target_resource_id,NEW.target_row_version
+           ) THEN
+            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='grant revocation envelope differs from persisted facts';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    expected_target_type := CASE NEW.capability_code WHEN 'sales.order.prepare' THEN 'sales_order' WHEN 'sales.dispatch.prepare' THEN 'dispatch' WHEN 'sales.invoice.prepare' THEN 'sales_invoice' WHEN 'sales.return.prepare' THEN 'sales_return' WHEN 'procurement.purchase_order.prepare' THEN 'purchase_order' WHEN 'procurement.goods_receipt.prepare' THEN 'goods_receipt' WHEN 'procurement.supplier_invoice.prepare' THEN 'supplier_invoice' WHEN 'procurement.purchase_return.prepare' THEN 'purchase_return' WHEN 'finance.adjustment_note.prepare' THEN 'adjustment_note' WHEN 'finance.customer_receipt.prepare' THEN 'payment' WHEN 'finance.supplier_payment.prepare' THEN 'payment' WHEN 'finance.supplier_advance.prepare' THEN 'payment' WHEN 'inventory.transfer.prepare' THEN 'inventory_document' WHEN 'inventory.adjustment.prepare' THEN 'inventory_document' WHEN 'inventory.destruction.prepare' THEN 'destruction' ELSE NULL END;
+    expected_operation := CASE NEW.capability_code WHEN 'sales.order.prepare' THEN 'sales.order.approve' WHEN 'sales.dispatch.prepare' THEN 'sales.dispatch.post' WHEN 'sales.invoice.prepare' THEN 'sales.invoice.post' WHEN 'sales.return.prepare' THEN 'sales.return.post' WHEN 'procurement.purchase_order.prepare' THEN 'procurement.purchase_order.approve' WHEN 'procurement.goods_receipt.prepare' THEN 'procurement.receipt.post' WHEN 'procurement.supplier_invoice.prepare' THEN 'procurement.supplier_invoice.post' WHEN 'procurement.purchase_return.prepare' THEN 'procurement.purchase_return.post' WHEN 'finance.adjustment_note.prepare' THEN 'finance.adjustment_note.post' WHEN 'finance.customer_receipt.prepare' THEN 'finance.payment.post' WHEN 'finance.supplier_payment.prepare' THEN 'finance.payment.post' WHEN 'finance.supplier_advance.prepare' THEN 'finance.supplier_advance.post' WHEN 'inventory.transfer.prepare' THEN 'inventory.document.post' WHEN 'inventory.adjustment.prepare' THEN 'inventory.document.post' WHEN 'inventory.destruction.prepare' THEN 'compliance.destruction.post' ELSE NULL END;
+    source_versions := preview_document->'source_versions';
+    IF expected_target_type IS NULL OR expected_operation IS NULL
+       OR NEW.operation IS DISTINCT FROM expected_operation OR NEW.operation_mode<>'write'
+       OR NEW.target_resource_type IS DISTINCT FROM expected_target_type
+       OR NEW.target_row_version<>1 OR NEW.requests_sensitive_read
+       OR pg_catalog.jsonb_typeof(request_document)<>'object'
+       OR pg_catalog.jsonb_typeof(preview_document)<>'object'
+       OR pg_catalog.jsonb_typeof(source_versions)<>'array'
+       OR pg_catalog.jsonb_typeof(preview_document->'resolved_references')<>'array'
+       OR pg_catalog.jsonb_typeof(preview_document->'calculation_ruleset')<>'array'
+       OR pg_catalog.jsonb_typeof(preview_document->'inventory_impact')<>'array'
+       OR pg_catalog.jsonb_typeof(preview_document->'financial_impact')<>'array'
+       OR pg_catalog.jsonb_typeof(preview_document->'tax_impact')<>'array'
+       OR preview_document->>'command_request_id' IS DISTINCT FROM NEW.id::text
+       OR preview_document->>'capability_code' IS DISTINCT FROM NEW.capability_code
+       OR preview_document->>'operation' IS DISTINCT FROM NEW.operation
+       OR preview_document->>'organization_id' IS DISTINCT FROM NEW.org_id::text
+       OR preview_document->>'target_resource_type' IS DISTINCT FROM NEW.target_resource_type
+       OR preview_document->>'target_resource_id' IS DISTINCT FROM NEW.target_resource_id::text
+       OR preview_document->>'branch_id' IS DISTINCT FROM NEW.branch_id::text
+       OR NULLIF(preview_document->>'destination_branch_id','')::uuid IS DISTINCT FROM NEW.destination_branch_id
+       OR preview_document->>'request_hash' IS DISTINCT FROM pg_catalog.encode(NEW.request_hash,'hex')
+       OR (NEW.capability_code IN (
+             'sales.order.prepare','procurement.purchase_order.prepare',
+             'sales.invoice.prepare','procurement.supplier_invoice.prepare',
+             'sales.return.prepare','procurement.purchase_return.prepare','finance.adjustment_note.prepare'
+           ) AND
+           NULLIF(preview_document->>'calculation_artifact_id','')::uuid IS NULL)
+       OR (NEW.capability_code IN (
+             'sales.order.prepare','procurement.purchase_order.prepare',
+             'sales.invoice.prepare','procurement.supplier_invoice.prepare',
+             'sales.return.prepare','procurement.purchase_return.prepare','finance.adjustment_note.prepare'
+           ) AND
+           NEW.aggregate_version_hash IS DISTINCT FROM "erp_automation_commands"."aggregate_version_hash"(
+               NEW.target_resource_type,NEW.target_resource_id,NEW.target_row_version
+           ))
+       OR (NEW.capability_code NOT IN (
+             'sales.order.prepare','procurement.purchase_order.prepare',
+             'sales.invoice.prepare','procurement.supplier_invoice.prepare',
+             'sales.return.prepare','procurement.purchase_return.prepare','finance.adjustment_note.prepare'
+           ) AND
+           NEW.aggregate_version_hash IS DISTINCT FROM extensions.digest(
+               pg_catalog.convert_to(source_versions::text,'UTF8'),'sha256'
+           ))
+       OR (NEW.calculation_hash IS NULL) IS DISTINCT FROM
+          (NULLIF(preview_document->>'calculation_hash','') IS NULL)
+       OR (NEW.calculation_hash IS NOT NULL AND
+           preview_document->>'calculation_hash' IS DISTINCT FROM pg_catalog.encode(NEW.calculation_hash,'hex'))
+       OR COALESCE(request_document->>'branch_id',request_document->>'source_branch_id') IS DISTINCT FROM NEW.branch_id::text
+       OR NULLIF(request_document->>'destination_branch_id','')::uuid IS DISTINCT FROM NEW.destination_branch_id THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='operator command envelope differs from exact typed persisted facts';
+    END IF;
+    RETURN NEW;
+END
+$function$;
+ALTER FUNCTION "erp_automation_commands"."guard_command_request_match"() OWNER TO "erp_migration_owner";
+REVOKE ALL ON FUNCTION "erp_automation_commands"."guard_command_request_match"() FROM PUBLIC, "erp_app", "erp_runtime";
+
+CREATE OR REPLACE FUNCTION "erp_automation_commands"."prepare_operator_command"(organization_id uuid, command_id uuid, grant_id uuid, capability_name varchar, source_branch_id uuid, destination_branch_id uuid, target_id uuid, requested_amount numeric, currency_code char(3), key_hash bytea, request_bytes bytea, preview_bytes bytea, calculation_hash bytea, aggregate_hash bytea, expires_at timestamptz)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+#variable_conflict use_variable
+DECLARE
+    actor_id uuid := erp_security.current_membership_id();
+    grant_row automation.agent_grants%ROWTYPE;
+    capability automation.agent_grant_capabilities%ROWTYPE;
+    existing automation.command_requests%ROWTYPE;
+    request_hash bytea := extensions.digest(request_bytes,'sha256');
+    preview_hash bytea := extensions.digest(preview_bytes,'sha256');
+    preview_document jsonb;
+    target_type text := CASE capability_name WHEN 'sales.order.prepare' THEN 'sales_order' WHEN 'sales.dispatch.prepare' THEN 'dispatch' WHEN 'sales.invoice.prepare' THEN 'sales_invoice' WHEN 'sales.return.prepare' THEN 'sales_return' WHEN 'procurement.purchase_order.prepare' THEN 'purchase_order' WHEN 'procurement.goods_receipt.prepare' THEN 'goods_receipt' WHEN 'procurement.supplier_invoice.prepare' THEN 'supplier_invoice' WHEN 'procurement.purchase_return.prepare' THEN 'purchase_return' WHEN 'finance.adjustment_note.prepare' THEN 'adjustment_note' WHEN 'finance.customer_receipt.prepare' THEN 'payment' WHEN 'finance.supplier_payment.prepare' THEN 'payment' WHEN 'finance.supplier_advance.prepare' THEN 'payment' WHEN 'inventory.transfer.prepare' THEN 'inventory_document' WHEN 'inventory.adjustment.prepare' THEN 'inventory_document' WHEN 'inventory.destruction.prepare' THEN 'destruction' ELSE NULL END;
+    operation_name text := CASE capability_name WHEN 'sales.order.prepare' THEN 'sales.order.approve' WHEN 'sales.dispatch.prepare' THEN 'sales.dispatch.post' WHEN 'sales.invoice.prepare' THEN 'sales.invoice.post' WHEN 'sales.return.prepare' THEN 'sales.return.post' WHEN 'procurement.purchase_order.prepare' THEN 'procurement.purchase_order.approve' WHEN 'procurement.goods_receipt.prepare' THEN 'procurement.receipt.post' WHEN 'procurement.supplier_invoice.prepare' THEN 'procurement.supplier_invoice.post' WHEN 'procurement.purchase_return.prepare' THEN 'procurement.purchase_return.post' WHEN 'finance.adjustment_note.prepare' THEN 'finance.adjustment_note.post' WHEN 'finance.customer_receipt.prepare' THEN 'finance.payment.post' WHEN 'finance.supplier_payment.prepare' THEN 'finance.payment.post' WHEN 'finance.supplier_advance.prepare' THEN 'finance.supplier_advance.post' WHEN 'inventory.transfer.prepare' THEN 'inventory.document.post' WHEN 'inventory.adjustment.prepare' THEN 'inventory.document.post' WHEN 'inventory.destruction.prepare' THEN 'compliance.destruction.post' ELSE NULL END;
+BEGIN
+    IF organization_id IS DISTINCT FROM erp_security.current_org_id()
+       OR actor_id IS NULL OR target_type IS NULL OR operation_name IS NULL
+       OR NULLIF(pg_catalog.current_setting('app.request_id',true),'')::uuid IS NULL
+       OR erp_security.has_permission('automation.command.execute',source_branch_id) IS DISTINCT FROM true
+       OR (destination_branch_id IS NOT NULL AND
+           erp_security.has_permission('automation.command.execute',destination_branch_id) IS DISTINCT FROM true) THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='operator prepare context or permission is invalid';
+    END IF;
+    IF pg_catalog.octet_length(key_hash)<>32
+       OR pg_catalog.octet_length(request_bytes) NOT BETWEEN 2 AND 1048576
+       OR pg_catalog.octet_length(preview_bytes) NOT BETWEEN 2 AND 1048576
+       OR pg_catalog.octet_length(aggregate_hash)<>32
+       OR (calculation_hash IS NOT NULL AND pg_catalog.octet_length(calculation_hash)<>32) THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operator prepare envelope size or hash is invalid';
+    END IF;
+    BEGIN
+        preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operator preview must be UTF-8 JSON';
+    END;
+    SELECT * INTO STRICT grant_row FROM automation.agent_grants
+     WHERE org_id=organization_id AND id=grant_id FOR SHARE;
+    SELECT * INTO STRICT capability FROM automation.agent_grant_capabilities
+     WHERE org_id=organization_id AND agent_grant_id=grant_id
+       AND capability_code=capability_name FOR SHARE;
+    SELECT * INTO existing FROM automation.command_requests
+     WHERE org_id=organization_id AND agent_grant_id=grant_id
+       AND capability_code=capability_name AND idempotency_key_hash=key_hash;
+    IF FOUND THEN
+        IF existing.request_hash IS DISTINCT FROM request_hash
+           OR existing.preview_hash IS DISTINCT FROM preview_hash
+           OR existing.target_resource_id IS DISTINCT FROM target_id THEN
+            RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='operator prepare idempotency key has different exact input';
+        END IF;
+        RETURN existing.id;
+    END IF;
+    PERFORM pg_catalog.set_config('app.command_request_id',command_id::text,true);
+    INSERT INTO "erp_automation_commands"."write_scopes" VALUES
+      (pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),'prepare',organization_id,command_id);
+    INSERT INTO automation.command_requests(
+        org_id,id,agent_grant_id,requested_by_membership_id,capability_code,operation,
+        operation_mode,branch_id,destination_branch_id,requested_amount,currency_code,
+        requests_sensitive_read,target_resource_type,target_resource_id,target_row_version,
+        serializer_version,idempotency_key_hash,request_media_type,request_bytes,request_hash,
+        preview_media_type,preview_bytes,preview_hash,calculation_hash,aggregate_version_hash,
+        risk_class,approval_policy,required_approval_count,status,expires_at)
+    VALUES(
+        organization_id,command_id,grant_id,actor_id,capability_name,operation_name,
+        'write',source_branch_id,destination_branch_id,requested_amount,currency_code,
+        false,target_type,target_id,1,'aasopharma-pg-jsonb-v1',key_hash,
+        'application/vnd.aasopharma.command+json',request_bytes,request_hash,
+        'application/vnd.aasopharma.command-preview+json',preview_bytes,preview_hash,
+        calculation_hash,aggregate_hash,capability.risk_class,capability.approval_policy,1,
+        'prepared',expires_at);
+    DELETE FROM "erp_automation_commands"."write_scopes" AS scope
+     WHERE scope.backend_pid=pg_catalog.pg_backend_pid()
+       AND scope.transaction_id=pg_catalog.txid_current()
+       AND scope.scope='prepare' AND scope.org_id=organization_id
+       AND scope.command_request_id=command_id;
+    RETURN command_id;
+END
+$function$;
+ALTER FUNCTION "erp_automation_commands"."prepare_operator_command"(organization_id uuid, command_id uuid, grant_id uuid, capability_name varchar, source_branch_id uuid, destination_branch_id uuid, target_id uuid, requested_amount numeric, currency_code char(3), key_hash bytea, request_bytes bytea, preview_bytes bytea, calculation_hash bytea, aggregate_hash bytea, expires_at timestamptz) OWNER TO "erp_migration_owner";
+REVOKE ALL ON FUNCTION "erp_automation_commands"."prepare_operator_command"(organization_id uuid, command_id uuid, grant_id uuid, capability_name varchar, source_branch_id uuid, destination_branch_id uuid, target_id uuid, requested_amount numeric, currency_code char(3), key_hash bytea, request_bytes bytea, preview_bytes bytea, calculation_hash bytea, aggregate_hash bytea, expires_at timestamptz) FROM PUBLIC, "erp_app", "erp_runtime";
+-- A standalone note is intentionally still a draft while its command preview
+-- and calculation artifact are issued.  Permit that state only for an artifact
+-- bound to a prepared command; direct artifact issuance continues to require an
+-- approved note.
+CREATE OR REPLACE FUNCTION "erp_calculation_authority"."issue_artifact"(p_artifact_id uuid, p_branch_id uuid, p_operation varchar, p_resource_type varchar, p_resource_id uuid, p_aggregate_version bigint, p_request_id uuid, p_command_request_id uuid, p_idempotency_key_id uuid, p_request_sha256 bytea, p_input_bytes bytea, p_output_bytes bytea, p_engine_version varchar, p_ruleset_version varchar, p_serializer_version varchar, p_expires_at timestamptz)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+    tenant_id uuid := NULLIF(pg_catalog.current_setting('app.org_id',true),'')::uuid;
+    actor_id uuid := NULLIF(pg_catalog.current_setting('app.membership_id',true),'')::uuid;
+    candidate calculation.artifacts%ROWTYPE;
+    existing calculation.artifacts%ROWTYPE;
+    actual_branch_id uuid;
+    actual_version bigint;
+    actual_status text;
+    input_document jsonb;
+    output_document jsonb;
+    version_hash bytea;
+BEGIN
+    IF SESSION_USER<>'erp_calculator' THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='only the authenticated calculator principal may issue artifacts';
+    END IF;
+    IF tenant_id IS NULL OR actor_id IS NULL OR p_artifact_id IS NULL
+       OR p_branch_id IS NULL OR p_resource_id IS NULL OR p_request_id IS NULL
+       OR p_idempotency_key_id IS NULL OR p_aggregate_version<=0 THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation artifact binding is incomplete';
+    END IF;
+    PERFORM 1 FROM core.memberships
+     WHERE org_id=tenant_id AND id=actor_id AND status='active';
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='active calculation actor is required';
+    END IF;
+    PERFORM 1
+      FROM core.branches AS branch
+     WHERE branch.org_id=tenant_id AND branch.id=p_branch_id AND branch.status='active'
+       AND EXISTS (
+           SELECT 1 FROM core.access_grants AS grant_row
+            WHERE grant_row.org_id=tenant_id
+              AND grant_row.membership_id=actor_id
+              AND grant_row.status='active'
+              AND grant_row.valid_from_at<=pg_catalog.transaction_timestamp()
+              AND (grant_row.expires_at IS NULL OR grant_row.expires_at>pg_catalog.transaction_timestamp())
+              AND (grant_row.branch_id IS NULL OR grant_row.branch_id=p_branch_id)
+       );
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='calculation branch is outside actor scope';
+    END IF;
+    IF p_expires_at<=pg_catalog.transaction_timestamp()
+       OR p_expires_at>pg_catalog.transaction_timestamp()+interval '24 hours' THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation artifact expiry must be within 24 hours';
+    END IF;
+    IF pg_catalog.octet_length(p_request_sha256)<>32
+       OR pg_catalog.octet_length(p_input_bytes) NOT BETWEEN 2 AND 1048576
+       OR pg_catalog.octet_length(p_output_bytes) NOT BETWEEN 2 AND 1048576
+       OR pg_catalog.btrim(p_engine_version)=''
+       OR pg_catalog.btrim(p_ruleset_version)=''
+       OR p_serializer_version<>'aasopharma-jcs-decimal-v1' THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation bytes, hashes, or versions are invalid';
+    END IF;
+    BEGIN
+        input_document := pg_catalog.convert_from(p_input_bytes,'UTF8')::jsonb;
+        output_document := pg_catalog.convert_from(p_output_bytes,'UTF8')::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation envelopes must be valid UTF-8 JSON';
+    END;
+    IF pg_catalog.jsonb_typeof(input_document)<>'object'
+       OR pg_catalog.jsonb_typeof(output_document)<>'object' THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='calculation envelopes must be JSON objects';
+    END IF;
+    PERFORM erp_calculation_authority.assert_input_schema(input_document);
+    PERFORM erp_calculation_authority.assert_output_schema(output_document);
+    IF input_document->>'operation'<>p_operation
+       OR input_document->>'resource_type'<>p_resource_type
+       OR input_document->>'resource_id'<>p_resource_id::text
+       OR (input_document->>'aggregate_version')::bigint<>p_aggregate_version
+       OR input_document->>'serializer_version'<>p_serializer_version
+       OR output_document->>'operation'<>p_operation
+       OR output_document->>'resource_type'<>p_resource_type
+       OR output_document->>'resource_id'<>p_resource_id::text
+       OR (output_document->>'aggregate_version')::bigint<>p_aggregate_version
+       OR output_document->>'engine_version'<>p_engine_version
+       OR output_document->>'ruleset_version'<>p_ruleset_version
+       OR output_document->>'serializer_version'<>p_serializer_version THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='calculation envelope metadata differs from authority binding';
+    END IF;
+    PERFORM 1 FROM core.idempotency_keys
+     WHERE org_id=tenant_id AND id=p_idempotency_key_id
+       AND actor_membership_id=actor_id AND operation=p_operation
+       AND request_hash=p_request_sha256 AND status='claimed'
+       AND expires_at>pg_catalog.transaction_timestamp()
+     FOR SHARE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='calculation requires the matching live idempotency claim';
+    END IF;
+
+    CASE p_resource_type
+      WHEN 'sales_order' THEN
+        IF p_operation<>'sales.order.approve' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
+          FROM sales.orders WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
+        candidate.sales_order_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'submitted' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sales order is not submitted'; END IF;
+      WHEN 'sales_invoice' THEN
+        IF p_operation<>'sales.invoice.post' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
+          FROM sales.invoices WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
+        candidate.sales_invoice_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'draft' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sales invoice is not draft'; END IF;
+      WHEN 'sales_return' THEN
+        IF p_operation<>'sales.return.post' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
+          FROM sales.returns WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
+        candidate.sales_return_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'draft' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sales return is not draft'; END IF;
+      WHEN 'purchase_order' THEN
+        IF p_operation<>'procurement.purchase_order.approve' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
+          FROM procurement.purchase_orders WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
+        candidate.purchase_order_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'submitted' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase order is not submitted'; END IF;
+      WHEN 'supplier_invoice' THEN
+        IF p_operation<>'procurement.supplier_invoice.post' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
+          FROM procurement.supplier_invoices WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
+        candidate.supplier_invoice_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'approved' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice is not approved'; END IF;
+      WHEN 'purchase_return' THEN
+        IF p_operation<>'procurement.purchase_return.post' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT branch_id,row_version,status INTO actual_branch_id,actual_version,actual_status
+          FROM procurement.purchase_returns WHERE org_id=tenant_id AND id=p_resource_id FOR SHARE;
+        candidate.purchase_return_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'submitted' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase return is not submitted'; END IF;
+      WHEN 'adjustment_note' THEN
+        IF p_operation<>'finance.adjustment_note.post' THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='operation and typed aggregate differ'; END IF;
+        SELECT coalesce(sales_invoice.branch_id,supplier_invoice.branch_id),note.row_version,note.status
+          INTO actual_branch_id,actual_version,actual_status
+          FROM finance.adjustment_notes note
+          LEFT JOIN sales.invoices sales_invoice ON sales_invoice.org_id=note.org_id AND sales_invoice.id=note.sales_invoice_id
+          LEFT JOIN procurement.supplier_invoices supplier_invoice ON supplier_invoice.org_id=note.org_id AND supplier_invoice.id=note.supplier_invoice_id
+         WHERE note.org_id=tenant_id AND note.id=p_resource_id FOR SHARE OF note;
+        candidate.adjustment_note_id := p_resource_id;
+        IF actual_status IS DISTINCT FROM 'approved'
+           AND NOT (actual_status='draft' AND p_command_request_id IS NOT NULL) THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment note is neither approved nor a command-bound draft'; END IF;
+      ELSE
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='unsupported calculation aggregate type';
+    END CASE;
+    IF actual_branch_id IS DISTINCT FROM p_branch_id
+       OR actual_version IS DISTINCT FROM p_aggregate_version THEN
+        RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='calculation aggregate branch or version changed';
+    END IF;
+    version_hash := erp_calculation_authority.aggregate_version_hash(
+        p_resource_type,p_resource_id,p_aggregate_version
+    );
+    IF p_command_request_id IS NOT NULL THEN
+        PERFORM 1 FROM automation.command_requests
+         WHERE org_id=tenant_id AND id=p_command_request_id
+           AND requested_by_membership_id=actor_id AND operation=p_operation
+           AND request_hash=p_request_sha256
+           AND aggregate_version_hash=version_hash
+           AND calculation_hash IS NULL
+           AND status IN ('prepared','pending_approval','approved')
+           AND expires_at>pg_catalog.transaction_timestamp()
+         FOR SHARE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='agent command does not match calculation binding';
+        END IF;
+    END IF;
+
+    candidate.org_id := tenant_id;
+    candidate.id := p_artifact_id;
+    candidate.branch_id := p_branch_id;
+    candidate.operation := p_operation;
+    candidate.aggregate_version := p_aggregate_version;
+    candidate.actor_membership_id := actor_id;
+    candidate.request_id := p_request_id;
+    candidate.command_request_id := p_command_request_id;
+    candidate.idempotency_key_id := p_idempotency_key_id;
+    candidate.request_sha256 := p_request_sha256;
+    candidate.input_media_type := 'application/vnd.aasopharma.calculation-input+json';
+    candidate.input_bytes := p_input_bytes;
+    candidate.input_sha256 := extensions.digest(p_input_bytes,'sha256');
+    candidate.output_media_type := 'application/vnd.aasopharma.calculation-output+json';
+    candidate.output_bytes := p_output_bytes;
+    candidate.output_sha256 := extensions.digest(p_output_bytes,'sha256');
+    candidate.engine_version := p_engine_version;
+    candidate.ruleset_version := p_ruleset_version;
+    candidate.serializer_version := p_serializer_version;
+    candidate.calculator_principal := SESSION_USER;
+    candidate.attestation_method := 'postgresql_session_user_v1';
+    candidate.authority_version := '1';
+    candidate.status := 'issued';
+    candidate.issued_at := pg_catalog.transaction_timestamp();
+    candidate.expires_at := p_expires_at;
+    candidate.authority_hash := erp_calculation_authority.artifact_hash(candidate);
+
+    SELECT * INTO existing FROM calculation.artifacts
+     WHERE org_id=tenant_id AND idempotency_key_id=p_idempotency_key_id FOR SHARE;
+    IF existing.id IS NOT NULL THEN
+        IF existing.id=p_artifact_id AND existing.branch_id=p_branch_id
+           AND existing.operation=p_operation AND existing.aggregate_version=p_aggregate_version
+           AND existing.actor_membership_id=actor_id AND existing.request_id=p_request_id
+           AND existing.command_request_id IS NOT DISTINCT FROM p_command_request_id
+           AND existing.request_sha256=p_request_sha256
+           AND existing.input_bytes=p_input_bytes AND existing.output_bytes=p_output_bytes
+           AND existing.engine_version=p_engine_version
+           AND existing.ruleset_version=p_ruleset_version
+           AND existing.serializer_version=p_serializer_version
+           AND existing.calculator_principal='erp_calculator'
+           AND existing.attestation_method='postgresql_session_user_v1'
+           AND existing.expires_at=p_expires_at
+           AND existing.authority_hash=erp_calculation_authority.artifact_hash(existing) THEN
+            RETURN existing.id;
+        END IF;
+        RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='idempotency claim already binds a different calculation artifact';
+    END IF;
+
+    INSERT INTO calculation.artifacts SELECT candidate.*;
+    IF p_command_request_id IS NOT NULL THEN
+        PERFORM erp_automation_commands.link_calculation_artifact(
+            tenant_id,p_command_request_id,candidate.id,candidate.authority_hash
+        );
+    END IF;
+    RETURN candidate.id;
+END
+$function$;
+ALTER FUNCTION "erp_calculation_authority"."issue_artifact"(uuid,uuid,varchar,varchar,uuid,bigint,uuid,uuid,uuid,bytea,bytea,bytea,varchar,varchar,varchar,timestamptz) OWNER TO "erp_migration_owner";
+REVOKE ALL ON FUNCTION "erp_calculation_authority"."issue_artifact"(uuid,uuid,varchar,varchar,uuid,bigint,uuid,uuid,uuid,bytea,bytea,bytea,varchar,varchar,varchar,timestamptz) FROM PUBLIC, "erp_app", "erp_runtime";
