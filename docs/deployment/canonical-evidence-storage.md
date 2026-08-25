@@ -16,11 +16,13 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
    whose `role` claim is exactly `erp_evidence_storage`. Store it only in the
    backend secret `EVIDENCE_STORAGE_SERVER_JWT`. Never use or expose the
    Supabase service-role key.
-4. Add an active organization-scoped canonical setting with namespace
+4. Set `CANONICAL_STAGING_PROJECT_REF` and its exact matching `SUPABASE_URL`.
+   The adapter rejects the retired project even when both values match it.
+5. Add an active organization-scoped canonical setting with namespace
    `evidence_retention`, key `expense_receipt_months`, and a positive integral
    numeric value reviewed for that organization's applicable retention rules.
    The upload API remains closed if this policy fact is absent.
-5. Set `EVIDENCE_STORAGE_ENABLED=true` only after the PostgreSQL migration,
+6. Set `EVIDENCE_STORAGE_ENABLED=true` only after the PostgreSQL migration,
    bucket policy, restricted JWT, and retention setting have all been verified.
 
 The object key is immutable and content-addressed:
