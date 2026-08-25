@@ -35,6 +35,7 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
   });
 
   it('requires explicit count UOM and evidence choices without example business facts', () => {
+    expect(source).toContain('label="Verified physical count sheet"');
     expect(source).toContain('Select count UOM');
     expect(source).toContain("uom_conversion_id: ''");
     expect(source).toContain("uom_multiplier: ''");

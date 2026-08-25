@@ -627,8 +627,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
               </span>
             </label>
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Verified physical count sheet</label>
               <Select
+                label="Verified physical count sheet"
                 value={selectedEvidenceId}
                 onChange={(value) => setSelectedEvidenceId(String(value || ''))}
                 disabled={evidenceOptions.length === 0}
