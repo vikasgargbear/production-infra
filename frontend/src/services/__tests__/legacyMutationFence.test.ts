@@ -12,7 +12,6 @@ import { complianceApi } from '../api/modules/compliance/compliance.api';
 import { employeesApi } from '../api/modules/master/employees.api';
 import { departmentsApi } from '../api/modules/org/departments.api';
 import { documentsApi } from '../api/modules/system/documents.api';
-import { collectionCenterApi } from '../api/modules/analytics/collectionCenter.api';
 import settingsApi from '../api/modules/settings/settings.api';
 import organizationsApi from '../api/modules/org/organizations.api';
 import { setupApi } from '../api/modules/settings/setup.api';
@@ -48,7 +47,6 @@ describe('legacy mutation adapters fail before transport', () => {
     ['employee', () => employeesApi.create({})],
     ['department', () => departmentsApi.create({ department_name: 'Legacy' })],
     ['document-number reservation', () => documentsApi.reserveNumber('INV')],
-    ['collection payment recording', () => collectionCenterApi.markCollected(1, 100)],
     ['stock settings update', () => settingsApi.updateStock({ allow_negative_stock: false })],
     ['organization creation', () => organizationsApi.create({ org_name: 'Legacy' })],
     ['legacy setup', () => setupApi.completeSetup()],
