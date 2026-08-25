@@ -116,15 +116,10 @@ LEGACY_PREFIXES = (
 SAFE_POSTS = {
     "/api/purchase-upload/parse-invoice-safe",
     "/api/purchase-upload/validate-invoice",
-    "/api/tax-entries/calculate",
 }
 CALCULATION_POSTS = {
     "/api/calculations/invoice": "preview_invoice_totals",
     "/api/calculations/sales-order": "preview_sales_order_totals",
-    "/api/calculations/purchase-order": "preview_purchase_order_totals",
-    "/api/calculations/challan": "preview_challan_totals",
-    "/api/calculations/return": "preview_return_totals",
-    "/api/calculations/note": "preview_note_totals",
 }
 NON_PERSISTENT_POST_OWNERS = {
     "/api/purchase-upload/parse-invoice-safe": (
@@ -132,9 +127,6 @@ NON_PERSISTENT_POST_OWNERS = {
     ),
     "/api/purchase-upload/validate-invoice": (
         "app.api.routes.purchase.upload.routes", "validate_invoice_data"
-    ),
-    "/api/tax-entries/calculate": (
-        "app.api.routes.finance.tax.routes", "calculate_tax"
     ),
     **{
         path: ("app.api.routes.calculations", endpoint)
@@ -175,10 +167,6 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("PUT", "/api/company/info"),
     ("POST", "/api/calculations/invoice"),
     ("POST", "/api/calculations/sales-order"),
-    ("POST", "/api/calculations/purchase-order"),
-    ("POST", "/api/calculations/challan"),
-    ("POST", "/api/calculations/return"),
-    ("POST", "/api/calculations/note"),
 }
 
 
@@ -413,7 +401,6 @@ def test_canonical_command_and_calculation_posts_remain_mounted():
         "/api/web/actions/commands/{command_request_id}/approve",
         "/api/web/actions/commands/{command_request_id}/execute",
         "/api/calculations/invoice",
-        "/api/calculations/purchase-order",
-        "/api/calculations/return",
+        "/api/calculations/sales-order",
     } <= posts
     assert "/api/documents/generate-number" not in posts

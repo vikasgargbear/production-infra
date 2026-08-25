@@ -145,7 +145,7 @@ def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
         "application/json"
     ]["schema"]
     assert response_schema["$ref"].endswith("/InvoiceCalculationPreviewResponse")
-    line_schema = schema["components"]["schemas"]["CalculationPreviewLine"]
+    line_schema = schema["components"]["schemas"]["CanonicalSalesCalculationPreviewLine"]
     totals_schema = schema["components"]["schemas"]["InvoiceCalculationPreviewTotals"]
     assert line_schema["additionalProperties"] is False
     assert totals_schema["additionalProperties"] is False

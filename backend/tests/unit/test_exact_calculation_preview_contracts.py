@@ -6,23 +6,13 @@ from uuid import uuid4
 import pytest
 
 from app.api.routes.calculations import (
-    preview_challan_totals,
     preview_invoice_totals,
-    preview_note_totals,
-    preview_purchase_order_totals,
-    preview_return_totals,
     preview_sales_order_totals,
 )
 from app.api.schemas.calculations import (
-    ChallanCalculationRequest,
     InvoiceCalculationRequest,
-    NoteCalculationRequest,
-    PurchaseCalculationRequest,
-    ReturnCalculationRequest,
     SalesOrderCalculationRequest,
 )
-from app.api.services.purchase.calculations import PurchaseCalculator
-from app.api.services.sales.challan.service import ChallanService
 from app.main import app
 
 
@@ -37,22 +27,15 @@ def _json_body(response):
     return json.loads(response.model_dump_json(exclude_none=True))
 
 
-def _line(**overrides):
+def _sales_line(**overrides):
     return {
         "product_id": _UUID,
         "quantity": "1.000001",
         "free_quantity": "0",
         "unit_price": "0.10",
         "discount_percent": "0",
-        "gst_percent": "18",
         **overrides,
     }
-
-
-def _sales_line(**overrides):
-    line = _line(**overrides)
-    line.pop("gst_percent", None)
-    return line
 
 
 def _authority(line_count):
@@ -73,7 +56,6 @@ def _authority(line_count):
 def test_all_preview_response_decimal_fields_are_openapi_string_only():
     schema = app.openapi()["components"]["schemas"]
     models = {
-        "CalculationPreviewLine": {"product_id", "batch_id", "free_supply_tax_treatment"},
         "CanonicalSalesCalculationPreviewLine": {
             "product_id", "batch_id", "free_supply_tax_treatment", "hsn_code",
             "taxability", "tax_code_version_id", "tax_release_id",
@@ -81,15 +63,6 @@ def test_all_preview_response_decimal_fields_are_openapi_string_only():
             "tax_ruleset_version",
         },
         "InvoiceCalculationPreviewTotals": set(),
-        "ChallanCalculationPreviewTotals": set(),
-        "PurchaseCalculationPreviewLine": {"product_id", "product_name"},
-        "PurchaseCalculationPreviewTotals": set(),
-        "ReturnCalculationPreviewLine": {"product_id"},
-        "ReturnCalculationPreviewTotals": set(),
-        "NoteCalculationPreviewLine": {
-            "product_id", "product_name", "free_supply_tax_treatment",
-        },
-        "NoteCalculationPreviewTotals": set(),
     }
 
     for model_name, non_decimal_fields in models.items():
@@ -106,10 +79,6 @@ def test_all_preview_response_decimal_fields_are_openapi_string_only():
     for endpoint, response_name in {
         "invoice": "InvoiceCalculationPreviewResponse",
         "sales-order": "InvoiceCalculationPreviewResponse",
-        "purchase-order": "PurchaseCalculationPreviewResponse",
-        "challan": "ChallanCalculationPreviewResponse",
-        "return": "ReturnCalculationPreviewResponse",
-        "note": "NoteCalculationPreviewResponse",
     }.items():
         response_schema = app.openapi()["paths"][f"/api/calculations/{endpoint}"][
             "post"
@@ -158,87 +127,3 @@ async def test_invoice_and_sales_order_wire_preserve_exact_decimal_inputs(monkey
     order_body = _json_body(order_response)
     assert order_body["line_items"][2]["quantity"] == "9007199254740993.000001"
     assert order_body["totals"]["subtotal_amount"] == "9007199254740993.30"
-
-
-@pytest.mark.asyncio
-async def test_purchase_challan_return_and_note_wire_values_are_exact_strings():
-    purchase_request = PurchaseCalculationRequest.model_validate({
-        "supplier_id": _UUID,
-        "gst_type": "IGST",
-        "items": [_line(quantity="9007199254740993.000001", unit_price="1")],
-    })
-    purchase = _json_body(await preview_purchase_order_totals.__wrapped__(
-        purchase_request, {}, db=None, context=_CONTEXT
-    ))
-    assert purchase["line_items"][0]["quantity"] == "9007199254740993.000001"
-    assert purchase["totals"]["subtotal_amount"] == "9007199254740993.00"
-
-    challan_request = ChallanCalculationRequest.model_validate({
-        "customer_id": _UUID,
-        "gst_type": "IGST",
-        "items": [_line(quantity="9007199254740993.000001", unit_price="1")],
-    })
-    challan = _json_body(await preview_challan_totals.__wrapped__(
-        challan_request, {}, db=None, context=_CONTEXT
-    ))
-    assert challan["line_items"][0]["quantity"] == "9007199254740993.000001"
-    assert challan["totals"]["subtotal_amount"] == "9007199254740993.00"
-
-    return_request = ReturnCalculationRequest.model_validate({
-        "return_type": "sales",
-        "customer_id": _UUID,
-        "gst_type": "IGST",
-        "items": [{
-            "product_id": _UUID,
-            "return_quantity": "9007199254740993.000001",
-            "unit_price": "1",
-            "tax_percent": "18",
-        }],
-    })
-    returned = _json_body(await preview_return_totals.__wrapped__(
-        return_request,
-        user={"is_admin": True},
-        db=None,
-        context=_CONTEXT,
-    ))
-    assert returned["line_items"][0]["return_quantity"] == (
-        "9007199254740993.000001"
-    )
-    assert returned["totals"]["subtotal"] == "9007199254740993.00"
-
-    note_request = NoteCalculationRequest.model_validate({
-        "note_type": "credit",
-        "party_id": _UUID,
-        "gst_type": "IGST",
-        "items": [_line(quantity="9007199254740993.000001", unit_price="1")],
-    })
-    note = _json_body(await preview_note_totals.__wrapped__(
-        note_request, {}, db=None, context=_CONTEXT
-    ))
-    assert note["line_items"][0]["quantity"] == "9007199254740993.000001"
-    assert note["totals"]["subtotal_amount"] == "9007199254740993.00"
-
-
-def test_remaining_legacy_calculation_defaults_remain_float_compatible():
-    item = _line(quantity="1", unit_price="100")
-    exact_challan = ChallanService.calculate_challan_totals(
-        [item], "IGST", exact_output=True
-    )
-    legacy_challan = ChallanService.calculate_challan_totals([item], "IGST")
-    assert exact_challan.keys() == legacy_challan.keys()
-    assert exact_challan["calculated_items"][0].keys() == (
-        legacy_challan["calculated_items"][0].keys()
-    )
-    assert isinstance(exact_challan["final_amount"], Decimal)
-    assert isinstance(legacy_challan["final_amount"], float)
-
-    exact_purchase = PurchaseCalculator.calculate_totals(
-        [item], "IGST", exact_output=True
-    )
-    legacy_purchase = PurchaseCalculator.calculate_totals([item], "IGST")
-    assert exact_purchase.keys() == legacy_purchase.keys()
-    assert exact_purchase["calculated_items"][0].keys() == (
-        legacy_purchase["calculated_items"][0].keys()
-    )
-    assert isinstance(exact_purchase["total_amount"], Decimal)
-    assert isinstance(legacy_purchase["total_amount"], float)

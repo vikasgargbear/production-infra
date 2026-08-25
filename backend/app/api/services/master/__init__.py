@@ -1,7 +1,3 @@
-"""
-Master Data Services Module
-Business logic for master data operations (products, customers, etc.)
-"""
-from .customer.service import CustomerService
+"""Canonical master operations live behind reviewed command adapters."""
 
-__all__ = ['CustomerService']
+__all__: list[str] = []

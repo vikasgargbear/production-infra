@@ -657,6 +657,20 @@ def collect_issues() -> List[ConsistencyIssue]:
         "backend/app/api/routes/sales/orders/routes.py",
         "backend/app/api/routes/master/products/routes.py",
     )
+    legacy_tax_authorities = (
+        "backend/app/api/services/compliance/gst_service.py",
+        "backend/app/api/services/compliance/gst_engine.py",
+        "backend/app/core/utils/state_utils.py",
+        "backend/app/api/routes/finance/tax/routes.py",
+        "backend/app/api/routes/master/customers/routes.py",
+        "backend/app/api/routes/master/suppliers/routes.py",
+    )
+    if any((REPOSITORY_ROOT / path).exists() for path in legacy_tax_authorities):
+        issues.append(ConsistencyIssue(
+            "BROWSER_OWNED_GST_AUTHORITY",
+            "legacy GST/state-name services or integer master routers were reintroduced; "
+            "tax facts must resolve from effective canonical registrations and releases",
+        ))
     calculation_routes = _read("backend/app/api/routes/calculations.py")
     calculation_schemas = _read("backend/app/api/schemas/calculations.py")
     tax_authority = _read("backend/app/api/services/sales/tax_authority.py")

@@ -4,11 +4,10 @@ import random
 
 import pytest
 
-from app.api.services.compliance.gst_service import GSTService
 from app.api.services.purchase.calculations import PurchaseCalculator
 from app.api.services.returns.return_calculation import ReturnCalculator
 from app.api.services.sales.calculation import calculate_sales_totals
-from app.api.shared.calculations import calculate_line_item
+from app.api.shared.calculations import calculate_gst_components, calculate_line_item
 from app.core.money import money, rupees
 
 
@@ -24,31 +23,13 @@ def _sales_totals(items, gst_type="CGST/SGST", **kwargs):
     return calculate_sales_totals(resolved, gst_type, **kwargs)
 
 
-class _ScalarResult:
-    def __init__(self, value):
-        self.value = value
-
-    def scalar(self):
-        return self.value
-
-
-class _RecordingDb:
-    def __init__(self, values):
-        self.values = iter(values)
-        self.calls = []
-
-    def execute(self, statement, params):
-        self.calls.append((str(statement), params))
-        return _ScalarResult(next(self.values))
-
-
 def test_commercial_rounding_is_half_up():
     assert money("1.005") == Decimal("1.01")
     assert rupees("10.50") == Decimal("11")
 
 
 def test_gst_components_are_exact_and_sum_to_total():
-    result = GSTService.calculate_gst_components(
+    result = calculate_gst_components(
         Decimal("156.92"), Decimal("5"), "CGST/SGST"
     )
 
@@ -58,21 +39,6 @@ def test_gst_components_are_exact_and_sum_to_total():
         result["cgst_amount"] + result["sgst_amount"]
     )
 
-
-def test_gst_type_uses_requested_branch_and_tenant_scopes_party_lookup():
-    db = _RecordingDb(["27AAAAA0000A1Z5", "29BBBBB0000B1Z5"])
-
-    result = GSTService.determine_gst_type(
-        db=db,
-        org_id="org-a",
-        branch_id=7,
-        customer_id=42,
-    )
-
-    assert result == "IGST"
-    assert db.calls[0][1] == {"org_id": "org-a", "branch_id": 7}
-    assert db.calls[1][1] == {"customer_id": 42, "org_id": "org-a"}
-    assert "org_id = :org_id" in db.calls[1][0]
 
 @pytest.mark.parametrize(
     "taxable,rate,gst_type",
@@ -85,7 +51,7 @@ def test_gst_type_uses_requested_branch_and_tenant_scopes_party_lookup():
 )
 def test_gst_components_fail_closed_for_invalid_inputs(taxable, rate, gst_type):
     with pytest.raises(ValueError):
-        GSTService.calculate_gst_components(
+        calculate_gst_components(
             Decimal(taxable), Decimal(rate), gst_type
         )
 

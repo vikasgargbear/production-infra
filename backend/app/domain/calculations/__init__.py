@@ -7,6 +7,7 @@ from .engine import (
     accumulate_reversal_state,
     calculate_document,
     calculate_reversal,
+    calculate_tax_components,
     money_string,
     round_money,
 )
@@ -77,6 +78,7 @@ __all__ = [
     "accumulate_reversal_state",
     "calculate_document",
     "calculate_reversal",
+    "calculate_tax_components",
     "money_string",
     "round_money",
     "decimal_string",

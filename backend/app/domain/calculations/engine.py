@@ -74,6 +74,35 @@ def money_string(value: Decimal) -> str:
     return format(round_money(value), ".2f")
 
 
+@_high_precision
+def calculate_tax_components(
+    taxable_amount: Decimal,
+    gst_rate: Decimal,
+    gst_type: GstType,
+) -> TaxAmounts:
+    """Split an already-resolved GST rate using exact canonical arithmetic.
+
+    This function deliberately owns no rate, geography, registration, or
+    place-of-supply policy.  Callers must resolve those effective-dated facts
+    before invoking the arithmetic boundary.
+    """
+    if not isinstance(taxable_amount, Decimal) or isinstance(taxable_amount, bool):
+        raise TypeError("taxable_amount must be Decimal")
+    if not taxable_amount.is_finite():
+        raise ValueError("taxable_amount must be finite")
+    if taxable_amount < 0:
+        raise ValueError("taxable_amount must be non-negative")
+    if not isinstance(gst_rate, Decimal) or isinstance(gst_rate, bool):
+        raise TypeError("gst_rate must be Decimal")
+    if not gst_rate.is_finite():
+        raise ValueError("gst_rate must be finite")
+    if gst_rate < 0 or gst_rate > Decimal("100"):
+        raise ValueError("gst_rate must be between 0 and 100")
+    if not isinstance(gst_type, GstType):
+        raise TypeError("gst_type must be GstType")
+    return _tax_from_base(taxable_amount, gst_rate, Decimal("0"), gst_type)
+
+
 @dataclass(frozen=True)
 class _Amounts:
     net_value: Decimal

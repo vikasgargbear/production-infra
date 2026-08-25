@@ -47,8 +47,23 @@ def test_legacy_compliance_routes_and_sources_are_retired() -> None:
         "backend/app/api/routes/compliance/gst.py",
         "backend/app/api/routes/compliance/gstr2b.py",
         "backend/app/api/routes/compliance/compliance.py",
+        "backend/app/api/services/compliance/gst_service.py",
+        "backend/app/api/services/compliance/gst_engine.py",
+        "backend/app/core/utils/state_utils.py",
+        "backend/app/api/routes/finance/tax/routes.py",
+        "backend/app/api/routes/master/customers/routes.py",
+        "backend/app/api/routes/master/suppliers/routes.py",
     ):
         assert not (ROOT / relative).exists()
+
+    assert "/api/tax-entries/calculate" not in paths
+    for path in (
+        "/api/calculations/purchase-order",
+        "/api/calculations/challan",
+        "/api/calculations/return",
+        "/api/calculations/note",
+    ):
+        assert path not in paths
 
 
 def test_overlapping_gst_reads_have_one_canonical_owner() -> None:

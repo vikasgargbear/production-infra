@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from ....core.money import decimal_value, money, rupees
-from ..compliance.gst_service import GSTService
+from ...shared.calculations import calculate_gst_components
 
 
 class ReturnCalculator:
@@ -81,7 +81,7 @@ class ReturnCalculator:
             base_amount = money(taxable_quantity * rate)
             discount_amount = money(base_amount * discount_percent / Decimal("100"))
             taxable_amount = base_amount - discount_amount
-            gst = GSTService.calculate_gst_components(
+            gst = calculate_gst_components(
                 taxable_amount, tax_percent, normalized_gst_type
             )
             item_tax = gst["total_tax_amount"]

@@ -8,7 +8,41 @@ from decimal import Decimal
 from typing import Dict
 
 from ...core.money import decimal_value, money, rupees
-from ..services.compliance.gst_service import GSTService
+from ...domain.calculations import GstType, calculate_tax_components
+
+
+def calculate_gst_components(
+    taxable_amount: object,
+    gst_rate: object,
+    gst_type: str,
+) -> Dict[str, Decimal]:
+    """Adapt explicit tax facts to the canonical Decimal arithmetic engine."""
+    taxable = decimal_value(
+        taxable_amount, "taxable_amount", minimum=Decimal("0")
+    )
+    rate = decimal_value(
+        gst_rate, "gst_rate", minimum=Decimal("0"), maximum=Decimal("100")
+    )
+    normalized_type = str(gst_type).strip().upper()
+    try:
+        canonical_type = {
+            "CGST/SGST": GstType.INTRA_STATE,
+            "IGST": GstType.INTER_STATE,
+        }[normalized_type]
+    except KeyError as exc:
+        raise ValueError("gst_type must be 'IGST' or 'CGST/SGST'") from exc
+    tax = calculate_tax_components(taxable, rate, canonical_type)
+    half_rate = rate / Decimal("2")
+    intra_state = canonical_type is GstType.INTRA_STATE
+    return {
+        "igst_percent": Decimal("0") if intra_state else rate,
+        "igst_amount": tax.igst_amount,
+        "cgst_percent": half_rate if intra_state else Decimal("0"),
+        "cgst_amount": tax.cgst_amount,
+        "sgst_percent": half_rate if intra_state else Decimal("0"),
+        "sgst_amount": tax.sgst_amount,
+        "total_tax_amount": tax.total_tax_amount,
+    }
 
 
 def calculate_line_item(
@@ -34,7 +68,7 @@ def calculate_line_item(
     subtotal = money(quantity_value * price_value)
     discount_amount = money(subtotal * discount_rate / Decimal("100"))
     taxable_amount = subtotal - discount_amount
-    gst = GSTService.calculate_gst_components(taxable_amount, gst_rate, gst_type)
+    gst = calculate_gst_components(taxable_amount, gst_rate, gst_type)
     line_total = money(taxable_amount + gst["total_tax_amount"])
 
     return {

@@ -8,7 +8,7 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 
 from ....core.money import decimal_value, money, rupees
-from ..compliance.gst_service import GSTService
+from ...shared.calculations import calculate_gst_components
 
 
 @dataclass
@@ -119,7 +119,7 @@ class PurchaseCalculator:
         taxable_amount = line_total - discount_amount
         
         # Step 4: Calculate tax
-        gst = GSTService.calculate_gst_components(
+        gst = calculate_gst_components(
             taxable_amount, tax_percent, normalized_gst_type
         )
         cgst_amount = gst["cgst_amount"]

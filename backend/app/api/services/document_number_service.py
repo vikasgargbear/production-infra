@@ -61,12 +61,6 @@ DOCUMENT_CONFIGS = {
         "column": "claim_number",
         "id_column": "claim_id"
     },
-    "supplier": {
-        "prefix": "SUP",
-        "table": "parties.suppliers",
-        "column": "supplier_code",
-        "id_column": "supplier_id"
-    },
     "branch": {
         "prefix": "BR",
         "table": "master.org_branches",

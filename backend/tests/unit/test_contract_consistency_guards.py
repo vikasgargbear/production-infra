@@ -25,10 +25,6 @@ from app.core.utils.constants import (
     SupplierInvoiceStatus,
 )
 from app.core.api_contract import OperationBranchScope
-from app.api.services.compliance.gst_engine import (
-    GSTCustomerCategory,
-    GSTTreatment,
-)
 from app.api.schemas.inventory.inventory import InventoryAdjustmentReason
 from app.api.schemas.inventory.stock import (
     StockAdjustmentReason,
@@ -125,25 +121,12 @@ def test_stock_transfer_persists_same_reference_on_both_movements(monkeypatch):
     ]
 
 
-def test_purchase_service_barrels_resolve_to_mounted_canonical_modules():
-    from app.api.services.purchase import (
-        GRNService as DomainGRNService,
-        SupplierInvoiceService as DomainSupplierInvoiceService,
-    )
-    from app.api.services.purchase.grn import GRNService as PackageGRNService
-    from app.api.services.purchase.supplier_invoice import (
-        SupplierInvoiceService as PackageSupplierInvoiceService,
-    )
-    from app.api.services.purchase.supplier_invoice.service import (
-        SupplierInvoiceService as MountedSupplierInvoiceService,
-    )
-    import app.api.shared
+def test_purchase_service_barrels_do_not_eagerly_import_legacy_services():
+    import app.api.services.purchase as purchase_services
 
-    assert DomainGRNService is PackageGRNService
-    assert DomainSupplierInvoiceService is PackageSupplierInvoiceService
-    assert PackageSupplierInvoiceService is MountedSupplierInvoiceService
-    assert MountedSupplierInvoiceService.__module__.endswith("supplier_invoice.service")
-    assert app.api.shared is not None
+    assert purchase_services.__all__ == []
+    assert not hasattr(purchase_services, "GRNService")
+    assert not hasattr(purchase_services, "SupplierInvoiceService")
 
     retired = (
         "backend/app/api/services/purchase/purchase_service.py",
@@ -325,13 +308,6 @@ def test_distinct_wire_enums_keep_explicit_domain_names_and_values():
     }
     assert {item.value for item in OperationBranchScope} == {
         "none", "optional", "required",
-    }
-    assert {item.value for item in GSTTreatment} == {
-        "CGST/SGST", "IGST", "EXEMPT", "NIL_RATED", "NON_GST",
-    }
-    assert {item.value for item in GSTCustomerCategory} == {
-        "B2B", "B2C", "EXPORT", "SEZ", "DEEMED_EXPORT", "COMPOSITION",
-        "UIN", "GOVERNMENT",
     }
 
 

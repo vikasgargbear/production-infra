@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from ....core.money import decimal_value, money
-from ..compliance.gst_service import GSTService
+from ...shared.calculations import calculate_gst_components
 
 
 class AdjustmentNoteCalculator:
@@ -60,7 +60,7 @@ class AdjustmentNoteCalculator:
             line_subtotal = money(quantity * unit_price)
             line_discount = money(line_subtotal * discount_rate / Decimal("100"))
             line_taxable = line_subtotal - line_discount
-            gst = GSTService.calculate_gst_components(line_taxable, tax_rate, gst_type)
+            gst = calculate_gst_components(line_taxable, tax_rate, gst_type)
             line_tax = gst["total_tax_amount"]
 
             subtotal += line_subtotal

@@ -39,9 +39,6 @@ from .api.routes.purchase import upload as purchase_upload
 from .api.routes.purchase.upload import routes as purchase_upload_routes
 from .api.routes import canonical_inventory_transfers
 
-# Finance Module
-from .api.routes.finance.tax import routes as tax_entries_routes
-
 # Organization Module
 from .api.routes.org import company_assets
 
@@ -306,13 +303,6 @@ include_explicit_non_persistent_post_utilities(
 # The retired payment/allocation/note routers mixed integer identifiers, old
 # outstanding projections, static reason/method lists, and silent zero/error
 # fallbacks, so none of them is mounted.
-include_explicit_non_persistent_post_utilities(
-    api,
-    tax_entries_routes.router,
-    prefix="/tax-entries",
-    tags=["Tax Entries"],
-    routes={"/calculate": tax_entries_routes.calculate_tax},
-)
 # Expense-claim eligibility, review and posted readback are canonical web
 # operator-action resources.  The legacy claim list/detail projections are not
 # mounted.
@@ -357,10 +347,6 @@ include_explicit_non_persistent_post_utilities(
     routes={
         "/calculations/invoice": calculations.preview_invoice_totals,
         "/calculations/sales-order": calculations.preview_sales_order_totals,
-        "/calculations/purchase-order": calculations.preview_purchase_order_totals,
-        "/calculations/challan": calculations.preview_challan_totals,
-        "/calculations/return": calculations.preview_return_totals,
-        "/calculations/note": calculations.preview_note_totals,
     },
 )
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed

@@ -58,7 +58,7 @@ def test_openapi_exposes_only_canonical_return_reads() -> None:
     assert invoice_parameter["schema"]["format"] == "uuid"
 
 
-def test_preview_calculators_do_not_import_legacy_return_persistence() -> None:
+def test_browser_owned_return_and_note_previews_are_retired() -> None:
     calculations = (ROOT / "backend/app/api/routes/calculations.py").read_text()
     return_calculator = (
         ROOT / "backend/app/api/services/returns/return_calculation.py"
@@ -67,8 +67,10 @@ def test_preview_calculators_do_not_import_legacy_return_persistence() -> None:
         ROOT / "backend/app/api/services/finance/adjustment_note_calculation.py"
     ).read_text()
 
-    assert "ReturnCalculator" in calculations
-    assert "AdjustmentNoteCalculator" in calculations
+    assert "ReturnCalculator" not in calculations
+    assert "AdjustmentNoteCalculator" not in calculations
+    assert "/api/calculations/return" not in app.openapi()["paths"]
+    assert "/api/calculations/note" not in app.openapi()["paths"]
     combined = return_calculator + note_calculator
     for forbidden in (
         "financial.customer_outstanding",
