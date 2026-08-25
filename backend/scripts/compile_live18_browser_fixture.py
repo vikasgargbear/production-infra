@@ -254,6 +254,14 @@ def resolve_authoritative_facts(
              bank.bank_name,journal.journal_number,
              statement_line.amount::text,statement_line.direction
         FROM finance.bank_statements statement
+        JOIN core.attachments source
+          ON source.org_id=statement.org_id
+         AND source.id=statement.source_attachment_id
+         AND source.storage_object_path=%s
+         AND source.evidence_kind='bank_statement_import'
+         AND source.status IN ('verified','retained')
+         AND source.verified_at IS NOT NULL
+         AND source.sha256=statement.source_sha256
         JOIN finance.bank_accounts bank
           ON bank.org_id=statement.org_id AND bank.id=statement.bank_account_id
          AND bank.id=%s AND bank.status='active'
@@ -468,6 +476,7 @@ def resolve_authoritative_facts(
             cursor.execute(
                 bank_reconciliation_sql,
                 (
+                    f"demo/{run_token}/bank-statement.json",
                     identities["bank_account_id"], identities["bank_ledger_id"],
                     identities["branch_id"], org_id, bank_statement_reference,
                 ),

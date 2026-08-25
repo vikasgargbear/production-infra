@@ -3073,6 +3073,13 @@ def seed_bank_reconciliation_ui_fixture(
             """
             SELECT statement.id,line.id,journal.id,line.amount,line.direction
               FROM finance.bank_statements statement
+              JOIN core.attachments source
+                ON source.org_id=statement.org_id
+               AND source.id=statement.source_attachment_id
+               AND source.storage_object_path=%s
+               AND source.evidence_kind='bank_statement_import'
+               AND source.status IN ('verified','retained')
+               AND source.sha256=statement.source_sha256
               JOIN finance.bank_statement_lines line
                 ON line.org_id=statement.org_id
                AND line.bank_statement_id=statement.id
@@ -3086,6 +3093,7 @@ def seed_bank_reconciliation_ui_fixture(
                AND line.amount=%s AND line.direction=%s
             """,
             (
+                f"demo/{DEMO_UI_FIXTURE_ID}/bank-statement.json",
                 journal_id, IDS["org"], statement_id, statement_reference,
                 amount, direction,
             ),

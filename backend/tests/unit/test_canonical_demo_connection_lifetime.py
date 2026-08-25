@@ -156,5 +156,6 @@ def test_bank_fixture_is_run_scoped_and_uses_canonical_parser_authority():
     assert "finance.journal_entries" in body
     assert "finance.journal_lines" in body
     assert "bank_line.account_id=%s" in body
+    assert "source.sha256=statement.source_sha256" in body
     assert "journal.journal_number=statement_line.bank_reference" not in body
     assert "INSERT INTO finance.reconciliation_matches" not in body
