@@ -67,6 +67,10 @@ and `sales_order_delivery_offset_days`. The compiler combines the bounded
 date is accepted from the secret. Customer, default canonical delivery-address
 identity/row version, product, FEFO batch, GST, and document policy are resolved
 by the authenticated UI and APIs.
+Purchase order reviews its quantity, rate, line discount, free quantity,
+document discount, freight charge, and a bounded delivery offset. Its supplier,
+product/UOM, branch, business date, GST facts, and immutable preview remain
+canonical API authority.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,

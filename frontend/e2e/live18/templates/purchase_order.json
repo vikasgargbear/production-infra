@@ -1,0 +1,33 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "purchase_order",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/purchase/purchase-order"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Supplier is missing its canonical UUID. Re-select it and try again.","exact":true},"value":"Supplier is missing its canonical UUID. Re-select it and try again."}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/purchase/purchase-order"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Expected Delivery","exact":true},"value":"{{fact.choice.purchase_order_expected_delivery_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search supplier by name, phone, or code...","exact":true},"value":"{{fact.display.supplier_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.supplier_name}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or scan barcode...","exact":true},"value":"{{fact.display.product_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.product_name}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.purchase_order_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.purchase_order_rate}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} discount percent","exact":true},"value":"{{scalar.purchase_order_line_discount_percent}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"{{scalar.purchase_order_free_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Document discount"},"value":"{{scalar.purchase_order_document_discount}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Freight charge"},"value":"{{scalar.purchase_order_freight_charge}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve & Create PO","exact":true}}
+    ]
+  }
+}

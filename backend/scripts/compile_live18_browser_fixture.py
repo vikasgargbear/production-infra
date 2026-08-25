@@ -189,13 +189,23 @@ def _operation_facts(
     scalars: dict[str, Any],
     used: set[str],
 ) -> dict[str, Any]:
-    if operation_id != "sales_order":
+    delivery_choices = {
+        "sales_order": (
+            "sales_order_delivery_offset_days",
+            "sales_order_requested_delivery_date",
+        ),
+        "purchase_order": (
+            "purchase_order_delivery_offset_days",
+            "purchase_order_expected_delivery_date",
+        ),
+    }
+    if operation_id not in delivery_choices:
         return facts
-    offset_key = "sales_order_delivery_offset_days"
+    offset_key, choice_key = delivery_choices[operation_id]
     offset_text = _leaf(scalars, offset_key, "reviewed scalar")
     if not re.fullmatch(r"[1-9]|[12][0-9]|30", offset_text):
         raise FixtureCompileError(
-            "sales_order_delivery_offset_days must be an integer from 1 through 30"
+            f"{offset_key} must be an integer from 1 through 30"
         )
     try:
         business_date = date.fromisoformat(_leaf(facts, "clock.business_date", "canonical fact"))
@@ -206,7 +216,7 @@ def _operation_facts(
         **facts,
         "choice": {
             **(facts.get("choice") or {}),
-            "sales_order_requested_delivery_date": (
+            choice_key: (
                 business_date + timedelta(days=int(offset_text))
             ).isoformat(),
         },

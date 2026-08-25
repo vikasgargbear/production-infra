@@ -264,3 +264,45 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     assert operation["prepare_steps"][1]["value"] == "2026-08-27"
     assert operation["prepare_steps"][7]["value"] == "1.125000"
     assert operation["prepare_steps"][8]["value"] == "84.1250"
+
+
+def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/purchase_order.json").read_text()
+    )
+    scalars = {
+        "purchase_order_delivery_offset_days": "3",
+        "purchase_order_quantity": "2.000000",
+        "purchase_order_rate": "84.0000",
+        "purchase_order_line_discount_percent": "0.000000",
+        "purchase_order_free_quantity": "0.000000",
+        "purchase_order_document_discount": "0.00",
+        "purchase_order_freight_charge": "0.00",
+    }
+    used: set[str] = set()
+    facts = _operation_facts(
+        "purchase_order",
+        {
+            "clock": {"business_date": "2026-08-25"},
+            "display": {
+                "supplier_code": "DEMO-SUPPLIER",
+                "supplier_name": "Demo Supplier",
+                "product_code": "DEMO-PRODUCT",
+                "product_name": "Demo Product",
+            },
+        },
+        scalars,
+        used,
+    )
+    operation = _compile_value(
+        {"lifecycle_mode": template["lifecycle_mode"], **template["steps"]},
+        facts,
+        scalars,
+        used,
+    )
+    _validate_compiled_steps("purchase_order", operation, "actor_confirmation")
+    assert used == set(scalars)
+    assert operation["prepare_steps"][1]["value"] == "2026-08-28"
+    assert operation["prepare_steps"][6]["value"] == "2.000000"
+    assert operation["prepare_steps"][7]["value"] == "84.0000"
