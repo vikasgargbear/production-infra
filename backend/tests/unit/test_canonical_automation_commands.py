@@ -670,7 +670,7 @@ def test_sales_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "batch.lot_kind='manufacturer_batch'",
         "batch.status='released'",
         "invoice_date<expires_on",
-        "sales_invoice_fefo_expiry_date_equivalence_v1",
+        "sales_invoice_fefo_expiry_date_equivalence_v3",
         "'auto_fefo','explicit_fefo'",
         "automatic FEFO allocation cannot satisfy locked stock",
         "ORDER BY batch_row.expires_on,batch_row.batch_number,batch_row.id",

@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "revision": "20260825_0019",
+  "source_sql_sha256": "77b4ee753edf49db9af22e464902fd5067e5a17103c95524fda4d07bd2731670",
+  "authority_change": "sales_invoice_multibatch_inventory_lineage_v1",
+  "scope": "canonical_inventory_document_assertion_only",
+  "seed_policy": "no_data_or_business_defaults"
+}

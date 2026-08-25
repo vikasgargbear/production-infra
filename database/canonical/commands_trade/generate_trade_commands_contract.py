@@ -250,10 +250,16 @@ BEGIN
                       dispatch_line.base_billed_quantity+dispatch_line.base_free_quantity)
                   IS NOT DISTINCT FROM ROW(line.product_id,line.batch_id,line.from_location_id,line.uom_code,line.base_quantity))
              OR
+             /* sales_invoice_multibatch_inventory_lineage_v1 */
              (doc.sales_invoice_id IS NOT NULL AND invoice_line.invoice_id=doc.sales_invoice_id
               AND invoice_line.line_kind='product' AND invoice_line.product_id=line.product_id
               AND invoice_line.uom_code=line.uom_code
-              AND invoice_line.base_billed_quantity+invoice_line.base_free_quantity=line.base_quantity)
+              AND invoice_line.base_billed_quantity+invoice_line.base_free_quantity=(
+                SELECT sum(sibling.base_quantity)
+                  FROM inventory.inventory_document_lines sibling
+                 WHERE sibling.org_id=line.org_id
+                   AND sibling.inventory_document_id=line.inventory_document_id
+                   AND sibling.sales_invoice_line_id=invoice_line.id))
           ));
     ELSIF doc.document_type='sales_return_receipt' THEN
         SELECT count(*) INTO bad_count FROM inventory.inventory_document_lines line

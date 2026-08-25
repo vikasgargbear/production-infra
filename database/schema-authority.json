@@ -55,6 +55,12 @@
     "backend/alembic/sql/20260825_0016_sales_invoice_auto_fefo.sql",
     "backend/alembic/versions/20260825_0017_runtime_deployment_readiness.py",
     "backend/alembic/sql/20260825_0017_runtime_deployment_readiness.sql",
+    "backend/alembic/versions/20260825_0018_sales_invoice_fefo_uom_alias.py",
+    "backend/alembic/sql/20260825_0018_sales_invoice_fefo_uom_alias.sql",
+    "backend/alembic/sql/20260825_0018_sales_invoice_fefo_uom_alias.manifest.json",
+    "backend/alembic/versions/20260825_0019_sales_invoice_multibatch_inventory.py",
+    "backend/alembic/sql/20260825_0019_sales_invoice_multibatch_inventory.sql",
+    "backend/alembic/sql/20260825_0019_sales_invoice_multibatch_inventory.manifest.json",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

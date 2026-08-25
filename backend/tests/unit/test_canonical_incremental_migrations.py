@@ -70,7 +70,7 @@ def test_fefo_migration_is_surgical_and_fails_closed_on_source_drift() -> None:
         "new_fefo constant text", 1
     )[1].split("BEGIN", 1)[0]
     assert baseline.count(old_fefo) == 0
-    assert "sales_invoice_fefo_expiry_date_equivalence_v1" in baseline
+    assert "sales_invoice_fefo_expiry_date_equivalence_v3" in baseline
     assert "ORDER BY batch_row.expires_on,stock.batch_id" not in baseline
     assert "sales_invoice_fefo_expiry_date_equivalence_v1" in new_fefo
 
@@ -84,11 +84,11 @@ def test_fefo_definition_checks_use_regular_strpos_calls() -> None:
     assert "pg_catalog.position(" not in postgres_contract
     assert "pg_catalog.strpos(definition,old_fefo)" in sql
     assert (
-        "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')"
+        "pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v3')"
         in postgres_contract
     )
     assert "pg_catalog.position(" not in staging_workflow
-    assert "sales_invoice_fefo_expiry_date_equivalence_v1" in staging_workflow
+    assert "sales_invoice_fefo_expiry_date_equivalence_v3" in staging_workflow
 
 
 def test_fefo_postgres_fixture_is_explicitly_head_only() -> None:

@@ -2710,14 +2710,16 @@ BEGIN
     IF has_direct THEN
       WITH requested AS (
         SELECT (line.value->>'product_id')::uuid product_id,(allocation.value->>'batch_id')::uuid batch_id,
-          sum(pg_catalog.round(((allocation.value->>'billed_quantity')::numeric+(allocation.value->>'free_quantity')::numeric)*conversion.multiplier,6)) requested_base
+          sum(pg_catalog.round(((allocation.value->>'billed_quantity')::numeric+(allocation.value->>'free_quantity')::numeric)*requested_conversion.multiplier,6)) requested_base
         FROM pg_catalog.jsonb_array_elements(request_document->'lines') line(value)
-        JOIN catalog.uom_conversions conversion ON conversion.org_id=organization_id AND conversion.id=(line.value->>'uom_conversion_id')::uuid
+        JOIN catalog.uom_conversions requested_conversion
+          ON requested_conversion.org_id=organization_id
+         AND requested_conversion.id=(line.value->>'uom_conversion_id')::uuid
         CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(COALESCE(line.value->'batch_allocations','[]'::jsonb)) allocation(value)
         WHERE line.value->>'fulfillment_source'='direct_issue'
         GROUP BY (line.value->>'product_id')::uuid,(allocation.value->>'batch_id')::uuid
       ), totals AS (SELECT product_id,sum(requested_base) requested_base FROM requested GROUP BY product_id),
-      /* sales_invoice_fefo_expiry_date_equivalence_v1 */
+      /* sales_invoice_fefo_expiry_date_equivalence_v3 */
       eligible_lots AS (
         SELECT stock.product_id,stock.batch_id,stock.on_hand_quantity,batch_row.expires_on
         FROM inventory.stock_balances stock JOIN inventory.batches batch_row ON batch_row.org_id=stock.org_id AND batch_row.id=stock.batch_id
@@ -2731,16 +2733,16 @@ BEGIN
         FROM eligible_lots eligible_lot
         LEFT JOIN requested ON requested.product_id=eligible_lot.product_id AND requested.batch_id=eligible_lot.batch_id
         GROUP BY eligible_lot.product_id,eligible_lot.expires_on),
-      eligible AS (
+      fefo_eligible AS (
         SELECT expiry_group.product_id,expiry_group.expires_on,
           expiry_group.expiry_available,expiry_group.expiry_requested,
           coalesce(sum(expiry_group.expiry_available) OVER (
             PARTITION BY expiry_group.product_id ORDER BY expiry_group.expires_on
             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_available
         FROM expiry_groups expiry_group)
-      SELECT count(*) INTO bad_count FROM eligible JOIN totals USING(product_id)
-       WHERE eligible.expiry_requested IS DISTINCT FROM
-         greatest(least(totals.requested_base-eligible.prior_available,eligible.expiry_available),0);
+      SELECT count(*) INTO bad_count FROM fefo_eligible JOIN totals USING(product_id)
+       WHERE fefo_eligible.expiry_requested IS DISTINCT FROM
+         greatest(least(totals.requested_base-fefo_eligible.prior_available,fefo_eligible.expiry_available),0);
       IF bad_count<>0 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='direct invoice batches do not follow FEFO'; END IF;
     END IF;
     RETURN pg_catalog.jsonb_build_object(

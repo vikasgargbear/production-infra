@@ -46,7 +46,9 @@ BEGIN
         'erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure
     ) INTO STRICT definition;
 
-    IF pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')>0
+    IF (pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v1')>0
+        OR pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v2')>0
+        OR pg_catalog.strpos(definition,'sales_invoice_fefo_expiry_date_equivalence_v3')>0)
        AND pg_catalog.strpos(definition,old_fefo)=0 THEN
         RETURN;
     END IF;

@@ -493,7 +493,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         "sales_invoice.id,sales_invoice.row_version",
         "sales_return.id,sales_return.row_version",
         "purchase_return.id,purchase_return.row_version",
-        "sales_invoice_fefo_expiry_date_equivalence_v1",
+        "sales_invoice_fefo_expiry_date_equivalence_v3",
         "terminal_response_body",
         "return_rounding_current",
         "portal_parser_ownership_current",
