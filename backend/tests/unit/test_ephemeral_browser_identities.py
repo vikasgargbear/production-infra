@@ -258,7 +258,7 @@ def test_partial_second_user_failure_remains_fully_cleanable(
     assert "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD=\n" in cleared
 
 
-def test_auth_users_are_deleted_even_when_database_cleanup_fails(
+def test_auth_users_are_retained_when_database_cleanup_fails(
     monkeypatch, tmp_path
 ):
     state_path, _ = _environment(monkeypatch, tmp_path)
@@ -294,7 +294,7 @@ def test_auth_users_are_deleted_even_when_database_cleanup_fails(
     with pytest.raises(identities.EphemeralIdentityError, match="database cleanup"):
         identities.cleanup(state_path)
 
-    assert deleted == [auth_user_id]
+    assert deleted == [], "Auth metadata must remain as the crash-recovery anchor"
     assert state_path.exists(), "state must remain available for a cleanup retry"
 
 
@@ -669,6 +669,65 @@ def test_live18_profile_exports_only_run_scoped_three_identity_credentials(
     ):
         assert exported.count(f"{name}=") == 1
     assert "masked-denial-jwt" not in state_path.read_text(encoding="utf-8")
+
+
+def test_uncommitted_live18_denial_state_is_not_sent_to_postgresql():
+    class RefuseSql:
+        def execute(self, *_args, **_kwargs):
+            pytest.fail("uncommitted denial state must not issue cleanup SQL")
+
+    identities._cleanup_live18_denial_database(
+        RefuseSql(),
+        {
+            "denial_database_provisioned": False,
+            "denial_identity": {
+                "auth_user_id": "",
+                "user_id": "",
+                "membership_id": "",
+                "role_id": "",
+                "access_grant_id": "",
+                "agent_grant_id": "",
+            },
+        },
+    )
+
+
+def test_committed_live18_denial_state_requires_its_identity_envelope():
+    with pytest.raises(
+        identities.EphemeralIdentityError, match="omitted its identity envelope"
+    ):
+        identities._cleanup_live18_denial_database(
+            object(), {"denial_database_provisioned": True}
+        )
+
+
+def test_live18_denial_cleanup_handles_commit_before_state_flag(monkeypatch):
+    statements = []
+
+    class Cursor:
+        def execute(self, statement, *_args, **_kwargs):
+            statements.append(" ".join(statement.split()))
+
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(
+        identities, "_leave_migration_owner", lambda _cursor, _options: None
+    )
+    identities._cleanup_live18_denial_database(
+        Cursor(),
+        {
+            "denial_database_provisioned": False,
+            "denial_identity": {
+                "auth_user_id": "d4000000-0000-7000-8000-000000000001",
+                "user_id": "d4000000-0000-7000-8000-000000000002",
+                "membership_id": "d4000000-0000-7000-8000-000000000003",
+                "role_id": "d4000000-0000-7000-8000-000000000004",
+                "access_grant_id": "d4000000-0000-7000-8000-000000000005",
+                "agent_grant_id": "d4000000-0000-7000-8000-000000000006",
+            },
+        },
+    )
+
+    assert any("DELETE FROM core.users" in statement for statement in statements)
 
 
 def test_live18_recovers_stale_purpose_users_before_creating_new_ones(

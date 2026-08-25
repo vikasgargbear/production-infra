@@ -1089,7 +1089,19 @@ def _exchange_live18_denial_token(email: str, password: str) -> str:
 def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
     denial = state.get("denial_identity")
     if not isinstance(denial, dict):
+        if state.get("denial_database_provisioned") is True:
+            raise EphemeralIdentityError(
+                "Committed live18 denial state omitted its identity envelope"
+            )
         return
+    try:
+        UUID(str(denial.get("auth_user_id", "")))
+    except (TypeError, ValueError):
+        if state.get("denial_database_provisioned") is not True:
+            return
+        raise EphemeralIdentityError(
+            "Committed live18 denial state omitted its Auth UUID"
+        )
     membership_options = _enter_migration_owner(cursor)
     cursor.execute(
         "DELETE FROM automation.agent_grant_capabilities WHERE org_id=%s AND agent_grant_id=%s",
@@ -1738,6 +1750,7 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
 
 def cleanup(state_path: Path) -> None:
     errors: list[str] = []
+    database_cleaned = False
     try:
         state = _read_state(state_path)
         if state is None:
@@ -1747,25 +1760,27 @@ def cleanup(state_path: Path) -> None:
         _validate_target(management_token)
         try:
             _cleanup_database(management_token, state)
-        except Exception as exc:  # continue with Auth deletion on partial failure
+            database_cleaned = True
+        except Exception as exc:  # retain Auth metadata as the durable recovery anchor
             errors.append(f"database cleanup: {exc}")
-        try:
-            service_key = _service_role_key(management_token)
-            _mask(service_key)
-            auth_user_ids = {
-                entry["auth_user_id"] for entry in state.get("auth_users", [])
-            }
-            auth_user_ids.update(
-                _list_run_auth_user_ids(
-                    service_key,
-                    str(state["run_token"]),
-                    str(state["purpose"]),
+        if database_cleaned:
+            try:
+                service_key = _service_role_key(management_token)
+                _mask(service_key)
+                auth_user_ids = {
+                    entry["auth_user_id"] for entry in state.get("auth_users", [])
+                }
+                auth_user_ids.update(
+                    _list_run_auth_user_ids(
+                        service_key,
+                        str(state["run_token"]),
+                        str(state["purpose"]),
+                    )
                 )
-            )
-            for auth_user_id in sorted(auth_user_ids):
-                _delete_auth_user(service_key, auth_user_id)
-        except Exception as exc:  # report after credentials are cleared
-            errors.append(f"Auth cleanup: {exc}")
+                for auth_user_id in sorted(auth_user_ids):
+                    _delete_auth_user(service_key, auth_user_id)
+            except Exception as exc:  # report after credentials are cleared
+                errors.append(f"Auth cleanup: {exc}")
     finally:
         _clear_browser_environment()
     if errors:
