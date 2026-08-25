@@ -6,7 +6,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 RAILWAY_SCHEMA = "https://railway.com/railway.schema.json"
-SINGAPORE_REGION = "asia-southeast1-eqsg3a"
 
 
 def _config(name: str) -> dict:
@@ -23,7 +22,7 @@ def _workflow() -> str:
     )
 
 
-def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
+def test_each_railway_service_uses_its_dockerfile_and_plan_default_region() -> None:
     expected_dockerfiles = {
         "api": "/deploy/railway/api.Dockerfile",
         "mcp": "/deploy/railway/mcp.Dockerfile",
@@ -42,10 +41,8 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
         assert config["build"]["builder"] == "DOCKERFILE"
         assert config["build"]["dockerfilePath"] == dockerfile
         assert config["deploy"]["startCommand"] == expected_start_commands[service]
-        assert config["deploy"]["sleepApplication"] is True
-        assert config["deploy"]["multiRegionConfig"] == {
-            SINGAPORE_REGION: {"numReplicas": 1}
-        }
+        assert config["deploy"]["sleepApplication"] is False
+        assert "multiRegionConfig" not in config["deploy"]
 
     mcp_dockerfile = (ROOT / "deploy/railway/mcp.Dockerfile").read_text(
         encoding="utf-8"
