@@ -137,3 +137,15 @@ def test_expense_prerequisites_use_only_canonical_evidence_accounts_and_role() -
     assert "CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" in workflow
     assert "CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" in workflow
     assert "sha256sum" in workflow
+
+
+def test_demo_provisions_a_bounded_canonical_expense_retention_policy() -> None:
+    module = _module()
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert module.DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS == 84
+    assert "'evidence_retention'" in source
+    assert "'expense_receipt_months'" in source
+    assert "value_type, value_numeric" in source
+    assert 'Decimal("1") <= retention_months <= Decimal("1200")' in source
+    assert "UPDATE core.settings" not in source

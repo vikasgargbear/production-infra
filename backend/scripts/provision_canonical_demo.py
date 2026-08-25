@@ -63,6 +63,7 @@ IDS = {
     "role": "d3000000-0000-7000-8000-000000000006",
     "reviewer_access_grant": "d3000000-0000-7000-8000-000000000007",
     "safety_setting": "d3000000-0000-7000-8000-000000000008",
+    "expense_receipt_retention_setting": "d3000000-0000-7000-8000-000000000029",
     "agent_grant": "d3000000-0000-7000-8000-000000000021",
     "legacy_approver_agent_grant": "d3000000-0000-7000-8000-000000000020",
     "operator_auth_user": "d3000000-0000-7000-8000-000000000022",
@@ -132,6 +133,7 @@ IDS = {
 INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
 ).date()
+DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS = Decimal("84")
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
 DEMO_RUN_ATTEMPT = os.getenv("GITHUB_RUN_ATTEMPT", "1")
 DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"
@@ -746,6 +748,59 @@ def bootstrap_identity(
             """,
             (IDS["org"], IDS["safety_setting"], IDS["reviewer_membership"], IDS["reviewer_membership"]),
         )
+        cursor.execute(
+            """
+            INSERT INTO core.settings (
+                org_id, id, scope_kind, branch_id, namespace, key,
+                value_type, value_numeric, status,
+                created_by_membership_id, updated_by_membership_id
+            )
+            SELECT
+                %s, %s, 'organization', NULL, 'evidence_retention',
+                'expense_receipt_months', 'numeric', %s, 'active', %s, %s
+            WHERE NOT EXISTS (
+                SELECT 1
+                  FROM core.settings
+                 WHERE org_id=%s AND branch_id IS NULL AND status='active'
+                   AND namespace='evidence_retention'
+                   AND key='expense_receipt_months'
+            )
+            ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            (
+                IDS["org"],
+                IDS["expense_receipt_retention_setting"],
+                DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS,
+                IDS["reviewer_membership"],
+                IDS["reviewer_membership"],
+                IDS["org"],
+            ),
+        )
+        cursor.execute(
+            """
+            SELECT value_type, value_numeric
+              FROM core.settings
+             WHERE org_id=%s AND branch_id IS NULL AND status='active'
+               AND namespace='evidence_retention'
+               AND key='expense_receipt_months'
+            """,
+            (IDS["org"],),
+        )
+        retention_settings = cursor.fetchall()
+        if len(retention_settings) != 1:
+            raise RuntimeError(
+                "expense receipt retention requires exactly one active organization setting"
+            )
+        retention_type, retention_months = retention_settings[0]
+        if (
+            retention_type != "numeric"
+            or retention_months is None
+            or retention_months != retention_months.to_integral_value()
+            or not Decimal("1") <= retention_months <= Decimal("1200")
+        ):
+            raise RuntimeError(
+                "expense receipt retention must be an integral month count from 1 to 1200"
+            )
         cursor.execute(
             """
             UPDATE automation.agent_grants
