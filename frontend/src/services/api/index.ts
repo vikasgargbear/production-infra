@@ -8,7 +8,6 @@ import * as dataUtils from './utils/dataUtils';
 // =========================================================================
 // ANALYTICS
 // =========================================================================
-import { dashboardApi } from './modules/analytics/dashboard.api';
 import reportsApi from './modules/analytics/reports.api';
 import { collectionCenterApi } from './modules/analytics/collectionCenter.api';
 import { customerOutstandingApi } from './modules/analytics/customerOutstanding.api';
@@ -109,7 +108,6 @@ export {
   auditApi,
 
   // Analytics
-  dashboardApi,
   reportsApi,
   collectionCenterApi,
   customerOutstandingApi,
@@ -185,7 +183,7 @@ export {
 // API object with all modules grouped by domain
 const apiModules = {
   // Analytics
-  analytics: { dashboard: dashboardApi, reports: reportsApi, collectionCenter: collectionCenterApi, customerOutstanding: customerOutstandingApi },
+  analytics: { reports: reportsApi, collectionCenter: collectionCenterApi, customerOutstanding: customerOutstandingApi },
 
   // Audit
   audit: { auditLogs: auditApi },

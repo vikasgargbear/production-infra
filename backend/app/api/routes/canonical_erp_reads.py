@@ -4618,11 +4618,35 @@ def sales_analytics_summary(date_from: date, date_to: date,
 
 @router.get("/sales/analytics/trend")
 @router.get("/sales/analytics/by-date")
-@router.get("/dashboard/sales-analytics")
 def sales_analytics_by_date(date_from: Optional[str] = None, date_to: Optional[str] = None,
                             user: dict = SALES_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     return _sales_daily(db, _range_params(org_id, date_from, date_to))
+
+
+@router.get("/dashboard/sales-analytics")
+def dashboard_sales_analytics(
+    date_from: date,
+    date_to: date,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    """Return one exact, dashboard-specific daily sales projection.
+
+    The general sales analytics response retains compatibility aliases for its
+    report consumers.  The executive dashboard contract deliberately exposes
+    only one name for each fact so the browser cannot guess among aliases.
+    """
+
+    org_id = _activate(db, user)
+    period = _validated_report_range(date_from, date_to)
+    return _rows(db, f"""
+        SELECT invoice.invoice_date AS date,
+               count(*) AS invoice_count,
+               COALESCE(SUM(invoice.grand_total),0) AS revenue
+          FROM sales.invoices invoice WHERE {_INVOICE_RANGE}
+         GROUP BY invoice.invoice_date ORDER BY invoice.invoice_date
+    """, _range_params(org_id, **period))
 
 
 def _customer_analytics_rows(db: Session, params: dict) -> list[dict]:
@@ -4988,7 +5012,6 @@ def _financial_totals(db: Session, params: dict) -> dict:
 
 
 @router.get("/financial/summary")
-@router.get("/dashboard/financial-summary")
 def financial_summary(date_from: Optional[date] = None, date_to: Optional[date] = None,
                       user: dict = FINANCE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
@@ -5148,7 +5171,7 @@ def dashboard_stats(date_from: Optional[date] = None, date_to: Optional[date] = 
         "comparison_period": None,
         "revenue_change": None,
         "orders_change": None,
-        "customers_change": None,
+        "new_customers_change": None,
     })
     if date_from is None or date_to is None:
         if date_from is not None or date_to is not None:
@@ -5172,7 +5195,7 @@ def dashboard_stats(date_from: Optional[date] = None, date_to: Optional[date] = 
         "orders_change": _comparison_percent(
             current["total_orders"], previous["total_orders"],
         ),
-        "customers_change": _comparison_percent(
+        "new_customers_change": _comparison_percent(
             current["new_customers"], previous["new_customers"],
         ),
     })
@@ -5181,28 +5204,100 @@ def dashboard_stats(date_from: Optional[date] = None, date_to: Optional[date] = 
 
 @router.get("/dashboard/inventory-summary")
 def dashboard_inventory_summary(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    rows = _inventory_analytics_rows(db, _activate(db, user))
-    return {"total_products": len(rows), "active_products": len(rows), "products_change": None,
-            "stock_value": sum((row["stock_value"] or 0) for row in rows),
-            "low_stock": sum(1 for row in rows if (row["total_quantity_available"] or 0) <= 0)}
+    """Return exact inventory facts without inventing a reorder threshold.
+
+    ``out_of_stock_products`` is knowable from the stock ledger projection.
+    "Low stock" is not: the canonical catalog currently has no effective-dated
+    reorder policy.  Omitting that fact is intentional and prevents a random
+    quantity threshold from becoming business truth.
+    """
+
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT organization.timezone AS organization_timezone,
+               (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AS business_date,
+               transaction_timestamp() AS as_of,
+               product_totals.active_products,
+               product_totals.stock_value,
+               product_totals.out_of_stock_products
+          FROM core.organizations organization
+          CROSS JOIN LATERAL (
+              SELECT count(*) AS active_products,
+                     COALESCE(SUM(COALESCE(stock.inventory_value,0)),0) AS stock_value,
+                     count(*) FILTER (
+                         WHERE COALESCE(stock.on_hand_quantity,0)<=0
+                     ) AS out_of_stock_products
+                FROM catalog.products product
+                LEFT JOIN LATERAL (
+                    SELECT SUM(balance.on_hand_quantity) AS on_hand_quantity,
+                           SUM(balance.inventory_value) AS inventory_value
+                      FROM inventory.stock_balances balance
+                     WHERE balance.org_id=product.org_id
+                       AND balance.product_id=product.id
+                ) stock ON true
+               WHERE product.org_id=organization.id AND product.status='active'
+          ) product_totals
+         WHERE organization.id=:org_id AND organization.status='active'
+    """, {"org_id": org_id})
+    if len(rows) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The active organization has no authoritative inventory dashboard context",
+        )
+    return rows[0]
 
 
 @router.get("/dashboard/top-products")
-def dashboard_top_products(limit: int = Query(5, ge=1, le=50),
-                           user: dict = SALES_USER, db: Session = Depends(get_db)):
-    rows = _product_performance_rows(db, _activate(db, user))[:limit]
-    return [{"id": row["id"], "name": row["name"], "revenue": row["revenue"],
-             "sales": row["sales"]} for row in rows]
+def dashboard_top_products(
+    date_from: date,
+    date_to: date,
+    limit: int = Query(5, ge=1, le=50),
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    period = _validated_report_range(date_from, date_to)
+    return _rows(db, f"""
+        SELECT product.id, product.name,
+               SUM(line.line_total) AS revenue,
+               SUM(line.billed_quantity) AS sales
+          FROM sales.invoice_lines line
+          JOIN sales.invoices invoice
+            ON invoice.org_id=line.org_id AND invoice.id=line.invoice_id
+          JOIN catalog.products product
+            ON product.org_id=line.org_id AND product.id=line.product_id
+         WHERE {_INVOICE_RANGE} AND product.status='active'
+         GROUP BY product.id, product.name
+         ORDER BY revenue DESC, product.name, product.id
+         LIMIT :limit
+    """, {**_range_params(org_id, **period), "limit": limit})
 
 
 @router.get("/dashboard/top-customers")
-def dashboard_top_customers(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                            limit: int = Query(5, ge=1, le=50),
-                            user: dict = SALES_USER, db: Session = Depends(get_db)):
+def dashboard_top_customers(
+    date_from: date,
+    date_to: date,
+    limit: int = Query(5, ge=1, le=50),
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+):
     org_id = _activate(db, user)
-    rows = _customer_analytics_rows(db, _range_params(org_id, date_from, date_to))[:limit]
-    return [{"id": row["id"], "name": row["name"],
-             "revenue": row["total_purchases"], "orders": row["purchase_frequency"]} for row in rows]
+    period = _validated_report_range(date_from, date_to)
+    return _rows(db, f"""
+        SELECT account.id, party.legal_name AS name,
+               SUM(invoice.grand_total) AS revenue,
+               count(*) AS orders
+          FROM sales.invoices invoice
+          JOIN parties.customer_accounts account
+            ON account.org_id=invoice.org_id AND account.id=invoice.customer_account_id
+          JOIN parties.parties party
+            ON party.org_id=account.org_id AND party.id=account.party_id
+         WHERE {_INVOICE_RANGE}
+         GROUP BY account.id, party.legal_name
+         ORDER BY revenue DESC, party.legal_name, account.id
+         LIMIT :limit
+    """, {**_range_params(org_id, **period), "limit": limit})
 
 
 def _tax_totals(db: Session, params: dict) -> dict:

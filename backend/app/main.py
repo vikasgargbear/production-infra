@@ -69,9 +69,6 @@ from .api.routes.compliance import gst
 from .api.routes.compliance import gstr2b
 from .api.routes.compliance import compliance
 
-# Reports Module (formerly Analytics)
-from .api.routes.reports import dashboard
-
 # Organization Module
 from .api.routes.org import company_assets
 
@@ -348,7 +345,9 @@ include_legacy_read_only_router(api, gstr2b.router, prefix="/gst", tags=["GST"])
 include_legacy_read_only_router(api, compliance.router, prefix="/compliance", tags=["Compliance"])
 
 # --- Analytics ---
-api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+# Dashboard and report projections are mounted by canonical_erp_reads.  The
+# retired reports.dashboard router queried the pre-canonical sales, inventory,
+# parties and financial schemas and silently converted read failures to zero.
 # Authoritative aging and collection totals are mounted by canonical_erp_reads.
 # The retired collection router exposed invented follow-up, agent, campaign and
 # efficiency facts; customer-outstanding also contained an unsafe first-org

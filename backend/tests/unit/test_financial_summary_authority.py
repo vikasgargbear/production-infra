@@ -129,4 +129,4 @@ def test_dashboard_change_is_unavailable_without_a_comparison_period(monkeypatch
     assert result["comparison_period"] is None
     assert result["revenue_change"] is None
     assert result["orders_change"] is None
-    assert result["customers_change"] is None
+    assert result["new_customers_change"] is None

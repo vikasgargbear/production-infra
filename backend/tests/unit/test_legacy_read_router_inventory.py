@@ -140,23 +140,6 @@ LEGACY_READ_INVENTORY = {
     },
 }
 
-# This router predates the read-only helper and remains directly mounted only
-# because the desktop Dashboard still calls its unique projections.  It is
-# tracked separately so the final canonical migration cannot overlook it.
-DIRECT_LEGACY_READ_INVENTORY = {
-    "app.api.routes.reports.dashboard": {
-        "/api/dashboard/", "/api/dashboard/stats", "/api/dashboard/recent-orders",
-        "/api/dashboard/revenue", "/api/dashboard/top-products",
-        "/api/dashboard/inventory-alerts", "/api/dashboard/customer-analytics",
-        "/api/dashboard/financial-summary", "/api/dashboard/kpis",
-        "/api/dashboard/sales-analytics", "/api/dashboard/inventory-summary",
-        "/api/dashboard/top-customers", "/api/dashboard/expiry-alerts",
-        "/api/dashboard/low-stock-alerts", "/api/dashboard/pending-payments",
-        "/api/dashboard/recent-activities",
-    },
-}
-
-
 def _get_routes():
     return [
         route for route in app.routes
@@ -187,15 +170,6 @@ def test_every_remaining_legacy_get_is_explicitly_inventoried() -> None:
 
     assert not unexpected_modules
     assert actual == LEGACY_READ_INVENTORY
-
-
-def test_direct_legacy_dashboard_reads_are_also_inventoried() -> None:
-    actual = {module: set() for module in DIRECT_LEGACY_READ_INVENTORY}
-    for route in _get_routes():
-        module = route.endpoint.__module__
-        if module in actual:
-            actual[module].add(route.path)
-    assert actual == DIRECT_LEGACY_READ_INVENTORY
 
 
 def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> None:

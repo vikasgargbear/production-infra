@@ -11,13 +11,10 @@ import * as PaymentModule from './payment';
 import * as LedgerModule from './ledger';
 import CreditDebitFlow from './payment/flows/CreditDebitFlow';
 import * as InventoryModule from './inventory';
-
-const NotesModule = { CreditDebitFlow };
-
-// Import other important modules
 import * as ChallanModule from './sales/challan';
 import * as ReportsModule from './reports';
-import * as DashboardModule from './Dashboard';
+
+const NotesModule = { CreditDebitFlow };
 
 // Types
 interface ModuleConfig {
@@ -39,8 +36,7 @@ export {
     NotesModule,
     InventoryModule,
     ChallanModule,
-    ReportsModule,
-    DashboardModule
+    ReportsModule
 };
 
 // Module registry for dynamic loading
@@ -131,8 +127,7 @@ const Modules = {
         NotesModule,
         InventoryModule,
         ChallanModule,
-        ReportsModule,
-        DashboardModule
+        ReportsModule
     },
     utils: {
         getModuleByPath,
