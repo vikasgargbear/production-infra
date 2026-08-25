@@ -17,6 +17,7 @@ const canonicalBatch = (status: string, suffix: string) => ({
     product_name: 'Demo Product',
     manufacturing_date: '2026-01-01',
     expiry_date: '2099-01-01',
+    days_to_expiry: 26450,
     quantity_available: '12.000000',
     sale_price_per_unit: '100.0000',
     mrp_per_unit: '120.0000',
@@ -160,6 +161,20 @@ describe('BatchSelector lifecycle and mobile presentation', () => {
         } as any} onBatchSelect={jest.fn()} onClose={jest.fn()} />);
 
         expect(await screen.findByText(/must remain an exact decimal string/i)).toBeTruthy();
+        expect(screen.queryByRole('option')).toBeNull();
+    });
+
+    it('rejects batches without the backend-owned expiry distance', async () => {
+        const batch = canonicalBatch('released', '26');
+        delete (batch as Partial<typeof batch>).days_to_expiry;
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({ data: { batches: [batch] } });
+
+        render(<BatchSelector show product={{
+            product_id: 'd3000000-0000-7000-8000-000000000015',
+            product_name: 'Demo Product',
+        } as any} onBatchSelect={jest.fn()} onClose={jest.fn()} />);
+
+        expect(await screen.findByText(/missing canonical days_to_expiry/i)).toBeTruthy();
         expect(screen.queryByRole('option')).toBeNull();
     });
 });

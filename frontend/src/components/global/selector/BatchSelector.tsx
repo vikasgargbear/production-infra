@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, ReactNode } from 'react';
-import { X, Package, AlertCircle, CheckCircle, Shield, Clock, Box } from 'lucide-react';
+import { X, Package, AlertCircle, CheckCircle, Box } from 'lucide-react';
 import { batchesApi } from '../../../services/api';
 import DateFormatter from '../../../services/dateFormatter';
-import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Product as CanonicalProduct } from '../../../types/models';
 import {
@@ -11,7 +10,6 @@ import {
     normalizeAuthoritativeDecimal,
 } from '../../../utils/exactDecimal';
 import {
-    batchDisabledReason,
     batchSelectionDisabledReason,
     compareBatchAvailability,
     compareBatchesByCanonicalFefo,
@@ -98,12 +96,8 @@ interface ProductWithBatch extends Product {
 }
 
 interface ExpiryInfo {
-    status: 'expired' | 'critical' | 'warning' | 'good';
-    icon: typeof AlertCircle;
-    gradient: string;
+    status: 'expired' | 'available';
     days: number;
-    label?: string;
-    color?: string;
 }
 
 interface BatchSelectorProps {
@@ -145,7 +139,6 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const [loading, setLoading] = useState<boolean>(false);
     const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [showCostInfo, setShowCostInfo] = useState<boolean>(false);
     const [focusedIndex, setFocusedIndex] = useState<number>(-1);
     const hasLoadedRef = useRef<number | string | false>(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -218,9 +211,9 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 throw new Error(`Batch row ${row} is missing identity fields`);
             }
 
-            const daysToExpiry = batch.expiry_date
-                ? Math.ceil((new Date(batch.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                : null;
+            if (!Number.isInteger(batch.days_to_expiry)) {
+                throw new Error(`Batch row ${row} is missing canonical days_to_expiry`);
+            }
 
             const processed = {
                 batch_id: batch.batch_id,
@@ -231,7 +224,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 sale_price_per_unit: requiredDecimal(batch.sale_price_per_unit, 'sale_price_per_unit', row, moneyOptions),
                 mrp_per_unit: requiredDecimal(batch.mrp_per_unit, 'mrp_per_unit', row, moneyOptions),
                 cost_per_unit: requiredDecimal(batch.cost_per_unit, 'cost_per_unit', row, moneyOptions),
-                days_to_expiry: daysToExpiry,
+                days_to_expiry: batch.days_to_expiry,
                 has_pending_sync: false,
                 product_id: batch.product_id,
                 product_name: batch.product_name,
@@ -316,8 +309,6 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const productWithBatch: ProductWithBatch = {
             ...product,
             ...batch,
-            product_code: product.product_code || '',
-            product_type: product.product_type || 'medicine',
             available_quantity: batch.quantity_available,
             quantity_available: batch.quantity_available,
             quantity: '1.000000',
@@ -325,40 +316,25 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             unit_price: batch.sale_price_per_unit,
             sale_price: batch.sale_price_per_unit,
             mrp: batch.mrp_per_unit,
-            manufacturing_date: batch.manufacturing_date || '',
+            manufacturing_date: batch.manufacturing_date,
         };
 
-        setTimeout(() => {
-            onBatchSelect(productWithBatch);
-            if (mode === 'modal') {
-                onClose();
-            }
-        }, (INVOICE_CONFIG as any).UI?.ANIMATION_DURATION || 150);
+        onBatchSelect(productWithBatch);
+        if (mode === 'modal') {
+            onClose();
+        }
     };
 
-    const getExpiryInfo = (expiryDate: string): ExpiryInfo | null => {
-        if (!expiryDate) return null;
-
-        const daysToExpiry = DateFormatter.daysBetween(new Date(), new Date(expiryDate));
-        const status = getExpiryStatusConfig(daysToExpiry);
-
-        const iconMap: Record<string, typeof AlertCircle> = {
-            expired: AlertCircle,
-            critical: AlertCircle,
-            warning: Clock,
-            good: Shield
-        };
-
-        return {
-            ...status,
-            icon: iconMap[status.status],
-            gradient: '',
-            days: daysToExpiry
-        } as ExpiryInfo;
+    const getExpiryInfo = (batch: Batch): ExpiryInfo => {
+        const days = batch.days_to_expiry;
+        if (typeof days !== 'number' || !Number.isInteger(days)) {
+            throw new Error(`Batch ${batch.batch_number} is missing canonical days_to_expiry`);
+        }
+        return { status: days <= 0 ? 'expired' : 'available', days };
     };
 
     const defaultRenderBatchInfo = (batch: Batch, index?: number): ReactNode => {
-        const expiryInfo = showExpiryStatus ? getExpiryInfo(batch.expiry_date) : null;
+        const expiryInfo = showExpiryStatus ? getExpiryInfo(batch) : null;
         const isSelected = selectedBatch?.batch_id === batch.batch_id;
         const isFocused = typeof index === 'number' && index === focusedIndex;
         const disabledReason = batchSelectionDisabledReason(batch, batches, enforceFefo);
@@ -431,10 +407,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                             {showExpiryStatus && expiryInfo && (
                                 <span className={cx(
                                     'text-xs font-medium',
-                                    expiryInfo.status === 'expired' ? 'text-red-600' : '',
-                                    expiryInfo.status === 'critical' ? 'text-red-600' : '',
-                                    expiryInfo.status === 'warning' ? 'text-amber-600' : '',
-                                    expiryInfo.status === 'good' ? 'text-emerald-600' : ''
+                                    expiryInfo.status === 'expired' ? 'text-red-600' : 'text-gray-600'
                                 )}>
                                     {expiryInfo.days > 0 ? `${expiryInfo.days} days` : 'Expired'}
                                 </span>
@@ -453,8 +426,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     <div className="text-center">
                         <span className={cx(
                             "text-sm font-bold",
-                            compareExactDecimals(batch.quantity_available, '10', 'Batch availability', quantityOptions) > 0 ? "text-emerald-600" :
-                                compareExactDecimals(batch.quantity_available, '0', 'Batch availability', quantityOptions) > 0 ? "text-amber-600" : "text-red-600"
+                            compareExactDecimals(batch.quantity_available, '0', 'Batch availability', quantityOptions) > 0
+                                ? "text-gray-900" : "text-red-600"
                         )}>
                             {formatExactDecimal(batch.quantity_available, 'Batch availability', quantityOptions)}
                         </span>
@@ -550,18 +523,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     </div>
                 </div>
 
-                {expiryInfo && (expiryInfo.status === 'expired' || expiryInfo.status === 'critical') && (
-                    <div className={cx(
-                        'px-3 py-1.5 border-t text-xs font-medium',
-                        expiryInfo.status === 'expired' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                    )}>
+                {expiryInfo?.status === 'expired' && (
+                    <div className="border-t border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700">
                         <div className="flex items-center gap-1">
                             <AlertCircle size={12} />
-                            <span>
-                                {expiryInfo.status === 'expired'
-                                    ? 'Expired - Cannot be sold'
-                                    : 'Expiring soon - Prioritize (FEFO)'}
-                            </span>
+                            <span>Expired - Cannot be sold</span>
                         </div>
                     </div>
                 )}
@@ -673,12 +639,6 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     }
 
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-        if (e.shiftKey && (e.key === '~' || e.key === '`')) {
-            e.preventDefault();
-            setShowCostInfo(prev => !prev);
-            return;
-        }
-
         if (e.key === 'Escape') {
             e.preventDefault();
             onClose();
