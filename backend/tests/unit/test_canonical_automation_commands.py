@@ -352,7 +352,8 @@ def test_postgres_fixture_is_rollback_only() -> None:
     assert fixture.rstrip().endswith("ROLLBACK;")
     assert "has_function_privilege" in fixture
     assert "execution_scopes" in fixture
-    assert "runtime_count<>21" in fixture
+    assert "THEN 21" in fixture
+    assert "ELSE 28" in fixture
     assert "calculator_count<>12" in fixture
     assert "calculator can execute an unreviewed automation helper" in fixture
 

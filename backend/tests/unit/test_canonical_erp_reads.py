@@ -16,6 +16,15 @@ from app.core.utils import schema_validator
 from app.main import app
 
 
+def _effective_route_leaves(routes):
+    for route in routes:
+        effective_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_contexts):
+            yield from effective_contexts()
+        else:
+            yield route
+
+
 CRITICAL_UI_READS = {
     "/api/canonical/business-context",
     "/api/products",
@@ -376,7 +385,7 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
 
     compatibility_operation_ids = {
         route.operation_id
-        for route in app.routes
+        for route in _effective_route_leaves(app.routes)
         if getattr(route, "endpoint", None) in {
             canonical_erp_reads.canonical_invoice_compatibility_detail,
             canonical_erp_reads.canonical_sales_order_compatibility_detail,

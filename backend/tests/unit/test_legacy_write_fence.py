@@ -17,6 +17,17 @@ from app.core.read_only_router import (
 )
 
 
+def _effective_route_leaves(routes):
+    """Flatten FastAPI 0.137+ lazy include wrappers and older flat routers."""
+
+    for route in routes:
+        effective_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_contexts):
+            yield from effective_contexts()
+        else:
+            yield route
+
+
 def _load_effective_app_routes():
     """Audit a true first import, independent of pytest's module graph."""
 
@@ -25,7 +36,14 @@ def _load_effective_app_routes():
 import json
 from app.main import app
 rows = []
-for route in app.routes:
+def route_leaves(routes):
+    for route in routes:
+        effective_contexts = getattr(route, 'effective_route_contexts', None)
+        if callable(effective_contexts):
+            yield from effective_contexts()
+        else:
+            yield route
+for route in route_leaves(app.routes):
     endpoint = getattr(route, 'endpoint', None)
     methods = sorted(getattr(route, 'methods', None) or ())
     # Restrict the probe to the public API contract.  Do not key this audit to
@@ -223,7 +241,10 @@ def test_read_only_helper_drops_legacy_mutations_and_non_http_routes():
     parent = APIRouter(prefix="/api")
     include_legacy_read_only_router(parent, source, prefix="/legacy")
 
-    mounted = {(route.path, frozenset(route.methods or ())) for route in parent.routes}
+    mounted = {
+        (route.path, frozenset(route.methods or ()))
+        for route in _effective_route_leaves(parent.routes)
+    }
     assert mounted == {("/api/legacy/records", frozenset({"GET"}))}
 
 
@@ -238,7 +259,10 @@ def test_non_persistent_post_allowlist_is_exact_and_owner_pinned():
     include_explicit_non_persistent_post_utilities(
         parent, source, routes={"/parse": parse}
     )
-    assert [(route.path, route.methods) for route in parent.routes] == [
+    assert [
+        (route.path, route.methods)
+        for route in _effective_route_leaves(parent.routes)
+    ] == [
         ("/api/parse", {"POST"})
     ]
 

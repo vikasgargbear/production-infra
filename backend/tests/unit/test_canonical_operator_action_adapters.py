@@ -3716,6 +3716,7 @@ def test_reviewer_reads_exact_preview_without_requester_grant_ownership():
         "target_row_version": 1,
         "serializer_version": "canonical-json-v1",
         "preview_media_type": "application/json",
+        "request_bytes": b"request",
         "preview_bytes": preview_bytes,
         "preview_hash": hashlib.sha256(preview_bytes).digest(),
         "request_hash": hashlib.sha256(b"request").digest(),

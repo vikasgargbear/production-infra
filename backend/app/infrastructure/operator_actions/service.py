@@ -235,7 +235,8 @@ _COMMAND_REVIEW_SQL = text(
            request.destination_branch_id, request.target_resource_type,
            request.target_resource_id, request.target_row_version,
            request.serializer_version, request.preview_media_type,
-           request.preview_bytes, request.preview_hash, request.request_hash,
+           request.request_bytes, request.preview_bytes,
+           request.preview_hash, request.request_hash,
            request.aggregate_version_hash, request.approval_policy,
            request.required_approval_count, request.expires_at
       FROM automation.command_requests AS request
@@ -250,8 +251,6 @@ _COMMAND_REVIEW_SQL = text(
                 OR request.branch_id=ANY(CAST(:branch_ids AS uuid[])))
             AND (request.destination_branch_id IS NULL
                  OR request.destination_branch_id=ANY(CAST(:branch_ids AS uuid[]))))
-       AND request.request_hash=extensions.digest(request.request_bytes,'sha256')
-       AND request.preview_hash=extensions.digest(request.preview_bytes,'sha256')
      FOR SHARE OF request
     """
 )
@@ -3943,6 +3942,13 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.POLICY_BLOCKED,
                         "Canonical command adapter is not available for review",
                     )
+                request_bytes = bytes(row["request_bytes"])
+                request_hash = "sha256:" + hashlib.sha256(request_bytes).hexdigest()
+                if request_hash != _hash_string(row["request_hash"]):
+                    raise OperatorActionError(
+                        ActionErrorCode.PREVIEW_CHANGED,
+                        "Prepared command request bytes no longer match their hash",
+                    )
                 preview_bytes = bytes(row["preview_bytes"])
                 preview_hash = "sha256:" + hashlib.sha256(preview_bytes).hexdigest()
                 if preview_hash != _hash_string(row["preview_hash"]):
@@ -3990,7 +3996,7 @@ class SqlAlchemyOperatorActionService:
                     preview_media_type=row["preview_media_type"],
                     preview_canonical_json=preview_canonical_json,
                     preview_hash=preview_hash,
-                    request_hash=_hash_string(row["request_hash"]),
+                    request_hash=request_hash,
                     aggregate_version_hash=_hash_string(row["aggregate_version_hash"]),
                     approval_policy=row["approval_policy"],
                     required_approval_count=row["required_approval_count"],
