@@ -41,9 +41,9 @@ ambiguity. It must fail closed instead of selecting one arbitrarily.
 | Stock transfer | `inventory.transfer.prepare` | explicit source/destination branches and locations → requested quantity → tied-earliest FEFO allocation → exact review → actor confirmation → execute once | posted transfer UUID, exact lines, paired `transfer_out`/`transfer_in` quantities and values | active; inter-branch only |
 | Standalone customer credit | `finance.adjustment_note.prepare` (`side=sales`, `direction=credit`) | posted invoice/open balance → line quantities and reviewed GST rule → immutable preview → independent approval → requester execute | posted note, exact original lines, tax document when statutory, allocation/residual and balanced journal | active |
 | Standalone supplier debit | `finance.adjustment_note.prepare` (`side=purchase`, `direction=debit`) | posted supplier invoice/open balance → line quantities and reviewed GST rule → immutable preview → independent approval → requester execute | posted note, exact original lines, tax document when statutory, allocation/residual and balanced journal | active |
-| Bank reconciliation | `finance.bank_reconciliation.prepare` | choose one imported statement line and one posted bank-ledger journal → exact review → independent approval → execute | immutable full-amount match, statement lifecycle, unchanged posted journal, audit and outbox | backend active; desktop candidate-selection projection is absent, so matching stays fail-closed rather than accepting opaque IDs or legacy transaction lists |
-| Destruction | `inventory.destruction.prepare` | no primary desktop entry | exact destruction certificate, stock ledger, remaining balance, valuation and balanced loss journal | backend active; desktop eligibility/certificate-selection projection is absent and unsafe opaque-ID entry is intentionally not exposed |
-| Expense claim | `finance.expense_claim.prepare` | no primary desktop entry | claim, receipt evidence, expense lines and balanced journal | pending integration; existing desktop CTA remains fail-closed |
+| Bank reconciliation | `finance.bank_reconciliation.prepare` | canonical candidate projection → choose one imported statement line and one posted bank-ledger journal → exact review → independent approval → requester execute/recover | immutable full-amount match, statement lifecycle, unchanged posted journal, audit and outbox | active; statement import remains explicitly unavailable until a separate reviewed import command exists |
+| Destruction | `inventory.destruction.prepare` | canonical eligibility/evidence projection → select one full stock balance and same-day verified certificate → exact review → independent approval → requester execute/recover | exact destruction certificate, stock ledger, remaining balance, valuation and balanced loss journal | active; certificate upload remains explicitly unavailable until a separate reviewed evidence-ingestion command exists |
+| Expense claim | `finance.expense_claim.prepare` | branch/claimant context → verified unused receipts and exact INR accounts → immutable preview → independent approval → requester execute/recover | claim, receipt hashes, exact expense lines, accounting event and balanced journal | active; separate approver; unsupported GST ITC, withholding, FX, mileage/per diem, cash advance, reversal and partial approval fail closed |
 
 The browser never retries `execute` after an ambiguous response. Once an
 execution returns a resource UUID, recovery is GET-only against canonical
@@ -67,7 +67,6 @@ runtime code silently create one.
 The following surfaces have no reviewed canonical command and therefore remain
 disabled or reject before transport:
 
-- expense claims until the pending canonical command is integrated;
 - direct journal authoring;
 - notification rules, campaigns, reminder sending, SMS and email sending;
 - direct collection-center payment recording;

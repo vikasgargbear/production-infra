@@ -14,6 +14,7 @@ const integratedOperations = [
   'procurement.supplier_invoice.prepare', 'procurement.purchase_return.prepare',
   'finance.customer_receipt.prepare', 'finance.supplier_payment.prepare',
   'finance.supplier_advance.prepare', 'finance.adjustment_note.prepare',
+  'finance.expense_claim.prepare',
   'inventory.transfer.prepare', 'inventory.adjustment.prepare',
   'inventory.destruction.prepare', 'finance.bank_reconciliation.prepare',
 ];
@@ -23,11 +24,11 @@ it.each(integratedOperations)('%s is accepted by the single desktop command tran
   expect(coverage).toContain(`\`${operation}\``);
 });
 
-it('records both bounded adjustment outcomes and the pending eighteenth expense outcome', () => {
+it('records both bounded adjustment outcomes and the integrated eighteenth expense outcome', () => {
   expect(coverage).toContain('Standalone customer credit');
   expect(coverage).toContain('Standalone supplier debit');
   expect(coverage).toContain('Expense claim / `finance.expense_claim.prepare`');
-  expect(coverage).toContain('not integrated at this SHA');
+  expect(coverage).toContain('wired, separate approver; verified receipt and balanced journal readback');
 });
 
 it('documents the no-default and no-fallback business-data boundary', () => {

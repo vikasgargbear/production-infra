@@ -28,14 +28,14 @@ readback tools. It does not own a second posting implementation.
 | 8 | Supplier return / `procurement.purchase_return.prepare` | Purchase Return → Prepare; approval/requester inboxes | `returns/canonicalReturns.api.ts`, `canonicalReturnLifecycle.ts` | `/canonical/returns/purchases/{id}` | `erp_purchase_return_prepare`; status/read projections | wired, separate approver |
 | 9 | Customer receipt / `finance.customer_receipt.prepare` | Customer Receipt → Post | `finance/customerReceipts.api.ts` | canonical payment plus invoice-allocation readbacks | `erp_customer_receipt_prepare`; open-item/status reads | wired; FIFO default and manual allocation available |
 | 10 | Supplier payment / `finance.supplier_payment.prepare` | Supplier Payment → Post | `finance/canonicalSupplierPayments.api.ts` | `/canonical/supplier-payments/{id}` | `erp_supplier_payment_prepare`; open-item/status reads | wired; FIFO default and manual allocation available |
-| 11 | Supplier advance / `finance.supplier_advance.prepare` | no primary desktop CTA | `canonicalOperatorActions.ts` only | command status/source reads | `erp_supplier_advance_prepare` | backend/MCP active; desktop absent |
+| 11 | Supplier advance / `finance.supplier_advance.prepare` | Financial Hub → Supplier Advance → Prepare; independent approval; requester execute | `finance/canonicalSupplierAdvances.api.ts`, `supplierAdvanceCommand.ts`, `supplierAdvanceLifecycle.ts` | `/canonical/supplier-advances/{id}` | `erp_supplier_advance_prepare`; review/status tools | wired, separate approver; exact PO-line, prepayment, withholding and journal readback |
 | 12 | Standalone customer credit / `finance.adjustment_note.prepare` | Credit & Debit Notes → Customer credit → Prepare | `finance/canonicalAdjustmentNotes.api.ts` | `/canonical/adjustment-notes/{id}` | `erp_adjustment_note_prepare`, `erp_adjustment_note_readback_get` | wired, separate approver |
 | 13 | Standalone supplier debit / `finance.adjustment_note.prepare` | Credit & Debit Notes → Supplier debit → Prepare | `finance/canonicalAdjustmentNotes.api.ts` | `/canonical/adjustment-notes/{id}` | same canonical note tools | wired, separate approver |
 | 14 | Inter-branch stock transfer / `inventory.transfer.prepare` | Stock Transfer → Prepare/Post | `StockTransfer.tsx`, `canonicalOperatorActions.ts` | posted transfer detail/ledger projection | `erp_inventory_transfer_prepare`; status/read projections | wired |
 | 15 | Cycle-count gain / `inventory.adjustment.prepare` | Stock Adjustment → Prepare; checker/requester states | `StockAdjustmentFlow.tsx`, `canonicalStockAdjustmentCommand.ts` | `/web/actions/inventory-adjustment/commands/{id}/readback` | `erp_inventory_adjustment_prepare`; status/read projections | wired, separate approver |
-| 16 | Certified destruction / `inventory.destruction.prepare` | no primary desktop CTA | operation registered in `canonicalOperatorActions.ts` | `/web/actions/inventory-destruction/commands/{id}/readback` | `erp_inventory_destruction_prepare`, `erp_inventory_destruction_readback_get` | backend/MCP active; safe eligibility/evidence chooser absent |
-| 17 | Bank match / `finance.bank_reconciliation.prepare` | Bank Reconcile remains disabled | operation registered in `canonicalOperatorActions.ts`; legacy `paymentsApi.startBankReconciliation` rejects | `/web/actions/bank-reconciliation/commands/{id}/readback` | `erp_bank_reconciliation_prepare`, `erp_bank_reconciliation_get` | backend/MCP active; candidate projection and statement import absent |
-| 18 | Expense claim / `finance.expense_claim.prepare` | Expenses remains disabled | no integrated frontend authority | pending exact claim/journal readback | pending integration | not integrated at this SHA |
+| 16 | Certified destruction / `inventory.destruction.prepare` | Stock → Destruction → choose an eligible full balance and same-day verified certificate → independent approval → requester execute | `inventory/stock/InventoryDestructionFlow.tsx`, `controlledOperations.api.ts` | `/canonical/inventory-destruction/context`; `/web/actions/inventory-destruction/commands/{id}/readback` | `erp_inventory_destruction_prepare`, `erp_inventory_destruction_readback_get` | wired, separate approver; certificate upload remains unavailable until a reviewed evidence-ingestion boundary exists |
+| 17 | Bank match / `finance.bank_reconciliation.prepare` | Financial → Bank Reconcile → choose one exact candidate → independent approval → requester execute | `payment/flows/BankReconciliationFlow.tsx`, `controlledOperations.api.ts` | `/canonical/bank-reconciliation/context`; `/web/actions/bank-reconciliation/commands/{id}/readback` | `erp_bank_reconciliation_prepare`, `erp_bank_reconciliation_get` | wired, separate approver; statement import remains unavailable until a reviewed import command exists |
+| 18 | Expense claim / `finance.expense_claim.prepare` | Expenses → Prepare claim; independent approval; requester execute/recover | `finance/canonicalExpenseClaims.api.ts`, `ExpenseClaimsFlow.tsx` | `/web/actions/expense-claims/commands/{id}/readback` | `erp_expense_claim_prepare`, `erp_expense_claim_readback` | wired, separate approver; verified receipt and balanced journal readback |
 
 ## No-fallback rules for these paths
 
@@ -55,13 +55,9 @@ readback tools. It does not own a second posting implementation.
 
 ## Remaining desktop closure order
 
-1. Integrate the expense-claim backend/MCP/readback and then replace its disabled
-   desktop surface.
-2. Add a canonical bank-reconciliation candidate projection before enabling
-   matching. Opaque UUID text entry is not an acceptable substitute.
-3. Add certified-destruction eligibility, evidence, and certificate projections
-   before exposing its CTA.
-4. Add the supplier-advance source/settlement chooser and the same independent
-   approval/recovery pattern.
-5. Deploy one exact SHA, then run authenticated desktop maker/checker browser
+1. Add a reviewed bank-statement import command and exact import readback; the
+   matching flow deliberately cannot manufacture statement lines.
+2. Add a reviewed destruction-certificate ingestion/verification command; the
+   destruction flow deliberately cannot manufacture compliance evidence.
+3. Deploy one exact SHA, then run authenticated desktop maker/checker browser
    writes and reconcile UI values with REST, MCP, and database evidence.
