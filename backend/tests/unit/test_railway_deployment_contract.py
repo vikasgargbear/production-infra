@@ -64,7 +64,7 @@ def test_railway_healthchecks_match_service_readiness_boundaries() -> None:
     assert _config("frontend")["deploy"]["healthcheckPath"] == "/health"
 
 
-def test_force_deploy_markers_are_watched_but_not_product_sources() -> None:
+def test_force_deploy_markers_are_watched_and_bound_into_exact_images() -> None:
     markers = {
         "api": "/deploy/railway/api.force-deploy",
         "mcp": "/deploy/railway/mcp.force-deploy",
@@ -79,6 +79,15 @@ def test_force_deploy_markers_are_watched_but_not_product_sources() -> None:
     for marker in markers.values():
         assert f"> {marker.removeprefix('/')}" in workflow
     assert 'DEPLOYMENT_NONCE: ${{ github.run_id }}:${{ github.run_attempt }}' in workflow
+
+    dockerfiles = {
+        "api": ROOT / "deploy/railway/api.Dockerfile",
+        "mcp": ROOT / "deploy/railway/mcp.Dockerfile",
+        "frontend": ROOT / "frontend/Dockerfile",
+    }
+    for service, dockerfile in dockerfiles.items():
+        contents = dockerfile.read_text(encoding="utf-8")
+        assert markers[service].removeprefix("/") in contents
 
 
 def test_frontend_container_builds_once_and_serves_spa_with_healthcheck() -> None:

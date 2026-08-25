@@ -10,6 +10,7 @@ COPY backend/mcp_runtime/requirements.txt ./requirements.txt
 RUN pip install --requirement requirements.txt
 
 COPY backend/mcp_runtime/aasopharma_mcp ./aasopharma_mcp
+COPY deploy/railway/mcp.force-deploy /service/.railway-deployment-provenance
 
 USER 65532:65532
 

@@ -31,6 +31,7 @@ RUN npm run typecheck \
 FROM caddy:2.10.2-alpine
 
 COPY frontend/Caddyfile /etc/caddy/Caddyfile
+COPY deploy/railway/frontend.force-deploy /etc/railway-deployment-provenance
 COPY --from=build /workspace/frontend/build /srv
 
 EXPOSE 8080
