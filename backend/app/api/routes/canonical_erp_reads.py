@@ -4527,8 +4527,8 @@ def canonical_collection_aging(
         overdue_days = int(row.get("max_overdue_days") or 0)
         parties.append({
             "id": row["customer_id"], "partyId": row["party_id"],
-            "name": row["customer_name"], "phone": row.get("phone") or "",
-            "email": row.get("email") or "", "location": row.get("location") or "",
+            "name": row["customer_name"], "phone": row.get("phone"),
+            "email": row.get("email"), "location": row.get("location"),
             "outstandingAmount": money_json(outstanding),
             "overdueAmount": money_json(row.get("overdue_amount") or 0),
             "daysOverdue": overdue_days,

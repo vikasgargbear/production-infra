@@ -96,3 +96,18 @@ test('payment analytics uses the organization clock and strict canonical project
   expect(canonicalReads).toContain('party.legal_name AS customer');
   expect(canonicalReads).not.toContain("COALESCE(party.legal_name,'Unassigned') AS customer");
 });
+
+test('collection balances reject invented identities, contacts, and success metrics', () => {
+  const component = read('frontend/src/components/ledger/CollectionCenter.tsx');
+  const projection = read('frontend/src/components/ledger/collectionProjection.ts');
+  const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
+
+  expect(component).toContain("queryKey: ['collection-center', 'canonical-aging']");
+  expect(component).toContain('projectCollectionAging');
+  expect(component).not.toContain("customer_name: party.name || 'Unknown'");
+  expect(component).not.toContain("total_outstanding: '0.00'");
+  expect(projection).toContain('is not a canonical UUID');
+  expect(projection).toContain('requires an authoritative target');
+  expect(canonicalReads).toContain('"phone": row.get("phone")');
+  expect(canonicalReads).not.toContain('"phone": row.get("phone") or ""');
+});

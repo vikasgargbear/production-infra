@@ -17,49 +17,22 @@ import {
   Zap,
   ExternalLink,
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { parseISO, format } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { ModuleHeader } from '../global';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
-import { compareExactDecimals, formatExactCurrency, normalizeAuthoritativeDecimal } from '../../utils/exactDecimal';
+import { compareExactDecimals, formatExactCurrency } from '../../utils/exactDecimal';
+import {
+  CollectionItem,
+  CollectionStats,
+  projectCollectionAging,
+} from './collectionProjection';
 
 interface CollectionCenterProps {
   embedded?: boolean;
   onCustomerClick?: (customer: CollectionItem) => void;
   onClose?: () => void;
 }
-
-interface CollectionItem {
-  customer_id: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_email: string;
-  customer_address: string;
-  total_outstanding: string;
-  overdue_amount: string;
-  days_overdue: number;
-  oldest_invoice_date: string;
-  last_payment_date?: string;
-  contact_attempts: number;
-  collection_status: 'current' | 'overdue';
-  priority: 'current' | '1-30' | '31-60' | '61-90' | '90+';
-  assigned_to?: string;
-  next_follow_up?: string;
-}
-
-interface CollectionStats {
-  total_outstanding: string;
-  total_overdue: string;
-  collections_today: string;
-  collections_mtd: string;
-  customers_count: number;
-  critical_accounts: number;
-  success_rate: null;
-}
-
-const exactMoney = (value: unknown, label: string) => normalizeAuthoritativeDecimal(value, label, {
-  scale: 2, maximumWholeDigits: 20, allowNegative: false,
-});
 
 const positiveMoney = (value: string, label: string) => compareExactDecimals(value, '0.00', label, {
   scale: 2, maximumWholeDigits: 20, allowNegative: false,
@@ -73,71 +46,23 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   const [filters, setFilters] = useState({
     status: 'all',
     priority: 'all',
-    assignedTo: 'all',
-    daysOverdue: 'all',
     searchQuery: ''
   });
 
   // Fetch collection data using the collection aging-data endpoint
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['collection-center', filters],
+    queryKey: ['collection-center', 'canonical-aging'],
     queryFn: async () => {
       try {
         // Use the collection aging-data endpoint - single efficient API call
         const response = await apiClient.get('/collection-center/collection/aging-data');
 
-        const agingData = response.data || {};
-        const parties = agingData.parties || [];
-        const summary = agingData.summary || {};
-
-        // Transform parties data to collection items
-        const collections: CollectionItem[] = parties.map((party: any) => {
-          return {
-            customer_id: String(party.id),
-            customer_name: party.name || 'Unknown',
-            customer_phone: party.phone || '',
-            customer_email: party.email || '',
-            customer_address: party.location || '',
-            total_outstanding: exactMoney(party.outstandingAmount, 'Collection outstanding'),
-            overdue_amount: exactMoney(party.overdueAmount, 'Collection overdue'),
-            days_overdue: party.daysOverdue || 0,
-            oldest_invoice_date: party.oldestInvoiceDate || '',
-            last_payment_date: party.lastPayment,
-            contact_attempts: 0,
-            collection_status: party.agingStatus,
-            priority: party.agingBand,
-          } as CollectionItem;
-        });
-
-        // Apply filters
-        let filteredData = [...collections];
-
-        if (filters.status !== 'all') {
-          if (filters.status === 'overdue') {
-            filteredData = filteredData.filter(c => c.days_overdue > 0);
-          } else {
-            filteredData = filteredData.filter(c => c.collection_status === filters.status);
-          }
-        }
-
-        if (filters.priority !== 'all') {
-          filteredData = filteredData.filter(c => c.priority === filters.priority);
-        }
-
-        // Calculate stats from summary
-        const criticalCount = collections.filter(c => c.priority === '90+').length;
+        const projected = projectCollectionAging(response.data);
+        const collections = projected.collections;
 
         return {
-          collections: filteredData,
-          stats: {
-            total_outstanding: exactMoney(summary.totalOutstanding, 'Collection total outstanding'),
-            total_overdue: exactMoney(summary.overdueAmount, 'Collection total overdue'),
-            collections_today: exactMoney(summary.currentDayCollections, 'Collections today'),
-            collections_mtd: exactMoney(summary.currentMonthCollections, 'Collections month to date'),
-            customers_count: collections.length,
-            critical_accounts: criticalCount,
-            success_rate: null,
-          }
+          collections,
+          stats: projected.stats,
         };
       } catch (error) {
         console.error('Collection Center API error:', error);
@@ -147,33 +72,33 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     refetchInterval: 60000 // Refresh every minute
   });
 
-  const collections = useMemo(() => data?.collections || [], [data?.collections]);
-  const stats: CollectionStats = data?.stats || {
-    total_outstanding: '0.00',
-    total_overdue: '0.00',
-    collections_today: '0.00',
-    collections_mtd: '0.00',
-    customers_count: 0,
-    critical_accounts: 0,
-    success_rate: null,
-  };
+  const collections = useMemo(() => data?.collections ?? [], [data?.collections]);
+  const stats: CollectionStats | null = data?.stats ?? null;
 
   // Filter collections
   const filteredCollections = useMemo(() => {
     let filtered = [...collections];
 
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(item => item.collection_status === filters.status);
+    }
+
+    if (filters.priority !== 'all') {
+      filtered = filtered.filter(item => item.priority === filters.priority);
+    }
+
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter((item: CollectionItem) =>
         item.customer_name.toLowerCase().includes(query) ||
-        item.customer_phone.includes(query) ||
+        item.customer_phone?.includes(query) ||
         item.customer_email?.toLowerCase().includes(query) ||
         item.customer_address?.toLowerCase().includes(query)
       );
     }
 
     return filtered;
-  }, [collections, filters.searchQuery]);
+  }, [collections, filters.priority, filters.searchQuery, filters.status]);
 
   // Quick action handlers
   const sendWhatsApp = (customer: CollectionItem) => {
@@ -225,7 +150,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `collection-list-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      link.download = 'collection-list.csv';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -291,6 +216,16 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     );
   }
 
+  if (!stats) {
+    return (
+      <div className={embedded ? 'p-6' : 'h-full bg-gray-50'}>
+        <div role="alert" className="mx-auto mt-8 max-w-xl rounded-lg border border-red-200 bg-white p-6 text-center">
+          Collection data is unavailable because the canonical response was empty.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={embedded ? 'p-6' : 'h-full bg-gray-50'}>
       {!embedded && (
@@ -347,7 +282,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                 <div className="rounded-md border border-gray-200 bg-white px-4 py-3">
                   <span className="mb-1 block text-xs text-gray-500">90+ Day Accounts</span>
                   <span className="text-lg font-semibold text-gray-900">
-                    {stats.critical_accounts || 0}
+                    {stats.critical_accounts}
                   </span>
                   <span className="mt-1 block text-xs text-amber-700">
                     By invoice due date
@@ -424,7 +359,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {filteredCollections.map((item: CollectionItem) => {
-                        const daysOverdue = item.days_overdue || 0;
+                        const daysOverdue = item.days_overdue;
                         const isOverdue = daysOverdue > 0;
 
                         return (
