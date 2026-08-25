@@ -36,6 +36,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_supplier_payment_prepare": "Prepare an INR supplier payment with an exact bank reference and payable allocations.",
     "erp_supplier_advance_prepare": "Prepare an INR supplier advance allocated to one approved purchase-order line.",
     "erp_adjustment_note_prepare": "Prepare a standalone canonical customer credit note or supplier debit note against exact posted invoice lines and the authoritative open item.",
+    "erp_inventory_transfer_prepare": "Prepare an exact canonical inter-branch stock transfer with explicit source batches and destination location.",
     "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
     "erp_inventory_destruction_prepare": "Prepare a certified same-day destruction of exact non-regulated stock with no GST ITC consequence.",
     "erp_bank_reconciliation_prepare": "Prepare an exact full match between one imported bank-statement line and one posted bank-ledger journal entry without changing either owner.",
