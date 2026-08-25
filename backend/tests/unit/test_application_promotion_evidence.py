@@ -198,6 +198,22 @@ def test_draft_operator_inputs_fail_closed(tmp_path: Path):
         )
 
 
+def test_workflow_is_read_only_and_never_changes_readiness():
+    workflow = (
+        REPOSITORY_ROOT / ".github/workflows/canonical-application-promotion-evidence.yml"
+    ).read_text(encoding="utf-8")
+    assert "test \"$CANONICAL_STAGING_PROJECT_REF\" = rgihahbmkrmhitjdjvev" in workflow
+    assert "test \"$CANONICAL_STAGING_PROJECT_REF\" != jfrairkkzxwkhbtqejnz" in workflow
+    assert "verify_render_pilot_sha.py" in workflow
+    assert "postgres:15" in workflow
+    assert "database/canonical/ci/bootstrap_supabase_auth.sql" in workflow
+    assert "pg_dump --data-only --no-owner --no-privileges" in workflow
+    assert "validate-manifest" in workflow
+    assert "approved_app_contract_v1" not in workflow
+    assert "production_ready" not in workflow
+    assert "deploy_render" not in workflow
+
+
 def test_current_mounted_callable_graph_has_no_reachable_retired_relation():
     graph = evidence._runtime_callable_route_graph()
     contract = json.loads(
