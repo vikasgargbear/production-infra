@@ -101,6 +101,12 @@ from .adjustment_note import (
     RESOLVE_ADJUSTMENT_NOTE_SQL,
     calculation_documents as adjustment_note_calculation_documents,
 )
+from .bank_reconciliation import (
+    EXECUTE_BANK_RECONCILIATION_SQL,
+    PERSIST_BANK_RECONCILIATION_SQL,
+    READBACK_BANK_RECONCILIATION_SQL,
+    RESOLVE_BANK_RECONCILIATION_SQL,
+)
 from .runtime_database import (
     assert_runtime_principal,
     runtime_database_configured,
@@ -715,6 +721,13 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "inventory.destruction.prepare":
             return self._prepare_inventory_destruction(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key == "finance.bank_reconciliation.prepare":
+            return self._prepare_bank_reconciliation(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -3073,6 +3086,125 @@ class SqlAlchemyOperatorActionService:
                     required_approvals=({"policy": policy.approval_policy, "count": 1},),
                 )
 
+    def _prepare_bank_reconciliation(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"finance.bank_reconciliation.prepare:{idempotency_key}"
+        )
+        match_id = uuid5(NAMESPACE_URL, identity + ":match")
+        command_id = uuid5(NAMESPACE_URL, identity + ":command")
+        normalized = {key: _json_value(value) for key, value in payload.items()}
+        normalized["reconciliation_match_id"] = str(match_id)
+        request_bytes = canonical_json_bytes(normalized)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "membership_id": context.membership_id,
+            "auth_user_id": context.auth_user_id,
+            "user_id": context.user_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
+            "reconciliation_match_id": match_id,
+            "command_request_id": command_id,
+            "idempotency_key_hash": hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+            "request_json": request_bytes.decode("utf-8"),
+            "request_bytes": request_bytes,
+            "expires_at": expires_at,
+        }
+        with self._session_factory() as session:
+            with session.begin():
+                assert_runtime_principal(session)
+                _lock_prepare_idempotency(
+                    session, params, "finance.bank_reconciliation.prepare"
+                )
+                rows = _mapping_rows(session.execute(RESOLVE_BANK_RECONCILIATION_SQL, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical bank reconciliation resolution is unavailable",
+                    )
+                resolution = _json_document(rows[0]["resolution"])
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {
+                        key: value
+                        for key, value in source.items()
+                        if key in {"resource_type", "id", "role"}
+                    }
+                    for source in source_versions
+                )
+                financial_impact = (
+                    {
+                        "effect": "reconciliation_only",
+                        "currency_code": resolution["currency_code"],
+                        "statement_direction": resolution["statement_direction"],
+                        "matched_amount": resolution["matched_amount"],
+                        "journal_debit_total": resolution["journal_debit_total"],
+                        "journal_credit_total": resolution["journal_credit_total"],
+                        "creates_journal": False,
+                    },
+                )
+                preview = {
+                    "branch_id": resolution["branch_id"],
+                    "calculation_ruleset": [],
+                    "capability_code": policy.operation_key,
+                    "command_request_id": str(command_id),
+                    "destination_branch_id": None,
+                    "financial_impact": list(financial_impact),
+                    "inventory_impact": [],
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": "finance.bank_reconciliation.match",
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(match_id),
+                    "target_resource_type": "reconciliation_match",
+                    "tax_impact": [],
+                }
+                params.update(
+                    {
+                        "resolved_bytes": canonical_json_bytes(resolution),
+                        "preview_bytes": canonical_json_bytes(preview),
+                    }
+                )
+                persisted = _mapping_rows(session.execute(PERSIST_BANK_RECONCILIATION_SQL, params))
+                if len(persisted) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical bank reconciliation prepare did not persist exactly once",
+                    )
+                result = _json_document(persisted[0]["command_request_id"])
+                if UUID(str(result["command_request_id"])) != command_id:
+                    raise OperatorActionError(
+                        ActionErrorCode.IDEMPOTENCY_CONFLICT,
+                        "Canonical bank reconciliation idempotency replay differs",
+                    )
+                return PreparedCommand(
+                    command_request_id=command_id,
+                    command_type="finance.bank_reconciliation.match",
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=datetime.fromisoformat(
+                        str(result["expires_at"]).replace("Z", "+00:00")
+                    ),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=(),
+                    inventory_impact=(),
+                    financial_impact=financial_impact,
+                    tax_impact=(),
+                    required_approvals=({"policy": policy.approval_policy, "count": 1},),
+                )
+
     def _prepare_inventory_adjustment(
         self,
         *,
@@ -3683,6 +3815,8 @@ class SqlAlchemyOperatorActionService:
                 session.execute(
                     EXECUTE_INVENTORY_DESTRUCTION_SQL
                     if before["operation"] == "compliance.destruction.post"
+                    else EXECUTE_BANK_RECONCILIATION_SQL
+                    if before["operation"] == "finance.bank_reconciliation.match"
                     else _EXECUTE_COMMAND_SQL,
                     params,
                 )
@@ -3935,6 +4069,58 @@ class SqlAlchemyOperatorActionService:
                     failure=failure,
                     audit_references=audit_references,
                 )
+
+    def get_bank_reconciliation_readback(
+        self,
+        *,
+        command_request_id: UUID,
+        context: ActionContext,
+    ) -> Mapping[str, Any]:
+        policy = ActionPolicy(
+            operation_key="automation.command.status.get",
+            permission="automation.command.view",
+            risk_class="read_only",
+            schema_profile="bank_reconciliation_readback",
+            approval_policy="none",
+            branch_fields=(),
+        )
+        with self._session_factory() as session:
+            with session.begin():
+                self._authorize(session, context, policy)
+                params = {
+                    "org_id": context.organization_id,
+                    "command_request_id": command_request_id,
+                    "agent_grant_id": context.agent_grant_id,
+                    "membership_id": context.membership_id,
+                }
+                rows = _mapping_rows(session.execute(READBACK_BANK_RECONCILIATION_SQL, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Exact bank reconciliation readback is incomplete",
+                    )
+                row = dict(rows[0])
+                expected_debit = (
+                    row["matched_amount"]
+                    if row["statement_direction"] == "credit"
+                    else Decimal("0")
+                )
+                expected_credit = (
+                    row["matched_amount"]
+                    if row["statement_direction"] == "debit"
+                    else Decimal("0")
+                )
+                if (
+                    row["journal_bank_debit"] != expected_debit
+                    or row["journal_bank_credit"] != expected_credit
+                    or row["audit_event_count"] < 2
+                    or row["outbox_event_count"] < 2
+                ):
+                    raise OperatorActionError(
+                        ActionErrorCode.STALE_VERSION,
+                        "Bank reconciliation readback differs from journal, audit, or outbox evidence",
+                    )
+                return row
 
 
 def install_sqlalchemy_operator_action_service() -> None:

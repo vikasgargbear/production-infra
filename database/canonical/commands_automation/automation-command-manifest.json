@@ -25,9 +25,32 @@
         "charge_line_foreign_currency_zero_rated_or_reverse_charge"
       ]
     },
+    "bank_reconciliation_pilot_scope": {
+      "required_matching": [
+        "active_reconcilable_bank_asset",
+        "imported_or_reconciling_statement",
+        "exact_statement_amount_direction_and_transaction_date",
+        "posted_balanced_same_day_journal",
+        "exactly_one_branch_bank_ledger_line",
+        "immutable_source_versions_revalidated_under_advisory_locks",
+        "distinct_exact_preview_approver"
+      ],
+      "supported_cardinality": "one_statement_line_to_one_posted_journal",
+      "supported_currency": "INR",
+      "unsupported_fail_closed": [
+        "partial_match",
+        "foreign_currency",
+        "date_mismatch",
+        "multi_bank_line_journal",
+        "already_matched_owner",
+        "reversal",
+        "automatic_tolerance"
+      ]
+    },
     "blocked_prepare_capabilities": [],
     "capability_operation_map": {
       "finance.adjustment_note.prepare": "finance.adjustment_note.post",
+      "finance.bank_reconciliation.prepare": "finance.bank_reconciliation.match",
       "finance.customer_receipt.prepare": "finance.payment.post",
       "finance.supplier_advance.prepare": "finance.supplier_advance.post",
       "finance.supplier_payment.prepare": "finance.payment.post",
@@ -70,6 +93,7 @@
     "dynamic_sql": false,
     "executable_prepare_capabilities": [
       "finance.adjustment_note.prepare",
+      "finance.bank_reconciliation.prepare",
       "finance.customer_receipt.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
@@ -89,6 +113,7 @@
       "automation.agent_grant.revoke",
       "compliance.destruction.post",
       "finance.adjustment_note.post",
+      "finance.bank_reconciliation.match",
       "finance.payment.post",
       "finance.supplier_advance.post",
       "inventory.document.post",
@@ -260,6 +285,7 @@
     },
     "registered_prepare_capabilities": [
       "finance.adjustment_note.prepare",
+      "finance.bank_reconciliation.prepare",
       "finance.customer_receipt.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",

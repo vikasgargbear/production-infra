@@ -41,6 +41,7 @@ OPERATOR_COMMANDS = {
     "finance.supplier_payment.prepare": ("finance.payment.post", "payment"),
     "finance.supplier_advance.prepare": ("finance.supplier_advance.post", "payment"),
     "finance.adjustment_note.prepare": ("finance.adjustment_note.post", "adjustment_note"),
+    "finance.bank_reconciliation.prepare": ("finance.bank_reconciliation.match", "reconciliation_match"),
     "inventory.transfer.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.adjustment.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.destruction.prepare": ("compliance.destruction.post", "destruction"),
@@ -48,7 +49,10 @@ OPERATOR_COMMANDS = {
 BASELINE_OPERATOR_COMMANDS = {
     capability: binding
     for capability, binding in OPERATOR_COMMANDS.items()
-    if capability != "finance.adjustment_note.prepare"
+    if capability not in {
+        "finance.adjustment_note.prepare",
+        "finance.bank_reconciliation.prepare",
+    }
 }
 
 
@@ -7710,6 +7714,7 @@ def generated_artifacts() -> tuple[str, str]:
             "registered_prepare_capabilities": sorted(OPERATOR_COMMANDS),
             "executable_prepare_capabilities": [
                 "finance.adjustment_note.prepare",
+                "finance.bank_reconciliation.prepare",
                 "finance.customer_receipt.prepare",
                 "finance.supplier_advance.prepare",
                 "finance.supplier_payment.prepare",
@@ -7729,6 +7734,7 @@ def generated_artifacts() -> tuple[str, str]:
                 set(OPERATOR_COMMANDS)
                 - {
                     "finance.adjustment_note.prepare",
+                    "finance.bank_reconciliation.prepare",
                     "finance.customer_receipt.prepare",
                     "finance.supplier_advance.prepare",
                     "finance.supplier_payment.prepare",
@@ -7753,6 +7759,7 @@ def generated_artifacts() -> tuple[str, str]:
                 "automation.agent_grant.revoke",
                 "compliance.destruction.post",
                 "finance.adjustment_note.post",
+                "finance.bank_reconciliation.match",
                 "finance.payment.post",
                 "finance.supplier_advance.post",
                 "inventory.document.post",
@@ -7782,6 +7789,28 @@ def generated_artifacts() -> tuple[str, str]:
                     "sales_debit_or_purchase_credit",
                     "increase_reversal_or_return_linked_note",
                     "charge_line_foreign_currency_zero_rated_or_reverse_charge",
+                ],
+            },
+            "bank_reconciliation_pilot_scope": {
+                "supported_currency": "INR",
+                "supported_cardinality": "one_statement_line_to_one_posted_journal",
+                "required_matching": [
+                    "active_reconcilable_bank_asset",
+                    "imported_or_reconciling_statement",
+                    "exact_statement_amount_direction_and_transaction_date",
+                    "posted_balanced_same_day_journal",
+                    "exactly_one_branch_bank_ledger_line",
+                    "immutable_source_versions_revalidated_under_advisory_locks",
+                    "distinct_exact_preview_approver",
+                ],
+                "unsupported_fail_closed": [
+                    "partial_match",
+                    "foreign_currency",
+                    "date_mismatch",
+                    "multi_bank_line_journal",
+                    "already_matched_owner",
+                    "reversal",
+                    "automatic_tolerance",
                 ],
             },
             "customer_receipt_pilot_scope": {

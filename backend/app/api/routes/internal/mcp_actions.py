@@ -10,7 +10,6 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jwt import InvalidTokenError as JWTError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
 from ....core.auth.jwt_auth import decode_jwt
 from ....domain.operator_actions import (
     ACTION_POLICIES,
@@ -125,6 +124,28 @@ class CommandStatusResponse(StrictDTO):
     resource_id: Optional[UUID] = None
     failure: Optional[dict[str, Any]] = None
     audit_references: list[dict[str, Any]]
+
+
+class BankReconciliationReadback(StrictDTO):
+    command_request_id: UUID
+    reconciliation_match_id: UUID
+    status: Literal["matched"]
+    bank_statement_id: UUID
+    bank_statement_status: Literal["reconciling", "reconciled"]
+    bank_statement_line_id: UUID
+    statement_direction: Literal["credit", "debit"]
+    bank_account_id: UUID
+    bank_ledger_account_id: UUID
+    journal_entry_id: UUID
+    journal_status: Literal["posted"]
+    journal_bank_line_id: UUID
+    matched_amount: Decimal
+    currency_code: str
+    match_method: Literal["manual", "reference_exact"]
+    journal_bank_debit: Decimal
+    journal_bank_credit: Decimal
+    audit_event_count: int
+    outbox_event_count: int
 
 
 def _error_detail(
@@ -557,6 +578,29 @@ def get_command_status(
             "failure": dict(result.failure) if result.failure is not None else None,
         }
     )
+
+
+@router.get(
+    "/commands/{command_request_id}/bank-reconciliation-readback",
+    response_model=BankReconciliationReadback,
+)
+def bank_reconciliation_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+) -> BankReconciliationReadback:
+    operation_key = "automation.command.status.get"
+    _require_release_gate(service)
+    _require_authority(context, operation_key)
+    _require_command_binding(context, command_request_id)
+    try:
+        row = service.get_bank_reconciliation_readback(
+            command_request_id=command_request_id,
+            context=context,
+        )
+    except OperatorActionError as exc:
+        _raise_action_error(exc)
+    return BankReconciliationReadback(**dict(row))
 
 
 @router.get("/actions/ready")

@@ -168,6 +168,12 @@ def validate_prepare_payload_semantics(
     """Enforce conditional action rules that JSON Schema field shapes cannot express."""
 
     values = payload.model_dump(mode="python")
+    if operation_key == "finance.bank_reconciliation.prepare":
+        amount = Decimal(values["matched_amount"])
+        if amount <= 0 or amount != amount.quantize(Decimal("0.01")):
+            raise ValueError(
+                "bank reconciliation requires a positive amount with exactly supported paise precision"
+            )
     if operation_key == "inventory.transfer.prepare":
         if values["source_branch_id"] == values["destination_branch_id"]:
             raise ValueError("source and destination branches must be distinct")

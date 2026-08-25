@@ -151,6 +151,13 @@ _PREPARE_BINDINGS = {
         execute_function="erp_automation_commands.execute_inventory_destruction_command",
         unavailable_reason=None,
     ),
+    "finance.bank_reconciliation.prepare": ActionAdapterBinding(
+        operation_key="finance.bank_reconciliation.prepare",
+        available=True,
+        prepare_function="erp_automation_commands.persist_bank_reconciliation_prepare",
+        execute_function="erp_automation_commands.execute_operator_command:bank_reconciliation_match",
+        unavailable_reason=None,
+    ),
 }
 
 _SHARED_BINDINGS = {
@@ -165,7 +172,7 @@ _SHARED_BINDINGS = {
         operation_key="automation.command.execute",
         available=True,
         prepare_function=None,
-        execute_function="erp_automation_commands.execute_approved_command",
+        execute_function="erp_automation_commands.execute_operator_command",
         unavailable_reason=None,
     ),
     "automation.command.status.get": ActionAdapterBinding(

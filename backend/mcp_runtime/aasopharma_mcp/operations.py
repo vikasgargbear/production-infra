@@ -140,6 +140,10 @@ OPERATOR_OPERATIONS.update(
             "erp_operation_status_get", "automation.command.status.get",
             SHARED_ACTION_SCHEMAS["erp_operation_status_get"], "status",
         ),
+        "erp_bank_reconciliation_get": OperatorOperation(
+            "erp_bank_reconciliation_get", "automation.command.status.get",
+            SHARED_ACTION_SCHEMAS["erp_bank_reconciliation_get"], "bank_reconciliation_readback",
+        ),
     }
 )
 
@@ -266,7 +270,11 @@ class OperationGateway:
         command_request_id: str | None,
     ) -> str:
         claims, organization_id = _oauth_identity(access)
-        operation_mode = "read" if operation.kind == "status" else "write"
+        operation_mode = (
+            "read"
+            if operation.kind in {"status", "bank_reconciliation_readback"}
+            else "write"
+        )
         payload = {
             "issuer": claims.get("iss"),
             "subject": access.subject,
@@ -366,6 +374,9 @@ class OperationGateway:
         elif operation.kind == "review":
             method = "GET"
             path = f"/api/internal/mcp/commands/{command_request_id}/review"
+        elif operation.kind == "bank_reconciliation_readback":
+            method = "GET"
+            path = f"/api/internal/mcp/commands/{command_request_id}/bank-reconciliation-readback"
             payload = None
         else:
             method = "GET"

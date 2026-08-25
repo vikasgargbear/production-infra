@@ -46,6 +46,11 @@ RESOURCE_TABLES = {
         "finance.adjustment_note_lines",
         "adjustment_note_id",
     ),
+    "finance.bank_reconciliation": (
+        "finance.reconciliation_matches",
+        "finance.bank_statement_lines",
+        "bank_statement_line_id",
+    ),
     "inventory.transfer": (
         "inventory.inventory_documents",
         "inventory.inventory_document_lines",

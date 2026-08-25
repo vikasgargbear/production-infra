@@ -39,6 +39,7 @@ ambiguity. It must fail closed instead of selecting one arbitrarily.
 | Supplier advance | `finance.supplier_advance.prepare` | no primary desktop entry yet | canonical command supports it | backend available; UI absent |
 | Cycle-count adjustment | `inventory.adjustment.prepare` | exact count review → independent approval → execute | inventory document, stock ledger and valuation | active; separate approver |
 | Stock transfer | `inventory.transfer.prepare` | explicit source/destination branches and locations → requested quantity → tied-earliest FEFO allocation → exact review → actor confirmation → execute once | posted transfer UUID, exact lines, paired `transfer_out`/`transfer_in` quantities and values | active; inter-branch only |
+| Bank reconciliation | `finance.bank_reconciliation.prepare` | choose one imported statement line and one posted bank-ledger journal → exact review → independent approval → execute | immutable full-amount match, statement lifecycle, unchanged posted journal, audit and outbox | backend active; desktop candidate selection, review/checker handoff, execute recovery and readback rendering not yet wired; statement import remains a separate unavailable UI boundary |
 | Destruction | `inventory.destruction.prepare` | no entry | none | backend resolver unavailable |
 
 The browser never retries `execute` after an ambiguous response. Once an
@@ -63,7 +64,6 @@ runtime code silently create one.
 The following surfaces have no reviewed canonical command and therefore remain
 disabled or reject before transport:
 
-- bank reconciliation;
 - standalone credit/debit notes and expense claims;
 - direct journal authoring;
 - notification rules, campaigns, reminder sending, SMS and email sending;

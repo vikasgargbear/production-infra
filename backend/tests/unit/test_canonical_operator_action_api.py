@@ -1408,7 +1408,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
         if path.startswith("/api/internal/mcp/")
         for route in routes
     ]
-    assert len(action_routes) == 6
+    assert len(action_routes) == 7
     assert all(route.include_in_schema is False for route in action_routes)
     assert all(
         mcp_actions.get_action_context

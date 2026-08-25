@@ -38,10 +38,12 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_adjustment_note_prepare": "Prepare a standalone canonical customer credit note or supplier debit note against exact posted invoice lines and the authoritative open item.",
     "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
     "erp_inventory_destruction_prepare": "Prepare a certified same-day destruction of exact non-regulated stock with no GST ITC consequence.",
+    "erp_bank_reconciliation_prepare": "Prepare an exact full match between one imported bank-statement line and one posted bank-ledger journal entry without changing either owner.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
     "erp_operation_review_get": "Inspect exact immutable preview bytes, hashes, source versions, impacts, and approval requirements using an independent approval grant.",
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
     "erp_operation_status_get": "Read immutable status, result, failure, and audit references for one authorized command.",
+    "erp_bank_reconciliation_get": "Read authoritative bank-statement, posted-journal, audit, and outbox evidence for one succeeded reconciliation command.",
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
     {
@@ -59,6 +61,7 @@ PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
         "erp_adjustment_note_prepare",
         "erp_inventory_adjustment_prepare",
         "erp_inventory_destruction_prepare",
+        "erp_bank_reconciliation_prepare",
     }
 )
 
@@ -924,6 +927,18 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         }
     )
 
+    bank_reconciliation = {
+        "branch_id": _uuid("Explicit authorized branch; no write-time branch default is allowed."),
+        "bank_statement_id": _uuid("Imported canonical bank statement."),
+        "bank_statement_line_id": _uuid("One immutable statement line to match in full."),
+        "journal_entry_id": _uuid("One posted canonical journal containing exactly one line for the statement bank ledger."),
+        "matched_amount": _decimal("Exact full statement-line and bank-ledger amount.", money=True),
+        "match_method": _string(
+            "Reviewed matching method; automatic or partial matching is not accepted.",
+            enum=["manual", "reference_exact"],
+        ),
+    }
+
     inventory_destruction = _header("destruction_date", "Approved physical destruction date.")
     inventory_destruction.update(
         {
@@ -978,6 +993,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         ("erp_adjustment_note_prepare", "finance.adjustment_note.prepare", "finance.adjustment_note.manage", "original_document_adjustment", "separate_approver", adjustment_note),
         ("erp_inventory_transfer_prepare", "inventory.transfer.prepare", "inventory.transfer.create", "interbranch_batched_movement", "actor_confirmation", inventory_transfer),
         ("erp_inventory_adjustment_prepare", "inventory.adjustment.prepare", "inventory.adjustment.create", "controlled_batched_movement", "separate_approver", inventory_adjustment),
+        ("erp_bank_reconciliation_prepare", "finance.bank_reconciliation.prepare", "finance.bank_reconcile", "exact_bank_journal_match", "separate_approver", bank_reconciliation),
         ("erp_inventory_destruction_prepare", "inventory.destruction.prepare", "inventory.destruction.create", "controlled_batched_movement", "separate_approver", inventory_destruction),
     )
 
@@ -1076,6 +1092,7 @@ SHARED_ACTION_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_operation_review_get": REVIEW_INPUT_SCHEMA,
     "erp_operation_execute": EXECUTE_INPUT_SCHEMA,
     "erp_operation_status_get": STATUS_INPUT_SCHEMA,
+    "erp_bank_reconciliation_get": STATUS_INPUT_SCHEMA,
 }
 
 
