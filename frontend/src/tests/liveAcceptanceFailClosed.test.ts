@@ -6,6 +6,11 @@ const e2e = (name: string) => fs.readFileSync(
   'utf8',
 );
 
+const support = (name: string) => fs.readFileSync(
+  path.resolve(process.cwd(), 'e2e', 'support', name),
+  'utf8',
+);
+
 test('explicit live writes cannot skip the sales-chain API because its fixture is absent', () => {
   const source = e2e('live-sales-chain-api.spec.ts');
 
@@ -31,4 +36,12 @@ test('live core API calendar inputs use the authoritative organization clock', (
   expect(core).toContain("'/canonical/business-context'");
   expect(sales).toContain("'/canonical/business-context'");
   expect(`${core}\n${sales}`).not.toMatch(/todayIst|Asia\/Kolkata/);
+});
+
+test('live browser organization binding resolves the backend origin before fetching context', () => {
+  const source = support('live-erp.ts');
+
+  expect(source).toContain("new URL((await apiReference).url()).origin");
+  expect(source).toContain('fetch(`${origin}/api/canonical/business-context`');
+  expect(source).not.toContain("fetch('/api/canonical/business-context'");
 });

@@ -66,15 +66,22 @@ export async function loginToLiveErp(page: Page, email: string, password: string
   if (expectedOrganizationId) {
     expect(expectedOrganizationId, 'expected disposable organization must be a canonical UUID')
       .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    const contextResponse = page.waitForResponse(response => (
+    const apiReference = page.waitForResponse(response => (
       response.request().method() === 'GET'
-      && new URL(response.url()).pathname === '/api/canonical/business-context'
+      && new URL(response.url()).pathname.startsWith('/api/')
+      && response.status() < 400
     ), { timeout: 30_000 });
     await page.reload();
-    const response = await contextResponse;
-    const body = await response.text();
-    expect(response.status(), `canonical business context: ${body}`).toBe(200);
-    const context = JSON.parse(body);
+    const apiOrigin = new URL((await apiReference).url()).origin;
+    const result = await page.evaluate(async origin => {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${origin}/api/canonical/business-context`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: response.status, text: await response.text() };
+    }, apiOrigin);
+    expect(result.status, `canonical business context: ${result.text}`).toBe(200);
+    const context = JSON.parse(result.text);
     expect(context.organization_id, 'authenticated browser session organization')
       .toBe(expectedOrganizationId);
     await expect(page.getByText('Core Operations')).toBeVisible({ timeout: 45_000 });
