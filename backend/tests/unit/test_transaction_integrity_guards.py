@@ -62,21 +62,22 @@ def test_stock_out_decision_locks_the_tenant_batch():
     assert method.count("org_id = :org_id") >= 2
 
 
-def test_stock_movement_validates_tenant_owned_references():
+def test_legacy_stock_movement_write_is_retired_in_favor_of_canonical_commands():
     source = _read("backend/app/api/services/inventory/inventory_service.py")
     method = _method_source(source, "record_stock_movement")
-    route = _read("backend/app/api/routes/inventory/stock/routes.py")
+    command_route = _read("backend/app/api/routes/web_operator_actions.py")
 
     assert "org_id is required to record a stock movement" in method
     assert "Product not found or access denied" in method
     assert "Location not found or access denied" in method
     assert "Batch not found or access denied" in method
-    assert '"org_id": context.org_id' in route
-    assert '"created_by": context.user_id' in route
-    movement_route = route.split("async def record_stock_movement", 1)[1].split(
-        "@router.get", 1
-    )[0]
-    assert "db.commit()" in movement_route
+    assert not (
+        REPOSITORY_ROOT / "backend/app/api/routes/inventory/stock/routes.py"
+    ).exists()
+    assert '"/inventory-adjustment/eligibility"' in command_route
+    assert '"/inventory-adjustment/commands/{command_request_id}/readback"' in command_route
+    assert "WHERE command.org_id=:org_id" in command_route
+    assert 'operation = "automation.command.execute"' in command_route
 
 
 def test_invoice_batch_deduction_is_atomic_and_cannot_go_negative():
@@ -267,12 +268,20 @@ def test_payment_creation_has_durable_locked_idempotency():
     assert "internal_notes TEXT" in tables
 
 
-def test_credit_and_debit_note_writes_commit_and_require_create_permission():
-    routes = _read("backend/app/api/routes/finance/credit_notes/routes.py")
+def test_legacy_credit_and_debit_note_writes_are_replaced_by_reviewed_commands():
+    command_route = _read("backend/app/api/routes/web_operator_actions.py")
+    command_contract = _read("backend/app/domain/operator_actions/contract.py")
+    readback = _read("backend/app/api/routes/canonical_adjustment_note_reads.py")
 
-    assert routes.count('PermissionChecker("finance", "create")') >= 2
-    assert routes.count("db.commit()") >= 2
-    assert 'note_data["branch_id"] = context.primary_branch_id' in routes
+    assert not (
+        REPOSITORY_ROOT / "backend/app/api/routes/finance/credit_notes/routes.py"
+    ).exists()
+    assert 'if operation_key == "finance.adjustment_note.prepare"' in command_contract
+    assert '@router.post("/{command_type}/prepare"' in command_route
+    assert 'operation = "automation.command.approve"' in command_route
+    assert 'operation = "automation.command.execute"' in command_route
+    assert 'prefix="/canonical/adjustment-notes"' in readback
+    assert "WHERE note.org_id=:org_id AND note.id=:note_id" in readback
 
 
 def test_journal_is_draft_until_all_lines_are_inserted():
