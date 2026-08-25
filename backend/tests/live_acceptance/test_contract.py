@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from .config import Live18GateError, load_live18_config
-from .contract import load_operation_matrix
+from .contract import load_operation_matrix, load_ready_operation_matrix
 from .mcp_readback import mcp_readback_arguments
 from .scope import out_of_scope_paths
 
@@ -28,6 +28,16 @@ def test_matrix_has_the_exact_18_named_business_operations() -> None:
         "stock_transfer", "destruction", "customer_credit_note", "supplier_debit_note",
         "bank_reconciliation", "expense_claim",
     }
+
+
+def test_browser_certification_selects_only_explicitly_ready_templates() -> None:
+    ready = load_ready_operation_matrix()
+    readiness = _json(ROOT / "docs/testing/live18-ui-template-readiness.json")
+    assert len(ready) == readiness["ready_count"]
+    assert {item.id for item in ready} == {
+        row["id"] for row in readiness["operations"] if row["status"] == "ready"
+    }
+    assert "destruction" not in {item.id for item in ready}
 
 
 def test_published_matrix_matches_the_reviewed_mcp_registry() -> None:
@@ -138,6 +148,21 @@ def test_browser_harness_has_no_local_or_legacy_authority() -> None:
     assert "unsupported runtime token" in source
     assert "LIVE18_RUN_TOKEN" in source
     assert re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", source, re.I) is None
+
+
+def test_secondary_finance_reconciliation_is_bound_to_exact_prepare_lineage() -> None:
+    source = (ROOT / "backend/tests/live_canonical/reconciliation.py").read_text()
+    for fragment in (
+        'prepare_request["bank_statement_line_id"]',
+        'prepare_request["journal_entry_id"]',
+        'prepare_request["reimbursement_account_id"]',
+        'expected["expense_account_id"]',
+        'expected["receipt_attachment_id"]',
+        'prepare_request["original_document_id"]',
+        'note["adjusts_open_item_id"] is not None',
+        'note["tax_document_count"] == 1',
+    ):
+        assert fragment in source
 
 
 def test_live_config_fails_before_io_when_incomplete() -> None:
