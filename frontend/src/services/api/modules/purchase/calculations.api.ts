@@ -20,7 +20,6 @@ export interface PurchaseCalculationRequest {
         mrp?: CalculationDecimalString;
         discount_percent?: CalculationDecimalString;
         tax_percent?: CalculationDecimalString;
-        gst_percent?: CalculationDecimalString;
     }>;
     freight_charges?: CalculationDecimalString;
     insurance_charges?: CalculationDecimalString;

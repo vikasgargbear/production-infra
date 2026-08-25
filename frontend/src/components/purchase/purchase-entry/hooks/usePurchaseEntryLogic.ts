@@ -295,9 +295,12 @@ export function usePurchaseEntryLogic({
                     const taxAmount = String(calculated.tax_amount);
                     const totalAmount = String(calculated.total ?? calculated.total_amount);
                     if (
-                        compareExactDecimals(item.taxable_amount || 0, taxableAmount, 'Purchase line taxable', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                        compareExactDecimals(item.tax_amount || 0, taxAmount, 'Purchase line tax', { scale: 2, maximumWholeDigits: 20 }) === 0 &&
-                        compareExactDecimals(item.total_amount || 0, totalAmount, 'Purchase line total', { scale: 2, maximumWholeDigits: 20 }) === 0
+                        !missing(item.taxable_amount)
+                        && !missing(item.tax_amount)
+                        && !missing(item.total_amount)
+                        && compareExactDecimals(item.taxable_amount, taxableAmount, 'Purchase line taxable', { scale: 2, maximumWholeDigits: 20 }) === 0
+                        && compareExactDecimals(item.tax_amount, taxAmount, 'Purchase line tax', { scale: 2, maximumWholeDigits: 20 }) === 0
+                        && compareExactDecimals(item.total_amount, totalAmount, 'Purchase line total', { scale: 2, maximumWholeDigits: 20 }) === 0
                     ) return item;
                     itemValuesChanged = true;
                     return { ...item, taxable_amount: taxableAmount, tax_amount: taxAmount, total_amount: totalAmount };
@@ -366,8 +369,8 @@ export function usePurchaseEntryLogic({
         if (supplier) {
             setPurchase(prev => ({
                 ...prev,
-                supplier_id: supplier.supplier_id || supplier.id,
-                supplier_name: supplier.supplier_name || supplier.name,
+                supplier_id: supplier.supplier_id ?? '',
+                supplier_name: supplier.supplier_name ?? '',
                 supplier_details: supplier
             }));
         } else {
@@ -383,14 +386,14 @@ export function usePurchaseEntryLogic({
     const handleAddItem = useCallback((product: any) => {
         setNewProductToAdd({
             id: Date.now() + Math.random(),
-            product_id: product.product_id || null,
-            product_name: product.product_name || product.name || '',
+            product_id: product.product_id ?? null,
+            product_name: product.product_name ?? '',
             product_code: product.product_code,
             uom_conversion_id: product.uom_conversion_id ?? '',
             hsn_code: product.hsn_code || '',
             mrp: product.mrp ?? '',
             selling_price: product.sale_price ?? product.selling_price ?? '',
-            tax_percent: product.tax_percent ?? product.gst_percent ?? product.tax_rate ?? '',
+            tax_percent: product.gst_percent ?? '',
             discount_percent: product.discount_percent ?? product.discount ?? '',
             pack_type: product.pack_type ?? product.packaging_type ?? '',
             pack_size: product.pack_size ?? product.units_per_pack ?? '',
@@ -425,12 +428,12 @@ export function usePurchaseEntryLogic({
             invoice_date: purchase.invoice_date,
             items: products.map((product) => ({
                 product_id: product.product_id || null,
-                product_name: product.product_name || product.name || '',
+                product_name: product.product_name ?? '',
                 product_code: product.product_code,
                 uom_conversion_id: product.uom_conversion_id ?? '',
                 hsn_code: product.hsn_code || '',
-                batch_number: product.batch_number || product.batch || '',
-                expiry_date: product.expiry_date || product.expiry || '',
+                batch_number: product.batch_number ?? '',
+                expiry_date: product.expiry_date ?? '',
                 manufacturing_date: product.manufacturing_date || '',
                 quantity: product.quantity ?? '',
                 free_quantity: product.free_quantity ?? product.free ?? '',
@@ -438,7 +441,7 @@ export function usePurchaseEntryLogic({
                 unit_price: product.unit_price ?? '',
                 selling_price: product.selling_price ?? product.sale_price ?? '',
                 discount_percent: product.discount_percent ?? product.discount ?? '',
-                tax_percent: product.tax_percent ?? product.gst_percent ?? product.tax_rate ?? '',
+                tax_percent: product.tax_percent ?? '',
                 pack_type: product.pack_type ?? product.packaging_type ?? '',
                 pack_size: product.pack_size ?? product.units_per_pack ?? '',
                 category: product.category || '',
@@ -579,7 +582,7 @@ export function usePurchaseEntryLogic({
             supplier_details: {
                 supplier_id: verifiedData.supplier_id,
                 supplier_name: verifiedData.supplier_name,
-                gst_number: verifiedData.supplier_gst || verifiedData.supplier_gst_number,
+                gst_number: verifiedData.supplier_gst_number,
                 primary_phone: verifiedData.supplier_phone,
                 primary_email: verifiedData.supplier_email,
                 address: verifiedData.supplier_address
@@ -596,7 +599,7 @@ export function usePurchaseEntryLogic({
             setSelectedSupplier({
                 supplier_id: verifiedData.supplier_id,
                 supplier_name: verifiedData.supplier_name,
-                gst_number: verifiedData.supplier_gst || verifiedData.supplier_gst_number,
+                gst_number: verifiedData.supplier_gst_number,
                 primary_phone: verifiedData.supplier_phone,
                 address: verifiedData.supplier_address
             });

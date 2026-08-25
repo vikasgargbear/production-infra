@@ -11,6 +11,7 @@ describe('canonical desktop return authority boundary', () => {
   const review = read('./components/ReturnReviewPanel.tsx');
   const purchaseSelector = read('./ui/PurchaseReturnSelector.tsx');
   const purchaseProjection = read('./utils/purchaseReturnProjection.ts');
+  const historyProjection = read('./utils/returnsHistoryProjection.ts');
   const activeSources = [
     salesFlow,
     purchaseFlow,
@@ -19,6 +20,7 @@ describe('canonical desktop return authority boundary', () => {
     review,
     purchaseSelector,
     purchaseProjection,
+    historyProjection,
   ].join('\n');
 
   it('has no reachable manual return entry that could lose invoice or receipt lineage', () => {
@@ -83,5 +85,22 @@ describe('canonical desktop return authority boundary', () => {
     expect(activeSources).not.toMatch(/selected:\s*true/);
     expect(salesFlow).toContain('isCanonicalUuid(invoiceId)');
     expect(purchaseFlow).toContain('isCanonicalUuid(invoiceId)');
+  });
+
+  it('does not alias GST identities or manufacture evidence timestamps', () => {
+    expect(activeSources).not.toMatch(/gst_number\s*:\s*[^\n]*(?:\.gst\b|gst_number\s*\|\|\s*[^\n]*gst_number)/);
+    expect(activeSources).not.toContain('new Date().toISOString()');
+    expect(salesFlow).not.toContain('(customer as any).id ??');
+    expect(salesFlow).not.toContain('(customer as any).party_id');
+    expect(purchaseFlow).not.toContain('supplier.id ||');
+    expect(purchaseFlow).not.toContain('supplier.party_id');
+    expect(salesFlow).toContain('The browser does not invent a confirmation time.');
+    expect(read('./utils/canonicalReturnCommand.ts')).toContain('RFC 3339 with an explicit offset');
+  });
+
+  it('projects history only from the canonical document-history contract', () => {
+    expect(historyProjection).toContain('CanonicalDocumentHistoryItem');
+    expect(historyProjection).not.toMatch(/return_id\s*\?\?|return_number\s*\?\?|approval_status\s*\?\?/);
+    expect(historyProjection).not.toMatch(/items_count[^\n]*(?:\|\||\?\?)\s*0/);
   });
 });

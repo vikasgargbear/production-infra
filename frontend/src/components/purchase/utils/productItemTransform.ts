@@ -36,7 +36,7 @@ const optionalNumber = (value: unknown, label: string): number | undefined => (
 );
 
 const productTax = (product: any): number => requiredNumber(
-    product.gst_percent ?? product.tax_percent,
+    product.gst_percent,
     'Product GST rate',
     { maximum: 100 },
 );
@@ -47,9 +47,9 @@ const productTax = (product: any): number => requiredNumber(
 export function prepareItemForPurchaseOrder(product: any): PurchaseOrderItem {
     return {
         id: generateTempId(),
-        product_id: product.product_id || product.id,
-        product_name: product.product_name || product.name,
-        hsn_code: product.hsn_code || product.hsn,
+        product_id: product.product_id,
+        product_name: product.product_name,
+        hsn_code: product.hsn_code,
         quantity: requiredNumber(product.quantity, 'Purchase-order quantity', { positive: true }),
         free_quantity: requiredNumber(product.free_quantity, 'Purchase-order free quantity'),
         unit_price: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-order unit price', { positive: true }),
@@ -65,9 +65,9 @@ export function prepareItemForPurchaseOrder(product: any): PurchaseOrderItem {
 export function prepareItemForPurchaseEntry(product: any): PurchaseEntryItem {
     return {
         id: generateTempId(),
-        product_id: product.product_id || product.id,
-        product_name: product.product_name || product.name,
-        hsn_code: product.hsn_code || product.hsn,
+        product_id: product.product_id,
+        product_name: product.product_name,
+        hsn_code: product.hsn_code,
         quantity: requiredNumber(product.quantity, 'Purchase-entry quantity', { positive: true }),
         free_quantity: requiredNumber(product.free_quantity, 'Purchase-entry free quantity'),
         unit_price: requiredNumber(product.unit_price ?? product.cost_per_unit, 'Purchase-entry unit price', { positive: true }),
@@ -90,9 +90,9 @@ export function prepareItemForPurchaseEntry(product: any): PurchaseEntryItem {
 export function prepareItemForGRN(product: any, poItem?: any): GRNItem {
     return {
         id: generateTempId(),
-        product_id: product.product_id || product.id,
-        product_name: product.product_name || product.name,
-        hsn_code: product.hsn_code || product.hsn,
+        product_id: product.product_id,
+        product_name: product.product_name,
+        hsn_code: product.hsn_code,
         quantity: requiredNumber(poItem?.quantity, 'GRN ordered quantity', { positive: true }),
         received_quantity: requiredNumber(poItem?.received_quantity, 'GRN received quantity', { positive: true }),
         rejected_quantity: requiredNumber(poItem?.rejected_quantity, 'GRN rejected quantity'),

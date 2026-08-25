@@ -41,7 +41,7 @@ const requiredFact = (value: unknown, label: string): unknown => {
 export function toPurchaseCalculationRequest(order: any): PurchaseCalculationRequest {
     return {
         supplier_id: calculationEntityId(order.supplier_id, 'Supplier'),
-        gst_type: order.gst_type || 'CGST/SGST',
+        gst_type: order.gst_type,
         items: (order.items || []).filter((item: any) => item.product_id).map((item: any, index: number) => {
             const label = `Purchase calculation items[${index}]`;
             return {
@@ -52,7 +52,7 @@ export function toPurchaseCalculationRequest(order: any): PurchaseCalculationReq
                 unit_price: inputRate(requiredFact(item.unit_price, `${label}.unit_price`), `${label}.unit_price`),
                 mrp: inputRate(requiredFact(item.mrp, `${label}.mrp`), `${label}.mrp`),
                 discount_percent: inputPercent(requiredFact(item.discount_percent, `${label}.discount_percent`), `${label}.discount_percent`),
-                tax_percent: inputPercent(requiredFact(item.tax_percent ?? item.gst_percent, `${label}.tax_percent`), `${label}.tax_percent`),
+                tax_percent: inputPercent(requiredFact(item.tax_percent, `${label}.tax_percent`), `${label}.tax_percent`),
             };
         }),
         freight_charges: inputMoney(requiredFact(order.freight_charges, 'Purchase freight charges'), 'Purchase freight charges'),

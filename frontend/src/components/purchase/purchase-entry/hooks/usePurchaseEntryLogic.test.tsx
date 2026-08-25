@@ -127,4 +127,20 @@ describe('usePurchaseEntryLogic calculation scheduling', () => {
         expect(mockedPreview).not.toHaveBeenCalled();
         expect(result.current.purchase.total_amount).toBe('');
     });
+
+    it('uses only the canonical product GST field when opening a purchase line', () => {
+        const { result } = renderHook(() => usePurchaseEntryLogic({ onClose: jest.fn() }));
+        act(() => result.current.handleAddItem({
+            product_id: '0198ea37-2b1d-7c8d-9123-123456789abc',
+            product_name: 'Canonical Product',
+            gst_percent: '5.0000',
+            tax_percent: '12',
+            tax_rate: '18',
+        }));
+        expect(result.current.newProductToAdd).toMatchObject({
+            product_id: '0198ea37-2b1d-7c8d-9123-123456789abc',
+            product_name: 'Canonical Product',
+            tax_percent: '5.0000',
+        });
+    });
 });

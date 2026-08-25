@@ -104,6 +104,22 @@ describe('canonical return command builders', () => {
       .toThrow(/ITC-reversal evidence/);
   });
 
+  it('requires an explicit RFC 3339 offset for statutory evidence time', () => {
+    const value: any = sales();
+    value.gst_tax_treatment = 'statutory';
+    value.return_reason_choices[0].supported_gst_treatments = ['commercial_only', 'statutory'];
+    value.recipient_itc_reversal_evidence_attachment_id = ids.evidence;
+    value.recipient_itc_reversal_confirmed_at = '2026-08-25T17:30:00';
+    expect(() => buildSalesReturnPreparePayload(value, 'erp-web-sales-return-prepare:test-time-1'))
+      .toThrow(/explicit offset/i);
+    value.recipient_itc_reversal_confirmed_at = '2026-08-25T17:30:00+05:30';
+    const payload: any = buildSalesReturnPreparePayload(
+      value,
+      'erp-web-sales-return-prepare:test-time-2',
+    );
+    expect(payload.recipient_itc_reversal_confirmed_at).toBe('2026-08-25T17:30:00+05:30');
+  });
+
   it('rejects a reason and treatment pair that is absent from the effective context', () => {
     const value = sales();
     value.return_reason = 'expiry';

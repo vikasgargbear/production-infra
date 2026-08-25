@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Package, Calendar, DollarSign, Percent, Hash, Gift, AlertCircle } from 'lucide-react';
+import { X, Save, Package, Calendar, DollarSign, Percent, Hash, Gift } from 'lucide-react';
 import { MonthYearPicker } from '../../global';
 import { toast } from 'react-toastify';
 import { getPurchaseItemErrors } from './purchaseItemValidation';
@@ -22,7 +22,6 @@ interface EditedItem {
   units_per_pack?: number | string;
   pack_type?: string;
   tax_percent?: number | string;
-  gst_percent?: number | string;
   discount_percent?: number | string;
   scheme_discount?: number | string;
   [key: string]: unknown;
@@ -75,7 +74,7 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
         pack_type: item.pack_type ?? '',
 
         // Tax & Discounts
-        tax_percent: item.tax_percent ?? item.gst_percent ?? '',
+        tax_percent: item.tax_percent ?? '',
         discount_percent: item.discount_percent ?? '',
         scheme_discount: item.scheme_discount ?? ''
       });
@@ -161,7 +160,6 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
                 <MonthYearPicker
                   value={editedItem.manufacturing_date}
                   onChange={(date) => handleFieldChange('manufacturing_date', date)}
-                  maxDate={new Date()}
                   className="w-full"
                   placeholder="MM/YYYY"
                 />
@@ -176,7 +174,6 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
                 <MonthYearPicker
                   value={editedItem.expiry_date}
                   onChange={(date) => handleFieldChange('expiry_date', date)}
-                  minDate={new Date()}
                   className="w-full"
                   placeholder="MM/YYYY"
                 />
@@ -346,18 +343,13 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
                   GST % <span className="text-red-500">*</span>
                 </label>
-                <select
+                <input
+                  type="text"
                   value={editedItem.tax_percent ?? ''}
-                  onChange={(e) => handleFieldChange('tax_percent', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select authoritative GST rate</option>
-                  <option value="0">0%</option>
-                  <option value="5">5%</option>
-                  <option value="12">12%</option>
-                  <option value="18">18%</option>
-                  <option value="28">28%</option>
-                </select>
+                  readOnly
+                  placeholder="Unavailable"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-800"
+                />
               </div>
 
               <div>
@@ -404,16 +396,6 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
             )}
           </div>
 
-          {/* Warning for expiry */}
-          {editedItem.expiry_date && new Date(editedItem.expiry_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-yellow-800">Short Expiry Warning</p>
-                <p className="text-xs text-yellow-700 mt-1">This batch expires in less than 3 months</p>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}

@@ -33,7 +33,6 @@ export interface PurchaseOrderItem {
     mrp?: number;
     expected_rate?: number;
     tax_percent?: number | string;
-    gst_percent?: number | string;
     discount_percent?: number | string;
     free_quantity?: number | string;
     free_supply_tax_treatment?:
@@ -185,8 +184,8 @@ export function usePurchaseOrderLogic({
         setSelectedSupplier(supplier);
         setPurchaseOrder(prev => ({
             ...prev,
-            supplier_id: supplier?.supplier_id ?? supplier?.id ?? '',
-            supplier_name: supplier?.supplier_name ?? supplier?.name ?? '',
+            supplier_id: supplier?.supplier_id ?? '',
+            supplier_name: supplier?.supplier_name ?? '',
             supplier_details: supplier
         }));
     }, []);
@@ -206,8 +205,7 @@ export function usePurchaseOrderLogic({
             unit_price: product.unit_price ?? product.purchase_rate ?? '',
             mrp: product.mrp,
             expected_rate: product.unit_price ?? product.purchase_rate,
-            tax_percent: product.gst_percent ?? product.tax_percent,
-            gst_percent: product.gst_percent ?? product.tax_percent,
+            tax_percent: product.gst_percent,
             discount_percent: '',
             free_quantity: '',
             free_supply_tax_treatment: product.free_supply_tax_treatment,

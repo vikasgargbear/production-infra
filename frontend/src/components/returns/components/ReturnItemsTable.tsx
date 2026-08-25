@@ -10,6 +10,7 @@ import { EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
 import { exactDecimalUnits } from '../../../utils/exactDecimal';
 import { formatReturnMoney } from '../utils/returnDecimal';
+import { formatCalendarDate } from '../../../utils/calendarDate';
 
 const EDITABLE_FIELDS: string[] = ['return_paid_qty', 'return_free_qty'];
 
@@ -91,11 +92,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
 
     const formatExpiry = (dateStr: string | undefined): string => {
         if (!dateStr) return '-';
-        try {
-            return new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-        } catch {
-            return '-';
-        }
+        try { return formatCalendarDate(dateStr); }
+        catch { return 'Unavailable'; }
     };
 
     return (

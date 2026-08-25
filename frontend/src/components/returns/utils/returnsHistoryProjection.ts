@@ -1,4 +1,4 @@
-import { normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
+import type { CanonicalDocumentHistoryItem } from '../../../services/api/modules/history/canonicalDocumentHistory.api';
 
 export type HistoryReturnType = 'sales' | 'purchase';
 
@@ -35,39 +35,28 @@ export const normalizeReturnStatus = (value: unknown): { status: string; label: 
     };
 };
 
-export function projectReturnsHistoryRows(value: unknown, type: HistoryReturnType): ReturnsHistoryRow[] {
-    if (!Array.isArray(value)) return [];
-    return value.map((raw) => {
-        const row = (raw || {}) as Record<string, unknown>;
-        const id = row.return_id ?? row.id;
-        const returnNumber = row.return_number ?? row.return_no
-            ?? (type === 'sales' ? row.sales_return_no : row.purchase_return_no);
-        return {
-            id: String(id ?? ''),
-            return_no: String(returnNumber ?? 'Not assigned'),
-            return_type: type,
-            customer_name: type === 'sales'
-                ? String(row.party_name ?? row.customer_name ?? 'Unknown Customer')
-                : undefined,
-            supplier_name: type === 'purchase'
-                ? String(row.party_name ?? row.supplier_name ?? 'Unknown Supplier')
-                : undefined,
-            original_document_no: String(
-                row.original_document_no ?? row.original_invoice_number
-                ?? row.original_purchase_no ?? row.invoice_number ?? row.purchase_no ?? 'Not available',
-            ),
-            return_date: String(row.return_date ?? ''),
-            total_amount: normalizeAuthoritativeDecimal(row.total_amount, 'Return history amount', {
-                scale: 2, maximumWholeDigits: 20, allowNegative: true,
-            }),
-            status: normalizeReturnStatus(row.approval_status ?? row.status).status,
-            reason: String(row.return_reason ?? row.reason ?? 'Not available'),
-            created_at: row.created_at ? String(row.created_at) : undefined,
-            items_count: typeof row.items_count === 'number' && Number.isSafeInteger(row.items_count) && row.items_count >= 0
-                ? row.items_count
-                : (Array.isArray(row.items) ? row.items.length : 0),
-        };
-    });
+export function projectReturnHistoryRow(row: CanonicalDocumentHistoryItem): ReturnsHistoryRow {
+    if (row.document_kind !== 'sales_return' && row.document_kind !== 'purchase_return') {
+        throw new Error('Return history received a non-return canonical document.');
+    }
+    if (row.total_amount === null) {
+        throw new Error('Return history amount is unavailable from the canonical contract.');
+    }
+    const type: HistoryReturnType = row.document_kind === 'sales_return' ? 'sales' : 'purchase';
+    return {
+        id: row.document_id,
+        return_no: row.document_number,
+        return_type: type,
+        customer_name: type === 'sales' ? row.party_name : undefined,
+        supplier_name: type === 'purchase' ? row.party_name : undefined,
+        original_document_no: row.source_document_number ?? 'Unavailable',
+        return_date: row.document_date,
+        total_amount: row.total_amount,
+        status: normalizeReturnStatus(row.status).status,
+        reason: 'Unavailable',
+        created_at: row.created_at,
+        items_count: row.line_count,
+    };
 }
 
 export function returnsHistoryCsv(rows: ReturnsHistoryRow[]): string {

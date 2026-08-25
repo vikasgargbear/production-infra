@@ -173,7 +173,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             items={purchaseOrder.items.map(item => ({
               ...item,
               unit_price: item.unit_price,
-              gst_percent: item.gst_percent ?? item.tax_percent,
+              gst_percent: item.tax_percent,
               discount_percent: item.discount_percent ?? '',
               free_quantity: item.free_quantity ?? ''
             }))}

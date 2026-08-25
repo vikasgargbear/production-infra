@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, CheckCircle, AlertCircle, ChevronLeft,
   Calendar, DollarSign, Percent,
-  Save, AlertTriangle, Trash2
+  Save, Trash2
 } from 'lucide-react';
 import { PurchaseProductSearch } from '../../global';
+import { requireCalendarDate } from '../../../utils/calendarDate';
 
 /**
  * ProductVerificationModal - Verify single product with search and validation
@@ -40,28 +41,17 @@ const ProductVerificationModal = ({
   });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
 
   // Update product data when product prop changes (switching between products)
   // Helper function to format date for input[type="date"]
   const formatDateForInput = (dateStr) => {
     if (!dateStr) return '';
 
-    // If already in YYYY-MM-DD format, return as is
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return dateStr;
-    }
-
-    // Try to parse various date formats
     try {
-      const date = new Date(dateStr);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
-      }
-    } catch (e) {
+      return requireCalendarDate(dateStr, 'Extracted expiry date');
+    } catch {
+      return '';
     }
-
-    return dateStr;
   };
 
   useEffect(() => {
@@ -116,7 +106,6 @@ const ProductVerificationModal = ({
     // Reset common state
     setSelectedProduct(null);
     setValidationErrors([]);
-    setValidationWarnings([]);
   }, [product, productIndex]); // Add productIndex to ensure updates when switching
 
   // Handle product selection from global search
@@ -125,12 +114,12 @@ const ProductVerificationModal = ({
     const mappedProduct = {
       product_id: selectedProd.product_id || null,
       uom_conversion_id: selectedProd.uom_conversion_id || '',
-      product_name: selectedProd.product_name || selectedProd.name,
-      hsn_code: selectedProd.hsn_code || selectedProd.hsn,
+      product_name: selectedProd.product_name ?? '',
+      hsn_code: selectedProd.hsn_code ?? '',
       mrp: selectedProd.mrp ?? productData.mrp,
       selling_price: productData.selling_price || selectedProd.selling_price || selectedProd.ptr || '',
       unit_price: productData.unit_price || selectedProd.unit_price || '',
-      tax_percent: selectedProd.tax_percent ?? selectedProd.gst_percent ?? productData.tax_percent,
+      tax_percent: selectedProd.gst_percent ?? '',
       // Keep extracted values for these
       quantity: productData.quantity,
       free_quantity: productData.free_quantity,
@@ -147,7 +136,6 @@ const ProductVerificationModal = ({
   // Validate product data
   const validateProduct = () => {
     const errors: string[] = [];
-    const warnings: string[] = [];
 
     // Required fields
     if (!productData.product_id || !productData.uom_conversion_id) {
@@ -188,22 +176,7 @@ const ProductVerificationModal = ({
       }
     }
 
-    // Expiry warning
-    if (productData.expiry_date) {
-      const expiry = new Date(productData.expiry_date);
-      const today = new Date();
-      const monthsUntilExpiry = (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30);
-
-      if (monthsUntilExpiry < 3) {
-        warnings.push('Product expires in less than 3 months');
-      }
-      if (monthsUntilExpiry < 0) {
-        errors.push('Product is already expired');
-      }
-    }
-
     setValidationErrors(errors);
-    setValidationWarnings(warnings);
 
     return errors.length === 0;
   };
@@ -357,7 +330,6 @@ const ProductVerificationModal = ({
                     ...prev,
                     expiry_date: e.target.value
                   }))}
-                  min={new Date().toISOString().split('T')[0]}
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                 />
               </div>
@@ -493,21 +465,13 @@ const ProductVerificationModal = ({
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   GST Rate
                 </label>
-                <select
+                <input
+                  type="text"
                   value={productData.tax_percent}
-                  onChange={(e) => setProductData(prev => ({
-                    ...prev,
-                    tax_percent: e.target.value
-                  }))}
-                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">Select authoritative GST rate</option>
-                  <option value="0">0% (Exempt)</option>
-                  <option value="5">5%</option>
-                  <option value="12">12%</option>
-                  <option value="18">18%</option>
-                  <option value="28">28%</option>
-                </select>
+                  readOnly
+                  placeholder="Unavailable until a canonical product is selected"
+                  className="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-800"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -562,21 +526,6 @@ const ProductVerificationModal = ({
           </div>
         )}
 
-        {validationWarnings.length > 0 && (
-          <div className="p-3 bg-yellow-50 rounded-lg">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" />
-              <div className="text-sm text-yellow-700">
-                <p className="font-medium mb-1">Warnings:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  {validationWarnings.map((warning, i) => (
-                    <li key={i}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Action Buttons */}

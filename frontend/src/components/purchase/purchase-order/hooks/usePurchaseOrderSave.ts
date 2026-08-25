@@ -94,7 +94,7 @@ export function usePurchaseOrderSave(
 
     const currentFingerprint = useCallback(() => JSON.stringify({
         branchId,
-        supplierId: selectedSupplier?.supplier_id ?? selectedSupplier?.id,
+        supplierId: selectedSupplier?.supplier_id,
         poDate: purchaseOrder.po_date,
         expectedOn: purchaseOrder.expected_delivery_date,
         discount: purchaseOrder.discount_amount,
@@ -150,7 +150,7 @@ export function usePurchaseOrderSave(
             const review = canonicalPurchaseOrderReview(
                 prepared.data,
                 branchId,
-                selectedSupplier!.supplier_id ?? selectedSupplier!.id,
+                selectedSupplier!.supplier_id,
             );
             setPreparedPreview(prepared.data);
             setCanonicalReview(review);

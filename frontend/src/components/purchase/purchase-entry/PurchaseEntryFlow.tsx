@@ -25,6 +25,15 @@ import {
   formatExactDecimal,
   normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
+import { formatCalendarDate } from '../../../utils/calendarDate';
+
+const formatPurchaseExpiry = (value: unknown): string => {
+  if (typeof value !== 'string') return 'Unavailable';
+  const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value);
+  if (match) return `${match[2]}/${match[1]}`;
+  if (/^\d{2}\/\d{4}$/.test(value)) return value;
+  return 'Unavailable';
+};
 
 /**
  * PurchaseEntryFlow - Purchase Entry using the full global document system
@@ -277,32 +286,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   const totalAmount = item.total_amount || '0.00';
 
                   // Format expiry date if exists
-                  const expiryDisplay = (() => {
-                    if (!item.expiry_date) return '-';
-
-                    // Handle YYYY-MM format from MonthYearPicker
-                    if (typeof item.expiry_date === 'string' && item.expiry_date.includes('-')) {
-                      const parts = item.expiry_date.split('-');
-                      if (parts.length === 2) {
-                        return `${parts[1]}/${parts[0]}`; // Convert YYYY-MM to MM/YYYY
-                      }
-                    }
-
-                    // Handle MM/YYYY format
-                    if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
-                      return item.expiry_date;
-                    }
-
-                    // Try to parse as date
-                    try {
-                      const date = new Date(item.expiry_date);
-                      if (!isNaN(date.getTime())) {
-                        return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-                      }
-                    } catch (e) { }
-
-                    return item.expiry_date || '-';
-                  })();
+                  const expiryDisplay = formatPurchaseExpiry(item.expiry_date);
 
                   return (
                     <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
@@ -368,15 +352,11 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                         />
                       </td>
                       <td className="text-center py-2 px-2">
-                        <input
-                          type="number"
-                          value={item.tax_percent || ''}
-                          onChange={(e) => handleUpdateItem(index, 'tax_percent', e.target.value)}
-                          className="w-14 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                        />
+                        <span className="text-xs font-medium text-gray-800" title="Canonical product or verified invoice GST rate">
+                          {item.tax_percent === '' || item.tax_percent === null || item.tax_percent === undefined
+                            ? 'Unavailable'
+                            : `${item.tax_percent}%`}
+                        </span>
                       </td>
                       <td className="text-right py-2 px-2 text-xs font-bold text-green-600">{formatCurrency(totalAmount)}</td>
                       <td className="text-center py-2 px-2">
@@ -451,7 +431,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   Supplier Invoice: {purchase.supplier_invoice_number}
                 </p>
                 <p className="text-xs text-gray-600 mt-1">
-                  Date: {new Date(purchase.invoice_date).toLocaleDateString('en-IN')}
+                  Date: {formatCalendarDate(purchase.invoice_date)}
                 </p>
               </div>
             </div>
@@ -512,32 +492,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 );
 
                 // Format expiry date if exists
-                const expiryDisplay = (() => {
-                  if (!item.expiry_date) return '-';
-
-                  // Handle YYYY-MM format from MonthYearPicker
-                  if (typeof item.expiry_date === 'string' && item.expiry_date.includes('-')) {
-                    const parts = item.expiry_date.split('-');
-                    if (parts.length === 2) {
-                      return `${parts[1]}/${parts[0]}`; // Convert YYYY-MM to MM/YYYY
-                    }
-                  }
-
-                  // Handle MM/YYYY format
-                  if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
-                    return item.expiry_date;
-                  }
-
-                  // Try to parse as date
-                  try {
-                    const date = new Date(item.expiry_date);
-                    if (!isNaN(date.getTime())) {
-                      return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-                    }
-                  } catch (e) { }
-
-                  return item.expiry_date || '-';
-                })();
+                const expiryDisplay = formatPurchaseExpiry(item.expiry_date);
 
                 return (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
@@ -674,7 +629,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
         }}
         onSave={handleSavePurchase}
         isSaving={saving}
-        saveLabel="Save Purchase"
 
         // Footer totals
         footerTotals={{
@@ -692,7 +646,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
             { key: 'Esc', action: 'Close' }
           ],
           2: [
-            { key: 'Ctrl+S', action: 'Save Purchase' },
             { key: 'Esc', action: 'Back to Edit' }
           ]
         }}
@@ -734,18 +687,18 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
 
             // Store extracted data and show verification flow
             const extractedPDFData = {
-              supplier_name: data.supplier_name || data.vendor_name || '',
-              supplier_gst_number: data.supplier_gst_number || data.vendor_gst_number || '',
-              supplier_address: data.supplier_address || data.vendor_address || '',
+              supplier_name: data.supplier_name || '',
+              supplier_gst_number: data.supplier_gst_number || '',
+              supplier_address: data.supplier_address || '',
               supplier_id: data.supplier_id || null,
               invoice_number: data.invoice_number || '',
               invoice_date: data.invoice_date || '',
               items: (data.items || []).map(item => ({
                 product_id: item.product_id || null,
                 uom_conversion_id: item.uom_conversion_id || '',
-                product_name: item.product_name || item.name || '',
+                product_name: item.product_name || '',
                 hsn_code: item.hsn_code || '',
-                batch_number: item.batch_number || item.batch_number || '',
+                batch_number: item.batch_number || '',
                 expiry_date: item.expiry_date || '',
                 manufacturing_date: item.manufacturing_date || '',
                 quantity: item.quantity ?? '',
@@ -754,7 +707,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 mrp: item.mrp ?? '',
                 selling_price: item.selling_price ?? item.sale_price ?? '',
                 discount_percent: item.discount_percent ?? '',
-                tax_percent: item.tax_percent ?? item.gst_percent ?? '',
+                tax_percent: item.tax_percent ?? '',
                 pack_type: item.pack_type ?? '',
                 pack_size: item.pack_size ?? ''
               })),

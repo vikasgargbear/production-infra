@@ -22,6 +22,7 @@ import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
+import { formatCalendarDate } from '../../utils/calendarDate';
 import {
   authoritativeReturnQuantity,
   authoritativeReturnRate,
@@ -342,10 +343,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     const fullSupplier = {
       ...supplier,
-      supplier_name: supplier.supplier_name || supplier.name,
+      supplier_name: supplier.supplier_name,
       address: supplier.address || supplier.billing_address || '',
       phone: supplier.phone || supplier.mobile || '',
-      gst_number: supplier.gst_number || supplier.gst_number || ''
+      gst_number: supplier.gst_number ?? ''
     };
 
     setSelectedSupplier(fullSupplier);
@@ -354,7 +355,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setReturnReasons([]);
     setReturnableInvoices([]);
 
-    const supplierId = supplier.supplier_id || supplier.id || supplier.party_id;
+    const supplierId = supplier.supplier_id;
 
     setReturnData(prev => ({
       ...prev,
@@ -575,7 +576,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                           Invoice #{selectedInvoice.supplier_invoice_number || selectedInvoice.invoice_number}
                         </h4>
                         <p className="text-sm text-gray-600">
-                          Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
+                          Date: {selectedInvoice.invoice_date ? formatCalendarDate(selectedInvoice.invoice_date) : 'Unavailable'}
                         </p>
                         <p className="text-sm text-gray-600">
                           Amount: {(() => {

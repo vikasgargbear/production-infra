@@ -4,12 +4,13 @@ import {
   X, AlertCircle, RefreshCw, Users, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
-import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
+import { canonicalDocumentHistoryApi } from '../../services/api';
 import { formatExactCurrency } from '../../utils/exactDecimal';
 import { formatCalendarDate } from '../../utils/calendarDate';
 import { resolvePurchaseHistoryDates } from '../purchase/purchaselisthistory/utils/purchaseHistoryProjection';
 import {
   normalizeReturnStatus,
+  projectReturnHistoryRow,
   returnsHistoryCsv,
   ReturnsHistoryRow,
 } from './utils/returnsHistoryProjection';
@@ -179,20 +180,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         date_from: filters.dateFrom || undefined,
         date_to: filters.dateTo || undefined,
       });
-      const allReturns = response.items.map(row => ({
-        id: row.document_id,
-        return_no: row.document_number,
-        return_type: row.document_kind === 'sales_return' ? 'sales' as const : 'purchase' as const,
-        customer_name: row.document_kind === 'sales_return' ? row.party_name : undefined,
-        supplier_name: row.document_kind === 'purchase_return' ? row.party_name : undefined,
-        original_document_no: row.source_document_number || 'Not available',
-        return_date: row.document_date,
-        total_amount: requireCanonicalHistoryAmount(row.total_amount, `${row.document_kind} total`),
-        status: row.status,
-        reason: 'Not available',
-        created_at: row.created_at,
-        items_count: row.line_count,
-      }));
+      const allReturns = response.items.map(projectReturnHistoryRow);
 
       if (requestSequence !== requestSequenceRef.current) return;
       businessDateRef.current = response.business_date;
@@ -345,8 +333,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="font-medium text-gray-900">
           {returnItem.return_type === 'sales'
-            ? returnItem.customer_name || 'Unknown Customer'
-            : returnItem.supplier_name || 'Unknown Supplier'
+            ? returnItem.customer_name
+            : returnItem.supplier_name
           }
         </div>
       ),

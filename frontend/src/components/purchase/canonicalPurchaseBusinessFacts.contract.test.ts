@@ -13,6 +13,7 @@ describe('active canonical purchase desktop facts', () => {
         read('purchase-order/hooks/usePurchaseOrderLogic.ts'),
         read('purchase-order/hooks/usePurchaseOrderSave.ts'),
         read('purchase-order/utils/canonicalPurchaseOrderCommand.ts'),
+        read('grn/canonicalReceiptCommand.ts'),
         read('ui/PurchaseItemEditModal.tsx'),
         read('utils/productItemTransform.ts'),
         read('../../services/calculations/purchaseOrderCalculationService.ts'),
@@ -61,5 +62,32 @@ describe('active canonical purchase desktop facts', () => {
         expect(existsSync(join(__dirname, '../../utils/purchaseValidation.ts'))).toBe(false);
         expect(read('../../utils/purchaseUploadValidation.ts')).toContain('backend repeats byte-size and magic-byte checks');
         expect(read('../../config/constants.ts')).not.toContain('MIN_ORDER_AMOUNT');
+    });
+
+    it('uses one canonical GST fact and never turns missing API money into zero', () => {
+        const source = activeSources();
+        expect(source).not.toMatch(/tax_percent\s*\?\?\s*[^,\n]*gst_percent/);
+        expect(source).not.toMatch(/gst_percent\s*\?\?\s*[^,\n]*tax_percent/);
+        expect(source).not.toMatch(/(?:tax_percent|gst_percent)\s*\?\?\s*[^,\n]*tax_rate/);
+        expect(source).not.toMatch(/(?:taxable_amount|tax_amount|total_amount)\s*\|\|\s*0/);
+        expect(read('../../services/api/modules/purchase/calculations.api.ts')).not.toMatch(/gst_percent\??:/);
+        expect(read('purchase-order/hooks/usePurchaseOrderLogic.ts')).not.toMatch(/gst_percent\??:/);
+        expect(read('../../services/calculations/purchaseOrderCalculationService.ts')).not.toContain("gst_type: order.gst_type || 'CGST/SGST'");
+        expect(source).not.toMatch(/supplier_id\s*\?\?\s*[^,\n]*\.id\b/);
+        expect(source).not.toMatch(/product_id\s*(?:\|\||\?\?)\s*[^,\n]*\.id\b/);
+    });
+
+    it('does not use the browser clock for purchase business policy', () => {
+        const source = activeSources();
+        expect(source).not.toMatch(/(?:minDate|maxDate)=\{new Date\(\)\}/);
+        expect(source).not.toMatch(/Date\.now\(\)\s*\+\s*90/);
+        expect(read('grn/canonicalReceiptCommand.ts')).not.toContain('now = new Date()');
+        expect(read('grn/canonicalReceiptCommand.ts')).not.toContain('cannot be in the future');
+    });
+
+    it('does not advertise writes that only load a draft', () => {
+        expect(read('PDFVerificationFlow.tsx')).toContain('Confirm & Load Draft');
+        expect(read('PDFVerificationFlow.tsx')).not.toContain('Confirm & Save Purchase');
+        expect(read('purchase-entry/PurchaseEntryFlow.tsx')).not.toContain("{ key: 'Ctrl+S', action: 'Save Purchase' }");
     });
 });

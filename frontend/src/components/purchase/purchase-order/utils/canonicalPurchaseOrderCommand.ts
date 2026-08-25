@@ -87,8 +87,8 @@ export function canonicalPurchaseOrderValidationError(
 ): string | null {
     try {
         requiredUuid(branchId, 'Purchase-order branch');
-        requiredUuid(supplier?.supplier_id ?? supplier?.id, 'Supplier');
-        if (!String(supplier?.supplier_name ?? supplier?.name ?? '').trim()) {
+        requiredUuid(supplier?.supplier_id, 'Supplier');
+        if (!String(supplier?.supplier_name ?? '').trim()) {
             return 'Selected supplier legal name is missing.';
         }
         if (!DATE_PATTERN.test(order.po_date)) return 'Purchase-order date is invalid.';
@@ -170,7 +170,7 @@ export function buildCanonicalPurchaseOrderPreparePayload(
         order_date: order.po_date,
         expected_on: order.expected_delivery_date,
         supplier_account_id: requiredUuid(
-            supplier.supplier_id ?? supplier.id,
+            supplier.supplier_id,
             'Supplier',
         ),
         tax_charge_mechanism: 'normal',

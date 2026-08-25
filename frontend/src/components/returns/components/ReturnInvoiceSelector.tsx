@@ -3,6 +3,7 @@ import { FileText, ChevronRight, ChevronLeft, Loader2, RefreshCw, Package } from
 import { invoicesApi } from '../../../services/api';
 import type { ReturnInvoiceSelectorProps } from '../types/return.types';
 import { formatReturnMoney } from '../utils/returnDecimal';
+import { formatCalendarDate } from '../../../utils/calendarDate';
 
 interface InvoiceData {
     id?: string | number;
@@ -104,7 +105,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-500">
                                         {invoiceDate && (
-                                            <span>{new Date(invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                            <span>{formatCalendarDate(invoiceDate)}</span>
                                         )}
                                         <span>{formatInvoiceAmount(invoiceAmount)}</span>
                                     </div>
@@ -133,13 +134,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
 
     // Format currency
     // Format date
-    const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-    };
+    const formatDate = (dateStr: string) => formatCalendarDate(dateStr);
 
     // Handle invoice click
     const handleInvoiceClick = (invoice: InvoiceData) => {

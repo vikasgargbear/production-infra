@@ -121,25 +121,6 @@ function organizationTimestamp(localValue: string, timeZone: string): string {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}${offsetSign}${offsetHour}:${offsetMinute}`;
 }
 
-export function organizationDateTimeInputValue(
-  value: Date,
-  timeZone: string,
-): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(value);
-  const part = (type: Intl.DateTimeFormatPartTypes) => (
-    parts.find(item => item.type === type)?.value || ''
-  );
-  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
-}
-
 function requireContextLine(
   context: CanonicalReceiptContext,
   id: string,
@@ -188,7 +169,6 @@ export function initialReceiptBatchDraft(
 export function buildCanonicalReceiptPayload(
   context: CanonicalReceiptContext,
   draft: CanonicalReceiptDraft,
-  now = new Date(),
 ): Record<string, unknown> {
   if (!canRecordCanonicalReceipt(context.status)) {
     throw new Error('Purchase order is no longer eligible for a canonical receipt');
@@ -211,10 +191,6 @@ export function buildCanonicalReceiptPayload(
         : 'Receipt date and time is required',
     );
   }
-  if (new Date(receivedAt).getTime() > now.getTime()) {
-    throw new Error('Receipt date and time cannot be in the future');
-  }
-
   const challanNumber = draft.supplierChallanNumber.trim();
   const challanDate = draft.supplierChallanDate.trim();
   if (Boolean(challanNumber) !== Boolean(challanDate)) {

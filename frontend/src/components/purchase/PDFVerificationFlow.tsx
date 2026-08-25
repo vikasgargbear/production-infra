@@ -276,8 +276,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       ...extractedData,
       supplier_id: verifiedSupplier.supplier_id,
       supplier_name: verifiedSupplier.supplier_name,
-      supplier_gst: verifiedSupplier.gst_number || verifiedSupplier.gst_number,
-      supplier_gst_number: verifiedSupplier.gst_number || verifiedSupplier.gst_number,
+      supplier_gst_number: verifiedSupplier.gst_number,
       supplier_phone: verifiedSupplier.primary_phone || verifiedSupplier.phone,
       supplier_email: verifiedSupplier.primary_email || verifiedSupplier.email,
       supplier_address: verifiedSupplier.address_line1 || verifiedSupplier.address,
@@ -419,7 +418,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p><span className="text-gray-600">Name:</span> <span className="font-medium">{verifiedSupplier?.supplier_name || verifiedSupplier?.name}</span></p>
-                    {(verifiedSupplier?.gst_number || verifiedSupplier?.gst_number) && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number || verifiedSupplier.gst_number}</p>}
+                    {verifiedSupplier?.gst_number && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number}</p>}
                     {(verifiedSupplier?.primary_phone || verifiedSupplier?.phone) && <p><span className="text-gray-600">Phone:</span> {verifiedSupplier.primary_phone || verifiedSupplier.phone}</p>}
                   </div>
                   <div>
@@ -534,7 +533,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                     className="px-8 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
                   >
                     <Save className="w-5 h-5" />
-                    <span>Confirm & Save Purchase</span>
+                    <span>Confirm & Load Draft</span>
                   </button>
                 </div>
               </div>

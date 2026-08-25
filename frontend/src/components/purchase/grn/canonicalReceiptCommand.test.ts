@@ -7,7 +7,6 @@ import {
 import type { CanonicalReceiptContext } from '../../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 
 
-const NOW = new Date('2026-08-25T12:00:00.000Z');
 const context: CanonicalReceiptContext = {
   purchase_order_id: '10000000-0000-7000-8000-000000000001',
   purchase_order_number: 'CODEX-E2E-PO-0001',
@@ -79,7 +78,7 @@ describe('canonical goods-receipt command contract', () => {
   );
 
   it('preserves billed/free quantities, batch, location and MRP evidence', () => {
-    const payload = buildCanonicalReceiptPayload(context, validDraft(), NOW) as any;
+    const payload = buildCanonicalReceiptPayload(context, validDraft()) as any;
     expect(payload).toMatchObject({
       purchase_order_id: context.purchase_order_id,
       branch_id: context.branch_id,
@@ -105,7 +104,7 @@ describe('canonical goods-receipt command contract', () => {
   it('serializes the organization-local receipt time with its explicit offset', () => {
     const draft = validDraft();
     draft.receivedAt = '2026-08-25T17:30';
-    const payload = buildCanonicalReceiptPayload(context, draft, NOW) as any;
+    const payload = buildCanonicalReceiptPayload(context, draft) as any;
     expect(payload.received_at).toBe('2026-08-25T17:30:00+05:30');
   });
 
@@ -116,9 +115,9 @@ describe('canonical goods-receipt command contract', () => {
     draft.lines[0].batches[0].rejectedQuantity = '0.200000';
     draft.lines[0].batches[0].qcStatus = 'partial';
     draft.lines[0].batches[0].qcNotes = 'Exact partial acceptance test';
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).not.toThrow();
+    expect(() => buildCanonicalReceiptPayload(context, draft)).not.toThrow();
     draft.lines[0].batches[0].rejectedQuantity = '0.200001';
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(
       /accepted plus rejected/i,
     );
   });
@@ -126,7 +125,7 @@ describe('canonical goods-receipt command contract', () => {
   it('rejects money beyond the canonical two-place MRP precision', () => {
     const draft = validDraft();
     draft.lines[0].batches[0].mrp = '125.001';
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(
       /MRP.*at most 2 places/i,
     );
   });
@@ -150,7 +149,7 @@ describe('canonical goods-receipt command contract', () => {
     second.toLocationId = context.lines[0].eligible_locations[0].id;
     draft.lines[0].batches.push(second);
 
-    const payload = buildCanonicalReceiptPayload(context, draft, NOW) as any;
+    const payload = buildCanonicalReceiptPayload(context, draft) as any;
     expect(payload.lines[0].batches).toHaveLength(2);
     expect(payload.lines[0].batches[1]).toMatchObject({
       manufacturer_batch_number: 'CODEX-E2E-BATCH-0002',
@@ -160,7 +159,7 @@ describe('canonical goods-receipt command contract', () => {
 
     second.acceptedQuantity = '4.000001';
     second.receivedQuantity = '4.000001';
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(
       /exceeds the remaining billed/i,
     );
   });
@@ -178,7 +177,7 @@ describe('canonical goods-receipt command contract', () => {
     draft.lines[0].batches[0].acceptedQuantity = '9';
     draft.lines[0].batches[0].freeQuantity = '2';
     draft.lines[0].batches.push(duplicate);
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(
       /repeats manufacturer batch/i,
     );
   });
@@ -188,14 +187,13 @@ describe('canonical goods-receipt command contract', () => {
     expect(() => buildCanonicalReceiptPayload(
       { ...context, status: 'received' as any },
       draft,
-      NOW,
     )).toThrow(/no longer eligible/i);
 
     draft.lines.push({
       ...draft.lines[0],
       batches: draft.lines[0].batches.map(batch => ({ ...batch })),
     });
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(
       /repeats a purchase-order line/i,
     );
   });
@@ -213,7 +211,7 @@ describe('canonical goods-receipt command contract', () => {
   it('rejects an impossible organization-local calendar time', () => {
     const draft = validDraft();
     draft.receivedAt = '2026-02-31T10:30';
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(
       /date and time is required/i,
     );
   });
@@ -226,11 +224,19 @@ describe('canonical goods-receipt command contract', () => {
     ['quantity mismatch', (draft: any) => { draft.lines[0].batches[0].rejectedQuantity = '1'; }, /accepted plus rejected/i],
     ['partial no notes', (draft: any) => { draft.lines[0].batches[0].qcStatus = 'partial'; draft.lines[0].batches[0].acceptedQuantity = '9'; draft.lines[0].batches[0].rejectedQuantity = '1'; }, /partial QC.*notes/i],
     ['missing QC disposition', (draft: any) => { draft.lines[0].batches[0].qcStatus = ''; }, /QC disposition is required/i],
-    ['future receipt', (draft: any) => { draft.receivedAt = '2026-08-26T12:00:00.000Z'; }, /cannot be in the future/i],
     ['challan pair', (draft: any) => { draft.supplierChallanDate = ''; }, /provided together/i],
   ])('fails closed for %s', (_name, mutate, expected) => {
     const draft = validDraft();
     mutate(draft);
-    expect(() => buildCanonicalReceiptPayload(context, draft, NOW)).toThrow(expected);
+    expect(() => buildCanonicalReceiptPayload(context, draft)).toThrow(expected);
+  });
+
+  it('does not compare receipt time to the browser clock', () => {
+    const draft = validDraft();
+    draft.receivedAt = '2099-08-26T12:00:00.000Z';
+    draft.supplierChallanDate = '2099-08-26';
+    draft.lines[0].batches[0].manufacturedOn = '2098-08-01';
+    draft.lines[0].batches[0].expiresOn = '2100-08-01';
+    expect(() => buildCanonicalReceiptPayload(context, draft)).not.toThrow();
   });
 });

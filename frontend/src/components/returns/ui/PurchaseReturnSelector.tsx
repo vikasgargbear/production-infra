@@ -1,5 +1,6 @@
 import React, { useState, forwardRef } from 'react';
 import { Search, FileText, Calendar, ChevronRight, Package, Truck, AlertCircle } from 'lucide-react';
+import { formatCalendarDate } from '../../../utils/calendarDate';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -131,7 +132,7 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2 text-gray-600">
                     <Calendar className="w-4 h-4" />
-                    <span>{invoiceDate ? new Date(invoiceDate).toLocaleDateString() : 'N/A'}</span>
+                    <span>{invoiceDate ? formatCalendarDate(invoiceDate) : 'Unavailable'}</span>
                   </div>
 
                   <div className="text-gray-600">

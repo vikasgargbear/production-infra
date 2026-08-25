@@ -32,6 +32,7 @@ import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBounda
 import { updateSalesReturnItem } from './utils/salesReturnProjection';
 import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
+import { formatCalendarDate } from '../../utils/calendarDate';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
@@ -305,7 +306,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       mobile: (customer as any).mobile || (customer as any).phone || '',
       email: (customer as any).email || (customer as any).contact_email || '',
       contact_person: (customer as any).contact_person || '',
-      gst_number: (customer as any).gst_number || (customer as any).gst || '',
+      gst_number: (customer as any).gst_number ?? '',
       drug_license_number: (customer as any).drug_license_number || (customer as any).drug_license || '',
       credit_limit: (customer as any).credit_limit,
       credit_days: (customer as any).credit_days
@@ -318,7 +319,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     dispatch({
       type: 'SET_RETURN_DATA',
       data: {
-        customer_id: (customer as any).id ?? (customer as any).customer_id ?? (customer as any).party_id,
+        customer_id: (customer as any).customer_id,
         customer_details: fullCustomer as Customer,
         invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
         items: [],
@@ -479,7 +480,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                       <div className="flex items-center gap-1.5 text-sm">
                         <span className="text-gray-500">Date:</span>
                         <span className="font-medium text-gray-900">
-                          {new Date(returnData.return_date || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {returnData.return_date ? formatCalendarDate(returnData.return_date) : 'Unavailable'}
                         </span>
                       </div>
 
@@ -678,20 +679,21 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                         }))}
                         placeholder="Select verified evidence"
                       />
-                      <label className="flex min-h-11 items-center gap-2 text-sm text-gray-700">
+                      <label className="block text-sm text-gray-700">
+                        Recipient ITC-reversal confirmation timestamp
                         <input
-                          type="checkbox"
-                          checked={Boolean((returnData as any).recipient_itc_reversal_confirmed_at)}
+                          type="text"
+                          value={String((returnData as any).recipient_itc_reversal_confirmed_at || '')}
                           onChange={(event) => dispatch({
                             type: 'SET_RETURN_DATA',
-                            data: {
-                              recipient_itc_reversal_confirmed_at: event.target.checked
-                                ? new Date().toISOString()
-                                : '',
-                            },
+                            data: { recipient_itc_reversal_confirmed_at: event.target.value },
                           })}
+                          placeholder="RFC 3339 with offset, e.g. 2026-08-25T17:30:00+05:30"
+                          className="mt-1 min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2"
                         />
-                        I confirm the recipient reversed ITC for this evidence.
+                        <span className="mt-1 block text-xs text-gray-500">
+                          Enter the timestamp from the retained evidence. The browser does not invent a confirmation time.
+                        </span>
                       </label>
                     </div>
                   )}

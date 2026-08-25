@@ -164,9 +164,10 @@ export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: s
       data.recipient_itc_reversal_evidence_attachment_id,
       'Recipient ITC-reversal evidence',
     );
-    const confirmedAt = String(data.recipient_itc_reversal_confirmed_at ?? '');
-    if (!confirmedAt || Number.isNaN(Date.parse(confirmedAt))) {
-      throw new Error('Recipient ITC-reversal confirmation time is required.');
+    const confirmedAt = String(data.recipient_itc_reversal_confirmed_at ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(confirmedAt)
+      || Number.isNaN(Date.parse(confirmedAt))) {
+      throw new Error('Recipient ITC-reversal confirmation time must be RFC 3339 with an explicit offset.');
     }
     payload.recipient_itc_reversal_confirmed_at = confirmedAt;
   }
