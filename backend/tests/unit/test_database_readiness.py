@@ -164,6 +164,25 @@ def test_agent_worktrees_are_not_scanned_as_repository_authority(tmp_path: Path)
     assert not schema_readiness.check_competing_ddl(_authority(), tmp_path)
 
 
+def test_virtual_environment_dependencies_are_not_scanned_as_repository_authority(
+    tmp_path: Path,
+):
+    installed_alembic_test = (
+        tmp_path / "backend/runtime-python/lib/python3.11/site-packages/alembic/testing/env.py"
+    )
+    installed_alembic_test.parent.mkdir(parents=True)
+    installed_alembic_test.write_text(
+        "from alembic import op\nrevision = 'dependency-fixture'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "backend/runtime-python/pyvenv.cfg").write_text(
+        "home = /usr/local/bin\n",
+        encoding="utf-8",
+    )
+
+    assert not schema_readiness.check_competing_ddl(_authority(), tmp_path)
+
+
 def test_alembic_revision_outside_authority_is_reported(tmp_path: Path):
     legacy = tmp_path / "backend/migrations/versions/legacy.py"
     legacy.parent.mkdir(parents=True)

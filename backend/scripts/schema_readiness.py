@@ -216,12 +216,25 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
     offenders: list[tuple[Path, int]] = []
     create_pattern = re.compile(r"(?im)^\s*CREATE\s+TABLE\b")
 
-    def is_agent_worktree(path: Path) -> bool:
+    def is_excluded_repository_path(path: Path) -> bool:
         relative_parts = path.relative_to(root).parts
-        return relative_parts[:2] == (".claude", "worktrees")
+        if relative_parts[:2] == (".claude", "worktrees"):
+            return True
+        if any(part in {".git", "node_modules", "__pycache__"} for part in relative_parts):
+            return True
+
+        # Virtual environments are installed dependencies, not repository-owned
+        # migration sources. Detect them by their interpreter marker instead of
+        # assuming a particular directory name such as ``venv`` or ``.venv``.
+        current = path.parent
+        while current != root and current.is_relative_to(root):
+            if (current / "pyvenv.cfg").is_file():
+                return True
+            current = current.parent
+        return False
 
     for path in root.rglob("*.sql"):
-        if is_agent_worktree(path):
+        if is_excluded_repository_path(path):
             continue
         resolved = path.resolve()
         if resolved.is_relative_to(bootstrap_root) or resolved.is_relative_to(migration_root):
@@ -247,7 +260,7 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
     revision_pattern = re.compile(r"(?m)^\s*revision\s*(?::[^=]+)?=")
     alembic_import_pattern = re.compile(r"(?m)^\s*from\s+alembic\s+import\s+op\b")
     for path in root.rglob("*.py"):
-        if is_agent_worktree(path):
+        if is_excluded_repository_path(path):
             continue
         resolved = path.resolve()
         if resolved.is_relative_to(migration_root):
