@@ -100,7 +100,13 @@ def _routes():
     # derived middleware.  Audit the effective FastAPI application rather
     # than its construction-time APIRouter, which a reload may replace after
     # the routes have already been mounted on the application.
-    return [route for route in main_module.app.routes if isinstance(route, APIRoute)]
+    return [
+        route
+        for route in main_module.app.routes
+        if hasattr(route, "dependant")
+        and hasattr(route, "endpoint")
+        and getattr(route, "methods", None)
+    ]
 
 
 def _direct_durable_side_effects(route: APIRoute):
