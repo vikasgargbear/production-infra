@@ -1,0 +1,15 @@
+{
+  "state": "draft",
+  "strategy": "reset",
+  "source_identifier": "rgihahbmkrmhitjdjvev",
+  "retired_source_accessed": false,
+  "disposable_staging_reset_verified": false,
+  "reset_workflow_run_url": null,
+  "reset_artifact_sha256": null,
+  "reset_completed_at": null,
+  "reviewer": null,
+  "reviewed_at": null,
+  "blockers": [
+    "Attach the canonical-staging reset run ID and verify the reset boundary before changing state to reviewed."
+  ]
+}

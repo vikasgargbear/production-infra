@@ -1,0 +1,13 @@
+{
+  "state": "draft",
+  "reviewer": null,
+  "reviewed_at": null,
+  "owner": null,
+  "trigger_conditions": [],
+  "verification_queries": [],
+  "max_recovery_minutes": null,
+  "steps": [],
+  "blockers": [
+    "Name the release owner, rollback trigger, quiesce procedure, verified backup artifact, restore target, DNS/Render reversal, validation queries, and maximum rollback window."
+  ]
+}

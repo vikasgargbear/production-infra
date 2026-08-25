@@ -1,0 +1,15 @@
+{
+  "state": "draft",
+  "retired_project_ref": "jfrairkkzxwkhbtqejnz",
+  "reviewer": null,
+  "reviewed_at": null,
+  "owner": null,
+  "prerequisites": [],
+  "final_backup_required": true,
+  "rollback_window_ends_at": null,
+  "retention_approval_reference": null,
+  "steps": [],
+  "blockers": [
+    "Document retention approval, final offline backup hash, restore proof, credential revocation, application traffic proof, deletion owner, rollback-window expiry, and irreversible-action approval."
+  ]
+}
