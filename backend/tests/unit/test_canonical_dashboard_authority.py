@@ -4,18 +4,30 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
+
+try:
+    from fastapi.routing import iter_route_contexts
+except ImportError:  # FastAPI <= 0.136 flattens included routers.
+    iter_route_contexts = None
 
 from app.api.routes import canonical_erp_reads
 from app.main import app
 
 
+def _effective_routes():
+    contexts = iter_route_contexts(app.routes) if iter_route_contexts else app.routes
+    for context in contexts:
+        original = getattr(context, "original_route", context)
+        yield getattr(context, "path", getattr(original, "path", "")), original
+
+
 def test_only_canonical_dashboard_routes_are_mounted() -> None:
     dashboard_routes = [
-        route for route in app.routes
-        if isinstance(route, APIRoute) and route.path.startswith("/api/dashboard/")
+        (path, route) for path, route in _effective_routes()
+        if path.startswith("/api/dashboard/")
+        and getattr(route, "endpoint", None) is not None
     ]
-    assert {route.path for route in dashboard_routes} == {
+    assert {path for path, _route in dashboard_routes} == {
         "/api/dashboard/stats",
         "/api/dashboard/sales-analytics",
         "/api/dashboard/inventory-summary",
@@ -24,7 +36,7 @@ def test_only_canonical_dashboard_routes_are_mounted() -> None:
     }
     assert all(
         route.endpoint.__module__ == "app.api.routes.canonical_erp_reads"
-        for route in dashboard_routes
+        for _path, route in dashboard_routes
     )
 
 

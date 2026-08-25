@@ -43,7 +43,6 @@ CRITICAL_UI_READS = {
     "/api/gst/dashboard",
     "/api/ledger/aging",
     "/api/collection-center/collection/aging-data",
-    "/api/financial/summary",
     "/api/dashboard/stats",
     "/api/settings/features",
 }

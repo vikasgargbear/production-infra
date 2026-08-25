@@ -13,7 +13,6 @@ import organizationsApi from '../api/modules/org/organizations.api';
 import { setupApi } from '../api/modules/settings/setup.api';
 import { metadataApi } from '../api/modules/settings/metadata.api';
 import utilsApi from '../api/modules/settings/utils.api';
-import ledgerApi from '../api/modules/finance/ledger.api';
 import { createCrudApi } from '../api/utils/createCrudApi';
 import { updateFeatureFlag } from '../../hooks/useFeatureFlags';
 
@@ -43,7 +42,6 @@ describe('legacy mutation adapters fail before transport', () => {
     ['legacy setup', () => setupApi.completeSetup()],
     ['metadata creation', () => metadataApi.createProductCategory({ category_name: 'Legacy' })],
     ['utility messaging', () => utilsApi.sendWhatsApp('9999999999', 'Legacy')],
-    ['unsupported ledger export', () => ledgerApi.exportReport({})],
     ['feature flag update', () => updateFeatureFlag('offline_mode', true)],
     ['generic CRUD mutation', () => createCrudApi({ basePath: '/legacy' }).create({})],
   ])('%s rejects without an HTTP mutation', async (_label, action) => {

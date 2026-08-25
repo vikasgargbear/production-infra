@@ -38,8 +38,8 @@ test('live reports and documents never present invented business facts', () => {
   expect(canonicalReads).toContain('invoice.seller_address_snapshot AS seller_address');
   expect(orderReview).not.toMatch(/Interest\s*@\s*18%/);
 
-  expect(financialReport).toContain('canonical reporting API');
-  expect(customerAnalytics).toContain('Not published by the canonical API');
+  expect(financialReport).toContain('canonical API does not publish');
+  expect(customerAnalytics).toContain('canonical API does not publish');
 });
 
 test('retired browser spreadsheet parsers cannot invent product master facts', () => {
@@ -71,18 +71,20 @@ test('retired compatibility mappers cannot infer canonical product or batch fact
   expect(configIndex).not.toContain('fieldAliases');
 });
 
-test('financial comparisons come from equal-period backend facts, never zero placeholders', () => {
+test('financial reports fail closed without reviewed projections; sales uses exact facts', () => {
   const financialReport = read('frontend/src/components/reports/FinancialReport.tsx');
   const salesReport = read('frontend/src/components/reports/SalesReport.tsx');
   const taxAnalytics = read('frontend/src/components/reports/TaxAnalytics.tsx');
   const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
 
-  expect(financialReport).toContain('requiredNumberFact');
-  expect(financialReport).toContain('Previous-period comparison unavailable');
+  expect(financialReport).toContain('CanonicalReportUnavailable');
+  expect(financialReport).not.toContain('apiClient');
   expect(financialReport).not.toContain('summaryData.revenue_change_percent || 0');
   expect(financialReport).not.toContain("transaction_category || 'General'");
-  expect(canonicalReads).toContain('previous_from = previous_to -');
-  expect(canonicalReads).toContain('"previous_accounts_receivable": None');
+  expect(canonicalReads).not.toContain('@router.get("/financial/summary")');
+  expect(canonicalReads).not.toContain('@router.get("/financial/cash-flow")');
+  expect(canonicalReads).not.toContain('@router.get("/financial/transactions")');
+  expect(canonicalReads).not.toContain('@router.get("/financial/expense-breakdown")');
   expect(canonicalReads).not.toContain('"revenue_change_percent": 0');
   expect(canonicalReads).not.toContain('"receivable_change_percent": 0');
   expect(canonicalReads).not.toContain('0::numeric AS sales_growth');

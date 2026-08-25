@@ -6,11 +6,6 @@ import apiClient, { apiHelpers } from './apiClient';
 import * as dataUtils from './utils/dataUtils';
 
 // =========================================================================
-// ANALYTICS
-// =========================================================================
-import reportsApi from './modules/analytics/reports.api';
-
-// =========================================================================
 // AUDIT
 // =========================================================================
 import { auditApi } from './modules/audit/audit.api';
@@ -100,9 +95,6 @@ export {
   // Audit
   auditApi,
 
-  // Analytics
-  reportsApi,
-
   // Auth
   authApi,
 
@@ -169,8 +161,6 @@ export {
 // API object with all modules grouped by domain
 const apiModules = {
   // Analytics
-  analytics: { reports: reportsApi },
-
   // Audit
   audit: { auditLogs: auditApi },
 

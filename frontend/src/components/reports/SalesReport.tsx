@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronUp, Printer
 } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
-import { format, subDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
 import { isValidReportDateRange } from './utils/reportDateRange';
+import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
+import { addCalendarDays, formatCalendarDate, requireCalendarDate } from '../../utils/calendarDate';
 
 interface SalesMetric {
   label: string;
@@ -32,40 +33,55 @@ const optionalNumberFact = (record: Record<string, unknown>, field: string): num
   return value;
 };
 
+interface SalesDailyRow {
+  date: string;
+  invoiceCount: number;
+  customerCount: number;
+  totalSales: number;
+  averageInvoiceValue: number;
+}
+
+const requiredCountFact = (record: Record<string, unknown>, field: string): number => {
+  const value = requiredNumberFact(record, field);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Sales report has invalid canonical ${field}.`);
+  }
+  return value;
+};
+
+export const projectSalesDailyRows = (payload: unknown): SalesDailyRow[] => {
+  if (!Array.isArray(payload)) throw new Error('Sales daily projection is not a list.');
+  return payload.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`Sales daily row ${index + 1} is invalid.`);
+    }
+    const row = item as Record<string, unknown>;
+    return {
+      date: requireCalendarDate(row.date, `Sales daily row ${index + 1} date`),
+      invoiceCount: requiredCountFact(row, 'invoice_count'),
+      customerCount: requiredCountFact(row, 'customer_count'),
+      totalSales: requiredNumberFact(row, 'total_sales'),
+      averageInvoiceValue: requiredNumberFact(row, 'avg_order_value'),
+    };
+  });
+};
+
 const SalesReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [reportType, setReportType] = useState('summary');
-  const [groupBy, setGroupBy] = useState('day');
   const [metrics, setMetrics] = useState<SalesMetric[]>([]);
   const [chartData, setChartData] = useState<any>(null);
   const [tableData, setTableData] = useState<any[]>([]);
-  const [filters, setFilters] = useState({
-    customer: '',
-    product: '',
-    category: '',
-    paymentStatus: 'all'
-  });
+  const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
   useEffect(() => {
-    // Set default date range to last 30 days
-    const end = new Date();
-    const start = subDays(end, 30);
+    if (!businessDate) return;
     setDateRange({
-      start: format(start, 'yyyy-MM-dd'),
-      end: format(end, 'yyyy-MM-dd')
+      start: addCalendarDays(businessDate, -29),
+      end: businessDate,
     });
-  }, []);
-
-  useEffect(() => {
-    if (dateRange.start && dateRange.end && isValidReportDateRange(dateRange.start, dateRange.end)) {
-      loadSalesData();
-    } else if (dateRange.start && dateRange.end) {
-      setMetrics([]);
-      setChartData(null);
-      setTableData([]);
-    }
-  }, [dateRange, reportType, groupBy, filters]);
+  }, [businessDate]);
 
   const dateRangeInvalid = Boolean(
     dateRange.start &&
@@ -73,37 +89,27 @@ const SalesReport: React.FC = () => {
     !isValidReportDateRange(dateRange.start, dateRange.end)
   );
 
-  const loadSalesData = async () => {
+  const loadSalesData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Fetch real sales data from multiple endpoints
       const [salesSummary, salesTrend, salesByDate] = await Promise.all([
-        // Get sales summary metrics
         apiClient.get('/sales/analytics/summary', {
           params: {
             date_from: dateRange.start,
             date_to: dateRange.end,
-            report_type: reportType,
-            group_by: groupBy
           }
         }),
-        // Get sales trend data for chart
         apiClient.get('/sales/analytics/trend', {
           params: {
             date_from: dateRange.start,
             date_to: dateRange.end,
-            group_by: groupBy
           }
         }),
-        // Get detailed sales data for table
         apiClient.get('/sales/analytics/by-date', {
           params: {
             date_from: dateRange.start,
             date_to: dateRange.end,
-            customer: filters.customer || undefined,
-            product: filters.product || undefined,
-            category: filters.category || undefined,
-            payment_status: filters.paymentStatus !== 'all' ? filters.paymentStatus : undefined
           }
         })
       ]);
@@ -138,25 +144,16 @@ const SalesReport: React.FC = () => {
       ];
       setMetrics(calculatedMetrics);
 
-      // Process chart data from API response
-      const trendData = salesTrend.data || [];
+      const trendData = projectSalesDailyRows(salesTrend.data);
       if (trendData.length > 0) {
-        const labels = trendData.map((item: any) => {
-          if (groupBy === 'day') {
-            return format(new Date(item.date || item.period), 'MMM dd');
-          } else if (groupBy === 'week') {
-            return `Week ${item.week || item.period}`;
-          } else {
-            return item.month || item.period;
-          }
-        });
+        const labels = trendData.map(item => formatCalendarDate(item.date));
 
         setChartData({
           labels,
           datasets: [
             {
               label: 'Sales Amount',
-              data: trendData.map((item: any) => item.total_sales || item.revenue || 0),
+              data: trendData.map(item => item.totalSales),
               borderColor: 'rgb(59, 130, 246)',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
               yAxisID: 'y',
@@ -165,7 +162,7 @@ const SalesReport: React.FC = () => {
             },
             {
               label: 'Order Count',
-              data: trendData.map((item: any) => item.order_count || item.orders || 0),
+              data: trendData.map(item => item.invoiceCount),
               borderColor: 'rgb(156, 163, 175)',
               backgroundColor: 'rgba(156, 163, 175, 0.1)',
               yAxisID: 'y1',
@@ -179,44 +176,36 @@ const SalesReport: React.FC = () => {
         setChartData(null);
       }
 
-      // Process table data from API response
-      const detailedData = salesByDate.data || [];
-      const processedTableData = detailedData.map((item: any) => ({
-        date: item.date || item.invoice_date,
-        orders: item.order_count || item.invoice_count || 0,
-        sales: formatCurrency(item.total_sales || item.total_amount || 0),
-        customers: item.customer_count || item.unique_customers || 0,
-        avgOrder: formatCurrency(item.avg_order_value ||
-          ((item.total_sales || item.total_amount || 0) / (item.order_count || 1)))
+      const detailedData = projectSalesDailyRows(salesByDate.data);
+      const processedTableData = detailedData.map(item => ({
+        date: formatCalendarDate(item.date),
+        orders: item.invoiceCount,
+        sales: formatCurrency(item.totalSales),
+        customers: item.customerCount,
+        avgOrder: formatCurrency(item.averageInvoiceValue),
       }));
       setTableData(processedTableData);
 
     } catch (error) {
       console.error('Error loading sales data:', error);
-      // Set empty state on error
+      setError(error instanceof Error ? error.message : 'Canonical sales report is unavailable.');
       setMetrics([]);
       setChartData(null);
       setTableData([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange.end, dateRange.start]);
 
-  const generateDateLabels = () => {
-    const days = parseInt((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24) + '');
-    
-    if (groupBy === 'day' && days <= 31) {
-      return Array.from({ length: Math.min(days, 31) }, (_, i) => 
-        format(subDays(new Date(dateRange.end), days - i - 1), 'MMM dd')
-      );
-    } else if (groupBy === 'week') {
-      return ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    } else if (groupBy === 'month') {
-      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+  useEffect(() => {
+    if (dateRange.start && dateRange.end && isValidReportDateRange(dateRange.start, dateRange.end)) {
+      loadSalesData();
+    } else if (dateRange.start && dateRange.end) {
+      setMetrics([]);
+      setChartData(null);
+      setTableData([]);
     }
-    return [];
-  };
-
+  }, [dateRange.end, dateRange.start, loadSalesData]);
 
   const chartOptions = {
     responsive: true,
@@ -281,7 +270,7 @@ const SalesReport: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           <div>
             <label htmlFor="sales-report-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
             <input
@@ -302,31 +291,6 @@ const SalesReport: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
-            <select
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="summary">Summary</option>
-              <option value="detailed">Detailed</option>
-              <option value="by-customer">By Customer</option>
-              <option value="by-product">By Product</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Group By</label>
-            <select
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          </div>
         </div>
         {dateRangeInvalid && (
           <p role="alert" className="mt-3 text-sm font-medium text-red-700">
@@ -335,8 +299,20 @@ const SalesReport: React.FC = () => {
         )}
       </div>
 
+      {(businessDateError || error) && (
+        <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+          {businessDateError || error}
+        </div>
+      )}
+
+      {(businessDateLoading || loading) && (
+        <div role="status" className="mb-6 rounded-lg border border-gray-200 bg-white p-4 text-gray-600">
+          Loading canonical sales report…
+        </div>
+      )}
+
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {!error && !businessDateError && <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {metrics.map((metric, index) => (
           <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <p className="text-sm text-gray-600">{metric.label}</p>
@@ -360,18 +336,18 @@ const SalesReport: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Chart */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      {!error && !businessDateError && <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Trend</h3>
         <div style={{ height: '400px' }}>
           {chartData && <Line data={chartData} options={chartOptions} />}
         </div>
-      </div>
+      </div>}
 
       {/* Data Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {!error && !businessDateError && <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Sales Data</h3>
         </div>
@@ -419,7 +395,7 @@ const SalesReport: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

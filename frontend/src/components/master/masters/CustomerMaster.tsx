@@ -47,7 +47,7 @@ export const loadCustomersWithCanonicalAging = async () => {
     : Array.isArray(responseData?.customers) ? responseData.customers : []) as Customer[];
   let agingRows: Record<string, unknown>[] | null = null;
   try {
-    const agingResponse = await ledgerApi.getAgingReport({ party_type: 'customer' });
+    const agingResponse = await ledgerApi.getAging({ party_type: 'customer' });
     agingRows = Array.isArray(agingResponse.data?.aging_data) ? agingResponse.data.aging_data : [];
   } catch {
     agingRows = null;

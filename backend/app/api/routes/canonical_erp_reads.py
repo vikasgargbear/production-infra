@@ -4472,12 +4472,10 @@ def canonical_collection_aging(
 
 def _sales_daily(db: Session, params: dict) -> list[dict]:
     return _rows(db, f"""
-        SELECT invoice.invoice_date AS date, invoice.invoice_date AS period,
-               count(*) AS order_count, count(*) AS invoice_count,
+        SELECT invoice.invoice_date AS date,
+               count(*) AS invoice_count,
                count(DISTINCT invoice.customer_account_id) AS customer_count,
-               count(DISTINCT invoice.customer_account_id) AS unique_customers,
                COALESCE(SUM(invoice.grand_total),0) AS total_sales,
-               COALESCE(SUM(invoice.grand_total),0) AS revenue,
                COALESCE(AVG(invoice.grand_total),0) AS avg_order_value
           FROM sales.invoices invoice WHERE {_INVOICE_RANGE}
          GROUP BY invoice.invoice_date ORDER BY invoice.invoice_date
@@ -4533,7 +4531,13 @@ def sales_analytics_summary(date_from: date, date_to: date,
 def sales_analytics_by_date(date_from: Optional[str] = None, date_to: Optional[str] = None,
                             user: dict = SALES_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
-    return _sales_daily(db, _range_params(org_id, date_from, date_to))
+    if date_from is None or date_to is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Both date_from and date_to are required for sales analytics",
+        )
+    period = _validated_report_range(date_from, date_to)
+    return _sales_daily(db, _range_params(org_id, **period))
 
 
 @router.get("/dashboard/sales-analytics")
@@ -4545,9 +4549,8 @@ def dashboard_sales_analytics(
 ):
     """Return one exact, dashboard-specific daily sales projection.
 
-    The general sales analytics response retains compatibility aliases for its
-    report consumers.  The executive dashboard contract deliberately exposes
-    only one name for each fact so the browser cannot guess among aliases.
+    Every sales analytics route exposes one name for each fact so browser
+    clients cannot guess among compatibility aliases.
     """
 
     org_id = _activate(db, user)
@@ -4559,153 +4562,6 @@ def dashboard_sales_analytics(
           FROM sales.invoices invoice WHERE {_INVOICE_RANGE}
          GROUP BY invoice.invoice_date ORDER BY invoice.invoice_date
     """, _range_params(org_id, **period))
-
-
-def _customer_analytics_rows(db: Session, params: dict) -> list[dict]:
-    return _rows(db, """
-        SELECT account.id AS customer_id, account.id, party.legal_name AS customer_name,
-               party.legal_name AS name, party.party_kind AS customer_type,
-               address.city, account.created_at, account.credit_limit,
-               COALESCE(sales.total_purchases,0) AS total_purchases,
-               COALESCE(sales.total_purchases,0) AS lifetime_value,
-               sales.last_purchase_date, COALESCE(sales.avg_order_value,0) AS avg_order_value,
-               COALESCE(sales.purchase_frequency,0) AS purchase_frequency,
-               COALESCE(open_item_data.outstanding_amount,0) AS outstanding_amount
-          FROM parties.customer_accounts account
-          JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-          LEFT JOIN LATERAL (
-              SELECT city FROM parties.addresses
-               WHERE org_id=account.org_id AND party_id=account.party_id AND status='active'
-               ORDER BY is_primary DESC, id LIMIT 1
-          ) address ON true
-          LEFT JOIN LATERAL (
-              SELECT SUM(invoice.grand_total) total_purchases, MAX(invoice.invoice_date) last_purchase_date,
-                     AVG(invoice.grand_total) avg_order_value, count(*) purchase_frequency
-                FROM sales.invoices invoice
-               WHERE invoice.org_id=account.org_id AND invoice.customer_account_id=account.id
-                 AND invoice.status NOT IN ('cancelled','reversed')
-                 AND (:date_from IS NULL OR invoice.invoice_date >= CAST(:date_from AS date))
-                 AND (:date_to IS NULL OR invoice.invoice_date <= CAST(:date_to AS date))
-          ) sales ON true
-          LEFT JOIN LATERAL (
-              SELECT SUM(principal_amount) outstanding_amount FROM finance.open_items item
-               WHERE item.org_id=account.org_id AND item.party_id=account.party_id
-                 AND item.item_side='receivable' AND item.status='open'
-          ) open_item_data ON true
-         WHERE account.org_id=:org_id ORDER BY total_purchases DESC, party.legal_name
-    """, params)
-
-
-@router.get("/customers/analytics/list")
-def customer_analytics_list(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                            user: dict = SALES_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _customer_analytics_rows(db, _range_params(org_id, date_from, date_to))
-
-
-@router.get("/customers/analytics/summary")
-def customer_analytics_summary(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                               user: dict = SALES_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _customer_analytics_rows(db, _range_params(org_id, date_from, date_to))
-    total = len(rows)
-    active = sum(1 for row in rows if row["last_purchase_date"] is not None)
-    revenue = sum((row["total_purchases"] or 0) for row in rows)
-    return {"total_customers": total, "active_customers": active,
-            "inactive_customers": total - active, "total_customer_revenue": revenue,
-            "average_lifetime_value": revenue / total if total else 0}
-
-
-@router.get("/customers/analytics/segments")
-def customer_analytics_segments(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                                user: dict = SALES_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT party.party_kind AS segment, count(*) AS count
-          FROM parties.customer_accounts account
-          JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-         WHERE account.org_id=:org_id GROUP BY party.party_kind ORDER BY party.party_kind
-    """, {"org_id": org_id})
-    return {str(row["segment"] or "Retail"): row["count"] for row in rows}
-
-
-@router.get("/customers/analytics/acquisition")
-def customer_analytics_acquisition(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                                   user: dict = SALES_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month, count(*) AS customers
-          FROM parties.customer_accounts WHERE org_id=:org_id
-           AND (:date_from IS NULL OR created_at::date >= CAST(:date_from AS date))
-           AND (:date_to IS NULL OR created_at::date <= CAST(:date_to AS date))
-         GROUP BY date_trunc('month', created_at) ORDER BY date_trunc('month', created_at)
-    """, _range_params(org_id, date_from, date_to))
-
-
-def _product_performance_rows(db: Session, org_id: UUID) -> list[dict]:
-    return _rows(db, """
-        SELECT product.id, product.name, COALESCE(category.name,'Uncategorized') AS category,
-               COALESCE(sales.quantity,0) AS sales, COALESCE(sales.revenue,0) AS revenue,
-               COALESCE(sales.revenue - sales.estimated_cost,0) AS profit,
-               CASE WHEN COALESCE(sales.revenue,0)=0 THEN 0
-                    ELSE ((sales.revenue-sales.estimated_cost)/sales.revenue)*100 END AS margin,
-               COALESCE(stock.quantity,0) AS stock,
-               CASE WHEN COALESCE(stock.quantity,0)=0 THEN COALESCE(sales.quantity,0)
-                    ELSE COALESCE(sales.quantity,0)/NULLIF(stock.quantity,0) END AS turnover,
-               CASE WHEN COALESCE(sales.quantity,0)>0 THEN 'up' ELSE 'stable' END AS trend,
-               0::numeric AS trend_value
-          FROM catalog.products product
-          LEFT JOIN catalog.categories category ON category.org_id=product.org_id AND category.id=product.category_id
-          LEFT JOIN LATERAL (
-              SELECT SUM(line.billed_quantity) quantity, SUM(line.line_total) revenue,
-                     SUM(line.billed_quantity * COALESCE(cost.average_unit_cost,0)) estimated_cost
-                FROM sales.invoice_lines line
-                JOIN sales.invoices invoice ON invoice.org_id=line.org_id AND invoice.id=line.invoice_id
-                LEFT JOIN LATERAL (
-                    SELECT MAX(average_unit_cost) average_unit_cost FROM inventory.stock_balances balance
-                     WHERE balance.org_id=line.org_id AND balance.product_id=line.product_id
-                ) cost ON true
-               WHERE line.org_id=product.org_id AND line.product_id=product.id
-                 AND invoice.status NOT IN ('cancelled','reversed')
-          ) sales ON true
-          LEFT JOIN LATERAL (
-              SELECT SUM(on_hand_quantity) quantity FROM inventory.stock_balances balance
-               WHERE balance.org_id=product.org_id AND balance.product_id=product.id
-          ) stock ON true
-         WHERE product.org_id=:org_id AND product.status='active' ORDER BY revenue DESC, product.name
-    """, {"org_id": org_id})
-
-
-@router.get("/products/analytics/performance")
-def product_performance(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    return {"products": _product_performance_rows(db, _activate(db, user))}
-
-
-@router.get("/products/categories")
-def product_categories(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT name FROM catalog.categories WHERE org_id=:org_id AND status='active' ORDER BY name
-    """, {"org_id": org_id})
-    return {"categories": [row["name"] for row in rows]}
-
-
-@router.get("/products/analytics/summary")
-def product_analytics_summary(user: dict = INVENTORY_USER, db: Session = Depends(get_db)):
-    rows = _product_performance_rows(db, _activate(db, user))
-    margins = [row["margin"] or 0 for row in rows]
-    categories: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        bucket = categories.setdefault(row["category"], {"revenue": 0, "profit": 0, "count": 0})
-        bucket["revenue"] += row["revenue"] or 0
-        bucket["profit"] += row["profit"] or 0
-        bucket["count"] += 1
-    return {"total_products": len(rows), "high_margin_products": sum(1 for value in margins if value > 25),
-            "fast_moving_products": sum(1 for row in rows if (row["turnover"] or 0) > 10),
-            "low_stock_products": sum(1 for row in rows if (row["stock"] or 0) <= 0),
-            "avg_margin": sum(margins) / len(margins) if margins else 0,
-            "category_performance": categories,
-            "trends": {"labels": [], "revenue": [], "margin": []}}
 
 
 def _payment_rows(db: Session, params: dict, method: Optional[str] = None,
@@ -4782,161 +4638,6 @@ def payment_analytics_trends(date_from: Optional[str] = None, date_to: Optional[
             "monthly": {"labels": list(monthly),
                         "received": [value[0] for value in monthly.values()],
                         "sent": [value[1] for value in monthly.values()]}}
-
-
-def _financial_totals(db: Session, params: dict) -> dict:
-    rows = _rows(db, f"""
-        SELECT COALESCE(sales.revenue,0) total_revenue,
-               COALESCE(expenses.total,0) operating_expenses,
-               COALESCE(sales.revenue,0)-COALESCE(expenses.total,0) gross_profit,
-               COALESCE(sales.revenue,0)-COALESCE(expenses.total,0) net_profit,
-               COALESCE(receivables.total,0) accounts_receivable,
-               COALESCE(payables.total,0) accounts_payable
-          FROM (SELECT SUM(invoice.grand_total) revenue FROM sales.invoices invoice
-                 WHERE {_INVOICE_RANGE}) sales
-          CROSS JOIN (SELECT SUM(line.functional_debit-line.functional_credit) total
-                        FROM finance.journal_lines line
-                        JOIN finance.journal_entries entry ON entry.org_id=line.org_id AND entry.id=line.journal_entry_id
-                        JOIN finance.accounts account ON account.org_id=line.org_id AND account.id=line.account_id
-                       WHERE line.org_id=:org_id AND account.account_type='expense' AND entry.status='posted'
-                         AND (:date_from IS NULL OR entry.posting_date >= CAST(:date_from AS date))
-                         AND (:date_to IS NULL OR entry.posting_date <= CAST(:date_to AS date))) expenses
-          CROSS JOIN (SELECT SUM(principal_amount) total FROM finance.open_items
-                       WHERE org_id=:org_id AND item_side='receivable' AND status='open') receivables
-          CROSS JOIN (SELECT SUM(principal_amount) total FROM finance.open_items
-                       WHERE org_id=:org_id AND item_side='payable' AND status='open') payables
-    """, params)
-    return rows[0]
-
-
-@router.get("/financial/summary")
-def financial_summary(date_from: Optional[date] = None, date_to: Optional[date] = None,
-                      user: dict = FINANCE_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    result = _financial_totals(db, _range_params(org_id, date_from, date_to))
-    if date_from is None or date_to is None:
-        if date_from is not None or date_to is not None:
-            raise HTTPException(
-                status_code=422,
-                detail="Both date_from and date_to are required for a financial comparison",
-            )
-        result.update({
-            "comparison_period": None,
-            "previous_revenue": None,
-            "revenue_change": None,
-            "revenue_change_percent": None,
-            "previous_gross_profit": None,
-            "gross_profit_change": None,
-            "gross_profit_change_percent": None,
-            "previous_net_profit": None,
-            "net_profit_change": None,
-            "net_profit_change_percent": None,
-            "previous_operating_expenses": None,
-            "operating_expenses_change": None,
-            "operating_expenses_change_percent": None,
-            "previous_accounts_receivable": None,
-            "receivable_change": None,
-            "receivable_change_percent": None,
-            "previous_accounts_payable": None,
-            "payable_change": None,
-            "payable_change_percent": None,
-        })
-        return result
-
-    period = _validated_report_range(date_from, date_to)
-    previous_to = period["date_from"] - timedelta(days=1)
-    previous_from = previous_to - (period["date_to"] - period["date_from"])
-    previous = _financial_totals(
-        db,
-        _range_params(org_id, previous_from, previous_to),
-    )
-
-    def comparison(field: str) -> tuple[Decimal, Decimal, Optional[Decimal]]:
-        current_value = Decimal(str(result[field]))
-        previous_value = Decimal(str(previous[field]))
-        change = current_value - previous_value
-        percent = None if previous_value == 0 else (
-            change / abs(previous_value) * Decimal("100")
-        )
-        return previous_value, change, percent
-
-    revenue = comparison("total_revenue")
-    gross_profit = comparison("gross_profit")
-    net_profit = comparison("net_profit")
-    operating_expenses = comparison("operating_expenses")
-    result.update({
-        "comparison_period": {
-            "date_from": previous_from,
-            "date_to": previous_to,
-        },
-        "previous_revenue": revenue[0],
-        "revenue_change": revenue[1],
-        "revenue_change_percent": revenue[2],
-        "previous_gross_profit": gross_profit[0],
-        "gross_profit_change": gross_profit[1],
-        "gross_profit_change_percent": gross_profit[2],
-        "previous_net_profit": net_profit[0],
-        "net_profit_change": net_profit[1],
-        "net_profit_change_percent": net_profit[2],
-        "previous_operating_expenses": operating_expenses[0],
-        "operating_expenses_change": operating_expenses[1],
-        "operating_expenses_change_percent": operating_expenses[2],
-        # Open-item balances are current snapshots. Without an effective-dated
-        # snapshot source, a prior receivable/payable value would be invented.
-        "previous_accounts_receivable": None,
-        "receivable_change": None,
-        "receivable_change_percent": None,
-        "previous_accounts_payable": None,
-        "payable_change": None,
-        "payable_change_percent": None,
-    })
-    return result
-
-
-@router.get("/financial/cash-flow")
-def financial_cash_flow(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                        user: dict = FINANCE_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT to_char(payment_date,'YYYY-MM-DD') AS period,
-               COALESCE(SUM(amount) FILTER (WHERE direction='receipt'),0) AS income,
-               COALESCE(SUM(amount) FILTER (WHERE direction='disbursement'),0) AS expenses,
-               COALESCE(SUM(CASE WHEN direction='receipt' THEN amount ELSE -amount END),0) AS net_flow
-          FROM finance.payments WHERE org_id=:org_id AND status='posted'
-           AND (:date_from IS NULL OR payment_date >= CAST(:date_from AS date))
-           AND (:date_to IS NULL OR payment_date <= CAST(:date_to AS date))
-         GROUP BY payment_date ORDER BY payment_date
-    """, _range_params(org_id, date_from, date_to))
-
-
-@router.get("/financial/transactions")
-def financial_transactions(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                           limit: int = Query(10, ge=1, le=100),
-                           user: dict = FINANCE_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _payment_rows(db, _range_params(org_id, date_from, date_to))[:limit]
-    return [{"id": row["id"], "date": row["date"],
-             "type": "income" if row["direction"] == "receipt" else "expense",
-             "category": row["method"], "description": row["description"],
-             "amount": row["amount"], "status": "paid" if row["status"] == "posted" else "pending",
-             "reference": row["reference"]} for row in rows]
-
-
-@router.get("/financial/expense-breakdown")
-def financial_expense_breakdown(date_from: Optional[str] = None, date_to: Optional[str] = None,
-                                user: dict = FINANCE_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    return _rows(db, """
-        SELECT account.name AS category,
-               COALESCE(SUM(line.functional_debit-line.functional_credit),0) AS amount
-          FROM finance.journal_lines line
-          JOIN finance.journal_entries entry ON entry.org_id=line.org_id AND entry.id=line.journal_entry_id
-          JOIN finance.accounts account ON account.org_id=line.org_id AND account.id=line.account_id
-         WHERE line.org_id=:org_id AND account.account_type='expense' AND entry.status='posted'
-           AND (:date_from IS NULL OR entry.posting_date >= CAST(:date_from AS date))
-           AND (:date_to IS NULL OR entry.posting_date <= CAST(:date_to AS date))
-         GROUP BY account.id, account.name ORDER BY amount DESC
-    """, _range_params(org_id, date_from, date_to))
 
 
 def _dashboard_stats_totals(db: Session, params: dict) -> dict:
@@ -5160,73 +4861,3 @@ def tax_gstr1_summary(date_from: Optional[str] = None, date_to: Optional[str] = 
     """, _range_params(org_id, date_from, date_to))
     return {"total_cgst": totals["cgst_collected"], "total_sgst": totals["sgst_collected"],
             "total_igst": totals["igst_collected"], "monthly_summary": monthly}
-
-
-def _profit_loss(db: Session, org_id: UUID, year: int, month: Optional[int]) -> tuple[list[dict], dict]:
-    params = {"org_id": org_id, "year": year, "month": month}
-    accounts = _rows(db, """
-        SELECT account.account_type, account.name,
-               CASE WHEN account.account_type='income'
-                    THEN SUM(line.functional_credit-line.functional_debit)
-                    ELSE SUM(line.functional_debit-line.functional_credit) END AS amount
-          FROM finance.journal_lines line
-          JOIN finance.journal_entries entry ON entry.org_id=line.org_id AND entry.id=line.journal_entry_id
-          JOIN finance.accounts account ON account.org_id=line.org_id AND account.id=line.account_id
-         WHERE line.org_id=:org_id AND entry.status='posted'
-           AND EXTRACT(year FROM entry.posting_date)=:year
-           AND (:month IS NULL OR EXTRACT(month FROM entry.posting_date)=:month)
-           AND account.account_type IN ('income','expense')
-         GROUP BY account.account_type, account.id, account.name ORDER BY account.account_type, account.name
-    """, params)
-    revenue = sum((row["amount"] or 0) for row in accounts if row["account_type"] == "income")
-    expenses = sum((row["amount"] or 0) for row in accounts if row["account_type"] == "expense")
-    net = revenue - expenses
-    items = [{"label": "Revenue", "amount": revenue, "isHeader": True}]
-    items.extend({"label": row["name"], "amount": row["amount"], "indent": 1}
-                 for row in accounts if row["account_type"] == "income")
-    items.extend([{"label": "Sales Revenue", "amount": revenue, "isSubtotal": True},
-                  {"label": "Expenses", "amount": expenses, "isHeader": True}])
-    items.extend({"label": row["name"], "amount": row["amount"], "indent": 1}
-                 for row in accounts if row["account_type"] == "expense")
-    items.extend([{"label": "Total Operating Expenses", "amount": expenses, "isSubtotal": True},
-                  {"label": "Net Profit", "amount": net, "isSubtotal": True}])
-    return items, {"revenue": revenue, "expenses": expenses, "net": net}
-
-
-@router.get("/reports/profit-loss")
-def profit_loss(year: int, month: Optional[int] = None, user: dict = FINANCE_USER,
-                db: Session = Depends(get_db)):
-    items, _ = _profit_loss(db, _activate(db, user), year, month)
-    return {"items": items}
-
-
-@router.get("/reports/profit-loss/trends")
-def profit_loss_trends(year: int, user: dict = FINANCE_USER, db: Session = Depends(get_db)):
-    org_id = _activate(db, user)
-    rows = _rows(db, """
-        SELECT EXTRACT(month FROM entry.posting_date)::int AS month,
-               SUM(CASE WHEN account.account_type='income'
-                        THEN line.functional_credit-line.functional_debit ELSE 0 END) revenue,
-               SUM(CASE WHEN account.account_type='expense'
-                        THEN line.functional_debit-line.functional_credit ELSE 0 END) expenses
-          FROM finance.journal_lines line
-          JOIN finance.journal_entries entry ON entry.org_id=line.org_id AND entry.id=line.journal_entry_id
-          JOIN finance.accounts account ON account.org_id=line.org_id AND account.id=line.account_id
-         WHERE line.org_id=:org_id AND entry.status='posted'
-           AND EXTRACT(year FROM entry.posting_date)=:year
-         GROUP BY EXTRACT(month FROM entry.posting_date) ORDER BY month
-    """, {"org_id": org_id, "year": year})
-    return {"labels": [str(row["month"]) for row in rows],
-            "revenue": [row["revenue"] or 0 for row in rows],
-            "expenses": [row["expenses"] or 0 for row in rows],
-            "netProfit": [(row["revenue"] or 0)-(row["expenses"] or 0) for row in rows]}
-
-
-@router.get("/reports/profit-loss/summary")
-def profit_loss_summary(year: int, month: Optional[int] = None, user: dict = FINANCE_USER,
-                        db: Session = Depends(get_db)):
-    _, totals = _profit_loss(db, _activate(db, user), year, month)
-    revenue = totals["revenue"]
-    margin = (totals["net"] / revenue * 100) if revenue else 0
-    return {"grossMargin": margin, "operatingMargin": margin,
-            "netMargin": margin, "ebitdaMargin": margin}
