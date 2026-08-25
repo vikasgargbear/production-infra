@@ -252,6 +252,7 @@ async def test_shared_operator_tools_use_action_grant_and_delegated_token(
 async def test_prepare_routes_exact_business_input_through_bounded_action_grant() -> None:
     access = _access()
     branch_id = str(uuid4())
+    delivery_address_id = str(uuid4())
     arguments = {
         "idempotency_key": "prepare-sales-order-0001",
         "branch_id": branch_id,
@@ -264,6 +265,8 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
         "rounding_policy": "nearest_rupee",
         "zero_rated_payment_mode": "not_applicable",
         "customer_account_id": str(uuid4()),
+        "delivery_address_id": delivery_address_id,
+        "delivery_address_row_version": 7,
         "lines": [
             {
                 "product_id": str(uuid4()),
@@ -313,6 +316,8 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
         "/api/internal/mcp/actions/sales.order.prepare/prepare"
     )
     assert calls[1][2]["json"] == arguments
+    assert calls[1][2]["json"]["delivery_address_id"] == delivery_address_id
+    assert calls[1][2]["json"]["delivery_address_row_version"] == 7
     assert access.token not in json.dumps(calls)
 
 
