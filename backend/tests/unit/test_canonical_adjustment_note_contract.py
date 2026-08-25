@@ -165,6 +165,18 @@ def test_database_has_exact_resolve_prepare_dispatch_and_post_lifecycle() -> Non
     assert "INSERT INTO finance.open_items" in baseline
     assert "INSERT INTO tax.documents" in baseline
     assert "INSERT INTO finance.accounting_events" in baseline
+    post_function = baseline.split(
+        'CREATE FUNCTION "erp_commercial_commands"."post_adjustment_note"', 1
+    )[1].split(
+        'ALTER FUNCTION "erp_commercial_commands"."post_adjustment_note"', 1
+    )[0]
+    assert "inventory." not in post_function
+    assert "note.sales_return_id IS NOT NULL" in post_function
+    assert "note.purchase_return_id IS NOT NULL" in post_function
+    inventory_table = baseline.split(
+        'CREATE TABLE "inventory"."inventory_documents"', 1
+    )[1].split("CREATE TABLE", 1)[0]
+    assert "adjustment_note_id" not in inventory_table
 
     assert '"finance.adjustment_note.prepare": ActionAdapterBinding' in registry
     execute_function = sql.split(
@@ -271,6 +283,17 @@ def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:
     assert "finance.allocations" in source
     assert "tax.gst_adjustment_rule_versions" in source
     assert "legacy" not in source.lower()
+    assert "command.requested_by_membership_id" in source
+    assert "approval.approver_membership_id<>command.requested_by_membership_id" in source
+    assert "artifact.adjustment_note_id=note.id" in source
+    assert "note.sales_return_id IS NULL AND note.purchase_return_id IS NULL" in source
+
+    mcp_source = (
+        Path(__file__).resolve().parents[3]
+        / "backend/app/api/routes/internal/mcp_canonical_resolution_reads.py"
+    ).read_text()
+    assert "load_adjustment_note_readback" in mcp_source
+    assert "return load_adjustment_note_readback(" in mcp_source
 
 
 def test_context_publishes_exact_original_calculation_and_tax_authority() -> None:
@@ -377,7 +400,164 @@ def test_context_model_reconciles_exact_source_policy_and_tax_shape() -> None:
     assert context.lines[0].line_discount.value == Decimal("10.00")
     assert context.lines[0].document_discount_eligible is False
 
+    settled = context.model_dump()
+    settled["original_open_item_outstanding"] = Decimal("0.00")
+    assert reads.AdjustmentNoteContext.model_validate(
+        settled
+    ).original_open_item_outstanding == Decimal("0.00")
+
     invalid = context.model_dump()
     invalid["lines"][0]["igst_rate"] = Decimal("12.000000")
     with pytest.raises(ValueError, match="intra-state source unexpectedly carries IGST"):
         reads.AdjustmentNoteContext.model_validate(invalid)
+
+
+def _customer_credit_readback() -> dict:
+    source_document_id = uuid4()
+    original_tax_document_id = uuid4()
+    requester_id = uuid4()
+    approver_id = uuid4()
+    return {
+        "id": uuid4(),
+        "note_number": "CN-2026-000001",
+        "note_date": "2026-08-25",
+        "side": "sales",
+        "direction": "credit",
+        "document_effect": "decrease",
+        "status": "posted",
+        "original_document_id": source_document_id,
+        "party_id": uuid4(),
+        "gst_tax_treatment": "statutory",
+        "recipient_itc_reversal_evidence_attachment_id": uuid4(),
+        "recipient_itc_reversal_confirmed_at": "2026-08-25T08:00:00Z",
+        "counterparty_portal_document_line_id": None,
+        "counterparty_payable_amount": "168.00",
+        "posted_at": "2026-08-25T08:10:00Z",
+        "command_request_id": uuid4(),
+        "preview_hash": "sha256:" + "a" * 64,
+        "requested_by_membership_id": requester_id,
+        "approved_by_membership_id": approver_id,
+        "approved_at": "2026-08-25T08:05:00Z",
+        "calculation_artifact_id": uuid4(),
+        "calculation_authority_hash": "sha256:" + "b" * 64,
+        "original_tax_document_id": original_tax_document_id,
+        "tax_document_id": uuid4(),
+        "tax_adjusts_document_id": original_tax_document_id,
+        "tax_document_total": "168.00",
+        "accounting_event_id": uuid4(),
+        "journal_entry_id": uuid4(),
+        "journal_debit_total": "168.00",
+        "journal_credit_total": "168.00",
+        "journal_line_debit_total": "168.00",
+        "journal_line_credit_total": "168.00",
+        "original_open_item_id": uuid4(),
+        "original_open_item_side": "receivable",
+        "original_open_item_principal": "336.00",
+        "original_open_item_outstanding_before": "100.00",
+        "original_open_item_outstanding_after": "0.00",
+        "original_open_item_status": "settled",
+        "allocated_amount": "100.00",
+        "residual_open_item_amount": "68.00",
+        "residual_open_item_id": uuid4(),
+        "residual_open_item_side": "payable",
+        "residual_open_item_status": "open",
+        "settlement_effect": "reduce_receivable_or_create_refund_payable",
+        "sales_return_id": None,
+        "purchase_return_id": None,
+        "inventory_effect": "none",
+        "lines": [{
+            "id": uuid4(),
+            "line_number": 1,
+            "original_line_id": uuid4(),
+            "original_document_id": source_document_id,
+            "original_line_number": 1,
+            "product_id": uuid4(),
+            "uom_code": "EA",
+            "uom_conversion_factor": "2.000000",
+            "original_billed_quantity": "2.000000",
+            "original_free_quantity": "1.000000",
+            "billed_quantity": "1.000000",
+            "free_quantity": "1.000000",
+            "base_billed_quantity": "2.000000",
+            "base_free_quantity": "2.000000",
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "net_value_amount": "150.00",
+            "gst_taxable_value": "150.00",
+            "cgst_amount": "9.00",
+            "sgst_amount": "9.00",
+            "igst_amount": "0.00",
+            "cess_amount": "0.00",
+            "line_total": "168.00",
+        }],
+    }
+
+
+def test_customer_credit_readback_proves_lineage_refund_and_no_inventory() -> None:
+    readback = reads.AdjustmentNoteReadback.model_validate(
+        _customer_credit_readback()
+    )
+
+    assert readback.original_open_item_outstanding_after == Decimal("0.00")
+    assert readback.allocated_amount == Decimal("100.00")
+    assert readback.residual_open_item_amount == Decimal("68.00")
+    assert readback.residual_open_item_side == "payable"
+    assert readback.inventory_effect == "none"
+    assert readback.lines[0].base_free_quantity == Decimal("2.000000")
+
+
+def test_shared_readback_keeps_supplier_debit_settlement_semantics() -> None:
+    value = _customer_credit_readback()
+    value.update({
+        "side": "purchase",
+        "direction": "debit",
+        "recipient_itc_reversal_evidence_attachment_id": None,
+        "recipient_itc_reversal_confirmed_at": None,
+        "counterparty_portal_document_line_id": uuid4(),
+        "original_open_item_side": "payable",
+        "residual_open_item_side": "receivable",
+        "settlement_effect": "reduce_payable_or_create_supplier_receivable",
+    })
+
+    readback = reads.AdjustmentNoteReadback.model_validate(value)
+    assert readback.original_open_item_side == "payable"
+    assert readback.residual_open_item_side == "receivable"
+
+
+def test_customer_credit_readback_rejects_self_approval_and_physical_return_link() -> None:
+    value = _customer_credit_readback()
+    value["approved_by_membership_id"] = value["requested_by_membership_id"]
+    with pytest.raises(ValueError, match="approval is not independent"):
+        reads.AdjustmentNoteReadback.model_validate(value)
+
+    value = _customer_credit_readback()
+    value["sales_return_id"] = uuid4()
+    with pytest.raises(ValueError, match="linked to a physical return"):
+        reads.AdjustmentNoteReadback.model_validate(value)
+
+
+def test_customer_credit_readback_rejects_quantity_and_gst_lineage_drift() -> None:
+    value = _customer_credit_readback()
+    value["lines"][0]["original_document_id"] = uuid4()
+    with pytest.raises(ValueError, match="exact source invoice"):
+        reads.AdjustmentNoteReadback.model_validate(value)
+
+    value = _customer_credit_readback()
+    value["lines"][0]["base_free_quantity"] = "1.000000"
+    with pytest.raises(ValueError, match="free base quantity"):
+        reads.AdjustmentNoteReadback.model_validate(value)
+
+    value = _customer_credit_readback()
+    value["tax_adjusts_document_id"] = uuid4()
+    with pytest.raises(ValueError, match="lacks exact tax document"):
+        reads.AdjustmentNoteReadback.model_validate(value)
+
+
+def test_context_sql_supports_settled_invoice_refunds_without_fake_partial_state() -> None:
+    source = (
+        Path(__file__).resolve().parents[3]
+        / "backend/app/api/routes/canonical_adjustment_note_reads.py"
+    ).read_text()
+
+    assert "item.status IN ('open','settled')" in source
+    assert "partially_settled" not in source
+    assert 'Decimal(str(header["original_open_item_outstanding"])) < 0' in source

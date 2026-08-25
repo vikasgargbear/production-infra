@@ -13,8 +13,13 @@ from __future__ import annotations
 import os
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
+
+from app.api.routes.canonical_adjustment_note_reads import (
+    load_adjustment_note_readback,
+)
 
 
 ORG_ID = UUID("d3900000-0000-7000-8000-000000000001")
@@ -231,6 +236,20 @@ def main() -> None:
                 ),
                 {"org_id": ORG_ID, "note_id": NOTE_ID},
             ).fetchall() == []
+            try:
+                load_adjustment_note_readback(
+                    note_id=NOTE_ID,
+                    db=session,
+                    org_id=ORG_ID,
+                    organization_scope=True,
+                    branch_ids=[],
+                )
+            except HTTPException as error:
+                assert error.status_code == 404
+            else:
+                raise AssertionError(
+                    "empty tenant unexpectedly returned an adjustment-note readback"
+                )
     finally:
         engine.dispose()
 
