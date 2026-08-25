@@ -3,7 +3,7 @@
 BEGIN;
 
 DO $fixture$
-DECLARE importer_definition text; stage_definition text;
+DECLARE importer_definition text; stage_definition text; release_dates_definition text;
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -42,6 +42,19 @@ BEGIN
      OR stage_definition NOT LIKE '%canonical PostgreSQL JSONB bytes%'
      OR stage_definition NOT LIKE '%reference source or canonical dataset SHA-256 mismatch%' THEN
     RAISE EXCEPTION 'GST reporting rules are absent from the governed release stage';
+  END IF;
+
+  SELECT pg_catalog.pg_get_constraintdef(constraint_row.oid)
+    INTO release_dates_definition
+    FROM pg_catalog.pg_constraint AS constraint_row
+   WHERE constraint_row.conrelid='core.reference_data_releases'::regclass
+     AND constraint_row.conname='reference_data_releases_dates_ck';
+  IF release_dates_definition IS NULL
+     OR release_dates_definition NOT LIKE '%dataset_kind = ''gst_reporting_rules''%'
+     OR release_dates_definition NOT LIKE '%publication_date <= effective_from%'
+     OR release_dates_definition NOT LIKE '%effective_to >= effective_from%'
+     OR release_dates_definition NOT LIKE '%reviewed_at <= created_at%' THEN
+    RAISE EXCEPTION 'reference release dates do not permit only governed retrospective GST reporting rules';
   END IF;
 
   IF NOT EXISTS (

@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "revision": "20260825_0015",
+  "source_sql_sha256": "03436f4798848aa8a1d24b67447e4204889079a1cae2507ff11976fd23adc927",
+  "authority_change": "retrospective_gst_reporting_release_dates_v1",
+  "scope": "gst_reporting_rules_only",
+  "seed_policy": "no_data_or_business_defaults"
+}
