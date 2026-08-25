@@ -68,7 +68,7 @@ test('decodes explicit tracked, positive-stock, and exhausted batch counts', () 
     scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
     items: [{
       product_id: ids.product, product_code: 'BOX', product_name: 'Carton',
-      generic_name: null, hsn_code: null, product_type: 'goods', unit: 'EA', category: null,
+      generic_name: null, hsn_code: null, product_type: 'medicine', unit: 'EA', category: null,
       total_quantity: '1.000000', total_value: '95.24', average_unit_cost: '95.2400',
       batch_count: 2, positive_stock_batch_count: 1, exhausted_batch_count: 1,
       negative_stock_batch_count: 0,
@@ -128,6 +128,90 @@ test('preserves signed negative current-stock and batch aggregates', () => {
   expect(current.summary).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
   expect(batches.items[0]).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
   expect(batches.summary).toMatchObject({ total_quantity: '-2.000000', total_value: '-40.00' });
+});
+
+test('preserves explicit zero prices and leaves unknown average cost unavailable', () => {
+  const decoded = decodeBatchPage({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
+    items: [{
+      batch_id: ids.batch, product_id: ids.product, product_code: 'FREE',
+      product_name: 'Explicit zero MRP', batch_number: 'B-ZERO', manufactured_on: null,
+      expires_on: null, expiry_state: 'undated', mrp: '0.0000', status: 'quarantined',
+      is_saleable: false, total_quantity: '0.000000', total_value: '0.00',
+      average_unit_cost: null,
+    }],
+    total_count: 1,
+    summary: {
+      batch_count: 1, positive_stock_count: 0, exhausted_batch_count: 1,
+      negative_stock_count: 0, total_quantity: '0.000000', total_value: '0.00',
+      expired_count: 0, expiring_30d_count: 0, near_expiry_90d_count: 0,
+    },
+    next_cursor: null,
+  });
+  expect(decoded.items[0]).toMatchObject({
+    mrp: '0.0000', total_quantity: '0.000000', total_value: '0.00',
+    average_unit_cost: null,
+  });
+  expect(batchItemsCsv(decoded.items)).toContain('0.0000');
+});
+
+test('rejects missing or aliased inventory business facts at the wire boundary', () => {
+  const current = {
+    product_id: ids.product, product_code: 'BOX', product_name: 'Carton',
+    generic_name: null, hsn_code: null, product_type: 'medicine', unit: 'EA', category: null,
+    total_quantity: '1.000000', total_value: '10.00', average_unit_cost: null,
+    batch_count: 1, positive_stock_batch_count: 1, exhausted_batch_count: 0,
+    negative_stock_batch_count: 0, expired_batch_count: 0, near_expiry_batch_count: 0,
+    requires_cold_chain: false,
+  };
+  const currentPage = (stockItem: Record<string, unknown>) => ({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25',
+    items: [stockItem], total_count: 1,
+    summary: {
+      product_count: 1, total_quantity: '1.000000', total_value: '10.00',
+      batch_count: 1, positive_stock_batch_count: 1, exhausted_batch_count: 0,
+      negative_stock_batch_count: 0,
+    },
+    next_cursor: null,
+  });
+  const { total_quantity: _quantity, ...missingQuantity } = current;
+  expect(() => decodeCurrentStockPage(currentPage(missingQuantity))).toThrow('total_quantity');
+  expect(() => decodeCurrentStockPage(currentPage({ ...current, product_type: 'goods' })))
+    .toThrow('not canonical');
+
+  const batch = {
+    batch_id: ids.batch, product_id: ids.product, product_code: 'BOX', product_name: 'Carton',
+    batch_number: 'B-1', manufactured_on: null, expires_on: null, expiry_state: 'undated',
+    mrp: '10.0000', status: 'released', is_saleable: true,
+    total_quantity: '1.000000', total_value: '10.00', average_unit_cost: null,
+  };
+  const batchPage = (batchItem: Record<string, unknown>) => ({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25', items: [batchItem],
+    total_count: 1, summary: {
+      batch_count: 1, positive_stock_count: 1, exhausted_batch_count: 0,
+      negative_stock_count: 0, total_quantity: '1.000000', total_value: '10.00',
+      expired_count: 0, expiring_30d_count: 0, near_expiry_90d_count: 0,
+    }, next_cursor: null,
+  });
+  const { mrp: _mrp, ...missingMrp } = batch;
+  expect(() => decodeBatchPage(batchPage(missingMrp))).toThrow('mrp');
+  expect(() => decodeBatchPage(batchPage({ ...batch, status: 'active' })))
+    .toThrow('not canonical');
+});
+
+test('rejects page totals that contradict their authoritative summaries', () => {
+  expect(() => decodeMovementPage({
+    ...response([], 0, null),
+    total_count: 1,
+  })).toThrow('total_count');
+  expect(() => decodeBatchPage({
+    scope, as_of: '2026-08-25T10:00:00Z', business_date: '2026-08-25', items: [],
+    total_count: 0, summary: {
+      batch_count: 1, positive_stock_count: 0, exhausted_batch_count: 1,
+      negative_stock_count: 0, total_quantity: '0.000000', total_value: '0.00',
+      expired_count: 0, expiring_30d_count: 0, near_expiry_90d_count: 0,
+    }, next_cursor: null,
+  })).toThrow('total_count');
 });
 
 test('validates and uses the organization IANA timezone for movement timestamps', () => {

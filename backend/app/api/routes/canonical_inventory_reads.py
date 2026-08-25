@@ -125,7 +125,7 @@ class CurrentStockRow(BaseModel):
     product_name: str
     generic_name: Optional[str]
     hsn_code: Optional[str]
-    product_type: str
+    product_type: Literal["medicine", "medical_device", "consumable"]
     unit: str
     category: Optional[str]
     total_quantity: SignedQuantity
@@ -193,6 +193,12 @@ class CurrentStockPage(BaseModel):
     summary: CurrentStockSummary
     next_cursor: Optional[str]
 
+    @model_validator(mode="after")
+    def validate_summary_identity(self):
+        if self.total_count != self.summary.product_count:
+            raise ValueError("current-stock total_count differs from summary product_count")
+        return self
+
 
 class BatchRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -247,6 +253,12 @@ class BatchPage(BaseModel):
     total_count: int = Field(ge=0)
     summary: BatchSummary
     next_cursor: Optional[str]
+
+    @model_validator(mode="after")
+    def validate_summary_identity(self):
+        if self.total_count != self.summary.batch_count:
+            raise ValueError("batch total_count differs from summary batch_count")
+        return self
 
 
 EntryKind = Literal[
@@ -329,6 +341,12 @@ class MovementPage(BaseModel):
     total_count: int = Field(ge=0)
     summary: MovementSummary
     next_cursor: Optional[str]
+
+    @model_validator(mode="after")
+    def validate_summary_identity(self):
+        if self.total_count != self.summary.movement_count:
+            raise ValueError("movement total_count differs from summary movement_count")
+        return self
 
 
 def _activate(db: Session, user: dict[str, Any]) -> UUID:
@@ -688,9 +706,9 @@ def batches(
                     AND recall.status IN ('initiated','in_progress')
                     AND recall_batch.status IN ('identified','quarantined')
                 )) AS is_saleable,
-               to_char(COALESCE(stock.quantity,0),'FM99999999999999.000000') AS total_quantity,
-               to_char(COALESCE(stock.value,0),'FM999999999999999999.00') AS total_value,
-               CASE WHEN COALESCE(stock.quantity,0)=0 THEN NULL ELSE
+               to_char(stock.quantity,'FM99999999999999.000000') AS total_quantity,
+               to_char(stock.value,'FM999999999999999999.00') AS total_value,
+               CASE WHEN stock.quantity=0 THEN NULL ELSE
                  to_char(round(stock.value/stock.quantity,4),'FM9999999999999999.0000')
                END AS average_unit_cost
         {base} AND (:after_id IS NULL OR batch.id>:after_id)

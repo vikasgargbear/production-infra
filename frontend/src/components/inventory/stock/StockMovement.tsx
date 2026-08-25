@@ -105,7 +105,9 @@ const StockMovement: React.FC<Props> = ({ open = true, onClose }) => {
           <button onClick={exportCsv} disabled={visible.length === 0}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-white disabled:bg-gray-300"><Download className="h-4 w-4" /> Export visible</button>
         </div>
-        <p className="mt-3 text-sm text-gray-600">Loaded {items.length} of {summary?.movement_count || 0} scoped immutable ledger entries</p>
+        <p className="mt-3 text-sm text-gray-600">
+          Loaded {items.length} of {summary ? summary.movement_count : '—'} scoped immutable ledger entries
+        </p>
         {summary && <div className="mt-3 grid gap-3 border-t border-gray-100 pt-3 text-sm sm:grid-cols-4">
           <span>Gross quantity: <strong>{displayQuantity(summary.gross_quantity)}</strong></span>
           <span>Net quantity delta: <strong>{displayQuantity(summary.net_quantity_delta)}</strong></span>

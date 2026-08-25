@@ -1,7 +1,7 @@
 import base64
 import inspect
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -271,6 +271,49 @@ def test_stock_aggregate_models_preserve_negative_quantity_and_value_on_the_wire
         properties = model.model_json_schema(mode="serialization")["properties"]
         assert properties["total_quantity"]["pattern"].startswith("^-?")
         assert properties["total_value"]["pattern"].startswith("^-?")
+
+
+def test_inventory_pages_reject_summary_count_drift():
+    scope = reads.InventoryScope(
+        branch_id=uuid4(), branch_code="MAIN", branch_name="Main",
+        location_id=None, location_code=None, location_name=None,
+    )
+    now = datetime(2026, 8, 25, 10, 0)
+    with pytest.raises(ValueError, match="summary product_count"):
+        reads.CurrentStockPage(
+            scope=scope, as_of=now, business_date=date(2026, 8, 25), items=[],
+            total_count=1,
+            summary=reads.CurrentStockSummary(
+                product_count=0, total_quantity="0.000000", total_value="0.00",
+                batch_count=0, positive_stock_batch_count=0,
+                exhausted_batch_count=0, negative_stock_batch_count=0,
+            ),
+            next_cursor=None,
+        )
+    with pytest.raises(ValueError, match="summary batch_count"):
+        reads.BatchPage(
+            scope=scope, as_of=now, business_date=date(2026, 8, 25), items=[],
+            total_count=0,
+            summary=reads.BatchSummary(
+                batch_count=1, positive_stock_count=0, exhausted_batch_count=1,
+                negative_stock_count=0, total_quantity="0.000000", total_value="0.00",
+                expired_count=0, expiring_30d_count=0, near_expiry_90d_count=0,
+            ),
+            next_cursor=None,
+        )
+
+
+def test_inventory_wire_rejects_product_aliases_and_requires_exact_mrp():
+    current_schema = reads.CurrentStockRow.model_json_schema(mode="serialization")
+    assert set(current_schema["properties"]["product_type"]["enum"]) == {
+        "medicine", "medical_device", "consumable",
+    }
+    batch_schema = reads.BatchRow.model_json_schema(mode="serialization")
+    assert "mrp" in batch_schema["required"]
+    assert batch_schema["properties"]["mrp"]["pattern"].endswith(r"\.[0-9]{4}$")
+    source = inspect.getsource(reads.batches)
+    assert "COALESCE(stock.quantity,0)" not in source
+    assert "COALESCE(stock.value,0)" not in source
 
 
 def test_postgres_runtime_fixture_executes_real_negative_stock_pagination():

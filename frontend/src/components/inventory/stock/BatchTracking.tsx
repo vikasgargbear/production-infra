@@ -6,7 +6,7 @@ import { InventoryScopeSelector } from './components/InventoryScopeSelector';
 import { useInventoryScope } from './hooks/useInventoryScope';
 import {
   batchItemsCsv, compareQuantity, decodeBatchPage, decodeMovementPage, displayDate, displayMoney,
-  displayOrganizationTimestamp, displayQuantity, exhaustCursorPages, isNegativeMoney,
+  displayOrganizationTimestamp, displayQuantity, displayRate, exhaustCursorPages, isNegativeMoney,
   isNegativeQuantity, movementLabel,
   type BatchItem, type BatchSummary, type MovementItem,
 } from './utils/canonicalStockReads';
@@ -120,7 +120,9 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-white disabled:bg-gray-300">
             <Download className="h-4 w-4" /> Export visible</button>
         </div>
-        <p className="mt-3 text-sm text-gray-600">Loaded {items.length} of {summary?.batch_count || 0} scoped batches</p>
+        <p className="mt-3 text-sm text-gray-600">
+          Loaded {items.length} of {summary ? summary.batch_count : '—'} scoped batches
+        </p>
         {summary && <div className="mt-3 flex flex-wrap gap-5 border-t border-gray-100 pt-3 text-sm">
           <span className={isNegativeQuantity(summary.total_quantity) ? 'text-red-700' : undefined}>
             Quantity: <strong>{displayQuantity(summary.total_quantity)}</strong>
@@ -139,6 +141,7 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
         <table className="min-w-full divide-y divide-gray-200"><thead className="bg-gray-50"><tr>
           <th className="px-4 py-3 text-left">Batch</th><th className="px-4 py-3 text-left">Product</th>
           <th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Value</th>
+          <th className="px-4 py-3 text-right">MRP</th><th className="px-4 py-3 text-right">Average cost</th>
           <th className="px-4 py-3 text-left">Expiry</th><th className="px-4 py-3 text-left">State</th><th className="px-4 py-3">Action</th>
         </tr></thead><tbody className="divide-y divide-gray-100">{visible.map(item => {
           const negative = isNegativeQuantity(item.total_quantity) || isNegativeMoney(item.total_value);
@@ -147,6 +150,8 @@ const BatchTracking: React.FC<Props> = ({ open = true, onClose }) => {
             className={negative ? 'bg-red-50 text-red-700' : undefined}>
           <td className="px-4 py-3 font-medium">{item.batch_number}</td><td className="px-4 py-3">{item.product_name}<div className="text-xs text-gray-500">{item.product_code}</div></td>
           <td className="px-4 py-3 text-right">{displayQuantity(item.total_quantity)}</td><td className="px-4 py-3 text-right">{displayMoney(item.total_value)}</td>
+          <td className="px-4 py-3 text-right">{displayRate(item.mrp)}</td>
+          <td className="px-4 py-3 text-right">{item.average_unit_cost === null ? '—' : displayRate(item.average_unit_cost)}</td>
           <td className="px-4 py-3">{displayDate(item.expires_on)}</td><td className="px-4 py-3 capitalize">
             {item.expiry_state.replace(/_/g, ' ')}<div className="text-xs text-gray-500">{item.status}</div>
           </td>

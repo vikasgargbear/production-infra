@@ -54,7 +54,7 @@ const CurrentStock: React.FC<Props> = ({ open = true, onClose }) => {
     const filtered = lowered ? items.filter(item => (
       item.product_name.toLowerCase().includes(lowered)
       || item.product_code.toLowerCase().includes(lowered)
-      || (item.generic_name || '').toLowerCase().includes(lowered)
+      || item.generic_name?.toLowerCase().includes(lowered)
     )) : [...items];
     filtered.sort((left, right) => {
       const comparison = sort.key === 'product_name'
@@ -111,7 +111,10 @@ const CurrentStock: React.FC<Props> = ({ open = true, onClose }) => {
               <Download className="h-4 w-4" /> Export visible
             </button>
           </div>
-          <p className="mt-3 text-sm text-gray-600">Loaded {items.length} of {summary?.product_count || 0} scoped products{asOf && scope.context ? ` • As of ${displayOrganizationTimestamp(asOf, scope.context.organization_timezone)}` : ''}</p>
+          <p className="mt-3 text-sm text-gray-600">
+            Loaded {items.length} of {summary ? summary.product_count : '—'} scoped products
+            {asOf && scope.context ? ` • As of ${displayOrganizationTimestamp(asOf, scope.context.organization_timezone)}` : ''}
+          </p>
           {summary && <div className="mt-3 flex flex-wrap gap-6 border-t border-gray-100 pt-3 text-sm">
             <span className={isNegativeQuantity(summary.total_quantity) ? 'text-red-700' : undefined}>
               Total quantity: <strong>{displayQuantity(summary.total_quantity)}</strong>

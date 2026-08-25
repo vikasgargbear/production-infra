@@ -174,7 +174,7 @@ export type CurrentStockItem = {
   product_name: string;
   generic_name: string | null;
   hsn_code: string | null;
-  product_type: string;
+  product_type: 'medicine' | 'medical_device' | 'consumable';
   unit: string;
   category: string | null;
   total_quantity: ExactDecimalString;
@@ -209,7 +209,7 @@ export type BatchItem = {
   expires_on: string | null;
   expiry_state: 'undated' | 'expired' | 'expiring_30d' | 'near_expiry_90d' | 'current';
   mrp: ExactDecimalString;
-  status: string;
+  status: 'quarantined' | 'released' | 'blocked' | 'recalled' | 'expired' | 'exhausted';
   is_saleable: boolean;
   total_quantity: ExactDecimalString;
   total_value: ExactDecimalString;
@@ -292,13 +292,17 @@ const page = <T, S>(
 
 const currentItem = (value: unknown, label: string): CurrentStockItem => {
   const row = record(value, label);
+  const productType = requiredString(row.product_type, `${label} product_type`);
+  if (!['medicine', 'medical_device', 'consumable'].includes(productType)) {
+    throw new Error(`${label} product_type is not canonical.`);
+  }
   const result = {
     product_id: uuid(row.product_id, `${label} product_id`),
     product_code: requiredString(row.product_code, `${label} product_code`),
     product_name: requiredString(row.product_name, `${label} product_name`),
     generic_name: nullableString(row.generic_name, `${label} generic_name`),
     hsn_code: nullableString(row.hsn_code, `${label} hsn_code`),
-    product_type: requiredString(row.product_type, `${label} product_type`),
+    product_type: productType as CurrentStockItem['product_type'],
     unit: requiredString(row.unit, `${label} unit`),
     category: nullableString(row.category, `${label} category`),
     total_quantity: exact(row.total_quantity, `${label} total_quantity`, SIGNED_QUANTITY),
@@ -347,6 +351,10 @@ const batchItem = (value: unknown, label: string): BatchItem => {
   if (!['undated', 'expired', 'expiring_30d', 'near_expiry_90d', 'current'].includes(expiryState)) {
     throw new Error(`${label} expiry_state is invalid.`);
   }
+  const status = requiredString(row.status, `${label} status`);
+  if (!['quarantined', 'released', 'blocked', 'recalled', 'expired', 'exhausted'].includes(status)) {
+    throw new Error(`${label} status is not canonical.`);
+  }
   return {
     batch_id: uuid(row.batch_id, `${label} batch_id`),
     product_id: uuid(row.product_id, `${label} product_id`),
@@ -357,7 +365,7 @@ const batchItem = (value: unknown, label: string): BatchItem => {
     expires_on: nullableDate(row.expires_on, `${label} expires_on`),
     expiry_state: expiryState,
     mrp: exact(row.mrp, `${label} mrp`, RATE),
-    status: requiredString(row.status, `${label} status`),
+    status: status as BatchItem['status'],
     is_saleable: boolean(row.is_saleable, `${label} is_saleable`),
     total_quantity: exact(row.total_quantity, `${label} total_quantity`, SIGNED_QUANTITY),
     total_value: exact(row.total_value, `${label} total_value`, SIGNED_MONEY),
@@ -469,15 +477,27 @@ const movementSummary = (value: unknown): MovementSummary => {
   };
 };
 
-export const decodeCurrentStockPage = (value: unknown) => (
-  page(value, currentItem, currentSummary, 'Current stock page')
-);
-export const decodeBatchPage = (value: unknown) => (
-  page(value, batchItem, batchSummary, 'Batch page')
-);
-export const decodeMovementPage = (value: unknown) => (
-  page(value, movementItem, movementSummary, 'Movement page')
-);
+export const decodeCurrentStockPage = (value: unknown) => {
+  const result = page(value, currentItem, currentSummary, 'Current stock page');
+  if (result.total_count !== result.summary.product_count) {
+    throw new Error('Current stock total_count does not match its authoritative summary.');
+  }
+  return result;
+};
+export const decodeBatchPage = (value: unknown) => {
+  const result = page(value, batchItem, batchSummary, 'Batch page');
+  if (result.total_count !== result.summary.batch_count) {
+    throw new Error('Batch total_count does not match its authoritative summary.');
+  }
+  return result;
+};
+export const decodeMovementPage = (value: unknown) => {
+  const result = page(value, movementItem, movementSummary, 'Movement page');
+  if (result.total_count !== result.summary.movement_count) {
+    throw new Error('Movement total_count does not match its authoritative summary.');
+  }
+  return result;
+};
 
 export async function exhaustCursorPages<T, S>(
   load: (params: InventoryReadParams) => Promise<{ data: unknown }>,
@@ -551,16 +571,19 @@ export const displayOrganizationTimestamp = (value: string, organizationTimeZone
 
 export const movementLabel = (movement: MovementItem): string => {
   if (movement.entry_kind === 'reversal') {
-    return `Reversal of ${(movement.reversed_entry_kind || 'entry').replace(/_/g, ' ')}`;
+    if (movement.reversed_entry_kind === null) {
+      throw new Error('Reversal label requires authoritative reversed entry kind.');
+    }
+    return `Reversal of ${movement.reversed_entry_kind.replace(/_/g, ' ')}`;
   }
   return movement.entry_kind.replace(/_/g, ' ');
 };
 
 export const batchItemsCsv = (items: readonly BatchItem[]): string => `${safeCsvRows([
-  ['Batch', 'Product', 'Quantity', 'Value', 'Expiry', 'Status'],
+  ['Batch', 'Product', 'Quantity', 'Value', 'MRP', 'Average Cost', 'Expiry', 'Status'],
   ...items.map(item => [
     item.batch_number, item.product_name, item.total_quantity, item.total_value,
-    item.expires_on || '', item.status,
+    item.mrp, item.average_unit_cost ?? '', item.expires_on ?? '', item.status,
   ]),
 ])}\n`;
 
