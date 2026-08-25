@@ -109,6 +109,27 @@ def test_existing_itc_authority_fails_closed_when_ambiguous() -> None:
         )
 
 
+def test_regulatory_identity_is_content_scoped_not_ui_run_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_RUN_ID", "1001")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    first = _module()
+    monkeypatch.setenv("GITHUB_RUN_ID", "2002")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+    second = _module()
+
+    assert first.IDS["destruction_itc_rule_release"] == second.IDS[
+        "destruction_itc_rule_release"
+    ]
+    assert first.IDS["destruction_itc_rule_version"] == second.IDS[
+        "destruction_itc_rule_version"
+    ]
+    assert first.IDS["destruction_certificate_evidence"] != second.IDS[
+        "destruction_certificate_evidence"
+    ]
+
+
 def test_replay_reconciliation_accepts_only_valid_forward_order_states() -> None:
     module = _module()
     assert module.PURCHASE_ORDER_RECONCILABLE_STATUSES == {

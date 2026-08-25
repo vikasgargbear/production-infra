@@ -358,12 +358,28 @@ for resource_key in (
     "destruction_loss_account",
     "destruction_certificate_evidence",
     "destruction_itc_reversal_evidence",
-    "destruction_itc_rule_release",
-    "destruction_itc_rule_version",
     "destruction_return_period",
     "destruction_gstr3b_return",
 ):
     IDS[resource_key] = demo_ui_fixture_uuid(resource_key)
+IDS["destruction_itc_rule_release"] = str(
+    uuid5(
+        NAMESPACE_URL,
+        (
+            "aasopharma-regulatory-release:gst_itc_reversal_rules:"
+            f"{ITC_REVERSAL_RULESET_VERSION}:{ITC_REVERSAL_SOURCE_URI}"
+        ),
+    )
+)
+IDS["destruction_itc_rule_version"] = str(
+    uuid5(
+        NAMESPACE_URL,
+        (
+            "aasopharma-regulatory-rule:CGST_SECTION_17_5_H_GOODS_DESTROYED:"
+            f"{ITC_REVERSAL_RULESET_VERSION}"
+        ),
+    )
+)
 
 
 def assert_target() -> None:
