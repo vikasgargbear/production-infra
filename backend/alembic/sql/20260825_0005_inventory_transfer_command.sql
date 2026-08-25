@@ -197,6 +197,8 @@ ALTER FUNCTION "erp_automation_commands"."resolve_inventory_transfer_prepare"(or
 
 REVOKE ALL ON FUNCTION "erp_automation_commands"."resolve_inventory_transfer_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, inventory_document_id uuid, request_document jsonb) FROM PUBLIC, "erp_app", "erp_runtime";
 
+GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_inventory_transfer_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, inventory_document_id uuid, request_document jsonb) TO "erp_runtime";
+
 CREATE OR REPLACE FUNCTION "erp_automation_commands"."assert_inventory_transfer_draft"(organization_id uuid, inventory_document_id uuid, resolved_document jsonb)
 RETURNS void
 LANGUAGE plpgsql
