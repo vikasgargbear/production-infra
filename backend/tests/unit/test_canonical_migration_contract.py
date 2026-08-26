@@ -189,6 +189,32 @@ def test_canonical_migration_contract_cli_is_stable() -> None:
         capture_output=True,
         text=True,
     ).stdout.strip()
+    head_parent = subprocess.run(
+        ["python3", str(script), "--print-head-parent"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    validated_parent = subprocess.run(
+        ["python3", str(script), "--validate-current", head_parent],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
     assert head == contract.head
     assert table_count == str(contract.canonical_table_count)
+    assert head_parent == contract.revisions[-2].revision
+    assert validated_parent == head_parent
+
+
+def test_canonical_migration_contract_rejects_unknown_deployed_revision() -> None:
+    script = REPOSITORY_ROOT / "backend/scripts/canonical_migration_contract.py"
+    result = subprocess.run(
+        ["python3", str(script), "--validate-current", "retired_or_unknown"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "outside the reviewed canonical chain" in result.stderr

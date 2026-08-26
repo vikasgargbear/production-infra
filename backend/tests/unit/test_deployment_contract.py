@@ -478,6 +478,11 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "server didn.t return client encoding" in workflow
     assert "auth_query secret check timed out" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
+    assert "SELECT to_regclass('public.alembic_version') IS NOT NULL" in workflow
+    assert 'if [ "$version_table_exists" = f ]' in workflow
+    assert 'elif [ "$version_table_exists" = t ]' in workflow
+    assert '--validate-current "$current_revision"' in workflow
+    assert workflow.count("alembic -c alembic.ini upgrade 20260820_0001") == 1
     assert "rotate_role_passwords:" in workflow
     role_provisioning = workflow.split(
         "Provision isolated staging login credentials", 1

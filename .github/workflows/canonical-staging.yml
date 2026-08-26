@@ -632,9 +632,23 @@ jobs:
             trap cleanup_alembic_on_exit EXIT
             for attempt in $(seq 1 3); do
               if (
-                cd backend
-                alembic -c alembic.ini upgrade 20260820_0001
-                cd ..
+                version_table_exists=$(psql -X -Atqc \
+                  "SELECT to_regclass('public.alembic_version') IS NOT NULL" \
+                  "$PSYCOPG_DATABASE_URL")
+                if [ "$version_table_exists" = f ]; then
+                  cd backend
+                  alembic -c alembic.ini upgrade 20260820_0001
+                  cd ..
+                elif [ "$version_table_exists" = t ]; then
+                  current_revision=$(psql -X -Atqc \
+                    'SELECT version_num FROM public.alembic_version' \
+                    "$PSYCOPG_DATABASE_URL")
+                  python3 backend/scripts/canonical_migration_contract.py \
+                    --validate-current "$current_revision" >/dev/null
+                else
+                  echo "Could not classify the deployed Alembic version table" >&2
+                  exit 2
+                fi
                 psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
                   -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' >/dev/null
                 cd backend

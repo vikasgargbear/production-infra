@@ -174,14 +174,30 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--print-head", action="store_true")
+    output.add_argument("--print-head-parent", action="store_true")
     output.add_argument("--print-table-count", action="store_true")
+    output.add_argument("--validate-current")
     output.add_argument("--json", action="store_true")
     args = parser.parse_args()
     contract = load_contract()
     if args.print_head:
         print(contract.head)
+    elif args.print_head_parent:
+        if len(contract.revisions) < 2:
+            raise CanonicalMigrationContractError(
+                "canonical history has no incremental head parent"
+            )
+        print(contract.revisions[-2].revision)
     elif args.print_table_count:
         print(contract.canonical_table_count)
+    elif args.validate_current is not None:
+        current = args.validate_current.strip()
+        known = {revision.revision for revision in contract.revisions}
+        if current not in known:
+            raise CanonicalMigrationContractError(
+                "deployed Alembic revision is outside the reviewed canonical chain"
+            )
+        print(current)
     elif args.json:
         print(json.dumps({
             "head": contract.head,

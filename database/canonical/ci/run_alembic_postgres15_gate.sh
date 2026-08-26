@@ -27,6 +27,7 @@ test "$server_major" = 15 || {
 python3 backend/scripts/package_canonical_baseline_migration.py
 python3 backend/scripts/generate_canonical_command_definition_migration.py --check
 expected_alembic_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+expected_pre_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head-parent)
 psql -X -v ON_ERROR_STOP=1 -f database/canonical/ci/bootstrap_supabase_auth.sql
 
 export DATABASE_URL="postgresql+psycopg2://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
@@ -35,6 +36,13 @@ CANONICAL_BASELINE_APPROVED_SHA256=$(
   python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256
 )
 
+(
+  cd backend
+  alembic -c alembic.ini upgrade "$expected_pre_head"
+)
+test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "$expected_pre_head"
+python3 backend/scripts/canonical_migration_contract.py \
+  --validate-current "$expected_pre_head" >/dev/null
 (
   cd backend
   alembic -c alembic.ini upgrade head
