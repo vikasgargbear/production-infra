@@ -16,7 +16,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
 
     assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}" in production
     assert "if: inputs.deploy_render_pilot == true" in staging
-    assert staging.count("if: inputs.deploy_render_pilot == true") == 9
+    assert staging.count("if: inputs.deploy_render_pilot == true") == 10
     assert "Close canonical writes before Render promotion" in staging
     assert "Open canonical writes after exact-SHA verification" in staging
     provision = staging.split("Provision and exercise the disposable demo organization", 1)[1]

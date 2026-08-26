@@ -210,6 +210,21 @@ def test_per_key_env_reconciliation_is_idempotent_and_non_destructive():
     assert "/env-vars/EXISTING" in client.calls[0][1]
 
 
+def test_retired_evidence_jwt_is_deleted_before_exact_env_validation():
+    client = RecordingClient([{"key": "EVIDENCE_STORAGE_SERVER_JWT"}, None])
+    service = provision.ServiceRef(
+        id="srv-test",
+        name=provision.API_NAME,
+        type="web_service",
+        url="https://api.onrender.com",
+        raw={},
+    )
+
+    assert client.retire_env(service, provision.RETIRED_API_ENV_KEYS) is True
+    assert [call[0] for call in client.calls] == ["GET", "DELETE"]
+    assert all("EVIDENCE_STORAGE_SERVER_JWT" in call[1] for call in client.calls)
+
+
 def test_existing_config_patch_keeps_auto_deploy_off_and_reconciles_drift():
     client = RecordingClient([{}])
     service = provision.ServiceRef(
@@ -470,6 +485,9 @@ class ConvergeClient:
         return False
 
     def ensure_spa_rewrite(self, _service):
+        return False
+
+    def retire_env(self, _service, _keys):
         return False
 
     def ensure_env(self, service, values):

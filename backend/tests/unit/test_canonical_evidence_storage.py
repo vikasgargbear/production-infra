@@ -213,10 +213,23 @@ def test_private_adapter_creates_without_upsert_and_reads_back_exact_bytes():
     assert requests[0].url.path == f"/storage/v1/object/{EVIDENCE_BUCKET}/{key}"
 
 
-def test_existing_object_is_not_overwritten_and_can_be_verified_by_readback():
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [
+        (400, {"code": "KeyAlreadyExists", "message": "Asset Already Exists"}),
+        (409, {"code": "ResourceAlreadyExists", "message": "already exists"}),
+        (
+            400,
+            {"error": "Duplicate", "message": "The resource already exists"},
+        ),
+    ],
+)
+def test_existing_object_is_not_overwritten_and_can_be_verified_by_readback(
+    status, payload
+):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST":
-            return httpx.Response(409, json={"message": "already exists"})
+            return httpx.Response(status, json=payload)
         if request.method == "GET":
             return httpx.Response(200, content=PDF)
         raise AssertionError(request.method)
@@ -231,6 +244,23 @@ def test_existing_object_is_not_overwritten_and_can_be_verified_by_readback():
     )
     assert storage.create("org/branch/expense_receipt/hash.pdf", PDF) is False
     assert storage.read("org/branch/expense_receipt/hash.pdf") == PDF
+
+
+@pytest.mark.parametrize("status", [400, 409])
+def test_unstructured_duplicate_status_is_not_treated_as_idempotent(status):
+    storage = SupabaseEvidenceStorage(
+        EvidenceStorageConfig(
+            base_url="https://canonical.supabase.co",
+            server_api_key=SERVER_API_KEY,
+            project_ref="canonicalcanonical12",
+        ),
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(status, json={"message": "ambiguous"})
+        ),
+    )
+
+    with pytest.raises(EvidenceStorageUnavailable):
+        storage.create("org/branch/expense_receipt/hash.pdf", PDF)
 
 
 def test_storage_auth_failure_is_unavailable_not_fake_success():

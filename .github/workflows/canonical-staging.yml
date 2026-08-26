@@ -1061,6 +1061,16 @@ jobs:
             exit 1
           fi
 
+      - name: Prove canonical evidence storage least privilege
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test "$EVIDENCE_STORAGE_ENABLED" = true
+          test -n "$EVIDENCE_STORAGE_SERVER_API_KEY"
+          python3 backend/scripts/verify_canonical_evidence_storage.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --receipt staging-evidence/canonical-evidence-storage-canary.json
+
       - name: Capture and audit exact-SHA transaction integrity
         run: |
           set -euo pipefail

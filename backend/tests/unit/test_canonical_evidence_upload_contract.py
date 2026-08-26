@@ -60,10 +60,43 @@ def test_storage_policy_has_no_update_or_service_role_authority():
         ROOT / "database/09-deployment/canonical-evidence-storage.sql"
     ).read_text(encoding="utf-8")
     assert "public=false" in policy
-    assert "REVOKE UPDATE ON TABLE storage.objects" in policy
+    assert "REVOKE ALL PRIVILEGES ON TABLE storage.buckets, storage.objects" in policy
     assert "FOR UPDATE TO erp_evidence_storage" not in policy
     assert "service_role" not in policy
     assert "NOBYPASSRLS" in policy
+    assert "storage.allow_any_operation" in policy
+    assert "storage.object.get_authenticated" in policy
+    assert "storage.object.list" not in policy
+    assert "a public or extra evidence-role policy" in policy
+
+
+def test_staging_proves_allowed_and_denied_storage_operations_before_deploy():
+    workflow = (
+        ROOT / ".github/workflows/canonical-staging.yml"
+    ).read_text(encoding="utf-8")
+    canary = workflow.split(
+        "Prove canonical evidence storage least privilege", 1
+    )[1].split("Capture and audit exact-SHA transaction integrity", 1)[0]
+
+    assert workflow.index("Provision canonical private evidence storage") < workflow.index(
+        "Prove canonical evidence storage least privilege"
+    ) < workflow.index("Reconcile and deploy the free Render pilot")
+    assert 'test "$EVIDENCE_STORAGE_ENABLED" = true' in canary
+    assert "verify_canonical_evidence_storage.py" in canary
+    assert '--project-ref "$CANONICAL_STAGING_PROJECT_REF"' in canary
+    assert "canonical-evidence-storage-canary.json" in canary
+
+    verifier = (
+        ROOT / "backend/scripts/verify_canonical_evidence_storage.py"
+    ).read_text(encoding="utf-8")
+    assert '"x-upsert": "false"' in verifier
+    assert "read.content != FIXTURE" in verifier
+    assert "object/list/{BUCKET}" in verifier
+    assert "list_body != []" in verifier
+    assert "client.put(" in verifier
+    assert "outside-reviewed-path" in verifier
+    assert "canonical-evidence-unreviewed" in verifier
+    assert "client.delete(object_url)" in verifier
 
 
 def test_integrity_readback_requires_exact_canonical_branch_permissions():

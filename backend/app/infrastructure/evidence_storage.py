@@ -180,8 +180,19 @@ class SupabaseEvidenceStorage:
             ) from exc
         if response.status_code in (200, 201):
             return True
-        if response.status_code == 409:
-            return False
+        if response.status_code in (400, 409):
+            try:
+                error = response.json()
+            except ValueError:
+                error = None
+            if isinstance(error, dict) and (
+                error.get("code") in {"KeyAlreadyExists", "ResourceAlreadyExists"}
+                or (
+                    error.get("error") == "Duplicate"
+                    and error.get("message") == "The resource already exists"
+                )
+            ):
+                return False
         self._raise_unavailable(response, "create")
 
     def read(self, object_key: str) -> bytes:

@@ -51,6 +51,8 @@ MCP_SHARED_REQUIRED = (
 )
 MCP_OPTIONAL_KEYS = ("MCP_ALLOWED_ORIGINS",)
 OPERATOR_REQUIRED = tuple(dict.fromkeys((*BACKEND_REQUIRED, *MCP_SHARED_REQUIRED)))
+SMTP_KEYS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD")
+SMTP_OPTIONAL_KEYS = ("SMTP_FROM_EMAIL", "SMTP_FROM_NAME")
 MCP_ALLOWED_ENV_KEYS = frozenset(
     {
         "SUPABASE_OAUTH_ISSUER",
@@ -63,8 +65,27 @@ MCP_ALLOWED_ENV_KEYS = frozenset(
         "MCP_REQUEST_TIMEOUT_SECONDS",
     }
 )
-SMTP_KEYS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD")
-SMTP_OPTIONAL_KEYS = ("SMTP_FROM_EMAIL", "SMTP_FROM_NAME")
+API_ALLOWED_ENV_KEYS = frozenset(
+    {
+        "APP_ENV",
+        "LOG_LEVEL",
+        "LOG_FORMAT",
+        "CORS_ORIGINS",
+        "APP_URL",
+        *BACKEND_REQUIRED,
+        *SMTP_KEYS,
+        *SMTP_OPTIONAL_KEYS,
+    }
+)
+FRONTEND_ALLOWED_ENV_KEYS = frozenset(
+    {
+        "NODE_VERSION",
+        "REACT_APP_API_BASE_URL",
+        "REACT_APP_SUPABASE_URL",
+        "REACT_APP_SUPABASE_ANON_KEY",
+    }
+)
+RETIRED_API_ENV_KEYS = frozenset({"EVIDENCE_STORAGE_SERVER_JWT"})
 
 
 class ProvisioningError(RuntimeError):
@@ -481,6 +502,20 @@ class RenderClient:
             changed = True
         return changed
 
+    def retire_env(self, service: ServiceRef, keys: Iterable[str]) -> bool:
+        changed = False
+        for key in sorted(keys):
+            current = self.request(
+                "GET",
+                f"/services/{service.id}/env-vars/{key}",
+                allow_not_found=True,
+            )
+            if current is None:
+                continue
+            self.request("DELETE", f"/services/{service.id}/env-vars/{key}")
+            changed = True
+        return changed
+
     def require_allowed_env(self, service: ServiceRef, allowed: Iterable[str]) -> None:
         response = self.request(
             "GET", f"/services/{service.id}/env-vars", query={"limit": 100}
@@ -702,6 +737,9 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
         mcp_service, args.repo, args.branch
     )
     changed[FRONTEND_NAME] |= client.ensure_spa_rewrite(frontend_service)
+    changed[API_NAME] |= client.retire_env(api_service, RETIRED_API_ENV_KEYS)
+    client.require_allowed_env(api_service, API_ALLOWED_ENV_KEYS)
+    client.require_allowed_env(frontend_service, FRONTEND_ALLOWED_ENV_KEYS)
     changed[API_NAME] |= client.ensure_env(
         api_service, backend_env(values, frontend_service.url)
     )
