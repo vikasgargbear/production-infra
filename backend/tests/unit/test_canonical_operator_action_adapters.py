@@ -3642,6 +3642,8 @@ def test_status_reauthorizes_and_reads_canonical_evidence_in_one_transaction():
     assert "core.access_grants" in sql
     assert "access_grant.valid_from_at" in sql
     assert "erp_automation_reads.requester_command_status" in sql
+    assert "request.approved_at" in session.executions[3][0]
+    assert "approval.approved_at" not in session.executions[3][0]
     assert "FROM automation.command_requests AS request" in PROJECTION_SQL
     assert "core.audit_events" in sql
     assert "legacy" not in sql.lower()

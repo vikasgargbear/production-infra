@@ -210,7 +210,7 @@ _COMMAND_STATUS_SQL = text(
            request.expires_at, request.completed_at,
            request.result_resource_type, request.result_resource_id,
            request.failure_code, request.failure_message,
-           approval.approved_at
+           request.approved_at
       FROM erp_automation_reads.requester_command_status(
            :org_id, :command_request_id, :agent_grant_id, :membership_id
       ) AS request

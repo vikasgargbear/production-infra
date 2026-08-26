@@ -286,6 +286,15 @@ def main() -> None:
                 context=_context(checker=True),
             )
             assert approved.status == "approved"
+            approved_status = maker_service.get_status(
+                command_request_id=prepared.command_request_id,
+                context=_context(),
+            )
+            # Approval is immutable side evidence; the command remains prepared
+            # until the independent requester executes it.
+            assert approved_status.status == "prepared"
+            assert approved_status.preview_hash == prepared.preview_hash
+            assert approved_status.approved_at == approved.approved_at
         finally:
             _close_runtime_connection(maker_connection)
             _close_runtime_connection(checker_connection)
@@ -327,6 +336,18 @@ def main() -> None:
 
         read_service, read_connection = _runtime_service(engine)
         try:
+            resource = read_service.get_succeeded_resource(
+                command_request_id=prepared.command_request_id,
+                context=_context(),
+            )
+            assert resource == {
+                "command_request_id": prepared.command_request_id,
+                "capability_code": "finance.bank_reconciliation.prepare",
+                "command_type": "finance.bank_reconciliation.match",
+                "status": "succeeded",
+                "resource_type": "reconciliation_match",
+                "resource_id": results[0].resource_id,
+            }
             readback = read_service.get_bank_reconciliation_readback(
                 command_request_id=prepared.command_request_id,
                 context=_context(),
