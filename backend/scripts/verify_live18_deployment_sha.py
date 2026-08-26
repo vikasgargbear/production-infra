@@ -142,18 +142,9 @@ def verify(
             "frontend, API, and MCP must use three distinct HTTPS origins"
         )
 
-    try:
-        frontend_health = fetch(f"{frontend}/health").decode("utf-8").strip()
-    except Live18DeploymentVerificationError:
-        raise
-    except UnicodeDecodeError as exc:
-        raise Live18DeploymentVerificationError(
-            "frontend health did not return UTF-8 text"
-        ) from exc
-    if frontend_health != "ok":
-        raise Live18DeploymentVerificationError(
-            "frontend health did not report exact text 'ok'"
-        )
+    # Render's static-site rewrite intentionally serves the SPA document for
+    # unknown paths, including /health. The versioned metadata resource is the
+    # frontend's public liveness and exact-build boundary on both providers.
     frontend_metadata = _json_object(
         fetch, f"{frontend}/build-metadata.json", "frontend build metadata"
     )

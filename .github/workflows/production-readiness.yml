@@ -1209,6 +1209,7 @@ jobs:
             --api-origin "$LIVE18_API_ORIGIN" \
             --mcp-origin "$LIVE18_MCP_ORIGIN" \
             > "$RUNNER_TEMP/live18-deployed-sha.json"
+          echo "LIVE18_DEPLOYMENT_BOUND=true" >> "$GITHUB_ENV"
       - name: Refuse any target except canonical disposable staging
         run: |
           set -euo pipefail
@@ -1692,16 +1693,26 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          python3 backend/scripts/provision_ephemeral_canonical_live.py cleanup \
-            --state "$RUNNER_TEMP/live18-mcp-identities.json"
+          state="$RUNNER_TEMP/live18-mcp-identities.json"
+          if [ -s "$state" ]; then
+            python3 backend/scripts/provision_ephemeral_canonical_live.py cleanup \
+              --state "$state"
+          else
+            echo "No temporary MCP authority state was created"
+          fi
       - name: Always restore seeded bindings and remove all three disposable identities
         if: always() && env.LIVE18_PROVIDER == 'render'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
-            --state "$RUNNER_TEMP/live18-browser-identities.json"
+          state="$RUNNER_TEMP/live18-browser-identities.json"
+          if [ -s "$state" ]; then
+            python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
+              --state "$state"
+          else
+            echo "No disposable browser identity state was created"
+          fi
       - name: Always clean Railway-direct temporary identities and authorities
         if: always() && env.LIVE18_PROVIDER == 'railway'
         env:
@@ -1821,7 +1832,7 @@ jobs:
         if: always()
         run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
       - name: Build scrubbed allowlisted live18 evidence manifest
-        if: always()
+        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
         env:
           LIVE18_BROWSER_OUTCOME: ${{ steps.live18_browser.outcome }}
         run: |
@@ -1836,7 +1847,7 @@ jobs:
             --output "$output"
           test "$(find "$RUNNER_TEMP/live18-upload" -type f | wc -l | tr -d ' ')" = 1
       - name: Upload scrubbed allowlisted live18 evidence only
-        if: always()
+        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: canonical-live18-acceptance-evidence

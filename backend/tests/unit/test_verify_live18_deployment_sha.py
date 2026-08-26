@@ -21,7 +21,6 @@ ORIGINS = {
 
 def _responses(sha: str = SHA) -> dict[str, bytes]:
     return {
-        "https://erp.example/health": b"ok\n",
         "https://erp.example/build-metadata.json": json.dumps(
             {"service": "aasopharma-erp", "git_commit": sha}
         ).encode(),
@@ -217,7 +216,7 @@ def test_any_sha_or_readiness_mismatch_fails_closed(url, payload, message):
 @pytest.mark.parametrize(
     ("url", "payload", "message"),
     [
-        ("https://erp.example/health", b"healthy", "exact text 'ok'"),
+        ("https://erp.example/build-metadata.json", b"\xff", "valid UTF-8 JSON"),
         ("https://api.example/health", b"not-json", "valid UTF-8 JSON"),
         ("https://mcp.example/ready", b"[]", "one JSON object"),
     ],
