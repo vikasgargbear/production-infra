@@ -151,12 +151,30 @@ jobs:
               ;;
           esac
 
-          project_json=$(curl --fail --silent --show-error \
-            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
-          test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
-          test "$(jq -r .status <<<"$project_json")" = ACTIVE_HEALTHY
-          test "$(jq -r .region <<<"$project_json")" = ap-south-1
+          project_ready=false
+          for attempt in $(seq 1 20); do
+            project_json=$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
+            test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
+            test "$(jq -r .region <<<"$project_json")" = ap-south-1
+            project_status=$(jq -er .status <<<"$project_json")
+            case "$project_status" in
+              ACTIVE_HEALTHY)
+                project_ready=true
+                break
+                ;;
+              COMING_UP|GOING_DOWN|RESTARTING|UPGRADING)
+                test "$attempt" -lt 20
+                sleep 15
+                ;;
+              *)
+                echo "::error title=Canonical staging unavailable::Project is not in a reviewed healthy or transitional state"
+                exit 2
+                ;;
+            esac
+          done
+          test "$project_ready" = true
 
           pooler_json=$(curl --fail --silent --show-error \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \

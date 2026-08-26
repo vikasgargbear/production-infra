@@ -429,6 +429,14 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     pooler_verifier = _read("backend/scripts/verify_staging_pooler_roles.py")
 
     assert "/config/database/pooler" in workflow
+    project_preflight = workflow.split(
+        "Refuse any target except the reviewed free staging project", 1
+    )[1].split("Restart the pinned free staging database", 1)[0]
+    assert "for attempt in $(seq 1 20)" in project_preflight
+    assert "ACTIVE_HEALTHY)" in project_preflight
+    assert "COMING_UP|GOING_DOWN|RESTARTING|UPGRADING)" in project_preflight
+    assert "Project is not in a reviewed healthy or transitional state" in project_preflight
+    assert 'test "$project_ready" = true' in project_preflight
     assert "/database/query/read-only" in workflow
     assert "Control plane verified exact canonical revision and topology" in workflow
     assert 'test "$pooler_port" = 6543' in workflow
