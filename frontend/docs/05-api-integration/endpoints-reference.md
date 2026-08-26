@@ -41,12 +41,8 @@ import {
 
 ## 🔐 Authentication
 
-### authApi
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `login(credentials)` | POST `/auth/login` | User login |
-| `logout()` | POST `/auth/logout` | User logout |
-| `forgotPassword(email)` | POST `/auth/forgot-password` | Password reset |
+Authentication is owned by the Supabase session and the ERP token exchange in
+`AuthContext`. There is no compatibility `authApi` client.
 
 ### usersApi
 | Method | Endpoint | Description |

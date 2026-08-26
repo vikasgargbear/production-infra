@@ -6,20 +6,9 @@ import apiClient, { apiHelpers } from './apiClient';
 import * as dataUtils from './utils/dataUtils';
 
 // =========================================================================
-// AUDIT
-// =========================================================================
-import { auditApi } from './modules/audit/audit.api';
-
-// =========================================================================
-// AUTH
-// =========================================================================
-import { authApi } from './modules/auth/auth.api';
-
-// =========================================================================
 // COMPLIANCE
 // =========================================================================
 import { gstApi } from './modules/compliance/gst.api';
-import { taxEntriesApi } from './modules/compliance/taxEntries.api';
 
 // =========================================================================
 // FINANCE
@@ -32,7 +21,6 @@ import { paymentAllocationApi } from './modules/finance/paymentAllocation.api';
 // INVENTORY
 // =========================================================================
 import { batchesApi } from './modules/inventory/batches.api';
-import { conversionsApi } from './modules/inventory/conversions.api';
 
 // =========================================================================
 // MASTER
@@ -47,7 +35,6 @@ import { bankAccountsApi } from './modules/master/bankAccounts.api';
 // ORG
 // =========================================================================
 import { companyApi } from './modules/org/company.api';
-import organizationsApi from './modules/org/organizations.api';
 import { branchesApi } from './modules/org/branches.api';
 
 // =========================================================================
@@ -55,7 +42,6 @@ import { branchesApi } from './modules/org/branches.api';
 // =========================================================================
 import { purchasesApi } from './modules/purchase/purchases.api';
 import { grnApi } from './modules/purchase/grn.api';
-import { supplierInvoicesApi } from './modules/purchase/supplierInvoices.api';
 
 // =========================================================================
 // SALES
@@ -69,8 +55,6 @@ import { challanCalculationsApi, invoiceCalculationsApi, salesOrderCalculationsA
 // SETTINGS
 // =========================================================================
 import settingsApi from './modules/settings/settings.api';
-import { setupApi } from './modules/settings/setup.api';
-import utilsApi from './modules/settings/utils.api';
 
 import {
   canonicalDocumentHistoryApi,
@@ -86,15 +70,8 @@ export {
   apiClient,
   apiHelpers,
 
-  // Audit
-  auditApi,
-
-  // Auth
-  authApi,
-
   // Compliance
   gstApi,
-  taxEntriesApi,
 
   // Finance
   ledgerApi,
@@ -103,7 +80,6 @@ export {
 
   // Inventory
   batchesApi,
-  conversionsApi,
 
   // Master
   customersApi,
@@ -114,13 +90,11 @@ export {
 
   // Org
   companyApi,
-  organizationsApi,
   branchesApi,
 
   // Purchase
   purchasesApi,
   grnApi,
-  supplierInvoicesApi,
 
   // Sales
   invoicesApi,
@@ -132,8 +106,6 @@ export {
 
   // Settings
   settingsApi,
-  setupApi,
-  utilsApi,
 
   // System
   canonicalDocumentHistoryApi,
@@ -151,36 +123,29 @@ export {
 
 // API object with all modules grouped by domain
 const apiModules = {
-  // Analytics
-  // Audit
-  audit: { auditLogs: auditApi },
-
-  // Auth
-  auth: { auth: authApi },
-
   // Compliance
-  compliance: { gst: gstApi, taxEntries: taxEntriesApi },
+  compliance: { gst: gstApi },
 
   // Finance
   finance: { ledger: ledgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi },
 
   // Inventory
-  inventory: { batches: batchesApi, conversions: conversionsApi },
+  inventory: { batches: batchesApi },
 
   // Master
   master: { customers: customersApi, suppliers: suppliersApi, products: productsApi, employees: employeesApi, bankAccounts: bankAccountsApi },
 
   // Org
-  org: { company: companyApi, organizations: organizationsApi, branches: branchesApi },
+  org: { company: companyApi, branches: branchesApi },
 
   // Purchase
-  purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },
+  purchase: { purchases: purchasesApi, grn: grnApi },
 
   // Sales
   sales: { invoices: invoicesApi, calculations: invoiceCalculationsApi, orderCalculations: salesOrderCalculationsApi, orders: ordersApi, challans: challansApi },
 
   // Settings
-  settings: { settings: settingsApi, setup: setupApi, utils: utilsApi },
+  settings: { settings: settingsApi },
 
 };
 

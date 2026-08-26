@@ -22,9 +22,6 @@ jest.mock('./settings/RoleManagement', () => () => null);
 jest.mock('./masters/TaxMaster', () => () => null);
 jest.mock('./masters/UnitMaster', () => () => null);
 jest.mock('./masters/WarehouseMaster', () => () => null);
-jest.mock('./utils/DataValidationEngine', () => () => null);
-jest.mock('./utils/BulkOperations', () => () => null);
-
 describe('MasterHub hash subpage contract', () => {
   it('uses a valid deep-linked subpage and reports user navigation', async () => {
     const onSubpageChange = jest.fn();

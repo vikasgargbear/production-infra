@@ -16,8 +16,6 @@ import RoleManagement from './settings/RoleManagement';
 import TaxMaster from './masters/TaxMaster';
 import UnitMaster from './masters/UnitMaster';
 import WarehouseMaster from './masters/WarehouseMaster';
-import DataValidationEngine from './utils/DataValidationEngine';
-import BulkOperations from './utils/BulkOperations';
 
 export const MASTER_SUBPAGE_IDS = [
   'product-master',
@@ -106,8 +104,6 @@ const MASTER_MODULES: MasterModule[] = [
 const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('master', 'edit');
-  const [showValidationEngine, setShowValidationEngine] = useState(false);
-  const [showBulkOperations, setShowBulkOperations] = useState(false);
   const resolvedDefault: MasterSubpage = initialSubpage
     && (MASTER_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
     ? initialSubpage as MasterSubpage
@@ -140,29 +136,16 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose, initialSubp
   );
 
   return (
-    <>
-      <ModuleHub
-        open={open}
-        onClose={onClose || (() => { })}
-        title="Master"
-        subtitle="Configure your platform"
-        icon={Settings}
-        modules={visibleModules}
-        defaultModule={defaultModule}
-        onActiveModuleChange={onSubpageChange}
-      />
-
-      {/* Enterprise Components */}
-      <DataValidationEngine
-        open={showValidationEngine}
-        onClose={() => setShowValidationEngine(false)}
-      />
-
-      <BulkOperations
-        open={showBulkOperations}
-        onClose={() => setShowBulkOperations(false)}
-      />
-    </>
+    <ModuleHub
+      open={open}
+      onClose={onClose || (() => { })}
+      title="Master"
+      subtitle="Configure your platform"
+      icon={Settings}
+      modules={visibleModules}
+      defaultModule={defaultModule}
+      onActiveModuleChange={onSubpageChange}
+    />
   );
 };
 
