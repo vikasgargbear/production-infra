@@ -329,7 +329,7 @@ git push origin v1.3.0
 - [ ] Smoke test critical flows
 - [ ] Check error monitoring
 - [ ] Verify API connectivity
-- [ ] Check offline functionality
+- [ ] Verify stale service workers unregister and browser caches are purged
 - [ ] Monitor performance metrics
 
 ---

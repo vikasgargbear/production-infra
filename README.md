@@ -1,6 +1,6 @@
 # PharmaERP - Production Infrastructure
 
-Enterprise-grade Pharmacy Management System with offline-first capabilities, multi-tenancy, and GST compliance.
+Enterprise-grade, cloud-authoritative Pharmacy Management System with multi-tenancy and GST compliance.
 
 Built for pharmaceutical distribution, where the domain does not forgive mistakes: batch and expiry tracking for drug compliance, multi-rate GST invoicing where even the order of discounts changes the tax, customer credit ledgers, and split-payment reconciliation. In daily production use. React + FastAPI + PostgreSQL, with web and Electron desktop clients. Roadmap: an MCP layer over the API, so the full ERP can be operated in natural language.
 
@@ -163,8 +163,7 @@ Create `.env.local` in `frontend/`:
 # API URL
 VITE_API_URL=http://localhost:8000/api
 
-# Feature Flags
-VITE_ENABLE_OFFLINE=true
+# Development diagnostics
 VITE_ENABLE_DEBUG=true
 ```
 
@@ -221,8 +220,7 @@ production-infra/
 │   │   │   ├── ledger/        # Outstanding, payments
 │   │   │   └── global/        # Shared components
 │   │   ├── services/
-│   │   │   ├── api/           # API clients
-│   │   │   └── offline/       # Offline sync services
+│   │   │   └── api/           # API clients
 │   │   ├── hooks/             # Custom React hooks
 │   │   ├── contexts/          # React Context
 │   │   └── types/             # TypeScript types
@@ -239,7 +237,6 @@ production-infra/
 │   │   ├── architecture/      # System design
 │   │   └── database/          # Schema docs
 │   ├── frontend/              # Frontend docs
-│   │   └── offline/           # Offline architecture
 │   ├── guides/                # Developer guides
 │   └── deployment/            # Deployment docs
 │
@@ -276,10 +273,9 @@ npm run lint               # ESLint
 
 | Feature | Description |
 |---------|-------------|
-| **Offline-First** | Full functionality without internet |
 | **Multi-Tenancy** | Organization & branch isolation |
 | **GST Compliance** | Indian tax calculations |
-| **Real-Time Sync** | Delta sync when online |
+| **Canonical APIs** | Fail-closed reads and writes against PostgreSQL authority |
 | **Role-Based Access** | Owner, Manager, Pharmacist, Salesperson |
 
 ---
@@ -292,7 +288,6 @@ npm run lint               # ESLint
 | **Architecture** | `docs/backend/architecture/` | System design |
 | **Database Schema** | `docs/backend/database/` | Table structures |
 | **Frontend Docs** | `frontend/docs/` | Components, guides |
-| **Offline System** | `docs/frontend/offline/` | Sync architecture |
 | **Getting Started** | `docs/guides/getting-started.md` | Full setup guide |
 | **Deployment** | `docs/deployment/` | Production deployment |
 

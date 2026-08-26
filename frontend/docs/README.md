@@ -42,7 +42,6 @@ docs/
 │   ├── api-client.md                     # How to use apiClient
 │   ├── endpoints-reference.md            # All endpoints documented
 │   ├── error-handling.md                 # Error codes & handling
-│   └── offline-sync.md                   # Offline-first patterns
 │
 ├── 06-guides/                            # 📝 Developer Guides
 │   ├── README.md                         # Guides index

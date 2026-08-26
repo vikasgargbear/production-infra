@@ -115,30 +115,13 @@
 
 ---
 
-## Sync Issues
-
-### "Data not syncing" / "Offline mode"
-
-**Check**:
-1. Is your internet working? Open another website
-2. Is there a red "Offline" indicator?
-
-**Solutions**:
-1. Check internet connection
-2. Click the Sync button manually
-3. Refresh the page
-4. Clear browser cache and cookies
-5. Log out and log in again
-
----
-
 ### "Changes not saving"
 
 **Solutions**:
 1. Check internet connection
-2. Click Save button again
+2. Retry the canonical API action
 3. Don't navigate away before save completes
-4. Look for error messages
+4. Look for the fail-closed API error and request identifier
 
 ---
 

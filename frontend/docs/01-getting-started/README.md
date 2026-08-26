@@ -54,8 +54,7 @@ frontend/
 │   │   └── global/       # Shared components
 │   │
 │   ├── services/         # API clients & utilities
-│   │   ├── api/          # API client, endpoints
-│   │   └── offline/      # Offline storage
+│   │   └── api/          # API client, endpoints
 │   │
 │   ├── hooks/            # Custom React hooks
 │   ├── contexts/         # React Context providers

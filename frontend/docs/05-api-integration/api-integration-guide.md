@@ -450,8 +450,7 @@ services/api/
     ├── products.api.ts       # Product operations
     ├── batches.api.ts        # Batch operations
     ├── payments.api.ts       # Payment operations
-    ├── reports.api.ts        # Report operations
-    └── sync.api.ts           # Offline sync
+    └── reports.api.ts        # Report operations
 ```
 
 ---
@@ -479,4 +478,3 @@ services/api/
 
 - [Endpoints Reference](./endpoints-reference.md) - All API endpoints
 - [Error Handling](./error-handling.md) - Error patterns
-- [Offline Sync](../../docs/frontend/offline/) - Offline-first patterns

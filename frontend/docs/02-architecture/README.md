@@ -68,8 +68,7 @@
 | Technology | Purpose |
 |------------|---------|
 | **Axios** | HTTP client |
-| **IndexedDB** | Offline storage |
-| **Custom Cache** | Search/data caching |
+| **Canonical API client** | Authenticated cloud data access |
 
 ### Forms & Validation
 | Technology | Purpose |
@@ -102,9 +101,6 @@ src/
 │   │   ├── [module]Api.ts     # Module-specific APIs
 │   │   └── index.ts           # API exports
 │   │
-│   └── offline/               # Offline support
-│       ├── storage/           # IndexedDB
-│       └── sync/              # Sync services
 │
 ├── hooks/                     # Shared Custom Hooks
 │   ├── useEscapeKey.ts

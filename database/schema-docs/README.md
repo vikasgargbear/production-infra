@@ -191,11 +191,10 @@ Implement proper pagination for large datasets:
 }
 ```
 
-### Offline Support
-Design APIs to support offline-first mobile apps:
-- Include `updated_at` timestamps
-- Support delta sync
-- Provide conflict resolution
+### Canonical consistency
+Expose authoritative API readbacks with stable UUIDs and row versions. Clients
+must fail closed when canonical context is unavailable; they must not maintain a
+second writable database or replay queue.
 
 ---
 

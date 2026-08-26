@@ -65,6 +65,13 @@ describe('deferred production surfaces', () => {
     expect(workerTombstone).toContain('caches.delete');
     expect(workerTombstone).not.toContain("addEventListener('fetch'");
     expect(workerTombstone).not.toContain('respondWith');
+
+    [
+      path.resolve(srcRoot, '../../docs/guides/offline-first-development.md'),
+      path.resolve(srcRoot, '../../docs/frontend/offline/README.md'),
+      path.resolve(srcRoot, '../docs/offline/README.md'),
+      path.resolve(srcRoot, '../docs/user-guides/troubleshooting/sync-issues.md'),
+    ].forEach(retiredGuide => expect(fs.existsSync(retiredGuide)).toBe(false));
   });
 
   test('zero-consumer compatibility clients and unreachable shells stay retired', () => {

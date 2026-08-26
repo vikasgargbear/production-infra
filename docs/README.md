@@ -28,7 +28,6 @@ docs/
 │   └── deployment/               # Deploy configs (4 files)
 │
 ├── frontend/                     # Frontend documentation
-│   ├── offline/                  # Offline-first architecture
 │   └── design-system.md          # UI components & patterns
 │
 ├── guides/                       # Developer guides
@@ -109,14 +108,13 @@ Frontend docs are split between two locations:
 
 | Location | Content |
 |----------|---------|
-| [docs/frontend/](frontend/) | Overview, offline architecture |
+| [docs/frontend/](frontend/) | Frontend design-system overview |
 | [frontend/docs/](../frontend/docs/) | Detailed dev docs, user guides (66 files) |
 
 ### Key Docs
 
 | Document | Description |
 |----------|-------------|
-| [Offline Architecture](frontend/offline/) | IndexedDB schema, sync engine, delta sync |
 | [Design System](../frontend/docs/design-system.md) | Complete (511 lines) |
 | [User Guides](../frontend/docs/user-guides/) | End-user operational guides (36 files) |
 

@@ -31,13 +31,12 @@
 19. [Stock Adjustments & Write-offs](#19-stock-adjustments--write-offs)
 20. [Master Data (Customers, Products, Suppliers)](#20-master-data)
 21. [Authentication & Multi-tenancy](#21-authentication--multi-tenancy)
-22. [Offline Sync](#22-offline-sync)
-23. [Loyalty Program](#23-loyalty-program)
-24. [GST & Compliance](#24-gst--compliance)
-25. [Dashboard & Analytics](#25-dashboard--analytics)
-26. [Cross-Module Interaction Map](#26-cross-module-interaction-map)
-27. [Critical Issues & Production Blockers](#27-critical-issues--production-blockers)
-28. [Database Schema Reference](#28-database-schema-reference)
+22. [Loyalty Program](#22-loyalty-program)
+23. [GST & Compliance](#23-gst--compliance)
+24. [Dashboard & Analytics](#24-dashboard--analytics)
+25. [Cross-Module Interaction Map](#25-cross-module-interaction-map)
+26. [Critical Issues & Production Blockers](#26-critical-issues--production-blockers)
+27. [Database Schema Reference](#27-database-schema-reference)
 
 ---
 
@@ -1107,33 +1106,11 @@ Tables moved from `public` to proper schemas:
 |----|----------|-------|
 | AUTH-1 | **HIGH** | No rate limiting on login (failed_login_count not implemented) |
 | AUTH-2 | **HIGH** | Refresh tokens not stored server-side (cannot be revoked) |
-| AUTH-3 | **MEDIUM** | Offline auth hash uses SHA256 (not bcrypt) for IndexedDB |
 | AUTH-4 | **LOW** | AdminBypass references wrong class attribute |
 
 ---
 
-## 22. OFFLINE SYNC
-
-### Sync Endpoint
-```
-POST /api/v1/sync/
-```
-
-### Tables for Delta Sync
-| Entity | Table | Sync Fields |
-|--------|-------|-------------|
-| products | `inventory.products` | product_id, name, code, hsn, gst_rate, manufacturer, is_active |
-| batches | `inventory.batches` | batch_id, product_id, batch_number, qty_available, mrp, expiry |
-| customers | `parties.customers` | customer_id, name, phone, gst_number, outstanding |
-| suppliers | `parties.suppliers` | supplier_id, name, code, gstin, phone |
-| employees | `master.employees` | employee_id, full_name, role, phone, email |
-| outstanding | `financial.customer_outstanding` | customer_id, total outstanding SUM |
-
-Each entity tracks `last_synced_at` timestamp for delta queries.
-
----
-
-## 23. LOYALTY PROGRAM
+## 22. LOYALTY PROGRAM
 
 ### Tables
 | Table | Purpose |
@@ -1152,7 +1129,7 @@ Each entity tracks `last_synced_at` timestamp for delta queries.
 
 ---
 
-## 24. GST & COMPLIANCE
+## 23. GST & COMPLIANCE
 
 ### GST Type Determination
 ```python
@@ -1183,7 +1160,7 @@ elif gst_type == "IGST":
 
 ---
 
-## 25. DASHBOARD & ANALYTICS
+## 24. DASHBOARD & ANALYTICS
 
 ### Available Queries (for AI analytics agent)
 
@@ -1205,7 +1182,7 @@ elif gst_type == "IGST":
 
 ---
 
-## 26. CROSS-MODULE INTERACTION MAP
+## 25. CROSS-MODULE INTERACTION MAP
 
 ```
                         ┌─────────────┐
@@ -1272,7 +1249,7 @@ elif gst_type == "IGST":
 
 ---
 
-## 27. CRITICAL ISSUES -- PRODUCTION BLOCKERS
+## 26. CRITICAL ISSUES -- PRODUCTION BLOCKERS
 
 ### Priority 1: Data Integrity (Must Fix Before Production)
 
@@ -1317,7 +1294,7 @@ elif gst_type == "IGST":
 
 ---
 
-## 28. DATABASE SCHEMA REFERENCE
+## 27. DATABASE SCHEMA REFERENCE
 
 ### Complete Table Map
 

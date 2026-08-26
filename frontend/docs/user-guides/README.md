@@ -92,7 +92,6 @@ Having issues? Find solutions:
 
 - [Login Problems](./troubleshooting/login-issues.md)
 - [Print Issues](./troubleshooting/print-issues.md)
-- [Sync Problems](./troubleshooting/sync-issues.md)
 - [Common Errors](./troubleshooting/common-errors.md)
 
 ---

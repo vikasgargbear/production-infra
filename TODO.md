@@ -26,11 +26,6 @@ Implement multi-format PDF template selection for invoices, credit notes, and ot
 
 ## Medium Priority
 
-### Offline-First Enhancements
-- [ ] Background sync queue management UI
-- [ ] Conflict resolution improvements
-- [ ] Offline data age indicators
-
 ### Reporting & Analytics
 - [ ] Custom report builder
 - [ ] Dashboard widgets customization

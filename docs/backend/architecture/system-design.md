@@ -52,7 +52,6 @@ graph TB
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | **Web App** | React 18 | Browser-based interface |
-| **Mobile App** | React Native | iOS/Android with offline |
 | **API Server** | FastAPI (Python) | REST API, business logic |
 | **Database** | PostgreSQL 14+ | Primary data store |
 | **Cache** | Redis | Session, rate limits, cache |
@@ -87,18 +86,18 @@ graph LR
 - **Services**: Business logic, orchestration
 - **Repository**: Direct SQL queries (no ORM)
 
-### 3. Offline-First Mobile
+### 3. Cloud-Authoritative Clients
 
 ```mermaid
 sequenceDiagram
-    participant Mobile
-    participant IndexedDB
+    participant Client
     participant API
+    participant PostgreSQL
 
-    Mobile->>IndexedDB: Read/Write offline
-    Mobile->>API: Sync when online
-    API-->>Mobile: Delta sync (changes only)
-    Mobile->>IndexedDB: Apply changes
+    Client->>API: Authenticated request with org/branch context
+    API->>PostgreSQL: Canonical transaction or read
+    PostgreSQL-->>API: UUID-bound authoritative result
+    API-->>Client: Result or fail-closed error
 ```
 
 ### 4. Event-Driven Side Effects

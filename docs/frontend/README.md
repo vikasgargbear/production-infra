@@ -10,7 +10,7 @@ Frontend documentation is organized into two locations:
 
 | Location | Purpose | Audience |
 |----------|---------|----------|
-| `docs/frontend/` | Technical overview, offline architecture | Backend devs, DevOps |
+| `docs/frontend/` | Technical and design-system overview | Backend devs, DevOps |
 | `frontend/docs/` | Detailed developer docs, user guides | Frontend devs, end users |
 
 ---
@@ -21,7 +21,6 @@ Frontend documentation is organized into two locations:
 
 | Document | Description |
 |----------|-------------|
-| [Offline Architecture](offline/) | Cache-first, delta sync, IndexedDB schema |
 | [Design System](design-system.md) | Colors, typography, components (summary) |
 
 ### In `frontend/docs/` (Main Frontend Docs)
@@ -60,7 +59,6 @@ End-user operational documentation:
 | TypeScript | 5.x | Type safety |
 | Vite | 5.x | Build tool |
 | Tailwind CSS | 3.x | Styling |
-| IndexedDB | — | Offline storage |
 | Axios | — | HTTP client |
 
 ---
@@ -81,10 +79,9 @@ graph TB
         Services[API Services]
     end
     
-    subgraph Offline
-        Cache[Memory Cache]
-        IDB[(IndexedDB)]
-        Sync[Sync Engine]
+    subgraph Cloud Authority
+        API[Authenticated canonical API]
+        DB[(PostgreSQL)]
     end
     
     Pages --> Modules
@@ -92,21 +89,13 @@ graph TB
     Modules --> Hooks
     Hooks --> Context
     Hooks --> Services
-    Services --> Cache
-    Services --> IDB
-    Sync --> IDB
+    Services --> API
+    API --> DB
 ```
 
 ---
 
 ## Key Features
-
-### Offline-First
-
-- Full functionality without network
-- Background sync when online
-- Conflict detection and resolution
-- See [Offline Architecture](offline/) for details
 
 ### Multi-Tenancy
 
@@ -133,8 +122,7 @@ frontend/
 │   │   ├── inventory/        # Products, batches
 │   │   └── global/           # Shared components
 │   ├── services/
-│   │   ├── api/              # API clients
-│   │   └── offline/          # Offline services
+│   │   └── api/              # API clients
 │   ├── hooks/                # Custom hooks
 │   ├── contexts/             # React Context
 │   ├── types/                # TypeScript types

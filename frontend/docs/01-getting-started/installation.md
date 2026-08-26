@@ -57,8 +57,7 @@ Edit `.env.local` with your settings:
 VITE_API_URL=http://localhost:8000/api
 VITE_API_TIMEOUT=30000
 
-# Feature Flags
-VITE_ENABLE_OFFLINE=true
+# Development diagnostics
 VITE_ENABLE_ANALYTICS=false
 VITE_ENABLE_DEBUG=true
 
@@ -89,7 +88,6 @@ Server starts at: `http://localhost:5173`
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VITE_API_TIMEOUT` | `30000` | API request timeout (ms) |
-| `VITE_ENABLE_OFFLINE` | `true` | Enable offline mode |
 | `VITE_ENABLE_DEBUG` | `false` | Enable debug logging |
 | `VITE_SENTRY_DSN` | — | Sentry error tracking DSN |
 

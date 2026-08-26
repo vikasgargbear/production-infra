@@ -272,58 +272,6 @@ async def fetch_dashboard_data():
 
 ---
 
-## Offline Handling
-
-### 1. Queue Operations
-
-```javascript
-class OfflineQueue {
-  add(operation) {
-    const queue = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
-    queue.push({
-      id: generateId(),
-      operation,
-      timestamp: Date.now(),
-      retries: 0
-    });
-    localStorage.setItem('offlineQueue', JSON.stringify(queue));
-  }
-  
-  async sync() {
-    const queue = this.getQueue();
-    for (const item of queue) {
-      try {
-        await this.execute(item.operation);
-        this.remove(item.id);
-      } catch (e) {
-        if (!isRetryable(e)) {
-          this.markFailed(item.id, e);
-        }
-      }
-    }
-  }
-}
-```
-
-### 2. Conflict Resolution
-
-```javascript
-async function syncLocalChanges(localData, serverData) {
-  if (localData.updated_at > serverData.updated_at) {
-    // Local is newer - push to server
-    await api.update(localData);
-  } else if (localData.updated_at < serverData.updated_at) {
-    // Server is newer - update local
-    await localDb.update(serverData);
-  } else {
-    // Same timestamp but different data - conflict
-    await resolveConflict(localData, serverData);
-  }
-}
-```
-
----
-
 ## Security
 
 ### 1. Validate All Inputs

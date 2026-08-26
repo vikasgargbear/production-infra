@@ -205,23 +205,6 @@ try {
 
 ---
 
-## 🔄 Offline Support
-
-```typescript
-import offlineStorage from '../../services/offlineStorage';
-
-// Store for offline use
-await offlineStorage.storeOffline('invoices', data, { persistent: true });
-
-// Retrieve offline data
-const cached = await offlineStorage.getOffline('invoices');
-if (cached?.data) {
-  setInvoices(cached.data);
-}
-```
-
----
-
 ## 📚 API Endpoints Reference
 
 ### Sales Module
@@ -253,4 +236,3 @@ if (cached?.data) {
 
 - [Endpoints Reference](./endpoints-reference.md)
 - [Error Handling](./error-handling.md)
-- [Offline Sync](./offline-sync.md)
