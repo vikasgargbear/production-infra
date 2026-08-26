@@ -81,6 +81,11 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      RAILWAY_RESET_SSH_PRIVATE_KEY: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh
+      RAILWAY_RESET_SSH_FINGERPRINT: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-fingerprint
+      RAILWAY_RESET_REMOTE_ROOT: /tmp/canonical-reset-${{ github.run_id }}-${{ github.run_attempt }}
+      RAILWAY_RESET_FENCE_OPENED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-fence-opened
+      RAILWAY_RESET_FENCE_CLOSED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-fence-closed
     steps:
       - uses: actions/checkout@v4
         with:
@@ -236,176 +241,216 @@ jobs:
             exit 1
           fi
 
-      - name: Close writes, quiesce sessions, and migrate the Railway reset boundary
+      - name: Register one run-scoped Railway reset SSH key
         if: inputs.reset_disposable_data == true
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          mkdir -p railway-reset-evidence
-          python3 -m pip install \
-            psycopg2-binary==2.9.9 \
-            sqlalchemy==2.0.23 \
-            alembic==1.14.1 \
-            httpx==0.25.2 \
-            requests==2.34.2
-          python3 backend/scripts/railway_canonical_reset.py prepare-reset \
-            --expected-sha "$REVIEWED_SHA" \
-            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
-            --receipt railway-reset-evidence/railway-reset-prepared.json
-          jq -e \
-            --arg sha "$REVIEWED_SHA" \
-            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            '.schema == "aasopharma.railway-canonical-reset.v1" and
-             .action == "prepare-reset" and .provider == "railway" and
-             .expected_sha == $sha and .project_ref == $project_ref and
-             .write_fence.state == "closed" and
-             .session_quiescence.remaining_targeted_session_count == 0 and
-             (.migration.alembic_head | type) == "string" and
-             (.migration.alembic_head | length) > 0 and
-             .migration.auth_schema_present == true and
-             .migration.storage_schema_present == true and
-             .role_cleanup.migration_owner_authority_semantics == "explicit_pg_auth_members_paths" and
-             .role_cleanup.postgres_migration_owner_set == false and
-             .role_cleanup.postgres_migration_owner_usage == false and
-             .transport.selected_ipv4_address == "verified-not-persisted"' \
-            railway-reset-evidence/railway-reset-prepared.json >/dev/null
+          umask 077
+          mkdir -p "$HOME/.ssh" "$HOME/.railway"
+          chmod 700 "$HOME/.ssh" "$HOME/.railway"
+          printf '%s\n' \
+            'Host ssh.railway.com' \
+            "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
+            '    StrictHostKeyChecking accept-new' \
+            > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+          ssh-keygen -q -t ed25519 -N '' \
+            -C "railway-reset-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -f "$RAILWAY_RESET_SSH_PRIVATE_KEY"
+          fingerprint=$(ssh-keygen -E sha256 -lf \
+            "$RAILWAY_RESET_SSH_PRIVATE_KEY.pub" | awk '{print $2}')
+          case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
+          printf '%s\n' "$fingerprint" > "$RAILWAY_RESET_SSH_FINGERPRINT"
+          railway ssh keys add \
+            --key "$RAILWAY_RESET_SSH_PRIVATE_KEY.pub" \
+            --name "railway-reset-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >/dev/null
+          railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys.txt"
+          grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys.txt" >/dev/null
 
-      - name: Build and mask the restricted evidence cleanup connection
-        if: inputs.reset_disposable_data == true
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: python3 backend/scripts/verify_staging_direct_roles.py --bootstrap-only
-
-      - name: Provision restricted evidence cleanup authority
+      - name: Execute the reviewed reset source inside Railway direct IPv6
         if: inputs.reset_disposable_data == true
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: |
-          set -euo pipefail
-          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
-          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
-          hook_exists=$(psql -X -Atqc \
-            "SELECT to_regprocedure('erp_security.canonical_evidence_storage_access_token_hook(jsonb)') IS NOT NULL" \
-            "$PSYCOPG_DATABASE_URL")
-          if [ "$hook_exists" = t ]; then
-            python3 backend/scripts/verify_supabase_auth_admin_secret.py \
-              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-              >railway-reset-evidence/railway-auth-admin-preflight.json
-            jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-              '.state == "verified"
-               and .project_ref == $project_ref
-               and .modern_secret_shape_verified == true
-               and .list_verified == true
-               and .readback_verified == true
-               and .mutation_performed == false' \
-              railway-reset-evidence/railway-auth-admin-preflight.json >/dev/null
-            identity_log=$(mktemp)
-            if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
-                --phase prepare \
-                --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-                --reviewed-sha "$REVIEWED_SHA" \
-                --github-env "$GITHUB_ENV" \
-                --receipt railway-reset-evidence/railway-evidence-storage-identity.json \
-                >railway-reset-evidence/railway-evidence-storage-identity-summary.json \
-                2>"$identity_log"; then
-              python3 backend/scripts/safe_ci_log_summary.py \
-                --label railway-evidence-identity "$identity_log"
-              exit 1
-            fi
-            echo "EVIDENCE_STORAGE_IDENTITY_READY=true" >> "$GITHUB_ENV"
-          elif [ "$hook_exists" = f ]; then
-            object_count=$(psql -X -Atqc \
-              "SELECT CASE WHEN to_regclass('storage.objects') IS NULL THEN 0 ELSE (SELECT count(*) FROM storage.objects WHERE bucket_id='canonical-evidence-private-v1') END" \
-              "$PSYCOPG_DATABASE_URL")
-            if [ "$object_count" != 0 ]; then
-              echo "Evidence exists but the restricted cleanup hook is unavailable" >&2
-              exit 1
-            fi
-            echo "EVIDENCE_STORAGE_IDENTITY_READY=false" >> "$GITHUB_ENV"
-          else
-            echo "Could not classify the evidence cleanup hook" >&2
-            exit 1
-          fi
-
-      - name: Reconcile and remove evidence through the restricted Storage API
-        if: inputs.reset_disposable_data == true
-        run: |
-          set -euo pipefail
-          cleanup_log=$(mktemp)
-          if ! PYTHONPATH=backend python3 backend/scripts/cleanup_staging_evidence_storage.py \
-              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-              --database-url-env PSYCOPG_DATABASE_URL \
-              --receipt railway-reset-evidence/railway-evidence-storage-cleanup.json \
-              >"$cleanup_log" 2>&1; then
-            python3 backend/scripts/safe_ci_log_summary.py \
-              --label railway-evidence-cleanup "$cleanup_log"
-            exit 1
-          fi
-          jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            '.contract_version == "canonical-evidence-reset-cleanup-v2"
-             and .state == "empty"
-             and .project_ref == $project_ref
-             and .bucket == "canonical-evidence-private-v1"
-             and .remaining_object_count == 0
-             and .deleted_object_count == .reconciled_object_count
-             and .legal_hold_count == 0
-             and .evidence_writer_membership_open == false
-             and .evidence_writer_role_posture_safe == true
-             and .evidence_writer_unexpected_member_count == 0
-             and .evidence_writer_inherited_role_count == 0
-             and ((.evidence_writer_role_installed == true
-                   and .evidence_writer_role_absence_verified == false)
-                  or (.evidence_writer_role_installed == false
-                      and .evidence_writer_role_absence_verified == true))
-             and (.observed_authenticator_session_count | type) == "number"
-             and .observed_authenticator_session_count >= 0
-             and (.terminated_authenticator_session_count | type) == "number"
-             and .terminated_authenticator_session_count >= 0
-             and .terminated_authenticator_session_count <= .observed_authenticator_session_count
-             and .remaining_preclosure_authenticator_session_count == 0
-             and (.evidence_writer_closed_at | type) == "string"
-             and (.retention_in_force_deleted_count | type) == "number"
-             and .retention_in_force_deleted_count >= 0' \
-            railway-reset-evidence/railway-evidence-storage-cleanup.json >/dev/null
-
-      - name: Reset disposable Railway data against the cleaned exact head
-        if: inputs.reset_disposable_data == true
-        env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
-          python3 backend/scripts/railway_canonical_reset.py reset \
-            --expected-sha "$REVIEWED_SHA" \
-            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
-            --evidence-cleanup-receipt railway-reset-evidence/railway-evidence-storage-cleanup.json \
-            --receipt railway-canonical-reset.json
-          jq -e \
-            --arg sha "$REVIEWED_SHA" \
+          case "$RAILWAY_RESET_REMOTE_ROOT" in
+            /tmp/canonical-reset-[0-9]*-[0-9]*) ;;
+            *) echo 'invalid Railway reset remote root' >&2; exit 2 ;;
+          esac
+          mkdir -p railway-reset-evidence
+          curl --fail-with-body --silent --show-error --max-time 30 \
+            "$RAILWAY_API_URL/health" >/dev/null
+          railway status \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json > "$RUNNER_TEMP/railway-reset-status.json"
+          deployment_id=$(jq -er \
+            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+            --arg service "$RAILWAY_API_SERVICE" '
+              [.environments.edges[].node
+               | select(.id == $environment)
+               | .serviceInstances.edges[].node
+               | select(.serviceName == $service)
+               | .activeDeployments[]
+               | select(.status == "SUCCESS" or .status == "SLEEPING")
+               | select((.instances | length) == 1)
+               | {deployment_id:.id,instance_id:.instances[0].id}]
+              | if length == 1 then .[0] else error("expected one active Railway API execution host") end
+            ' "$RUNNER_TEMP/railway-reset-status.json")
+          RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID=$(jq -r .deployment_id <<<"$deployment_id")
+          RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID=$(jq -r .instance_id <<<"$deployment_id")
+          export RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID
+          printf '%s\n' "$RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID" > \
+            "$RUNNER_TEMP/railway-reset-bootstrap-deployment-id"
+          printf '%s\n' "$RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID" > \
+            "$RUNNER_TEMP/railway-reset-bootstrap-instance-id"
+
+          remote_ssh() {
+            railway ssh \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service "$RAILWAY_API_SERVICE" \
+              --deployment-instance "$RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID" \
+              --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+              -- "$@"
+          }
+          archive="$RUNNER_TEMP/railway-reset-source.tar.gz"
+          git archive --format=tar.gz --output "$archive" "$REVIEWED_SHA" -- \
+            backend database deploy/control-plane
+          source_sha256=$(sha256sum "$archive" | cut -d' ' -f1)
+          [[ "$source_sha256" =~ ^[0-9a-f]{64}$ ]]
+          # Expansion belongs to the remote shell.
+          # shellcheck disable=SC2016
+          remote_hash=$(remote_ssh /bin/sh -c \
+            'set -eu; root=$1; umask 077; test ! -e "$root"; mkdir -m 700 "$root"; cat > "$root/source.tar.gz"; sha256sum "$root/source.tar.gz" | cut -d" " -f1' \
+            sh "$RAILWAY_RESET_REMOTE_ROOT" < "$archive")
+          test "$remote_hash" = "$source_sha256"
+          # Expansion belongs to the remote shell.
+          # shellcheck disable=SC2016
+          remote_ssh /bin/sh -c \
+            'set -eu; root=$1; mkdir -m 700 "$root/source"; tar -xzf "$root/source.tar.gz" -C "$root/source"; test -f "$root/source/backend/scripts/railway_reset_control_plane.py"' \
+            sh "$RAILWAY_RESET_REMOTE_ROOT" >/dev/null
+          host_deployed_sha=$(remote_ssh printenv RAILWAY_GIT_COMMIT_SHA)
+          [[ "$host_deployed_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf '%s\n' "$host_deployed_sha" > \
+            "$RUNNER_TEMP/railway-reset-bootstrap-host-sha"
+          printf '%s\n' "$source_sha256" > \
+            "$RUNNER_TEMP/railway-reset-source-sha256"
+          request_nonce=$(openssl rand -hex 32)
+          [[ "$request_nonce" =~ ^[0-9a-f]{64}$ ]]
+
+          base_request="$RUNNER_TEMP/railway-reset-base-request.json"
+          jq -n \
+            --arg expected_sha "$REVIEWED_SHA" \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --arg expected_head "$expected_head" \
-            '.schema == "aasopharma.railway-canonical-reset.v1" and
-             .action == "reset" and .provider == "railway" and
-             .expected_sha == $sha and .project_ref == $project_ref and
-             .write_fence.state == "closed" and
-             .post_reset_fence_state == "closed" and
-             .evidence_cleanup.contract_version == "canonical-evidence-reset-cleanup-v2" and
-             .evidence_cleanup.state == "empty" and
-             .evidence_cleanup.remaining_object_count == 0 and
-             (.evidence_cleanup.receipt_sha256 | test("^[0-9a-f]{64}$")) and
-             .session_quiescence.remaining_targeted_session_count == 0 and
-             .reset.alembic_head == $expected_head and
-             .reset.disposable_row_count_after_reset == 0 and
-             .reset.evidence_storage_object_count_after_reset == 0 and
-             .role_cleanup.migration_owner_authority_semantics == "explicit_pg_auth_members_paths" and
-             .role_cleanup.postgres_migration_owner_set == false and
-             .role_cleanup.postgres_migration_owner_usage == false and
-             .transport.selected_ipv4_address == "verified-not-persisted"' \
-            railway-canonical-reset.json >/dev/null
+            --arg production_project_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg request_nonce "$request_nonce" \
+            --arg deployment_id "$RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID" \
+            --arg deployment_instance_id "$RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID" \
+            --arg host_deployed_sha "$host_deployed_sha" \
+            --arg source_archive_sha256 "$source_sha256" \
+            '{schema:"aasopharma.railway-reset-control-request.v1",
+              expected_sha:$expected_sha,project_ref:$project_ref,
+              production_project_refs:$production_project_refs,
+              run_id:$run_id,run_attempt:$run_attempt,request_nonce:$request_nonce,
+              deployment_id:$deployment_id,deployment_instance_id:$deployment_instance_id,
+              host_deployed_sha:$host_deployed_sha,
+              execution_source:"reviewed_source_archive",
+              source_archive_sha256:$source_archive_sha256}' > "$base_request"
+          chmod 600 "$base_request"
+
+          close_request="$RUNNER_TEMP/railway-reset-close-request.json"
+          jq --arg password "$SUPABASE_DB_PASSWORD" \
+            '.secrets={SUPABASE_DB_PASSWORD:$password}' \
+            "$base_request" > "$close_request"
+          chmod 600 "$close_request"
+          # Expansion belongs to the remote shell.
+          # shellcheck disable=SC2016
+          remote_ssh /bin/sh -c \
+            'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py close-fence --input - --output -' \
+            sh "$RAILWAY_RESET_REMOTE_ROOT" \
+            < "$close_request" > railway-reset-evidence/railway-fence-closed.json
+          PYTHONPATH=backend python3 - \
+            "$close_request" railway-reset-evidence/railway-fence-closed.json <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.railway_reset_control_plane import verify_response
+
+          request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          verify_response(response, request, action="close-fence")
+          closure = response["result"]["evidence_writer_closure"]
+          if not (
+              response["result"]["write_fence"]["state"] == "closed"
+              and closure["membership_open"] is False
+              and closure["role_posture_safe"] is True
+              and closure["unexpected_member_count"] == 0
+              and closure["inherited_role_count"] == 0
+              and closure["remaining_preclosure_authenticator_session_count"] == 0
+          ):
+              raise SystemExit("pre-reset write fence was not attested closed")
+          PY
+          touch "$RAILWAY_RESET_FENCE_CLOSED"
+
+          reset_request="$RUNNER_TEMP/railway-reset-request.json"
+          jq \
+            --arg access "$SUPABASE_ACCESS_TOKEN" \
+            --arg anon "$SUPABASE_ANON_KEY" \
+            --arg password "$SUPABASE_DB_PASSWORD" \
+            '.secrets={SUPABASE_ACCESS_TOKEN:$access,SUPABASE_ANON_KEY:$anon,SUPABASE_DB_PASSWORD:$password}' \
+            "$base_request" > "$reset_request"
+          chmod 600 "$reset_request"
+          # Evidence cleanup temporarily opens an independent Storage writer
+          # grant. Until the complete reset receipt is verified, failure
+          # compensation must actively close both write boundaries.
+          rm -f "$RAILWAY_RESET_FENCE_CLOSED"
+          # Expansion belongs to the remote shell.
+          # shellcheck disable=SC2016
+          remote_ssh /bin/sh -c \
+            'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py reset-boundary --input - --output -' \
+            sh "$RAILWAY_RESET_REMOTE_ROOT" \
+            < "$reset_request" > railway-reset-evidence/railway-reset-control.json
+
+          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          PYTHONPATH=backend python3 - \
+            "$reset_request" railway-reset-evidence/railway-reset-control.json \
+            "$expected_head" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.railway_reset_control_plane import verify_response
+
+          reset_request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          reset_response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          verify_response(reset_response, reset_request, action="reset-boundary")
+          result = reset_response["result"]
+          prepared = result["prepared"]
+          evidence = result["evidence"]["cleanup_receipt"]
+          reset = result["reset"]
+          expected_head = sys.argv[3]
+          if not (
+              prepared["write_fence"]["state"] == "closed"
+              and prepared["transport"]["network_family"] == 6
+              and prepared["migration"]["alembic_head"] == expected_head
+              and evidence["state"] == "empty"
+              and evidence["remaining_object_count"] == 0
+              and evidence["evidence_writer_membership_open"] is False
+              and reset["post_reset_fence_state"] == "closed"
+              and reset["reset"]["alembic_head"] == expected_head
+              and reset["reset"]["disposable_row_count_after_reset"] == 0
+              and reset["reset"]["evidence_storage_object_count_after_reset"] == 0
+          ):
+              raise SystemExit("Railway IPv6 reset receipt is incomplete")
+          Path("railway-canonical-reset.json").write_text(
+              json.dumps(reset, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+          touch "$RAILWAY_RESET_FENCE_CLOSED"
 
       - name: Reconcile the reviewed staging MCP OAuth client authority
         env:
@@ -862,23 +907,86 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          python3 backend/scripts/railway_canonical_reset.py open-fence \
-            --expected-sha "$REVIEWED_SHA" \
-            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
-            --receipt railway-canonical-fence-open.json
-          jq -e \
-            --arg sha "$REVIEWED_SHA" \
+          status="$RUNNER_TEMP/railway-exact-api-status.json"
+          railway status \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json > "$status"
+          exact=$(jq -er \
+            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+            --arg service "$RAILWAY_API_SERVICE" \
+            --arg deployment "$(<api-deployment-id)" '
+              [.environments.edges[].node
+               | select(.id == $environment)
+               | .serviceInstances.edges[].node
+               | select(.serviceName == $service)
+               | .activeDeployments[]
+               | select(.id == $deployment and .status == "SUCCESS")
+               | .instances[]
+               | select(.status == "RUNNING")
+               | {deployment_id:$deployment,instance_id:.id}]
+              | if length == 1 then .[0] else error("expected one exact running Railway API instance") end
+            ' "$status")
+          exact_deployment_id=$(jq -r .deployment_id <<<"$exact")
+          exact_instance_id=$(jq -r .instance_id <<<"$exact")
+          printf '%s\n' "$exact_deployment_id" > "$RUNNER_TEMP/railway-exact-api-deployment-id"
+          printf '%s\n' "$exact_instance_id" > "$RUNNER_TEMP/railway-exact-api-instance-id"
+          request="$RUNNER_TEMP/railway-fence-open-request.json"
+          request_nonce=$(openssl rand -hex 32)
+          jq -n \
+            --arg expected_sha "$REVIEWED_SHA" \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            '.schema == "aasopharma.railway-canonical-reset.v1" and
-             .action == "open-fence" and .provider == "railway" and
-             .expected_sha == $sha and .project_ref == $project_ref and
-             .write_fence.state == "open" and
-             .role_cleanup.migration_owner_authority_semantics == "explicit_pg_auth_members_paths" and
-             .role_cleanup.postgres_migration_owner_set == false and
-             .role_cleanup.postgres_migration_owner_usage == false and
-             .transport.selected_ipv4_address == "verified-not-persisted"' \
-            railway-canonical-fence-open.json >/dev/null
+            --arg production_project_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg request_nonce "$request_nonce" \
+            --arg deployment_id "$exact_deployment_id" \
+            --arg deployment_instance_id "$exact_instance_id" \
+            --arg password "$SUPABASE_DB_PASSWORD" \
+            '{schema:"aasopharma.railway-reset-control-request.v1",
+              expected_sha:$expected_sha,project_ref:$project_ref,
+              production_project_refs:$production_project_refs,
+              run_id:$run_id,run_attempt:$run_attempt,request_nonce:$request_nonce,
+              deployment_id:$deployment_id,deployment_instance_id:$deployment_instance_id,
+              host_deployed_sha:$expected_sha,execution_source:"exact_railway_deployment",
+              source_archive_sha256:"",secrets:{SUPABASE_DB_PASSWORD:$password}}' \
+            > "$request"
+          chmod 600 "$request"
+          # From this point until the open receipt is verified, failure
+          # compensation must actively close through this exact instance.
+          rm -f "$RAILWAY_RESET_FENCE_CLOSED"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$exact_instance_id" \
+            --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+            -- python scripts/railway_reset_control_plane.py open-fence \
+              --input - --output - \
+            < "$request" > railway-canonical-fence-open.json
+          PYTHONPATH=backend python3 - "$request" railway-canonical-fence-open.json <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.railway_reset_control_plane import verify_response
+
+          request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          verify_response(response, request, action="open-fence")
+          result = response["result"]
+          closure = result["evidence_writer_closure"]
+          if not (
+              result["write_fence"]["state"] == "open"
+              and result["transport"]["network_family"] == 6
+              and result["role_cleanup"]["postgres_migration_owner_set"] is False
+              and result["role_cleanup"]["postgres_migration_owner_usage"] is False
+              and closure["membership_open"] is False
+              and closure["role_posture_safe"] is True
+              and closure["remaining_preclosure_authenticator_session_count"] == 0
+          ):
+              raise SystemExit("Railway write-fence open receipt is incomplete")
+          PY
+          touch "$RAILWAY_RESET_FENCE_OPENED"
 
       - name: Verify all public services publish the reviewed SHA
         run: |
@@ -969,8 +1077,135 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          python3 backend/scripts/railway_canonical_reset.py close-fence \
-            --expected-sha "$REVIEWED_SHA" \
-            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
-            --receipt railway-canonical-fence-reclosed.json
+          if test -f "$RAILWAY_RESET_FENCE_CLOSED" && \
+             test ! -f "$RAILWAY_RESET_FENCE_OPENED"; then
+            echo 'A verified closed-fence receipt remains authoritative.'
+            exit 0
+          fi
+
+          if test -s "$RUNNER_TEMP/railway-exact-api-deployment-id" && \
+             test -s "$RUNNER_TEMP/railway-exact-api-instance-id"; then
+            deployment_id=$(<"$RUNNER_TEMP/railway-exact-api-deployment-id")
+            instance_id=$(<"$RUNNER_TEMP/railway-exact-api-instance-id")
+            host_deployed_sha="$REVIEWED_SHA"
+            execution_source=exact_railway_deployment
+            source_archive_sha256=""
+            remote_command=(python scripts/railway_reset_control_plane.py close-fence --input - --output -)
+          else
+            for required in \
+              "$RUNNER_TEMP/railway-reset-bootstrap-deployment-id" \
+              "$RUNNER_TEMP/railway-reset-bootstrap-instance-id" \
+              "$RUNNER_TEMP/railway-reset-bootstrap-host-sha" \
+              "$RUNNER_TEMP/railway-reset-source-sha256"; do
+              if test ! -s "$required"; then
+                echo 'Write-fence closure is unattested and no reviewed Railway execution boundary remains.' >&2
+                exit 1
+              fi
+            done
+            deployment_id=$(<"$RUNNER_TEMP/railway-reset-bootstrap-deployment-id")
+            instance_id=$(<"$RUNNER_TEMP/railway-reset-bootstrap-instance-id")
+            host_deployed_sha=$(<"$RUNNER_TEMP/railway-reset-bootstrap-host-sha")
+            execution_source=reviewed_source_archive
+            source_archive_sha256=$(<"$RUNNER_TEMP/railway-reset-source-sha256")
+            # Expansion belongs to the remote shell.
+            # shellcheck disable=SC2016
+            remote_command=(/bin/sh -c \
+              'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py close-fence --input - --output -' \
+              sh "$RAILWAY_RESET_REMOTE_ROOT")
+          fi
+          request="$RUNNER_TEMP/railway-fence-reclose-request.json"
+          request_nonce=$(openssl rand -hex 32)
+          jq -n \
+            --arg expected_sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg production_project_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg request_nonce "$request_nonce" \
+            --arg deployment_id "$deployment_id" \
+            --arg deployment_instance_id "$instance_id" \
+            --arg host_deployed_sha "$host_deployed_sha" \
+            --arg execution_source "$execution_source" \
+            --arg source_archive_sha256 "$source_archive_sha256" \
+            --arg password "$SUPABASE_DB_PASSWORD" \
+            '{schema:"aasopharma.railway-reset-control-request.v1",
+              expected_sha:$expected_sha,project_ref:$project_ref,
+              production_project_refs:$production_project_refs,
+              run_id:$run_id,run_attempt:$run_attempt,request_nonce:$request_nonce,
+              deployment_id:$deployment_id,deployment_instance_id:$deployment_instance_id,
+              host_deployed_sha:$host_deployed_sha,execution_source:$execution_source,
+              source_archive_sha256:$source_archive_sha256,
+              secrets:{SUPABASE_DB_PASSWORD:$password}}' \
+            > "$request"
+          chmod 600 "$request"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$instance_id" \
+            --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+            -- "${remote_command[@]}" \
+            < "$request" > railway-canonical-fence-reclosed.json
+          PYTHONPATH=backend python3 - "$request" railway-canonical-fence-reclosed.json <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.railway_reset_control_plane import verify_response
+
+          request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          verify_response(response, request, action="close-fence")
+          closure = response["result"]["evidence_writer_closure"]
+          if not (
+              response["result"]["write_fence"]["state"] == "closed"
+              and closure["membership_open"] is False
+              and closure["role_posture_safe"] is True
+              and closure["unexpected_member_count"] == 0
+              and closure["inherited_role_count"] == 0
+              and closure["remaining_preclosure_authenticator_session_count"] == 0
+          ):
+              raise SystemExit("failure compensation did not re-close the write fence")
+          PY
+          rm -f "$RAILWAY_RESET_FENCE_OPENED"
+          touch "$RAILWAY_RESET_FENCE_CLOSED"
+
+      - name: Remove the run-scoped Railway reset source
+        if: always() && inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          if test ! -s "$RUNNER_TEMP/railway-reset-bootstrap-instance-id" || \
+             test ! -s "$RAILWAY_RESET_SSH_PRIVATE_KEY"; then
+            exit 0
+          fi
+          instance_id=$(<"$RUNNER_TEMP/railway-reset-bootstrap-instance-id")
+          # The old deployment may have been retired after exact promotion. In
+          # that case its ephemeral filesystem no longer exists to clean.
+          # Expansion belongs to the remote shell.
+          # shellcheck disable=SC2016
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$instance_id" \
+            --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+            -- /bin/sh -c \
+              'set -eu; root=$1; case "$root" in /tmp/canonical-reset-[0-9]*-[0-9]*) ;; *) exit 2 ;; esac; test ! -e "$root" || find "$root" -depth -delete' \
+              sh "$RAILWAY_RESET_REMOTE_ROOT" >/dev/null || true
+
+      - name: Remove the run-scoped Railway reset SSH key
+        if: always() && inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          if test ! -s "$RAILWAY_RESET_SSH_FINGERPRINT"; then
+            exit 0
+          fi
+          fingerprint=$(<"$RAILWAY_RESET_SSH_FINGERPRINT")
+          railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt"
+          if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt" >/dev/null; then
+            railway ssh keys remove "$fingerprint"
+          fi
+          railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt"
+          if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt" >/dev/null; then
+            echo 'Run-scoped Railway reset SSH key remained after cleanup' >&2
+            exit 1
+          fi

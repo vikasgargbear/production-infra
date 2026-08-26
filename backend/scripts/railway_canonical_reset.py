@@ -19,13 +19,16 @@ import contextlib
 from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 from typing import Any, Iterator, Mapping
+from urllib.parse import quote
 
 import psycopg2
 
@@ -69,6 +72,8 @@ EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 RESET_LOCK_KEY = 8_260_827_1
+CONTROL_TRANSPORT_GITHUB_IPV4 = "github_direct_ipv4"
+CONTROL_TRANSPORT_RAILWAY_IPV6 = "railway_ssh_direct_ipv6"
 
 
 class RailwayCanonicalResetError(RuntimeError):
@@ -114,21 +119,122 @@ def _validate_boundary(
         raise RailwayCanonicalResetError("refusing to reset a production project")
 
 
-def _admin_database_url(*, password: str, application_name: str) -> tuple[str, Any]:
+def _admin_database_url(
+    *,
+    password: str,
+    application_name: str,
+    control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
+) -> tuple[str, Mapping[str, Any]]:
+    """Resolve and attest the provider-owned database control transport.
+
+    GitHub-hosted runners use the separately reviewed direct-IPv4 contract.
+    Railway control actions execute inside the API service and must prove that
+    the same direct database hostname was reached over IPv6.  Neither path may
+    fall back to Supavisor.
+    """
+
     contract = load_direct_database_contract()
-    evidence = verify_direct_database(
-        contract=contract,
-        role=contract.administrator_role,
-        password=password,
-        application_name=application_name,
-    )
     dsn = build_direct_dsn(
         contract=contract,
         role=contract.administrator_role,
         password=password,
         application_name=application_name,
     )
-    return dsn, evidence
+    if control_transport == CONTROL_TRANSPORT_GITHUB_IPV4:
+        evidence = asdict(
+            verify_direct_database(
+                contract=contract,
+                role=contract.administrator_role,
+                password=password,
+                application_name=application_name,
+            )
+        )
+        evidence["mode"] = CONTROL_TRANSPORT_GITHUB_IPV4
+        evidence["network_family"] = 4
+        evidence["selected_ipv4_address"] = "verified-not-persisted"
+        return dsn, evidence
+    if control_transport != CONTROL_TRANSPORT_RAILWAY_IPV6:
+        raise RailwayCanonicalResetError(
+            "canonical reset control transport is unsupported"
+        )
+
+    try:
+        answers = socket.getaddrinfo(
+            contract.host,
+            contract.port,
+            family=socket.AF_INET6,
+            type=socket.SOCK_STREAM,
+        )
+    except OSError as error:
+        raise RailwayCanonicalResetError(
+            "Railway cannot resolve the canonical direct IPv6 database host"
+        ) from error
+    public_ipv6: set[str] = set()
+    for answer in answers:
+        try:
+            if answer[0] != socket.AF_INET6:
+                continue
+            address = ipaddress.ip_address(answer[4][0])
+        except (IndexError, TypeError, ValueError):
+            continue
+        if isinstance(address, ipaddress.IPv6Address) and address.is_global:
+            public_ipv6.add(str(address))
+    if not public_ipv6:
+        raise RailwayCanonicalResetError(
+            "Railway has no caller-visible public direct IPv6 database resolution"
+        )
+    selected_ipv6_address = sorted(public_ipv6, key=ipaddress.ip_address)[0]
+    # Keep the reviewed hostname for TLS/SNI, but pin every later libpq
+    # connection to the exact public IPv6 address attested here.
+    pinned_dsn = f"{dsn}&hostaddr={quote(selected_ipv6_address, safe='')}"
+    with contextlib.closing(psycopg2.connect(pinned_dsn)) as connection:
+        with connection:
+            connection.set_session(readonly=True)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT current_user,
+                           current_database(),
+                           current_setting('ssl'),
+                           family(inet_server_addr()),
+                           host(inet_server_addr()),
+                           current_setting('row_security')='on',
+                           pg_has_role(current_user,'erp_migration_owner','MEMBER'),
+                           role.rolsuper,
+                           role.rolcreaterole,
+                           role.rolbypassrls
+                      FROM pg_catalog.pg_roles AS role
+                     WHERE role.rolname=current_user
+                    """
+                )
+                row = cursor.fetchone()
+    if row != (
+        contract.administrator_role,
+        contract.database,
+        "on",
+        6,
+        selected_ipv6_address,
+        True,
+        False,
+        False,
+        True,
+        True,
+    ):
+        raise RailwayCanonicalResetError(
+            "Railway direct IPv6 database authority attestation failed"
+        )
+    return pinned_dsn, {
+        "mode": CONTROL_TRANSPORT_RAILWAY_IPV6,
+        "role": contract.administrator_role,
+        "host": contract.host,
+        "port": contract.port,
+        "database": contract.database,
+        "network_family": 6,
+        "ipv6_answer_count": len(public_ipv6),
+        "selected_ipv6_address": "verified-not-persisted",
+        "row_security": True,
+        "migration_owner_member": False,
+    }
 
 
 def _set_owner_delegation(database_url: str, *, enabled: bool) -> None:
@@ -353,6 +459,7 @@ def prepare_reset_boundary(
     project_ref: str,
     production_project_refs: str,
     password: str,
+    control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
 ) -> dict[str, Any]:
     """Fence, quiesce and migrate before hosted evidence cleanup starts."""
 
@@ -364,6 +471,7 @@ def prepare_reset_boundary(
     database_url, transport = _admin_database_url(
         password=_required(password, "Supabase database password"),
         application_name="canonical_railway_reset_prepare",
+        control_transport=control_transport,
     )
     authority = load_reset_authority()
     with _temporary_owner_delegation(database_url, project_ref=project_ref):
@@ -384,10 +492,7 @@ def prepare_reset_boundary(
         "provider": "railway",
         "expected_sha": expected_sha,
         "project_ref": project_ref,
-        "transport": {
-            **asdict(transport),
-            "selected_ipv4_address": "verified-not-persisted",
-        },
+        "transport": dict(transport),
         "write_fence": fence_receipt,
         "session_quiescence": session_receipt,
         "migration": migration_receipt,
@@ -403,6 +508,7 @@ def reset_disposable_staging(
     production_project_refs: str,
     password: str,
     evidence_cleanup_receipt_path: Path,
+    control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
 ) -> dict[str, Any]:
     _validate_boundary(
         expected_sha=expected_sha,
@@ -412,6 +518,7 @@ def reset_disposable_staging(
     database_url, transport = _admin_database_url(
         password=_required(password, "Supabase database password"),
         application_name="canonical_railway_reset",
+        control_transport=control_transport,
     )
     authority = load_reset_authority()
     fence_receipt: dict[str, Any]
@@ -444,10 +551,7 @@ def reset_disposable_staging(
         "provider": "railway",
         "expected_sha": expected_sha,
         "project_ref": project_ref,
-        "transport": {
-            **asdict(transport),
-            "selected_ipv4_address": "verified-not-persisted",
-        },
+        "transport": dict(transport),
         "write_fence": fence_receipt,
         "evidence_cleanup": {
             "contract_version": evidence_cleanup["contract_version"],
@@ -476,6 +580,7 @@ def _set_fence_after_deploy(
     project_ref: str,
     production_project_refs: str,
     password: str,
+    control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
 ) -> dict[str, Any]:
     if action not in {"open", "close"}:
         raise RailwayCanonicalResetError("post-deploy fence action is invalid")
@@ -487,6 +592,7 @@ def _set_fence_after_deploy(
     database_url, transport = _admin_database_url(
         password=_required(password, "Supabase database password"),
         application_name=f"canonical_railway_fence_{action}",
+        control_transport=control_transport,
     )
     with _temporary_owner_delegation(database_url, project_ref=project_ref):
         fence_receipt = apply_fence(
@@ -502,10 +608,7 @@ def _set_fence_after_deploy(
         "provider": "railway",
         "expected_sha": expected_sha,
         "project_ref": project_ref,
-        "transport": {
-            **asdict(transport),
-            "selected_ipv4_address": "verified-not-persisted",
-        },
+        "transport": dict(transport),
         "write_fence": fence_receipt,
         "role_cleanup": role_receipt,
         "completed_at": _utc_now(),

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
 import json
 from pathlib import Path
 
@@ -49,16 +48,19 @@ def _write_cleanup_receipt(path: Path, **overrides: object) -> Path:
     return path
 
 
-@dataclass(frozen=True)
-class _Transport:
-    role: str = "postgres"
-    host: str = f"db.{PROJECT_REF}.supabase.co"
-    port: int = 5432
-    database: str = "postgres"
-    ipv4_answer_count: int = 1
-    selected_ipv4_address: str = "1.1.1.1"
-    row_security: bool = True
-    migration_owner_member: bool = False
+def _transport_receipt() -> dict[str, object]:
+    return {
+        "mode": RESET.CONTROL_TRANSPORT_GITHUB_IPV4,
+        "role": "postgres",
+        "host": f"db.{PROJECT_REF}.supabase.co",
+        "port": 5432,
+        "database": "postgres",
+        "network_family": 4,
+        "ipv4_answer_count": 1,
+        "selected_ipv4_address": "verified-not-persisted",
+        "row_security": True,
+        "migration_owner_member": False,
+    }
 
 
 class _Connection:
@@ -74,7 +76,7 @@ def _common_stubs(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
     monkeypatch.setattr(
         RESET,
         "_admin_database_url",
-        lambda **_kwargs: ("postgresql://redacted", _Transport()),
+        lambda **_kwargs: ("postgresql://redacted", _transport_receipt()),
     )
 
     @contextmanager
@@ -388,13 +390,10 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
         ROOT / ".github/workflows/production-readiness.yml"
     ).read_text(encoding="utf-8")
 
-    close = workflow.index(
-        "Close writes, quiesce sessions, and migrate the Railway reset boundary"
+    register_key = workflow.index("Register one run-scoped Railway reset SSH key")
+    reset = workflow.index(
+        "Execute the reviewed reset source inside Railway direct IPv6"
     )
-    cleanup = workflow.index(
-        "Reconcile and remove evidence through the restricted Storage API"
-    )
-    reset = workflow.index("Reset disposable Railway data against the cleaned exact head")
     deploy = workflow.index("Force-upload the exact source tree")
     prove = workflow.index("Prove exact Railway authority before reopening reset fence")
     api_isolation = workflow.index(
@@ -405,21 +404,43 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     prove_open = workflow.index("Prove selected provider authority and inactive standbys")
     oauth = workflow.index("Reconcile the exact Railway frontend OAuth redirect")
     reclose = workflow.index("Re-close writes after any certification failure")
+    remove_source = workflow.index("Remove the run-scoped Railway reset source")
+    remove_key = workflow.index("Remove the run-scoped Railway reset SSH key")
     upload = workflow.index("name: railway-canonical-staging-")
     assert (
-        close < cleanup < reset < deploy < prove < api_isolation < open_fence
+        register_key < reset < deploy < prove < api_isolation < open_fence
         < public_readiness < prove_open < oauth < upload < reclose
+        < remove_source < remove_key
     )
-    assert "railway_canonical_reset.py prepare-reset" in workflow[close:cleanup]
-    assert "cleanup_staging_evidence_storage.py" in workflow[close:reset]
-    assert "--evidence-cleanup-receipt" in workflow[reset:deploy]
-    assert "sqlalchemy==2.0.23" in workflow[close:cleanup]
-    assert "alembic==1.14.1" in workflow[close:cleanup]
+    reset_block = workflow[reset:deploy]
+    assert "git archive --format=tar.gz" in reset_block
+    assert 'test "$remote_hash" = "$source_sha256"' in reset_block
+    assert "railway_reset_control_plane.py close-fence" in reset_block
+    assert "railway_reset_control_plane.py reset-boundary" in reset_block
+    assert 'execution_source:"reviewed_source_archive"' in reset_block
+    assert 'action="close-fence"' in reset_block
+    assert "verify_response(reset_response" in reset_block
+    preclose_marker = reset_block.index('touch "$RAILWAY_RESET_FENCE_CLOSED"')
+    uncertain_marker = reset_block.index('rm -f "$RAILWAY_RESET_FENCE_CLOSED"')
+    reset_call = reset_block.index("railway_reset_control_plane.py reset-boundary")
+    verified_marker = reset_block.rindex('touch "$RAILWAY_RESET_FENCE_CLOSED"')
+    assert preclose_marker < uncertain_marker < reset_call < verified_marker
+    assert reset_block.count("evidence_writer_closure") >= 1
     assert "DELETE FROM storage.objects" not in workflow
     assert "--fence closed" in workflow[prove:open_fence]
-    assert "railway_canonical_reset.py open-fence" in workflow[open_fence:prove_open]
-    assert "railway_canonical_reset.py close-fence" in workflow[reclose:]
+    assert "railway_reset_control_plane.py open-fence" in workflow[open_fence:prove_open]
+    assert "railway_reset_control_plane.py close-fence" in workflow[reclose:remove_source]
+    assert 'execution_source:"exact_railway_deployment"' in workflow[open_fence:]
     assert "if: failure() && inputs.reset_disposable_data == true" in workflow[reclose:]
+    compensation = workflow[reclose:remove_source]
+    assert 'test -f "$RAILWAY_RESET_FENCE_CLOSED"' in compensation
+    assert 'test ! -f "$RAILWAY_RESET_FENCE_OPENED"' in compensation
+    assert "railway-reset-bootstrap-instance-id" in compensation
+    assert "reviewed_source_archive" in compensation
+    assert "exact_railway_deployment" in compensation
+    assert "Write-fence closure is unattested" in compensation
+    assert "find \"$root\" -depth -delete" in workflow[remove_source:remove_key]
+    assert "railway ssh keys remove" in workflow[remove_key:]
     assert "manage_render_pilot_lifecycle.py" not in workflow
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production
 
@@ -428,5 +449,7 @@ def test_railway_reset_reuses_version_safe_role_cleanup_authority() -> None:
     source = (ROOT / "backend/scripts/railway_canonical_reset.py").read_text(
         encoding="utf-8"
     )
-    assert "pg_has_role" not in source
+    assert source.count("pg_has_role(") == 1
+    assert "pg_has_role(current_user,'erp_migration_owner','MEMBER')" in source
+    assert "pg_has_role(current_user,'erp_migration_owner','SET')" not in source
     assert "verify_post_cleanup_role_state(connection, project_ref=project_ref)" in source

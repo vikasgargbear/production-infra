@@ -15,6 +15,7 @@ import argparse
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
+import ipaddress
 import json
 import os
 import re
@@ -562,6 +563,12 @@ def probe_hosted_hook(database_url: str) -> dict[str, Any]:
             "HOSTED_HOOK_DATABASE_AUTHORITY_DENIED",
             "hosted Auth hook project does not match database authority",
         )
+    application_name = dsn.get("application_name")
+    expected_network_family = {
+        "canonical_staging_ci": 4,
+        "canonical_railway_evidence_cleanup": 6,
+    }.get(application_name)
+    host_address = dsn.get("hostaddr")
     if (
         dsn.get("host") != contract.host
         or dsn.get("port") != str(contract.port)
@@ -569,12 +576,12 @@ def probe_hosted_hook(database_url: str) -> dict[str, Any]:
         or dsn.get("user") != "postgres"
         or dsn.get("sslmode") != "require"
         or dsn.get("gssencmode") != "disable"
-        or dsn.get("application_name") != "canonical_staging_ci"
-        or dsn.get("hostaddr")
+        or expected_network_family is None
+        or (expected_network_family == 4 and host_address)
     ):
         raise IdentityProvisioningError(
             "HOSTED_HOOK_DATABASE_TARGET_DENIED",
-            "hosted Auth hook preflight requires reviewed direct IPv4 staging",
+            "hosted Auth hook preflight requires a reviewed direct staging transport",
         )
     function_name = "erp_security.canonical_evidence_storage_access_token_hook"
     function_signature = function_name + "(jsonb)"
@@ -582,6 +589,27 @@ def probe_hosted_hook(database_url: str) -> dict[str, Any]:
         with psycopg2.connect(database_url) as connection:
             connection.set_session(readonly=True, autocommit=False)
             with connection.cursor() as cursor:
+                if expected_network_family == 6:
+                    try:
+                        expected_address = ipaddress.ip_address(host_address or "")
+                    except ValueError:
+                        expected_address = None
+                    if not (
+                        isinstance(expected_address, ipaddress.IPv6Address)
+                        and expected_address.is_global
+                    ):
+                        raise IdentityProvisioningError(
+                            "HOSTED_HOOK_DATABASE_TARGET_DENIED",
+                            "hosted Auth hook Railway transport is not pinned to public IPv6",
+                        )
+                    cursor.execute(
+                        "SELECT family(inet_server_addr()), host(inet_server_addr())"
+                    )
+                    if cursor.fetchone() != (6, str(expected_address)):
+                        raise IdentityProvisioningError(
+                            "HOSTED_HOOK_DATABASE_TARGET_DENIED",
+                            "hosted Auth hook Railway transport is not direct IPv6",
+                        )
                 cursor.execute(
                     "SELECT procedure.prosecdef, procedure.provolatile, "
                     "pg_catalog.has_schema_privilege("

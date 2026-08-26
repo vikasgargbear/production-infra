@@ -43,11 +43,19 @@ def auth_authority():
     )
 
 
-def reviewed_database_url():
+def reviewed_database_url(
+    application_name: str = "canonical_staging_ci",
+):
     contract = provision.load_direct_database_contract()
+    host_address = (
+        "&hostaddr=2606%3A4700%3A4700%3A%3A1111"
+        if application_name == "canonical_railway_evidence_cleanup"
+        else ""
+    )
     return (
         f"postgresql://postgres:password@{contract.host}:{contract.port}/postgres?"
-        "sslmode=require&gssencmode=disable&application_name=canonical_staging_ci"
+        f"sslmode=require&gssencmode=disable&application_name={application_name}"
+        f"{host_address}"
     )
 
 
@@ -297,6 +305,9 @@ class HookProbeCursor:
         return False
 
     def execute(self, statement, parameters=None):
+        if statement == "SELECT family(inet_server_addr()), host(inet_server_addr())":
+            self.row = (6, "2606:4700:4700::1111")
+            return
         if statement.startswith("SELECT procedure.prosecdef"):
             self.row = (False, "s", True, True, False, True)
             return
@@ -364,6 +375,20 @@ def test_hosted_read_only_probe_covers_acl_both_methods_ordinary_and_spoofs(
         "spoof_denials_verified": 2,
         "mutation_performed": False,
     }
+
+
+def test_hosted_read_only_probe_accepts_attested_railway_direct_ipv6(
+    monkeypatch,
+) -> None:
+    connection = HookProbeConnection()
+    monkeypatch.setattr(provision.psycopg2, "connect", lambda _url: connection)
+
+    result = provision.probe_hosted_hook(
+        reviewed_database_url("canonical_railway_evidence_cleanup")
+    )
+
+    assert result["acl_verified"] is True
+    assert connection.cursor_instance.methods == ["password", "token_refresh"]
 
 
 def test_hosted_probe_rejects_changed_ordinary_claims(monkeypatch) -> None:

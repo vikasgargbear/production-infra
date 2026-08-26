@@ -648,7 +648,8 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
     ):
         assert endpoint in workflow
 
-    assert workflow.count("curl --fail-with-body") == 2
+    # One pre-reset wake-up plus the two public readiness probes.
+    assert workflow.count("curl --fail-with-body") == 3
     assert "Verify exact API database isolation before reopening writes" in workflow
     assert "fetch()" in workflow
     assert workflow.count(" &\n") >= 6
