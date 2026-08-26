@@ -10,12 +10,13 @@ retry through another transport, or fall back to Supavisor.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ipaddress
 import json
 from pathlib import Path
 import re
 import socket
 from typing import Any, Callable, Mapping, Sequence
-from urllib.parse import quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, unquote, urlsplit, urlunsplit
 
 import psycopg2
 
@@ -24,6 +25,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = REPO_ROOT / "deploy/control-plane/canonical-staging.json"
 ROLE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 APPLICATION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,62}$")
+SAFE_DSN_QUERY_KEYS = frozenset(
+    {"sslmode", "gssencmode", "connect_timeout", "application_name"}
+)
 
 
 class CanonicalStagingDatabaseError(RuntimeError):
@@ -52,7 +56,9 @@ class DirectDatabaseEvidence:
     port: int
     database: str
     ipv4_answer_count: int
+    selected_ipv4_address: str
     row_security: bool
+    migration_owner_member: bool
 
 
 def _database_document(path: Path) -> tuple[str, Mapping[str, Any]]:
@@ -159,34 +165,63 @@ def build_direct_dsn(
 def redact_dsn(dsn: str) -> str:
     try:
         parsed = urlsplit(dsn)
-        if parsed.scheme not in {"postgres", "postgresql"} or not parsed.username:
+        if (
+            parsed.scheme not in {"postgres", "postgresql"}
+            or not parsed.username
+            or parsed.password is None
+            or parsed.fragment
+        ):
             raise ValueError
         hostname = parsed.hostname
         if hostname is None:
             raise ValueError
+        username_value = unquote(parsed.username)
+        if not ROLE_PATTERN.fullmatch(username_value):
+            raise ValueError
+        query_pairs = parse_qsl(
+            parsed.query,
+            keep_blank_values=True,
+            strict_parsing=True,
+        )
+        if (
+            len(query_pairs) != len(SAFE_DSN_QUERY_KEYS)
+            or {name for name, _value in query_pairs} != SAFE_DSN_QUERY_KEYS
+        ):
+            raise ValueError
+        query_values = dict(query_pairs)
+        timeout = int(query_values["connect_timeout"])
+        if (
+            query_values["sslmode"] != "require"
+            or query_values["gssencmode"] != "disable"
+            or not 1 <= timeout <= 30
+            or not APPLICATION_NAME_PATTERN.fullmatch(
+                query_values["application_name"]
+            )
+        ):
+            raise ValueError
         port = f":{parsed.port}" if parsed.port is not None else ""
-        username = quote(parsed.username, safe="")
+        username = quote(username_value, safe="")
         return urlunsplit(
             (
                 parsed.scheme,
                 f"{username}:***@{hostname}{port}",
                 parsed.path,
-                parsed.query,
+                urlencode(query_values),
                 "",
             )
         )
-    except (TypeError, ValueError):
+    except (KeyError, TypeError, ValueError):
         raise CanonicalStagingDatabaseError(
             "database DSN cannot be safely redacted"
         ) from None
 
 
-def _ipv4_answers(
+def _direct_ipv4_answers(
     contract: DirectDatabaseContract,
     resolver: Callable[..., Sequence[tuple[Any, ...]]],
-) -> int:
+) -> tuple[str, ...]:
     try:
-        answers = resolver(
+        ipv4_answers = resolver(
             contract.host,
             contract.port,
             family=socket.AF_INET,
@@ -196,12 +231,51 @@ def _ipv4_answers(
         raise CanonicalStagingDatabaseError(
             "direct database host has no caller-visible IPv4 resolution"
         ) from None
-    count = sum(1 for answer in answers if answer and answer[0] == socket.AF_INET)
-    if count == 0:
+    public_ipv4: set[str] = set()
+    for answer in ipv4_answers:
+        try:
+            if answer[0] != socket.AF_INET:
+                continue
+            address = ipaddress.ip_address(answer[4][0])
+        except (IndexError, TypeError, ValueError):
+            continue
+        if isinstance(address, ipaddress.IPv4Address) and address.is_global:
+            public_ipv4.add(str(address))
+    if not public_ipv4:
         raise CanonicalStagingDatabaseError(
-            "direct database host has no caller-visible IPv4 resolution"
+            "direct database host has no caller-visible public IPv4 resolution"
         )
-    return count
+    try:
+        ipv6_answers = resolver(
+            contract.host,
+            contract.port,
+            family=socket.AF_INET6,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as error:
+        no_address_codes = {
+            code
+            for code in (
+                getattr(socket, "EAI_NONAME", None),
+                getattr(socket, "EAI_NODATA", None),
+                getattr(socket, "EAI_ADDRFAMILY", None),
+            )
+            if code is not None
+        }
+        if error.errno not in no_address_codes:
+            raise CanonicalStagingDatabaseError(
+                "direct database IPv6 absence could not be established"
+            ) from None
+        ipv6_answers = ()
+    except Exception:
+        raise CanonicalStagingDatabaseError(
+            "direct database IPv6 absence could not be established"
+        ) from None
+    if any(answer and answer[0] == socket.AF_INET6 for answer in ipv6_answers):
+        raise CanonicalStagingDatabaseError(
+            "direct IPv4 contract forbids caller-visible IPv6 resolution"
+        )
+    return tuple(sorted(public_ipv4, key=ipaddress.ip_address))
 
 
 def verify_direct_database(
@@ -221,14 +295,17 @@ def verify_direct_database(
         password=password,
         application_name=application_name,
     )
-    ipv4_answer_count = _ipv4_answers(contract, resolver)
+    ipv4_answers = _direct_ipv4_answers(contract, resolver)
+    selected_ipv4_address = ipv4_answers[0]
     try:
-        with connect(dsn) as connection:
+        with connect(dsn, hostaddr=selected_ipv4_address) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT current_user, role.rolsuper, role.rolcreaterole, "
                     "role.rolbypassrls, current_setting('row_security') = 'on', "
-                    "current_database() FROM pg_catalog.pg_roles AS role "
+                    "current_database(), pg_has_role(current_user, "
+                    "'erp_migration_owner', 'MEMBER') "
+                    "FROM pg_catalog.pg_roles AS role "
                     "WHERE role.rolname = current_user"
                 )
                 posture = cursor.fetchone()
@@ -244,11 +321,15 @@ def verify_direct_database(
     )
     if (
         not isinstance(posture, tuple)
-        or len(posture) != 6
+        or len(posture) != 7
         or posture[0] != role
         or posture[1:4] != expected_flags
         or posture[4] is not True
         or posture[5] != contract.database
+        or (
+            role in contract.isolated_roles
+            and posture[6] is not False
+        )
     ):
         raise CanonicalStagingDatabaseError(
             f"direct database role or RLS posture mismatch for {role}"
@@ -258,6 +339,8 @@ def verify_direct_database(
         host=contract.host,
         port=contract.port,
         database=contract.database,
-        ipv4_answer_count=ipv4_answer_count,
+        ipv4_answer_count=len(ipv4_answers),
+        selected_ipv4_address=selected_ipv4_address,
         row_security=True,
+        migration_owner_member=bool(posture[6]),
     )
