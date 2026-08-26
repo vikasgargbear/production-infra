@@ -4,7 +4,9 @@ import importlib.util
 from pathlib import Path
 from uuid import uuid4
 
+import psycopg2
 import pytest
+import requests
 
 
 SCRIPT = Path(__file__).parents[2] / "scripts" / "exercise_staging_mcp_oauth.py"
@@ -12,6 +14,52 @@ SPEC = importlib.util.spec_from_file_location("exercise_staging_mcp_oauth", SCRI
 assert SPEC and SPEC.loader
 exercise = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(exercise)
+
+
+def test_http_and_provider_failures_never_echo_response_bodies() -> None:
+    response = requests.Response()
+    response.status_code = 503
+    response._content = b"provider-secret-token-and-customer-data"
+
+    failure = exercise._http_error("MCP request", response)
+
+    assert str(failure) == "MCP request returned HTTP 503"
+    assert "secret" not in str(failure)
+
+
+def test_safe_failure_detail_reduces_external_errors_to_fixed_classes() -> None:
+    assert exercise._safe_failure_detail(
+        requests.ConnectionError("provider-secret")
+    ) == "network_error class=ConnectionError"
+    assert exercise._safe_failure_detail(
+        psycopg2.OperationalError("database-secret")
+    ) == "database_error"
+    assert exercise._safe_failure_detail(KeyError("customer-secret")) == (
+        "validation_error class=KeyError"
+    )
+
+
+def test_jsonrpc_error_exposes_only_numeric_protocol_code() -> None:
+    response = requests.Response()
+    response.status_code = 200
+    response.headers["content-type"] = "application/json"
+    response._content = (
+        b'{"jsonrpc":"2.0","error":{"code":-32000,'
+        b'"message":"provider-secret"}}'
+    )
+
+    with pytest.raises(exercise.ExerciseError, match=r"^MCP JSON-RPC error code=-32000$"):
+        exercise._jsonrpc_response(response)
+
+
+def test_exercise_source_has_no_raw_external_failure_rendering() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert "response.text[:500]" not in source
+    assert "json.dumps(result)[:1000]" not in source
+    assert 'f"Live command did not succeed: {status}"' not in source
+    assert 'f"Database did not reconcile the live MCP sales order: {row}"' not in source
+    assert 'detail = str(exc)' not in source
 
 
 def _customer_resolution(addresses):

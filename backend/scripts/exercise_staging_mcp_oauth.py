@@ -40,6 +40,21 @@ class ExerciseError(RuntimeError):
     pass
 
 
+def _http_error(label: str, response: requests.Response) -> ExerciseError:
+    return ExerciseError(f"{label} returned HTTP {response.status_code}")
+
+
+def _safe_failure_detail(error: BaseException) -> str:
+    if isinstance(error, ExerciseError):
+        return str(error)
+    if isinstance(error, psycopg2.Error):
+        sqlstate = getattr(error, "pgcode", None)
+        return f"database_error sqlstate={sqlstate}" if sqlstate else "database_error"
+    if isinstance(error, requests.RequestException):
+        return f"network_error class={type(error).__name__}"
+    return f"validation_error class={type(error).__name__}"
+
+
 def _required(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
@@ -85,9 +100,7 @@ def _start_authorization(
         timeout=20,
     )
     if response.status_code not in (302, 303, 307, 308):
-        raise ExerciseError(
-            f"Authorization start returned HTTP {response.status_code}: {response.text[:500]}"
-        )
+        raise _http_error("Authorization start", response)
     return _authorization_id(response.headers.get("Location", ""))
 
 
@@ -102,9 +115,7 @@ def _authorization_details(
         timeout=20,
     )
     if not response.ok:
-        raise ExerciseError(
-            f"Authorization details returned HTTP {response.status_code}: {response.text[:500]}"
-        )
+        raise _http_error("Authorization details", response)
     details = response.json()
     if not isinstance(details, dict) or "authorization_id" not in details:
         raise ExerciseError("Authorization details did not require explicit consent")
@@ -124,9 +135,7 @@ def _decide(
         timeout=20,
     )
     if not response.ok:
-        raise ExerciseError(
-            f"OAuth {action} returned HTTP {response.status_code}: {response.text[:500]}"
-        )
+        raise _http_error(f"OAuth {action}", response)
     location = response.json().get("redirect_url")
     if not isinstance(location, str) or not location:
         raise ExerciseError(f"OAuth {action} omitted redirect_url")
@@ -146,10 +155,7 @@ def _revoke_existing_grant(
         timeout=20,
     )
     if not response.ok:
-        raise ExerciseError(
-            f"OAuth grant reset returned HTTP {response.status_code}: "
-            f"{response.text[:500]}"
-        )
+        raise _http_error("OAuth grant reset", response)
 
 
 def _assert_denial_redirect(location: str, state: str) -> None:
@@ -187,9 +193,7 @@ def _exchange_token(
         timeout=20,
     )
     if not response.ok:
-        raise ExerciseError(
-            f"OAuth token exchange returned HTTP {response.status_code}: {response.text[:500]}"
-        )
+        raise _http_error("OAuth token exchange", response)
     token = response.json()
     if not isinstance(token.get("access_token"), str) or not isinstance(
         token.get("refresh_token"), str
@@ -200,9 +204,7 @@ def _exchange_token(
 
 def _jsonrpc_response(response: requests.Response) -> dict[str, Any]:
     if not response.ok:
-        raise ExerciseError(
-            f"MCP request returned HTTP {response.status_code}: {response.text[:500]}"
-        )
+        raise _http_error("MCP request", response)
     if "text/event-stream" in response.headers.get("content-type", ""):
         data_lines = [
             line[6:]
@@ -217,14 +219,17 @@ def _jsonrpc_response(response: requests.Response) -> dict[str, Any]:
     if not isinstance(body, dict) or body.get("jsonrpc") != "2.0":
         raise ExerciseError("MCP response is not JSON-RPC 2.0")
     if "error" in body:
-        raise ExerciseError(f"MCP JSON-RPC error: {body['error']}")
+        error = body["error"]
+        code = error.get("code") if isinstance(error, dict) else None
+        detail = f" code={code}" if isinstance(code, int) else ""
+        raise ExerciseError(f"MCP JSON-RPC error{detail}")
     return body
 
 
 def _tool_payload(response: dict[str, Any]) -> dict[str, Any]:
     result = response.get("result")
     if not isinstance(result, dict) or result.get("isError") is True:
-        raise ExerciseError(f"Live MCP tool returned an error: {json.dumps(result)[:1000]}")
+        raise ExerciseError("Live MCP tool returned an error result")
     structured = result.get("structuredContent")
     if isinstance(structured, dict):
         return structured
@@ -310,7 +315,7 @@ def _verify_sales_order_readback(
     if not isinstance(resource_id, str) or status.get("resource_id") != resource_id:
         raise ExerciseError("Live execute/status omitted one stable sales-order resource UUID")
     if readback.get("match_state") != "matched" or readback.get("matched_count") != 1:
-        raise ExerciseError(f"Live sales-order readback was not one exact match: {readback}")
+        raise ExerciseError("Live sales-order readback was not one exact match")
     document = readback.get("document")
     if not isinstance(document, dict) or document.get("sales_order_id") != resource_id:
         raise ExerciseError("Live sales-order readback identity differs from execute")
@@ -397,7 +402,7 @@ def _exercise_mcp(
     contract_path = Path(__file__).parents[1] / "mcp_runtime/service-contract.json"
     expected = sorted(json.loads(contract_path.read_text(encoding="utf-8"))["tools"])
     if names != expected:
-        raise ExerciseError(f"Live MCP registry drifted: {names}")
+        raise ExerciseError("Live MCP registry drifted from the reviewed tool set")
     if not business_flow:
         return names, None
     called = _jsonrpc_response(
@@ -504,7 +509,7 @@ def _exercise_mcp(
     )
     status = call("erp_operation_status_get", {"command_request_id": command_id})
     if status.get("status") != "succeeded":
-        raise ExerciseError(f"Live command did not succeed: {status}")
+        raise ExerciseError("Live command did not reach succeeded status")
     resource_id = executed.get("resource_id")
     if not isinstance(resource_id, str):
         raise ExerciseError("Live sales-order execute omitted resource_id")
@@ -564,7 +569,7 @@ def _reconcile_database(workflow: dict[str, Any]) -> dict[str, Any]:
             )
             value_rows = cursor.fetchall()
     if row is None or row[0] != "succeeded" or row[2] != 1:
-        raise ExerciseError(f"Database did not reconcile the live MCP sales order: {row}")
+        raise ExerciseError("Database did not reconcile one succeeded MCP sales order")
     if str(row[1]) != readback["sales_order_id"] or len(value_rows) != 1:
         raise ExerciseError("Database resource identity/line cardinality differs from MCP readback")
     value_row = value_rows[0]
@@ -745,7 +750,8 @@ if __name__ == "__main__":
         ValueError,
         KeyError,
     ) as exc:
-        print(f"staging MCP OAuth exercise failed: {exc}", file=sys.stderr)
-        detail = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        detail = _safe_failure_detail(exc)
+        print(f"staging MCP OAuth exercise failed: {detail}", file=sys.stderr)
+        detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error title=Staging MCP OAuth exercise failed::{detail}")
         raise SystemExit(1)
