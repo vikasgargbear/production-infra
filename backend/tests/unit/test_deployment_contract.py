@@ -865,6 +865,16 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert reset_step.index("RESET ROLE") < reset_step.index(
         "DROP EXTENSION IF EXISTS btree_gist"
     )
+    role_cleanup = reset_step.split("DO $reset_canonical_roles$", 1)[1].split(
+        "$reset_canonical_roles$;", 1
+    )[0]
+    assert "SET LOCAL ROLE %I" in role_cleanup
+    assert role_cleanup.index("SET LOCAL ROLE %I") < role_cleanup.index(
+        "DROP OWNED BY %I CASCADE"
+    )
+    assert role_cleanup.index("DROP OWNED BY %I CASCADE") < role_cleanup.index(
+        "RESET ROLE"
+    )
     assert "DROP ROLE IF EXISTS erp_runtime" in workflow
     assert "to_regclass('auth.users') IS NOT NULL" in workflow
     assert "DROP SCHEMA auth" not in workflow

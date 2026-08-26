@@ -335,7 +335,9 @@ jobs:
               'erp_tax_provider', 'erp_app', 'erp_migration_owner'
             ] LOOP
               IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name) THEN
+                EXECUTE pg_catalog.format('SET LOCAL ROLE %I', role_name);
                 EXECUTE pg_catalog.format('DROP OWNED BY %I CASCADE', role_name);
+                EXECUTE 'RESET ROLE';
               END IF;
             END LOOP;
           END
