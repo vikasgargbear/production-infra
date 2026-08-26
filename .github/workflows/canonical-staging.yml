@@ -508,9 +508,22 @@ jobs:
               (name for name, pattern in classes if re.search(pattern, text, re.IGNORECASE)),
               "unclassified_migration_failure",
           )
+          diagnostic_lines = []
+          safe_prefix = re.compile(
+              r"^(?:psycopg2\.errors\.[A-Za-z]+:|sqlalchemy\.exc\.[A-Za-z]+:|"
+              r"migration_support\.[A-Za-z0-9_.]+:|DETAIL:|CONTEXT:)"
+          )
+          for raw_line in text.splitlines():
+              line = raw_line.strip()
+              if safe_prefix.match(line):
+                  line = re.sub(r"postgres(?:ql)?://\S+", "<redacted-database-url>", line)
+                  diagnostic_lines.append(line[:500])
+          diagnostic = " | ".join(diagnostic_lines[-4:]) or "allowlisted diagnostic unavailable"
+          diagnostic = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(
               "::error title=Canonical free staging migration failure::"
-              f"class={failure_class}; raw migration output retained only inside the job"
+              f"class={failure_class}; diagnostic={diagnostic}; "
+              "raw migration output retained only inside the job"
           )
           PY
             exit 1

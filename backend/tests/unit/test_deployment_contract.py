@@ -575,6 +575,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "cleanup_alembic_on_exit" in workflow
     assert 'cat "$log_file"' not in workflow
     assert "unclassified_migration_failure" in workflow
+    assert "allowlisted diagnostic unavailable" in workflow
+    assert 're.sub(r"postgres(?:ql)?://\\S+", "<redacted-database-url>", line)' in workflow
+    assert "diagnostic_lines[-4:]" in workflow
+    assert "raw migration output retained only inside the job" in workflow
     assert "raw migration output retained only inside the job" in workflow
     assert "cleanup_fixture_roles_on_exit" in workflow
     assert "cleanup_demo_role_on_exit" in workflow
