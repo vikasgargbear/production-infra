@@ -544,8 +544,9 @@ def test_response_verifier_recomputes_hash_and_does_not_trust_remote_boundary(
 
 
 class _Cursor:
-    def __init__(self, row: tuple[object, ...]) -> None:
+    def __init__(self, row: tuple[object, ...], statements: list[str]) -> None:
         self.row = row
+        self.statements = statements
 
     def __enter__(self):
         return self
@@ -553,18 +554,35 @@ class _Cursor:
     def __exit__(self, *_args):
         return False
 
-    def execute(self, _statement: str) -> None:
-        return None
+    def execute(self, statement: str) -> None:
+        self.statements.append(statement)
 
     def fetchone(self):
         return self.row
 
 
 class _Connection:
-    def __init__(self, row: tuple[object, ...]) -> None:
+    def __init__(
+        self,
+        row: tuple[object, ...],
+        *,
+        hostaddr: str = "2606:4700:4700::1111",
+    ) -> None:
         self.row = row
         self.readonly: bool | None = None
         self.closed = False
+        self.statements: list[str] = []
+        self.info = type("ConnectionInfo", (), {"ssl_in_use": True})()
+        self._parameters = {
+            "host": f"db.{PROJECT_REF}.supabase.co",
+            "hostaddr": hostaddr,
+            "port": "5432",
+            "dbname": "postgres",
+            "user": "postgres",
+            "sslmode": "require",
+            "gssencmode": "disable",
+            "application_name": "canonical_test",
+        }
 
     def __enter__(self):
         return self
@@ -575,8 +593,11 @@ class _Connection:
     def set_session(self, *, readonly: bool) -> None:
         self.readonly = readonly
 
+    def get_dsn_parameters(self) -> dict[str, str]:
+        return dict(self._parameters)
+
     def cursor(self) -> _Cursor:
-        return _Cursor(self.row)
+        return _Cursor(self.row, self.statements)
 
     def close(self) -> None:
         self.closed = True
@@ -599,7 +620,7 @@ def test_ipv6_admin_transport_attests_the_connected_server_and_hides_address(
 ) -> None:
     address = "2606:4700:4700::1111"
     connection = _Connection(
-        ("postgres", "postgres", "on", 6, address, True, False, False, True, True)
+        ("postgres", "postgres", "on", True, False, False, True, True)
     )
     monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
     monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
@@ -627,6 +648,7 @@ def test_ipv6_admin_transport_attests_the_connected_server_and_hides_address(
     assert evidence["selected_ipv6_address"] == "verified-not-persisted"
     assert address not in json.dumps(evidence)
     assert DB_PASSWORD not in json.dumps(evidence)
+    assert all("inet_server_addr" not in statement for statement in connection.statements)
 
 
 def test_ipv6_admin_transport_fails_before_connect_without_ipv6(
@@ -683,8 +705,6 @@ def test_ipv6_admin_transport_rejects_wrong_role_or_network_family(
                 "wrong-role",
                 "postgres",
                 "on",
-                4,
-                "2606:4700:4700::1111",
                 True,
                 False,
                 False,
@@ -694,9 +714,43 @@ def test_ipv6_admin_transport_rejects_wrong_role_or_network_family(
         ),
     )
 
-    with pytest.raises(RESET.RailwayCanonicalResetError, match="authority attestation"):
+    with pytest.raises(
+        RESET.RailwayCanonicalResetError,
+        match="railway_ipv6_database_authority_attestation_mismatch:current_user",
+    ):
         RESET._admin_database_url(
             password=DB_PASSWORD,
             application_name="canonical_test",
             control_transport=RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
         )
+
+
+def test_ipv6_admin_transport_attests_libpq_destination_not_server_interface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    address = "2606:4700:4700::1111"
+    connection = _Connection(
+        ("postgres", "postgres", "on", True, False, False, True, True),
+        hostaddr="2606:4700:4700::2222",
+    )
+    monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
+    monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
+    monkeypatch.setattr(
+        RESET.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 5432, 0, 0))
+        ],
+    )
+    monkeypatch.setattr(RESET.psycopg2, "connect", lambda _dsn: connection)
+
+    with pytest.raises(
+        RESET.RailwayCanonicalResetError,
+        match="railway_ipv6_database_authority_attestation_mismatch:libpq_hostaddr",
+    ):
+        RESET._admin_database_url(
+            password=DB_PASSWORD,
+            application_name="canonical_test",
+            control_transport=RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
+        )
+    assert all("inet_server_addr" not in statement for statement in connection.statements)

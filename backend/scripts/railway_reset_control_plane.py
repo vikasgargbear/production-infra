@@ -49,6 +49,7 @@ from provision_canonical_evidence_storage_identity import (  # noqa: E402
 )
 from railway_canonical_reset import (  # noqa: E402
     CONTROL_TRANSPORT_RAILWAY_IPV6,
+    RailwayCanonicalResetError,
     _admin_database_url,
     close_fence_after_failure,
     open_fence_after_deploy,
@@ -383,10 +384,17 @@ def _fence(request: Mapping[str, Any], *, action: str) -> dict[str, Any]:
         except Exception as error:
             evidence_error = error
         if canonical_error is not None or evidence_error is not None:
+            def safe_reason(error: Exception | None) -> str:
+                if error is None:
+                    return "closed"
+                if isinstance(error, RailwayCanonicalResetError):
+                    return str(error)
+                return type(error).__name__
+
             raise RailwayResetControlError(
                 "compound write-fence closure failed: "
-                f"canonical={type(canonical_error).__name__ if canonical_error else 'closed'} "
-                f"evidence={type(evidence_error).__name__ if evidence_error else 'closed'}"
+                f"canonical={safe_reason(canonical_error)} "
+                f"evidence={safe_reason(evidence_error)}"
             ) from (canonical_error or evidence_error)
         if result is None or evidence_transport is None or evidence_closure is None:
             raise RailwayResetControlError(

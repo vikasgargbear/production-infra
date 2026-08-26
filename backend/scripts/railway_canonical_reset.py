@@ -187,41 +187,74 @@ def _admin_database_url(
     # Keep the reviewed hostname for TLS/SNI, but pin every later libpq
     # connection to the exact public IPv6 address attested here.
     pinned_dsn = f"{dsn}&hostaddr={quote(selected_ipv6_address, safe='')}"
-    with contextlib.closing(psycopg2.connect(pinned_dsn)) as connection:
-        with connection:
-            connection.set_session(readonly=True)
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT current_user,
-                           current_database(),
-                           current_setting('ssl'),
-                           family(inet_server_addr()),
-                           host(inet_server_addr()),
-                           current_setting('row_security')='on',
-                           pg_has_role(current_user,'erp_migration_owner','MEMBER'),
-                           role.rolsuper,
-                           role.rolcreaterole,
-                           role.rolbypassrls
-                      FROM pg_catalog.pg_roles AS role
-                     WHERE role.rolname=current_user
-                    """
+    try:
+        with contextlib.closing(psycopg2.connect(pinned_dsn)) as connection:
+            parameters = connection.get_dsn_parameters()
+            try:
+                connected_hostaddr = str(
+                    ipaddress.ip_address(parameters.get("hostaddr", ""))
                 )
-                row = cursor.fetchone()
-    if row != (
-        contract.administrator_role,
-        contract.database,
-        "on",
-        6,
-        selected_ipv6_address,
-        True,
-        False,
-        False,
-        True,
-        True,
-    ):
+            except ValueError:
+                connected_hostaddr = ""
+            client_checks = {
+                "libpq_host": parameters.get("host") == contract.host,
+                "libpq_hostaddr": connected_hostaddr == selected_ipv6_address,
+                "libpq_port": parameters.get("port") == str(contract.port),
+                "libpq_database": parameters.get("dbname") == contract.database,
+                "libpq_user": parameters.get("user") == contract.administrator_role,
+                "libpq_sslmode": parameters.get("sslmode") == "require",
+                "libpq_gssencmode": parameters.get("gssencmode") == "disable",
+                "libpq_application_name": (
+                    parameters.get("application_name") == application_name
+                ),
+                "tls_active": connection.info.ssl_in_use is True,
+            }
+            with connection:
+                connection.set_session(readonly=True)
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT current_user,
+                               current_database(),
+                               current_setting('ssl'),
+                               current_setting('row_security')='on',
+                               pg_has_role(current_user,'erp_migration_owner','MEMBER'),
+                               role.rolsuper,
+                               role.rolcreaterole,
+                               role.rolbypassrls
+                          FROM pg_catalog.pg_roles AS role
+                         WHERE role.rolname=current_user
+                        """
+                    )
+                    row = cursor.fetchone()
+    except RailwayCanonicalResetError:
+        raise
+    except Exception as error:
         raise RailwayCanonicalResetError(
-            "Railway direct IPv6 database authority attestation failed"
+            "railway_ipv6_database_connection_failed:"
+            f"{type(error).__name__}"
+        ) from None
+    mismatches = [name for name, passed in client_checks.items() if not passed]
+    if not isinstance(row, tuple) or len(row) != 8:
+        mismatches.append("server_posture_shape")
+    else:
+        server_checks = {
+            "current_user": row[0] == contract.administrator_role,
+            "current_database": row[1] == contract.database,
+            "server_ssl": row[2] == "on",
+            "row_security": row[3] is True,
+            "migration_owner_membership": row[4] is False,
+            "superuser": row[5] is False,
+            "createrole": row[6] is True,
+            "bypassrls": row[7] is True,
+        }
+        mismatches.extend(
+            name for name, passed in server_checks.items() if not passed
+        )
+    if mismatches:
+        raise RailwayCanonicalResetError(
+            "railway_ipv6_database_authority_attestation_mismatch:"
+            + ",".join(sorted(mismatches))
         )
     return pinned_dsn, {
         "mode": CONTROL_TRANSPORT_RAILWAY_IPV6,
