@@ -14,6 +14,7 @@ from fastapi import Depends, Header, HTTPException, status
 from jwt import InvalidTokenError as JWTError
 
 from ..auth.jwt_auth import decode_jwt
+from ..auth.test_identity import SyntheticIdentityConfigurationError, required_test_identity
 from ..env import is_production, is_test_mode_enabled
 
 logger = logging.getLogger(__name__)
@@ -114,13 +115,19 @@ class PermissionChecker:
             if is_production():
                 logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
                 raise HTTPException(status_code=503, detail="Service configuration error")
+            try:
+                test_identity = required_test_identity()
+            except SyntheticIdentityConfigurationError as error:
+                logger.error("TEST_MODE identity configuration is incomplete: %s", error)
+                raise HTTPException(status_code=503, detail="Service configuration error")
             return {
-                "user_id": "00000000-0000-0000-0000-000000000008",
-                "auth_user_id": "00000000-0000-0000-0000-000000000008",
-                "username": "test_mode_user", "email": "test@example.com",
-                "org_id": "e78d6777-35f6-4b19-994f-caaede2f021a", "is_admin": True,
+                "user_id": str(test_identity.user_id),
+                "auth_user_id": str(test_identity.auth_user_id),
+                "username": test_identity.email, "email": test_identity.email,
+                "org_id": str(test_identity.organization_id), "is_admin": True,
                 "permissions": {"all": True}, "role_permissions": {"all": True},
                 "allowed_modules": sorted(MODULE_DOMAINS), "data_access_level": "organization",
+                "branch_ids": [test_identity.branch_id], "branch_scope": "all",
             }
 
         if not authorization or not authorization.startswith("Bearer "):

@@ -19,6 +19,7 @@ from jwt import InvalidTokenError as JWTError
 import logging
 
 from .jwt_auth import decode_jwt  # Single source of truth
+from .test_identity import SyntheticIdentityConfigurationError, required_test_identity
 from ..env import is_production, is_test_mode_enabled
 
 logger = logging.getLogger(__name__)
@@ -96,8 +97,6 @@ async def get_org_context(
     
     TEST MODE: Set TEST_MODE=true env var to bypass auth (for automated testing only!)
     """
-    import os
-    
     # TEST MODE: Bypass auth for automated testing
     # SECURITY: Block TEST_MODE in production
     if is_test_mode_enabled():
@@ -107,15 +106,17 @@ async def get_org_context(
                 status_code=503,
                 detail="Service configuration error"
             )
-        logger.warning("TEST_MODE enabled - bypassing authentication")
-        # Legacy fixtures use integer branch IDs here. Canonical fixture packs use UUIDs.
-        test_org_id = os.getenv("TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a")
-        test_branch_id = int(os.getenv("TEST_BRANCH_ID", "5"))
+        try:
+            test_identity = required_test_identity()
+        except SyntheticIdentityConfigurationError as error:
+            logger.error("TEST_MODE identity configuration is incomplete: %s", error)
+            raise HTTPException(status_code=503, detail="Service configuration error")
+        logger.warning("TEST_MODE enabled with an explicit synthetic identity")
         return OrgContext(
-            org_id=UUID(test_org_id),
-            user_id=8,  # Default test user
+            org_id=test_identity.organization_id,
+            user_id=test_identity.user_id,
             branch_scope=BranchScope.ALL,
-            branch_ids=[test_branch_id]
+            branch_ids=[test_identity.branch_id]
         )
     
     if not credentials:
