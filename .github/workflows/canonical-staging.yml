@@ -190,6 +190,23 @@ jobs:
           echo "SUPABASE_POOLER_PORT=$pooler_port" >> "$GITHUB_ENV"
           echo "SUPABASE_SESSION_POOLER_PORT=5432" >> "$GITHUB_ENV"
 
+      - name: Quiesce reviewed Render clients before database lifecycle changes
+        if: >-
+          inputs.restart_staging_database == true ||
+          inputs.refresh_pooler_configuration == true ||
+          inputs.reset_disposable_data == true ||
+          inputs.rotate_role_passwords == true
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY"
+          mkdir -p staging-evidence
+          python3 backend/scripts/manage_render_pilot_lifecycle.py quiesce \
+            --commit-sha "$GITHUB_SHA" \
+            --receipt staging-evidence/render-pilot-lifecycle.json
+          # Do not probe the database while old application pools drain and
+          # any prior Supavisor circuit reaches its documented expiry.
+          sleep 125
+
       - name: Restart the pinned free staging database
         if: inputs.restart_staging_database == true
         run: |
@@ -242,6 +259,37 @@ jobs:
           test "$(jq -r .default_pool_size <<<"$response")" = 5
           test "$(jq -r .pool_mode <<<"$response")" = transaction
           sleep 125
+
+      - name: Clear only this runner's reviewed Supabase network ban
+        if: >-
+          inputs.restart_staging_database == true ||
+          inputs.refresh_pooler_configuration == true ||
+          inputs.reset_disposable_data == true ||
+          inputs.rotate_role_passwords == true
+        run: |
+          set -euo pipefail
+          before=$(mktemp)
+          after=$(mktemp)
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/network-bans/retrieve/enriched" \
+            >"$before"
+          before_count=$(jq -er '.banned_ipv4_addresses | length' "$before")
+          curl --fail --silent --show-error \
+            --request DELETE \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data '{"ipv4_addresses":[],"requester_ip":true}' \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/network-bans" \
+            >/dev/null
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/network-bans/retrieve/enriched" \
+            >"$after"
+          after_count=$(jq -er '.banned_ipv4_addresses | length' "$after")
+          echo "::notice title=Canonical staging network-ban recovery::before=$before_count; after=$after_count; scope=requester_ip"
 
       - name: Build and mask the staging bootstrap connection
         run: python3 backend/scripts/verify_staging_pooler_roles.py --bootstrap-only
@@ -940,6 +988,11 @@ jobs:
           test -n "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
           test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" != disabled-unissued-canonical-staging
           mkdir -p staging-evidence
+          if [ -f staging-evidence/render-pilot-lifecycle.json ]; then
+            python3 backend/scripts/manage_render_pilot_lifecycle.py resume-owned \
+              --commit-sha "$GITHUB_SHA" \
+              --receipt staging-evidence/render-pilot-lifecycle.json
+          fi
           deploy_sha='${{ inputs.render_deploy_sha }}'
           if [ -z "$deploy_sha" ]; then
             deploy_sha="$GITHUB_SHA"
@@ -1363,5 +1416,14 @@ jobs:
         with:
           name: canonical-staging-baseline-${{ github.run_id }}
           path: staging-evidence/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Preserve Render lifecycle receipt on failure
+        if: always() && hashFiles('staging-evidence/render-pilot-lifecycle.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-pilot-lifecycle-${{ github.run_id }}
+          path: staging-evidence/render-pilot-lifecycle.json
           if-no-files-found: error
           retention-days: 14

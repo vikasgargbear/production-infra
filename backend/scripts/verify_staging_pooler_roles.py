@@ -40,7 +40,10 @@ TRANSIENT_MARKERS = (
     ("could not translate host name", "dns_unavailable"),
 )
 MAX_ATTEMPTS = 2
-RETRY_DELAY_SECONDS = 5
+RETRY_DELAY_SECONDS = 125
+QUIET_WINDOW_FAILURE_KINDS = frozenset(
+    {"auth_query_unavailable", "auth_query_timeout", "pooler_circuit_open"}
+)
 
 
 class RoleVerificationFailure(RuntimeError):
@@ -235,6 +238,8 @@ def select_pooler(
     except RoleVerificationFailure as session_failure:
         if not session_failure.transient:
             raise PoolerVerificationFailure("session", session_failure) from None
+        if session_failure.kind in QUIET_WINDOW_FAILURE_KINDS:
+            raise PoolerVerificationFailure("session", session_failure) from None
 
     try:
         # A partial session-mode pass grants no authority to mix pooler modes.
@@ -268,6 +273,8 @@ def select_admin_pooler(
         return session_port, "session"
     except RoleVerificationFailure as session_failure:
         if not session_failure.transient:
+            raise PoolerVerificationFailure("session", session_failure) from None
+        if session_failure.kind in QUIET_WINDOW_FAILURE_KINDS:
             raise PoolerVerificationFailure("session", session_failure) from None
 
     try:

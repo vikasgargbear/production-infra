@@ -272,6 +272,7 @@ def test_render_blueprint_is_manual_free_and_health_checked():
     assert "dockerfilePath: ./backend/Dockerfile" in backend
     assert "dockerContext: ./backend" in backend
     assert "healthCheckPath: /ready" in backend
+    assert "maxShutdownDelaySeconds: 60" in backend
     assert 'autoDeployTrigger: "off"' in backend
     assert "key: PORT" not in backend
     assert "key: APP_URL" in backend
@@ -301,6 +302,7 @@ def test_render_mcp_service_is_isolated_minimal_and_fail_closed():
     assert "dockerfilePath: ./backend/mcp_runtime/Dockerfile" in service
     assert "dockerContext: ./backend/mcp_runtime" in service
     assert "healthCheckPath: /health" in service
+    assert "maxShutdownDelaySeconds: 60" in service
     assert 'autoDeployTrigger: "off"' in service
     for name in (
         "SUPABASE_OAUTH_ISSUER",
@@ -507,6 +509,16 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "password_unexpired" in workflow
     assert "Canonical isolated role posture" in workflow
     assert "/network-bans/retrieve" in workflow
+    assert "/network-bans/retrieve/enriched" in workflow
+    assert '"requester_ip":true' in workflow
+    assert "manage_render_pilot_lifecycle.py quiesce" in workflow
+    assert "manage_render_pilot_lifecycle.py resume-owned" in workflow
+    assert workflow.index("manage_render_pilot_lifecycle.py quiesce") < workflow.index(
+        "Restart the pinned free staging database"
+    )
+    assert workflow.index("manage_render_pilot_lifecycle.py resume-owned") < workflow.index(
+        "provision_render_pilot.py"
+    )
     assert "--request POST" in workflow
     assert "Canonical staging network-ban count" in workflow
     assert "def verify_role_set_once(" in pooler_verifier

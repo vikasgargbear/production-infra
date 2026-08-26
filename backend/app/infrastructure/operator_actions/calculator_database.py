@@ -62,3 +62,16 @@ def calculator_session_factory():
         },
     )
     return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def dispose_calculator_engine() -> None:
+    """Dispose the lazy calculator pool without creating it during shutdown."""
+    if calculator_session_factory.cache_info().currsize == 0:
+        return
+
+    factory = calculator_session_factory()
+    calculator_engine = factory.kw.get("bind")
+    if calculator_engine is None:
+        raise RuntimeError("calculator session factory has no bound engine")
+    calculator_engine.dispose()
+    calculator_session_factory.cache_clear()

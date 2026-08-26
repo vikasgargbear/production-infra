@@ -70,6 +70,9 @@ from .api.routes.internal import (
     tax_provider,
 )
 from .infrastructure.operator_actions import install_sqlalchemy_operator_action_service
+from .infrastructure.operator_actions.calculator_database import (
+    dispose_calculator_engine,
+)
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -82,30 +85,37 @@ from .infrastructure.operator_actions import install_sqlalchemy_operator_action_
 async def lifespan(app: FastAPI):
     # Initialize structured logging before anything else
     setup_logging()
-    install_sqlalchemy_operator_action_service()
 
     import logging
     logger = logging.getLogger(__name__)
 
-    # SECURITY: Block TEST_MODE in production at startup
-    env = get_app_env()
-    if is_production() and is_test_mode_enabled():
-        raise RuntimeError(
-            "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
-            "Remove TEST_MODE env var or set APP_ENV=development."
-        )
+    try:
+        install_sqlalchemy_operator_action_service()
 
-    if is_production():
-        required = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "CORS_ORIGINS", "APP_URL")
-        missing = [name for name in required if not os.getenv(name, "").strip()]
-        if missing:
+        # SECURITY: Block TEST_MODE in production at startup
+        env = get_app_env()
+        if is_production() and is_test_mode_enabled():
             raise RuntimeError(
-                "Missing required production configuration: " + ", ".join(missing)
+                "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
+                "Remove TEST_MODE env var or set APP_ENV=development."
             )
 
-    logger.info("Starting Pharma ERP Backend...")
-    yield
-    logger.info("Shutting down...")
+        if is_production():
+            required = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "CORS_ORIGINS", "APP_URL")
+            missing = [name for name in required if not os.getenv(name, "").strip()]
+            if missing:
+                raise RuntimeError(
+                    "Missing required production configuration: " + ", ".join(missing)
+                )
+
+        logger.info("Starting Pharma ERP Backend...")
+        yield
+    finally:
+        logger.info("Shutting down...")
+        try:
+            dispose_calculator_engine()
+        finally:
+            engine.dispose()
 
 # CORS Configuration — env-based whitelist in production
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")

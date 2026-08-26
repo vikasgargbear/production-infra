@@ -7,6 +7,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /ready
+    maxShutdownDelaySeconds: 60
     autoDeployTrigger: "off"
     envVars:
       - key: APP_ENV
@@ -62,6 +63,7 @@ services:
     dockerfilePath: ./backend/mcp_runtime/Dockerfile
     dockerContext: ./backend/mcp_runtime
     healthCheckPath: /health
+    maxShutdownDelaySeconds: 60
     autoDeployTrigger: "off"
     envVars:
       - key: SUPABASE_OAUTH_ISSUER

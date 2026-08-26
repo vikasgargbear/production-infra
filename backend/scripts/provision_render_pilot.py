@@ -181,6 +181,7 @@ def api_create_payload(
             "plan": "free",
             "region": "singapore",
             "healthCheckPath": "/ready",
+            "maxShutdownDelaySeconds": 60,
             "envSpecificDetails": {
                 "dockerContext": "./backend",
                 "dockerfilePath": "./backend/Dockerfile",
@@ -236,6 +237,7 @@ def mcp_create_payload(
             "plan": "free",
             "region": "singapore",
             "healthCheckPath": "/health",
+            "maxShutdownDelaySeconds": 60,
             "envSpecificDetails": {
                 "dockerContext": "./backend/mcp_runtime",
                 "dockerfilePath": "./backend/mcp_runtime/Dockerfile",
@@ -394,6 +396,7 @@ class RenderClient:
                 "healthCheckPath": (
                     "/ready" if service.name == API_NAME else "/health"
                 ),
+                "maxShutdownDelaySeconds": 60,
                 "envSpecificDetails": docker,
             }
         else:

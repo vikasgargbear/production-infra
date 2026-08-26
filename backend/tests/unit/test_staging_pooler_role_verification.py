@@ -163,7 +163,7 @@ def test_pooler_selection_rechecks_the_complete_set_on_transaction_mode() -> Non
         calls.append((kwargs["port"], tuple(kwargs["roles"])))
         if kwargs["port"] == "5432":
             raise verifier.RoleVerificationFailure(
-                "erp_regulatory_importer", "auth_query_timeout", transient=True
+                "erp_regulatory_importer", "connection_refused", transient=True
             )
 
     assert verifier.select_pooler(
@@ -218,6 +218,29 @@ def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -
             transaction_port="6543",
             verify_admin=permanent_failure,
         )
+    assert calls == ["5432"]
+
+
+def test_pooler_circuit_stops_after_the_bounded_quiet_window() -> None:
+    verifier = _load()
+    calls: list[str] = []
+
+    def verify_admin(**kwargs) -> None:
+        calls.append(kwargs["port"])
+        raise verifier.RoleVerificationFailure(
+            "postgres", "pooler_circuit_open", transient=True
+        )
+
+    with pytest.raises(verifier.PoolerVerificationFailure) as captured:
+        verifier.select_admin_pooler(
+            password="secret",
+            project_ref="a" * 20,
+            host="pooler.example",
+            session_port="5432",
+            transaction_port="6543",
+            verify_admin=verify_admin,
+        )
+    assert captured.value.mode == "session"
     assert calls == ["5432"]
 
 

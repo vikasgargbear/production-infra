@@ -59,6 +59,7 @@ def test_dry_run_payloads_match_reviewed_render_contract(capsys):
     assert api["serviceDetails"]["runtime"] == "docker"
     assert api["serviceDetails"]["plan"] == "free"
     assert api["serviceDetails"]["region"] == "singapore"
+    assert api["serviceDetails"]["maxShutdownDelaySeconds"] == 60
     assert api["serviceDetails"]["envSpecificDetails"] == {
         "dockerContext": "./backend",
         "dockerfilePath": "./backend/Dockerfile",
@@ -67,6 +68,7 @@ def test_dry_run_payloads_match_reviewed_render_contract(capsys):
     assert mcp["type"] == "web_service"
     assert mcp["autoDeploy"] == "no"
     assert mcp["serviceDetails"]["healthCheckPath"] == "/health"
+    assert mcp["serviceDetails"]["maxShutdownDelaySeconds"] == 60
     assert mcp["serviceDetails"]["envSpecificDetails"] == {
         "dockerContext": "./backend/mcp_runtime",
         "dockerfilePath": "./backend/mcp_runtime/Dockerfile",
