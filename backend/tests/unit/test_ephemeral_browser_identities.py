@@ -760,6 +760,15 @@ def test_stale_recovery_restores_run_scoped_baseline_grants_by_lineage(monkeypat
     ]
     assert len(baseline_updates) == 1
     assert baseline_updates[0][2] == [operator_grant_id, reviewer_grant_id]
+    temporary_updates = [
+        params
+        for statement, params in statements
+        if statement.startswith("UPDATE automation.agent_grants")
+        and "consent_version IN" in statement
+        and "SET status='suspended'" in statement
+    ]
+    assert len(temporary_updates) == 1
+    assert temporary_updates[0][-1] == identities.WEB_CLIENT_ID
     assert "d3000000-0000-7000-8000-000000000020" not in str(statements)
     assert "d3000000-0000-7000-8000-000000000021" not in str(statements)
 
@@ -1144,6 +1153,37 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
     }
 
 
+def test_seeded_boundary_requires_every_typed_operator_capability_bound():
+    bounds = {
+        row["capability_code"]: row
+        for row in identities.LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS
+    }
+
+    assert len(bounds) == 21
+    assert bounds["finance.expense_claim.prepare"] == {
+        "capability_code": "finance.expense_claim.prepare",
+        "operation_mode": "write",
+        "risk_class": "consequential_write",
+        "approval_policy": "separate_approver",
+        "maximum_amount": 1_000_000,
+        "currency_code": "INR",
+        "allow_sensitive_read": False,
+        "status": "active",
+    }
+    assert bounds["automation.command.status.get"]["maximum_amount"] is None
+    assert bounds["inventory.destructions.get"]["operation_mode"] == "read"
+    assert identities.LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS == ({
+        "capability_code": "automation.command.approve",
+        "operation_mode": "write",
+        "risk_class": "consequential_write",
+        "approval_policy": "actor_confirmation",
+        "maximum_amount": None,
+        "currency_code": None,
+        "allow_sensitive_read": False,
+        "status": "active",
+    },)
+
+
 def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
     monkeypatch,
 ):
@@ -1222,6 +1262,7 @@ def _seeded_live18_identity_boundary(**overrides):
         "exact_active_demo_access_grant_count": 2,
         "active_web_grant_count": 2,
         "exact_active_baseline_web_grant_count": 2,
+        "exact_active_baseline_capability_grant_count": 2,
         "active_temporary_grant_count": 0,
     }
     values.update(overrides)
@@ -1290,6 +1331,12 @@ def test_live18_final_cleanup_rejects_identity_pristine_boundary(monkeypatch):
         (
             _seeded_live18_identity_boundary(
                 exact_active_baseline_web_grant_count=1
+            ),
+            (0, 0, 0),
+        ),
+        (
+            _seeded_live18_identity_boundary(
+                exact_active_baseline_capability_grant_count=1
             ),
             (0, 0, 0),
         ),

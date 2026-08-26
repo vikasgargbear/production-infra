@@ -52,6 +52,7 @@ DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
 DEMO_REVIEWER_AUTH_USER_ID = "d3000000-0000-7000-8000-000000000002"
 DEMO_REVIEWER_USER_ID = "d3000000-0000-7000-8000-000000000003"
 DEMO_REVIEWER_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000004"
+DEMO_ROLE_ID = "d3000000-0000-7000-8000-000000000006"
 DEMO_OPERATOR_AUTH_USER_ID = "d3000000-0000-7000-8000-000000000022"
 DEMO_OPERATOR_USER_ID = "d3000000-0000-7000-8000-000000000023"
 DEMO_OPERATOR_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000024"
@@ -221,6 +222,7 @@ class Live18IdentityBoundary(NamedTuple):
     exact_active_demo_access_grant_count: int
     active_web_grant_count: int
     exact_active_baseline_web_grant_count: int
+    exact_active_baseline_capability_grant_count: int
     active_temporary_grant_count: int
 
 
@@ -267,6 +269,40 @@ def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[st
 
 
 LIVE18_REQUESTER_CAPABILITIES, LIVE18_REQUESTER_PERMISSIONS = _live18_authority()
+
+
+def _baseline_capability_bounds(
+    capabilities: tuple[tuple[str, str, str, str], ...],
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        {
+            "capability_code": capability,
+            "operation_mode": operation_mode,
+            "risk_class": risk_class,
+            "approval_policy": approval_policy,
+            "maximum_amount": 1_000_000 if capability.endswith(".prepare") else None,
+            "currency_code": "INR" if capability.endswith(".prepare") else None,
+            "allow_sensitive_read": False,
+            "status": "active",
+        }
+        for capability, operation_mode, risk_class, approval_policy in sorted(
+            capabilities
+        )
+    )
+
+
+LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS = _baseline_capability_bounds(
+    LIVE18_REQUESTER_CAPABILITIES
+    + (("inventory.destructions.get", "read", "read_only", "none"),)
+)
+LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS = _baseline_capability_bounds(
+    ((
+        "automation.command.approve",
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    ),)
+)
 LIVE18_IDENTITIES = IDENTITIES
 
 PROFILE_TWO_USER = "two-user-approvals"
@@ -1073,6 +1109,7 @@ def _recover_stale_live18_database(
                        updated_at=transaction_timestamp(),row_version=row_version+1
                  WHERE org_id=%s
                    AND subject_membership_id IN (%s::uuid,%s::uuid)
+                   AND client_id=%s
                    AND consent_version IN ('browser-e2e-v1','canonical-live-e2e-v1')
                    AND status='active'
                 """,
@@ -1080,6 +1117,7 @@ def _recover_stale_live18_database(
                     DEMO_ORG_ID,
                     DEMO_OPERATOR_MEMBERSHIP_ID,
                     DEMO_REVIEWER_MEMBERSHIP_ID,
+                    WEB_CLIENT_ID,
                 ),
             )
             if baseline_rows:
@@ -1256,7 +1294,53 @@ def _live18_database_boundary(
                     %s::uuid AS operator_membership_id,
                     %s::uuid AS reviewer_membership_id,
                     %s::uuid AS denial_creator_membership_id,
-                    %s::varchar AS web_client_id
+                    %s::uuid AS demo_role_id,
+                    %s::varchar AS web_client_id,
+                    %s::jsonb AS operator_capability_bounds,
+                    %s::jsonb AS reviewer_capability_bounds
+                ),
+                exact_baseline_grants AS (
+                  SELECT grant_row.id,grant_row.subject_membership_id
+                    FROM automation.agent_grants AS grant_row
+                    CROSS JOIN ids
+                   WHERE grant_row.org_id=ids.demo_org_id
+                     AND grant_row.client_id=ids.web_client_id
+                     AND grant_row.authorization_mode='self_consent'
+                     AND grant_row.branch_id IS NULL
+                     AND grant_row.suspended_at IS NULL
+                     AND grant_row.consented_by_membership_id=
+                         grant_row.subject_membership_id
+                     AND grant_row.granted_by_membership_id=
+                         grant_row.subject_membership_id
+                     AND grant_row.consented_at=grant_row.granted_at
+                     AND grant_row.expires_at=
+                         grant_row.granted_at + interval '30 days'
+                     AND grant_row.created_by_membership_id=
+                         ids.reviewer_membership_id
+                     AND grant_row.updated_by_membership_id=
+                         ids.reviewer_membership_id
+                     AND grant_row.status='active'
+                     AND grant_row.expires_at>transaction_timestamp()
+                     AND (
+                       (grant_row.subject_membership_id=
+                          ids.operator_membership_id AND
+                        grant_row.client_display_name=
+                          'Canonical staging demo runner' AND
+                        grant_row.consent_version='demo-v2' AND
+                        grant_row.consent_text_hash=extensions.digest(
+                          'canonical staging demo consent; INR 1000000 maximum',
+                          'sha256'
+                        )) OR
+                       (grant_row.subject_membership_id=
+                          ids.reviewer_membership_id AND
+                        grant_row.client_display_name=
+                          'Canonical staging independent approver' AND
+                        grant_row.consent_version='demo-v2-approver' AND
+                        grant_row.consent_text_hash=extensions.digest(
+                          'canonical staging independent approval consent',
+                          'sha256'
+                        ))
+                     )
                 )
                 SELECT jsonb_build_object(
                   'operator_auth_user_id',
@@ -1331,11 +1415,17 @@ def _live18_database_boundary(
                         )
                         AND access_grant.scope_kind='organization'
                         AND access_grant.branch_id IS NULL
+                        AND access_grant.created_by_membership_id=
+                            ids.reviewer_membership_id
                         AND access_grant.status='active'
                         AND access_grant.valid_from_at<=transaction_timestamp()
-                        AND (access_grant.expires_at IS NULL OR
-                             access_grant.expires_at>transaction_timestamp())
-                        AND membership.status='active' AND role.status='active'),
+                        AND access_grant.expires_at=
+                            access_grant.valid_from_at + interval '30 days'
+                        AND access_grant.expires_at>transaction_timestamp()
+                        AND membership.status='active'
+                        AND role.id=ids.demo_role_id
+                        AND role.code='demo_operator'
+                        AND role.status='active'),
                   'active_web_grant_count',
                     (SELECT count(*) FROM automation.agent_grants,ids
                       WHERE org_id=ids.demo_org_id
@@ -1345,21 +1435,39 @@ def _live18_database_boundary(
                         AND client_id=ids.web_client_id AND status='active'
                         AND expires_at>transaction_timestamp()),
                   'exact_active_baseline_web_grant_count',
-                    (SELECT count(*)
-                       FROM automation.agent_grants AS grant_row
-                       CROSS JOIN ids
-                      WHERE grant_row.org_id=ids.demo_org_id
-                        AND grant_row.client_id=ids.web_client_id
-                        AND grant_row.status='active'
-                        AND grant_row.expires_at>transaction_timestamp()
-                        AND (
-                          (grant_row.subject_membership_id=
-                             ids.operator_membership_id AND
-                           grant_row.consent_version='demo-v2') OR
-                          (grant_row.subject_membership_id=
-                             ids.reviewer_membership_id AND
-                           grant_row.consent_version='demo-v2-approver')
-                        )),
+                    (SELECT count(*) FROM exact_baseline_grants),
+                  'exact_active_baseline_capability_grant_count',
+                    (SELECT count(*) FROM (
+                      SELECT baseline.id
+                        FROM exact_baseline_grants AS baseline
+                        JOIN automation.agent_grant_capabilities AS capability
+                          ON capability.org_id=(SELECT demo_org_id FROM ids)
+                         AND capability.agent_grant_id=baseline.id
+                        CROSS JOIN ids
+                      GROUP BY baseline.id,baseline.subject_membership_id,
+                                ids.operator_membership_id,
+                                ids.operator_capability_bounds,
+                                ids.reviewer_capability_bounds
+                      HAVING jsonb_agg(
+                               jsonb_build_object(
+                                 'capability_code',capability.capability_code,
+                                 'operation_mode',capability.operation_mode,
+                                 'risk_class',capability.risk_class,
+                                 'approval_policy',capability.approval_policy,
+                                 'maximum_amount',capability.maximum_amount,
+                                 'currency_code',capability.currency_code,
+                                 'allow_sensitive_read',
+                                   capability.allow_sensitive_read,
+                                 'status',capability.status
+                               ) ORDER BY capability.capability_code
+                             )=
+                             CASE
+                               WHEN baseline.subject_membership_id=
+                                    ids.operator_membership_id
+                               THEN ids.operator_capability_bounds
+                               ELSE ids.reviewer_capability_bounds
+                             END
+                    ) AS exact_capability_set),
                   'active_temporary_grant_count',
                     (SELECT count(*) FROM automation.agent_grants,ids
                       WHERE org_id=ids.demo_org_id
@@ -1382,7 +1490,10 @@ def _live18_database_boundary(
                     DEMO_OPERATOR_MEMBERSHIP_ID,
                     DEMO_REVIEWER_MEMBERSHIP_ID,
                     DENIAL_CREATOR_MEMBERSHIP_ID,
+                    DEMO_ROLE_ID,
                     WEB_CLIENT_ID,
+                    json.dumps(LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS),
+                    json.dumps(LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS),
                 ),
             )
             row = cursor.fetchone()
@@ -1435,6 +1546,7 @@ def _classify_live18_identity_boundary(management_token: str) -> str:
         exact_active_demo_access_grant_count=0,
         active_web_grant_count=0,
         exact_active_baseline_web_grant_count=0,
+        exact_active_baseline_capability_grant_count=0,
         active_temporary_grant_count=0,
     )
     seeded = Live18IdentityBoundary(
@@ -1452,6 +1564,7 @@ def _classify_live18_identity_boundary(management_token: str) -> str:
         exact_active_demo_access_grant_count=2,
         active_web_grant_count=2,
         exact_active_baseline_web_grant_count=2,
+        exact_active_baseline_capability_grant_count=2,
         active_temporary_grant_count=0,
     )
     if denial_state != (0, 0, 0):

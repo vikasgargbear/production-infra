@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -117,12 +118,18 @@ def test_demo_provisions_transfer_authority_route_and_numbering():
     for fragment in (
         '"inventory.transfer.create"',
         '"inventory.document.post"',
-        '("inventory.transfer.prepare", "actor_confirmation")',
         '"transfer_destination_branch"',
         '"transfer_destination_location"',
         '"stock_transfer": "DEMO-ST-"',
     ):
         assert fragment in source
+    contract = json.loads(
+        (root / "docs/architecture/mcp-operator-actions.json").read_text()
+    )
+    assert {
+        (action["operation_key"], action["approval_policy"])
+        for action in contract["prepare_actions"]
+    } >= {("inventory.transfer.prepare", "actor_confirmation")}
 
 
 def test_postgres_route_fixture_uses_real_runtime_role_and_useful_rows():

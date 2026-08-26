@@ -1490,6 +1490,7 @@ jobs:
                       "finance.supplier_advance.prepare", "finance.supplier_payment.prepare",
                       "finance.adjustment_note.prepare", "inventory.adjustment.prepare",
                       "inventory.transfer.prepare", "inventory.destruction.prepare",
+                      "finance.bank_reconciliation.prepare", "finance.expense_claim.prepare",
                       "automation.command.approve", "automation.command.execute",
                       "automation.command.review",
                   }

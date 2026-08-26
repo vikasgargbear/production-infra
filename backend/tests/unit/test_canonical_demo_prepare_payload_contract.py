@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,6 +48,30 @@ def _module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_demo_prepare_authority_matches_generated_operator_contract():
+    module = _module()
+    contract = json.loads(
+        module.OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8")
+    )
+    expected = tuple(
+        sorted(
+            (action["operation_key"], action["approval_policy"])
+            for action in contract["prepare_actions"]
+        )
+    )
+
+    assert module.PREPARE_CAPABILITIES == expected
+    assert len(module.PREPARE_CAPABILITIES) == 17
+    assert (
+        "finance.bank_reconciliation.prepare",
+        "separate_approver",
+    ) in module.PREPARE_CAPABILITIES
+    assert (
+        "finance.expense_claim.prepare",
+        "separate_approver",
+    ) in module.PREPARE_CAPABILITIES
 
 
 def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:

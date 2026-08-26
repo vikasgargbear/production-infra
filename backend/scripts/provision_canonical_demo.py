@@ -65,6 +65,17 @@ ITC_REVERSAL_SOURCE_PUBLICATION_DATE = date(2022, 1, 1)
 ITC_REVERSAL_EFFECTIVE_FROM = date(2017, 7, 1)
 ITC_REVERSAL_RULESET_VERSION = "cgst-act-section-17-5-h-2022-01-01"
 CLIENT_ID = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "").strip()
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+BACKEND_ROOT = SCRIPT_DIRECTORY.parent
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+_PACKAGED_OPERATOR_CONTRACT_PATH = (
+    BACKEND_ROOT / "docs" / "architecture" / "mcp-operator-actions.json"
+)
+OPERATOR_CONTRACT_PATH = (
+    _PACKAGED_OPERATOR_CONTRACT_PATH
+    if _PACKAGED_OPERATOR_CONTRACT_PATH.is_file()
+    else REPOSITORY_ROOT / "docs/architecture/mcp-operator-actions.json"
+)
 
 IDS = {
     "org": "d3000000-0000-7000-8000-000000000001",
@@ -248,23 +259,38 @@ REQUIRED_PERMISSIONS = (
 )
 
 
-PREPARE_CAPABILITIES = (
-    ("sales.order.prepare", "actor_confirmation"),
-    ("sales.dispatch.prepare", "actor_confirmation"),
-    ("sales.invoice.prepare", "actor_confirmation"),
-    ("sales.return.prepare", "separate_approver"),
-    ("procurement.purchase_order.prepare", "actor_confirmation"),
-    ("procurement.goods_receipt.prepare", "actor_confirmation"),
-    ("procurement.supplier_invoice.prepare", "actor_confirmation"),
-    ("procurement.purchase_return.prepare", "separate_approver"),
-    ("finance.customer_receipt.prepare", "actor_confirmation"),
-    ("finance.supplier_advance.prepare", "separate_approver"),
-    ("finance.supplier_payment.prepare", "actor_confirmation"),
-    ("finance.adjustment_note.prepare", "separate_approver"),
-    ("inventory.adjustment.prepare", "separate_approver"),
-    ("inventory.transfer.prepare", "actor_confirmation"),
-    ("inventory.destruction.prepare", "separate_approver"),
-)
+def _reviewed_prepare_capabilities() -> tuple[tuple[str, str], ...]:
+    contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
+    actions = contract.get("prepare_actions")
+    if not isinstance(actions, list) or len(actions) != 17:
+        raise RuntimeError(
+            "generated operator contract must contain exactly 17 prepare actions"
+        )
+    capabilities = tuple(sorted(
+        (
+            str(action.get("operation_key", "")),
+            str(action.get("approval_policy", "")),
+        )
+        for action in actions
+        if isinstance(action, dict)
+    ))
+    if (
+        len(capabilities) != 17
+        or len({operation for operation, _ in capabilities}) != 17
+        or any(
+            not operation.endswith(".prepare")
+            or approval_policy not in {
+                "actor_confirmation",
+                "separate_approver",
+            }
+            for operation, approval_policy in capabilities
+        )
+    ):
+        raise RuntimeError("generated prepare authority is incomplete or malformed")
+    return capabilities
+
+
+PREPARE_CAPABILITIES = _reviewed_prepare_capabilities()
 
 CALCULATION_TOTAL_FIELDS = (
     "subtotal",
