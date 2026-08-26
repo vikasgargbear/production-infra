@@ -159,6 +159,38 @@ jobs:
       - name: Install the reviewed migration toolchain
         run: pip install -r backend/requirements.txt
 
+      - name: Diagnose deployment configuration before mutation
+        env:
+          REVIEWED_DEPLOY_SHA: ${{ inputs.render_deploy_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          requirements=(
+            --require-env CANONICAL_BASELINE_APPROVED_SHA256
+            --require-env CANONICAL_PRODUCTION_PROJECT_REFS
+            --require-env CANONICAL_STAGING_PROJECT_REF
+            --require-env CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID
+            --require-env SUPABASE_ACCESS_TOKEN
+            --require-env SUPABASE_DB_PASSWORD
+          )
+          if [ '${{ inputs.deploy_render_pilot }}' = true ]; then
+            requirements+=(
+              --require-env RENDER_API_KEY
+              --require-env RAILWAY_API_TOKEN
+              --require-env RAILWAY_PROJECT_ID
+              --require-env RAILWAY_ENVIRONMENT_ID
+              --require-env RAILWAY_API_SERVICE_ID
+              --require-env RAILWAY_MCP_SERVICE_ID
+              --require-env RAILWAY_FRONTEND_SERVICE_ID
+              --require-env RAILWAY_API_URL
+              --require-env RAILWAY_MCP_URL
+              --require-env RAILWAY_FRONTEND_URL
+            )
+          fi
+          python backend/scripts/deployment_control.py preflight \
+            --expected-sha "$REVIEWED_DEPLOY_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            "${requirements[@]}"
+
       - uses: actions/setup-node@v4
         if: inputs.deploy_render_pilot == true
         with:

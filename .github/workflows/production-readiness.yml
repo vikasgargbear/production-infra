@@ -504,6 +504,30 @@ jobs:
       RENDER_MCP_URL: ${{ vars.RENDER_MCP_URL }}
       RENDER_FRONTEND_URL: ${{ vars.RENDER_FRONTEND_URL }}
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deployment control-plane validator
+        run: pip install jsonschema==4.23.0
+
+      - name: Diagnose Render configuration before mutation
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          python backend/scripts/deployment_control.py preflight \
+            --expected-sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --require-env RENDER_API_KEY \
+            --require-env RENDER_API_SERVICE_ID \
+            --require-env RENDER_MCP_SERVICE_ID \
+            --require-env RENDER_FRONTEND_SERVICE_ID \
+            --require-env RENDER_API_URL \
+            --require-env RENDER_MCP_URL \
+            --require-env RENDER_FRONTEND_URL
+
       - name: Refuse incomplete Render configuration
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}

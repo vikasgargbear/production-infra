@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aasopharma.example/schemas/deployment-control-v1.json",
+  "title": "AasoPharma deployment control plane",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "environment", "supabase", "providers", "configuration", "phases"],
+  "properties": {
+    "schema": {"const": "aasopharma.deployment-control.v1"},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "classification", "github_environment", "repository"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "classification": {"enum": ["disposable_test", "production"]},
+        "github_environment": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}
+      }
+    },
+    "supabase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_ref", "region", "origin", "oauth_issuer"],
+      "properties": {
+        "project_ref": {"type": "string", "pattern": "^[a-z0-9]{20}$"},
+        "region": {"type": "string", "minLength": 1},
+        "origin": {"type": "string", "format": "uri"},
+        "oauth_issuer": {"type": "string", "format": "uri"}
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["render", "railway"],
+      "properties": {
+        "render": {"$ref": "#/$defs/provider"},
+        "railway": {"$ref": "#/$defs/provider"}
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variables", "secrets", "run_outputs"],
+      "properties": {
+        "variables": {"type": "array", "items": {"$ref": "#/$defs/configurationName"}, "uniqueItems": true},
+        "secrets": {"type": "array", "items": {"$ref": "#/$defs/configurationName"}, "uniqueItems": true},
+        "run_outputs": {"type": "array", "items": {"$ref": "#/$defs/configurationName"}, "uniqueItems": true}
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "after"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "after": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "configurationName": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "services"],
+      "properties": {
+        "authority": {"enum": ["active", "retired"]},
+        "owner_id": {"type": "string", "minLength": 1},
+        "project_id": {"type": "string", "minLength": 1},
+        "environment_id": {"type": "string", "minLength": 1},
+        "services": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["api", "mcp", "frontend"],
+          "properties": {
+            "api": {"$ref": "#/$defs/service"},
+            "mcp": {"$ref": "#/$defs/service"},
+            "frontend": {"$ref": "#/$defs/service"}
+          }
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "origin"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "origin": {"type": "string", "format": "uri"},
+        "kind": {"enum": ["web_service", "static_site"]},
+        "health": {"type": "string", "pattern": "^/"},
+        "readiness": {"type": "string", "pattern": "^/"}
+      }
+    }
+  }
+}

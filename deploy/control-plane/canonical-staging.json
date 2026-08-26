@@ -1,0 +1,138 @@
+{
+  "schema": "aasopharma.deployment-control.v1",
+  "environment": {
+    "name": "canonical-staging",
+    "classification": "disposable_test",
+    "github_environment": "canonical-staging",
+    "repository": "vikasgargbear/production-infra"
+  },
+  "supabase": {
+    "project_ref": "rgihahbmkrmhitjdjvev",
+    "region": "ap-south-1",
+    "origin": "https://rgihahbmkrmhitjdjvev.supabase.co",
+    "oauth_issuer": "https://rgihahbmkrmhitjdjvev.supabase.co/auth/v1"
+  },
+  "providers": {
+    "render": {
+      "authority": "active",
+      "owner_id": "tea-da2nh58ae00c73ciaqog",
+      "services": {
+        "api": {
+          "id": "srv-da2sajon74is738juujg",
+          "name": "aasopharma-api-pilot",
+          "origin": "https://aasopharma-api-pilot.onrender.com",
+          "kind": "web_service",
+          "health": "/health",
+          "readiness": "/ready"
+        },
+        "mcp": {
+          "id": "srv-da39uem7bikc739guke0",
+          "name": "aasopharma-mcp-pilot",
+          "origin": "https://aasopharma-mcp-pilot.onrender.com",
+          "kind": "web_service",
+          "health": "/health",
+          "readiness": "/ready"
+        },
+        "frontend": {
+          "id": "srv-da2saj1t0dsc73b3fkbg",
+          "name": "aasopharma-erp-pilot",
+          "origin": "https://aasopharma-erp-pilot.onrender.com",
+          "kind": "static_site",
+          "health": "/build-metadata.json"
+        }
+      }
+    },
+    "railway": {
+      "authority": "retired",
+      "project_id": "1edeb960-f398-4b19-87d8-14436aa8da37",
+      "environment_id": "348f90ca-fc31-4b13-97f1-50c1e64c3367",
+      "services": {
+        "api": {
+          "id": "9200378b-aa54-4a6f-8446-41e253c6175d",
+          "name": "aasopharma-api-pilot",
+          "origin": "https://aasopharma-api-pilot-production.up.railway.app"
+        },
+        "mcp": {
+          "id": "64896a64-7eae-4ece-a8a4-bc4499c7c7e0",
+          "name": "aasopharma-mcp-pilot",
+          "origin": "https://pharma-backend-production-0c09.up.railway.app"
+        },
+        "frontend": {
+          "id": "c0ae6736-d7cc-46ee-bbcf-f9604b6c6950",
+          "name": "aasopharma-erp-pilot",
+          "origin": "https://aasopharma-erp-pilot-production-eb9b.up.railway.app"
+        }
+      }
+    }
+  },
+  "configuration": {
+    "variables": [
+      "CANONICAL_BASELINE_APPROVED_SHA256",
+      "CANONICAL_PRODUCTION_PROJECT_REFS",
+      "CANONICAL_STAGING_PROJECT_REF",
+      "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID",
+      "DEPLOY_RAILWAY_PILOT",
+      "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF",
+      "MCP_ALLOWED_ORIGINS",
+      "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+      "RAILWAY_API_SERVICE",
+      "RAILWAY_API_SERVICE_ID",
+      "RAILWAY_API_URL",
+      "RAILWAY_ENVIRONMENT_ID",
+      "RAILWAY_FRONTEND_SERVICE",
+      "RAILWAY_FRONTEND_SERVICE_ID",
+      "RAILWAY_FRONTEND_URL",
+      "RAILWAY_MCP_SERVICE",
+      "RAILWAY_MCP_SERVICE_ID",
+      "RAILWAY_MCP_URL",
+      "RAILWAY_PROJECT_ID",
+      "RENDER_API_SERVICE_ID",
+      "RENDER_API_URL",
+      "RENDER_FRONTEND_SERVICE_ID",
+      "RENDER_FRONTEND_URL",
+      "RENDER_MCP_SERVICE_ID",
+      "RENDER_MCP_URL",
+      "RENDER_OWNER_ID",
+      "SUPABASE_OAUTH_ISSUER",
+      "SUPABASE_URL"
+    ],
+    "secrets": [
+      "CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64",
+      "CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256",
+      "ERP_CALCULATOR_PASSWORD",
+      "ERP_REGULATORY_IMPORTER_PASSWORD",
+      "ERP_RUNTIME_PASSWORD",
+      "ERP_TAX_PROVIDER_PASSWORD",
+      "JWT_SECRET_KEY",
+      "LIVE18_REVIEWED_SCALARS_JSON",
+      "MCP_INTERNAL_SERVICE_TOKEN",
+      "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON",
+      "RAILWAY_API_TOKEN",
+      "RENDER_API_KEY",
+      "SUPABASE_ACCESS_TOKEN",
+      "SUPABASE_ANON_KEY",
+      "SUPABASE_DB_PASSWORD",
+      "TAX_PROVIDER_INTERNAL_HMAC_SECRET",
+      "TAX_PROVIDER_INTERNAL_SERVICE_TOKEN"
+    ],
+    "run_outputs": [
+      "CANONICAL_DEMO_EVIDENCE_DIR",
+      "CANONICAL_STAGING_MCP_TEST_EMAIL",
+      "CANONICAL_STAGING_MCP_TEST_PASSWORD",
+      "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+    ]
+  },
+  "phases": [
+    {"name": "preflight", "after": []},
+    {"name": "quiesce", "after": ["preflight"]},
+    {"name": "migrate_reset", "after": ["quiesce"]},
+    {"name": "close_fence", "after": ["migrate_reset"]},
+    {"name": "deploy_exact_sha", "after": ["close_fence"]},
+    {"name": "pre_fence_provenance", "after": ["deploy_exact_sha"]},
+    {"name": "prove_railway_retired", "after": ["pre_fence_provenance"]},
+    {"name": "open_fence", "after": ["prove_railway_retired"]},
+    {"name": "full_readiness", "after": ["open_fence"]},
+    {"name": "oauth_demo_live18", "after": ["full_readiness"]},
+    {"name": "promotion_evidence", "after": ["oauth_demo_live18"]}
+  ]
+}
