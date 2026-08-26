@@ -487,6 +487,8 @@ class ConvergeClient:
     def __init__(self):
         self.deployed = []
         self.env_updates = {}
+        self.retired_env = []
+        self.allowed_env = {}
         self.services = {
             provision.API_NAME: provision.ServiceRef(
                 "srv-api", provision.API_NAME, "web_service", "https://api.onrender.com", {}
@@ -511,14 +513,16 @@ class ConvergeClient:
     def ensure_spa_rewrite(self, _service):
         return False
 
-    def retire_env(self, _service, _keys):
+    def retire_env(self, service, keys):
+        self.retired_env.append((service.name, frozenset(keys)))
         return False
 
     def ensure_env(self, service, values):
         self.env_updates[service.name] = dict(values)
         return False
 
-    def require_allowed_env(self, _service, _allowed):
+    def require_allowed_env(self, service, allowed):
+        self.allowed_env[service.name] = frozenset(allowed)
         return None
 
     def deploy(self, service, commit_id, *, cancel_stale_deploys=False):
@@ -548,6 +552,7 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
             commit_id="a" * 40 if deploy else None,
             deploy_service=None,
             cancel_stale_deploys=False,
+            evidence_credential_cutover_phase="prepare",
         )
     )
 
@@ -567,8 +572,39 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
         if deploy
         else []
     )
+    assert client.retired_env == []
+    assert provision.RETIRED_API_ENV_KEYS <= client.allowed_env[provision.API_NAME]
     if deploy:
         assert result["deployed"][provision.API_NAME]["id"] == "dep-srv-api"
+
+
+def test_render_legacy_evidence_environment_requires_explicit_retire_phase(
+    monkeypatch,
+):
+    client = ConvergeClient()
+    monkeypatch.setattr(provision, "operator_values", lambda _path: _values())
+    monkeypatch.setattr(provision, "RenderClient", lambda _key: client)
+
+    provision.converge(
+        SimpleNamespace(
+            env_file=None,
+            owner_id="owner",
+            repo=provision.DEFAULT_REPO,
+            branch="main",
+            deploy=False,
+            commit_id=None,
+            deploy_service=None,
+            cancel_stale_deploys=False,
+            evidence_credential_cutover_phase="retire",
+        )
+    )
+
+    assert client.retired_env == [
+        (provision.API_NAME, provision.RETIRED_API_ENV_KEYS)
+    ]
+    assert provision.RETIRED_API_ENV_KEYS.isdisjoint(
+        client.allowed_env[provision.API_NAME]
+    )
 
 
 def test_converge_can_deploy_only_the_reviewed_api_service(monkeypatch):

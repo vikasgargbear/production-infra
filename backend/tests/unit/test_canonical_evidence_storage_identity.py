@@ -468,20 +468,18 @@ def test_password_session_rejects_missing_or_broadened_hook_claims(claims) -> No
         )
 
 
-def test_retired_custom_secret_key_is_removed_only_after_exact_shape() -> None:
+def test_prepare_retains_custom_secret_key_after_validating_exact_shape() -> None:
     client = ManagementClient(
         [[{
             "id": "retired-key-id",
             "name": provision.RETIRED_KEY_NAME,
             "type": "secret",
             "secret_jwt_template": {"role": provision.SERVICE_ROLE},
-        }], None]
+        }]]
     )
 
-    assert provision.retire_custom_api_key(client) == "retired-key-id"
-    assert client.calls[-1][0:2] == (
-        "DELETE", f"/projects/{provision.PROJECT_REF}/api-keys/retired-key-id"
-    )
+    assert provision.inspect_retired_custom_api_key(client) == "retired-key-id"
+    assert all(call[0] == "GET" for call in client.calls)
 
 
 def test_run_environment_contains_identity_password_but_no_legacy_api_key(tmp_path) -> None:
@@ -506,6 +504,7 @@ def test_blocked_main_writes_only_a_non_secret_error_code(tmp_path, monkeypatch)
     monkeypatch.delenv("SUPABASE_ACCESS_TOKEN", raising=False)
 
     result = provision.main([
+        "--phase", "prepare",
         "--project-ref", provision.PROJECT_REF,
         "--reviewed-sha", "a" * 40,
         "--github-env", str(environment),
@@ -515,10 +514,12 @@ def test_blocked_main_writes_only_a_non_secret_error_code(tmp_path, monkeypatch)
     assert result == 2
     assert json.loads(receipt.read_text(encoding="utf-8")) == {
         "version": 1,
+        "phase": "prepare",
         "state": "blocked",
         "error_code": "MANAGEMENT_TOKEN_MISSING",
         "project_ref": provision.PROJECT_REF,
         "reviewed_sha": "a" * 40,
+        "run": {"id": "local", "attempt": "local"},
         "service_auth_user_id": provision.SERVICE_AUTH_USER_ID,
         "service_email": provision.SERVICE_EMAIL,
         "service_marker": provision.SERVICE_MARKER,
@@ -540,6 +541,7 @@ def test_missing_anon_key_fails_before_any_hosted_api_call(
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "must-not-be-used")
 
     result = provision.main([
+        "--phase", "prepare",
         "--project-ref", provision.PROJECT_REF,
         "--reviewed-sha", "a" * 40,
         "--github-env", str(environment),

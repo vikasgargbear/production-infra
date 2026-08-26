@@ -760,8 +760,15 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
         mcp_service, args.repo, args.branch
     )
     changed[FRONTEND_NAME] |= client.ensure_spa_rewrite(frontend_service)
-    changed[API_NAME] |= client.retire_env(api_service, RETIRED_API_ENV_KEYS)
-    client.require_allowed_env(api_service, API_ALLOWED_ENV_KEYS)
+    if getattr(args, "evidence_credential_cutover_phase", "prepare") == "retire":
+        changed[API_NAME] |= client.retire_env(api_service, RETIRED_API_ENV_KEYS)
+        api_allowed_env_keys = API_ALLOWED_ENV_KEYS
+    else:
+        # The legacy variables remain available to the old suspended artifact
+        # until the exact-SHA backend proves its service-user storage path.
+        # The dedicated proof-gated retirement command removes them later.
+        api_allowed_env_keys = API_ALLOWED_ENV_KEYS | RETIRED_API_ENV_KEYS
+    client.require_allowed_env(api_service, api_allowed_env_keys)
     client.require_allowed_env(frontend_service, FRONTEND_ALLOWED_ENV_KEYS)
     changed[API_NAME] |= client.ensure_env(
         api_service, backend_env(values, frontend_service.url)
@@ -833,6 +840,15 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         "--cancel-stale-deploys",
         action="store_true",
         help="Cancel non-target active deploys for explicitly selected services",
+    )
+    parser.add_argument(
+        "--evidence-credential-cutover-phase",
+        choices=("prepare", "retire"),
+        default="prepare",
+        help=(
+            "Preserve legacy evidence variables during deployment preparation; "
+            "retirement is allowed only at the separately proof-gated boundary"
+        ),
     )
     args = parser.parse_args(argv)
     if args.deploy and not args.apply:

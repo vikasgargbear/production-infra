@@ -438,6 +438,7 @@ jobs:
               staging-evidence/canonical-auth-admin-preflight.json >/dev/null
             identity_log=$(mktemp)
             if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --phase prepare \
                 --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
                 --reviewed-sha "$GITHUB_SHA" \
                 --github-env "$GITHUB_ENV" \
@@ -1143,6 +1144,7 @@ jobs:
           if [ "${EVIDENCE_STORAGE_IDENTITY_READY:-false}" != true ]; then
             identity_log=$(mktemp)
             if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --phase prepare \
                 --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
                 --reviewed-sha "$GITHUB_SHA" \
                 --github-env "$GITHUB_ENV" \
@@ -1222,6 +1224,7 @@ jobs:
           config_log=$(mktemp)
           if ! python3 backend/scripts/provision_render_pilot.py \
               --apply \
+              --evidence-credential-cutover-phase prepare \
               --branch "$GITHUB_REF_NAME" \
               > staging-evidence/render-pilot-config.json 2>"$config_log"; then
             python3 backend/scripts/safe_ci_log_summary.py --label render "$config_log"
@@ -1249,6 +1252,7 @@ jobs:
             if ! python3 backend/scripts/provision_render_pilot.py \
                 --apply \
                 --deploy \
+                --evidence-credential-cutover-phase prepare \
                 --deploy-service "$service_name" \
                 --cancel-stale-deploys \
                 --branch "$GITHUB_REF_NAME" \

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Reconcile the one hosted Auth identity allowed to access evidence storage.
+"""Prepare the one hosted Auth identity allowed to access evidence storage.
 
 The management token and current modern Auth Admin secret remain runner-local. A
 new random password is installed on every successful reconciliation and exported
-only through GitHub's run-scoped environment file.  Receipts contain identity
-and hook facts but never credentials or access tokens.
+only through GitHub's run-scoped environment file.  Receipts contain identity,
+hook, and legacy-credential presence facts but never credentials or access
+tokens.  This prepare boundary is deliberately non-destructive: the legacy
+credential is retired only by the separately proof-gated cutover command.
 """
 
 from __future__ import annotations
@@ -717,7 +719,7 @@ def verify_password_session(
     return claims
 
 
-def retire_custom_api_key(client: Client) -> str | None:
+def inspect_retired_custom_api_key(client: Client) -> str | None:
     records = client.management("GET", f"/projects/{PROJECT_REF}/api-keys")
     matches = [
         row for row in records if isinstance(row, dict)
@@ -739,9 +741,6 @@ def retire_custom_api_key(client: Client) -> str | None:
         raise IdentityProvisioningError(
             "RETIRED_KEY_CONTRACT_DRIFT", "retired evidence API key drifted"
         )
-    client.management(
-        "DELETE", f"/projects/{PROJECT_REF}/api-keys/{record['id']}"
-    )
     return str(record["id"])
 
 
@@ -803,8 +802,13 @@ def _write_receipt(path: Path, payload: Mapping[str, Any]) -> None:
 def _receipt_base(reviewed_sha: str) -> dict[str, Any]:
     return {
         "version": 1,
+        "phase": "prepare",
         "project_ref": PROJECT_REF,
         "reviewed_sha": reviewed_sha,
+        "run": {
+            "id": os.getenv("GITHUB_RUN_ID", "local"),
+            "attempt": os.getenv("GITHUB_RUN_ATTEMPT", "local"),
+        },
         "service_auth_user_id": SERVICE_AUTH_USER_ID,
         "service_email": SERVICE_EMAIL,
         "service_marker": SERVICE_MARKER,
@@ -816,6 +820,7 @@ def _receipt_base(reviewed_sha: str) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--phase", required=True, choices=("prepare",))
     parser.add_argument("--project-ref", required=True)
     parser.add_argument("--reviewed-sha", required=True)
     parser.add_argument("--github-env", type=Path, required=True)
@@ -853,13 +858,13 @@ def main(argv: list[str] | None = None) -> int:
         rollout = reconcile_hook_config(client)
         with _restore_hook_on_failure(client, rollout):
             verify_password_session(client, anon_key, password)
-            retired_key_id = retire_custom_api_key(client)
+            retained_key_id = inspect_retired_custom_api_key(client)
             _append_environment(args.github_env, password)
             _write_receipt(
                 args.receipt,
                 {
                     **base,
-                    "state": "ready",
+                    "state": "prepared",
                     "identity_created": created,
                     "password_rotated": True,
                     "password_session_verified": True,
@@ -869,11 +874,11 @@ def main(argv: list[str] | None = None) -> int:
                         "hook_custom_access_token_enabled"
                     ],
                     "hook_config_changed": rollout.changed,
-                    "retired_secret_api_key_removed": retired_key_id is not None,
-                    "retired_secret_api_key_id": retired_key_id,
+                    "legacy_secret_api_key_retained": retained_key_id is not None,
+                    "legacy_secret_api_key_id": retained_key_id,
                 },
             )
-            print(json.dumps({"state": "ready", "project_ref": PROJECT_REF}))
+            print(json.dumps({"state": "prepared", "project_ref": PROJECT_REF}))
         return 0
     except (IdentityProvisioningError, SupabaseAuthAdminError) as error:
         _write_receipt(
