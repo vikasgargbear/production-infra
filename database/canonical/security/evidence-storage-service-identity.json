@@ -1,0 +1,10 @@
+{
+  "contract_version": "canonical-evidence-storage-service-identity-v1",
+  "scope": "canonical_platform",
+  "purpose": "One non-human Supabase Auth identity for the least-privilege canonical evidence-storage database role.",
+  "auth_user_id": "d3000000-0000-4000-8000-0000000000e1",
+  "email": "canonical-evidence-storage@service.aasopharma.invalid",
+  "app_metadata_marker": "canonical-evidence-storage-service-v1",
+  "database_role": "erp_evidence_storage",
+  "max_access_token_seconds": 900
+}

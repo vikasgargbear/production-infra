@@ -118,7 +118,7 @@ def _reset_facts(
     return {
         "contract_version": evidence.RESET_CONTRACT_VERSION,
         "project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
-        "alembic_head": "20260826_0028",
+        "alembic_head": "20260826_0029",
         "alembic_schema_count": evidence.RESET_ALEMBIC_SCHEMA_COUNT,
         "authority_manifest_sha256": "1" * 64,
         "catalog_fingerprint_sha256": "2" * 64,

@@ -13,7 +13,7 @@ from typing import BinaryIO, Optional
 
 _ANNOTATION_TITLES = {
     "evidence-cleanup": "Canonical evidence reset cleanup failed",
-    "evidence-key": "Canonical evidence key provisioning failed",
+    "evidence-identity": "Canonical evidence identity provisioning failed",
     "fixture": "Live canonical fixture failed",
     "readiness": "Canonical CI API failed readiness",
     "render": "Render reconciliation blocked",
@@ -40,7 +40,7 @@ def safe_log_annotation(path: Path, *, label: str) -> str:
     title = _ANNOTATION_TITLES[label]
     with path.open("rb") as stream:
         summary = fingerprint_stream(stream)
-    if label in {"evidence-key", "render"}:
+    if label in {"evidence-identity", "render"}:
         text = path.read_text(encoding="utf-8", errors="replace")
         diagnostic = _safe_render_diagnostic(text)
         if diagnostic:
@@ -55,19 +55,12 @@ def _safe_render_diagnostic(text: str) -> Optional[str]:
     """Classify known provisioner failures without emitting provider payloads."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for line in reversed(lines):
-        evidence_key = re.fullmatch(
-            r"evidence storage key provisioning blocked: ([A-Za-z0-9 /_-]+)",
+        evidence_identity = re.fullmatch(
+            r"evidence storage service identity blocked: ([A-Z0-9_]+)",
             line,
         )
-        if evidence_key:
-            message = evidence_key.group(1)
-            http_status = re.search(r"failed with HTTP ([0-9]{3})$", message)
-            if http_status:
-                return (
-                    "evidence_storage_management_api_http_"
-                    + http_status.group(1)
-                )
-            return "evidence_storage_key_contract_blocked"
+        if evidence_identity:
+            return "evidence_storage_identity_" + evidence_identity.group(1).lower()
         missing = re.fullmatch(
             r"provisioning blocked: Missing required operator values: ([A-Z0-9_, ]+)",
             line,

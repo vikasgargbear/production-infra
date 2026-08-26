@@ -40,7 +40,11 @@ services:
         sync: false
       - key: EVIDENCE_STORAGE_ENABLED
         sync: false
-      - key: EVIDENCE_STORAGE_SERVER_API_KEY
+      - key: EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID
+        sync: false
+      - key: EVIDENCE_STORAGE_SERVICE_EMAIL
+        sync: false
+      - key: EVIDENCE_STORAGE_SERVICE_PASSWORD
         sync: false
       - key: MCP_INTERNAL_SERVICE_TOKEN
         sync: false

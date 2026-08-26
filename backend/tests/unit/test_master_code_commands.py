@@ -61,7 +61,8 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         ROOT / "backend/app/infrastructure/operator_actions/deployment_contract.py",
         "master_code_deployment_contract",
     )
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == onboarding_revision.revision
+    assert onboarding_revision.revision == "20260826_0028"
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260826_0029"
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:

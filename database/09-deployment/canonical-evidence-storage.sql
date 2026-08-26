@@ -2,9 +2,9 @@
 --
 -- Apply only to the disposable canonical Supabase project.  This role has no
 -- database-table authority outside Supabase Storage and is never a browser
--- credential.  The ERP backend uses a Supabase `sb_secret_` API key configured
--- with the custom role `erp_evidence_storage`; do not substitute the Supabase
--- service-role key.
+-- credential.  The ERP backend signs in as one exact hosted Auth service user;
+-- the versioned custom access-token hook assigns only that identity the
+-- `erp_evidence_storage` role.  Never substitute the Supabase service-role key.
 
 BEGIN;
 

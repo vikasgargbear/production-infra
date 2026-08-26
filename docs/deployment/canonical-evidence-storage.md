@@ -6,18 +6,19 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
 
 ## Provisioning order
 
-1. Apply Alembic through migration `20260825_0022` to the disposable canonical
+1. Apply Alembic through the current reviewed head to the disposable canonical
    staging database.
 2. Apply
    `database/09-deployment/canonical-evidence-storage.sql` to that same Supabase
    project. Confirm the bucket is private, limited to 10 MiB PDF objects, and
    has no UPDATE policy.
-3. Create a server-only Supabase secret API key whose custom database role is
-   exactly `erp_evidence_storage`. Store the resulting `sb_secret_...` value
-   only in the backend secret `EVIDENCE_STORAGE_SERVER_API_KEY`. Never use or
-   expose the Supabase `service_role` key, and never send this key to a browser.
-   The backend sends this credential only in Supabase's `apikey` header; it
-   does not pair it with an anon key or an `Authorization` bearer header.
+3. Reconcile the exact non-human Auth identity defined by
+   `database/canonical/security/evidence-storage-service-identity.json`, enable
+   the reviewed custom access-token hook, rotate its password, and verify a
+   password session. The hook grants only `erp_evidence_storage`, stamps the
+   platform marker, and caps access-token lifetime at 15 minutes. The hosted
+   project `service_role` key is runner-local bootstrap authority only; it is
+   never stored on Render or sent to a browser.
 4. Set `EVIDENCE_STORAGE_EXPECTED_PROJECT_REF` for the reviewed environment and
    its exact matching `SUPABASE_URL`. Keep retired-project denial in the
    deployment/promotion allowlist rather than in application source.
@@ -26,7 +27,7 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
    numeric value reviewed for that organization's applicable retention rules.
    The upload API remains closed if this policy fact is absent.
 6. Set `EVIDENCE_STORAGE_ENABLED=true` only after the PostgreSQL migration,
-   bucket policy, restricted custom-role API key, and retention setting have
+   bucket policy, exact service identity, hook readback, and retention setting have
    all been verified.
 
 The object key is immutable and content-addressed:
@@ -36,7 +37,7 @@ The object key is immutable and content-addressed:
 ```
 
 The backend creates without upsert, fetches the bytes back through the
-bucket-restricted API key, parses the bounded PDF structure and at least one
+short-lived service-identity token, parses the bounded PDF structure and at least one
 page, recomputes SHA-256, and only then changes canonical metadata from
 `pending_upload` to `verified`.
 Missing configuration, storage errors, and integrity mismatches fail closed.
