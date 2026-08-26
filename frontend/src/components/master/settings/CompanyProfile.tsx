@@ -65,9 +65,9 @@ interface CompanyData {
     defaultTerms: string;
     defaultFooter: string;
     printFormat: string;
-    showSignature: boolean;
-    showLogo: boolean;
-    showBankDetails: boolean;
+    showSignature: boolean | null;
+    showLogo: boolean | null;
+    showBankDetails: boolean | null;
 
     // Regional Settings
     timezone: string;
@@ -101,46 +101,46 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
         state: '',
         stateCode: '',
         pincode: '',
-        country: 'India',
+        country: '',
         phone: '',
         altPhone: '',
         email: '',
         website: '',
 
         // Financial Settings
-        financialYearStart: '2024-04-01',
-        financialYearEnd: '2025-03-31',
-        defaultCurrency: 'INR',
-        currencySymbol: '₹',
+        financialYearStart: '',
+        financialYearEnd: '',
+        defaultCurrency: '',
+        currencySymbol: '',
 
         // Bank Details
         bankName: '',
         accountNumber: '',
         accountName: '',
-        accountType: 'CURRENT',
+        accountType: '',
         ifscCode: '',
         branchName: '',
 
         // Invoice Settings
-        invoicePrefix: 'INV/',
-        challanPrefix: 'DC/',
-        poPrefix: 'PO/',
-        returnPrefix: 'RTN/',
-        creditNotePrefix: 'CN/',
-        debitNotePrefix: 'DN/',
+        invoicePrefix: '',
+        challanPrefix: '',
+        poPrefix: '',
+        returnPrefix: '',
+        creditNotePrefix: '',
+        debitNotePrefix: '',
 
         // Receipt Settings
         defaultTerms: '',
         defaultFooter: '',
-        printFormat: 'A4',
-        showSignature: true,
-        showLogo: true,
-        showBankDetails: true,
+        printFormat: '',
+        showSignature: null,
+        showLogo: null,
+        showBankDetails: null,
 
         // Regional Settings (NEW - for timezone handling)
-        timezone: 'Asia/Kolkata',
-        dateFormat: 'DD-MM-YYYY',
-        timeFormat: '12h'
+        timezone: '',
+        dateFormat: '',
+        timeFormat: ''
     });
 
     // Fetch organization profile on mount
@@ -165,13 +165,25 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     throw new Error('Canonical organization profile has no legal name');
                 }
                 const primaryBank = normalized.bankAccounts[0];
+                const businessSettings = data.business_settings
+                    && typeof data.business_settings === 'object'
+                    ? data.business_settings
+                    : {};
+                const canonicalText = (...values: unknown[]): string => {
+                    const value = values.find(candidate => typeof candidate === 'string');
+                    return typeof value === 'string' ? value : '';
+                };
+                const canonicalBoolean = (...values: unknown[]): boolean | null => {
+                    const value = values.find(candidate => typeof candidate === 'boolean');
+                    return typeof value === 'boolean' ? value : null;
+                };
 
                 // Map the canonical organization projection through the same boundary
                 // used by invoice documents and the global company context.
                 setCompanyData({
                     // Basic Details
                     businessName: normalized.name,
-                    tagline: normalized.business_settings?.tagline || '',
+                    tagline: canonicalText(businessSettings.tagline),
                     logo: normalized.logo,
 
                     // Registration Details
@@ -187,46 +199,61 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     state: normalized.state,
                     stateCode: normalized.state,
                     pincode: normalized.pincode,
-                    country: data.country || 'India',
+                    country: canonicalText(data.country),
                     phone: normalized.phone,
                     altPhone: data.alt_phone || '',
                     email: normalized.email,
                     website: data.website || '',
 
                     // Financial Settings
-                    financialYearStart: data.financial_year_start || '2024-04-01',
-                    financialYearEnd: data.financial_year_end || '2025-03-31',
-                    defaultCurrency: data.currency || 'INR',
-                    currencySymbol: data.currency_symbol || '₹',
+                    financialYearStart: canonicalText(
+                        businessSettings.financial_year_start,
+                        data.financial_year_start,
+                    ),
+                    financialYearEnd: canonicalText(
+                        businessSettings.financial_year_end,
+                        data.financial_year_end,
+                    ),
+                    defaultCurrency: canonicalText(businessSettings.currency, data.currency),
+                    currencySymbol: canonicalText(
+                        businessSettings.currency_symbol,
+                        data.currency_symbol,
+                    ),
 
                     // Bank Details
                     bankName: primaryBank?.bank_name || '',
                     accountNumber: primaryBank?.account_number || '',
                     accountName: primaryBank?.account_name || '',
-                    accountType: primaryBank?.account_type || 'CURRENT',
+                    accountType: canonicalText(primaryBank?.account_type),
                     ifscCode: primaryBank?.ifsc_code || '',
                     branchName: primaryBank?.branch_name || '',
 
                     // Invoice Settings
-                    invoicePrefix: data.business_settings?.invoice_prefix || data.invoice_prefix || 'INV/',
-                    challanPrefix: data.business_settings?.challan_prefix || data.challan_prefix || 'DC/',
-                    poPrefix: data.business_settings?.po_prefix || data.po_prefix || 'PO/',
-                    returnPrefix: data.business_settings?.return_prefix || data.return_prefix || 'RTN/',
-                    creditNotePrefix: data.business_settings?.credit_note_prefix || data.credit_note_prefix || 'CN/',
-                    debitNotePrefix: data.business_settings?.debit_note_prefix || data.debit_note_prefix || 'DN/',
+                    invoicePrefix: canonicalText(businessSettings.invoice_prefix, data.invoice_prefix),
+                    challanPrefix: canonicalText(businessSettings.challan_prefix, data.challan_prefix),
+                    poPrefix: canonicalText(businessSettings.po_prefix, data.po_prefix),
+                    returnPrefix: canonicalText(businessSettings.return_prefix, data.return_prefix),
+                    creditNotePrefix: canonicalText(
+                        businessSettings.credit_note_prefix,
+                        data.credit_note_prefix,
+                    ),
+                    debitNotePrefix: canonicalText(
+                        businessSettings.debit_note_prefix,
+                        data.debit_note_prefix,
+                    ),
 
                     // Receipt Settings
-                    defaultTerms: data.business_settings?.default_terms || data.default_terms || '',
-                    defaultFooter: data.business_settings?.default_footer || data.default_footer || '',
-                    printFormat: data.business_settings?.print_format || data.print_format || 'A4',
-                    showSignature: data.business_settings?.show_signature !== false,
-                    showLogo: data.business_settings?.show_logo !== false,
-                    showBankDetails: data.business_settings?.show_bank_details !== false,
+                    defaultTerms: canonicalText(businessSettings.default_terms, data.default_terms),
+                    defaultFooter: canonicalText(businessSettings.default_footer, data.default_footer),
+                    printFormat: canonicalText(businessSettings.print_format, data.print_format),
+                    showSignature: canonicalBoolean(businessSettings.show_signature),
+                    showLogo: canonicalBoolean(businessSettings.show_logo),
+                    showBankDetails: canonicalBoolean(businessSettings.show_bank_details),
 
                     // Regional Settings (NEW)
-                    timezone: data.timezone || data.business_settings?.timezone || 'Asia/Kolkata',
-                    dateFormat: data.date_format || data.business_settings?.date_format || 'DD-MM-YYYY',
-                    timeFormat: data.time_format || data.business_settings?.time_format || '12h'
+                    timezone: canonicalText(data.timezone, businessSettings.timezone),
+                    dateFormat: canonicalText(data.date_format, businessSettings.date_format),
+                    timeFormat: canonicalText(data.time_format, businessSettings.time_format),
                 });
 
                 // Update logo if it came from API
@@ -293,7 +320,10 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     }
 
     return (
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gray-50">
+        <div
+            data-testid="company-profile-root"
+            className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gray-50"
+        >
             {/* Header */}
             <div className="flex-shrink-0 border-b border-gray-200 bg-white px-3 py-4 sm:px-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -333,7 +363,10 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             )}
 
             {/* Content */}
-            <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+            <div
+                data-testid="company-profile-scroll-region"
+                className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+            >
                 <fieldset disabled className="mx-auto max-w-6xl min-w-0 space-y-6 p-3 disabled:opacity-100 sm:p-6">
                     <div className="rounded-md border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800">
                         Profile changes are disabled until the canonical cloud update workflow is available.
@@ -564,6 +597,20 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
+
+                                <div>
+                                    <label htmlFor="company-country" className="block text-sm font-medium text-gray-700 mb-1">
+                                        Country
+                                    </label>
+                                    <input
+                                        id="company-country"
+                                        type="text"
+                                        value={companyData.country}
+                                        onChange={(e) => handleInputChange('country', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Unavailable"
+                                    />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -626,6 +673,83 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                         </div>
                     </div>
 
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+                        <h2 className="mb-4 flex items-center text-lg font-semibold text-gray-900">
+                            <FileText className="mr-2 h-5 w-5" />
+                            Authoritative Business Settings
+                        </h2>
+                        <p className="mb-4 text-sm text-gray-600">
+                            Missing settings are shown as unavailable; this page does not infer company defaults.
+                        </p>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                            <div>
+                                <label htmlFor="company-financial-year-start" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Financial Year Start
+                                </label>
+                                <input
+                                    id="company-financial-year-start"
+                                    type="text"
+                                    value={companyData.financialYearStart}
+                                    onChange={(e) => handleInputChange('financialYearStart', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-financial-year-end" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Financial Year End
+                                </label>
+                                <input
+                                    id="company-financial-year-end"
+                                    type="text"
+                                    value={companyData.financialYearEnd}
+                                    onChange={(e) => handleInputChange('financialYearEnd', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-currency" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Currency
+                                </label>
+                                <input
+                                    id="company-currency"
+                                    type="text"
+                                    value={companyData.defaultCurrency}
+                                    onChange={(e) => handleInputChange('defaultCurrency', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-currency-symbol" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Currency Symbol
+                                </label>
+                                <input
+                                    id="company-currency-symbol"
+                                    type="text"
+                                    value={companyData.currencySymbol}
+                                    onChange={(e) => handleInputChange('currencySymbol', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-primary-account-type" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Primary Account Type
+                                </label>
+                                <input
+                                    id="company-primary-account-type"
+                                    type="text"
+                                    value={companyData.accountType}
+                                    onChange={(e) => handleInputChange('accountType', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Regional Settings - NEW */}
                     <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -645,6 +769,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     onChange={(e) => handleInputChange('timezone', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="">Unavailable</option>
                                     <option value="Asia/Kolkata">India (IST - UTC+5:30)</option>
                                     <option value="Asia/Dubai">UAE (GST - UTC+4)</option>
                                     <option value="Asia/Singapore">Singapore (SGT - UTC+8)</option>
@@ -667,6 +792,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     onChange={(e) => handleInputChange('dateFormat', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="">Unavailable</option>
                                     <option value="DD-MM-YYYY">31-12-2024 (Indian)</option>
                                     <option value="MM-DD-YYYY">12-31-2024 (US)</option>
                                     <option value="YYYY-MM-DD">2024-12-31 (ISO)</option>
@@ -687,6 +813,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     onChange={(e) => handleInputChange('timeFormat', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="">Unavailable</option>
                                     <option value="12h">12 Hour (3:30 PM)</option>
                                     <option value="24h">24 Hour (15:30)</option>
                                 </select>
@@ -744,6 +871,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     value={companyData.invoicePrefix}
                                     onChange={(e) => handleInputChange('invoicePrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
@@ -757,6 +885,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     value={companyData.challanPrefix}
                                     onChange={(e) => handleInputChange('challanPrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
@@ -770,6 +899,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     value={companyData.poPrefix}
                                     onChange={(e) => handleInputChange('poPrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
@@ -783,6 +913,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     value={companyData.returnPrefix}
                                     onChange={(e) => handleInputChange('returnPrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
@@ -796,6 +927,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     value={companyData.creditNotePrefix}
                                     onChange={(e) => handleInputChange('creditNotePrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
@@ -809,6 +941,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     value={companyData.debitNotePrefix}
                                     onChange={(e) => handleInputChange('debitNotePrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
                         </div>
@@ -833,6 +966,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                         onChange={(e) => handleInputChange('printFormat', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     >
+                                        <option value="">Unavailable</option>
                                         <option value="A4">A4</option>
                                         <option value="A5">A5</option>
                                         <option value="Letter">Letter</option>
@@ -844,31 +978,34 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
-                                            checked={companyData.showLogo}
+                                            checked={companyData.showLogo === true}
                                             onChange={(e) => handleInputChange('showLogo', e.target.checked)}
                                             className="rounded text-blue-600"
                                         />
                                         <span className="text-sm text-gray-700">Show logo on receipts</span>
+                                        {companyData.showLogo === null && <span className="text-xs text-gray-500">Unavailable</span>}
                                     </label>
 
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
-                                            checked={companyData.showSignature}
+                                            checked={companyData.showSignature === true}
                                             onChange={(e) => handleInputChange('showSignature', e.target.checked)}
                                             className="rounded text-blue-600"
                                         />
                                         <span className="text-sm text-gray-700">Show signature line</span>
+                                        {companyData.showSignature === null && <span className="text-xs text-gray-500">Unavailable</span>}
                                     </label>
 
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
-                                            checked={companyData.showBankDetails}
+                                            checked={companyData.showBankDetails === true}
                                             onChange={(e) => handleInputChange('showBankDetails', e.target.checked)}
                                             className="rounded text-blue-600"
                                         />
                                         <span className="text-sm text-gray-700">Show bank details</span>
+                                        {companyData.showBankDetails === null && <span className="text-xs text-gray-500">Unavailable</span>}
                                     </label>
                                 </div>
                             </div>
