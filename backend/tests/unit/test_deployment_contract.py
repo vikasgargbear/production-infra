@@ -532,6 +532,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Database lifecycle changes require an exact-SHA Render deployment" in workflow
     assert "REVIEWED_RENDER_DEPLOY_SHA: ${{ inputs.render_deploy_sha }}" in workflow
     assert "always() && !success()" in workflow
+    assert "Preserve bounded staging evidence on failure" in workflow
+    assert "canonical-staging-failure-${{ github.run_id }}" in workflow
     render_deploy = workflow.split("Reconcile and deploy the free Render pilot", 1)[1]
     assert render_deploy.index(
         "deploy_one_service aasopharma-api-pilot"
@@ -553,7 +555,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "range(1, MAX_ATTEMPTS + 1)" in pooler_verifier
     assert "if not failure.transient or attempt == MAX_ATTEMPTS:" in pooler_verifier
     assert "Require one complete role cohort to pass" in pooler_verifier
-    assert "password authentication failed" not in pooler_verifier
+    assert '("password authentication failed", "credential_propagation_pending")' in pooler_verifier
+    assert "MAX_ATTEMPTS = 2" in pooler_verifier
     assert "connect_timeout=5" in pooler_verifier
     assert "str(error)" in pooler_verifier
     role_verification = workflow.split(

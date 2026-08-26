@@ -1661,6 +1661,17 @@ jobs:
             --commit-sha "$GITHUB_SHA" \
             --receipt staging-evidence/render-pilot-lifecycle.json
 
+      - name: Preserve bounded staging evidence on failure
+        if: >-
+          always() && !success() &&
+          hashFiles('staging-evidence/*') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-staging-failure-${{ github.run_id }}
+          path: staging-evidence/*
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Preserve Render lifecycle receipt on failure
         if: always() && hashFiles('staging-evidence/render-pilot-lifecycle.json') != ''
         uses: actions/upload-artifact@v4

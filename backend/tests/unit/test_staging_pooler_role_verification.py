@@ -53,7 +53,7 @@ def test_only_allowlisted_operational_failures_are_transient() -> None:
     ) == "connection_refused"
     assert verifier._transient_kind(
         psycopg2.OperationalError("password authentication failed")
-    ) is None
+    ) == "credential_propagation_pending"
     assert verifier._transient_kind(SqlstateOperationalError("08006")) == (
         "connection_exception"
     )
@@ -82,8 +82,8 @@ def test_connection_failures_are_reduced_to_fixed_non_secret_kinds(monkeypatch) 
             host="pooler.example",
             port="5432",
         )
-    assert captured.value.kind == "non_transient_verification_failure"
-    assert captured.value.transient is False
+    assert captured.value.kind == "credential_propagation_pending"
+    assert captured.value.transient is True
     assert secret not in str(captured.value)
 
 

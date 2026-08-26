@@ -24,6 +24,10 @@ PASSWORD_PATTERN = re.compile(r"[A-Za-z0-9_-]{48,96}")
 PROJECT_REF_PATTERN = re.compile(r"[a-z0-9]{20}")
 POOLER_HOST_PATTERN = re.compile(r"[a-z0-9.-]+\.pooler\.supabase\.com")
 TRANSIENT_MARKERS = (
+    # A just-rotated password can be rejected by a stale Supavisor auth worker.
+    # The verifier remains fail-closed: one complete cohort retry is bounded,
+    # and a wrong secret never becomes an accepted connection.
+    ("password authentication failed", "credential_propagation_pending"),
     ("eauthquery", "auth_query_unavailable"),
     ("auth_query secret check timed out", "auth_query_timeout"),
     ("ecircuitbreaker", "pooler_circuit_open"),
