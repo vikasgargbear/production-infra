@@ -11,7 +11,13 @@ from contextlib import asynccontextmanager
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
-from .core.database import DATABASE_CONNECTION_MODE, engine
+from .core.database import (
+    DATABASE_CONNECTION_MODE,
+    DATABASE_TRANSPORT_REQUIREMENT,
+    DATABASE_URL,
+    attest_database_transport,
+    engine,
+)
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
@@ -213,13 +219,6 @@ async def health_check():
 
 
 READINESS_TIMEOUT_SECONDS = 5.0
-DATABASE_TRANSPORT_REQUIREMENT = os.getenv(
-    "DATABASE_TRANSPORT_REQUIREMENT", ""
-).strip()
-if DATABASE_TRANSPORT_REQUIREMENT not in {"", "supabase_direct_ipv6"}:
-    raise RuntimeError(
-        "DATABASE_TRANSPORT_REQUIREMENT must be empty or supabase_direct_ipv6"
-    )
 
 
 def _database_readiness() -> dict:
@@ -235,8 +234,7 @@ def _database_readiness() -> dict:
                            'erp_migration_owner',
                            'MEMBER'
                        ) AS migration_owner_member,
-                       current_setting('row_security') = 'on' AS row_security,
-                       family(inet_server_addr()) AS address_family
+                       current_setting('row_security') = 'on' AS row_security
                   FROM pg_catalog.pg_roles AS role
                  WHERE role.rolname=current_user
                 """
@@ -250,14 +248,15 @@ def _database_readiness() -> dict:
         and not bool(row["migration_owner_member"])
     )
     row_security = bool(row["row_security"])
-    ip_version = row["address_family"]
-    if DATABASE_TRANSPORT_REQUIREMENT == "supabase_direct_ipv6" and not (
-        DATABASE_CONNECTION_MODE == "supabase_direct"
-        and principal_isolated
-        and row_security
-        and ip_version == 6
-    ):
-        raise RuntimeError("required direct IPv6 database transport is not ready")
+    transport_receipt = attest_database_transport(
+        DATABASE_URL,
+        DATABASE_TRANSPORT_REQUIREMENT,
+    )
+    required_ip_version = transport_receipt["ip_version"]
+    if required_ip_version is not None and not (principal_isolated and row_security):
+        raise RuntimeError(
+            f"required direct IPv{required_ip_version} database transport is not ready"
+        )
 
     return {
         "transport": DATABASE_CONNECTION_MODE,
@@ -265,7 +264,7 @@ def _database_readiness() -> dict:
         "principal_isolated": principal_isolated,
         "migration_owner_member": bool(row["migration_owner_member"]),
         "row_security": row_security,
-        "ip_version": ip_version,
+        "ip_version": required_ip_version,
     }
 
 

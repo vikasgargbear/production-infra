@@ -1,13 +1,22 @@
 """
 Database Configuration
 """
+from __future__ import annotations
+
+import ipaddress
 import os
+import socket
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from typing import Generator
-from urllib.parse import urlparse, urlunparse
+from typing import Callable, Generator
+from urllib.parse import parse_qs, urlparse
 
 from .env import is_production
+
+
+DATABASE_DSN_OVERRIDE_PARAMETERS = frozenset(
+    {"host", "port", "dbname", "user", "password", "service", "servicefile"}
+)
 
 
 def _bounded_pool_setting(
@@ -55,6 +64,139 @@ def classify_database_connection(database_url: str) -> str:
 
     return "other"
 
+
+def required_database_ip_version(requirement: str) -> int | None:
+    """Resolve one reviewed direct-Supabase address-family requirement."""
+
+    normalized = requirement.strip()
+    if normalized == "":
+        return None
+    if normalized == "supabase_direct_ipv4":
+        return 4
+    if normalized == "supabase_direct_ipv6":
+        return 6
+    raise RuntimeError(
+        "DATABASE_TRANSPORT_REQUIREMENT must be empty, "
+        "supabase_direct_ipv4, or supabase_direct_ipv6"
+    )
+
+
+def validate_database_transport_requirement(
+    requirement: str,
+    connection_mode: str,
+    database_url: str,
+) -> int | None:
+    """Reject pooler or non-Supabase URLs when direct transport is required."""
+
+    ip_version = required_database_ip_version(requirement)
+    if ip_version is not None and connection_mode != "supabase_direct":
+        raise RuntimeError(
+            f"required direct IPv{ip_version} database endpoint is not configured"
+        )
+    if ip_version is not None:
+        parsed = urlparse(database_url)
+        hostname_parts = (parsed.hostname or "").split(".")
+        if not (
+            parsed.scheme in {"postgresql", "postgresql+psycopg2"}
+            and len(hostname_parts) == 4
+            and hostname_parts[0] == "db"
+            and hostname_parts[1]
+            and hostname_parts[2:] == ["supabase", "co"]
+            and parsed.port == 5432
+            and parsed.path == "/postgres"
+            and not parsed.fragment
+        ):
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database endpoint is not exact"
+            )
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if DATABASE_DSN_OVERRIDE_PARAMETERS.intersection(query):
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database endpoint has an override"
+            )
+        if query.get("sslmode") != ["require"]:
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database TLS mode is not configured"
+            )
+        hostaddr_values = query.get("hostaddr", [])
+        if len(hostaddr_values) != 1:
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database hostaddr is not configured"
+            )
+        try:
+            configured_address = ipaddress.ip_address(hostaddr_values[0])
+        except ValueError as error:
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database hostaddr is invalid"
+            ) from error
+        if configured_address.version != ip_version:
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database hostaddr has the wrong family"
+            )
+        if not configured_address.is_global:
+            raise RuntimeError(
+                f"required direct IPv{ip_version} database hostaddr is not public"
+            )
+    return ip_version
+
+
+def attest_database_transport(
+    database_url: str,
+    requirement: str,
+    *,
+    resolver: Callable[..., list] = socket.getaddrinfo,
+) -> dict[str, object]:
+    """Attest that libpq's pinned hostaddr remains one current direct DNS path."""
+
+    connection_mode = classify_database_connection(database_url)
+    ip_version = validate_database_transport_requirement(
+        requirement,
+        connection_mode,
+        database_url,
+    )
+    if ip_version is None:
+        return {
+            "requirement": "none",
+            "transport": connection_mode,
+            "ip_version": None,
+        }
+
+    parsed = urlparse(database_url)
+    assert parsed.hostname is not None
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    configured_address = str(ipaddress.ip_address(query["hostaddr"][0]))
+    address_family = socket.AF_INET if ip_version == 4 else socket.AF_INET6
+    try:
+        resolved = resolver(
+            parsed.hostname,
+            parsed.port or 5432,
+            address_family,
+            socket.SOCK_STREAM,
+        )
+    except OSError as error:
+        raise RuntimeError(
+            f"required direct IPv{ip_version} database DNS path is unavailable"
+        ) from error
+    resolved_addresses = set()
+    for item in resolved:
+        if len(item) < 5 or not item[4]:
+            continue
+        try:
+            address = ipaddress.ip_address(item[4][0])
+        except ValueError:
+            continue
+        if address.version == ip_version and address.is_global:
+            resolved_addresses.add(str(address))
+    if configured_address not in resolved_addresses:
+        raise RuntimeError(
+            f"required direct IPv{ip_version} database hostaddr is not a current DNS path"
+        )
+    return {
+        "requirement": requirement,
+        "transport": connection_mode,
+        "ip_version": ip_version,
+    }
+
 _configured_database_url = os.getenv("DATABASE_URL", "").strip()
 if is_production() and (
     not _configured_database_url
@@ -79,6 +221,14 @@ if "supabase.co" in DATABASE_URL and "target_session_attrs" not in DATABASE_URL:
 DATABASE_CONNECTION_MODE = classify_database_connection(DATABASE_URL)
 IS_SUPABASE = DATABASE_CONNECTION_MODE.startswith("supabase_")
 IS_SUPABASE_POOLER = DATABASE_CONNECTION_MODE == "supabase_transaction_pooler"
+DATABASE_TRANSPORT_REQUIREMENT = os.getenv(
+    "DATABASE_TRANSPORT_REQUIREMENT", ""
+).strip()
+REQUIRED_DATABASE_IP_VERSION = validate_database_transport_requirement(
+    DATABASE_TRANSPORT_REQUIREMENT,
+    DATABASE_CONNECTION_MODE,
+    DATABASE_URL,
+)
 
 if DATABASE_CONNECTION_MODE == "supabase_direct":
     print("[DATABASE] Supabase direct connection detected")

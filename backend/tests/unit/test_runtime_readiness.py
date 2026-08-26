@@ -14,7 +14,6 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         "rolbypassrls": False,
         "migration_owner_member": False,
         "row_security": True,
-        "address_family": 6,
     }
 
     class Result:
@@ -46,6 +45,15 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
     monkeypatch.setattr(
         main, "DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv6"
     )
+    monkeypatch.setattr(
+        main,
+        "attest_database_transport",
+        lambda *_args: {
+            "requirement": "supabase_direct_ipv6",
+            "transport": "supabase_direct",
+            "ip_version": 6,
+        },
+    )
 
     assert main._database_readiness() == {
         "transport": "supabase_direct",
@@ -58,7 +66,7 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
     assert "current_user AS principal" in executed[0]
     assert "pg_has_role" in executed[0]
     assert "erp_migration_owner" in executed[0]
-    assert "family(inet_server_addr())" in executed[0]
+    assert "inet_server_addr" not in executed[0]
 
     readiness_row["migration_owner_member"] = True
     try:
@@ -69,7 +77,7 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         raise AssertionError("migration-owner membership passed the isolation gate")
 
 
-def test_database_readiness_fails_closed_on_non_ipv6_transport(monkeypatch):
+def test_database_readiness_fails_closed_on_unattested_direct_transport(monkeypatch):
     class Result:
         def mappings(self):
             return self
@@ -82,7 +90,6 @@ def test_database_readiness_fails_closed_on_non_ipv6_transport(monkeypatch):
                 "rolbypassrls": False,
                 "migration_owner_member": False,
                 "row_security": True,
-                "address_family": 4,
             }
 
     class Connection:
@@ -107,12 +114,65 @@ def test_database_readiness_fails_closed_on_non_ipv6_transport(monkeypatch):
         main, "DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv6"
     )
 
+    def reject_transport(*_args):
+        raise RuntimeError("required direct IPv6 database DNS path is unavailable")
+
+    monkeypatch.setattr(main, "attest_database_transport", reject_transport)
+
     try:
         main._database_readiness()
     except RuntimeError as error:
-        assert str(error) == "required direct IPv6 database transport is not ready"
+        assert str(error) == "required direct IPv6 database DNS path is unavailable"
     else:
-        raise AssertionError("IPv4 transport unexpectedly passed the IPv6 readiness gate")
+        raise AssertionError("unattested transport unexpectedly passed readiness")
+
+
+def test_database_readiness_accepts_attested_direct_ipv4(monkeypatch):
+    readiness_row = {
+        "principal": "erp_runtime",
+        "rolsuper": False,
+        "rolbypassrls": False,
+        "migration_owner_member": False,
+        "row_security": True,
+    }
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def one(self):
+            return readiness_row
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def execute(self, _statement):
+            return Result()
+
+    class Engine:
+        def connect(self):
+            return Connection()
+
+    monkeypatch.setattr(main, "engine", Engine())
+    monkeypatch.setattr(main, "DATABASE_CONNECTION_MODE", "supabase_direct")
+    monkeypatch.setattr(
+        main, "DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv4"
+    )
+    monkeypatch.setattr(
+        main,
+        "attest_database_transport",
+        lambda *_args: {
+            "requirement": "supabase_direct_ipv4",
+            "transport": "supabase_direct",
+            "ip_version": 4,
+        },
+    )
+
+    assert main._database_readiness()["ip_version"] == 4
 
 
 def test_ready_returns_success_only_after_database_probe(monkeypatch):

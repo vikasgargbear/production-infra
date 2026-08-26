@@ -8,16 +8,18 @@ Deploying after configuration requires the additional --deploy flag.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
+import socket
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional
 from urllib.error import HTTPError
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 
@@ -38,6 +40,9 @@ EVIDENCE_IDENTITY_AUTHORITY = json.loads(
 
 BACKEND_REQUIRED = (
     "DATABASE_URL",
+    "DATABASE_TRANSPORT_REQUIREMENT",
+    "DATABASE_POOL_SIZE",
+    "DATABASE_MAX_OVERFLOW",
     "ERP_CALCULATOR_DATABASE_URL",
     "TAX_PROVIDER_DATABASE_URL",
     "TAX_PROVIDER_INTERNAL_SERVICE_TOKEN",
@@ -103,6 +108,19 @@ class ProvisioningError(RuntimeError):
     pass
 
 
+RENDER_DATABASE_TRANSPORT_REQUIREMENT = "supabase_direct_ipv4"
+RENDER_DATABASE_POOL_SIZE = "3"
+RENDER_DATABASE_MAX_OVERFLOW = "1"
+DATABASE_PRINCIPALS = {
+    "DATABASE_URL": "erp_runtime",
+    "ERP_CALCULATOR_DATABASE_URL": "erp_calculator",
+    "TAX_PROVIDER_DATABASE_URL": "erp_tax_provider",
+}
+DATABASE_DSN_OVERRIDE_PARAMETERS = frozenset(
+    {"host", "port", "dbname", "user", "password", "service", "servicefile"}
+)
+
+
 @dataclass(frozen=True)
 class ServiceRef:
     id: str
@@ -132,6 +150,93 @@ def load_env_file(path: Optional[Path]) -> Dict[str, str]:
     return values
 
 
+def _direct_ipv4_database_url(
+    name: str,
+    value: str,
+    project_ref: str,
+) -> str:
+    """Pin one reviewed direct Supabase DSN to a current IPv4 DNS address."""
+
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ProvisioningError(f"{name} is not a valid direct PostgreSQL URL") from exc
+    if (
+        parsed.scheme not in {"postgresql", "postgresql+psycopg2"}
+        or parsed.username != DATABASE_PRINCIPALS[name]
+        or not parsed.password
+        or parsed.hostname != f"db.{project_ref}.supabase.co"
+        or port != 5432
+        or parsed.path != "/postgres"
+        or parsed.fragment
+    ):
+        raise ProvisioningError(
+            f"{name} must use its reviewed role on the direct Supabase endpoint"
+        )
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    if DATABASE_DSN_OVERRIDE_PARAMETERS.intersection(
+        key for key, _value in query_items
+    ):
+        raise ProvisioningError(f"{name} contains a connection override")
+    if sum(key == "hostaddr" for key, _value in query_items) > 1:
+        raise ProvisioningError(f"{name} contains multiple hostaddr values")
+    if sum(key == "sslmode" for key, _value in query_items) != 1:
+        raise ProvisioningError(f"{name} must contain exactly one TLS mode")
+    query = dict(query_items)
+    if query.get("sslmode") != "require":
+        raise ProvisioningError(f"{name} must require TLS")
+    try:
+        addresses = {
+            str(ipaddress.ip_address(item[4][0]))
+            for item in socket.getaddrinfo(
+                parsed.hostname,
+                port,
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+            )
+            if len(item) >= 5
+            and item[4]
+            and ipaddress.ip_address(item[4][0]).version == 4
+            and ipaddress.ip_address(item[4][0]).is_global
+        }
+    except OSError as exc:
+        raise ProvisioningError(
+            f"{name} direct Supabase IPv4 DNS resolution failed"
+        ) from exc
+    if not addresses:
+        raise ProvisioningError(
+            f"{name} direct Supabase endpoint has no reviewed public IPv4 path"
+        )
+    configured_hostaddr = query.get("hostaddr")
+    if configured_hostaddr:
+        try:
+            configured_hostaddr = str(ipaddress.ip_address(configured_hostaddr))
+        except ValueError as exc:
+            raise ProvisioningError(f"{name} hostaddr is invalid") from exc
+        if configured_hostaddr not in addresses:
+            raise ProvisioningError(
+                f"{name} hostaddr is not a current direct Supabase IPv4 path"
+            )
+    else:
+        configured_hostaddr = sorted(addresses)[0]
+    normalized_query = [
+        (key, item_value)
+        for key, item_value in query_items
+        if key != "hostaddr"
+    ]
+    normalized_query.append(("hostaddr", configured_hostaddr))
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(normalized_query),
+            "",
+        )
+    )
+
+
 def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
     values = load_env_file(env_file)
     for key in (*OPERATOR_REQUIRED, *MCP_OPTIONAL_KEYS, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS):
@@ -151,6 +256,22 @@ def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
     if values["SUPABASE_URL"].rstrip("/") != expected_origin:
         raise ProvisioningError(
             "canonical evidence storage project authority does not match SUPABASE_URL"
+        )
+    if values["DATABASE_TRANSPORT_REQUIREMENT"] != (
+        RENDER_DATABASE_TRANSPORT_REQUIREMENT
+    ):
+        raise ProvisioningError(
+            "DATABASE_TRANSPORT_REQUIREMENT must be supabase_direct_ipv4 for Render"
+        )
+    if values["DATABASE_POOL_SIZE"] != RENDER_DATABASE_POOL_SIZE:
+        raise ProvisioningError("DATABASE_POOL_SIZE must be 3 for Render")
+    if values["DATABASE_MAX_OVERFLOW"] != RENDER_DATABASE_MAX_OVERFLOW:
+        raise ProvisioningError("DATABASE_MAX_OVERFLOW must be 1 for Render")
+    for database_name in DATABASE_PRINCIPALS:
+        values[database_name] = _direct_ipv4_database_url(
+            database_name,
+            values[database_name],
+            expected_project,
         )
     if values["EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID"] != (
         EVIDENCE_IDENTITY_AUTHORITY["auth_user_id"]

@@ -16,11 +16,36 @@ sys.modules[SPEC.name] = provision
 SPEC.loader.exec_module(provision)
 
 
+TEST_PROJECT_REF = "canonicalcanonical12"
+TEST_DIRECT_IPV4 = "13.248.118.66"
+
+
+@pytest.fixture(autouse=True)
+def _reviewed_direct_ipv4_dns(monkeypatch):
+    monkeypatch.setattr(
+        provision.socket,
+        "getaddrinfo",
+        lambda _host, port, family, socket_type: [
+            (family, socket_type, 6, "", (TEST_DIRECT_IPV4, port))
+        ],
+    )
+
+
+def _database_url(principal):
+    return (
+        f"postgresql://{principal}:secret@db.{TEST_PROJECT_REF}.supabase.co:5432/postgres"
+        "?sslmode=require&connect_timeout=10"
+    )
+
+
 def _values():
     return {
-        "DATABASE_URL": "secret-db",
-        "ERP_CALCULATOR_DATABASE_URL": "secret-calculator-db",
-        "TAX_PROVIDER_DATABASE_URL": "secret-tax-provider-db",
+        "DATABASE_URL": _database_url("erp_runtime"),
+        "DATABASE_TRANSPORT_REQUIREMENT": "supabase_direct_ipv4",
+        "DATABASE_POOL_SIZE": "3",
+        "DATABASE_MAX_OVERFLOW": "1",
+        "ERP_CALCULATOR_DATABASE_URL": _database_url("erp_calculator"),
+        "TAX_PROVIDER_DATABASE_URL": _database_url("erp_tax_provider"),
         "TAX_PROVIDER_INTERNAL_SERVICE_TOKEN": "tax-provider-bearer-secret-value-123456",
         "TAX_PROVIDER_INTERNAL_HMAC_SECRET": "tax-provider-hmac-secret-value-1234567",
         "JWT_SECRET_KEY": "secret-jwt",
@@ -112,6 +137,9 @@ def test_environment_mapping_uses_derived_service_origins():
         "CORS_ORIGINS",
         "APP_URL",
         "DATABASE_URL",
+        "DATABASE_TRANSPORT_REQUIREMENT",
+        "DATABASE_POOL_SIZE",
+        "DATABASE_MAX_OVERFLOW",
         "ERP_CALCULATOR_DATABASE_URL",
         "TAX_PROVIDER_DATABASE_URL",
         "TAX_PROVIDER_INTERNAL_SERVICE_TOKEN",
@@ -157,9 +185,85 @@ def test_redacted_payload_never_prints_operator_values():
     )
     rendered = json.dumps(provision.redacted_payload(payload))
 
-    for value in _values().values():
+    for key, value in _values().items():
+        if key in {"DATABASE_POOL_SIZE", "DATABASE_MAX_OVERFLOW"}:
+            continue
         assert value not in rendered
     assert "secret-jwt" not in rendered
+
+
+def test_operator_values_pin_direct_ipv4_and_bounded_pool(monkeypatch):
+    for key, value in _values().items():
+        monkeypatch.setenv(key, value)
+
+    values = provision.operator_values(None)
+
+    assert values["DATABASE_TRANSPORT_REQUIREMENT"] == "supabase_direct_ipv4"
+    assert values["DATABASE_POOL_SIZE"] == "3"
+    assert values["DATABASE_MAX_OVERFLOW"] == "1"
+    for name in provision.DATABASE_PRINCIPALS:
+        assert f"hostaddr={TEST_DIRECT_IPV4}" in values[name]
+        assert ".pooler.supabase.com" not in values[name]
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        (
+            "DATABASE_TRANSPORT_REQUIREMENT",
+            "",
+            "Missing required operator values: DATABASE_TRANSPORT_REQUIREMENT",
+        ),
+        ("DATABASE_POOL_SIZE", "4", "must be 3"),
+        ("DATABASE_MAX_OVERFLOW", "2", "must be 1"),
+        (
+            "DATABASE_URL",
+            "postgresql://erp_runtime:secret@aws-0-region.pooler.supabase.com:5432/postgres?sslmode=require",
+            "direct Supabase endpoint",
+        ),
+        (
+            "ERP_CALCULATOR_DATABASE_URL",
+            _database_url("erp_runtime"),
+            "reviewed role",
+        ),
+        (
+            "DATABASE_URL",
+            _database_url("erp_runtime") + "&host=pooler.example",
+            "connection override",
+        ),
+        (
+            "DATABASE_URL",
+            _database_url("erp_runtime") + "&sslmode=require",
+            "exactly one TLS mode",
+        ),
+    ],
+)
+def test_render_database_transport_contract_fails_closed(
+    monkeypatch,
+    key,
+    value,
+    message,
+):
+    values = _values()
+    values[key] = value
+    for env_key, env_value in values.items():
+        monkeypatch.setenv(env_key, env_value)
+
+    with pytest.raises(provision.ProvisioningError, match=message):
+        provision.operator_values(None)
+
+
+def test_render_database_transport_has_no_pooler_fallback(monkeypatch):
+    for key, value in _values().items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(
+        provision.socket,
+        "getaddrinfo",
+        lambda *_args: [],
+    )
+
+    with pytest.raises(provision.ProvisioningError, match="no reviewed public IPv4"):
+        provision.operator_values(None)
 
 
 @pytest.mark.parametrize(
