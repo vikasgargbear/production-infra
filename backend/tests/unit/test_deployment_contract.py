@@ -569,14 +569,14 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         in workflow
     )
     assert workflow.count("WITH SET TRUE, INHERIT FALSE") == 3
-    assert workflow.count("revoke_staging_postgres_set_roles.sh") == 3
+    assert workflow.count("revoke_staging_postgres_set_roles.sh") == 4
     assert workflow.count("migration-owner-runtime") == 1
-    assert workflow.count("migration-owner\n") == 2
+    assert workflow.count("migration-owner\n") == 3
     assert "cleanup_alembic_on_exit" in workflow
     assert "cleanup_fixture_roles_on_exit" in workflow
     assert "cleanup_demo_role_on_exit" in workflow
     assert "cleanup_demo_on_exit" in workflow
-    assert workflow.count("postgres retained unverified") == 7
+    assert workflow.count("postgres retained unverified") == 9
     assert "unverified migration-owner delegation" in workflow
     assert "unverified fixture role delegation" in workflow
     assert "unverified demo role delegation" in workflow
@@ -1097,6 +1097,20 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "provision_staging_mcp_oauth.py --mode client-only" in workflow
     assert "provision_staging_mcp_oauth.py --mode bind-existing-demo" in workflow
     assert "exercise_staging_mcp_oauth.py" in workflow
+    bind_step = workflow[
+        workflow.index("- name: Exercise hosted OAuth and MCP against the provisioned demo") :
+    ]
+    bind_step = bind_step[: bind_step.index("\n      - name:", 10)]
+    bind = bind_step.index("provision_staging_mcp_oauth.py --mode bind-existing-demo")
+    cleanup = bind_step.index(
+        "if ! cleanup_oauth_role_membership; then", bind
+    )
+    exercise = bind_step.index("python3 backend/scripts/exercise_staging_mcp_oauth.py")
+    assert "trap cleanup_oauth_role_on_exit EXIT" in bind_step
+    assert (
+        "revoke_staging_postgres_set_roles.sh migration-owner" in bind_step
+    )
+    assert bind < cleanup < exercise
     assert "timeout-minutes: 35" in workflow
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
 

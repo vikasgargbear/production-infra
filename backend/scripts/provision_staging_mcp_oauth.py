@@ -11,6 +11,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 import psycopg2
 import requests
@@ -18,6 +19,7 @@ import requests
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
+REVIEWED_POOLER_HOST = "aws-0-ap-south-1.pooler.supabase.com"
 CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
@@ -104,8 +106,7 @@ def _request_json(
     )
     if not response.ok:
         raise ProvisioningError(
-            f"{method} {url} failed with HTTP {response.status_code}: "
-            f"{response.text[:500]}"
+            f"OAuth administration request failed with HTTP {response.status_code}"
         )
     return response.json() if response.content else None
 
@@ -221,6 +222,57 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
     return user_id
 
 
+def _reviewed_database_url(database_url: str) -> str:
+    """Reject every database target except the reviewed staging pooler binding."""
+
+    try:
+        parsed = urlsplit(database_url)
+        port = parsed.port
+    except ValueError as exc:
+        raise ProvisioningError(
+            "PSYCOPG_DATABASE_URL is not a valid reviewed DSN"
+        ) from exc
+    expected_host = _required("SUPABASE_POOLER_HOST")
+    expected_port = _required("CANONICAL_ACTIVE_POOLER_PORT")
+    active_mode = _required("CANONICAL_ACTIVE_POOLER_MODE")
+    if expected_host != REVIEWED_POOLER_HOST:
+        raise ProvisioningError("SUPABASE_POOLER_HOST is not the reviewed staging pooler")
+    if (active_mode, expected_port) not in {
+        ("session", "5432"),
+        ("transaction", "6543"),
+    }:
+        raise ProvisioningError("Canonical staging pooler mode and port are inconsistent")
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    expected_query = {
+        "application_name": ["canonical_staging_ci"],
+        "connect_timeout": ["15"],
+        "gssencmode": ["disable"],
+        "sslmode": ["require"],
+    }
+    if (
+        parsed.scheme != "postgresql"
+        or parsed.username != f"postgres.{PROJECT_REF}"
+        or not parsed.password
+        or parsed.hostname != expected_host
+        or str(port) != expected_port
+        or parsed.path != "/postgres"
+        or parsed.fragment
+        or query != expected_query
+    ):
+        raise ProvisioningError("PSYCOPG_DATABASE_URL does not target reviewed staging")
+    return database_url
+
+
+def _attest_reviewed_database(cursor) -> None:
+    """Verify the logical database principal before borrowing owner authority."""
+
+    cursor.execute(
+        "SELECT current_user,current_database(),current_setting('ssl')"
+    )
+    if cursor.fetchone() != ("postgres", "postgres", "on"):
+        raise ProvisioningError("Database session does not match reviewed staging authority")
+
+
 def _enter_migration_owner(cursor) -> bool:
     """Borrow canonical owner authority only for this fixture transaction."""
 
@@ -290,6 +342,7 @@ def _bind_demo(
     )
     with psycopg2.connect(database_url) as connection:
         with connection.cursor() as cursor:
+            _attest_reviewed_database(cursor)
             supports_membership_options = _enter_migration_owner(cursor)
             cursor.execute(
                 """
@@ -786,7 +839,8 @@ def _redacted_annotation(exc: BaseException) -> str:
     detail = re.sub(r"sb_secret_[A-Za-z0-9._-]+", "[REDACTED]", detail)
     detail = re.sub(r"eyJ[A-Za-z0-9._-]+", "[REDACTED]", detail)
     detail = re.sub(r"postgres(?:ql)?://[^\s]+", "[REDACTED_DATABASE_URL]", detail)
-    return detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return detail[:500]
 
 
 def _mode(argv: list[str] | None = None) -> str:
@@ -820,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
             "CANONICAL_STAGING_MCP_TEST_PASSWORD is required when binding an existing demo"
         )
     database_url = (
-        _required("PSYCOPG_DATABASE_URL")
+        _reviewed_database_url(_required("PSYCOPG_DATABASE_URL"))
         if mode not in {"client-authority-only", "client-only"}
         else ""
     )
@@ -909,7 +963,6 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (ProvisioningError, requests.RequestException, psycopg2.Error) as exc:
-        print(f"staging MCP OAuth provisioning failed: {exc}", file=sys.stderr)
         print(
             f"::error title=Staging MCP OAuth provisioning failed::{_redacted_annotation(exc)}"
         )

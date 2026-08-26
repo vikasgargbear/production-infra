@@ -1351,7 +1351,26 @@ jobs:
           set -euo pipefail
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          cleanup_oauth_role_membership() {
+            bash backend/scripts/revoke_staging_postgres_set_roles.sh migration-owner
+          }
+          cleanup_oauth_role_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            if ! cleanup_oauth_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified OAuth role delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_oauth_role_on_exit EXIT
           python3 backend/scripts/provision_staging_mcp_oauth.py --mode bind-existing-demo
+          if ! cleanup_oauth_role_membership; then
+            trap - EXIT
+            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified OAuth role delegation"
+            exit 1
+          fi
+          trap - EXIT
           python3 backend/scripts/exercise_staging_mcp_oauth.py
 
       - name: Publish staging baseline evidence
