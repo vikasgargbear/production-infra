@@ -9,13 +9,22 @@ import socket
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import Callable, Generator
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .env import is_production
 
 
 DATABASE_DSN_OVERRIDE_PARAMETERS = frozenset(
-    {"host", "port", "dbname", "user", "password", "service", "servicefile"}
+    {
+        "host",
+        "hostaddr",
+        "port",
+        "dbname",
+        "user",
+        "password",
+        "service",
+        "servicefile",
+    }
 )
 
 
@@ -81,6 +90,22 @@ def required_database_ip_version(requirement: str) -> int | None:
     )
 
 
+def validate_direct_database_connection_budget(
+    requirement: str,
+    pool_size: int,
+    max_overflow: int,
+) -> None:
+    """Keep the reviewed canonical per-process connection budget deterministic."""
+
+    if required_database_ip_version(requirement) is None:
+        return
+    if pool_size != 3 or max_overflow != 1:
+        raise RuntimeError(
+            "required direct database transport needs DATABASE_POOL_SIZE=3 "
+            "and DATABASE_MAX_OVERFLOW=1"
+        )
+
+
 def validate_database_transport_requirement(
     requirement: str,
     connection_mode: str,
@@ -118,26 +143,81 @@ def validate_database_transport_requirement(
             raise RuntimeError(
                 f"required direct IPv{ip_version} database TLS mode is not configured"
             )
-        hostaddr_values = query.get("hostaddr", [])
-        if len(hostaddr_values) != 1:
-            raise RuntimeError(
-                f"required direct IPv{ip_version} database hostaddr is not configured"
-            )
-        try:
-            configured_address = ipaddress.ip_address(hostaddr_values[0])
-        except ValueError as error:
-            raise RuntimeError(
-                f"required direct IPv{ip_version} database hostaddr is invalid"
-            ) from error
-        if configured_address.version != ip_version:
-            raise RuntimeError(
-                f"required direct IPv{ip_version} database hostaddr has the wrong family"
-            )
-        if not configured_address.is_global:
-            raise RuntimeError(
-                f"required direct IPv{ip_version} database hostaddr is not public"
-            )
     return ip_version
+
+
+def validate_direct_database_peer(
+    database_url: str,
+    primary_database_url: str,
+    expected_role: str,
+    requirement: str,
+) -> None:
+    """Require a dedicated role on the exact reviewed direct database authority."""
+
+    if required_database_ip_version(requirement) is None:
+        return
+    connection_mode = classify_database_connection(database_url)
+    validate_database_transport_requirement(
+        requirement,
+        connection_mode,
+        database_url,
+    )
+    candidate = urlparse(database_url)
+    primary = urlparse(primary_database_url)
+    if (
+        unquote(candidate.username or "") != expected_role
+        or not candidate.password
+        or candidate.hostname != primary.hostname
+        or candidate.port != primary.port
+        or candidate.path != primary.path
+    ):
+        raise RuntimeError(
+            f"database URL must authenticate as {expected_role} on the primary "
+            "direct database authority"
+        )
+
+
+def _public_dns_addresses(
+    hostname: str,
+    port: int,
+    family: int,
+    ip_version: int,
+    resolver: Callable[..., list],
+) -> set[str]:
+    """Return public addresses for one family; distinguish no record from DNS failure."""
+
+    try:
+        resolved = resolver(hostname, port, family, socket.SOCK_STREAM)
+    except socket.gaierror as error:
+        no_record_codes = {
+            value
+            for value in (
+                getattr(socket, "EAI_NONAME", None),
+                getattr(socket, "EAI_NODATA", None),
+            )
+            if value is not None
+        }
+        if error.errno in no_record_codes:
+            return set()
+        raise RuntimeError(
+            f"required direct IPv{ip_version} database DNS resolution failed"
+        ) from error
+    except OSError as error:
+        raise RuntimeError(
+            f"required direct IPv{ip_version} database DNS resolution failed"
+        ) from error
+
+    addresses = set()
+    for item in resolved:
+        if len(item) < 5 or not item[4]:
+            continue
+        try:
+            address = ipaddress.ip_address(item[4][0])
+        except ValueError:
+            continue
+        if address.version == ip_version and address.is_global:
+            addresses.add(str(address))
+    return addresses
 
 
 def attest_database_transport(
@@ -146,7 +226,7 @@ def attest_database_transport(
     *,
     resolver: Callable[..., list] = socket.getaddrinfo,
 ) -> dict[str, object]:
-    """Attest that libpq's pinned hostaddr remains one current direct DNS path."""
+    """Attest that the direct hostname exposes only the required public IP family."""
 
     connection_mode = classify_database_connection(database_url)
     ip_version = validate_database_transport_requirement(
@@ -163,33 +243,30 @@ def attest_database_transport(
 
     parsed = urlparse(database_url)
     assert parsed.hostname is not None
-    query = parse_qs(parsed.query, keep_blank_values=True)
-    configured_address = str(ipaddress.ip_address(query["hostaddr"][0]))
-    address_family = socket.AF_INET if ip_version == 4 else socket.AF_INET6
-    try:
-        resolved = resolver(
-            parsed.hostname,
-            parsed.port or 5432,
-            address_family,
-            socket.SOCK_STREAM,
+    ipv4_addresses = _public_dns_addresses(
+        parsed.hostname,
+        parsed.port or 5432,
+        socket.AF_INET,
+        4,
+        resolver,
+    )
+    ipv6_addresses = _public_dns_addresses(
+        parsed.hostname,
+        parsed.port or 5432,
+        socket.AF_INET6,
+        6,
+        resolver,
+    )
+    required_addresses = ipv4_addresses if ip_version == 4 else ipv6_addresses
+    competing_addresses = ipv6_addresses if ip_version == 4 else ipv4_addresses
+    if not required_addresses:
+        raise RuntimeError(
+            f"required direct IPv{ip_version} database hostname has no public address"
         )
-    except OSError as error:
+    if competing_addresses:
         raise RuntimeError(
-            f"required direct IPv{ip_version} database DNS path is unavailable"
-        ) from error
-    resolved_addresses = set()
-    for item in resolved:
-        if len(item) < 5 or not item[4]:
-            continue
-        try:
-            address = ipaddress.ip_address(item[4][0])
-        except ValueError:
-            continue
-        if address.version == ip_version and address.is_global:
-            resolved_addresses.add(str(address))
-    if configured_address not in resolved_addresses:
-        raise RuntimeError(
-            f"required direct IPv{ip_version} database hostaddr is not a current DNS path"
+            f"required direct IPv{ip_version} database hostname still exposes "
+            f"public IPv{6 if ip_version == 4 else 4}"
         )
     return {
         "requirement": requirement,
@@ -230,6 +307,31 @@ REQUIRED_DATABASE_IP_VERSION = validate_database_transport_requirement(
     DATABASE_URL,
 )
 
+
+def validate_required_database_peers() -> None:
+    """Validate canonical write-side DSNs when a direct transport is required."""
+
+    if REQUIRED_DATABASE_IP_VERSION is None:
+        return
+    for environment_name, expected_role in (
+        ("ERP_CALCULATOR_DATABASE_URL", "erp_calculator"),
+        ("TAX_PROVIDER_DATABASE_URL", "erp_tax_provider"),
+    ):
+        peer_url = os.getenv(environment_name, "").strip()
+        if not peer_url:
+            raise RuntimeError(
+                f"{environment_name} is required for direct canonical transport"
+            )
+        validate_direct_database_peer(
+            peer_url,
+            DATABASE_URL,
+            expected_role,
+            DATABASE_TRANSPORT_REQUIREMENT,
+        )
+
+
+validate_required_database_peers()
+
 if DATABASE_CONNECTION_MODE == "supabase_direct":
     print("[DATABASE] Supabase direct connection detected")
 elif DATABASE_CONNECTION_MODE == "supabase_session_pooler":
@@ -247,6 +349,11 @@ DATABASE_POOL_SIZE = _bounded_pool_setting(
 )
 DATABASE_MAX_OVERFLOW = _bounded_pool_setting(
     "DATABASE_MAX_OVERFLOW", default=20, minimum=0, maximum=40
+)
+validate_direct_database_connection_budget(
+    DATABASE_TRANSPORT_REQUIREMENT,
+    DATABASE_POOL_SIZE,
+    DATABASE_MAX_OVERFLOW,
 )
 
 # Create engine with connection pooling optimized for Supabase

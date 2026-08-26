@@ -3991,7 +3991,7 @@ def test_calculator_database_requires_the_isolated_principal(monkeypatch):
         calculator_session_factory()
 
 
-def test_calculator_database_is_not_imported_by_ordinary_database_module():
+def test_calculator_database_transport_dependency_is_one_way_and_bounded():
     ordinary_database = (
         Path(__file__).resolve().parents[2] / "app/core/database.py"
     ).read_text(encoding="utf-8")
@@ -3999,7 +3999,9 @@ def test_calculator_database_is_not_imported_by_ordinary_database_module():
         Path(__file__).resolve().parents[2]
         / "app/infrastructure/operator_actions/calculator_database.py"
     ).read_text(encoding="utf-8")
-    assert CALCULATOR_DATABASE_URL_ENV not in ordinary_database
+    assert "operator_actions.calculator_database" not in ordinary_database
+    assert "validate_direct_database_peer" in ordinary_database
+    assert "validate_direct_database_peer" in calculator_database
     assert '== "erp_calculator"' in calculator_database
     assert "pool_size=2" in calculator_database
     assert "max_overflow=0" in calculator_database

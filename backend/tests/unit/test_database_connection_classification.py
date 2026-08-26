@@ -1,3 +1,5 @@
+import socket
+
 import pytest
 
 from app.core.database import (
@@ -5,7 +7,9 @@ from app.core.database import (
     attest_database_transport,
     classify_database_connection,
     required_database_ip_version,
+    validate_direct_database_connection_budget,
     validate_database_transport_requirement,
+    validate_direct_database_peer,
 )
 
 
@@ -90,10 +94,9 @@ def test_pool_budget_uses_explicit_bounded_environment_values(monkeypatch):
 )
 def test_direct_transport_requirements_are_typed(requirement, expected_ip_version):
     assert required_database_ip_version(requirement) == expected_ip_version
-    hostaddr = "13.248.118.66" if expected_ip_version != 6 else "2606:4700::6810:85e5"
     database_url = (
         "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
-        f"?sslmode=require&hostaddr={hostaddr}"
+        "?sslmode=require"
     )
     assert (
         validate_database_transport_requirement(
@@ -117,27 +120,36 @@ def test_direct_transport_requirement_rejects_pooler_and_unknown_modes():
         required_database_ip_version("supavisor_fallback")
 
 
+def test_direct_transport_requires_reviewed_main_connection_budget():
+    validate_direct_database_connection_budget("supabase_direct_ipv4", 3, 1)
+    validate_direct_database_connection_budget("", 20, 40)
+
+    with pytest.raises(RuntimeError, match="DATABASE_POOL_SIZE=3"):
+        validate_direct_database_connection_budget("supabase_direct_ipv4", 4, 1)
+    with pytest.raises(RuntimeError, match="DATABASE_MAX_OVERFLOW=1"):
+        validate_direct_database_connection_budget("supabase_direct_ipv4", 3, 2)
+
+
 @pytest.mark.parametrize(
     ("database_url", "message"),
     [
         (
             "postgresql://erp_runtime:secret@db.project.supabase.co/postgres"
-            "?sslmode=require&hostaddr=13.248.118.66",
+            "?sslmode=require",
             "endpoint is not exact",
         ),
         (
-            "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
-            "?hostaddr=13.248.118.66",
+            "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres",
             "TLS mode is not configured",
         ),
         (
             "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
-            "?sslmode=require&hostaddr=127.0.0.1",
-            "hostaddr is not public",
+            "?sslmode=require&hostaddr=13.248.118.66",
+            "endpoint has an override",
         ),
         (
             "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
-            "?sslmode=require&hostaddr=13.248.118.66&host=pooler.example",
+            "?sslmode=require&host=pooler.example",
             "endpoint has an override",
         ),
     ],
@@ -154,15 +166,17 @@ def test_direct_ipv4_transport_requires_exact_public_tls_endpoint(
         )
 
 
-def test_direct_ipv4_transport_requires_pinned_current_dns_address():
+def test_direct_ipv4_transport_requires_public_a_and_no_aaaa():
     database_url = (
         "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
-        "?sslmode=require&hostaddr=13.248.118.66"
+        "?sslmode=require"
     )
 
     def resolve(host, port, family, socket_type):
         assert (host, port) == ("db.project.supabase.co", 5432)
-        return [(family, socket_type, 6, "", ("13.248.118.66", port))]
+        if family == socket.AF_INET:
+            return [(family, socket_type, 6, "", ("13.248.118.66", port))]
+        return []
 
     assert attest_database_transport(
         database_url,
@@ -175,17 +189,67 @@ def test_direct_ipv4_transport_requires_pinned_current_dns_address():
     }
 
 
-def test_direct_ipv4_transport_rejects_dns_drift_without_fallback():
+def test_direct_ipv4_transport_rejects_missing_a_without_fallback():
     database_url = (
         "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
-        "?sslmode=require&hostaddr=13.248.118.66"
+        "?sslmode=require"
     )
 
-    with pytest.raises(RuntimeError, match="not a current DNS path"):
+    with pytest.raises(RuntimeError, match="has no public address"):
         attest_database_transport(
             database_url,
             "supabase_direct_ipv4",
-            resolver=lambda *_args: [
-                (2, 1, 6, "", ("13.248.118.67", 5432))
-            ],
+            resolver=lambda *_args: [],
+        )
+
+
+def test_direct_ipv4_transport_rejects_remaining_public_aaaa():
+    database_url = (
+        "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
+        "?sslmode=require"
+    )
+
+    def resolve(_host, port, family, socket_type):
+        address = (
+            "13.248.118.66"
+            if family == socket.AF_INET
+            else "2606:4700::6810:85e5"
+        )
+        return [(family, socket_type, 6, "", (address, port))]
+
+    with pytest.raises(RuntimeError, match="still exposes public IPv6"):
+        attest_database_transport(
+            database_url,
+            "supabase_direct_ipv4",
+            resolver=resolve,
+        )
+
+
+def test_direct_peer_requires_plain_role_and_same_direct_authority():
+    primary = (
+        "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
+        "?sslmode=require"
+    )
+    validate_direct_database_peer(
+        primary.replace("erp_runtime", "erp_calculator"),
+        primary,
+        "erp_calculator",
+        "supabase_direct_ipv4",
+    )
+
+    with pytest.raises(RuntimeError, match="authenticate as erp_calculator"):
+        validate_direct_database_peer(
+            primary.replace("erp_runtime", "erp_runtime.other"),
+            primary,
+            "erp_calculator",
+            "supabase_direct_ipv4",
+        )
+    with pytest.raises(RuntimeError, match="primary direct database authority"):
+        validate_direct_database_peer(
+            primary.replace("erp_runtime", "erp_calculator").replace(
+                "db.project.supabase.co", "db.other.supabase.co"
+            ),
+            primary,
+            "erp_calculator",
+            "supabase_direct_ipv4",
         )

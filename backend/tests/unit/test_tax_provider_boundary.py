@@ -160,6 +160,60 @@ def test_provider_database_url_cannot_reuse_runtime_or_calculator_principal(monk
     provider_infrastructure.get_tax_provider_database.cache_clear()
 
 
+def test_provider_database_uses_one_connection_with_zero_overflow(monkeypatch) -> None:
+    captured = {}
+    database_url = (
+        "postgresql://erp_tax_provider:secret@example.invalid:5432/postgres"
+    )
+    monkeypatch.delenv("DATABASE_TRANSPORT_REQUIREMENT", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://erp_runtime:secret@localhost/db")
+    monkeypatch.setenv(
+        "ERP_CALCULATOR_DATABASE_URL",
+        "postgresql://erp_calculator:secret@localhost/db",
+    )
+    monkeypatch.setenv("TAX_PROVIDER_DATABASE_URL", database_url)
+    monkeypatch.setattr(
+        provider_infrastructure,
+        "create_engine",
+        lambda url, **kwargs: captured.update(url=url, **kwargs) or object(),
+    )
+    provider_infrastructure.get_tax_provider_database.cache_clear()
+
+    provider_infrastructure.get_tax_provider_database()
+
+    assert captured["url"] == database_url
+    assert captured["pool_size"] == 1
+    assert captured["max_overflow"] == 0
+    assert "poolclass" not in captured
+    provider_infrastructure.get_tax_provider_database.cache_clear()
+
+
+def test_provider_direct_transport_rejects_pooler(monkeypatch) -> None:
+    primary = (
+        "postgresql://erp_runtime:secret@db.project.supabase.co:5432/postgres"
+        "?sslmode=require"
+    )
+    monkeypatch.setenv("DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv4")
+    monkeypatch.setenv("DATABASE_URL", primary)
+    monkeypatch.setenv(
+        "ERP_CALCULATOR_DATABASE_URL",
+        primary.replace("erp_runtime", "erp_calculator"),
+    )
+    monkeypatch.setenv(
+        "TAX_PROVIDER_DATABASE_URL",
+        "postgresql://erp_tax_provider.project:secret@"
+        "aws-0-region.pooler.supabase.com:5432/postgres?sslmode=require",
+    )
+    provider_infrastructure.get_tax_provider_database.cache_clear()
+
+    with pytest.raises(
+        provider_infrastructure.TaxProviderConfigurationError,
+        match="direct IPv4 database endpoint",
+    ):
+        provider_infrastructure.get_tax_provider_database()
+    provider_infrastructure.get_tax_provider_database.cache_clear()
+
+
 def test_worker_route_is_hidden_separate_and_externally_fail_closed() -> None:
     assert {route.path for route in tax_provider.router.routes} == {
         "/internal/tax-provider/requests:fetch",

@@ -10,6 +10,8 @@ from urllib.parse import unquote, urlparse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from ...core.database import validate_direct_database_peer
+
 
 CALCULATOR_DATABASE_URL_ENV = "ERP_CALCULATOR_DATABASE_URL"
 PROJECT_REF_RE = re.compile(r"^[a-z0-9]{20}$")
@@ -23,6 +25,20 @@ def calculator_database_configured() -> bool:
         parsed = urlparse(value)
     except ValueError:
         return False
+    transport_requirement = os.getenv(
+        "DATABASE_TRANSPORT_REQUIREMENT", ""
+    ).strip()
+    if transport_requirement:
+        try:
+            validate_direct_database_peer(
+                value,
+                os.getenv("DATABASE_URL", "").strip(),
+                "erp_calculator",
+                transport_requirement,
+            )
+        except RuntimeError:
+            return False
+        return True
     username = unquote(parsed.username or "")
     direct = username == "erp_calculator"
     pooler_prefix, separator, project_ref = username.partition(".")

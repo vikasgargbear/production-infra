@@ -9,8 +9,8 @@ from functools import lru_cache
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.pool import NullPool
 
+from ..core.database import validate_direct_database_peer
 from ..domain.tax_provider import (
     ProviderCompletionRequest,
     ProviderRequestFetchRequest,
@@ -27,6 +27,9 @@ class TaxProviderDatabase:
 
     def __init__(self, engine: Engine):
         self._engine = engine
+
+    def dispose(self) -> None:
+        self._engine.dispose()
 
     def _verify_principal(self, connection) -> None:
         principal = connection.execute(text("SELECT session_user")).scalar_one()
@@ -149,6 +152,19 @@ def get_tax_provider_database() -> TaxProviderDatabase:
     database_url = os.getenv("TAX_PROVIDER_DATABASE_URL", "").strip()
     if not database_url:
         raise TaxProviderConfigurationError("TAX_PROVIDER_DATABASE_URL is not configured")
+    transport_requirement = os.getenv(
+        "DATABASE_TRANSPORT_REQUIREMENT", ""
+    ).strip()
+    if transport_requirement:
+        try:
+            validate_direct_database_peer(
+                database_url,
+                os.getenv("DATABASE_URL", "").strip(),
+                "erp_tax_provider",
+                transport_requirement,
+            )
+        except RuntimeError as exc:
+            raise TaxProviderConfigurationError(str(exc)) from exc
     if database_url in {
         os.getenv("DATABASE_URL", "").strip(),
         os.getenv("ERP_CALCULATOR_DATABASE_URL", "").strip(),
@@ -158,11 +174,24 @@ def get_tax_provider_database() -> TaxProviderDatabase:
         )
     engine = create_engine(
         database_url,
-        poolclass=NullPool,
+        pool_size=1,
+        max_overflow=0,
         pool_pre_ping=True,
+        pool_recycle=300,
+        pool_timeout=10,
         connect_args={
             "connect_timeout": 10,
             "options": "-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000",
         },
     )
     return TaxProviderDatabase(engine)
+
+
+def dispose_tax_provider_engine() -> None:
+    """Dispose the lazy tax-provider pool without creating it during shutdown."""
+
+    if get_tax_provider_database.cache_info().currsize == 0:
+        return
+    database = get_tax_provider_database()
+    database.dispose()
+    get_tax_provider_database.cache_clear()

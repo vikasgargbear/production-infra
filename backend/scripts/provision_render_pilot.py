@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional
 from urllib.error import HTTPError
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -117,7 +117,16 @@ DATABASE_PRINCIPALS = {
     "TAX_PROVIDER_DATABASE_URL": "erp_tax_provider",
 }
 DATABASE_DSN_OVERRIDE_PARAMETERS = frozenset(
-    {"host", "port", "dbname", "user", "password", "service", "servicefile"}
+    {
+        "host",
+        "hostaddr",
+        "port",
+        "dbname",
+        "user",
+        "password",
+        "service",
+        "servicefile",
+    }
 )
 
 
@@ -155,7 +164,7 @@ def _direct_ipv4_database_url(
     value: str,
     project_ref: str,
 ) -> str:
-    """Pin one reviewed direct Supabase DSN to a current IPv4 DNS address."""
+    """Validate one hostname-only direct DSN against caller-visible DNS."""
 
     try:
         parsed = urlsplit(value)
@@ -179,62 +188,62 @@ def _direct_ipv4_database_url(
         key for key, _value in query_items
     ):
         raise ProvisioningError(f"{name} contains a connection override")
-    if sum(key == "hostaddr" for key, _value in query_items) > 1:
-        raise ProvisioningError(f"{name} contains multiple hostaddr values")
     if sum(key == "sslmode" for key, _value in query_items) != 1:
         raise ProvisioningError(f"{name} must contain exactly one TLS mode")
     query = dict(query_items)
     if query.get("sslmode") != "require":
         raise ProvisioningError(f"{name} must require TLS")
-    try:
-        addresses = {
-            str(ipaddress.ip_address(item[4][0]))
-            for item in socket.getaddrinfo(
+
+    def public_addresses(family: int, ip_version: int) -> set[str]:
+        try:
+            resolved = socket.getaddrinfo(
                 parsed.hostname,
                 port,
-                socket.AF_INET,
+                family,
                 socket.SOCK_STREAM,
             )
-            if len(item) >= 5
-            and item[4]
-            and ipaddress.ip_address(item[4][0]).version == 4
-            and ipaddress.ip_address(item[4][0]).is_global
-        }
-    except OSError as exc:
-        raise ProvisioningError(
-            f"{name} direct Supabase IPv4 DNS resolution failed"
-        ) from exc
-    if not addresses:
+        except socket.gaierror as exc:
+            no_record_codes = {
+                value
+                for value in (
+                    getattr(socket, "EAI_NONAME", None),
+                    getattr(socket, "EAI_NODATA", None),
+                )
+                if value is not None
+            }
+            if exc.errno in no_record_codes:
+                return set()
+            raise ProvisioningError(
+                f"{name} direct Supabase DNS resolution failed"
+            ) from exc
+        except OSError as exc:
+            raise ProvisioningError(
+                f"{name} direct Supabase DNS resolution failed"
+            ) from exc
+
+        addresses = set()
+        for item in resolved:
+            if len(item) < 5 or not item[4]:
+                continue
+            try:
+                address = ipaddress.ip_address(item[4][0])
+            except ValueError:
+                continue
+            if address.version == ip_version and address.is_global:
+                addresses.add(str(address))
+        return addresses
+
+    ipv4_addresses = public_addresses(socket.AF_INET, 4)
+    ipv6_addresses = public_addresses(socket.AF_INET6, 6)
+    if not ipv4_addresses:
         raise ProvisioningError(
             f"{name} direct Supabase endpoint has no reviewed public IPv4 path"
         )
-    configured_hostaddr = query.get("hostaddr")
-    if configured_hostaddr:
-        try:
-            configured_hostaddr = str(ipaddress.ip_address(configured_hostaddr))
-        except ValueError as exc:
-            raise ProvisioningError(f"{name} hostaddr is invalid") from exc
-        if configured_hostaddr not in addresses:
-            raise ProvisioningError(
-                f"{name} hostaddr is not a current direct Supabase IPv4 path"
-            )
-    else:
-        configured_hostaddr = sorted(addresses)[0]
-    normalized_query = [
-        (key, item_value)
-        for key, item_value in query_items
-        if key != "hostaddr"
-    ]
-    normalized_query.append(("hostaddr", configured_hostaddr))
-    return urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            urlencode(normalized_query),
-            "",
+    if ipv6_addresses:
+        raise ProvisioningError(
+            f"{name} direct Supabase endpoint still exposes public IPv6"
         )
-    )
+    return value
 
 
 def operator_values(env_file: Optional[Path]) -> Dict[str, str]:

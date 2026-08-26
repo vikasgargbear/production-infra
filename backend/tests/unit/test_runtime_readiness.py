@@ -8,6 +8,7 @@ from app import main
 
 def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
     executed = []
+    peer_checks = []
     readiness_row = {
         "principal": "erp_runtime",
         "rolsuper": False,
@@ -41,6 +42,11 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
             return Connection()
 
     monkeypatch.setattr(main, "engine", Engine())
+    monkeypatch.setattr(
+        main,
+        "validate_required_database_peers",
+        lambda: peer_checks.append(True),
+    )
     monkeypatch.setattr(main, "DATABASE_CONNECTION_MODE", "supabase_direct")
     monkeypatch.setattr(
         main, "DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv6"
@@ -67,6 +73,7 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
     assert "pg_has_role" in executed[0]
     assert "erp_migration_owner" in executed[0]
     assert "inet_server_addr" not in executed[0]
+    assert peer_checks == [True]
 
     readiness_row["migration_owner_member"] = True
     try:

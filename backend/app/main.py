@@ -17,6 +17,7 @@ from .core.database import (
     DATABASE_URL,
     attest_database_transport,
     engine,
+    validate_required_database_peers,
 )
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
@@ -80,6 +81,7 @@ from .infrastructure.operator_actions import install_sqlalchemy_operator_action_
 from .infrastructure.operator_actions.calculator_database import (
     dispose_calculator_engine,
 )
+from .infrastructure.tax_provider import dispose_tax_provider_engine
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -122,7 +124,10 @@ async def lifespan(app: FastAPI):
         try:
             dispose_calculator_engine()
         finally:
-            engine.dispose()
+            try:
+                dispose_tax_provider_engine()
+            finally:
+                engine.dispose()
 
 # CORS Configuration — env-based whitelist in production
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")
@@ -222,6 +227,7 @@ READINESS_TIMEOUT_SECONDS = 5.0
 
 
 def _database_readiness() -> dict:
+    validate_required_database_peers()
     with engine.connect() as connection:
         row = connection.execute(
             text(

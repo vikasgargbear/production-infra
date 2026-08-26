@@ -22,12 +22,15 @@ TEST_DIRECT_IPV4 = "13.248.118.66"
 
 @pytest.fixture(autouse=True)
 def _reviewed_direct_ipv4_dns(monkeypatch):
+    def resolve(_host, port, family, socket_type):
+        if family != provision.socket.AF_INET:
+            return []
+        return [(family, socket_type, 6, "", (TEST_DIRECT_IPV4, port))]
+
     monkeypatch.setattr(
         provision.socket,
         "getaddrinfo",
-        lambda _host, port, family, socket_type: [
-            (family, socket_type, 6, "", (TEST_DIRECT_IPV4, port))
-        ],
+        resolve,
     )
 
 
@@ -192,8 +195,9 @@ def test_redacted_payload_never_prints_operator_values():
     assert "secret-jwt" not in rendered
 
 
-def test_operator_values_pin_direct_ipv4_and_bounded_pool(monkeypatch):
-    for key, value in _values().items():
+def test_operator_values_validate_hostname_only_direct_ipv4_and_bounded_pool(monkeypatch):
+    configured = _values()
+    for key, value in configured.items():
         monkeypatch.setenv(key, value)
 
     values = provision.operator_values(None)
@@ -202,7 +206,8 @@ def test_operator_values_pin_direct_ipv4_and_bounded_pool(monkeypatch):
     assert values["DATABASE_POOL_SIZE"] == "3"
     assert values["DATABASE_MAX_OVERFLOW"] == "1"
     for name in provision.DATABASE_PRINCIPALS:
-        assert f"hostaddr={TEST_DIRECT_IPV4}" in values[name]
+        assert values[name] == configured[name]
+        assert "hostaddr=" not in values[name]
         assert ".pooler.supabase.com" not in values[name]
 
 
@@ -229,6 +234,11 @@ def test_operator_values_pin_direct_ipv4_and_bounded_pool(monkeypatch):
         (
             "DATABASE_URL",
             _database_url("erp_runtime") + "&host=pooler.example",
+            "connection override",
+        ),
+        (
+            "DATABASE_URL",
+            _database_url("erp_runtime") + "&hostaddr=" + TEST_DIRECT_IPV4,
             "connection override",
         ),
         (
@@ -263,6 +273,23 @@ def test_render_database_transport_has_no_pooler_fallback(monkeypatch):
     )
 
     with pytest.raises(provision.ProvisioningError, match="no reviewed public IPv4"):
+        provision.operator_values(None)
+
+
+def test_render_database_transport_rejects_remaining_aaaa(monkeypatch):
+    for key, value in _values().items():
+        monkeypatch.setenv(key, value)
+
+    def resolve(_host, port, family, socket_type):
+        address = (
+            TEST_DIRECT_IPV4
+            if family == provision.socket.AF_INET
+            else "2606:4700::6810:85e5"
+        )
+        return [(family, socket_type, 6, "", (address, port))]
+
+    monkeypatch.setattr(provision.socket, "getaddrinfo", resolve)
+    with pytest.raises(provision.ProvisioningError, match="still exposes public IPv6"):
         provision.operator_values(None)
 
 
