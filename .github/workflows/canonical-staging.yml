@@ -425,6 +425,17 @@ jobs:
             "SELECT to_regprocedure('erp_security.canonical_evidence_storage_access_token_hook(jsonb)') IS NOT NULL" \
             "$PSYCOPG_DATABASE_URL")
           if [ "$hook_exists" = t ]; then
+            python3 backend/scripts/verify_supabase_auth_admin_secret.py \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              >staging-evidence/canonical-auth-admin-preflight.json
+            jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+              '.state == "verified"
+               and .project_ref == $project_ref
+               and .modern_secret_shape_verified == true
+               and .list_verified == true
+               and .readback_verified == true
+               and .mutation_performed == false' \
+              staging-evidence/canonical-auth-admin-preflight.json >/dev/null
             identity_log=$(mktemp)
             if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
                 --project-ref "$CANONICAL_STAGING_PROJECT_REF" \

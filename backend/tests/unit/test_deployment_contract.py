@@ -764,6 +764,9 @@ def test_reset_rotates_existing_identity_without_reopening_storage_writer() -> N
     )[1].split("Prove canonical evidence storage least privilege", 1)[0]
 
     assert "hook_exists" in pre_reset
+    assert "verify_supabase_auth_admin_secret.py" in pre_reset
+    assert 'and .readback_verified == true' in pre_reset
+    assert 'and .mutation_performed == false' in pre_reset
     assert "provision_canonical_evidence_storage_identity.py" in pre_reset
     assert "canonical-evidence-storage.sql" not in pre_reset
     assert "object_count" in pre_reset

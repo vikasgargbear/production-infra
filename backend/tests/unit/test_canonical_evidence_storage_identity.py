@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import psycopg2
 import requests
 
 
@@ -36,19 +37,27 @@ def user(**overrides):
     return value
 
 
-AUTHORITY = provision.SupabaseAuthAdminAuthority(
-    provision.PROJECT_REF, "sb_secret_" + "a" * 32
-)
+def auth_authority():
+    return provision.SupabaseAuthAdminAuthority(
+        provision.PROJECT_REF, "sb_secret_" + "a" * 32
+    )
 
 
-class AuthAdminStub:
-    def __init__(self, users, response=None):
+def reviewed_database_url():
+    return (
+        f"postgresql://postgres.{provision.PROJECT_REF}:password@"
+        f"{provision.REVIEWED_POOLER_HOST}:5432/postgres?sslmode=require"
+    )
+
+
+class AuthClient:
+    def __init__(self, monkeypatch, users, response=None):
         self.users = users
         self.response = response or user()
         self.calls = []
+        monkeypatch.setattr(provision, "_auth_admin_json", self.request)
 
-    def request(self, authority, method, path, **kwargs):
-        assert authority == AUTHORITY
+    def request(self, _authority, method, path, **kwargs):
         self.calls.append((method, path, kwargs))
         if method == "GET":
             return {"users": self.users}
@@ -58,14 +67,15 @@ class AuthAdminStub:
 def test_service_identity_creation_uses_exact_uuid_email_marker_and_role(
     monkeypatch,
 ) -> None:
-    stub = AuthAdminStub([])
-    monkeypatch.setattr(provision, "auth_admin_request", stub.request)
+    client = AuthClient(monkeypatch, [])
 
-    resolved, created = provision.reconcile_service_user(AUTHORITY, "random-password")
+    resolved, created = provision.reconcile_service_user(
+        auth_authority(), "random-password"
+    )
 
     assert resolved == user()
     assert created is True
-    method, path, kwargs = stub.calls[-1]
+    method, path, kwargs = client.calls[-1]
     assert (method, path) == ("POST", "users")
     payload = kwargs["payload"]
     assert payload == {
@@ -98,16 +108,17 @@ def test_platform_identity_constants_come_from_versioned_authority() -> None:
 
 
 def test_existing_exact_identity_rotates_password_in_place(monkeypatch) -> None:
-    stub = AuthAdminStub([user()])
-    monkeypatch.setattr(provision, "auth_admin_request", stub.request)
+    client = AuthClient(monkeypatch, [user()])
 
-    _, created = provision.reconcile_service_user(AUTHORITY, "new-random-password")
+    _, created = provision.reconcile_service_user(
+        auth_authority(), "new-random-password"
+    )
 
     assert created is False
-    assert stub.calls[-1][0:2] == (
+    assert client.calls[-1][0:2] == (
         "PUT", f"users/{provision.SERVICE_AUTH_USER_ID}"
     )
-    assert stub.calls[-1][2]["payload"] == {
+    assert client.calls[-1][2]["payload"] == {
         "password": "new-random-password",
         "app_metadata": {
             "erp_service_identity": provision.SERVICE_MARKER,
@@ -130,12 +141,13 @@ def test_existing_exact_identity_rotates_password_in_place(monkeypatch) -> None:
     ],
 )
 def test_collision_or_duplicate_service_identity_fails_closed(
-    monkeypatch, users
+    users, monkeypatch
 ) -> None:
-    stub = AuthAdminStub(users)
-    monkeypatch.setattr(provision, "auth_admin_request", stub.request)
+    AuthClient(monkeypatch, users)
     with pytest.raises(provision.IdentityProvisioningError):
-        provision.reconcile_service_user(AUTHORITY, "password")
+        provision.reconcile_service_user(
+            auth_authority(), "password"
+        )
 
 
 class ManagementClient:
@@ -148,27 +160,43 @@ class ManagementClient:
         return self.responses.pop(0)
 
 
+def auth_config(**overrides):
+    value = {
+        "security_captcha_enabled": False,
+        "external_email_enabled": True,
+        "jwt_exp": 3600,
+        "rate_limit_token_refresh": 150,
+        "refresh_token_rotation_enabled": True,
+        "security_refresh_token_reuse_interval": 10,
+        "hook_custom_access_token_enabled": False,
+        "hook_custom_access_token_uri": None,
+    }
+    value.update(overrides)
+    return value
+
 def test_auth_hook_configuration_is_enabled_without_overwriting_other_fields() -> None:
     client = ManagementClient(
         [
-            {"site_url": "https://erp.example", "hook_custom_access_token_enabled": False},
-            {
-                "site_url": "https://erp.example",
-                "hook_custom_access_token_enabled": True,
-                "hook_custom_access_token_uri": provision.HOOK_URI,
-            },
-            {
-                "site_url": "https://erp.example",
-                "hook_custom_access_token_enabled": True,
-                "hook_custom_access_token_uri": provision.HOOK_URI,
-            },
+            auth_config(),
+            None,
+            auth_config(
+                hook_custom_access_token_enabled=True,
+                hook_custom_access_token_uri=provision.HOOK_URI,
+            ),
         ]
     )
 
-    assert provision.reconcile_hook_config(client) == {
+    rollout = provision.reconcile_hook_config(client)
+    assert rollout.expected == {
         "hook_custom_access_token_enabled": True,
         "hook_custom_access_token_uri": provision.HOOK_URI,
     }
+    assert rollout.prior == {
+        "hook_custom_access_token_enabled": False,
+        "hook_custom_access_token_uri": None,
+    }
+    assert rollout.changed is True
+    assert rollout.hosted_auth_facts["jwt_exp"] == 3600
     assert client.calls[1][2]["payload"] == {
         "hook_custom_access_token_enabled": True,
         "hook_custom_access_token_uri": provision.HOOK_URI,
@@ -176,6 +204,203 @@ def test_auth_hook_configuration_is_enabled_without_overwriting_other_fields() -
     assert client.calls[2][0:2] == (
         "GET", f"/projects/{provision.PROJECT_REF}/config/auth"
     )
+
+
+@pytest.mark.parametrize(
+    ("override", "error_code"),
+    [
+        ({"security_captcha_enabled": True}, "SERVICE_PASSWORD_CAPTCHA_UNSUPPORTED"),
+        ({"external_email_enabled": False}, "SERVICE_PASSWORD_PROVIDER_DISABLED"),
+        ({"jwt_exp": 899}, "AUTH_JWT_LIFETIME_INVALID"),
+        ({"rate_limit_token_refresh": 0}, "AUTH_REFRESH_RATE_LIMIT_INVALID"),
+        ({"refresh_token_rotation_enabled": False}, "AUTH_REFRESH_ROTATION_DISABLED"),
+        ({"security_refresh_token_reuse_interval": -1}, "AUTH_REFRESH_REUSE_INVALID"),
+    ],
+)
+def test_hosted_auth_invariants_fail_before_global_hook_patch(
+    override, error_code
+) -> None:
+    client = ManagementClient([auth_config(**override)])
+
+    with pytest.raises(provision.IdentityProvisioningError) as caught:
+        provision.reconcile_hook_config(client)
+
+    assert caught.value.code == error_code
+    assert [call[0] for call in client.calls] == ["GET"]
+
+
+def test_failed_hook_readback_restores_exact_prior_fields() -> None:
+    prior = auth_config(
+        hook_custom_access_token_enabled=False,
+        hook_custom_access_token_uri=None,
+    )
+    client = ManagementClient([prior, None, auth_config(), None, prior])
+
+    with pytest.raises(provision.IdentityProvisioningError):
+        provision.reconcile_hook_config(client)
+
+    assert client.calls[-2][0] == "PATCH"
+    assert client.calls[-2][2]["payload"] == {
+        "hook_custom_access_token_enabled": False,
+        "hook_custom_access_token_uri": None,
+    }
+
+
+def test_any_post_patch_failure_restores_exact_prior_hook_fields() -> None:
+    prior = {
+        "hook_custom_access_token_enabled": False,
+        "hook_custom_access_token_uri": None,
+    }
+    client = ManagementClient([None, auth_config()])
+    rollout = provision.HookRollout(
+        prior=prior,
+        expected={
+            "hook_custom_access_token_enabled": True,
+            "hook_custom_access_token_uri": provision.HOOK_URI,
+        },
+        hosted_auth_facts={},
+        changed=True,
+    )
+
+    with pytest.raises(RuntimeError, match="downstream failed"):
+        with provision._restore_hook_on_failure(client, rollout):
+            raise RuntimeError("downstream failed")
+
+    assert client.calls == [
+        (
+            "PATCH",
+            f"/projects/{provision.PROJECT_REF}/config/auth",
+            {"payload": prior},
+        ),
+        ("GET", f"/projects/{provision.PROJECT_REF}/config/auth", {}),
+    ]
+
+
+class _DeniedSpoof(psycopg2.Error):
+    @property
+    def pgcode(self):
+        return "42501"
+
+
+class HookProbeCursor:
+    def __init__(self):
+        self.row = None
+        self.methods = []
+        self.ordinary_verified = False
+        self.spoof_denials = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def execute(self, statement, parameters=None):
+        if statement.startswith("SELECT procedure.prosecdef"):
+            self.row = (False, "s", True, True, False, True)
+            return
+        if statement.startswith(("SET LOCAL", "SAVEPOINT", "ROLLBACK", "RELEASE")):
+            return
+        event = parameters[0].adapted
+        if statement.endswith("->'claims'"):
+            if event["authentication_method"] in ("password", "token_refresh"):
+                self.methods.append(event["authentication_method"])
+                claims = dict(event["claims"])
+                claims["role"] = provision.SERVICE_ROLE
+                claims["exp"] = claims["iat"] + 900
+                claims["erp_service_identity"] = provision.SERVICE_MARKER
+                self.row = (claims,)
+            else:
+                self.ordinary_verified = True
+                self.row = (event["claims"],)
+            return
+        self.spoof_denials += 1
+        raise _DeniedSpoof("spoof denied")
+
+    def fetchone(self):
+        return self.row
+
+
+class HookProbeConnection:
+    def __init__(self):
+        self.cursor_instance = HookProbeCursor()
+        self.session = None
+        self.rolled_back = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def set_session(self, **kwargs):
+        self.session = kwargs
+
+    def cursor(self):
+        return self.cursor_instance
+
+    def rollback(self):
+        self.rolled_back = True
+
+
+def test_hosted_read_only_probe_covers_acl_both_methods_ordinary_and_spoofs(
+    monkeypatch,
+) -> None:
+    connection = HookProbeConnection()
+    monkeypatch.setattr(provision.psycopg2, "connect", lambda _url: connection)
+
+    result = provision.probe_hosted_hook(reviewed_database_url())
+
+    assert connection.session == {"readonly": True, "autocommit": False}
+    assert connection.rolled_back is True
+    assert connection.cursor_instance.methods == ["password", "token_refresh"]
+    assert connection.cursor_instance.ordinary_verified is True
+    assert connection.cursor_instance.spoof_denials == 2
+    assert result == {
+        "acl_verified": True,
+        "ordinary_claims_unchanged": True,
+        "service_methods_verified": ["password", "token_refresh"],
+        "spoof_denials_verified": 2,
+        "mutation_performed": False,
+    }
+
+
+def test_hosted_probe_rejects_changed_ordinary_claims(monkeypatch) -> None:
+    connection = HookProbeConnection()
+    original_execute = connection.cursor_instance.execute
+
+    def changed_ordinary(statement, parameters=None):
+        original_execute(statement, parameters)
+        if (
+            parameters
+            and hasattr(parameters[0], "adapted")
+            and parameters[0].adapted["authentication_method"] == "oauth"
+        ):
+            connection.cursor_instance.row = ({"role": "changed"},)
+
+    connection.cursor_instance.execute = changed_ordinary
+    monkeypatch.setattr(provision.psycopg2, "connect", lambda _url: connection)
+
+    with pytest.raises(provision.IdentityProvisioningError) as caught:
+        provision.probe_hosted_hook(reviewed_database_url())
+
+    assert caught.value.code == "AUTH_HOOK_ORDINARY_PROBE_INVALID"
+
+
+def test_hosted_probe_rejects_wrong_database_before_connect(monkeypatch) -> None:
+    monkeypatch.setattr(
+        provision.psycopg2,
+        "connect",
+        lambda _url: pytest.fail("wrong database target reached PostgreSQL"),
+    )
+
+    with pytest.raises(provision.IdentityProvisioningError) as caught:
+        provision.probe_hosted_hook(
+            "postgresql://postgres.other:password@localhost:5432/postgres"
+            "?sslmode=require"
+        )
+
+    assert caught.value.code == "HOSTED_HOOK_DATABASE_TARGET_DENIED"
 
 
 class SessionClient:
@@ -340,3 +565,72 @@ def test_management_network_failure_becomes_a_typed_non_secret_error(
 
     assert captured.value.code == "MANAGEMENT_API_UNREACHABLE"
     assert "must-not-escape" not in str(captured.value)
+
+
+def test_main_runs_hosted_read_only_probe_before_global_hook_patch(
+    tmp_path, monkeypatch
+) -> None:
+    receipt = tmp_path / "ready.json"
+    environment = tmp_path / "github-env"
+    environment.touch(mode=0o600)
+    monkeypatch.setenv("SUPABASE_URL", provision.SUPABASE_URL)
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "anon-key")
+    monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
+    monkeypatch.setenv("PSYCOPG_DATABASE_URL", reviewed_database_url())
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    authority = auth_authority()
+    calls = []
+    monkeypatch.setattr(
+        provision, "_auth_admin_authority", lambda _token: authority
+    )
+    monkeypatch.setattr(
+        provision, "mask_auth_admin_secret", lambda _authority: None
+    )
+    monkeypatch.setattr(
+        provision,
+        "reconcile_service_user",
+        lambda _authority, _password: (user(), False),
+    )
+    monkeypatch.setattr(
+        provision,
+        "probe_hosted_hook",
+        lambda _url: calls.append("hosted-read-only-probe") or {
+            "mutation_performed": False
+        },
+    )
+    rollout = provision.HookRollout(
+        prior={
+            "hook_custom_access_token_enabled": True,
+            "hook_custom_access_token_uri": provision.HOOK_URI,
+        },
+        expected={
+            "hook_custom_access_token_enabled": True,
+            "hook_custom_access_token_uri": provision.HOOK_URI,
+        },
+        hosted_auth_facts={},
+        changed=False,
+    )
+    monkeypatch.setattr(
+        provision,
+        "reconcile_hook_config",
+        lambda _client: calls.append("global-hook-config") or rollout,
+    )
+    monkeypatch.setattr(
+        provision, "verify_password_session", lambda *_args: service_claims()
+    )
+    monkeypatch.setattr(provision, "retire_custom_api_key", lambda _client: None)
+
+    assert provision.main(
+        [
+            "--project-ref",
+            provision.PROJECT_REF,
+            "--reviewed-sha",
+            "a" * 40,
+            "--github-env",
+            str(environment),
+            "--receipt",
+            str(receipt),
+        ]
+    ) == 0
+    assert calls == ["hosted-read-only-probe", "global-hook-config"]
+    assert json.loads(receipt.read_text(encoding="utf-8"))["state"] == "ready"
