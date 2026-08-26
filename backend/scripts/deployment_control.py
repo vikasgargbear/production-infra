@@ -172,6 +172,28 @@ def validate_manifest(manifest: Mapping[str, Any]) -> list[Diagnostic]:
                 next_action="correct the single control-plane manifest",
             )
         )
+    database = supabase["database"]
+    expected_database_host = f"db.{supabase['project_ref']}.supabase.co"
+    if database["host"] != expected_database_host:
+        diagnostics.append(
+            Diagnostic(
+                "CFG_SUPABASE_DATABASE_HOST_DRIFT",
+                "preflight",
+                "supabase.database.host",
+                "direct database host does not derive from the reviewed project reference",
+                next_action="correct the single control-plane manifest",
+            )
+        )
+    if "pooler.supabase.com" in database["host"]:
+        diagnostics.append(
+            Diagnostic(
+                "CFG_SUPABASE_POOLER_PROHIBITED",
+                "preflight",
+                "supabase.database.host",
+                "shared Supavisor is prohibited for canonical certification",
+                next_action="use the reviewed direct IPv4 database endpoint",
+            )
+        )
     if manifest["providers"]["render"]["authority"] != "active":
         diagnostics.append(
             Diagnostic(

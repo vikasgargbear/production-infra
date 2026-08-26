@@ -34,6 +34,14 @@ def test_manifest_is_the_complete_static_workflow_authority() -> None:
     assert document["supabase"]["origin"] == (
         f"https://{document['supabase']['project_ref']}.supabase.co"
     )
+    database = document["supabase"]["database"]
+    assert database["transport"] == "direct_ipv4"
+    assert database["host"] == (
+        f"db.{document['supabase']['project_ref']}.supabase.co"
+    )
+    assert database["port"] == 5432
+    assert database["username_mode"] == "plain_role"
+    assert database["shared_supavisor_fallback"] is False
     assert "RENDER_MCP_URL" in document["configuration"]["variables"]
 
 

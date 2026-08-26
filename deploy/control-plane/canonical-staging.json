@@ -10,7 +10,25 @@
     "project_ref": "rgihahbmkrmhitjdjvev",
     "region": "ap-south-1",
     "origin": "https://rgihahbmkrmhitjdjvev.supabase.co",
-    "oauth_issuer": "https://rgihahbmkrmhitjdjvev.supabase.co/auth/v1"
+    "oauth_issuer": "https://rgihahbmkrmhitjdjvev.supabase.co/auth/v1",
+    "database": {
+      "transport": "direct_ipv4",
+      "host": "db.rgihahbmkrmhitjdjvev.supabase.co",
+      "port": 5432,
+      "database": "postgres",
+      "username_mode": "plain_role",
+      "sslmode": "require",
+      "gssencmode": "disable",
+      "connect_timeout_seconds": 15,
+      "shared_supavisor_fallback": false,
+      "administrator_role": "postgres",
+      "isolated_roles": [
+        "erp_runtime",
+        "erp_calculator",
+        "erp_tax_provider",
+        "erp_regulatory_importer"
+      ]
+    }
   },
   "providers": {
     "render": {

@@ -5,6 +5,12 @@ canonical environment: Supabase project identity, the sole active Render
 services, retired Railway services, configuration names, and phase ordering.
 It never contains secret values.
 
+The database contract is also authoritative: certification uses the exact
+`db.<project-ref>.supabase.co:5432` direct IPv4 endpoint with plain PostgreSQL
+role names. Shared Supavisor fallback is explicitly prohibited. The helper in
+`backend/scripts/canonical_staging_database.py` builds redacted-safe DSNs and
+verifies caller-side IPv4 DNS resolution plus role and RLS posture.
+
 Use one entrypoint for deployment diagnosis:
 
 ```bash

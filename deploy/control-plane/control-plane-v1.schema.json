@@ -21,12 +21,13 @@
     "supabase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["project_ref", "region", "origin", "oauth_issuer"],
+      "required": ["project_ref", "region", "origin", "oauth_issuer", "database"],
       "properties": {
         "project_ref": {"type": "string", "pattern": "^[a-z0-9]{20}$"},
         "region": {"type": "string", "minLength": 1},
         "origin": {"type": "string", "format": "uri"},
-        "oauth_issuer": {"type": "string", "format": "uri"}
+        "oauth_issuer": {"type": "string", "format": "uri"},
+        "database": {"$ref": "#/$defs/supabaseDatabase"}
       }
     },
     "providers": {
@@ -64,6 +65,41 @@
   },
   "$defs": {
     "configurationName": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+    "supabaseDatabase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transport",
+        "host",
+        "port",
+        "database",
+        "username_mode",
+        "sslmode",
+        "gssencmode",
+        "connect_timeout_seconds",
+        "shared_supavisor_fallback",
+        "administrator_role",
+        "isolated_roles"
+      ],
+      "properties": {
+        "transport": {"const": "direct_ipv4"},
+        "host": {"type": "string", "pattern": "^db\\.[a-z0-9]{20}\\.supabase\\.co$"},
+        "port": {"const": 5432},
+        "database": {"const": "postgres"},
+        "username_mode": {"const": "plain_role"},
+        "sslmode": {"const": "require"},
+        "gssencmode": {"const": "disable"},
+        "connect_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 30},
+        "shared_supavisor_fallback": {"const": false},
+        "administrator_role": {"const": "postgres"},
+        "isolated_roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^erp_[a-z0-9_]+$"}
+        }
+      }
+    },
     "provider": {
       "type": "object",
       "additionalProperties": false,
