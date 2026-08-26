@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlparse
 
 from sqlalchemy import text
 
+from ...core.database import validate_direct_database_peer
 from ...domain.operator_actions.models import (
     ActionErrorCode,
     OperatorActionError,
@@ -38,6 +39,20 @@ def runtime_database_configured() -> bool:
         parsed = urlparse(value)
     except ValueError:
         return False
+    transport_requirement = os.getenv(
+        "DATABASE_TRANSPORT_REQUIREMENT", ""
+    ).strip()
+    if transport_requirement:
+        try:
+            validate_direct_database_peer(
+                value,
+                value,
+                "erp_runtime",
+                transport_requirement,
+            )
+        except RuntimeError:
+            return False
+        return True
     username = unquote(parsed.username or "")
     direct = username == "erp_runtime"
     pooler_prefix, separator, project_ref = username.partition(".")

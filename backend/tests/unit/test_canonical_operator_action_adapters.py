@@ -2050,6 +2050,7 @@ def test_calculator_backed_readiness_also_requires_runtime_principal():
 
 
 def test_runtime_database_readiness_requires_exact_nonowner_runtime_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_TRANSPORT_REQUIREMENT", raising=False)
     monkeypatch.delenv(RUNTIME_DATABASE_URL_ENV, raising=False)
     assert runtime_database_configured() is False
     monkeypatch.setenv(
@@ -2072,6 +2073,33 @@ def test_runtime_database_readiness_requires_exact_nonowner_runtime_url(monkeypa
         RUNTIME_DATABASE_URL_ENV,
         "postgresql://erp_runtime.wrong:secret@"
         "aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+    )
+    assert runtime_database_configured() is False
+
+
+def test_runtime_database_readiness_rejects_pooler_when_direct_is_required(
+    monkeypatch,
+):
+    monkeypatch.setenv("DATABASE_TRANSPORT_REQUIREMENT", "supabase_direct_ipv4")
+    monkeypatch.setenv(
+        RUNTIME_DATABASE_URL_ENV,
+        "postgresql://erp_runtime.abcdefghijklmnopqrst:secret@"
+        "aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require",
+    )
+    assert runtime_database_configured() is False
+
+    monkeypatch.setenv(
+        RUNTIME_DATABASE_URL_ENV,
+        "postgresql://erp_runtime:secret@"
+        "db.abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=require",
+    )
+    assert runtime_database_configured() is True
+
+    monkeypatch.setenv(
+        RUNTIME_DATABASE_URL_ENV,
+        "postgresql://erp_runtime:secret@"
+        "db.abcdefghijklmnopqrst.supabase.co:5432/postgres"
+        "?sslmode=require&hostaddr=192.0.2.1",
     )
     assert runtime_database_configured() is False
 
