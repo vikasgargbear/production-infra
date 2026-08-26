@@ -1,11 +1,8 @@
-/** Browser UUID with a test/legacy-runtime fallback for idempotency keys. */
+/** Generate a cryptographically secure browser UUID for command identity. */
 export function clientUuid(): string {
-    if (typeof globalThis.crypto?.randomUUID === 'function') {
-        return globalThis.crypto.randomUUID();
+    const cryptoApi = globalThis.crypto;
+    if (typeof cryptoApi?.randomUUID !== 'function') {
+        throw new Error('Secure UUID generation is unavailable in this browser.');
     }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
-        const random = Math.floor(Math.random() * 16);
-        const value = character === 'x' ? random : (random & 0x3) | 0x8;
-        return value.toString(16);
-    });
+    return cryptoApi.randomUUID();
 }

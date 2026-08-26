@@ -307,7 +307,6 @@ class ProductDefaults:
     """Default values for product creation and management"""
     HSN_PHARMA = "30049099"       # Default pharmaceutical HSN code
     HSN_GENERAL = "3004"          # General medicines HSN
-    DEFAULT_GST_PERCENT = 12      # Default GST rate for pharma products
     DEFAULT_PRODUCT_TYPE = "medication"
     DEFAULT_BASE_UOM = "NOS"      # Default unit of measure (Numbers)
     DEFAULT_CESS_RATE = 0.00
