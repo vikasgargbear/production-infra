@@ -44,12 +44,20 @@ def _transport(*, update_status: int = 403):
     return httpx.MockTransport(handler), requests
 
 
-def test_canary_proves_allowed_and_denied_operations_without_authorization():
+class TokenProvider:
+    def authorization_headers(self):
+        return {
+            "apikey": "sb_publishable_" + "a" * 32,
+            "Authorization": "Bearer verified-service-user-token",
+        }
+
+
+def test_canary_proves_allowed_and_denied_operations_with_service_user():
     transport, requests = _transport()
 
     result = verify.verify_canary(
         project_ref="canonicalcanonical12",
-        api_key="sb_secret_" + "a" * 32,
+        token_provider=TokenProvider(),
         transport=transport,
     )
 
@@ -64,7 +72,10 @@ def test_canary_proves_allowed_and_denied_operations_without_authorization():
         },
     }
     assert all(request.headers.get("apikey") for request in requests)
-    assert all("authorization" not in request.headers for request in requests)
+    assert all(
+        request.headers.get("authorization") == "Bearer verified-service-user-token"
+        for request in requests
+    )
 
 
 def test_canary_fails_if_update_authority_is_broader_than_reviewed():
@@ -73,6 +84,6 @@ def test_canary_fails_if_update_authority_is_broader_than_reviewed():
     with pytest.raises(verify.EvidenceCanaryError, match="can update"):
         verify.verify_canary(
             project_ref="canonicalcanonical12",
-            api_key="sb_secret_" + "a" * 32,
+            token_provider=TokenProvider(),
             transport=transport,
         )

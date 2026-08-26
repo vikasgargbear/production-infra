@@ -169,6 +169,14 @@ def _evidence_cleanup_facts() -> dict:
         "object_key_set_sha256": "5" * 64,
         "legal_hold_count": 0,
         "retention_in_force_deleted_count": 1,
+        "evidence_writer_membership_open": False,
+        "evidence_writer_role_posture_safe": True,
+        "evidence_writer_unexpected_member_count": 0,
+        "evidence_writer_inherited_role_count": 0,
+        "observed_authenticator_session_count": 2,
+        "terminated_authenticator_session_count": 2,
+        "remaining_preclosure_authenticator_session_count": 0,
+        "evidence_writer_closed_at": "2026-08-25T10:59:58+00:00",
         "completed_at": "2026-08-25T10:59:59+00:00",
     }
 

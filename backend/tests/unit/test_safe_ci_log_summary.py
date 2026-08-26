@@ -104,7 +104,7 @@ def test_evidence_cleanup_annotation_classifies_missing_restricted_credential(
     log_path = tmp_path / "evidence-cleanup.log"
     log_path.write_text(
         "canonical evidence reset cleanup blocked: evidence cleanup requires "
-        "the bucket-restricted Supabase secret API key\n"
+        "the reviewed service-user token provider\n"
         f"private-object-key/{'a' * 64}.pdf\n",
         encoding="utf-8",
     )

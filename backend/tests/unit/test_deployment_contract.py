@@ -643,10 +643,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'detail = "canonical demo failure summary unavailable"' in workflow
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
-    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 10
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 9
     for label in (
         "evidence-cleanup",
-        "evidence-key",
         "fixture",
         "readiness",
         "render",
@@ -700,7 +699,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         "deploy_one_service aasopharma-api-pilot"
     )
     assert workflow.index(
-        "Prove the competing Railway authority is retired before closing writes"
+        "Prove the competing Railway authority is retired before lifecycle changes"
     ) < workflow.index("Close canonical writes before Render promotion")
     assert workflow.index("render-pilot-public-evidence.json") < workflow.index(
         "Open canonical writes after exact-SHA verification"

@@ -130,7 +130,10 @@ jobs:
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
-      EVIDENCE_STORAGE_SERVER_API_KEY: ${{ secrets.EVIDENCE_STORAGE_SERVER_API_KEY }}
+      EVIDENCE_STORAGE_ENABLED: ${{ vars.EVIDENCE_STORAGE_ENABLED }}
+      EVIDENCE_STORAGE_SERVICE_EMAIL: ${{ vars.EVIDENCE_STORAGE_SERVICE_EMAIL }}
+      EVIDENCE_STORAGE_SERVICE_PASSWORD: ${{ secrets.EVIDENCE_STORAGE_SERVICE_PASSWORD }}
+      EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID: ${{ vars.EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID }}
       CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
       TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
@@ -253,6 +256,32 @@ jobs:
             git cat-file -e "$deploy_sha^{commit}"
             echo "CANONICAL_RENDER_DEPLOY_SHA=$deploy_sha" >> "$GITHUB_ENV"
           fi
+
+      - name: Prove the competing Railway authority is retired before lifecycle changes
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          test -n "$RAILWAY_API_TOKEN"
+          test -n "$RAILWAY_PROJECT_ID"
+          test -n "$RAILWAY_ENVIRONMENT_ID"
+          test -n "$RAILWAY_API_SERVICE_ID"
+          test -n "$RAILWAY_MCP_SERVICE_ID"
+          test -n "$RAILWAY_FRONTEND_SERVICE_ID"
+          railway_state=$(mktemp)
+          railway status \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json >"$railway_state"
+          python3 backend/scripts/verify_retired_railway_authority.py \
+            --status-json "$railway_state" \
+            --project-id "$RAILWAY_PROJECT_ID" \
+            --environment-id "$RAILWAY_ENVIRONMENT_ID" \
+            --commit-sha "$GITHUB_SHA" \
+            --service "$RAILWAY_API_SERVICE_ID=$RAILWAY_API_SERVICE=$RAILWAY_API_URL" \
+            --service "$RAILWAY_MCP_SERVICE_ID=$RAILWAY_MCP_SERVICE=$RAILWAY_MCP_URL" \
+            --service "$RAILWAY_FRONTEND_SERVICE_ID=$RAILWAY_FRONTEND_SERVICE=$RAILWAY_FRONTEND_URL" \
+            --receipt staging-evidence/railway-authority-retired-before-close.json
 
       - name: Quiesce reviewed Render clients before deployment or database lifecycle changes
         if: >-
@@ -387,7 +416,7 @@ jobs:
         run: |
           set -euo pipefail
           cleanup_log=$(mktemp)
-          if ! python3 backend/scripts/cleanup_staging_evidence_storage.py \
+          if ! PYTHONPATH=backend python3 backend/scripts/cleanup_staging_evidence_storage.py \
               --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
               --database-url-env PSYCOPG_DATABASE_URL \
               --receipt staging-evidence/canonical-evidence-storage-reset-cleanup.json \
@@ -396,12 +425,20 @@ jobs:
             exit 1
           fi
           jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            '.contract_version == "canonical-evidence-reset-cleanup-v1"
+            '.contract_version == "canonical-evidence-reset-cleanup-v2"
              and .state == "empty"
              and .project_ref == $project_ref
              and .bucket == "canonical-evidence-private-v1"
              and .remaining_object_count == 0
              and .legal_hold_count == 0
+             and .evidence_writer_membership_open == false
+             and (.observed_authenticator_session_count | type) == "number"
+             and .observed_authenticator_session_count >= 0
+             and (.terminated_authenticator_session_count | type) == "number"
+             and .terminated_authenticator_session_count >= 0
+             and .terminated_authenticator_session_count <= .observed_authenticator_session_count
+             and .remaining_preclosure_authenticator_session_count == 0
+             and (.evidence_writer_closed_at | type) == "string"
              and (.retention_in_force_deleted_count | type) == "number"
              and .retention_in_force_deleted_count >= 0' \
             staging-evidence/canonical-evidence-storage-reset-cleanup.json >/dev/null
@@ -1037,24 +1074,16 @@ jobs:
           test "$(psql -X -Atqc \
             "SELECT count(*) FROM pg_catalog.pg_policy WHERE polrelid='storage.objects'::regclass AND polname IN ('canonical_evidence_server_select','canonical_evidence_server_insert','canonical_evidence_server_delete')" \
             "$PSYCOPG_DATABASE_URL")" = 3
-          key_log=$(mktemp)
-          if ! python3 backend/scripts/provision_canonical_evidence_storage_key.py \
-              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-              --github-env "$GITHUB_ENV" \
-              --receipt staging-evidence/canonical-evidence-storage-key.json \
-              >staging-evidence/canonical-evidence-storage-key-summary.json \
-              2>"$key_log"; then
-            python3 backend/scripts/safe_ci_log_summary.py --label evidence-key "$key_log"
-            exit 1
-          fi
 
       - name: Prove canonical evidence storage least privilege
         if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
           test "$EVIDENCE_STORAGE_ENABLED" = true
-          test -n "$EVIDENCE_STORAGE_SERVER_API_KEY"
-          python3 backend/scripts/verify_canonical_evidence_storage.py \
+          test -n "$EVIDENCE_STORAGE_SERVICE_EMAIL"
+          test -n "$EVIDENCE_STORAGE_SERVICE_PASSWORD"
+          test -n "$EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID"
+          PYTHONPATH=backend python3 backend/scripts/verify_canonical_evidence_storage.py \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --receipt staging-evidence/canonical-evidence-storage-canary.json
 
@@ -1082,32 +1111,6 @@ jobs:
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
           test -n "$SUPABASE_ACCESS_TOKEN"
           python3 backend/scripts/provision_staging_mcp_oauth.py --mode client-only
-
-      - name: Prove the competing Railway authority is retired before closing writes
-        if: inputs.deploy_render_pilot == true
-        run: |
-          set -euo pipefail
-          mkdir -p staging-evidence
-          test -n "$RAILWAY_API_TOKEN"
-          test -n "$RAILWAY_PROJECT_ID"
-          test -n "$RAILWAY_ENVIRONMENT_ID"
-          test -n "$RAILWAY_API_SERVICE_ID"
-          test -n "$RAILWAY_MCP_SERVICE_ID"
-          test -n "$RAILWAY_FRONTEND_SERVICE_ID"
-          railway_state=$(mktemp)
-          railway status \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --json >"$railway_state"
-          python3 backend/scripts/verify_retired_railway_authority.py \
-            --status-json "$railway_state" \
-            --project-id "$RAILWAY_PROJECT_ID" \
-            --environment-id "$RAILWAY_ENVIRONMENT_ID" \
-            --commit-sha "$GITHUB_SHA" \
-            --service "$RAILWAY_API_SERVICE_ID=$RAILWAY_API_SERVICE=$RAILWAY_API_URL" \
-            --service "$RAILWAY_MCP_SERVICE_ID=$RAILWAY_MCP_SERVICE=$RAILWAY_MCP_URL" \
-            --service "$RAILWAY_FRONTEND_SERVICE_ID=$RAILWAY_FRONTEND_SERVICE=$RAILWAY_FRONTEND_URL" \
-            --receipt staging-evidence/railway-authority-retired-before-close.json
 
       - name: Close canonical writes before Render promotion
         if: inputs.deploy_render_pilot == true

@@ -107,7 +107,7 @@ def _safe_evidence_cleanup_diagnostic(text: str) -> Optional[str]:
     """Classify cleanup failures without emitting object keys or provider data."""
 
     normalized = " ".join(text.lower().split())
-    if "requires the bucket-restricted supabase secret api key" in normalized:
+    if "requires the reviewed service-user token provider" in normalized:
         return "evidence_cleanup_credential_unavailable"
     if "do not reconcile one-to-one" in normalized:
         return "evidence_cleanup_inventory_reconciliation_failed"

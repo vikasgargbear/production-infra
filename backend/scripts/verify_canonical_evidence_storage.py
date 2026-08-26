@@ -11,6 +11,12 @@ from typing import Any
 
 import httpx
 
+from app.infrastructure.evidence_storage_credentials import (
+    EvidenceCredentialConfig,
+    EvidenceCredentialUnavailable,
+    EvidenceServiceTokenProvider,
+)
+
 
 BUCKET = "canonical-evidence-private-v1"
 ORGANIZATION_ID = "00000000-0000-7000-8000-000000000001"
@@ -35,15 +41,19 @@ def _status(response: httpx.Response, allowed: set[int], operation: str) -> str:
 def verify_canary(
     *,
     project_ref: str,
-    api_key: str,
+    token_provider: EvidenceServiceTokenProvider,
     transport: httpx.BaseTransport | None = None,
 ) -> dict[str, Any]:
     origin = f"https://{project_ref}.supabase.co/storage/v1"
     object_url = f"{origin}/object/{BUCKET}/{OBJECT_KEY}"
     cleanup_required = False
-    with httpx.Client(
-        headers={"apikey": api_key}, timeout=20.0, transport=transport
-    ) as client:
+    try:
+        headers = token_provider.authorization_headers()
+    except EvidenceCredentialUnavailable as exc:
+        raise EvidenceCanaryError(
+            "canonical evidence service-user token is unavailable"
+        ) from exc
+    with httpx.Client(headers=headers, timeout=20.0, transport=transport) as client:
         try:
             upload = client.post(
                 object_url,
@@ -141,12 +151,20 @@ def main() -> int:
     parser.add_argument("--project-ref", required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
-    api_key = os.getenv("EVIDENCE_STORAGE_SERVER_API_KEY", "")
-    if not api_key.startswith("sb_secret_"):
-        raise SystemExit("canonical evidence canary requires its restricted API key")
     try:
-        receipt = verify_canary(project_ref=args.project_ref, api_key=api_key)
-    except (EvidenceCanaryError, httpx.RequestError) as error:
+        config = EvidenceCredentialConfig.from_environment(
+            base_url=f"https://{args.project_ref}.supabase.co",
+            project_ref=args.project_ref,
+        )
+        receipt = verify_canary(
+            project_ref=args.project_ref,
+            token_provider=EvidenceServiceTokenProvider(config),
+        )
+    except (
+        EvidenceCanaryError,
+        EvidenceCredentialUnavailable,
+        httpx.RequestError,
+    ) as error:
         raise SystemExit(f"canonical evidence canary blocked: {error}") from None
     _write_receipt(args.receipt, receipt)
     print(json.dumps({"state": "verified", "project_ref": args.project_ref}))

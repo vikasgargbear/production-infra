@@ -32,7 +32,7 @@ RETIRED_SOURCE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
 SCHEMA_VERSION = "2.0.0"
 RESET_SCOPE = "canonical_disposable_data_v1"
 RESET_CONTRACT_VERSION = "canonical-data-reset-v1"
-EVIDENCE_RESET_CLEANUP_VERSION = "canonical-evidence-reset-cleanup-v1"
+EVIDENCE_RESET_CLEANUP_VERSION = "canonical-evidence-reset-cleanup-v2"
 EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
 RESET_ALEMBIC_SCHEMA_COUNT = 30
 RESET_CANONICAL_RELATION_COUNT = 119
@@ -251,6 +251,30 @@ def build_reset_attestation(
                 "object_key_set_sha256"
             ],
             "evidence_cleanup_completed_at": evidence_cleanup["completed_at"],
+            "evidence_writer_membership_open_after_cleanup": evidence_cleanup[
+                "evidence_writer_membership_open"
+            ],
+            "evidence_writer_role_posture_safe_after_cleanup": evidence_cleanup[
+                "evidence_writer_role_posture_safe"
+            ],
+            "evidence_writer_unexpected_member_count": evidence_cleanup[
+                "evidence_writer_unexpected_member_count"
+            ],
+            "evidence_writer_inherited_role_count": evidence_cleanup[
+                "evidence_writer_inherited_role_count"
+            ],
+            "evidence_writer_observed_authenticator_session_count": evidence_cleanup[
+                "observed_authenticator_session_count"
+            ],
+            "evidence_writer_terminated_authenticator_session_count": evidence_cleanup[
+                "terminated_authenticator_session_count"
+            ],
+            "evidence_writer_remaining_preclosure_authenticator_session_count": evidence_cleanup[
+                "remaining_preclosure_authenticator_session_count"
+            ],
+            "evidence_writer_closed_at": evidence_cleanup[
+                "evidence_writer_closed_at"
+            ],
             "evidence_cleanup_facts_sha256": hashlib.sha256(
                 _json_bytes(dict(evidence_cleanup))
             ).hexdigest(),
@@ -334,13 +358,28 @@ def _validated_evidence_cleanup_facts(value: Mapping[str, Any]) -> dict[str, Any
         "bucket": EVIDENCE_STORAGE_BUCKET,
         "remaining_object_count": 0,
         "legal_hold_count": 0,
+        "evidence_writer_membership_open": False,
+        "evidence_writer_role_posture_safe": True,
+        "evidence_writer_unexpected_member_count": 0,
+        "evidence_writer_inherited_role_count": 0,
+        "remaining_preclosure_authenticator_session_count": 0,
     }
     if any(facts.get(key) != expected for key, expected in exact.items()):
         raise EvidenceError("evidence cleanup facts do not match the reviewed contract")
+    if (
+        facts.get("evidence_writer_membership_open") is not False
+        or facts.get("evidence_writer_role_posture_safe") is not True
+    ):
+        raise EvidenceError("evidence cleanup writer closure facts are invalid")
     integer_fields = (
         "reconciled_object_count",
         "deleted_object_count",
         "retention_in_force_deleted_count",
+        "observed_authenticator_session_count",
+        "terminated_authenticator_session_count",
+        "remaining_preclosure_authenticator_session_count",
+        "evidence_writer_unexpected_member_count",
+        "evidence_writer_inherited_role_count",
     )
     for field in integer_fields:
         count = facts.get(field)
@@ -350,6 +389,11 @@ def _validated_evidence_cleanup_facts(value: Mapping[str, Any]) -> dict[str, Any
         raise EvidenceError("evidence cleanup reconciled and deleted counts differ")
     if facts["retention_in_force_deleted_count"] > facts["deleted_object_count"]:
         raise EvidenceError("evidence cleanup retention override count is impossible")
+    if (
+        facts["terminated_authenticator_session_count"]
+        > facts["observed_authenticator_session_count"]
+    ):
+        raise EvidenceError("evidence cleanup authenticator session counts are impossible")
     if SHA256.fullmatch(str(facts.get("object_key_set_sha256", ""))) is None:
         raise EvidenceError("evidence cleanup facts lack object_key_set_sha256")
     try:
@@ -357,6 +401,10 @@ def _validated_evidence_cleanup_facts(value: Mapping[str, Any]) -> dict[str, Any
     except ValueError as exc:
         raise EvidenceError("evidence cleanup facts lack database_date") from exc
     _timestamp(facts.get("completed_at"), "evidence_cleanup_facts.completed_at")
+    _timestamp(
+        facts.get("evidence_writer_closed_at"),
+        "evidence_cleanup_facts.evidence_writer_closed_at",
+    )
     return facts
 
 
@@ -827,6 +875,11 @@ def wrap_reviewed_input(
             "post_cleanup_login_password_present_count": ISOLATED_ROLE_COUNT,
             "post_cleanup_postgres_migration_owner_set": False,
             "post_cleanup_postgres_migration_owner_usage": False,
+            "evidence_writer_membership_open_after_cleanup": False,
+            "evidence_writer_role_posture_safe_after_cleanup": True,
+            "evidence_writer_unexpected_member_count": 0,
+            "evidence_writer_inherited_role_count": 0,
+            "evidence_writer_remaining_preclosure_authenticator_session_count": 0,
         }
         if any(
             reset_payload.get(key) != expected
@@ -864,6 +917,12 @@ def wrap_reviewed_input(
         override_count = reset_payload.get(
             "evidence_cleanup_retention_override_count"
         )
+        observed_sessions = reset_payload.get(
+            "evidence_writer_observed_authenticator_session_count"
+        )
+        terminated_sessions = reset_payload.get(
+            "evidence_writer_terminated_authenticator_session_count"
+        )
         if (
             not isinstance(deleted_count, int)
             or isinstance(deleted_count, bool)
@@ -872,6 +931,13 @@ def wrap_reviewed_input(
             or isinstance(override_count, bool)
             or override_count < 0
             or override_count > deleted_count
+            or not isinstance(observed_sessions, int)
+            or isinstance(observed_sessions, bool)
+            or observed_sessions < 0
+            or not isinstance(terminated_sessions, int)
+            or isinstance(terminated_sessions, bool)
+            or terminated_sessions < 0
+            or terminated_sessions > observed_sessions
         ):
             raise EvidenceError(
                 "source disposition reset attestation has invalid evidence cleanup counts"
@@ -879,6 +945,10 @@ def wrap_reviewed_input(
         _timestamp(
             reset_payload.get("evidence_cleanup_completed_at"),
             "reset attestation evidence_cleanup_completed_at",
+        )
+        _timestamp(
+            reset_payload.get("evidence_writer_closed_at"),
+            "reset attestation evidence_writer_closed_at",
         )
         payload_reset_attestation = reset_attestation
     elif kind == "rollback_plan":
@@ -1891,10 +1961,23 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
         != ISOLATED_ROLE_COUNT
         or reset_payload.get("post_cleanup_postgres_migration_owner_set") is not False
         or reset_payload.get("post_cleanup_postgres_migration_owner_usage") is not False
+        or reset_payload.get("evidence_writer_membership_open_after_cleanup") is not False
+        or reset_payload.get("evidence_writer_role_posture_safe_after_cleanup") is not True
+        or reset_payload.get("evidence_writer_unexpected_member_count") != 0
+        or reset_payload.get("evidence_writer_inherited_role_count") != 0
+        or reset_payload.get(
+            "evidence_writer_remaining_preclosure_authenticator_session_count"
+        ) != 0
     ):
         raise EvidenceError("source disposition reset attestation is invalid")
     evidence_deleted = reset_payload.get("evidence_cleanup_deleted_object_count")
     evidence_overridden = reset_payload.get("evidence_cleanup_retention_override_count")
+    observed_sessions = reset_payload.get(
+        "evidence_writer_observed_authenticator_session_count"
+    )
+    terminated_sessions = reset_payload.get(
+        "evidence_writer_terminated_authenticator_session_count"
+    )
     if (
         not isinstance(evidence_deleted, int)
         or isinstance(evidence_deleted, bool)
@@ -1903,6 +1986,13 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
         or isinstance(evidence_overridden, bool)
         or evidence_overridden < 0
         or evidence_overridden > evidence_deleted
+        or not isinstance(observed_sessions, int)
+        or isinstance(observed_sessions, bool)
+        or observed_sessions < 0
+        or not isinstance(terminated_sessions, int)
+        or isinstance(terminated_sessions, bool)
+        or terminated_sessions < 0
+        or terminated_sessions > observed_sessions
     ):
         raise EvidenceError("source disposition reset attestation is invalid")
     if ALEMBIC_REVISION.fullmatch(
@@ -1928,6 +2018,10 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
     _timestamp(
         reset_payload.get("evidence_cleanup_completed_at"),
         "source disposition evidence_cleanup_completed_at",
+    )
+    _timestamp(
+        reset_payload.get("evidence_writer_closed_at"),
+        "source disposition evidence_writer_closed_at",
     )
     if hashlib.sha256(_json_bytes(reset_attestation)).hexdigest() != source_payload.get(
         "reset_artifact_sha256"
