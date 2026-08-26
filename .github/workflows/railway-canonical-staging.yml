@@ -7,12 +7,22 @@ on:
         description: Exact reviewed application SHA to upload to all Railway pilot services
         required: true
         type: string
+      reset_disposable_data:
+        description: Close writes and reset disposable canonical staging before the exact deployment
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       reviewed_sha:
         description: Exact application SHA to upload to all Railway pilot services
         required: true
         type: string
+      reset_disposable_data:
+        description: Close writes and reset disposable canonical staging before the exact deployment
+        required: false
+        default: false
+        type: boolean
     outputs:
       api_deployment_id:
         description: Exact Railway API deployment created for the reviewed SHA
@@ -33,6 +43,8 @@ on:
       SUPABASE_ANON_KEY:
         required: true
       SUPABASE_ACCESS_TOKEN:
+        required: true
+      SUPABASE_DB_PASSWORD:
         required: true
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN:
         required: true
@@ -64,6 +76,8 @@ jobs:
       RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
       RAILWAY_FRONTEND_URL: ${{ vars.RAILWAY_FRONTEND_URL }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
@@ -221,6 +235,177 @@ jobs:
             echo "::error title=Railway service configuration drift::All services must use repository-root context, their exact /deploy/railway/*.railway.json config file, one Singapore replica, and no dashboard start override. Correct drift separately; this workflow will not trigger an unbound intermediate deployment."
             exit 1
           fi
+
+      - name: Close writes, quiesce sessions, and migrate the Railway reset boundary
+        if: inputs.reset_disposable_data == true
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p railway-reset-evidence
+          python3 -m pip install \
+            psycopg2-binary==2.9.9 \
+            sqlalchemy==2.0.23 \
+            alembic==1.14.1 \
+            httpx==0.25.2 \
+            requests==2.34.2
+          python3 backend/scripts/railway_canonical_reset.py prepare-reset \
+            --expected-sha "$REVIEWED_SHA" \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --receipt railway-reset-evidence/railway-reset-prepared.json
+          jq -e \
+            --arg sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            '.schema == "aasopharma.railway-canonical-reset.v1" and
+             .action == "prepare-reset" and .provider == "railway" and
+             .expected_sha == $sha and .project_ref == $project_ref and
+             .write_fence.state == "closed" and
+             .session_quiescence.remaining_targeted_session_count == 0 and
+             (.migration.alembic_head | type) == "string" and
+             (.migration.alembic_head | length) > 0 and
+             .migration.auth_schema_present == true and
+             .migration.storage_schema_present == true and
+             .role_cleanup.migration_owner_authority_semantics == "explicit_pg_auth_members_paths" and
+             .role_cleanup.postgres_migration_owner_set == false and
+             .role_cleanup.postgres_migration_owner_usage == false and
+             .transport.selected_ipv4_address == "verified-not-persisted"' \
+            railway-reset-evidence/railway-reset-prepared.json >/dev/null
+
+      - name: Build and mask the restricted evidence cleanup connection
+        if: inputs.reset_disposable_data == true
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: python3 backend/scripts/verify_staging_direct_roles.py --bootstrap-only
+
+      - name: Provision restricted evidence cleanup authority
+        if: inputs.reset_disposable_data == true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
+          hook_exists=$(psql -X -Atqc \
+            "SELECT to_regprocedure('erp_security.canonical_evidence_storage_access_token_hook(jsonb)') IS NOT NULL" \
+            "$PSYCOPG_DATABASE_URL")
+          if [ "$hook_exists" = t ]; then
+            python3 backend/scripts/verify_supabase_auth_admin_secret.py \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              >railway-reset-evidence/railway-auth-admin-preflight.json
+            jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+              '.state == "verified"
+               and .project_ref == $project_ref
+               and .modern_secret_shape_verified == true
+               and .list_verified == true
+               and .readback_verified == true
+               and .mutation_performed == false' \
+              railway-reset-evidence/railway-auth-admin-preflight.json >/dev/null
+            identity_log=$(mktemp)
+            if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --phase prepare \
+                --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+                --reviewed-sha "$REVIEWED_SHA" \
+                --github-env "$GITHUB_ENV" \
+                --receipt railway-reset-evidence/railway-evidence-storage-identity.json \
+                >railway-reset-evidence/railway-evidence-storage-identity-summary.json \
+                2>"$identity_log"; then
+              python3 backend/scripts/safe_ci_log_summary.py \
+                --label railway-evidence-identity "$identity_log"
+              exit 1
+            fi
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=true" >> "$GITHUB_ENV"
+          elif [ "$hook_exists" = f ]; then
+            object_count=$(psql -X -Atqc \
+              "SELECT CASE WHEN to_regclass('storage.objects') IS NULL THEN 0 ELSE (SELECT count(*) FROM storage.objects WHERE bucket_id='canonical-evidence-private-v1') END" \
+              "$PSYCOPG_DATABASE_URL")
+            if [ "$object_count" != 0 ]; then
+              echo "Evidence exists but the restricted cleanup hook is unavailable" >&2
+              exit 1
+            fi
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=false" >> "$GITHUB_ENV"
+          else
+            echo "Could not classify the evidence cleanup hook" >&2
+            exit 1
+          fi
+
+      - name: Reconcile and remove evidence through the restricted Storage API
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          cleanup_log=$(mktemp)
+          if ! PYTHONPATH=backend python3 backend/scripts/cleanup_staging_evidence_storage.py \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --database-url-env PSYCOPG_DATABASE_URL \
+              --receipt railway-reset-evidence/railway-evidence-storage-cleanup.json \
+              >"$cleanup_log" 2>&1; then
+            python3 backend/scripts/safe_ci_log_summary.py \
+              --label railway-evidence-cleanup "$cleanup_log"
+            exit 1
+          fi
+          jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            '.contract_version == "canonical-evidence-reset-cleanup-v2"
+             and .state == "empty"
+             and .project_ref == $project_ref
+             and .bucket == "canonical-evidence-private-v1"
+             and .remaining_object_count == 0
+             and .deleted_object_count == .reconciled_object_count
+             and .legal_hold_count == 0
+             and .evidence_writer_membership_open == false
+             and .evidence_writer_role_posture_safe == true
+             and .evidence_writer_unexpected_member_count == 0
+             and .evidence_writer_inherited_role_count == 0
+             and ((.evidence_writer_role_installed == true
+                   and .evidence_writer_role_absence_verified == false)
+                  or (.evidence_writer_role_installed == false
+                      and .evidence_writer_role_absence_verified == true))
+             and (.observed_authenticator_session_count | type) == "number"
+             and .observed_authenticator_session_count >= 0
+             and (.terminated_authenticator_session_count | type) == "number"
+             and .terminated_authenticator_session_count >= 0
+             and .terminated_authenticator_session_count <= .observed_authenticator_session_count
+             and .remaining_preclosure_authenticator_session_count == 0
+             and (.evidence_writer_closed_at | type) == "string"
+             and (.retention_in_force_deleted_count | type) == "number"
+             and .retention_in_force_deleted_count >= 0' \
+            railway-reset-evidence/railway-evidence-storage-cleanup.json >/dev/null
+
+      - name: Reset disposable Railway data against the cleaned exact head
+        if: inputs.reset_disposable_data == true
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          python3 backend/scripts/railway_canonical_reset.py reset \
+            --expected-sha "$REVIEWED_SHA" \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --evidence-cleanup-receipt railway-reset-evidence/railway-evidence-storage-cleanup.json \
+            --receipt railway-canonical-reset.json
+          jq -e \
+            --arg sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg expected_head "$expected_head" \
+            '.schema == "aasopharma.railway-canonical-reset.v1" and
+             .action == "reset" and .provider == "railway" and
+             .expected_sha == $sha and .project_ref == $project_ref and
+             .write_fence.state == "closed" and
+             .post_reset_fence_state == "closed" and
+             .evidence_cleanup.contract_version == "canonical-evidence-reset-cleanup-v2" and
+             .evidence_cleanup.state == "empty" and
+             .evidence_cleanup.remaining_object_count == 0 and
+             (.evidence_cleanup.receipt_sha256 | test("^[0-9a-f]{64}$")) and
+             .session_quiescence.remaining_targeted_session_count == 0 and
+             .reset.alembic_head == $expected_head and
+             .reset.disposable_row_count_after_reset == 0 and
+             .reset.evidence_storage_object_count_after_reset == 0 and
+             .role_cleanup.migration_owner_authority_semantics == "explicit_pg_auth_members_paths" and
+             .role_cleanup.postgres_migration_owner_set == false and
+             .role_cleanup.postgres_migration_owner_usage == false and
+             .transport.selected_ipv4_address == "verified-not-persisted"' \
+            railway-canonical-reset.json >/dev/null
 
       - name: Reconcile the reviewed staging MCP OAuth client authority
         env:
@@ -648,6 +833,53 @@ jobs:
           require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command" "$mcp_deployment_message" false
           require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health "" "$frontend_deployment_message" false
 
+      - name: Prove exact Railway authority before reopening reset fence
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/deployment_control.py status \
+            --expected-sha "$REVIEWED_SHA" \
+            --fence closed
+
+      - name: Verify exact API database isolation before reopening writes
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 15 \
+            "$RAILWAY_API_URL/ready" > api-ready-before-fence-open.json
+          jq -e '.status == "ready" and
+                 .database.transport == "supabase_direct" and
+                 .database.principal == "erp_runtime" and
+                 .database.principal_isolated == true and
+                 .database.migration_owner_member == false and
+                 .database.row_security == true and
+                 .database.ip_version == 6' \
+            api-ready-before-fence-open.json >/dev/null
+
+      - name: Open writes after exact Railway provenance proof
+        if: inputs.reset_disposable_data == true
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/railway_canonical_reset.py open-fence \
+            --expected-sha "$REVIEWED_SHA" \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --receipt railway-canonical-fence-open.json
+          jq -e \
+            --arg sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            '.schema == "aasopharma.railway-canonical-reset.v1" and
+             .action == "open-fence" and .provider == "railway" and
+             .expected_sha == $sha and .project_ref == $project_ref and
+             .write_fence.state == "open" and
+             .role_cleanup.migration_owner_authority_semantics == "explicit_pg_auth_members_paths" and
+             .role_cleanup.postgres_migration_owner_set == false and
+             .role_cleanup.postgres_migration_owner_usage == false and
+             .transport.selected_ipv4_address == "verified-not-persisted"' \
+            railway-canonical-fence-open.json >/dev/null
+
       - name: Verify all public services publish the reviewed SHA
         run: |
           set -euo pipefail
@@ -670,13 +902,7 @@ jobs:
             frontend_health=$(<frontend-health.txt)
             frontend_metadata=$(<frontend-metadata.json)
             if jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_health" >/dev/null 2>&1 && \
-               jq -e '.status == "ready" and
-                      .database.transport == "supabase_direct" and
-                      .database.principal == "erp_runtime" and
-                      .database.principal_isolated == true and
-                      .database.migration_owner_member == false and
-                      .database.row_security == true and
-                      .database.ip_version == 6' <<<"$api_ready" >/dev/null 2>&1 && \
+               jq -e '.status == "ready" and .database.transport == "supabase_direct" and .database.principal == "erp_runtime" and .database.principal_isolated == true and .database.migration_owner_member == false and .database.row_security == true and .database.ip_version == 6' <<<"$api_ready" >/dev/null 2>&1 && \
                jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_health" >/dev/null 2>&1 && \
                jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1 && \
                test "$frontend_health" = ok && \
@@ -730,6 +956,21 @@ jobs:
           path: |
             railway-pilot-evidence.json
             railway-supabase-auth-redirect.json
+            railway-canonical-reset.json
+            railway-canonical-fence-open.json
+            railway-reset-evidence/*.json
             ${{ runner.temp }}/railway-oauth-evidence/canonical-staging-oauth-client.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Re-close writes after any certification failure
+        if: failure() && inputs.reset_disposable_data == true
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/railway_canonical_reset.py close-fence \
+            --expected-sha "$REVIEWED_SHA" \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --production-project-refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --receipt railway-canonical-fence-reclosed.json

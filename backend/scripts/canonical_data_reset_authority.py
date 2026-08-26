@@ -503,23 +503,98 @@ def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict
             password_presence = _role_password_presence(cursor)
             cursor.execute(
                 """
-                SELECT EXISTS (
-                    SELECT 1
-                      FROM pg_catalog.pg_auth_members AS membership
-                      JOIN pg_catalog.pg_roles AS granted
-                        ON granted.oid=membership.roleid
-                      JOIN pg_catalog.pg_roles AS member
-                        ON member.oid=membership.member
-                     WHERE granted.rolname='erp_migration_owner'
-                       AND member.rolname='postgres'
+                WITH RECURSIVE identity AS (
+                    SELECT oid, rolinherit, rolsuper
+                      FROM pg_catalog.pg_roles
+                     WHERE rolname=current_user
+                ), set_path(roleid) AS (
+                    SELECT oid FROM identity
+                    UNION
+                    SELECT membership.roleid
+                      FROM set_path AS prior
+                      JOIN pg_catalog.pg_auth_members AS membership
+                        ON membership.member=prior.roleid
+                     WHERE CASE
+                             WHEN current_setting('server_version_num')::integer >= 160000
+                             THEN COALESCE(
+                               (to_jsonb(membership)->>'set_option')::boolean,
+                               false
+                             )
+                             ELSE true
+                           END
+                ), usage_path(roleid) AS (
+                    SELECT oid FROM identity
+                    UNION
+                    SELECT membership.roleid
+                      FROM usage_path AS prior
+                      JOIN pg_catalog.pg_auth_members AS membership
+                        ON membership.member=prior.roleid
+                      JOIN pg_catalog.pg_roles AS member_role
+                        ON member_role.oid=membership.member
+                     WHERE CASE
+                             WHEN current_setting('server_version_num')::integer >= 160000
+                             THEN COALESCE(
+                               (to_jsonb(membership)->>'inherit_option')::boolean,
+                               false
+                             )
+                             ELSE member_role.rolinherit
+                           END
+                ), direct_membership AS (
+                    SELECT COALESCE(bool_or(
+                             CASE
+                               WHEN membership.member IS NULL THEN false
+                               WHEN current_setting('server_version_num')::integer >= 160000
+                               THEN COALESCE(
+                                 (to_jsonb(membership)->>'set_option')::boolean,
+                                 false
+                               )
+                               ELSE true
+                             END
+                           ),false) AS set_option,
+                           COALESCE(bool_or(
+                             CASE
+                               WHEN membership.member IS NULL THEN false
+                               WHEN current_setting('server_version_num')::integer >= 160000
+                               THEN COALESCE(
+                                 (to_jsonb(membership)->>'inherit_option')::boolean,
+                                 false
+                               )
+                               ELSE identity.rolinherit
+                             END
+                           ),false) AS inherit_option
+                      FROM identity
+                 LEFT JOIN pg_catalog.pg_auth_members AS membership
+                        ON membership.roleid=(
+                             SELECT oid FROM pg_catalog.pg_roles
+                              WHERE rolname='erp_migration_owner'
+                           )
+                       AND membership.member=identity.oid
                 )
+                SELECT EXISTS (
+                         SELECT 1 FROM set_path
+                          WHERE roleid='erp_migration_owner'::regrole::oid
+                       ) AS delegated_set_path,
+                       EXISTS (
+                         SELECT 1 FROM usage_path
+                          WHERE roleid='erp_migration_owner'::regrole::oid
+                       ) AS delegated_usage_path,
+                       direct_membership.set_option,
+                       direct_membership.inherit_option,
+                       identity.rolsuper AS verification_principal_superuser
+                  FROM direct_membership CROSS JOIN identity
                 """
             )
             delegation = cursor.fetchone()
-            if delegation is None or delegation != (False,):
+            if (
+                delegation is None
+                or len(delegation) != 5
+                or delegation[:4] != (False, False, False, False)
+                or not isinstance(delegation[4], bool)
+            ):
                 raise ResetAuthorityError(
                     "postgres retains temporary migration-owner delegation"
                 )
+            verification_principal_superuser = delegation[4]
             login_password_present_count = sum(
                 present for role, present in password_presence if role in LOGIN_ROLES
             )
@@ -551,8 +626,10 @@ def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict
         "login_role_count": len(LOGIN_ROLES),
         "login_role_password_present_count": login_password_present_count,
         "nonlogin_role_password_present_count": nonlogin_password_present_count,
+        "migration_owner_authority_semantics": "explicit_pg_auth_members_paths",
         "postgres_migration_owner_set": False,
         "postgres_migration_owner_usage": False,
+        "verification_principal_superuser": verification_principal_superuser,
         "role_catalog_sha256": role_catalog_sha256,
         "verified_at": _utc_now(),
     }
@@ -597,6 +674,38 @@ def _evidence_object_count(cursor: Any) -> int:
     if row is None:
         raise ResetAuthorityError("could not count canonical evidence objects")
     return int(row[0])
+
+
+def verify_reset_boundary(
+    connection: Any, *, authority: ResetAuthority, project_ref: str
+) -> dict[str, object]:
+    """Read-only proof that the deployed head/topology matches reset authority."""
+
+    if project_ref != CANONICAL_STAGING_PROJECT_REF:
+        raise ResetAuthorityError(
+            "reset boundary verification is restricted to canonical staging"
+        )
+    with connection:
+        with connection.cursor() as cursor:
+            catalog = _catalog_snapshot(cursor, authority.alembic_schemas)
+            authority.validate_observed_catalog(
+                alembic_head=catalog.alembic_head,
+                alembic_schemas=catalog.alembic_schemas,
+                canonical_relations=catalog.canonical_relations,
+                ephemeral_scope_relations=catalog.ephemeral_scope_relations,
+            )
+            if not catalog.auth_schema_present or not catalog.storage_schema_present:
+                raise ResetAuthorityError(
+                    "managed Supabase schemas must exist before reset"
+                )
+    return {
+        "alembic_head": catalog.alembic_head,
+        "canonical_relation_count": len(catalog.canonical_relations),
+        "ephemeral_scope_relation_count": len(catalog.ephemeral_scope_relations),
+        "catalog_fingerprint_sha256": catalog.fingerprint_sha256(),
+        "auth_schema_present": catalog.auth_schema_present,
+        "storage_schema_present": catalog.storage_schema_present,
+    }
 
 
 def execute_reset(

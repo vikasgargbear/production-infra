@@ -130,8 +130,9 @@ jobs:
   canonical-free-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      (inputs.deploy_canonical_staging || inputs.provision_canonical_demo) &&
-      !(inputs.run_live18 && inputs.live18_provider == 'railway')
+      (inputs.deploy_canonical_staging || inputs.provision_canonical_demo ||
+       inputs.reset_canonical_staging) &&
+      inputs.live18_provider == 'render'
     uses: ./.github/workflows/canonical-staging.yml
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
@@ -147,11 +148,13 @@ jobs:
   railway-canonical-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      inputs.deploy_canonical_staging && inputs.live18_provider == 'railway' &&
+      (inputs.deploy_canonical_staging || inputs.reset_canonical_staging) &&
+      inputs.live18_provider == 'railway' &&
       vars.DEPLOY_RAILWAY_PILOT == 'true'
     uses: ./.github/workflows/railway-canonical-staging.yml
     with:
       reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
+      reset_disposable_data: ${{ inputs.reset_canonical_staging }}
     secrets: inherit
 
   canonical-application-promotion-evidence:

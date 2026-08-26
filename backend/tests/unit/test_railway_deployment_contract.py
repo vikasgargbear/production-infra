@@ -648,18 +648,19 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
     ):
         assert endpoint in workflow
 
-    assert workflow.count("curl --fail-with-body") == 1
+    assert workflow.count("curl --fail-with-body") == 2
+    assert "Verify exact API database isolation before reopening writes" in workflow
     assert "fetch()" in workflow
     assert workflow.count(" &\n") >= 6
     assert '.status == "healthy" and .git_commit == $sha' in workflow
     assert '.status == "ok" and .git_commit == $sha' in workflow
-    assert workflow.count('.status == "ready"') == 2
-    assert '.database.transport == "supabase_direct"' in workflow
-    assert '.database.principal == "erp_runtime"' in workflow
-    assert ".database.principal_isolated == true" in workflow
-    assert ".database.migration_owner_member == false" in workflow
-    assert ".database.row_security == true" in workflow
-    assert ".database.ip_version == 6" in workflow
+    assert workflow.count('.status == "ready"') == 3
+    assert workflow.count('.database.transport == "supabase_direct"') == 2
+    assert workflow.count('.database.principal == "erp_runtime"') == 2
+    assert workflow.count(".database.principal_isolated == true") == 2
+    assert workflow.count(".database.migration_owner_member == false") == 2
+    assert workflow.count(".database.row_security == true") == 2
+    assert workflow.count(".database.ip_version == 6") == 2
     assert '.service == "aasopharma-erp" and .git_commit == $sha' in workflow
     assert "deployment_id:$api_deployment_id" in workflow
     assert "deployment_id:$mcp_deployment_id" in workflow

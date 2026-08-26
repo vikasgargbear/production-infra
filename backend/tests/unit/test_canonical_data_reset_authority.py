@@ -246,6 +246,23 @@ def test_postgresql_gate_executes_reset_idempotency_and_rollback() -> None:
     assert "rollback-integration" in runtime_check
 
 
+def test_role_cleanup_attests_effective_set_and_usage_not_membership_absence() -> None:
+    source = inspect.getsource(reset_authority.verify_post_cleanup_role_state)
+
+    assert "WITH RECURSIVE identity" in source
+    assert "SELECT oid, rolinherit, rolsuper" in source
+    assert "set_path(roleid)" in source
+    assert "usage_path(roleid)" in source
+    assert "server_version_num" in source
+    assert "'erp_migration_owner'::regrole::oid" in source
+    assert "verification_principal_superuser" in source
+    assert "pg_has_role" not in source
+    assert "'SET'" not in source
+    assert "membership.member IS NULL THEN false" in source
+    assert "set_option" in source
+    assert "inherit_option" in source
+
+
 def test_transactional_reset_emits_safe_exact_catalog_facts(monkeypatch) -> None:
     authority = load_reset_authority()
     connection = _FakeConnection()
@@ -312,7 +329,7 @@ def test_role_posture_and_password_presence_use_the_correct_catalogs() -> None:
 
 def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> None:
     connection = _FakeConnection()
-    connection.cursor_instance.fetchone_result = (False,)
+    connection.cursor_instance.fetchone_result = (False, False, False, False, True)
     role_rows = tuple(
         (
             role,
@@ -354,15 +371,20 @@ def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> N
     assert receipt["nonlogin_role_password_present_count"] == 0
     assert receipt["postgres_migration_owner_set"] is False
     assert receipt["postgres_migration_owner_usage"] is False
+    assert (
+        receipt["migration_owner_authority_semantics"]
+        == "explicit_pg_auth_members_paths"
+    )
+    assert receipt["verification_principal_superuser"] is True
 
-    connection.cursor_instance.fetchone_result = (True,)
+    connection.cursor_instance.fetchone_result = (True, False, True, False, True)
     with pytest.raises(ResetAuthorityError, match="retains temporary"):
         reset_authority.verify_post_cleanup_role_state(
             connection,
             project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,
         )
 
-    connection.cursor_instance.fetchone_result = (False,)
+    connection.cursor_instance.fetchone_result = (False, False, False, False, True)
     monkeypatch.setattr(
         reset_authority,
         "_role_password_presence",
