@@ -45,14 +45,23 @@ def test_server_storage_credential_is_absent_from_browser_source():
             assert "EVIDENCE_STORAGE_SERVER_JWT" not in source, path
 
 
-def test_storage_adapter_uses_only_the_custom_role_secret_api_key_header():
+def test_storage_adapter_uses_public_api_key_and_verified_service_user_bearer():
     adapter = (
         ROOT / "backend/app/infrastructure/evidence_storage.py"
     ).read_text(encoding="utf-8")
-    assert '"apikey": self._config.server_api_key' in adapter
-    assert '"Authorization"' not in adapter
+    credentials = (
+        ROOT / "backend/app/infrastructure/evidence_storage_credentials.py"
+    ).read_text(encoding="utf-8")
+    assert '"apikey": self._config.credentials.publishable_api_key' in adapter
+    assert '"Authorization": f"Bearer {access_token}"' in adapter
+    assert "SUPABASE_ANON_KEY" in credentials
+    assert "EVIDENCE_STORAGE_SERVICE_EMAIL" in credentials
+    assert "EVIDENCE_STORAGE_SERVICE_PASSWORD" in credentials
+    assert "EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID" in credentials
+    assert "EVIDENCE_STORAGE_SERVER_API_KEY" not in adapter
     assert "EVIDENCE_STORAGE_SERVER_JWT" not in adapter
-    assert "SUPABASE_ANON_KEY" not in adapter
+    assert "JWT_SECRET_KEY" in credentials
+    assert "must be distinct from the ERP JWT signing secret" in credentials
 
 
 def test_storage_policy_has_no_update_or_service_role_authority():

@@ -13,12 +13,65 @@ from app.infrastructure.evidence_storage import (
     EvidenceStorageConflict,
     EvidenceStorageUnavailable,
     SupabaseEvidenceStorage,
+    _configured_evidence_storage,
+    configured_evidence_storage,
     evidence_object_key,
     validate_pdf,
 )
+from app.infrastructure.evidence_storage_credentials import (
+    EvidenceCredentialConfig,
+    EvidenceCredentialUnavailable,
+)
 
 
-SERVER_API_KEY = "sb_secret_" + "a" * 32
+PROJECT_REF = "canonicalcanonical12"
+BASE_URL = f"https://{PROJECT_REF}.supabase.co"
+PUBLISHABLE_API_KEY = "sb_publishable_" + "a" * 32
+SERVICE_EMAIL = "evidence-storage@canonical.invalid"
+SERVICE_PASSWORD = "evidence-password-" + "x" * 32
+SERVICE_USER_ID = "c1fe54d2-a6d9-4c63-9d08-dd4b02caf630"
+
+
+class StubTokenProvider:
+    def __init__(self, *tokens: str) -> None:
+        self.tokens = list(tokens or ("access-token",))
+        self.index = 0
+        self.access_calls = 0
+        self.invalidated: list[str] = []
+
+    def access_token(self) -> str:
+        self.access_calls += 1
+        return self.tokens[self.index]
+
+    def invalidate(self, rejected_token: str) -> None:
+        self.invalidated.append(rejected_token)
+        if self.index + 1 < len(self.tokens):
+            self.index += 1
+
+
+def _config() -> EvidenceStorageConfig:
+    return EvidenceStorageConfig(
+        credentials=EvidenceCredentialConfig(
+            base_url=BASE_URL,
+            project_ref=PROJECT_REF,
+            publishable_api_key=PUBLISHABLE_API_KEY,
+            service_email=SERVICE_EMAIL,
+            service_password=SERVICE_PASSWORD,
+            expected_user_id=SERVICE_USER_ID,
+        )
+    )
+
+
+def _set_valid_environment(monkeypatch) -> None:
+    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_URL", BASE_URL)
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", PROJECT_REF)
+    monkeypatch.setenv("SUPABASE_ANON_KEY", PUBLISHABLE_API_KEY)
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVICE_EMAIL", SERVICE_EMAIL)
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVICE_PASSWORD", SERVICE_PASSWORD)
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID", SERVICE_USER_ID)
+    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_API_KEY", raising=False)
+    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_JWT", raising=False)
 
 
 def _blank_pdf() -> bytes:
@@ -51,36 +104,30 @@ PDF = _blank_pdf()
 
 
 def test_storage_configuration_fails_closed_without_explicit_enable(monkeypatch):
+    _set_valid_environment(monkeypatch)
     monkeypatch.delenv("EVIDENCE_STORAGE_ENABLED", raising=False)
-    monkeypatch.setenv("SUPABASE_URL", "https://canonical.supabase.co")
-    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "canonicalcanonical12")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
 
     with pytest.raises(EvidenceStorageUnavailable, match="not enabled"):
         EvidenceStorageConfig.from_environment()
 
 
-def test_storage_configuration_requires_https_and_server_only_authority(monkeypatch):
-    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("SUPABASE_URL", "http://canonical.supabase.co")
-    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "canonicalcanonical12")
-    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_API_KEY", raising=False)
+def test_storage_configuration_requires_https(monkeypatch):
+    _set_valid_environment(monkeypatch)
+    monkeypatch.setenv("SUPABASE_URL", f"http://{PROJECT_REF}.supabase.co")
 
     with pytest.raises(EvidenceStorageUnavailable, match="HTTPS"):
         EvidenceStorageConfig.from_environment()
 
 
 def test_storage_configuration_binds_the_exact_reviewed_staging_project(monkeypatch):
-    project_ref = "rgihahbmkrmhitjdjvev"
-    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
-    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
+    _set_valid_environment(monkeypatch)
 
     config = EvidenceStorageConfig.from_environment()
 
-    assert config.project_ref == project_ref
-    assert config.base_url == f"https://{project_ref}.supabase.co"
+    assert config.project_ref == PROJECT_REF
+    assert config.base_url == BASE_URL
+    assert config.credentials.publishable_api_key == PUBLISHABLE_API_KEY
+    assert config.credentials.expected_user_id == SERVICE_USER_ID
 
 
 @pytest.mark.parametrize(
@@ -93,59 +140,52 @@ def test_storage_configuration_binds_the_exact_reviewed_staging_project(monkeypa
 def test_storage_rejects_retired_or_mismatched_project_authority(
     monkeypatch, project_ref, base_url
 ):
-    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
+    _set_valid_environment(monkeypatch)
     monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
     monkeypatch.setenv("SUPABASE_URL", base_url)
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
 
-    with pytest.raises(EvidenceStorageUnavailable, match="reviewed environment"):
+    with pytest.raises(EvidenceStorageUnavailable, match="reviewed"):
         EvidenceStorageConfig.from_environment()
 
 
 @pytest.mark.parametrize(
-    "api_key",
-    [
-        "service_role",
-        "eyJhbGciOiJIUzI1NiJ9.payload.signature",
-        "sb_publishable_public",
-        "sb_secret_short",
-        "sb_secret_" + "a" * 23,
-        "sb_secret_" + "a" * 24 + " ",
-    ],
+    "retired_name",
+    ["EVIDENCE_STORAGE_SERVER_API_KEY", "EVIDENCE_STORAGE_SERVER_JWT"],
 )
-def test_storage_rejects_non_secret_or_malformed_server_api_keys(monkeypatch, api_key):
-    project_ref = "canonicalcanonical12"
-    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
-    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", api_key)
+def test_storage_rejects_retired_server_credentials(monkeypatch, retired_name):
+    _set_valid_environment(monkeypatch)
+    monkeypatch.setenv(retired_name, "must-not-be-used")
 
-    with pytest.raises(EvidenceStorageUnavailable, match="sb_secret_"):
+    with pytest.raises(EvidenceStorageUnavailable, match="Retired"):
         EvidenceStorageConfig.from_environment()
 
 
-def test_storage_requires_the_server_api_key_when_enabled(monkeypatch):
-    project_ref = "canonicalcanonical12"
-    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
-    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
-    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_API_KEY", raising=False)
-
-    with pytest.raises(EvidenceStorageUnavailable, match="not configured"):
-        EvidenceStorageConfig.from_environment()
-
-
-def test_storage_does_not_depend_on_the_browser_anon_key(monkeypatch):
-    project_ref = "canonicalcanonical12"
-    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
-    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
-    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
+def test_storage_requires_the_public_key_and_service_identity(monkeypatch):
+    _set_valid_environment(monkeypatch)
     monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
 
-    config = EvidenceStorageConfig.from_environment()
+    with pytest.raises(EvidenceStorageUnavailable, match="publishable or legacy anon"):
+        EvidenceStorageConfig.from_environment()
 
-    assert config.server_api_key == SERVER_API_KEY
+
+def test_storage_rejects_the_erp_jwt_secret_as_service_password(monkeypatch):
+    _set_valid_environment(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET_KEY", SERVICE_PASSWORD)
+
+    with pytest.raises(EvidenceStorageUnavailable, match="ERP JWT"):
+        EvidenceStorageConfig.from_environment()
+
+
+def test_configured_storage_reuses_one_process_token_cache(monkeypatch):
+    _set_valid_environment(monkeypatch)
+    _configured_evidence_storage.cache_clear()
+    try:
+        first = configured_evidence_storage()
+        second = configured_evidence_storage()
+        assert first is second
+        assert first._token_provider is second._token_provider
+    finally:
+        _configured_evidence_storage.cache_clear()
 
 
 @pytest.mark.parametrize(
@@ -196,20 +236,17 @@ def test_private_adapter_creates_without_upsert_and_reads_back_exact_bytes():
         raise AssertionError(request.method)
 
     storage = SupabaseEvidenceStorage(
-        EvidenceStorageConfig(
-            base_url="https://canonical.supabase.co",
-            server_api_key=SERVER_API_KEY,
-            project_ref="canonicalcanonical12",
-        ),
+        _config(),
         transport=httpx.MockTransport(handler),
+        token_provider=StubTokenProvider(),
     )
     key = evidence_object_key("org", "branch", "expense_receipt", "a" * 64)
 
     assert storage.create(key, PDF) is True
     assert storage.read(key) == PDF
     assert requests[0].headers["x-upsert"] == "false"
-    assert "authorization" not in requests[0].headers
-    assert requests[0].headers["apikey"] == SERVER_API_KEY
+    assert requests[0].headers["authorization"] == "Bearer access-token"
+    assert requests[0].headers["apikey"] == PUBLISHABLE_API_KEY
     assert requests[0].url.path == f"/storage/v1/object/{EVIDENCE_BUCKET}/{key}"
 
 
@@ -235,12 +272,9 @@ def test_existing_object_is_not_overwritten_and_can_be_verified_by_readback(
         raise AssertionError(request.method)
 
     storage = SupabaseEvidenceStorage(
-        EvidenceStorageConfig(
-            base_url="https://canonical.supabase.co",
-            server_api_key=SERVER_API_KEY,
-            project_ref="canonicalcanonical12",
-        ),
+        _config(),
         transport=httpx.MockTransport(handler),
+        token_provider=StubTokenProvider(),
     )
     assert storage.create("org/branch/expense_receipt/hash.pdf", PDF) is False
     assert storage.read("org/branch/expense_receipt/hash.pdf") == PDF
@@ -249,14 +283,11 @@ def test_existing_object_is_not_overwritten_and_can_be_verified_by_readback(
 @pytest.mark.parametrize("status", [400, 409])
 def test_unstructured_duplicate_status_is_not_treated_as_idempotent(status):
     storage = SupabaseEvidenceStorage(
-        EvidenceStorageConfig(
-            base_url="https://canonical.supabase.co",
-            server_api_key=SERVER_API_KEY,
-            project_ref="canonicalcanonical12",
-        ),
+        _config(),
         transport=httpx.MockTransport(
             lambda _request: httpx.Response(status, json={"message": "ambiguous"})
         ),
+        token_provider=StubTokenProvider(),
     )
 
     with pytest.raises(EvidenceStorageUnavailable):
@@ -265,28 +296,76 @@ def test_unstructured_duplicate_status_is_not_treated_as_idempotent(status):
 
 def test_storage_auth_failure_is_unavailable_not_fake_success():
     storage = SupabaseEvidenceStorage(
-        EvidenceStorageConfig(
-            base_url="https://canonical.supabase.co",
-            server_api_key=SERVER_API_KEY,
-            project_ref="canonicalcanonical12",
-        ),
+        _config(),
         transport=httpx.MockTransport(
             lambda _request: httpx.Response(403, json={"message": "denied"})
         ),
+        token_provider=StubTokenProvider(),
     )
 
     with pytest.raises(EvidenceStorageUnavailable, match="bucket-restricted"):
         storage.create("org/branch/expense_receipt/hash.pdf", PDF)
 
 
+@pytest.mark.parametrize("operation", ["create", "read", "delete"])
+def test_storage_refreshes_once_after_401(operation):
+    requests: list[httpx.Request] = []
+    provider = StubTokenProvider("rejected-token", "refreshed-token")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.headers["authorization"] == "Bearer rejected-token":
+            return httpx.Response(401, json={"message": "expired"})
+        if request.method == "POST":
+            return httpx.Response(201)
+        if request.method == "GET":
+            return httpx.Response(200, content=PDF)
+        return httpx.Response(204)
+
+    storage = SupabaseEvidenceStorage(
+        _config(),
+        transport=httpx.MockTransport(handler),
+        token_provider=provider,
+    )
+
+    if operation == "create":
+        assert storage.create("org/branch/kind/hash.pdf", PDF) is True
+    elif operation == "read":
+        assert storage.read("org/branch/kind/hash.pdf") == PDF
+    else:
+        assert storage.delete("org/branch/kind/hash.pdf") is True
+
+    assert len(requests) == 2
+    assert provider.invalidated == ["rejected-token"]
+    assert requests[1].headers["authorization"] == "Bearer refreshed-token"
+
+
+def test_storage_does_not_retry_403_or_a_second_401():
+    for statuses, expected_requests in [([403], 1), ([401, 401], 2)]:
+        provider = StubTokenProvider("first-token", "second-token")
+        requests = 0
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            nonlocal requests
+            status = statuses[min(requests, len(statuses) - 1)]
+            requests += 1
+            return httpx.Response(status)
+
+        storage = SupabaseEvidenceStorage(
+            _config(),
+            transport=httpx.MockTransport(handler),
+            token_provider=provider,
+        )
+        with pytest.raises(EvidenceStorageUnavailable, match="bucket-restricted"):
+            storage.create("org/branch/kind/hash.pdf", PDF)
+        assert requests == expected_requests
+
+
 def test_cleanup_requires_one_exact_object_key():
     storage = SupabaseEvidenceStorage(
-        EvidenceStorageConfig(
-            base_url="https://canonical.supabase.co",
-            server_api_key=SERVER_API_KEY,
-            project_ref="canonicalcanonical12",
-        ),
+        _config(),
         transport=httpx.MockTransport(lambda _request: httpx.Response(204)),
+        token_provider=StubTokenProvider(),
     )
 
     with pytest.raises(EvidenceStorageConflict, match="exact object key"):

@@ -1,16 +1,17 @@
 """Private object storage boundary for canonical evidence PDFs.
 
-The browser never receives the server credential.  This adapter is deliberately
-small: one private bucket, create-without-upsert, authenticated readback, and
-bounded cleanup.  Canonical metadata and tenant authority remain in PostgreSQL.
+The browser never receives the dedicated service-user credential.  This adapter
+is deliberately small: one private bucket, create-without-upsert, authenticated
+readback, and bounded cleanup.  Canonical metadata and tenant authority remain
+in PostgreSQL.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
 import os
-import re
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -19,12 +20,16 @@ from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfparser import PDFParser
 from pdfminer.psparser import PSEOF, PSException
 
+from app.infrastructure.evidence_storage_credentials import (
+    EvidenceCredentialConfig,
+    EvidenceCredentialUnavailable,
+    EvidenceServiceTokenProvider,
+)
+
 
 EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 MAX_EVIDENCE_BYTES = 10 * 1024 * 1024
 PDF_MEDIA_TYPE = "application/pdf"
-PROJECT_REF_PATTERN = re.compile(r"[a-z0-9]{20}")
-SERVER_API_KEY_PATTERN = re.compile(r"sb_secret_[A-Za-z0-9._-]{24,}")
 
 
 class EvidenceStorageError(RuntimeError):
@@ -51,11 +56,17 @@ class ValidatedPdf:
 
 @dataclass(frozen=True)
 class EvidenceStorageConfig:
-    base_url: str
-    server_api_key: str
-    project_ref: str
+    credentials: EvidenceCredentialConfig
     bucket: str = EVIDENCE_BUCKET
     timeout_seconds: float = 15.0
+
+    @property
+    def base_url(self) -> str:
+        return self.credentials.base_url
+
+    @property
+    def project_ref(self) -> str:
+        return self.credentials.project_ref
 
     @classmethod
     def from_environment(cls) -> "EvidenceStorageConfig":
@@ -63,32 +74,23 @@ class EvidenceStorageConfig:
             raise EvidenceStorageUnavailable("Canonical evidence storage is not enabled")
         base_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
         project_ref = os.getenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "").strip()
-        server_api_key = os.getenv("EVIDENCE_STORAGE_SERVER_API_KEY", "")
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc or parsed.path:
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage requires an explicit HTTPS project origin"
             )
-        if (
-            PROJECT_REF_PATTERN.fullmatch(project_ref) is None
-            or parsed.hostname != f"{project_ref}.supabase.co"
-        ):
+        if parsed.hostname != f"{project_ref}.supabase.co":
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage project authority does not match the reviewed environment"
             )
-        if not server_api_key:
-            raise EvidenceStorageUnavailable(
-                "Canonical evidence storage server authority is not configured"
+        try:
+            credentials = EvidenceCredentialConfig.from_environment(
+                base_url=base_url,
+                project_ref=project_ref,
             )
-        if SERVER_API_KEY_PATTERN.fullmatch(server_api_key) is None:
-            raise EvidenceStorageUnavailable(
-                "Canonical evidence storage requires a restricted Supabase sb_secret_ API key"
-            )
-        return cls(
-            base_url=base_url,
-            server_api_key=server_api_key,
-            project_ref=project_ref,
-        )
+        except EvidenceCredentialUnavailable as exc:
+            raise EvidenceStorageUnavailable(str(exc)) from exc
+        return cls(credentials=credentials)
 
 
 def validate_pdf(filename: str | None, media_type: str | None, content: bytes) -> ValidatedPdf:
@@ -136,18 +138,59 @@ class SupabaseEvidenceStorage:
         config: EvidenceStorageConfig,
         *,
         transport: httpx.BaseTransport | None = None,
+        token_provider: EvidenceServiceTokenProvider | None = None,
     ) -> None:
         self._config = config
         self._transport = transport
+        self._token_provider = token_provider or EvidenceServiceTokenProvider(
+            config.credentials,
+            transport=transport,
+        )
 
-    def _client(self) -> httpx.Client:
+    def _client(self, access_token: str) -> httpx.Client:
         return httpx.Client(
             timeout=self._config.timeout_seconds,
             transport=self._transport,
             headers={
-                "apikey": self._config.server_api_key,
+                "apikey": self._config.credentials.publishable_api_key,
+                "Authorization": f"Bearer {access_token}",
             },
         )
+
+    def _access_token(self) -> str:
+        try:
+            return self._token_provider.access_token()
+        except EvidenceCredentialUnavailable as exc:
+            raise EvidenceStorageUnavailable(str(exc)) from exc
+
+    def _invalidate(self, rejected_token: str) -> None:
+        self._token_provider.invalidate(rejected_token)
+
+    def _request(
+        self,
+        method: str,
+        object_key: str,
+        **kwargs: object,
+    ) -> httpx.Response:
+        """Send a storage request and retry exactly once after a 401."""
+
+        for attempt in range(2):
+            access_token = self._access_token()
+            try:
+                with self._client(access_token) as client:
+                    response = client.request(
+                        method,
+                        self._object_url(object_key),
+                        **kwargs,
+                    )
+            except httpx.RequestError as exc:
+                raise EvidenceStorageUnavailable(
+                    "Canonical evidence storage could not be reached"
+                ) from exc
+            if response.status_code != 401 or attempt == 1:
+                return response
+            self._invalidate(access_token)
+        raise AssertionError("unreachable evidence-storage retry state")
 
     def _object_url(self, object_key: str) -> str:
         encoded_key = quote(object_key, safe="/")
@@ -167,17 +210,12 @@ class SupabaseEvidenceStorage:
     def create(self, object_key: str, content: bytes) -> bool:
         """Create one immutable object; return False when the key already exists."""
 
-        try:
-            with self._client() as client:
-                response = client.post(
-                    self._object_url(object_key),
-                    content=content,
-                    headers={"Content-Type": PDF_MEDIA_TYPE, "x-upsert": "false"},
-                )
-        except httpx.RequestError as exc:
-            raise EvidenceStorageUnavailable(
-                "Canonical evidence storage could not be reached"
-            ) from exc
+        response = self._request(
+            "POST",
+            object_key,
+            content=content,
+            headers={"Content-Type": PDF_MEDIA_TYPE, "x-upsert": "false"},
+        )
         if response.status_code in (200, 201):
             return True
         if response.status_code in (400, 409):
@@ -198,44 +236,44 @@ class SupabaseEvidenceStorage:
     def read(self, object_key: str) -> bytes:
         """Fetch one object with a strict upper bound for integrity verification."""
 
-        chunks: list[bytes] = []
-        byte_count = 0
-        try:
-            with self._client() as client:
-                with client.stream("GET", self._object_url(object_key)) as response:
-                    if response.status_code == 404:
-                        raise EvidenceStorageUnavailable(
-                            "Canonical evidence object is missing"
-                        )
-                    if response.status_code != 200:
-                        self._raise_unavailable(response, "read")
-                    for chunk in response.iter_bytes():
-                        byte_count += len(chunk)
-                        if byte_count > MAX_EVIDENCE_BYTES:
-                            raise EvidenceIntegrityError(
-                                "Stored evidence exceeds the 10 MiB integrity boundary"
+        for attempt in range(2):
+            access_token = self._access_token()
+            chunks: list[bytes] = []
+            byte_count = 0
+            try:
+                with self._client(access_token) as client:
+                    with client.stream("GET", self._object_url(object_key)) as response:
+                        if response.status_code == 401 and attempt == 0:
+                            self._invalidate(access_token)
+                            continue
+                        if response.status_code == 404:
+                            raise EvidenceStorageUnavailable(
+                                "Canonical evidence object is missing"
                             )
-                        chunks.append(chunk)
-        except EvidenceStorageError:
-            raise
-        except httpx.RequestError as exc:
-            raise EvidenceStorageUnavailable(
-                "Canonical evidence storage could not be reached"
-            ) from exc
-        return b"".join(chunks)
+                        if response.status_code != 200:
+                            self._raise_unavailable(response, "read")
+                        for chunk in response.iter_bytes():
+                            byte_count += len(chunk)
+                            if byte_count > MAX_EVIDENCE_BYTES:
+                                raise EvidenceIntegrityError(
+                                    "Stored evidence exceeds the 10 MiB integrity boundary"
+                                )
+                            chunks.append(chunk)
+            except EvidenceStorageError:
+                raise
+            except httpx.RequestError as exc:
+                raise EvidenceStorageUnavailable(
+                    "Canonical evidence storage could not be reached"
+                ) from exc
+            return b"".join(chunks)
+        raise AssertionError("unreachable evidence-storage retry state")
 
     def delete(self, object_key: str) -> bool:
         """Delete one explicitly resolved orphan key; never accepts a prefix."""
 
         if not object_key or object_key.endswith("/"):
             raise EvidenceStorageConflict("Evidence cleanup requires one exact object key")
-        try:
-            with self._client() as client:
-                response = client.delete(self._object_url(object_key))
-        except httpx.RequestError as exc:
-            raise EvidenceStorageUnavailable(
-                "Canonical evidence storage could not be reached"
-            ) from exc
+        response = self._request("DELETE", object_key)
         if response.status_code in (200, 204):
             return True
         if response.status_code == 404:
@@ -243,7 +281,16 @@ class SupabaseEvidenceStorage:
         self._raise_unavailable(response, "delete")
 
 
+@lru_cache(maxsize=1)
+def _configured_evidence_storage(
+    config: EvidenceStorageConfig,
+) -> SupabaseEvidenceStorage:
+    """Share the service-user session cache and exchange lock per process."""
+
+    return SupabaseEvidenceStorage(config)
+
+
 def configured_evidence_storage() -> SupabaseEvidenceStorage:
     """FastAPI dependency that remains unavailable until safe authority exists."""
 
-    return SupabaseEvidenceStorage(EvidenceStorageConfig.from_environment())
+    return _configured_evidence_storage(EvidenceStorageConfig.from_environment())
