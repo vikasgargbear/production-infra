@@ -46,3 +46,34 @@ def test_deferred_document_number_types_are_absent() -> None:
 
 def test_deferred_compliance_tables_are_not_queried_by_runtime_routes() -> None:
     assert not (BACKEND_ROOT / "app/api/routes/compliance/compliance.py").exists()
+
+
+def test_zero_consumer_backend_archaeology_stays_retired() -> None:
+    retired_paths = (
+        "app/api/routes/audit/routes.py",
+        "app/api/routes/settings/business.py",
+        "app/api/routes/settings/features.py",
+        "app/api/services/dashboard_service.py",
+        "app/api/services/email/email_service.py",
+        "app/api/services/settings/settings_service.py",
+    )
+
+    assert [path for path in retired_paths if (BACKEND_ROOT / path).exists()] == []
+
+
+def test_retired_audit_and_settings_routes_are_absent() -> None:
+    api_routes = [
+        route for route in app.routes
+        if getattr(route, "endpoint", None) is not None
+    ]
+    paths = {route.path for route in api_routes}
+
+    assert not any(path.startswith("/api/audit-logs") for path in paths)
+    assert not any(path.startswith("/api/settings/business") for path in paths)
+    settings_routes = [
+        route for route in api_routes if route.path.startswith("/api/settings/")
+    ]
+    assert settings_routes
+    assert {
+        route.endpoint.__module__ for route in settings_routes
+    } == {"app.api.routes.canonical_erp_reads"}
