@@ -9,10 +9,10 @@ PostgreSQL multi-schema database.
 | Schema | Tables | Description |
 |--------|--------|-------------|
 | [sales](schemas/sales.md) | 25 | Orders, invoices, challans, returns |
-| [inventory](schemas/inventory.md) | 16 | Products, batches, movements |
-| [procurement](schemas/procurement.md) | 14 | PO, GRN, supplier invoices |
-| [financial](schemas/financial.md) | 16 | Payments, ledger, accounting |
-| [parties](schemas/parties.md) | 4 | Customers, suppliers |
+| inventory | 16 | Products, batches, movements |
+| procurement | 14 | PO, GRN, supplier invoices |
+| financial | 16 | Payments, ledger, accounting |
+| parties | 4 | Customers, suppliers |
 | master | 13 | Orgs, branches, users, employees |
 | gst | 15 | Tax settings, returns, HSN |
 | compliance | 28 | Licenses, inspections, QC |

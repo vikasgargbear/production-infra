@@ -21,10 +21,10 @@ Complete database table reference organized by schema.
 | Schema | Tables | Description | Documentation |
 |--------|--------|-------------|---------------|
 | [sales](#sales-schema) | 25 | Orders, invoices, challans, returns | [Details](schemas/sales.md) |
-| [inventory](#inventory-schema) | 16 | Products, batches, stock, movements | [Details](schemas/inventory.md) |
-| [procurement](#procurement-schema) | 14 | PO, GRN, supplier invoices | [Details](schemas/procurement.md) |
-| [financial](#financial-schema) | 16 | Payments, ledger, accounting | [Details](schemas/financial.md) |
-| [parties](#parties-schema) | 4 | Customers, suppliers | [Details](schemas/parties.md) |
+| [inventory](#inventory-schema) | 16 | Products, batches, stock, movements | [Canonical model](../../architecture/canonical-field-dictionary.json) |
+| [procurement](#procurement-schema) | 14 | PO, GRN, supplier invoices | [Canonical model](../../architecture/canonical-field-dictionary.json) |
+| [financial](#financial-schema) | 16 | Payments, ledger, accounting | [Canonical model](../../architecture/canonical-field-dictionary.json) |
+| [parties](#parties-schema) | 4 | Customers, suppliers | [Canonical model](../../architecture/canonical-field-dictionary.json) |
 | [master](#master-schema) | 13 | Orgs, branches, users, employees | — |
 | [gst](#gst-schema) | 15 | Tax settings, returns, HSN codes | — |
 | [compliance](#compliance-schema) | 28 | Licenses, inspections, QC | — |
@@ -336,10 +336,7 @@ ORDER BY tables DESC;
 ## Related Documentation
 
 - [Sales Schema Details](schemas/sales.md)
-- [Inventory Schema Details](schemas/inventory.md)
-- [Procurement Schema Details](schemas/procurement.md)
-- [Financial Schema Details](schemas/financial.md)
-- [Parties Schema Details](schemas/parties.md)
+- [Canonical field dictionary](../../architecture/canonical-field-dictionary.json)
 - [Backend Services](../services/)
 
 ---

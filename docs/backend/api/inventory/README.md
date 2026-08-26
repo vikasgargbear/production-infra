@@ -411,7 +411,7 @@ GET /api/inventory/movements
 
 ## See Also
 
-- [Inventory Schema](../../database/schemas/inventory.md)
+- [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)
 - [Inventory Services](../../services/inventory/)
 - [Sales API](../sales/) · [Purchase API](../purchase/)
 

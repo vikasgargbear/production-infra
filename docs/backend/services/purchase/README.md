@@ -198,4 +198,4 @@ UploadService
 
 ---
 
-**See also**: [Purchase API](../../api/purchase/) · [Procurement Schema](../../database/schemas/procurement.md)
+**See also**: [Purchase API](../../api/purchase/) · [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)

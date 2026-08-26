@@ -259,7 +259,7 @@ GET /api/master/categories/tree
 
 ## See Also
 
-- [Parties Schema](../../database/schemas/parties.md)
+- [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)
 - [Master Services](../../services/master/)
 - [Sales API](../sales/) · [Purchase API](../purchase/)
 

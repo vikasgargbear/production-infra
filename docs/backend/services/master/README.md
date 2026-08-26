@@ -170,4 +170,4 @@ product_id = ProductService.create_product(
 
 ---
 
-**See also**: [Master API](../../api/master/) · [Parties Schema](../../database/schemas/parties.md)
+**See also**: [Master API](../../api/master/) · [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)

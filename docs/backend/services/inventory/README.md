@@ -147,4 +147,4 @@ WriteOffService
 
 ---
 
-**See also**: [Inventory API](../../api/inventory/) · [Inventory Schema](../../database/schemas/inventory.md)
+**See also**: [Inventory API](../../api/inventory/) · [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)

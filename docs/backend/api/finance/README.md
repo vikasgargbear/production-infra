@@ -400,7 +400,7 @@ POST /api/finance/credit-notes
 
 ## See Also
 
-- [Financial Schema](../../database/schemas/financial.md)
+- [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)
 - [Finance Services](../../services/finance/)
 - [Sales API](../sales/) · [Returns API](../returns/)
 

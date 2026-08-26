@@ -186,4 +186,4 @@ CreditNoteService
 
 ---
 
-**See also**: [Finance API](../../api/finance/) · [Financial Schema](../../database/schemas/financial.md)
+**See also**: [Finance API](../../api/finance/) · [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)

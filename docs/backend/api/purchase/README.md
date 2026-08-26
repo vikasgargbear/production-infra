@@ -400,7 +400,7 @@ POST /api/purchase/supplier-invoices
 
 ## See Also
 
-- [Procurement Schema](../../database/schemas/procurement.md)
+- [Canonical field dictionary](../../../architecture/canonical-field-dictionary.json)
 - [Purchase Services](../../services/purchase/)
 - [Inventory API](../inventory/)
 
