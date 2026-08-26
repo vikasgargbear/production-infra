@@ -157,9 +157,9 @@ const ReturnRequesterInbox: React.FC = () => {
               </>
             )}
             {resourceId && (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-950"><p className="flex items-center gap-2 font-semibold"><FileCheck2 className="h-5 w-5" />Persisted canonical resource</p><p className="mt-1 break-all font-mono">{resourceId}</p>{!readback && <button type="button" disabled={busy} onClick={() => void loadReadbackOnly(selected, resourceId)} className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-green-300 bg-white px-4 font-medium hover:bg-green-100"><RefreshCw className="h-4 w-4" />Retry exact readback (GET only)</button>}</div>
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-950"><p className="flex items-center gap-2 font-semibold"><FileCheck2 className="h-5 w-5" />Persisted canonical resource</p><p data-testid="canonical-posted-resource-id" aria-label="Persisted canonical resource ID" className="mt-1 break-all font-mono">{resourceId}</p>{!readback && <button type="button" disabled={busy} onClick={() => void loadReadbackOnly(selected, resourceId)} className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-green-300 bg-white px-4 font-medium hover:bg-green-100"><RefreshCw className="h-4 w-4" />Retry exact readback (GET only)</button>}</div>
             )}
-            {readback && <div className="rounded-lg border border-green-200 bg-white p-4"><h3 className="mb-2 font-semibold text-gray-950">Posted reconciliation</h3><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-gray-700">{JSON.stringify(readback, null, 2)}</pre></div>}
+            {readback && <div className="rounded-lg border border-green-200 bg-white p-4"><h3 className="mb-2 font-semibold text-gray-950">Posted reconciliation</h3><pre aria-label="Authoritative return readback" className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-gray-700">{JSON.stringify(readback, null, 2)}</pre></div>}
           </section>
         )}
       </div>

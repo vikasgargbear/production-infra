@@ -138,6 +138,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
                 setShowCreateProduct={logic.setShowCreateProduct}
                 showImportModal={logic.showImportModal}
                 setShowImportModal={logic.setShowImportModal}
+                approvedOrderImportUnavailableReason={logic.approvedOrderImportUnavailableReason}
                 newProductName={logic.newProductName}
                 setNewProductName={logic.setNewProductName}
 

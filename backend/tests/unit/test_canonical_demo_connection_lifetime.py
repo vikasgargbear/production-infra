@@ -102,11 +102,25 @@ def test_provisioner_has_no_implicit_psycopg_contexts_or_retained_preflight_pool
         and node.func.value.id == "psycopg2"
         and node.func.attr == "connect"
     ]
+    database_connection_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "database_connection"
+    ]
+    context_managed_calls = {
+        id(item.context_expr)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.With, ast.AsyncWith))
+        for item in node.items
+    }
 
     # The sole driver connect is owned by database_connection(), whose finally
     # closes the client. Every call site uses that explicit-closing boundary.
     assert len(raw_connect_calls) == 1
-    assert source.count('database_connection("') == 28
+    assert database_connection_calls
+    assert all(id(call) in context_managed_calls for call in database_connection_calls)
     assert "connection.close()" in source
 
     preflight_action = source.split("def preflight_action", 1)[1].split(

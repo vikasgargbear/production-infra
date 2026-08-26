@@ -117,9 +117,12 @@ it('persists a posted resource and retries failed readback without a second exec
   fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(post);
 
-  expect(await screen.findByText(resourceId)).not.toBeNull();
+  expect((await screen.findByTestId('canonical-posted-resource-id')).textContent).toBe(resourceId);
   fireEvent.click(screen.getByRole('button', { name: /retry exact readback \(get only\)/i }));
   await screen.findByText(/"status": "posted"/i);
+  expect(screen.getByLabelText('Authoritative return readback').textContent).toContain(
+    `"return_id": "${resourceId}"`,
+  );
   expect(canonicalReturnsApi.executeAsRequester).toHaveBeenCalledTimes(1);
   expect(canonicalReturnsApi.executeAsRequester).toHaveBeenCalledWith(
     commandId,

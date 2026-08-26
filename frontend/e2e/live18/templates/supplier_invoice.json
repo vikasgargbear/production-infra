@@ -10,7 +10,7 @@
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/supplier-invoice"},
-      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted GRN","exact":true},"value":"{{fact.identity.supplier_invoice_goods_receipt_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted GRN","exact":true},"value":"{{resource_goods_receipt}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Supplier invoice number","exact":true},"value":"{{fact.choice.supplier_invoice_number}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Supplier invoice date","exact":true},"value":"{{fact.choice.supplier_invoice_date}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Supplier invoice received date","exact":true},"value":"{{fact.choice.supplier_invoice_received_date}}"},

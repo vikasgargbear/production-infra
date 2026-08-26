@@ -30,6 +30,7 @@ interface ChallanDetailsStepProps {
     setShowCreateProduct: React.Dispatch<React.SetStateAction<boolean>>;
     showImportModal: boolean;
     setShowImportModal: React.Dispatch<React.SetStateAction<boolean>>;
+    approvedOrderImportUnavailableReason: string | null;
     newProductName: string;
     setNewProductName: React.Dispatch<React.SetStateAction<string>>;
     handleCustomerSelect: (customer: CustomerDetails | null) => Promise<void>;
@@ -54,6 +55,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
     setChallan,
     showImportModal,
     setShowImportModal,
+    approvedOrderImportUnavailableReason,
     handleImport,
     challanFormRef,
     onClose,
@@ -112,11 +114,18 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowImportModal(true)}
-                                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                                    disabled={Boolean(approvedOrderImportUnavailableReason)}
+                                    aria-describedby={approvedOrderImportUnavailableReason ? 'approved-order-import-status' : undefined}
+                                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-100 disabled:text-gray-500"
                                 >
                                     <FileInput className="h-4 w-4" />
                                     Select approved order
                                 </button>
+                                {approvedOrderImportUnavailableReason && (
+                                    <p id="approved-order-import-status" role="status" className="mt-2 text-xs text-amber-800">
+                                        {approvedOrderImportUnavailableReason}
+                                    </p>
+                                )}
                             </div>
                         </div>
 

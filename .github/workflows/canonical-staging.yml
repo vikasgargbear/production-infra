@@ -1166,6 +1166,7 @@ jobs:
           CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
           CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
           CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
+          LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
           PYTHONUNBUFFERED: "1"
           PGOPTIONS: -c statement_timeout=120000 -c lock_timeout=15000 -c idle_in_transaction_session_timeout=180000
         run: |
@@ -1173,6 +1174,7 @@ jobs:
           test -n "$ERP_REGULATORY_IMPORTER_PASSWORD"
           test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64"
           test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          test -n "$LIVE18_REVIEWED_SCALARS_JSON"
           [[ "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
           expense_receipt_path="$RUNNER_TEMP/live18-reviewed-expense-receipt.pdf"
           umask 077

@@ -1,12 +1,10 @@
-"""Exercise canonical-demo aggregation and setting replay on PostgreSQL 15.
+"""Exercise canonical-demo setting and deterministic-authority replay on PostgreSQL 15.
 
-The fixture extracts the receipt-ceiling SQL from the production provisioner,
-uses two independent supplier-invoice allocations, and proves the exact
-remaining quantities/value.  It also executes the real typed setting
-replacement command twice, verifies its idempotency lineage, and simulates a
-later run after the 30-day grant window to prove fresh access/agent authority
-is issued without rewriting terminal evidence. Every row is rolled back and
-the script refuses to choose a database itself.
+The fixture executes the real typed setting replacement command twice,
+verifies its idempotency lineage, and simulates a later run after the 30-day
+grant window to prove fresh access/agent authority is issued without rewriting
+terminal evidence. Every row is rolled back and the script refuses to choose a
+database itself.
 """
 
 from __future__ import annotations
@@ -14,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import psycopg2
@@ -26,185 +23,6 @@ from scripts import provision_canonical_demo as fixture
 
 register_uuid()
 
-
-ORG = UUID("fa000000-0000-7000-8000-000000000001")
-MEMBERSHIP = UUID("fa000000-0000-7000-8000-000000000002")
-GOODS_RECEIPT = UUID("fa000000-0000-7000-8000-000000000003")
-GOODS_RECEIPT_LINE = UUID("fa000000-0000-7000-8000-000000000004")
-PORTAL_DOCUMENT = UUID("fa000000-0000-7000-8000-000000000005")
-PORTAL_LINE = UUID("fa000000-0000-7000-8000-000000000006")
-INVOICE_NUMBER = "PG15-MULTI-ALLOCATION"
-INVOICE_DATE = "2026-08-25"
-
-
-def _connect():
-    url = make_url(os.environ["DATABASE_URL"])
-    return psycopg2.connect(
-        host=url.host,
-        port=url.port or 5432,
-        dbname=url.database,
-        user=url.username,
-        password=url.password or "",
-    )
-
-
-def _receipt_ceiling_sql() -> str:
-    return next(
-        value
-        for value in fixture.reconcile_supplier_invoice_ui_fixture.__code__.co_consts
-        if isinstance(value, str) and "WITH receipt_ceiling AS (" in value
-    )
-
-
-def _assert_numeric_multi_allocation_ceiling() -> None:
-    tables = (
-        "procurement.goods_receipts",
-        "procurement.goods_receipt_lines",
-        "procurement.supplier_invoice_receipt_allocations",
-        "tax.portal_documents",
-        "tax.portal_document_lines",
-    )
-    connection = _connect()
-    try:
-        with connection.cursor() as cursor:
-            for table in tables:
-                cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER ALL")
-            try:
-                cursor.execute(
-                    """
-                    INSERT INTO procurement.goods_receipts(
-                      org_id,id,branch_id,supplier_account_id,goods_receipt_number,
-                      fiscal_year,received_at,supplier_challan_number,
-                      supplier_challan_date,status,posted_at,posted_by_membership_id,
-                      created_by_membership_id,updated_by_membership_id)
-                    VALUES (%s,%s,%s,%s,'PG15-GRN-0001',2026,
-                      transaction_timestamp(),'PG15-CHALLAN-0001',DATE '2026-08-25',
-                      'posted',transaction_timestamp(),%s,%s,%s)
-                    """,
-                    (
-                        ORG,
-                        GOODS_RECEIPT,
-                        uuid4(),
-                        uuid4(),
-                        MEMBERSHIP,
-                        MEMBERSHIP,
-                        MEMBERSHIP,
-                    ),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO procurement.goods_receipt_lines(
-                      org_id,id,goods_receipt_id,line_number,product_id,batch_id,
-                      location_id,uom_code,received_quantity,accepted_quantity,
-                      rejected_quantity,free_quantity,base_accepted_quantity,
-                      base_free_quantity,qc_status,unit_cost,extended_cost,
-                      created_by_membership_id)
-                    VALUES (%s,%s,%s,1,%s,%s,%s,'EA',50,50,0,2.5,50,2.5,
-                      'accepted',95.2381,5000.00,%s)
-                    """,
-                    (
-                        ORG,
-                        GOODS_RECEIPT_LINE,
-                        GOODS_RECEIPT,
-                        uuid4(),
-                        uuid4(),
-                        uuid4(),
-                        MEMBERSHIP,
-                    ),
-                )
-                cursor.executemany(
-                    """
-                    INSERT INTO procurement.supplier_invoice_receipt_allocations(
-                      org_id,id,supplier_invoice_line_id,goods_receipt_line_id,
-                      allocated_base_billed_quantity,allocated_base_free_quantity,
-                      created_by_membership_id)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)
-                    """,
-                    (
-                        (
-                            ORG,
-                            uuid4(),
-                            uuid4(),
-                            GOODS_RECEIPT_LINE,
-                            Decimal("10"),
-                            Decimal("0.5"),
-                            MEMBERSHIP,
-                        ),
-                        (
-                            ORG,
-                            uuid4(),
-                            uuid4(),
-                            GOODS_RECEIPT_LINE,
-                            Decimal("5"),
-                            Decimal("0.25"),
-                            MEMBERSHIP,
-                        ),
-                    ),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO tax.portal_documents(
-                      org_id,id,registration_id,return_period_id,
-                      portal_document_type,portal_generation_date,
-                      source_attachment_id,source_sha256,status,parsed_at,
-                      created_by_membership_id)
-                    VALUES (%s,%s,%s,%s,'gstr2b',DATE '2026-08-25',%s,
-                      decode(repeat('ab',32),'hex'),'parsed',transaction_timestamp(),%s)
-                    """,
-                    (ORG, PORTAL_DOCUMENT, uuid4(), uuid4(), uuid4(), MEMBERSHIP),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO tax.portal_document_lines(
-                      org_id,id,portal_document_id,line_number,supplier_gstin,
-                      counterparty_name,invoice_number,invoice_date,document_type,
-                      place_of_supply_state_code,taxable_amount,cgst_amount,
-                      sgst_amount,igst_amount,cess_amount,total_amount,
-                      portal_reference,source_row_hash,created_by_membership_id)
-                    VALUES (%s,%s,%s,1,'27DEMOC5678D1Z5','PG15 Supplier',%s,%s,
-                      'invoice','27',5000,300,300,0,0,5600,'PG15-GSTR2B',
-                      decode(repeat('cd',32),'hex'),%s)
-                    """,
-                    (
-                        ORG,
-                        PORTAL_LINE,
-                        PORTAL_DOCUMENT,
-                        INVOICE_NUMBER,
-                        INVOICE_DATE,
-                        MEMBERSHIP,
-                    ),
-                )
-            finally:
-                for table in reversed(tables):
-                    cursor.execute(f"ALTER TABLE {table} ENABLE TRIGGER ALL")
-
-            cursor.execute(
-                _receipt_ceiling_sql(),
-                (
-                    ORG,
-                    GOODS_RECEIPT,
-                    GOODS_RECEIPT_LINE,
-                    ORG,
-                    INVOICE_NUMBER,
-                    INVOICE_DATE,
-                    ORG,
-                    PORTAL_LINE,
-                ),
-            )
-            row = cursor.fetchone()
-            assert row is not None
-            values = dict(zip((column.name for column in cursor.description), row))
-            assert values["goods_receipt_id"] == GOODS_RECEIPT
-            assert values["goods_receipt_line_id"] == GOODS_RECEIPT_LINE
-            assert values["remaining_base_billed_quantity"] == Decimal("35.000000")
-            assert values["remaining_base_free_quantity"] == Decimal("1.750000")
-            assert values["remaining_capitalized_value"] == Decimal("3500.00")
-            assert values["candidate_count"] == 1
-            assert values["portal_document_line_id"] == str(PORTAL_LINE)
-            assert values["consumed_count"] == 0
-    finally:
-        connection.rollback()
-        connection.close()
 
 
 def _configure_fixture_ids() -> None:
@@ -715,7 +533,6 @@ def _assert_itc_reversal_authority_replays_across_ui_runs() -> None:
 
 
 def main() -> None:
-    _assert_numeric_multi_allocation_ceiling()
     _assert_bootstrap_repairs_stale_auth_bindings()
     _assert_setting_replacement_replay()
     _assert_deterministic_authority_renews_after_expiry()

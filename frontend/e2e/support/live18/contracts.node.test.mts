@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import {
   assertExactCommandTargets, interpolateUiSteps,
 } from './runtimeUiValues.ts';
+import {
+  Live18BrowserHealth, rejectedPrepareOccurrences,
+} from './browserHealth.ts';
 import { buildOperationFailureEvidence } from './failureEvidence.ts';
 import { isExpectedSessionExchange } from './session.ts';
 
@@ -75,6 +78,154 @@ test('operation failure evidence excludes messages, locator values, and credenti
     error_kind: 'Error',
   });
   assert.doesNotMatch(JSON.stringify(failure), /must-not-upload/);
+});
+
+test('browser health evidence fingerprints sensitive diagnostics and strips query strings', () => {
+  const listeners = new Map<string, (value: any) => void>();
+  const page = {
+    on(event: string, listener: (value: any) => void) {
+      listeners.set(event, listener);
+    },
+  };
+  const health = new Live18BrowserHealth();
+  health.observe(page as any, 'requester', 'https://api.example');
+  listeners.get('pageerror')?.(new Error('password=must-not-appear'));
+  const failedApiRequest = {
+    url: () => 'https://api.example/api/invoices?customer=must-not-appear',
+    method: () => 'GET',
+    failure: () => ({ errorText: 'token=must-not-appear' }),
+  };
+  listeners.get('request')?.(failedApiRequest);
+  listeners.get('requestfailed')?.(failedApiRequest);
+  const errorApiRequest = { method: () => 'GET', url: () => 'https://api.example/api/invoices' };
+  listeners.get('request')?.(errorApiRequest);
+  listeners.get('response')?.({
+    url: () => 'https://api.example/api/invoices?customer=must-not-appear',
+    status: () => 500,
+    request: () => errorApiRequest,
+  });
+  const failedHealthRequest = {
+    url: () => 'https://api.example/health?token=must-not-appear',
+    method: () => 'GET',
+    failure: () => ({ errorText: 'cors=must-not-appear' }),
+  };
+  listeners.get('request')?.(failedHealthRequest);
+  listeners.get('requestfailed')?.(failedHealthRequest);
+  const readyRequest = { method: () => 'GET', url: () => 'https://api.example/ready' };
+  listeners.get('request')?.(readyRequest);
+  listeners.get('response')?.({
+    url: () => 'https://api.example/ready',
+    status: () => 503,
+    request: () => readyRequest,
+  });
+  const foreignRequest = { method: () => 'GET', url: () => 'https://other.example/api/invoices' };
+  listeners.get('request')?.(foreignRequest);
+  listeners.get('response')?.({
+    url: () => 'https://other.example/api/invoices',
+    status: () => 200,
+    request: () => foreignRequest,
+  });
+  const evidence = health.snapshot();
+  assert.equal(evidence.length, 6);
+  assert.deepEqual(evidence.map(item => item.kind), [
+    'page_error', 'request_failed', 'response_error', 'request_failed', 'response_error',
+    'unexpected_api_origin',
+  ]);
+  assert.equal(evidence[1].path, '/api/invoices');
+  assert.equal(evidence[3].path, '/health');
+  assert.equal(evidence[4].path, '/ready');
+  assert.deepEqual(evidence.map(item => item.occurrences), [1, 1, 1, 1, 1, 1]);
+  assert.doesNotMatch(JSON.stringify(evidence), /must-not-appear|password|token|customer/);
+  for (const item of evidence) assert.match(item.fingerprint, /^[0-9a-f]{64}$/);
+  health.clear();
+  assert.deepEqual(health.snapshot(), []);
+});
+
+test('browser health preserves repeated failure counts and rejects path-bearing API origins', () => {
+  const listeners = new Map<string, (value: any) => void>();
+  const page = {
+    on(event: string, listener: (value: any) => void) {
+      listeners.set(event, listener);
+    },
+  };
+  const health = new Live18BrowserHealth();
+  assert.throws(
+    () => health.observe(page as any, 'requester', 'https://api.example/base'),
+    /requires one credential-free HTTPS API origin/,
+  );
+  health.observe(page as any, 'requester', 'https://api.example/');
+  const rejectedRequest = {
+    url: () => 'https://api.example/api/web/actions/sales.invoice.prepare/prepare',
+    method: () => 'POST',
+  };
+  listeners.get('request')?.(rejectedRequest);
+  const rejected = {
+    url: () => 'https://api.example/api/web/actions/sales.invoice.prepare/prepare',
+    status: () => 422,
+    request: () => rejectedRequest,
+  };
+  listeners.get('response')?.(rejected);
+  listeners.get('response')?.(rejected);
+  const [failure] = health.snapshot();
+  assert.equal(failure.occurrences, 2);
+});
+
+test('browser health redacts UUID paths and ignores failures started before a phase clear', () => {
+  const listeners = new Map<string, (value: any) => void>();
+  const page = { on(event: string, listener: (value: any) => void) { listeners.set(event, listener); } };
+  const health = new Live18BrowserHealth();
+  health.observe(page as any, 'reviewer', 'https://api.example');
+  const request = {
+    url: () => 'https://api.example/api/web/actions/commands/d3000000-0000-7000-8000-000000000041/review',
+    method: () => 'GET',
+    failure: () => ({ errorText: 'navigation aborted' }),
+  };
+  listeners.get('request')?.(request);
+  health.clear();
+  listeners.get('requestfailed')?.(request);
+  assert.deepEqual(health.snapshot(), []);
+  listeners.get('request')?.(request);
+  listeners.get('requestfailed')?.(request);
+  const [failure] = health.snapshot();
+  assert.equal(failure.path, '/api/web/actions/commands/{uuid}/review');
+});
+
+test('browser health rejects a foreign API request before it can cross a phase clear', () => {
+  const listeners = new Map<string, (value: any) => void>();
+  const page = { on(event: string, listener: (value: any) => void) { listeners.set(event, listener); } };
+  const health = new Live18BrowserHealth();
+  health.observe(page as any, 'requester', 'https://api.example');
+  const request = {
+    url: () => 'https://old-api.example/api/web/actions/sales.invoice.prepare/prepare',
+    method: () => 'POST',
+  };
+  listeners.get('request')?.(request);
+  const beforeClear = health.snapshot();
+  assert.equal(beforeClear.length, 1);
+  assert.equal(beforeClear[0].kind, 'unexpected_api_origin');
+  health.clear();
+  listeners.get('response')?.({
+    url: request.url,
+    status: () => 200,
+    request: () => request,
+  });
+  assert.deepEqual(health.snapshot(), []);
+});
+
+test('missing-required health counts distinct 400 and 422 prepare failures together', () => {
+  const failures = [400, 422].map(status => ({
+    actor: 'requester' as const,
+    kind: 'response_error' as const,
+    method: 'POST',
+    path: '/api/web/actions/sales.invoice.prepare/prepare',
+    status,
+    fingerprint: String(status).padStart(64, '0'),
+    occurrences: 1,
+  }));
+  assert.equal(rejectedPrepareOccurrences(
+    failures,
+    '/api/web/actions/sales.invoice.prepare/prepare',
+  ), 2);
 });
 
 test('runtime values target the exact prepared command in value and locator name', () => {

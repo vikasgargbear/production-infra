@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from scripts.compile_live18_browser_fixture import (
     TEMPLATE_SCHEMA,
     compile_fixture,
     load_reviewed_scalars,
+    supplier_invoice_chain_choices,
+    validate_reviewed_scalar_pack,
     _compile_value,
     _validate_compiled_steps,
     _operation_facts,
@@ -812,8 +815,8 @@ def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:
         (root / "frontend/e2e/live18/templates/purchase_order.json").read_text()
     )
     scalars = {
-        "purchase_order_delivery_offset_days": "3",
         "purchase_order_quantity": "2.000000",
+        "purchase_order_delivery_offset_days": "3",
         "purchase_order_rate": "84.0000",
         "purchase_order_line_discount_percent": "0.000000",
         "purchase_order_free_quantity": "0.000000",
@@ -863,9 +866,7 @@ def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attest
     )
     scalars = {"supplier_invoice_itc_attestation": attestation}
     facts = {
-        "identity": {
-            "supplier_invoice_goods_receipt_id": "d3000000-0000-7000-8000-000000000041",
-        },
+        "identity": {},
         "display": {"product_name": "Demo Product"},
         "choice": {
             "supplier_invoice_number": "DEMO-UI-SUP-32840459528-1",
@@ -882,9 +883,119 @@ def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attest
     )
     _validate_compiled_steps("supplier_invoice", operation, "actor_confirmation")
     assert used == set(scalars)
-    assert operation["prepare_steps"][1]["value"] == facts["identity"]["supplier_invoice_goods_receipt_id"]
+    assert operation["prepare_steps"][1]["value"] == "{{resource_goods_receipt}}"
     assert operation["prepare_steps"][2]["value"] == facts["choice"]["supplier_invoice_number"]
     assert operation["prepare_steps"][6]["locator"]["name"] == attestation
+
+
+def test_supplier_invoice_chain_normalizes_exact_reviewed_economics() -> None:
+    values = {
+        "purchase_order_quantity": "2.000000",
+        "purchase_order_delivery_offset_days": "3",
+        "purchase_order_rate": "84.0000",
+        "purchase_order_line_discount_percent": "5.000000",
+        "purchase_order_free_quantity": "0.000000",
+        "purchase_order_document_discount": "0.60",
+        "purchase_order_freight_charge": "0.00",
+        "goods_receipt_received_quantity": "2.000000",
+        "goods_receipt_accepted_quantity": "2.000000",
+        "goods_receipt_rejected_quantity": "0.000000",
+        "goods_receipt_free_quantity": "0.000000",
+        "goods_receipt_mrp": "150.00",
+        "goods_receipt_qc_status": "accepted",
+    }
+    pack = {"schema": SCALAR_SCHEMA, "values": values}
+
+    validated = validate_reviewed_scalar_pack(
+        pack, byte_size=len(json.dumps(pack).encode("utf-8"))
+    )
+
+    assert supplier_invoice_chain_choices(validated) == values
+
+
+def test_supplier_invoice_facts_require_scalar_bound_portal_economics() -> None:
+    values = {
+        "purchase_order_quantity": "2.000000",
+        "purchase_order_delivery_offset_days": "3",
+        "purchase_order_rate": "84.0000",
+        "purchase_order_line_discount_percent": "5.000000",
+        "purchase_order_free_quantity": "0.000000",
+        "purchase_order_document_discount": "0.60",
+        "purchase_order_freight_charge": "0.00",
+        "goods_receipt_received_quantity": "2.000000",
+        "goods_receipt_accepted_quantity": "2.000000",
+        "goods_receipt_rejected_quantity": "0.000000",
+        "goods_receipt_free_quantity": "0.000000",
+        "goods_receipt_mrp": "150.00",
+        "goods_receipt_qc_status": "accepted",
+    }
+    invoice_number = "DEMO-UI-SUP-1234-1"
+    economics = {
+        "gst_taxable_total": "159.06",
+        "cgst_total": "9.54",
+        "sgst_total": "9.54",
+        "igst_total": "0.00",
+        "cess_total": "0.00",
+        "grand_total": "178.14",
+    }
+    source_hash = hashlib.sha256(json.dumps({
+        "invoice_number": invoice_number,
+        "reviewed_chain": supplier_invoice_chain_choices(values),
+        "economics": economics,
+    }, separators=(",", ":"), sort_keys=True).encode()).hexdigest()
+    facts = {
+        "choice": {
+            "supplier_invoice_number": invoice_number,
+            "supplier_invoice_portal_taxable_amount": economics["gst_taxable_total"],
+            "supplier_invoice_portal_cgst_amount": economics["cgst_total"],
+            "supplier_invoice_portal_sgst_amount": economics["sgst_total"],
+            "supplier_invoice_portal_igst_amount": economics["igst_total"],
+            "supplier_invoice_portal_cess_amount": economics["cess_total"],
+            "supplier_invoice_portal_total_amount": economics["grand_total"],
+            "supplier_invoice_portal_source_row_hash": source_hash,
+        }
+    }
+
+    assert _operation_facts("supplier_invoice", facts, values, set()) == facts
+
+    facts["choice"]["supplier_invoice_portal_source_row_hash"] = "0" * 64
+    with pytest.raises(FixtureCompileError, match="not bound"):
+        _operation_facts("supplier_invoice", facts, values, set())
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    (
+        ("purchase_order_freight_charge", "1.00", "charge-line identity"),
+        ("purchase_order_free_quantity", "1.000000", "zero free quantity"),
+        ("goods_receipt_accepted_quantity", "1.000000", "accepted plus rejected"),
+        ("goods_receipt_free_quantity", "1.000000", "free quantity"),
+        ("goods_receipt_rejected_quantity", "1.000000", "accepted plus rejected"),
+        ("goods_receipt_qc_status", "partial", "accepted QC"),
+    ),
+)
+def test_supplier_invoice_chain_rejects_unreconciled_reviewed_choices(
+    key: str, value: str, message: str
+) -> None:
+    values = {
+        "purchase_order_quantity": "2.000000",
+        "purchase_order_delivery_offset_days": "3",
+        "purchase_order_rate": "84.0000",
+        "purchase_order_line_discount_percent": "0.000000",
+        "purchase_order_free_quantity": "0.000000",
+        "purchase_order_document_discount": "0.00",
+        "purchase_order_freight_charge": "0.00",
+        "goods_receipt_received_quantity": "2.000000",
+        "goods_receipt_accepted_quantity": "2.000000",
+        "goods_receipt_rejected_quantity": "0.000000",
+        "goods_receipt_free_quantity": "0.000000",
+        "goods_receipt_mrp": "150.00",
+        "goods_receipt_qc_status": "accepted",
+    }
+    values[key] = value
+
+    with pytest.raises(FixtureCompileError, match=message):
+        supplier_invoice_chain_choices(values)
 
 
 def test_customer_receipt_template_targets_prior_certified_invoice() -> None:

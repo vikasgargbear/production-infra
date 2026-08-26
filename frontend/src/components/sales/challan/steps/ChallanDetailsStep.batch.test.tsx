@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import ChallanDetailsStep from './ChallanDetailsStep';
 import type { Challan } from '../types/challanTypes';
 
@@ -57,33 +58,39 @@ const challan = {
     }],
 } as Challan;
 
+const stepProps = (
+    overrides: Partial<ComponentProps<typeof ChallanDetailsStep>> = {},
+): ComponentProps<typeof ChallanDetailsStep> => ({
+    challan,
+    setChallan: jest.fn(),
+    selectedCustomer: null,
+    employees: [],
+    selectedMR: null,
+    setSelectedMR: jest.fn(),
+    showCreateCustomer: false,
+    setShowCreateCustomer: jest.fn(),
+    showCreateProduct: false,
+    setShowCreateProduct: jest.fn(),
+    showImportModal: false,
+    setShowImportModal: jest.fn(),
+    approvedOrderImportUnavailableReason: null,
+    newProductName: '',
+    setNewProductName: jest.fn(),
+    handleCustomerSelect: jest.fn(),
+    handleProductSelect: jest.fn(),
+    handleImport: jest.fn(),
+    updateItem: jest.fn(),
+    removeItem: jest.fn(),
+    challanFormRef: { current: null },
+    itemsTableRef: { current: null },
+    productSearchRef: { current: null },
+    onContinue: jest.fn(),
+    ...overrides,
+});
+
 test('renders an accessible same-tier batch choice and applies its canonical identity', () => {
     const setChallan = jest.fn();
-    render(<ChallanDetailsStep
-        challan={challan}
-        setChallan={setChallan}
-        selectedCustomer={null}
-        employees={[]}
-        selectedMR={null}
-        setSelectedMR={jest.fn()}
-        showCreateCustomer={false}
-        setShowCreateCustomer={jest.fn()}
-        showCreateProduct={false}
-        setShowCreateProduct={jest.fn()}
-        showImportModal={false}
-        setShowImportModal={jest.fn()}
-        newProductName=""
-        setNewProductName={jest.fn()}
-        handleCustomerSelect={jest.fn()}
-        handleProductSelect={jest.fn()}
-        handleImport={jest.fn()}
-        updateItem={jest.fn()}
-        removeItem={jest.fn()}
-        challanFormRef={{ current: null }}
-        itemsTableRef={{ current: null }}
-        productSearchRef={{ current: null }}
-        onContinue={jest.fn()}
-    />);
+    render(<ChallanDetailsStep {...stepProps({ setChallan })} />);
 
     const choice = screen.getByRole('combobox', { name: /Batch for Canonical Product/i });
     expect(screen.getByText(/FEFO batches are selected by default/i)).toBeTruthy();
@@ -98,4 +105,21 @@ test('renders an accessible same-tier batch choice and applies its canonical ide
         batch_id: alternateBatch,
         batch_number: 'BATCH-B',
     });
+});
+
+test('keeps approved-order selection unavailable until the authoritative date is ready', () => {
+    const setShowImportModal = jest.fn();
+    const reason = 'Loading the authoritative organization business date…';
+    render(<ChallanDetailsStep {...stepProps({
+        challan: { ...challan, challan_date: '' },
+        setShowImportModal,
+        approvedOrderImportUnavailableReason: reason,
+    })} />);
+
+    const selectOrder = screen.getByRole('button', { name: 'Select approved order' }) as HTMLButtonElement;
+    expect(selectOrder.disabled).toBe(true);
+    expect(selectOrder.getAttribute('aria-describedby')).toBe('approved-order-import-status');
+    expect(screen.getByRole('status').textContent).toBe(reason);
+    fireEvent.click(selectOrder);
+    expect(setShowImportModal).not.toHaveBeenCalled();
 });

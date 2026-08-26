@@ -9,6 +9,7 @@ non-derivable operator choices may arrive in the compact reviewed scalar pack.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -72,13 +73,11 @@ def _leaf(mapping: dict[str, Any], dotted: str, authority: str) -> str:
     return rendered
 
 
-def load_reviewed_scalars(path: Path) -> dict[str, Any]:
-    raw = path.read_bytes()
-    if len(raw) > MAX_SCALAR_BYTES:
+def validate_reviewed_scalar_pack(pack: Any, *, byte_size: int) -> dict[str, Any]:
+    if byte_size > MAX_SCALAR_BYTES:
         raise FixtureCompileError(
             f"reviewed scalar pack exceeds {MAX_SCALAR_BYTES} bytes"
         )
-    pack = json.loads(raw)
     if not isinstance(pack, dict) or pack.get("schema") != SCALAR_SCHEMA:
         raise FixtureCompileError(f"reviewed scalar pack must use {SCALAR_SCHEMA}")
     values = pack.get("values")
@@ -94,6 +93,104 @@ def load_reviewed_scalars(path: Path) -> dict[str, Any]:
         if UUID_RE.fullmatch(str(value)):
             raise FixtureCompileError(f"reviewed scalar must not carry a UUID: {key}")
     return values
+
+
+def load_reviewed_scalars(path: Path) -> dict[str, Any]:
+    raw = path.read_bytes()
+    if len(raw) > MAX_SCALAR_BYTES:
+        raise FixtureCompileError(
+            f"reviewed scalar pack exceeds {MAX_SCALAR_BYTES} bytes"
+        )
+    return validate_reviewed_scalar_pack(json.loads(raw), byte_size=len(raw))
+
+
+def supplier_invoice_chain_choices(scalars: dict[str, Any]) -> dict[str, str]:
+    """Validate the reviewed PO -> GRN economics that the GSTR-2B row must mirror."""
+
+    decimal_rules = {
+        "purchase_order_quantity": (6, True),
+        "purchase_order_rate": (4, True),
+        "purchase_order_line_discount_percent": (6, False),
+        "purchase_order_free_quantity": (6, False),
+        "purchase_order_document_discount": (2, False),
+        "purchase_order_freight_charge": (2, False),
+        "goods_receipt_received_quantity": (6, True),
+        "goods_receipt_accepted_quantity": (6, True),
+        "goods_receipt_rejected_quantity": (6, False),
+        "goods_receipt_free_quantity": (6, False),
+        "goods_receipt_mrp": (2, True),
+    }
+    rendered: dict[str, str] = {}
+    numeric: dict[str, Decimal] = {}
+    for key, (scale, positive) in decimal_rules.items():
+        value = _leaf(scalars, key, "reviewed scalar")
+        if not re.fullmatch(
+            rf"(?:0|[1-9][0-9]{{0,17}})(?:\.[0-9]{{1,{scale}}})?", value
+        ):
+            raise FixtureCompileError(
+                f"{key} must be a plain decimal with at most {scale} fractional digits"
+            )
+        number = Decimal(value)
+        if number < 0 or (positive and number <= 0):
+            qualifier = "positive" if positive else "non-negative"
+            raise FixtureCompileError(f"{key} must be {qualifier}")
+        rendered[key] = value
+        numeric[key] = number
+
+    delivery_offset = _leaf(
+        scalars, "purchase_order_delivery_offset_days", "reviewed scalar"
+    )
+    if not re.fullmatch(r"[1-9]|[12][0-9]|30", delivery_offset):
+        raise FixtureCompileError(
+            "purchase_order_delivery_offset_days must be an integer from 1 through 30"
+        )
+    rendered["purchase_order_delivery_offset_days"] = delivery_offset
+
+    discount_percent = numeric["purchase_order_line_discount_percent"]
+    if discount_percent >= 100:
+        raise FixtureCompileError(
+            "purchase_order_line_discount_percent must be less than 100"
+        )
+    if numeric["purchase_order_freight_charge"] != 0:
+        raise FixtureCompileError(
+            "purchase_order_freight_charge must be zero until a canonical charge-line identity is reviewed"
+        )
+    if (
+        numeric["goods_receipt_received_quantity"]
+        != numeric["goods_receipt_accepted_quantity"]
+        + numeric["goods_receipt_rejected_quantity"]
+    ):
+        raise FixtureCompileError(
+            "goods_receipt_received_quantity must equal accepted plus rejected quantity"
+        )
+    if numeric["goods_receipt_accepted_quantity"] != numeric["purchase_order_quantity"]:
+        raise FixtureCompileError(
+            "goods_receipt_accepted_quantity must exactly consume the reviewed purchase-order billed quantity"
+        )
+    if numeric["purchase_order_free_quantity"] != 0:
+        raise FixtureCompileError(
+            "current Live18 supplier-invoice lineage requires zero free quantity because "
+            "the browser template does not select a free-supply tax treatment"
+        )
+    if numeric["goods_receipt_free_quantity"] != numeric["purchase_order_free_quantity"]:
+        raise FixtureCompileError(
+            "goods_receipt_free_quantity must exactly consume the reviewed purchase-order free quantity"
+        )
+    qc_status = _leaf(scalars, "goods_receipt_qc_status", "reviewed scalar")
+    if qc_status != "accepted" or numeric["goods_receipt_rejected_quantity"] != 0:
+        raise FixtureCompileError(
+            "Live18 supplier-invoice lineage requires accepted QC with zero rejected quantity"
+        )
+
+    gross_price = numeric["purchase_order_quantity"] * numeric["purchase_order_rate"]
+    if numeric["purchase_order_document_discount"] >= gross_price:
+        raise FixtureCompileError(
+            "reviewed purchase-order discounts leave no positive supplier-invoice taxable value"
+        )
+    return {
+        **rendered,
+        "goods_receipt_qc_status": qc_status,
+    }
 
 
 def load_identity_evidence(path: Path) -> tuple[str, dict[str, str]]:
@@ -197,45 +294,42 @@ def resolve_authoritative_facts(
     )
     if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
         raise FixtureCompileError("live18 run token must be GitHub run-id and attempt")
-    supplier_challan_number = f"DEMO-UI-CH-{run_token}"
     supplier_invoice_number = f"DEMO-UI-SUP-{run_token}"
     bank_statement_reference = f"DEMO-UI-BANK-{run_token}"
     supplier_invoice_sql = """
-      SELECT receipt.id::text, receipt.supplier_challan_date,
-             portal_line.invoice_number, portal_line.invoice_date
-        FROM procurement.goods_receipts AS receipt
-        JOIN procurement.goods_receipt_lines AS receipt_line
-          ON receipt_line.org_id=receipt.org_id
-         AND receipt_line.goods_receipt_id=receipt.id
-        JOIN parties.supplier_accounts AS supplier
-          ON supplier.org_id=receipt.org_id
-         AND supplier.id=receipt.supplier_account_id
-         AND supplier.status='active'
-        JOIN parties.tax_registrations AS supplier_registration
-          ON supplier_registration.org_id=supplier.org_id
-         AND supplier_registration.party_id=supplier.party_id
-         AND supplier_registration.status='active'
-        JOIN tax.portal_document_lines AS portal_line
-          ON portal_line.org_id=receipt.org_id
-         AND portal_line.document_type='invoice'
-         AND portal_line.supplier_gstin=supplier_registration.registration_number
-         AND portal_line.invoice_number=%s
-         AND portal_line.invoice_date=receipt.supplier_challan_date
+      SELECT portal_line.id::text, portal_line.invoice_number, portal_line.invoice_date,
+             portal_line.taxable_amount::text, portal_line.cgst_amount::text,
+             portal_line.sgst_amount::text, portal_line.igst_amount::text,
+             portal_line.cess_amount::text, portal_line.total_amount::text,
+             pg_catalog.encode(portal_line.source_row_hash,'hex')
+        FROM tax.portal_document_lines AS portal_line
         JOIN tax.portal_documents AS portal_document
           ON portal_document.org_id=portal_line.org_id
          AND portal_document.id=portal_line.portal_document_id
          AND portal_document.portal_document_type='gstr2b'
          AND portal_document.status='parsed'
          AND portal_document.parsed_at IS NOT NULL
-       WHERE receipt.org_id=%s
-         AND receipt.supplier_challan_number=%s
-         AND receipt.status='posted'
-         AND NOT EXISTS (
-           SELECT 1
-             FROM procurement.supplier_invoice_receipt_allocations AS allocation
-            WHERE allocation.org_id=receipt_line.org_id
-              AND allocation.goods_receipt_line_id=receipt_line.id
-         )
+        JOIN core.attachments AS source
+          ON source.org_id=portal_document.org_id
+         AND source.id=portal_document.source_attachment_id
+         AND source.storage_object_path=%s
+         AND source.evidence_kind='gstr2b_import'
+         AND source.status='retained'
+         AND source.verified_at IS NOT NULL
+         AND source.sha256=portal_document.source_sha256
+        JOIN parties.supplier_accounts AS supplier
+          ON supplier.org_id=portal_line.org_id
+         AND supplier.id=%s
+         AND supplier.status='active'
+        JOIN parties.tax_registrations AS supplier_registration
+          ON supplier_registration.org_id=supplier.org_id
+         AND supplier_registration.party_id=supplier.party_id
+         AND supplier_registration.registration_type='GSTIN'
+         AND supplier_registration.status='active'
+       WHERE portal_line.org_id=%s
+         AND portal_line.document_type='invoice'
+         AND portal_line.supplier_gstin=supplier_registration.registration_number
+         AND portal_line.invoice_number=%s
          AND NOT EXISTS (
            SELECT 1
              FROM automation.command_requests AS command
@@ -246,9 +340,7 @@ def resolve_authoritative_facts(
               AND NULLIF(convert_from(command.request_bytes,'UTF8')::jsonb
                     ->>'portal_document_line_id','')::uuid=portal_line.id
          )
-       GROUP BY receipt.id, receipt.supplier_challan_date,
-                portal_line.id, portal_line.invoice_number, portal_line.invoice_date
-      HAVING count(receipt_line.id)=1
+       ORDER BY portal_line.id
     """
     bank_reconciliation_sql = """
       SELECT statement.id::text,statement_line.id::text,journal.id::text,
@@ -684,7 +776,10 @@ def resolve_authoritative_facts(
                 cycle_count_rows = cursor.fetchall()
             cursor.execute(
                 supplier_invoice_sql,
-                (supplier_invoice_number, org_id, supplier_challan_number),
+                (
+                    f"demo/{run_token}/synthetic-ui-gstr2b.json",
+                    identities["supplier_account_id"], org_id, supplier_invoice_number,
+                ),
             )
             supplier_invoice_rows = cursor.fetchall()
             cursor.execute(
@@ -748,7 +843,7 @@ def resolve_authoritative_facts(
     )
     if len(supplier_invoice_rows) != 1:
         raise FixtureCompileError(
-            "run-scoped supplier-invoice GRN/GSTR-2B authority resolved "
+            "run-scoped supplier-invoice GSTR-2B authority resolved "
             f"{len(supplier_invoice_rows)} rows, expected one"
         )
     if len(adjustment_evidence_rows) != 1:
@@ -767,8 +862,19 @@ def resolve_authoritative_facts(
             "run-scoped GST destruction stock, ITC lineage, rule, return, and evidence "
             f"resolved {len(destruction_rows)} rows, expected one"
         )
-    goods_receipt_id, challan_date, resolved_invoice_number, invoice_date = supplier_invoice_rows[0]
-    if resolved_invoice_number != supplier_invoice_number or challan_date != invoice_date:
+    (
+        supplier_invoice_portal_line_id,
+        resolved_invoice_number,
+        invoice_date,
+        supplier_invoice_portal_taxable_amount,
+        supplier_invoice_portal_cgst_amount,
+        supplier_invoice_portal_sgst_amount,
+        supplier_invoice_portal_igst_amount,
+        supplier_invoice_portal_cess_amount,
+        supplier_invoice_portal_total_amount,
+        supplier_invoice_portal_source_row_hash,
+    ) = supplier_invoice_rows[0]
+    if resolved_invoice_number != supplier_invoice_number:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
     if len(bank_reconciliation_rows) != 1:
         raise FixtureCompileError(
@@ -845,7 +951,7 @@ def resolve_authoritative_facts(
     return {
         "identity": {
             **identities,
-            "supplier_invoice_goods_receipt_id": goods_receipt_id,
+            "supplier_invoice_portal_document_line_id": supplier_invoice_portal_line_id,
             "delivery_address_id": resolved.pop("delivery_address_id"),
             "delivery_address_row_version": resolved.pop("delivery_address_row_version"),
             "direct_issue_batch_id": resolved.pop("direct_issue_batch_id"),
@@ -963,6 +1069,13 @@ def resolve_authoritative_facts(
             "destruction_igst_amount": destruction_igst_amount,
             "destruction_cess_amount": destruction_cess_amount,
             "destruction_reason_code": "quality_rejected",
+            "supplier_invoice_portal_taxable_amount": supplier_invoice_portal_taxable_amount,
+            "supplier_invoice_portal_cgst_amount": supplier_invoice_portal_cgst_amount,
+            "supplier_invoice_portal_sgst_amount": supplier_invoice_portal_sgst_amount,
+            "supplier_invoice_portal_igst_amount": supplier_invoice_portal_igst_amount,
+            "supplier_invoice_portal_cess_amount": supplier_invoice_portal_cess_amount,
+            "supplier_invoice_portal_total_amount": supplier_invoice_portal_total_amount,
+            "supplier_invoice_portal_source_row_hash": supplier_invoice_portal_source_row_hash,
         },
     }
 
@@ -1001,6 +1114,76 @@ def _operation_facts(
             None,
         ),
     }
+    if operation_id == "supplier_invoice":
+        chain = supplier_invoice_chain_choices(scalars)
+        portal_components = {
+            key: Decimal(_leaf(facts, f"choice.{key}", "canonical fact"))
+            for key in (
+                "supplier_invoice_portal_taxable_amount",
+                "supplier_invoice_portal_cgst_amount",
+                "supplier_invoice_portal_sgst_amount",
+                "supplier_invoice_portal_igst_amount",
+                "supplier_invoice_portal_cess_amount",
+                "supplier_invoice_portal_total_amount",
+            )
+        }
+        if portal_components["supplier_invoice_portal_taxable_amount"] <= 0 or any(
+            value < 0 for value in portal_components.values()
+        ):
+            raise FixtureCompileError("run-scoped GSTR-2B amounts must be non-negative")
+        reconciled_total = sum(
+            (
+                portal_components[key]
+                for key in (
+                    "supplier_invoice_portal_taxable_amount",
+                    "supplier_invoice_portal_cgst_amount",
+                    "supplier_invoice_portal_sgst_amount",
+                    "supplier_invoice_portal_igst_amount",
+                    "supplier_invoice_portal_cess_amount",
+                )
+            ),
+            Decimal("0"),
+        )
+        if portal_components["supplier_invoice_portal_total_amount"] != reconciled_total:
+            raise FixtureCompileError(
+                "run-scoped GSTR-2B total does not reconcile to taxable and GST components"
+            )
+        expected_source_hash = hashlib.sha256(json.dumps(
+            {
+                "invoice_number": _leaf(
+                    facts, "choice.supplier_invoice_number", "canonical fact"
+                ),
+                "reviewed_chain": chain,
+                "economics": {
+                    "gst_taxable_total": format(
+                        portal_components["supplier_invoice_portal_taxable_amount"], ".2f"
+                    ),
+                    "cgst_total": format(
+                        portal_components["supplier_invoice_portal_cgst_amount"], ".2f"
+                    ),
+                    "sgst_total": format(
+                        portal_components["supplier_invoice_portal_sgst_amount"], ".2f"
+                    ),
+                    "igst_total": format(
+                        portal_components["supplier_invoice_portal_igst_amount"], ".2f"
+                    ),
+                    "cess_total": format(
+                        portal_components["supplier_invoice_portal_cess_amount"], ".2f"
+                    ),
+                    "grand_total": format(
+                        portal_components["supplier_invoice_portal_total_amount"], ".2f"
+                    ),
+                },
+            },
+            separators=(",", ":"), sort_keys=True,
+        ).encode()).hexdigest()
+        if _leaf(
+            facts, "choice.supplier_invoice_portal_source_row_hash", "canonical fact"
+        ) != expected_source_hash:
+            raise FixtureCompileError(
+                "run-scoped GSTR-2B row is not bound to the reviewed PO/GRN scalar pack"
+            )
+        return facts
     if operation_id == "expense_claim":
         amount = _leaf(scalars, "expense_claim_amount", "reviewed scalar")
         if not re.fullmatch(r"(?:0|[1-9][0-9]{0,17})\.[0-9]{2}", amount):

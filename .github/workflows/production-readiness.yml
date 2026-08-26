@@ -1410,6 +1410,13 @@ jobs:
           import sys
 
           receipt_path = Path(os.environ["LIVE18_EXPENSE_RECEIPT_PATH"])
+          scalar_path = Path(os.environ["LIVE18_REVIEWED_SCALARS_INPUT_PATH"])
+          scalar_bytes = scalar_path.read_bytes()
+          if not scalar_bytes or len(scalar_bytes) > 32768:
+              raise SystemExit("reviewed scalar transport is missing or oversized")
+          reviewed_scalars = json.loads(scalar_bytes)
+          if not isinstance(reviewed_scalars, dict):
+              raise SystemExit("reviewed scalar transport must be one JSON object")
           request = {
               "schema": "aasopharma.live18.railway-database-phase.v1",
               "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
@@ -1427,6 +1434,7 @@ jobs:
               "expense_receipt_base64": base64.b64encode(
                   receipt_path.read_bytes()
               ).decode("ascii"),
+              "reviewed_scalars": reviewed_scalars,
               "secrets": {
                   "SUPABASE_DB_PASSWORD": os.environ["SUPABASE_DB_PASSWORD"],
                   "ERP_REGULATORY_IMPORTER_PASSWORD": os.environ[

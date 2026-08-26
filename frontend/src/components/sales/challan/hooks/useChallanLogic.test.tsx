@@ -2,6 +2,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { apiClient, employeesApi } from '../../../../services/api';
 import { useChallanLogic } from './useChallanLogic';
 
+const mockUseCanonicalBusinessDate = jest.fn();
+
 jest.mock('../../../../contexts/CompanyContext', () => ({
     useCompany: () => ({
         companyInfo: {
@@ -14,7 +16,10 @@ jest.mock('../../../../hooks/useNetworkStatus', () => ({
     useNetworkStatus: () => ({ isOnline: true }),
 }));
 jest.mock('../../../../hooks/useCanonicalBusinessDate', () => ({
-    useCanonicalBusinessDate: () => ({
+    useCanonicalBusinessDate: () => mockUseCanonicalBusinessDate(),
+}));
+
+const readyBusinessContext = () => ({
         businessDate: '2026-08-25',
         organizationTimezone: 'Asia/Kolkata',
         documentPolicy: {
@@ -27,8 +32,7 @@ jest.mock('../../../../hooks/useCanonicalBusinessDate', () => ({
         },
         loading: false,
         error: '',
-    }),
-}));
+    });
 jest.mock('../../../../services/api', () => ({
     employeesApi: { getAll: jest.fn().mockResolvedValue({ data: [] }) },
     apiClient: { get: jest.fn() },
@@ -60,6 +64,7 @@ const interstateCustomer = {
 
 describe('useChallanLogic canonical draft boundaries', () => {
     beforeEach(() => {
+        mockUseCanonicalBusinessDate.mockReturnValue(readyBusinessContext());
         mockedEmployeeGetAll.mockResolvedValue({ data: [] } as Awaited<ReturnType<typeof employeesApi.getAll>>);
         mockedApiGet.mockResolvedValue({ data: { success: true, data: [] } } as any);
     });
@@ -68,6 +73,29 @@ describe('useChallanLogic canonical draft boundaries', () => {
         const { result } = renderHook(() => useChallanLogic());
         await waitFor(() => expect(result.current.challan.challan_date).toBe('2026-08-25'));
         expect(result.current.challan.expected_delivery_date).toBe('');
+    });
+
+    it('blocks approved-order import until the authoritative business date is loaded', async () => {
+        mockUseCanonicalBusinessDate.mockReturnValue({
+            ...readyBusinessContext(),
+            businessDate: '',
+            documentPolicy: null,
+            loading: true,
+        });
+        const { result, rerender } = renderHook(() => useChallanLogic());
+
+        act(() => result.current.setShowImportModal(true));
+        expect(result.current.showImportModal).toBe(false);
+        expect(result.current.approvedOrderImportUnavailableReason).toBe(
+            'Loading the authoritative organization business date…',
+        );
+
+        mockUseCanonicalBusinessDate.mockReturnValue(readyBusinessContext());
+        rerender();
+        await waitFor(() => expect(result.current.challan.challan_date).toBe('2026-08-25'));
+        expect(result.current.approvedOrderImportUnavailableReason).toBeNull();
+        act(() => result.current.setShowImportModal(true));
+        expect(result.current.showImportModal).toBe(true);
     });
 
     it('preserves customer identity and clears it explicitly', async () => {

@@ -14,6 +14,9 @@ import {
   buildOperationFailureEvidence, OperationFailureProgress, writeOperationFailureEvidence,
 } from '../support/live18/failureEvidence';
 import {
+  Live18BrowserHealth, rejectedPrepareOccurrences,
+} from '../support/live18/browserHealth';
+import {
   interpolateUiSteps, RuntimeUiValues,
 } from '../support/live18/runtimeUiValues';
 import {
@@ -113,16 +116,16 @@ const jsonObject = (value: string | null): Record<string, unknown> | null => {
 };
 
 async function captureResponse(
-  actor: 'requester' | 'reviewer', response: Response,
+  actor: 'requester' | 'reviewer', response: Response, expectedApiOrigin: string,
 ): Promise<CapturedResponse | null> {
   const url = new URL(response.url());
-  if (!url.pathname.startsWith('/api/')) return null;
+  if (url.origin !== expectedApiOrigin || !url.pathname.startsWith('/api/web/actions/')) return null;
   const text = await response.text().catch(() => '');
-  const parsed = jsonObject(text) || { raw: text };
+  const parsed = jsonObject(text) || {};
   return {
     actor,
     method: response.request().method(),
-    path: `${url.pathname}${url.search}`,
+    path: url.pathname,
     status: response.status(),
     requestId: response.headers()['x-request-id'] || response.headers()['x-render-request-id'] || null,
     requestBody: jsonObject(response.request().postData()),
@@ -234,14 +237,19 @@ async function runOperation(
     stage: 'requester_login', stepIndex: null, actor: 'requester', action: null, locatorKind: null,
   };
   const captured: CapturedResponse[] = [];
+  let missingRequiredHttpEvidence: CapturedResponse[] = [];
+  const browserHealth = new Live18BrowserHealth();
   const pending = new Set<Promise<void>>();
   const listen = (actor: 'requester' | 'reviewer') => (response: Response) => {
-    const task = captureResponse(actor, response).then(item => { if (item) captured.push(item); })
+    const task = captureResponse(actor, response, config.apiOrigin)
+      .then(item => { if (item) captured.push(item); })
       .finally(() => pending.delete(task));
     pending.add(task);
   };
   requesterPage.on('response', listen('requester'));
   reviewerPage.on('response', listen('reviewer'));
+  browserHealth.observe(requesterPage, 'requester', config.apiOrigin);
+  browserHealth.observe(reviewerPage, 'reviewer', config.apiOrigin);
 
   try {
     const requesterSession = await loginAndCaptureSession(
@@ -280,6 +288,25 @@ async function runOperation(
         invalidPrepare,
         `${contract.id} missing-required-fields path must not prepare a command`,
       ).toHaveLength(0);
+      const missingRequiredFailures = browserHealth.snapshot();
+      expect(
+        rejectedPrepareOccurrences(missingRequiredFailures, preparePath),
+        `${contract.id} missing-required path must not retry a rejected prepare request`,
+      ).toBeLessThanOrEqual(1);
+      const unexpectedMissingRequiredFailures = missingRequiredFailures.filter(failure => !(
+        failure.kind === 'response_error'
+        && failure.method === 'POST'
+        && failure.path === preparePath
+        && (failure.status === 400 || failure.status === 422)
+      ));
+      expect(
+        unexpectedMissingRequiredFailures,
+        `${contract.id} missing-required path must fail cleanly without unrelated browser errors`,
+      ).toEqual([]);
+      missingRequiredHttpEvidence = captured.filter(item => item.method === 'POST'
+        && item.path === preparePath && (item.status === 400 || item.status === 422));
+      browserHealth.clear();
+      captured.length = 0;
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.prepare_steps,
         prePrepareRuntime, `${contract.id}.prepare_steps`, progress,
@@ -400,10 +427,19 @@ async function runOperation(
         requesterPage.getByText(postedHeading, { exact: false }),
         `${contract.id} must show its operation-specific posted/readback state`,
       ).toBeVisible();
-      await expect(
-        requesterPage.getByText(resourceId, { exact: false }),
-        `${contract.id} must visibly identify the exact canonical resource it posted`,
-      ).toBeVisible();
+      const explicitResourceEvidence = requesterPage.getByTestId('canonical-posted-resource-id');
+      if (await explicitResourceEvidence.count()) {
+        await expect(
+          explicitResourceEvidence,
+          `${contract.id} must visibly identify the exact canonical resource it posted`,
+        ).toBeVisible();
+        await expect(explicitResourceEvidence).toHaveText(resourceId);
+      } else {
+        await expect(
+          requesterPage.getByText(resourceId, { exact: false }),
+          `${contract.id} must visibly identify the exact canonical resource it posted`,
+        ).toBeVisible();
+      }
 
       beginStage(progress, 'rest_readback');
       const readbackPath = resolveReadbackPath(contract, commandId, resourceId);
@@ -421,6 +457,11 @@ async function runOperation(
       beginStage(progress, 'denial_probe');
       const denied = await denialApi.get(readbackPath);
       expect([403, 404]).toContain(denied.status());
+      await Promise.all([...pending]);
+      expect(
+        browserHealth.snapshot(),
+        `${contract.id} browser must have no console, page, request, or API response failures`,
+      ).toEqual([]);
       persistCompletedResource(contract.id, resourceId);
 
       beginStage(progress, 'evidence_write');
@@ -438,9 +479,8 @@ async function runOperation(
         branch_id: config.expectedBranchId,
         rest_readback: readback,
         self_approval_probe: selfApprovalProbe,
-        missing_required_http_evidence: captured.filter(item => item.method === 'POST'
-          && item.path === preparePath && item.status >= 400),
-        http_evidence: captured,
+        missing_required_http_evidence: missingRequiredHttpEvidence,
+        http_evidence: [...missingRequiredHttpEvidence, ...captured],
         cleanup_id: findDeep(executions[0].responseBody, 'reversal_command_id') || null,
       };
       const root = evidenceRoot();

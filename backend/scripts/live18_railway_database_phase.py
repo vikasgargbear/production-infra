@@ -45,6 +45,11 @@ from app.domain.operator_actions.contract import (  # noqa: E402
     validate_prepare_payload_semantics,
 )
 from canonical_migration_contract import load_contract  # noqa: E402
+from compile_live18_browser_fixture import (  # noqa: E402
+    FixtureCompileError,
+    supplier_invoice_chain_choices,
+    validate_reviewed_scalar_pack,
+)
 from live18_evidence_contract import MANDATORY_LINEAGE_PATHS  # noqa: E402
 from provision_ephemeral_browser_identities import (  # noqa: E402
     EXPECTED_PROJECT_REF,
@@ -522,6 +527,24 @@ def _temporary_admin_owner_delegation(admin_url: str):
         _verify_admin_owner_delegation_removed(admin_url)
 
 
+def _reviewed_scalar_environment_value(request: dict[str, Any]) -> str:
+    reviewed_scalar_pack = request.get("reviewed_scalars")
+    try:
+        reviewed_scalar_json = json.dumps(
+            reviewed_scalar_pack, sort_keys=True, separators=(",", ":")
+        )
+        reviewed_scalar_values = validate_reviewed_scalar_pack(
+            reviewed_scalar_pack,
+            byte_size=len(reviewed_scalar_json.encode("utf-8")),
+        )
+        supplier_invoice_chain_choices(reviewed_scalar_values)
+    except (FixtureCompileError, TypeError, ValueError) as exc:
+        raise RailwayDatabasePhaseError(
+            "Reviewed PO/GRN scalar authority is invalid"
+        ) from exc
+    return reviewed_scalar_json
+
+
 def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
     _deployed_oauth_client_id()
@@ -549,6 +572,7 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
         or hashlib.sha256(receipt).hexdigest() != receipt_sha256
     ):
         raise RailwayDatabasePhaseError("Reviewed expense receipt bytes differ")
+    reviewed_scalar_json = _reviewed_scalar_environment_value(request)
 
     admin_url = _admin_direct_url(
         project_ref, secrets["SUPABASE_DB_PASSWORD"], "canonical_live18_railway_demo"
@@ -583,6 +607,7 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
             "CANONICAL_DEMO_EXPENSE_RECEIPT_PATH": str(receipt_path),
             "CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256": receipt_sha256,
             "CANONICAL_DEMO_API_URL": api_origin,
+            "LIVE18_REVIEWED_SCALARS_JSON": reviewed_scalar_json,
             "PSYCOPG_DATABASE_URL": admin_url,
             "ERP_RUNTIME_DATABASE_URL": runtime_url,
             "ERP_CALCULATOR_DATABASE_URL": calculator_url,

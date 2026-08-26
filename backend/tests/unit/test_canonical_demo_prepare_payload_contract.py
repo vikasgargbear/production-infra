@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,24 @@ SCRIPT = ROOT / "backend/scripts/provision_canonical_demo.py"
 UUID_A = "d3000000-0000-7000-8000-0000000000aa"
 UUID_B = "d3000000-0000-7000-8000-0000000000ab"
 UUID_C = "d3000000-0000-7000-8000-0000000000ac"
+
+
+def _reviewed_po_grn_scalars() -> dict[str, str]:
+    return {
+        "purchase_order_quantity": "2.000000",
+        "purchase_order_delivery_offset_days": "3",
+        "purchase_order_rate": "84.0000",
+        "purchase_order_line_discount_percent": "0.000000",
+        "purchase_order_free_quantity": "0.000000",
+        "purchase_order_document_discount": "0.00",
+        "purchase_order_freight_charge": "0.00",
+        "goods_receipt_received_quantity": "2.000000",
+        "goods_receipt_accepted_quantity": "2.000000",
+        "goods_receipt_rejected_quantity": "0.000000",
+        "goods_receipt_free_quantity": "0.000000",
+        "goods_receipt_mrp": "150.00",
+        "goods_receipt_qc_status": "accepted",
+    }
 
 
 def _module():
@@ -67,9 +86,11 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
             {"supplier_account_id": module.IDS["supplier_account"]},
         ),
         (
-            "ui_purchase_order",
+            "live18_purchase_order_economics",
             "procurement.purchase_order.prepare",
-            module.supplier_invoice_ui_purchase_order_payload(),
+            module.live18_supplier_invoice_purchase_order_payload(
+                _reviewed_po_grn_scalars(), date(2026, 8, 26)
+            ),
             {"supplier_account_id": module.IDS["supplier_account"]},
         ),
         (
@@ -82,12 +103,6 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
             "goods_receipt",
             "procurement.goods_receipt.prepare",
             module.goods_receipt_payload(UUID_A, UUID_B),
-            {"purchase_order_id": UUID_A},
-        ),
-        (
-            "ui_goods_receipt",
-            "procurement.goods_receipt.prepare",
-            module.supplier_invoice_ui_goods_receipt_payload(UUID_A, UUID_B),
             {"purchase_order_id": UUID_A},
         ),
         (

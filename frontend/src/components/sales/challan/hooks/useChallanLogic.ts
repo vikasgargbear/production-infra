@@ -8,7 +8,14 @@
  * Pattern: Composition over duplication
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+    useState,
+    useEffect,
+    useRef,
+    useCallback,
+    type Dispatch,
+    type SetStateAction,
+} from 'react';
 import { useSalesTransaction } from '../../hooks/useSalesTransaction';
 
 import { useCompany } from '../../../../contexts/CompanyContext';
@@ -76,7 +83,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     const [saving] = useState(false);
     const [showCreateCustomer, setShowCreateCustomer] = useState(false);
     const [showCreateProduct, setShowCreateProduct] = useState(false);
-    const [showImportModal, setShowImportModal] = useState(false);
+    const [showImportModal, setShowImportModalState] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [createdChallanData, setCreatedChallanData] = useState<CreatedChallanData | null>(null);
     const [sameAsBilling, setSameAsBilling] = useState(sameAsBillingInitial);
@@ -104,6 +111,26 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             setMessageType('error');
         }
     }, [businessDate, businessDateError, businessDateLoading, setChallan]);
+
+    const approvedOrderImportUnavailableReason = (() => {
+        if (businessDateLoading) {
+            return 'Loading the authoritative organization business date…';
+        }
+        if (businessDateError || !businessDate) {
+            return businessDateError || 'The authoritative organization business date is unavailable.';
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(challan.challan_date)) {
+            return 'Select a valid dispatch date before selecting an approved order.';
+        }
+        return null;
+    })();
+
+    const setShowImportModal = useCallback<Dispatch<SetStateAction<boolean>>>(next => {
+        setShowImportModalState(previous => {
+            const requested = typeof next === 'function' ? next(previous) : next;
+            return requested && approvedOrderImportUnavailableReason ? false : requested;
+        });
+    }, [approvedOrderImportUnavailableReason]);
 
     // A dispatch is an inventory movement, not a tax invoice. Its selling price,
     // GST and document total are therefore never calculated or cached in the browser.
@@ -287,6 +314,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         message,
         messageType,
         documentPolicy,
+        approvedOrderImportUnavailableReason,
 
         // Refs
         customerSearchRef,

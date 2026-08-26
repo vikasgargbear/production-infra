@@ -9,7 +9,7 @@ const required = (name: string): string => {
   return value;
 };
 
-const checkedHttpsOrigin = (value: string, name: string): string => {
+const checkedHttpsUrl = (value: string, name: string): string => {
   const normalized = value.replace(/\/$/, '');
   const parsed = new URL(normalized);
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password
@@ -19,7 +19,14 @@ const checkedHttpsOrigin = (value: string, name: string): string => {
   return normalized;
 };
 
-const httpsOrigin = (name: string): string => checkedHttpsOrigin(required(name), name);
+const httpsOrigin = (name: string): string => {
+  const normalized = checkedHttpsUrl(required(name), name);
+  const parsed = new URL(normalized);
+  if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    throw new Error(`${name} must be an origin without a path, query, or fragment.`);
+  }
+  return parsed.origin;
+};
 
 export interface Live18BrowserConfig {
   appOrigin: string;
@@ -53,7 +60,7 @@ export function loadBrowserConfig(): Live18BrowserConfig {
     || !rawMetadataUrls.every(value => typeof value === 'string')) {
     throw new Error('Distinct HTTPS app and API metadata URLs are required.');
   }
-  const metadataUrls = rawMetadataUrls.map(value => checkedHttpsOrigin(value, 'metadata URL'));
+  const metadataUrls = rawMetadataUrls.map(value => checkedHttpsUrl(value, 'metadata URL'));
   if (new Set(metadataUrls).size !== metadataUrls.length) {
     throw new Error('App and API metadata URLs must be distinct.');
   }

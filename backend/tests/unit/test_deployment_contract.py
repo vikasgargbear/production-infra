@@ -736,24 +736,16 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "def seed_supplier_invoice_ui_portal_evidence" in provisioner
     assert 'supplier_invoice_number = f"DEMO-UI-SUP-{DEMO_UI_FIXTURE_ID}"' in provisioner
     assert '"portal_document_line_id": portal_line_id' in provisioner
-    assert '"taxable_amount": "5000.00"' in provisioner
-    assert 'supplier_challan_number": f"DEMO-UI-CH-{DEMO_UI_FIXTURE_ID}"' in provisioner
-    assert 'evidence_label="supplier-invoice-ui-fixture"' in provisioner
-    assert "expected_line_count=1" in provisioner
+    assert "def live18_supplier_invoice_purchase_order_payload" in provisioner
+    assert "def supplier_invoice_portal_economics" in provisioner
+    assert '"taxable_amount": economics["gst_taxable_total"]' in provisioner
+    assert "supplier_invoice_ui_purchase_order_payload" not in provisioner
+    assert "supplier_invoice_ui_goods_receipt_payload" not in provisioner
+    assert 'evidence_label="supplier-invoice-ui-fixture"' not in provisioner
     assert "def reconcile_supplier_invoice_ui_fixture" in provisioner
-    receipt_ceiling = provisioner.split("WITH receipt_ceiling AS (", 1)[1].split(
-        "), exact_portal_candidates AS (", 1
-    )[0]
-    receipt_ceiling_group = receipt_ceiling.split("GROUP BY", 1)[1]
-    for grouped_column in (
-        "receipt.goods_receipt_number",
-        "receipt.supplier_challan_number",
-        "receipt.supplier_challan_date",
-        "line.base_accepted_quantity",
-        "line.base_free_quantity",
-        "line.unit_cost",
-    ):
-        assert grouped_column in receipt_ceiling_group
+    assert "supplier_invoice_goods_receipt_id" not in provisioner
+    assert "remaining_capitalized_value" not in provisioner
+    assert "LIVE18_REVIEWED_SCALARS_JSON" in provisioner
     assert "demo supplier-invoice UI fixture portal row was already consumed" in provisioner
     assert '"supplier_invoice_ui_fixture": supplier_invoice_ui_fixture' in provisioner
     assert "dispatch_delivery_challan_number" in provisioner
@@ -800,8 +792,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "supply_type='intra_state'" in cross_table
     assert "supply_type='inter_state'" in cross_table
     assert provisioner.count("DEMOB1234C") == 1
-    assert provisioner.count("DEMOC5678D") == 6
-    assert provisioner.count("27DEMOC5678D1Z5") == 5
+    assert provisioner.count("DEMOC5678D") == 5
+    assert provisioner.count("27DEMOC5678D1Z5") == 4
     assert "ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING" in provisioner
     assert "verify_organization_fiscal_tax_fact" in provisioner
     assert "2026::smallint" in provisioner
@@ -1200,9 +1192,13 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "remaining_active_denial_authority_count" in recovery
     assert "remaining_denial_auth_binding_count" in recovery
     assert '"api_origin": os.environ["LIVE18_API_ORIGIN"]' in live18
+    assert 'scalar_path = Path(os.environ["LIVE18_REVIEWED_SCALARS_INPUT_PATH"])' in live18
+    assert '"reviewed_scalars": reviewed_scalars' in live18
     railway_phase = _read("backend/scripts/live18_railway_database_phase.py")
     assert '"PHARMA_CANONICAL_LIVE_API_BASE_URL": _validated_railway_api_origin(' in railway_phase
     assert "def _validated_railway_api_origin(" in railway_phase
+    assert "def _reviewed_scalar_environment_value(" in railway_phase
+    assert '"LIVE18_REVIEWED_SCALARS_JSON": reviewed_scalar_json' in railway_phase
     assert railway_phase.count(
         "https://aasopharma-api-pilot-production.up.railway.app"
     ) == 1

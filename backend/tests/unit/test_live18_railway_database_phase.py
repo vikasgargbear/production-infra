@@ -45,6 +45,58 @@ def _boundary_request() -> dict[str, str]:
     }
 
 
+def _reviewed_scalar_pack() -> dict[str, object]:
+    return {
+        "schema": "aasopharma.live18.reviewed-scalars.v1",
+        "values": {
+            "purchase_order_quantity": "2.000000",
+            "purchase_order_delivery_offset_days": "3",
+            "purchase_order_rate": "84.0000",
+            "purchase_order_line_discount_percent": "0.000000",
+            "purchase_order_free_quantity": "0.000000",
+            "purchase_order_document_discount": "0.00",
+            "purchase_order_freight_charge": "0.00",
+            "goods_receipt_received_quantity": "2.000000",
+            "goods_receipt_accepted_quantity": "2.000000",
+            "goods_receipt_rejected_quantity": "0.000000",
+            "goods_receipt_free_quantity": "0.000000",
+            "goods_receipt_mrp": "150.00",
+            "goods_receipt_qc_status": "accepted",
+        },
+    }
+
+
+def test_remote_demo_accepts_only_a_reconciled_reviewed_scalar_pack() -> None:
+    pack = _reviewed_scalar_pack()
+
+    serialized = phase._reviewed_scalar_environment_value(
+        {"reviewed_scalars": pack}
+    )
+
+    assert json.loads(serialized) == pack
+    assert " " not in serialized
+
+    pack["values"]["goods_receipt_free_quantity"] = "1.000000"
+    with pytest.raises(
+        phase.RailwayDatabasePhaseError, match="scalar authority is invalid"
+    ):
+        phase._reviewed_scalar_environment_value({"reviewed_scalars": pack})
+
+
+def test_remote_demo_rejects_missing_or_oversized_scalar_authority() -> None:
+    with pytest.raises(
+        phase.RailwayDatabasePhaseError, match="scalar authority is invalid"
+    ):
+        phase._reviewed_scalar_environment_value({})
+
+    pack = _reviewed_scalar_pack()
+    pack["values"]["unreviewed_note"] = "x" * (phase.MAX_REQUEST_BYTES // 2)
+    with pytest.raises(
+        phase.RailwayDatabasePhaseError, match="scalar authority is invalid"
+    ):
+        phase._reviewed_scalar_environment_value({"reviewed_scalars": pack})
+
+
 def test_captured_database_evidence_replaces_the_runner_database_secret():
     values = _live_env()
     values["PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH"] = "/tmp/db-evidence.json"
