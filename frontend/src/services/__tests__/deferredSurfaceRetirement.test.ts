@@ -77,8 +77,14 @@ describe('deferred production surfaces', () => {
   test('zero-consumer compatibility clients and unreachable shells stay retired', () => {
     [
       'components/global/pdf/GlobalPDFGenerator.ts',
+      'components/global/GlobalDocumentSummary.tsx',
+      'components/global/auth/PermissionGate.tsx',
+      'components/global/ui/KeyboardNavigationGuide.tsx',
+      'components/global/ui/feedback/EmptyState.tsx',
+      'components/global/ui/feedback/LoadingState.tsx',
       'components/master/utils/DataValidationEngine.tsx',
       'components/master/utils/BulkOperations.tsx',
+      'components/payment/entry/PaymentReceived.tsx',
       'services/api/modules/audit/audit.api.ts',
       'services/api/modules/auth/auth.api.ts',
       'services/api/modules/compliance/taxEntries.api.ts',

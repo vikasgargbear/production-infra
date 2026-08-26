@@ -11,7 +11,7 @@
 | **UI** | Button, Badge, Card, Spinner, Toast |
 | **Form** | Input, Select, DatePicker, Checkbox, NumberInput |
 | **Layout** | Header, Sidebar, Modal, Drawer |
-| **Data** | Table, Pagination, EmptyState |
+| **Data** | Table, Pagination |
 | **Search** | SearchBar, ProductSearch, CustomerSearch |
 
 ---
@@ -441,8 +441,7 @@ components/global/
 │   └── Drawer.tsx
 ├── data/
 │   ├── Table.tsx
-│   ├── Pagination.tsx
-│   └── EmptyState.tsx
+│   └── Pagination.tsx
 └── search/
     ├── SearchBar.tsx
     ├── ProductSearch.tsx
