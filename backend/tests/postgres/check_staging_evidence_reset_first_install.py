@@ -53,10 +53,36 @@ def main() -> None:
                     AssertionError("empty first install must not resolve a token")
                 ),
             )
+
+            # The hosted pre-reset credential step installs the safe role but
+            # leaves authenticator membership closed. Prove that exact state
+            # does not terminate unrelated Supabase platform sessions.
+            with connection.cursor() as cursor:
+                cursor.execute("CREATE ROLE authenticator NOLOGIN")
+                cursor.execute(
+                    "CREATE ROLE erp_evidence_storage "
+                    "NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE "
+                    "NOREPLICATION NOBYPASSRLS"
+                )
+                cursor.execute(
+                    "GRANT erp_evidence_storage TO CURRENT_USER WITH ADMIN OPTION"
+                )
+                cursor.execute(
+                    "SELECT pg_catalog.pg_has_role("
+                    "'authenticator','erp_evidence_storage','MEMBER')"
+                )
+                assert cursor.fetchone() == (False,)
+            connection.commit()
+
+            installed_closed = close_writer_authority(connection)
         finally:
             connection.rollback()
             with connection.cursor() as cursor:
                 cursor.execute("DROP SCHEMA IF EXISTS storage CASCADE")
+                cursor.execute(
+                    "DROP ROLE IF EXISTS erp_evidence_storage"
+                )
+                cursor.execute("DROP ROLE IF EXISTS authenticator")
             connection.commit()
 
     assert receipt["state"] == "empty"
@@ -65,6 +91,11 @@ def main() -> None:
     assert receipt["evidence_writer_role_absence_verified"] is True
     assert receipt["evidence_writer_membership_open"] is False
     assert receipt["remaining_preclosure_authenticator_session_count"] == 0
+    assert installed_closed.role_installed is True
+    assert installed_closed.role_absence_verified is False
+    assert installed_closed.membership_open is False
+    assert installed_closed.observed_authenticator_session_count == 0
+    assert installed_closed.terminated_authenticator_session_count == 0
 
 
 if __name__ == "__main__":

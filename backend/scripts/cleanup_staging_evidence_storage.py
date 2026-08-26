@@ -283,10 +283,10 @@ def close_writer_authority(connection: Any) -> WriterClosure:
 
     (
         role_installed_before_closure,
-        _membership_open_before_closure,
-        _role_posture_safe_before_closure,
-        _unexpected_member_count_before_closure,
-        _inherited_role_count_before_closure,
+        membership_open_before_closure,
+        role_posture_safe_before_closure,
+        unexpected_member_count_before_closure,
+        inherited_role_count_before_closure,
     ) = _writer_closure_catalog(connection)
     if not role_installed_before_closure:
         # A session cannot retain membership in a role that does not exist.
@@ -307,10 +307,41 @@ def close_writer_authority(connection: Any) -> WriterClosure:
             role_absence_verified=True,
         )
 
-    if role_installed_before_closure:
-        with connection.cursor() as cursor:
-            cursor.execute(CLOSE_WRITER_SQL)
-        connection.commit()
+    if not membership_open_before_closure:
+        if (
+            not role_posture_safe_before_closure
+            or unexpected_member_count_before_closure
+            or inherited_role_count_before_closure
+        ):
+            raise EvidenceResetCleanupError(
+                "canonical evidence writer closure posture is unsafe: "
+                "membership_open=0 "
+                f"role_posture_safe={int(role_posture_safe_before_closure)} "
+                "unexpected_member_count="
+                f"{unexpected_member_count_before_closure} "
+                f"inherited_role_count={inherited_role_count_before_closure} "
+                "remaining_preclosure_session_count=0"
+            )
+        # Existing authenticator sessions can retain evidence authority only
+        # after an observed open membership is revoked. When membership is
+        # already closed, terminating Supabase platform sessions is unrelated
+        # to this cleanup and would be unnecessarily disruptive.
+        return WriterClosure(
+            membership_open=False,
+            role_posture_safe=True,
+            unexpected_member_count=0,
+            inherited_role_count=0,
+            observed_authenticator_session_count=0,
+            terminated_authenticator_session_count=0,
+            remaining_preclosure_authenticator_session_count=0,
+            verified_at=_utc_now(),
+            role_installed=True,
+            role_absence_verified=False,
+        )
+
+    with connection.cursor() as cursor:
+        cursor.execute(CLOSE_WRITER_SQL)
+    connection.commit()
 
     observed = 0
     terminated = 0

@@ -214,7 +214,7 @@ def test_writer_closure_revokes_before_terminating_hosted_authenticator_sessions
         def __init__(self):
             self.cursors = iter(
                 (
-                    Cursor((), ((False, True, 0, 0),)),
+                    Cursor((), ((True, True, 0, 0),)),
                     Cursor(()),
                     Cursor(((101,), (102,)), ((True,), (False,), (0,))),
                     Cursor((), ((False, True, 0, 0),)),
@@ -244,6 +244,43 @@ def test_writer_closure_revokes_before_terminating_hosted_authenticator_sessions
     assert closure.role_installed is True
     assert closure.role_absence_verified is False
     assert connection.commits == 4
+
+
+def test_writer_closure_preserves_sessions_when_installed_membership_is_closed():
+    executed: list[tuple[str, tuple[object, ...] | None]] = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, sql, parameters=None):
+            executed.append((sql, parameters))
+
+        def fetchone(self):
+            return (False, True, 0, 0)
+
+    class Connection:
+        commits = 0
+
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            self.commits += 1
+
+    closure = close_writer_authority(Connection())
+
+    assert all(sql != CLOSE_WRITER_SQL for sql, _parameters in executed)
+    assert all("pg_stat_activity" not in sql for sql, _parameters in executed)
+    assert all("pg_terminate_backend" not in sql for sql, _parameters in executed)
+    assert closure.role_installed is True
+    assert closure.role_absence_verified is False
+    assert closure.membership_open is False
+    assert closure.observed_authenticator_session_count == 0
+    assert closure.terminated_authenticator_session_count == 0
 
 
 def test_writer_closure_proves_absent_first_install_role_without_revoke():
