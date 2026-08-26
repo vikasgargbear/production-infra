@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 interface SidebarSettings {
     // Whether sidebar is currently expanded (controlled by hover or lock)
@@ -15,8 +15,6 @@ interface SidebarContextValue {
     toggleLockExpanded: () => void;
     setLockExpanded: (locked: boolean) => void;
 }
-
-const SIDEBAR_SETTINGS_KEY = 'aaso_sidebar_settings';
 
 const defaultSettings: SidebarSettings = {
     isExpanded: false,
@@ -39,36 +37,10 @@ interface SidebarProviderProps {
 }
 
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) => {
-    const [settings, setSettings] = useState<SidebarSettings>(() => {
-        // Load saved preferences from localStorage
-        try {
-            const saved = localStorage.getItem(SIDEBAR_SETTINGS_KEY);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                return {
-                    ...defaultSettings,
-                    lockExpanded: parsed.lockExpanded ?? false
-                };
-            }
-        } catch (e) {
-            console.warn('Failed to load sidebar settings:', e);
-        }
-        return defaultSettings;
-    });
+    const [settings, setSettings] = useState<SidebarSettings>(defaultSettings);
 
     // Compute isExpanded based on hover state and lock setting
     const isExpanded = settings.lockExpanded || settings.isHovering;
-
-    // Save lockExpanded to localStorage whenever it changes
-    useEffect(() => {
-        try {
-            localStorage.setItem(SIDEBAR_SETTINGS_KEY, JSON.stringify({
-                lockExpanded: settings.lockExpanded
-            }));
-        } catch (e) {
-            console.warn('Failed to save sidebar settings:', e);
-        }
-    }, [settings.lockExpanded]);
 
     const setIsHovering = (hovering: boolean) => {
         setSettings(prev => ({ ...prev, isHovering: hovering }));

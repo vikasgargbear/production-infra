@@ -7,7 +7,10 @@ import {
 } from './erpSessionStorage';
 
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+});
 
 
 test('stores one canonical ERP token and user record', () => {
@@ -15,8 +18,9 @@ test('stores one canonical ERP token and user record', () => {
 
     expect(getErpAccessToken()).toBe('access-token');
     expect(getErpSessionUser()).toEqual({ user_id: 7, org_id: 'org-7' });
-    expect(localStorage.getItem(ERP_SESSION_KEYS.accessToken)).toBe('access-token');
-    expect(localStorage.getItem(ERP_SESSION_KEYS.user)).not.toBeNull();
+    expect(sessionStorage.getItem(ERP_SESSION_KEYS.accessToken)).toBe('access-token');
+    expect(sessionStorage.getItem(ERP_SESSION_KEYS.user)).not.toBeNull();
+    expect(localStorage.length).toBe(0);
 });
 
 
@@ -26,10 +30,10 @@ test('saving and clearing remove every legacy tenant and token alias', () => {
         'userData', 'pharma_branch_id', 'pharma_offline_creds',
         'pharma_refresh_token',
     ];
-    legacyKeys.forEach((key) => localStorage.setItem(key, 'legacy'));
+    legacyKeys.forEach((key) => sessionStorage.setItem(key, 'legacy'));
 
     saveErpSession('access-token', { user_id: 7 });
-    legacyKeys.forEach((key) => expect(localStorage.getItem(key)).toBeNull());
+    legacyKeys.forEach((key) => expect(sessionStorage.getItem(key)).toBeNull());
 
     clearErpSessionStorage();
     expect(getErpAccessToken()).toBeNull();
