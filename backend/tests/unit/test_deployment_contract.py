@@ -810,9 +810,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "INSERT INTO tax.organization_fiscal_tax_facts" not in provisioner
     assert 'IDS["operator_auth_user"], IDS["org"]' in provisioner
     assert 'IDS["fiscal_fact_evidence"]' in provisioner
-    supplier_address = provisioner.split("INSERT INTO parties.addresses", 2)[2].split(
-        "INSERT INTO parties.tax_registrations", 1
-    )[0]
+    supplier_marker = provisioner.index("88 Synthetic Wholesale Avenue")
+    supplier_address = provisioner[
+        provisioner.rfind("INSERT INTO parties.addresses", 0, supplier_marker):
+        provisioner.index("INSERT INTO parties.tax_registrations", supplier_marker)
+    ]
     assert "'registered'" in supplier_address
     assert "ON CONFLICT (org_id,id) DO UPDATE SET" in supplier_address
     fiscal_verification = provisioner.split("def verify_fiscal_tax_fact", 1)[1].split(

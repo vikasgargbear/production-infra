@@ -1,0 +1,58 @@
+{
+  "template_schema": "aasopharma.live23.ui-variant-template.v1",
+  "scenario_id": "sales_invoice_sez_with_igst",
+  "operation_id": "sales_invoice",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/sales/invoice"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.sez_customer_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.sez_customer_account_id}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.sales_invoice_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.sales_invoice_rate}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} discount percent","exact":true},"value":"{{scalar.sales_invoice_discount_percent}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"{{scalar.sales_invoice_free_quantity}}"},
+      {"actor":"requester","action":"press","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"Tab"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Change","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-address-{{fact.identity.sez_delivery_address_id}}-v{{fact.identity.sez_delivery_address_row_version}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact Distance (km)","exact":true},"value":"{{scalar.sales_invoice_distance_km}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue to Preview","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Invoice free-supply tax treatment is missing or invalid","exact":true},"value":"Invoice free-supply tax treatment is missing or invalid"}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/sales/invoice"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.sez_customer_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.sez_customer_account_id}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search products by name, code, or HSN...","exact":true},"value":"{{fact.display.product_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.sales_invoice_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.sales_invoice_rate}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} discount percent","exact":true},"value":"{{scalar.sales_invoice_discount_percent}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"{{scalar.sales_invoice_free_quantity}}"},
+      {"actor":"requester","action":"press","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"Tab"},
+      {"actor":"requester","action":"select","locator":{"kind":"testId","name":"desktop-free-supply-treatment-{{fact.identity.direct_issue_batch_id}}"},"value":"{{scalar.sales_invoice_free_supply_tax_treatment}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Change","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-address-{{fact.identity.sez_delivery_address_id}}-v{{fact.identity.sez_delivery_address_row_version}}"}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Zero-rated payment mode","exact":true},"value":"with_igst"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"invoice-logistics-mode-in_person"},"value":"In person (no carrier)"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact Distance (km)","exact":true},"value":"{{scalar.sales_invoice_distance_km}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue to Preview","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Generate Invoice","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact sales invoice","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.sez_customer_name}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed this exact server preview and want to post it.","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact sales invoice","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve & Post","exact":true}}
+    ]
+  }
+}

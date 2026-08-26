@@ -8,6 +8,13 @@ never silently skipped or represented as passing evidence. Moving it to
 `ready` automatically makes its template, browser run, and reconciliation
 mandatory.
 
+Live18 certifies one UI-driven success scenario for each distinct operation;
+it does not claim all 23 success variants named by the broader canonical
+scenario matrix. The five additional tax/return variants, including their
+current blockers, are tracked separately in
+`docs/testing/live23-ui-variant-readiness.json` and
+`docs/testing/canonical-live23-variants.md`. They cannot inherit a Live18 pass.
+
 ## Non-negotiable gate
 
 A run is not live evidence unless all of the following are true:

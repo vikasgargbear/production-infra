@@ -71,6 +71,25 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
     assert len(MODULE.LIVE18_PREPARE_CAPABILITIES) == 17
 
 
+def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() -> None:
+    with pytest.raises(MODULE.CanonicalLiveIdentityError, match="run token"):
+        MODULE._resolve_fixture_identities(object(), "local")
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    for authority in (
+        "interstate_customer_account_id",
+        "interstate_delivery_address_id",
+        "interstate_customer_gstin_id",
+        "sez_customer_account_id",
+        "sez_delivery_address_id",
+        "sez_customer_gstin_id",
+        "interstate_registration.taxpayer_type='regular'",
+        "sez_registration.taxpayer_type IN ('sez_unit','sez_developer')",
+        "state_code<>branch.state_code",
+    ):
+        assert authority in source
+
+
 def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
     class LoginResponse:
         ok = True

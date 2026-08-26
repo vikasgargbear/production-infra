@@ -33,6 +33,7 @@ export type DeliveryType = 'local' | 'courier' | 'self_pickup' | 'transport' | '
 
 /** GST type - intra-state vs inter-state */
 export type GstType = 'CGST/SGST' | 'IGST';
+export type ZeroRatedPaymentMode = 'not_applicable' | 'with_igst';
 
 /** Whether free units contribute to the taxable line value. */
 export type FreeSupplyTaxTreatment = SharedFreeSupplyTaxTreatment;
@@ -359,6 +360,7 @@ export interface Invoice {
 
     // Dates - DB: invoice_date is date NOT NULL
     invoice_date: string;  // REQUIRED - DB: date NOT NULL
+    zero_rated_payment_mode?: ZeroRatedPaymentMode;
     order_date?: string;
     due_date?: string;
 

@@ -83,6 +83,7 @@ export interface Invoice {
     billing_address_data?: CustomerAddress;
     shipping_address_data?: CustomerAddress;
     gst_type: GstType | '';
+    zero_rated_payment_mode: 'not_applicable' | 'with_igst';
     delivery_type: '' | 'PICKUP' | 'DELIVERY' | 'COURIER';
     distance_km: string;
     transport_company: string;
@@ -188,6 +189,7 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     // The canonical calculation preview resolves the tax treatment from the
     // branch, customer, document date, and reviewed tax registration facts.
     gst_type: '',
+    zero_rated_payment_mode: 'not_applicable',
     delivery_type: '',
     distance_km: '',
     transport_company: '',
@@ -248,13 +250,16 @@ export const useInvoiceLogic = (
             setInvoice(previous => ({
                 ...previous,
                 invoice_date: previous.invoice_date || businessDate,
+                zero_rated_payment_mode: previous.zero_rated_payment_mode
+                    || documentPolicy?.default_zero_rated_payment_mode
+                    || 'not_applicable',
             }));
             return;
         }
         if (!businessDateLoading && businessDateError) {
             setError(previous => previous || businessDateError);
         }
-    }, [businessDate, businessDateError, businessDateLoading]);
+    }, [businessDate, businessDateError, businessDateLoading, documentPolicy]);
 
     // Save state and logic managed by useInvoiceSave
     const [showSuccessModal, setShowSuccessModal] = useState(false);

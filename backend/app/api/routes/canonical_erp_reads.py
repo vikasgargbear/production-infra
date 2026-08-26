@@ -159,7 +159,9 @@ class CanonicalDocumentPolicy(BaseModel):
 
     allowed_rounding_policies: list[Literal["none"]]
     default_rounding_policy: Literal["none"]
-    allowed_zero_rated_payment_modes: list[Literal["not_applicable"]]
+    allowed_zero_rated_payment_modes: list[
+        Literal["not_applicable", "with_igst"]
+    ]
     default_zero_rated_payment_mode: Literal["not_applicable"]
     allowed_tax_charge_mechanisms: list[Literal["normal"]]
     default_tax_charge_mechanism: Literal["normal"]
@@ -208,7 +210,7 @@ def canonical_business_context(
         "document_policy": {
             "allowed_rounding_policies": ["none"],
             "default_rounding_policy": "none",
-            "allowed_zero_rated_payment_modes": ["not_applicable"],
+            "allowed_zero_rated_payment_modes": ["not_applicable", "with_igst"],
             "default_zero_rated_payment_mode": "not_applicable",
             "allowed_tax_charge_mechanisms": ["normal"],
             "default_tax_charge_mechanism": "normal",

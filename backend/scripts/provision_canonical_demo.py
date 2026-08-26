@@ -150,6 +150,7 @@ DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS = Decimal("84")
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
 DEMO_RUN_ATTEMPT = os.getenv("GITHUB_RUN_ATTEMPT", "1")
 DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"
+LIVE23_VARIANTS_REQUIRED = os.getenv("LIVE23_VARIANTS_REQUIRED") == "true"
 for grant_key in (
     "reviewer_access_grant",
     "operator_access_grant",
@@ -431,6 +432,43 @@ def demo_ui_fixture_uuid(label: str) -> str:
             f"aasopharma-canonical-demo-ui:{DEMO_UI_FIXTURE_ID}:{label}",
         )
     )
+
+
+def demo_ui_fixture_gstin(state_code: str, label: str) -> str:
+    """Derive a checksum-valid synthetic GSTIN without checking in an identity."""
+
+    if not re.fullmatch(r"[0-9]{2}", state_code):
+        raise ValueError("demo GSTIN state code must contain two digits")
+    digest = hashlib.sha256(
+        f"aasopharma-canonical-demo-ui:{DEMO_UI_FIXTURE_ID}:{label}".encode()
+    ).digest()
+    letters = "".join(chr(ord("A") + digest[index] % 26) for index in range(6))
+    digits = "".join(str(digest[index] % 10) for index in range(6, 10))
+    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    body = f"{state_code}{letters[:5]}{digits}{letters[5]}1Z"
+    factor = 2
+    total = 0
+    for character in reversed(body):
+        product = alphabet.index(character) * factor
+        total += product // 36 + product % 36
+        factor = 1 if factor == 2 else 2
+    return f"{body}{alphabet[(36 - total % 36) % 36]}"
+
+
+for resource_key in (
+    "interstate_customer_party",
+    "interstate_customer_account",
+    "interstate_customer_address",
+    "interstate_customer_gstin",
+    "sez_customer_party",
+    "sez_customer_account",
+    "sez_customer_address",
+    "sez_customer_gstin",
+):
+    IDS[resource_key] = demo_ui_fixture_uuid(resource_key)
+
+INTERSTATE_CUSTOMER_GSTIN = demo_ui_fixture_gstin("29", "interstate-customer")
+SEZ_CUSTOMER_GSTIN = demo_ui_fixture_gstin("29", "sez-customer")
 
 
 for resource_key in (
@@ -1526,10 +1564,34 @@ def seed_business_master(connection) -> None:
             """,
             (IDS["org"], IDS["receivable_account"], IDS["reviewer_membership"], IDS["reviewer_membership"]),
         )
+        variant_parties = (
+            (
+                IDS["interstate_customer_party"],
+                f"Synthetic Interstate Customer {DEMO_UI_FIXTURE_ID}",
+                INTERSTATE_CUSTOMER_GSTIN[2:12],
+            ),
+            (
+                IDS["sez_customer_party"],
+                f"Synthetic SEZ Customer {DEMO_UI_FIXTURE_ID}",
+                SEZ_CUSTOMER_GSTIN[2:12],
+            ),
+        ) if LIVE23_VARIANTS_REQUIRED else ()
+        variant_addresses = (
+            (
+                IDS["interstate_customer_address"],
+                IDS["interstate_customer_party"],
+                "18 Synthetic Interstate Trade Road",
+            ),
+            (
+                IDS["sez_customer_address"],
+                IDS["sez_customer_party"],
+                "7 Synthetic SEZ Technology Park",
+            ),
+        ) if LIVE23_VARIANTS_REQUIRED else ()
         parties = (
             (IDS["customer_party"], "Demo Retail Customer Private Limited", "DEMOA1234B"),
             (IDS["manufacturer_party"], "Demo Paper Products Private Limited", "DEMOB1234C"),
-        )
+        ) + variant_parties
         cursor.executemany(
             """
             INSERT INTO parties.parties (
@@ -1574,6 +1636,26 @@ def seed_business_master(connection) -> None:
                 SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
+        cursor.executemany(
+            """
+            INSERT INTO parties.addresses (
+                org_id, id, party_id, address_kind, line1, city, state_code,
+                postal_code, country_code, is_primary, valid_from, status,
+                created_by_membership_id, updated_by_membership_id
+            ) VALUES (
+                %s, %s, %s, 'billing', %s, 'Bengaluru', '29', '560001',
+                'IN', true, %s, 'active', %s, %s
+            ) ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"], address_id, party_id, line1,
+                    SOURCE_RETRIEVED_ON, IDS["reviewer_membership"],
+                    IDS["reviewer_membership"],
+                )
+                for address_id, party_id, line1 in variant_addresses
+            ],
+        )
         cursor.execute(
             """
             INSERT INTO parties.tax_registrations (
@@ -1590,6 +1672,35 @@ def seed_business_master(connection) -> None:
                 IDS["org"], IDS["customer_gstin"], IDS["customer_party"],
                 SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
+        )
+        cursor.executemany(
+            """
+            INSERT INTO parties.tax_registrations (
+                org_id, id, party_id, registration_type, registration_number,
+                registered_legal_name, state_code, taxpayer_type, valid_from,
+                verified_at, status, created_by_membership_id,
+                updated_by_membership_id
+            ) VALUES (
+                %s, %s, %s, 'GSTIN', %s, %s, '29', %s, %s,
+                transaction_timestamp(), 'active', %s, %s
+            ) ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"], IDS["interstate_customer_gstin"],
+                    IDS["interstate_customer_party"], INTERSTATE_CUSTOMER_GSTIN,
+                    f"Synthetic Interstate Customer {DEMO_UI_FIXTURE_ID}",
+                    "regular", SOURCE_RETRIEVED_ON,
+                    IDS["reviewer_membership"], IDS["reviewer_membership"],
+                ),
+                (
+                    IDS["org"], IDS["sez_customer_gstin"],
+                    IDS["sez_customer_party"], SEZ_CUSTOMER_GSTIN,
+                    f"Synthetic SEZ Customer {DEMO_UI_FIXTURE_ID}",
+                    "sez_unit", SOURCE_RETRIEVED_ON,
+                    IDS["reviewer_membership"], IDS["reviewer_membership"],
+                ),
+            ] if LIVE23_VARIANTS_REQUIRED else [],
         )
         cursor.execute(
             """
@@ -1615,6 +1726,31 @@ def seed_business_master(connection) -> None:
                 IDS["org"], IDS["customer_contact"], IDS["customer_party"],
                 IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
+        )
+        cursor.executemany(
+            """
+            INSERT INTO parties.customer_accounts (
+                org_id, id, party_id, customer_code, credit_limit, credit_days,
+                default_receivable_account_id, status,
+                created_by_membership_id, updated_by_membership_id
+            ) VALUES (
+                %s, %s, %s, %s, 1000000, 30, %s, 'active', %s, %s
+            ) ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"], IDS["interstate_customer_account"],
+                    IDS["interstate_customer_party"],
+                    f"LIVE23-INTER-{DEMO_UI_FIXTURE_ID}", IDS["receivable_account"],
+                    IDS["reviewer_membership"], IDS["reviewer_membership"],
+                ),
+                (
+                    IDS["org"], IDS["sez_customer_account"],
+                    IDS["sez_customer_party"],
+                    f"LIVE23-SEZ-{DEMO_UI_FIXTURE_ID}", IDS["receivable_account"],
+                    IDS["reviewer_membership"], IDS["reviewer_membership"],
+                ),
+            ] if LIVE23_VARIANTS_REQUIRED else [],
         )
         cursor.execute(
             """

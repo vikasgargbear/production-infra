@@ -220,7 +220,15 @@ def resolve_authoritative_facts(
         "quarantine_location_id", "transfer_destination_branch_id",
         "transfer_destination_location_id", "bank_account_id", "bank_ledger_id",
     }
-    if set(identities) != required:
+    live23_identities = {
+        "interstate_customer_account_id", "interstate_delivery_address_id",
+        "interstate_customer_gstin_id", "sez_customer_account_id",
+        "sez_delivery_address_id", "sez_customer_gstin_id",
+    }
+    if frozenset(identities) not in {
+        frozenset(required),
+        frozenset(required | live23_identities),
+    }:
         raise FixtureCompileError(
             f"canonical fixture identity set drifted: missing={sorted(required-set(identities))} "
             f"extra={sorted(set(identities)-required)}"
@@ -756,12 +764,59 @@ def resolve_authoritative_facts(
                  lot.remaining_igst_amount+lot.remaining_cess_amount)>0
        ORDER BY balance.batch_id
     """
+    variant_customer_sql = """
+      SELECT requested.kind,account.customer_code,party.legal_name,
+             address.id::text,address.row_version,registration.id::text,
+             registration.taxpayer_type,address.state_code
+        FROM (VALUES
+              ('interstate',%s::uuid,%s::uuid,%s::uuid,'regular'),
+              ('sez',%s::uuid,%s::uuid,%s::uuid,'sez_unit'))
+             AS requested(kind,account_id,address_id,registration_id,taxpayer_type)
+        JOIN parties.customer_accounts account
+          ON account.org_id=%s AND account.id=requested.account_id
+         AND account.status='active'
+        JOIN parties.parties party
+          ON party.org_id=account.org_id AND party.id=account.party_id
+         AND party.status='active'
+        JOIN parties.addresses address
+          ON address.org_id=account.org_id AND address.party_id=account.party_id
+         AND address.id=requested.address_id AND address.is_primary
+         AND address.status='active'
+        JOIN parties.tax_registrations registration
+          ON registration.org_id=account.org_id
+         AND registration.party_id=account.party_id
+         AND registration.id=requested.registration_id
+         AND registration.registration_type='GSTIN'
+         AND registration.taxpayer_type=requested.taxpayer_type
+         AND registration.state_code=address.state_code
+         AND registration.status='active' AND registration.verified_at IS NOT NULL
+        JOIN core.branches branch
+          ON branch.org_id=account.org_id AND branch.id=%s AND branch.status='active'
+       WHERE address.state_code<>branch.state_code
+       ORDER BY requested.kind
+    """
     with psycopg2.connect(database_url) as connection:
         connection.set_session(readonly=True, autocommit=False)
         with connection.cursor() as cursor:
             cursor.execute("SELECT erp_security.activate_context(%s::uuid,%s::uuid)", (auth_user_id, org_id))
             cursor.execute(sql, params)
             rows = cursor.fetchall()
+            variant_customer_rows: list[tuple[Any, ...]] = []
+            if live23_identities <= set(identities):
+                cursor.execute(
+                    variant_customer_sql,
+                    (
+                        identities["interstate_customer_account_id"],
+                        identities["interstate_delivery_address_id"],
+                        identities["interstate_customer_gstin_id"],
+                        identities["sez_customer_account_id"],
+                        identities["sez_delivery_address_id"],
+                        identities["sez_customer_gstin_id"],
+                        org_id,
+                        identities["branch_id"],
+                    ),
+                )
+                variant_customer_rows = cursor.fetchall()
             cycle_count_rows: list[tuple[Any, ...]] = []
             if len(rows) == 1:
                 cursor.execute(
@@ -828,6 +883,13 @@ def resolve_authoritative_facts(
         raise FixtureCompileError(
             "authoritative cycle-count membership, batch, UOM and evidence resolved "
             f"{len(cycle_count_rows)} rows, expected one"
+        )
+    if live23_identities <= set(identities) and (
+        len(variant_customer_rows) != 2
+        or {row[0] for row in variant_customer_rows} != {"interstate", "sez"}
+    ):
+        raise FixtureCompileError(
+            "run-scoped inter-state and SEZ customer authority must resolve exactly once"
         )
     keys = (
         "branch_code", "branch_name", "customer_code", "customer_name",
@@ -948,6 +1010,7 @@ def resolve_authoritative_facts(
         cycle_count_evidence_status,
         cycle_count_evidence_document_date,
     ) = cycle_count_rows[0]
+    variant_customers = {row[0]: row for row in variant_customer_rows}
     return {
         "identity": {
             **identities,
@@ -955,6 +1018,12 @@ def resolve_authoritative_facts(
             "delivery_address_id": resolved.pop("delivery_address_id"),
             "delivery_address_row_version": resolved.pop("delivery_address_row_version"),
             "direct_issue_batch_id": resolved.pop("direct_issue_batch_id"),
+            **({
+                "interstate_delivery_address_row_version": (
+                    variant_customers["interstate"][4]
+                ),
+                "sez_delivery_address_row_version": variant_customers["sez"][4],
+            } if variant_customers else {}),
             "cycle_count_evidence_attachment_id": cycle_count_evidence_id,
             "cycle_count_counted_by_membership_id": cycle_count_membership_id,
             "bank_reconciliation_statement_id": bank_statement_id,
@@ -986,6 +1055,12 @@ def resolve_authoritative_facts(
         },
         "display": {
             **resolved,
+            **({
+                "interstate_customer_code": variant_customers["interstate"][1],
+                "interstate_customer_name": variant_customers["interstate"][2],
+                "sez_customer_code": variant_customers["sez"][1],
+                "sez_customer_name": variant_customers["sez"][2],
+            } if variant_customers else {}),
             "cycle_count_system_base_quantity": cycle_count_system_base_quantity,
             "cycle_count_uom_multiplier": cycle_count_uom_multiplier,
             "cycle_count_uom_code": cycle_count_uom_code,

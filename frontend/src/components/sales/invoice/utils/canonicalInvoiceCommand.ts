@@ -341,6 +341,11 @@ export function buildCanonicalInvoicePreparePayload(
     if (!policy) {
         throw new Error('Commercial document policy is unavailable. Refresh before preparing the invoice.');
     }
+    const zeroRatedPaymentMode = invoice.zero_rated_payment_mode
+        || policy.default_zero_rated_payment_mode;
+    if (!policy.allowed_zero_rated_payment_modes.includes(zeroRatedPaymentMode)) {
+        throw new Error('Invoice zero-rated payment mode is not allowed by server policy.');
+    }
 
     const firstItem = invoice.items[0];
     const firstDirectIssueItem = invoice.items.find(
@@ -361,7 +366,7 @@ export function buildCanonicalInvoicePreparePayload(
         invoice_date: invoice.invoice_date,
         document_discount: documentDiscount(invoice),
         rounding_policy: policy.default_rounding_policy,
-        zero_rated_payment_mode: policy.default_zero_rated_payment_mode,
+        zero_rated_payment_mode: zeroRatedPaymentMode,
         ...(freight !== null && exactDecimalUnits(freight, 'Invoice freight', { scale: 4 }) > 0n ? {
             charge_lines: [{
                 charge_code: 'freight',

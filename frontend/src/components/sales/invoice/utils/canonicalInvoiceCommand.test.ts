@@ -14,7 +14,7 @@ import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/o
 const documentPolicy: CanonicalDocumentPolicy = {
     allowed_rounding_policies: ['none'],
     default_rounding_policy: 'none',
-    allowed_zero_rated_payment_modes: ['not_applicable'],
+    allowed_zero_rated_payment_modes: ['not_applicable', 'with_igst'],
     default_zero_rated_payment_mode: 'not_applicable',
     allowed_tax_charge_mechanisms: ['normal'],
     default_tax_charge_mechanism: 'normal',
@@ -542,5 +542,23 @@ describe('canonical invoice command', () => {
             customer,
         )).toMatch(/delivery address/i);
         expect(invoicePreviewValidationError(company, invoice, customer)).toBeNull();
+    });
+
+    it('sends an explicitly selected server-supported SEZ with-IGST mode', () => {
+        const payload = buildCanonicalInvoicePreparePayload({
+            ...invoice,
+            zero_rated_payment_mode: 'with_igst',
+        } as Invoice, customer, 'erp-web-invoice:sez-with-igst');
+
+        expect(payload.zero_rated_payment_mode).toBe('with_igst');
+    });
+
+    it('fails closed when invoice state contains a mode outside server policy', () => {
+        expect(() => buildCanonicalInvoicePreparePayload({
+            ...invoice,
+            zero_rated_payment_mode: 'without_payment',
+        } as unknown as Invoice, customer, 'erp-web-invoice:unsupported-zero-mode')).toThrow(
+            /not allowed by server policy/i,
+        );
     });
 });

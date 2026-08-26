@@ -9,7 +9,10 @@ OWNED_PREFIXES = (
     "backend/scripts/live_acceptance/",
     "backend/tests/live_acceptance/",
     "docs/testing/canonical-live18-acceptance.md",
+    "docs/testing/canonical-live23-variants.md",
+    "docs/testing/live23-ui-variant-readiness.json",
     "frontend/e2e/live18/",
+    "frontend/e2e/live23/",
     "frontend/e2e/support/live18/",
 )
 

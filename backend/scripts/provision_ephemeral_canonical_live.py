@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import sys
 from pathlib import Path
@@ -211,14 +212,19 @@ def _capabilities(role: str, *, live18: bool = False):
     return LIVE18_MCP_REQUESTER_CAPABILITIES if live18 else REQUESTER_CAPABILITIES
 
 
-def _resolve_fixture_identities(cursor) -> dict[str, str]:
+def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
+    if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
+        raise CanonicalLiveIdentityError("Canonical live fixture run token is invalid")
     cursor.execute(
         """
         SELECT branch.id::text,customer.id::text,supplier.id::text,
                product.id::text,uom.id::text,count_uom.id::text,
                saleable.id::text,quarantine.id::text,
                destination_branch.id::text,destination_location.id::text,
-               bank.id::text,bank_ledger.id::text
+               bank.id::text,bank_ledger.id::text,
+               interstate.id::text,interstate_address.id::text,
+               interstate_registration.id::text,
+               sez.id::text,sez_address.id::text,sez_registration.id::text
           FROM core.branches AS branch
           JOIN parties.customer_accounts AS customer
             ON customer.org_id=branch.org_id AND customer.id=%s
@@ -254,6 +260,35 @@ def _resolve_fixture_identities(cursor) -> dict[str, str]:
           JOIN finance.accounts AS bank_ledger
             ON bank_ledger.org_id=branch.org_id AND bank_ledger.id=%s
            AND bank_ledger.status='active'
+          LEFT JOIN parties.customer_accounts AS interstate
+            ON interstate.org_id=branch.org_id AND interstate.customer_code=%s
+           AND interstate.status='active'
+          LEFT JOIN parties.addresses AS interstate_address
+            ON interstate_address.org_id=interstate.org_id
+           AND interstate_address.party_id=interstate.party_id
+           AND interstate_address.is_primary AND interstate_address.status='active'
+           AND interstate_address.state_code<>branch.state_code
+          LEFT JOIN parties.tax_registrations AS interstate_registration
+            ON interstate_registration.org_id=interstate.org_id
+           AND interstate_registration.party_id=interstate.party_id
+           AND interstate_registration.registration_type='GSTIN'
+           AND interstate_registration.state_code=interstate_address.state_code
+           AND interstate_registration.taxpayer_type='regular'
+           AND interstate_registration.status='active'
+          LEFT JOIN parties.customer_accounts AS sez
+            ON sez.org_id=branch.org_id AND sez.customer_code=%s
+           AND sez.status='active'
+          LEFT JOIN parties.addresses AS sez_address
+            ON sez_address.org_id=sez.org_id AND sez_address.party_id=sez.party_id
+           AND sez_address.is_primary AND sez_address.status='active'
+           AND sez_address.state_code<>branch.state_code
+          LEFT JOIN parties.tax_registrations AS sez_registration
+            ON sez_registration.org_id=sez.org_id
+           AND sez_registration.party_id=sez.party_id
+           AND sez_registration.registration_type='GSTIN'
+           AND sez_registration.state_code=sez_address.state_code
+           AND sez_registration.taxpayer_type IN ('sez_unit','sez_developer')
+           AND sez_registration.status='active'
          WHERE branch.org_id=%s AND branch.id=%s AND branch.status='active'
          LIMIT 2
         """,
@@ -269,6 +304,8 @@ def _resolve_fixture_identities(cursor) -> dict[str, str]:
             TRANSFER_DESTINATION_LOCATION_ID,
             BANK_ACCOUNT_ID,
             BANK_LEDGER_ID,
+            f"LIVE23-INTER-{run_token}",
+            f"LIVE23-SEZ-{run_token}",
             DEMO_ORG_ID,
             BRANCH_ID,
         ),
@@ -291,8 +328,22 @@ def _resolve_fixture_identities(cursor) -> dict[str, str]:
         "transfer_destination_location_id",
         "bank_account_id",
         "bank_ledger_id",
+        "interstate_customer_account_id",
+        "interstate_delivery_address_id",
+        "interstate_customer_gstin_id",
+        "sez_customer_account_id",
+        "sez_delivery_address_id",
+        "sez_customer_gstin_id",
     )
-    return dict(zip(keys, rows[0]))
+    resolved = dict(zip(keys, rows[0]))
+    variant_keys = keys[12:]
+    if os.getenv("LIVE23_VARIANTS_REQUIRED") == "true":
+        if any(resolved[key] is None for key in variant_keys):
+            raise CanonicalLiveIdentityError(
+                "Required Live23 customer fixture authority is incomplete"
+            )
+        return resolved
+    return {key: resolved[key] for key in keys[:12]}
 
 
 def _provision_database(
@@ -387,7 +438,9 @@ def _provision_database(
                     "The reviewed denial identity must map exactly once to its disposable organization"
                 )
             denial_org_id = denial_orgs[0][0]
-            fixture_identities = _resolve_fixture_identities(cursor)
+            fixture_identities = _resolve_fixture_identities(
+                cursor, browser_state["run_token"]
+            )
             cursor.execute(
                 """
                 SELECT id::text,subject_membership_id::text,row_version

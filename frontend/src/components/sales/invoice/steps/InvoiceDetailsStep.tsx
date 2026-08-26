@@ -169,6 +169,37 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         </div>
                                     </div>
                                 </div>
+                                <div className="border-t border-gray-100 pt-4">
+                                    <label
+                                        htmlFor="invoice-zero-rated-payment-mode"
+                                        className="block text-sm font-medium text-gray-700 mb-2"
+                                    >
+                                        Zero-rated payment mode
+                                    </label>
+                                    <select
+                                        id="invoice-zero-rated-payment-mode"
+                                        value={invoice.zero_rated_payment_mode || 'not_applicable'}
+                                        onChange={(event) => setInvoice(previous => ({
+                                            ...previous,
+                                            zero_rated_payment_mode: event.target.value as
+                                                'not_applicable' | 'with_igst',
+                                        }))}
+                                        className="min-h-[44px] w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        {documentPolicy?.allowed_zero_rated_payment_modes.map(mode => (
+                                            <option key={mode} value={mode}>
+                                                {mode === 'with_igst'
+                                                    ? 'SEZ supply — with IGST payment'
+                                                    : 'Not applicable — ordinary supply'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="mt-1 text-xs text-gray-600">
+                                        Choose SEZ with IGST only for a verified SEZ customer.
+                                        The server derives supply type from the selected GST
+                                        registration and address.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 

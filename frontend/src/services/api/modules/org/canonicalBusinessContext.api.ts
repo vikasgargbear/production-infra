@@ -11,7 +11,7 @@ export interface CanonicalBusinessContext {
 export interface CanonicalDocumentPolicy {
   allowed_rounding_policies: Array<'none'>;
   default_rounding_policy: 'none';
-  allowed_zero_rated_payment_modes: Array<'not_applicable'>;
+  allowed_zero_rated_payment_modes: Array<'not_applicable' | 'with_igst'>;
   default_zero_rated_payment_mode: 'not_applicable';
   allowed_tax_charge_mechanisms: Array<'normal'>;
   default_tax_charge_mechanism: 'normal';
@@ -41,6 +41,20 @@ const singleton = <T extends string>(
   return expected;
 };
 
+const supportedZeroRatedPaymentModes = (
+  values: unknown,
+  selected: unknown,
+): Array<'not_applicable' | 'with_igst'> => {
+  if (!Array.isArray(values)
+      || values.length !== 2
+      || values[0] !== 'not_applicable'
+      || values[1] !== 'with_igst'
+      || selected !== 'not_applicable') {
+    throw new Error('The canonical API returned ambiguous zero-rated payment policy.');
+  }
+  return values;
+};
+
 export function requireCanonicalBusinessContext(value: unknown): CanonicalBusinessContext {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('The canonical API returned no organization business clock.');
@@ -58,11 +72,9 @@ export function requireCanonicalBusinessContext(value: unknown): CanonicalBusine
   const policy = (context as Partial<CanonicalBusinessContext>).document_policy as Partial<CanonicalDocumentPolicy> | undefined;
   if (!policy) throw new Error('The canonical API returned no commercial document policy.');
   singleton(policy.allowed_rounding_policies, policy.default_rounding_policy, 'none', 'rounding');
-  singleton(
+  supportedZeroRatedPaymentModes(
     policy.allowed_zero_rated_payment_modes,
     policy.default_zero_rated_payment_mode,
-    'not_applicable',
-    'zero-rated payment',
   );
   singleton(
     policy.allowed_tax_charge_mechanisms,

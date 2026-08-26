@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import re
+from uuid import UUID
 
 import pytest
 
@@ -38,6 +40,37 @@ def test_demo_identity_rejects_an_invalid_organization_pan_before_database_use()
 
     with pytest.raises(ValueError, match="canonical PAN shape"):
         module.bootstrap_identity(object(), organization_pan="NOT-A-PAN")
+
+
+def test_live23_customer_identities_and_gstins_are_run_derived() -> None:
+    module = _module()
+
+    for key in (
+        "interstate_customer_party",
+        "interstate_customer_account",
+        "interstate_customer_address",
+        "interstate_customer_gstin",
+        "sez_customer_party",
+        "sez_customer_account",
+        "sez_customer_address",
+        "sez_customer_gstin",
+    ):
+        UUID(module.IDS[key])
+        assert module.IDS[key] == module.demo_ui_fixture_uuid(key)
+    for gstin in (module.INTERSTATE_CUSTOMER_GSTIN, module.SEZ_CUSTOMER_GSTIN):
+        assert re.fullmatch(
+            r"29[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]",
+            gstin,
+        )
+        alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        factor = 2
+        total = 0
+        for character in reversed(gstin[:-1]):
+            product = alphabet.index(character) * factor
+            total += product // 36 + product % 36
+            factor = 1 if factor == 2 else 2
+        assert gstin[-1] == alphabet[(36 - total % 36) % 36]
+    assert module.INTERSTATE_CUSTOMER_GSTIN != module.SEZ_CUSTOMER_GSTIN
 
 
 @pytest.mark.parametrize("row_version", [0, -1, True])
