@@ -52,11 +52,6 @@ export interface PurchaseSearchRef {
     clear: () => void;
 }
 
-interface CacheEntry {
-    data: Purchase[];
-    timestamp: number;
-}
-
 // ==================== COMPONENT ====================
 
 /**
@@ -90,7 +85,6 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
     const searchInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
-    const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
@@ -130,19 +124,7 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const getCacheKey = (type: string, params: Record<string, unknown>): string => {
-        return `${type}_${JSON.stringify(params)}`;
-    };
-
     const fetchRecentPurchases = async () => {
-        const cacheKey = getCacheKey('recent', { supplierId });
-        const cached = cacheRef.current.get(cacheKey);
-
-        if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
-            setPurchases(cached.data);
-            return;
-        }
-
         setLoading(true);
         setError(null);
 
@@ -157,11 +139,6 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
             const response = await purchasesApi.getOrders(params);
             const recentPurchases = (response as any).data?.purchases || [];
 
-            cacheRef.current.set(cacheKey, {
-                data: recentPurchases,
-                timestamp: Date.now()
-            });
-
             setPurchases(recentPurchases);
         } catch (err) {
             setError('Failed to load recent purchases');
@@ -172,14 +149,6 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
     };
 
     const searchPurchases = async (query: string) => {
-        const cacheKey = getCacheKey('search', { query, supplierId });
-        const cached = cacheRef.current.get(cacheKey);
-
-        if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
-            setPurchases(cached.data);
-            return;
-        }
-
         setLoading(true);
         setError(null);
 
@@ -193,11 +162,6 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
 
             const response = await purchasesApi.getOrders(params);
             const searchResults = (response as any).data?.purchases || [];
-
-            cacheRef.current.set(cacheKey, {
-                data: searchResults,
-                timestamp: Date.now()
-            });
 
             setPurchases(searchResults);
             setShowDropdown(true);
@@ -258,11 +222,14 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
     };
 
     const formatCurrency = (amount: number | undefined): string => {
+        if (amount === undefined || !Number.isFinite(amount)) {
+            return 'Amount unavailable';
+        }
         return new Intl.NumberFormat('en-IN', {
             style: 'currency',
             currency: 'INR',
             minimumFractionDigits: 2
-        }).format(amount || 0);
+        }).format(amount);
     };
 
     return (
@@ -329,10 +296,10 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
                                 </div>
                                 <div className="text-right">
                                     <div className="font-semibold text-gray-900">
-                                        {formatCurrency(purchase.total_amount || purchase.total_amount)}
+                                        {formatCurrency(purchase.total_amount)}
                                     </div>
                                     <div className="text-xs text-gray-500 mt-1">
-                                        {purchase.payment_status || 'Unpaid'}
+                                        {purchase.payment_status || 'Status unavailable'}
                                     </div>
                                 </div>
                             </div>

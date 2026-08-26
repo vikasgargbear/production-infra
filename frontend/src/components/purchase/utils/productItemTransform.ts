@@ -6,12 +6,13 @@
  */
 
 import type { BasePurchaseItem, PurchaseOrderItem, GRNItem } from '../types';
+import { clientUuid } from '../../../utils/clientUuid';
 
 /**
  * Generate a client-only draft-row identity.
  */
 export function generateTempId(): string {
-    return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `temp_${clientUuid()}`;
 }
 
 const requiredNumber = (
