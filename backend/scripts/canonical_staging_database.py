@@ -21,7 +21,18 @@ from urllib.parse import parse_qsl, quote, urlencode, unquote, urlsplit, urlunsp
 import psycopg2
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _resolve_repository_root(script_path: Path = Path(__file__)) -> Path:
+    """Resolve source-checkout and flattened API-image layouts."""
+
+    resolved = script_path.resolve()
+    candidates = (resolved.parents[2], resolved.parents[1])
+    for candidate in candidates:
+        if (candidate / "deploy/control-plane/canonical-staging.json").is_file():
+            return candidate
+    return candidates[0]
+
+
+REPO_ROOT = _resolve_repository_root()
 DEFAULT_MANIFEST = REPO_ROOT / "deploy/control-plane/canonical-staging.json"
 ROLE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 APPLICATION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,62}$")

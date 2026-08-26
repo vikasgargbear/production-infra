@@ -44,9 +44,6 @@ from cleanup_staging_evidence_storage import (  # noqa: E402
     open_writer_authority,
     validated_cleanup_keys,
 )
-from provision_canonical_evidence_storage_identity import (  # noqa: E402
-    main as provision_evidence_identity,
-)
 from railway_canonical_reset import (  # noqa: E402
     CONTROL_TRANSPORT_RAILWAY_IPV6,
     RailwayCanonicalResetError,
@@ -78,6 +75,18 @@ FENCE_SECRET_KEYS = {"SUPABASE_DB_PASSWORD"}
 
 class RailwayResetControlError(RuntimeError):
     """The bounded Railway reset control request failed closed."""
+
+
+def provision_evidence_identity(arguments: list[str]) -> int:
+    """Load reset-only provisioning only for the reset action.
+
+    Fence open/close runs from the slim API image and must not depend on
+    repository-only evidence identity declarations.
+    """
+
+    from provision_canonical_evidence_storage_identity import main
+
+    return main(arguments)
 
 
 def _required_text(mapping: Mapping[str, Any], key: str) -> str:

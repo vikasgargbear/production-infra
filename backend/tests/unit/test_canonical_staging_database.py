@@ -81,6 +81,27 @@ def test_manifest_loads_exact_direct_ipv4_contract() -> None:
     )
 
 
+def test_repository_root_supports_checkout_and_flattened_runtime_layouts(
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout_script = checkout / "backend/scripts/canonical_staging_database.py"
+    (checkout / "deploy/control-plane").mkdir(parents=True)
+    (checkout / "deploy/control-plane/canonical-staging.json").touch()
+    checkout_script.parent.mkdir(parents=True)
+    checkout_script.touch()
+
+    runtime = tmp_path / "runtime"
+    runtime_script = runtime / "scripts/canonical_staging_database.py"
+    (runtime / "deploy/control-plane").mkdir(parents=True)
+    (runtime / "deploy/control-plane/canonical-staging.json").touch()
+    runtime_script.parent.mkdir(parents=True)
+    runtime_script.touch()
+
+    assert DATABASE._resolve_repository_root(checkout_script) == checkout
+    assert DATABASE._resolve_repository_root(runtime_script) == runtime
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

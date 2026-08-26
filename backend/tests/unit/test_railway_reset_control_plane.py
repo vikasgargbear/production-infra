@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 import hashlib
 import json
@@ -23,6 +24,16 @@ NONCE = "c" * 64
 DB_PASSWORD = "database-secret-value"
 ACCESS_TOKEN = "sb_secret_access-token-value"
 ANON_KEY = "eyJanonymous-token-value"
+
+
+def test_fence_control_does_not_eagerly_import_reset_only_provisioning() -> None:
+    source_path = Path(CONTROL.__file__)
+    module = ast.parse(source_path.read_text(encoding="utf-8"))
+    eager_modules = {
+        node.module for node in module.body if isinstance(node, ast.ImportFrom)
+    }
+
+    assert "provision_canonical_evidence_storage_identity" not in eager_modules
 
 
 def _request(
