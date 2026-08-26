@@ -366,12 +366,12 @@ def _prepared_purchase_order_totals(
         )
     if len(prepared.financial_impact) != 1 or len(prepared.tax_impact) != 1:
         raise RuntimeError("purchase-order preflight impact cardinality changed")
-    financial = prepared.financial_impact[0]
+    financial_impact = prepared.financial_impact[0]
     tax = prepared.tax_impact[0]
-    if financial.get("currency_code") != "INR":
+    if financial_impact.get("currency_code") != "INR":
         raise RuntimeError("purchase-order preflight currency changed")
     try:
-        grand_total = Decimal(str(financial["supplier_commitment"]))
+        grand_total = Decimal(str(financial_impact["supplier_commitment"]))
         cgst_total = Decimal(str(tax["cgst_total"]))
         sgst_total = Decimal(str(tax["sgst_total"]))
         igst_total = Decimal(str(tax["igst_total"]))
