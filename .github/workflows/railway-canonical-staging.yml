@@ -450,16 +450,39 @@ jobs:
           printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/mcp.force-deploy
           printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/frontend.force-deploy
 
+          structured_upload_error() {
+            jq -ser '
+              def safe_code:
+                if . == "UPLOAD_FAILED" or
+                   . == "RATELIMITED" or
+                   . == "FETCH_ERROR" or
+                   . == "UNAUTHORIZED" or
+                   . == "INVALID_TOKEN" or
+                   . == "GRAPHQL_ERROR"
+                then . else "UNCLASSIFIED" end;
+              if length == 1 and
+                 (.[0] | type) == "object" and
+                 (.[0].code | type) == "string"
+              then
+                [(.[0].code | safe_code),
+                 (if .[0].code == "UPLOAD_FAILED" and (.[0].error | type) == "string"
+                  then (try (.[0].error | capture("^Failed to upload code with status code (?<status>[0-9]{3})( [A-Za-z][A-Za-z -]*)?$"; "i").status) catch "NONE")
+                  else "NONE" end)] | @tsv
+              else "NONE\tNONE"
+              end' "$1" 2>/dev/null || printf '%s\n' $'NONE\tNONE'
+          }
+
           upload_failure_kind() {
             local stdout_file=$1
             local stderr_file=$2
+            local provider_code
+            local http_status
             if ! test -s "$stdout_file" && ! test -s "$stderr_file"; then
               printf '%s\n' empty_cli_response
               return 0
             fi
-            if grep -Eqi \
-              '(http[^0-9]*(429|500|502|503|504)|status([_ ]?code)?[^0-9]*(429|500|502|503|504)|too many requests|rate limit|timed? out|timeout|connection (reset|refused|closed)|network error|temporary failure|temporarily unavailable|socket hang up|unexpected eof|tls handshake|service unavailable|bad gateway|gateway timeout)' \
-              "$stdout_file" "$stderr_file"; then
+            IFS=$'\t' read -r provider_code http_status < <(structured_upload_error "$stdout_file")
+            if test "$provider_code" = RATELIMITED || test "$http_status" = 429 || [[ "$http_status" =~ ^5[0-9]{2}$ ]]; then
               printf '%s\n' transient_transport
               return 0
             fi
@@ -489,17 +512,20 @@ jobs:
             local stdout_sha256
             local stderr_sha256
             local stdout_shape
+            local provider_code
+            local http_status
             stdout_bytes=$(wc -c < "$stdout_file" | tr -d ' ')
             stderr_bytes=$(wc -c < "$stderr_file" | tr -d ' ')
             stdout_sha256=$(sha256sum "$stdout_file" | cut -d' ' -f1)
             stderr_sha256=$(sha256sum "$stderr_file" | cut -d' ' -f1)
+            IFS=$'\t' read -r provider_code http_status < <(structured_upload_error "$stdout_file")
             stdout_shape=$(jq -src '
               if length == 1 then
                 {documents:1,type:(.[0]|type),deployment_id_present:(if (.[0]|type)=="object" then (.[0]|has("deploymentId")) else false end)}
               else
                 {documents:length,type:"multiple_or_empty",deployment_id_present:false}
               end' "$stdout_file" 2>/dev/null || printf '%s' '{"documents":0,"type":"invalid_json","deployment_id_present":false}')
-            echo "::error title=Railway source upload failed::service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind stdout_bytes=$stdout_bytes stdout_sha256=$stdout_sha256 stdout_shape=$stdout_shape stderr_bytes=$stderr_bytes stderr_sha256=$stderr_sha256"
+            echo "::error title=Railway source upload failed::service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind provider_code=$provider_code http_status=$http_status stdout_bytes=$stdout_bytes stdout_sha256=$stdout_sha256 stdout_shape=$stdout_shape stderr_bytes=$stderr_bytes stderr_sha256=$stderr_sha256"
           }
 
           recover_accepted_upload() {

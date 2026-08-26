@@ -324,6 +324,20 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "frontend_pid" not in workflow
 
     assert "upload_failure_kind()" in workflow
+    assert "structured_upload_error()" in workflow
+    assert 'def safe_code:' in workflow
+    assert 'else "UNCLASSIFIED" end' in workflow
+    for safe_code in (
+        "UPLOAD_FAILED",
+        "RATELIMITED",
+        "FETCH_ERROR",
+        "UNAUTHORIZED",
+        "INVALID_TOKEN",
+        "GRAPHQL_ERROR",
+    ):
+        assert f'. == "{safe_code}"' in workflow
+    assert '^Failed to upload code with status code ' in workflow
+    assert '[[ "$http_status" =~ ^5[0-9]{2}$ ]]' in workflow
     assert "empty_cli_response" in workflow
     assert "transient_transport" in workflow
     assert "non_retryable" in workflow
@@ -343,6 +357,7 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "expected exactly one Railway deployment UUID document" in workflow
     assert 'test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")' in workflow
     assert "service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind" in workflow
+    assert "provider_code=$provider_code http_status=$http_status" in workflow
     assert "stdout_bytes=$stdout_bytes stdout_sha256=$stdout_sha256 stdout_shape=$stdout_shape" in workflow
     assert "stderr_bytes=$stderr_bytes stderr_sha256=$stderr_sha256" in workflow
     upload_step = workflow[
@@ -352,6 +367,7 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "sed -E" not in upload_step
     assert 'cat "$stdout_file"' not in upload_step
     assert 'cat "$stderr_file"' not in upload_step
+    assert "grep -Eqi" not in upload_step
     assert 'keys:' not in upload_step
     assert 'upload_service api "$RAILWAY_API_SERVICE" ||' not in upload_step
     assert 'upload_service mcp "$RAILWAY_MCP_SERVICE" ||' not in upload_step
@@ -419,6 +435,18 @@ if test "$command" = up; then
   if test "$FAKE_RAILWAY_SCENARIO" = nonretry_api && test "$service" = api-service; then
     printf '%s\\n' 'configuration invalid SECRET_SHOULD_NOT_APPEAR' >&2
     exit 9
+  fi
+  if test "$FAKE_RAILWAY_SCENARIO" = json502_api && test "$service" = api-service && test "$count" = 1; then
+    printf '%s\n' '{"code":"UPLOAD_FAILED","error":"Failed to upload code with status code 502 Bad Gateway","hint":"retry"}'
+    exit 1
+  fi
+  if test "$FAKE_RAILWAY_SCENARIO" = json403_api && test "$service" = api-service; then
+    printf '%s\n' '{"code":"UPLOAD_FAILED","error":"Failed to upload code with status code 403 Forbidden","hint":"check access"}'
+    exit 1
+  fi
+  if test "$FAKE_RAILWAY_SCENARIO" = secretcode_api && test "$service" = api-service; then
+    printf '%s\n' '{"code":"SECRET_SHOULD_NOT_APPEAR","error":"ERROR_SECRET_SHOULD_NOT_APPEAR","hint":"HINT_SECRET_SHOULD_NOT_APPEAR"}'
+    exit 1
   fi
   if test "$FAKE_RAILWAY_SCENARIO" = multidoc_api && test "$service" = api-service; then
     printf '%s\\n%s\\n' '{"deploymentId":"11111111-1111-4111-8111-111111111111"}' '{"deploymentId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}'
@@ -523,7 +551,30 @@ exit 45
     assert retried_calls.count("list api-service") == 6
     assert retried_calls[-2:] == ["up mcp-service", "up frontend-service"]
 
-    for failing_name in ("nonretry_api", "ambiguous_api", "multidoc_api"):
+    json_502, json_502_calls = run_scenario("json502_api")
+    assert json_502.returncode == 0, json_502.stderr
+    assert json_502_calls.count("up api-service") == 2
+    assert json_502_calls.count("list api-service") == 6
+    assert "provider_code=UPLOAD_FAILED http_status=502" in json_502.stdout
+    assert json_502_calls[-2:] == ["up mcp-service", "up frontend-service"]
+
+    json_403, json_403_calls = run_scenario("json403_api")
+    assert json_403.returncode != 0
+    assert json_403_calls == ["up api-service"]
+    assert "provider_code=UPLOAD_FAILED http_status=403" in json_403.stdout
+
+    secret_code, secret_code_calls = run_scenario("secretcode_api")
+    assert secret_code.returncode != 0
+    assert secret_code_calls == ["up api-service"]
+    assert "provider_code=UNCLASSIFIED http_status=NONE" in secret_code.stdout
+    assert "SECRET_SHOULD_NOT_APPEAR" not in secret_code.stdout
+    assert "SECRET_SHOULD_NOT_APPEAR" not in secret_code.stderr
+
+    for failing_name in (
+        "nonretry_api",
+        "ambiguous_api",
+        "multidoc_api",
+    ):
         failed, failed_calls = run_scenario(failing_name)
         assert failed.returncode != 0
         assert "up mcp-service" not in failed_calls
