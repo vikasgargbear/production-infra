@@ -25,11 +25,11 @@
     "source_sha256": {
       "backend/app/api/routes/internal/tax_provider.py": "e3693f7c8e5add5376e81c4c17620bbce32741d2fcaf7e21d5eef283ae0e06cb",
       "backend/app/domain/tax_provider/contract.py": "4c1279da8ab9efa4f4d346c43d996a07f070777a032275d1c49e08b74269a5de",
-      "backend/app/infrastructure/tax_provider.py": "37f12423acab14be9bc54e8a25e9abaf828539cef81631b24d8d89f47eb77e84",
+      "backend/app/infrastructure/tax_provider.py": "c5b55665372d86e6f1af6518872214aad969136189ddde2c2c445ae83cb028a2",
       "backend/tests/fixtures/tax_provider/offline-boundary-conformance.json": "ffa6f65842ca301c8f8fe73ffdfc45d807e0b7244b6cf6f3f576ef3b27cbb167"
     },
     "reviewed_by": "canonical-tax-provider-boundary-tests",
-    "reviewed_at": "2026-08-20"
+    "reviewed_at": "2026-08-26"
   },
   "sandbox_conformance": {
     "reviewed": false,
