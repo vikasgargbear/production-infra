@@ -47,6 +47,11 @@ def test_only_allowlisted_operational_failures_are_transient() -> None:
         psycopg2.OperationalError("connection timed out")
     ) == "connection_timeout"
     assert verifier._transient_kind(
+        psycopg2.OperationalError(
+            "FATAL: Failed to connect to database: :error, :econnrefused"
+        )
+    ) == "connection_refused"
+    assert verifier._transient_kind(
         psycopg2.OperationalError("password authentication failed")
     ) is None
     assert verifier._transient_kind(SqlstateOperationalError("08006")) == (
