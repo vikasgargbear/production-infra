@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+from datetime import datetime
 from typing import Any
 
 try:
@@ -37,6 +38,30 @@ SERVICE_TYPES = {
 }
 
 
+def _parse_created_at(value: object) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ProvisioningError("Render deployment is missing createdAt")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ProvisioningError("Render deployment has invalid createdAt") from exc
+
+
+def select_latest_deploy(rows: object) -> dict[str, Any]:
+    if not isinstance(rows, list) or not rows:
+        raise ProvisioningError("Render service has no deployments")
+    deploys: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ProvisioningError("Render deployment response is malformed")
+        deploy = row.get("deploy", row)
+        if not isinstance(deploy, dict):
+            raise ProvisioningError("Render deployment response is malformed")
+        _parse_created_at(deploy.get("createdAt"))
+        deploys.append(deploy)
+    return max(deploys, key=lambda deploy: _parse_created_at(deploy.get("createdAt")))
+
+
 def verify(client: RenderClient, owner_id: str, commit_sha: str) -> dict[str, Any]:
     if not SHA_RE.fullmatch(commit_sha):
         raise ProvisioningError("reviewed Render SHA must be 40 lowercase hexadecimal characters")
@@ -49,11 +74,12 @@ def verify(client: RenderClient, owner_id: str, commit_sha: str) -> dict[str, An
         if service is None:
             raise ProvisioningError(f"reviewed Render service is missing: {name}")
         rows = client.request(
-            "GET", f"/services/{service.id}/deploys", query={"limit": 1}
+            "GET", f"/services/{service.id}/deploys", query={"limit": 20}
         )
-        if not isinstance(rows, list) or len(rows) != 1:
-            raise ProvisioningError(f"{name} has no unambiguous current deployment")
-        deploy = rows[0].get("deploy", rows[0]) if isinstance(rows[0], dict) else {}
+        try:
+            deploy = select_latest_deploy(rows)
+        except ProvisioningError as exc:
+            raise ProvisioningError(f"{name}: {exc}") from exc
         deployed_sha = (deploy.get("commit") or {}).get("id") if isinstance(deploy, dict) else None
         if deploy.get("status") != "live" or deployed_sha != commit_sha:
             raise ProvisioningError(

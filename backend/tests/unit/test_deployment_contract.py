@@ -406,29 +406,21 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
     assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
 
 
-def test_render_pilot_diagnostics_emit_only_deploy_bound_metadata_and_log_fingerprints():
+def test_render_pilot_diagnostics_emit_only_allowlisted_deploy_metadata():
     workflow = _read(".github/workflows/production-readiness.yml")
     job = workflow.split("  render-pilot-diagnostics:", 1)[1].split(
         "  deploy-render-pilot:", 1
     )[0]
 
-    assert "def get_deploy_logs(" in job
-    assert '"type": log_type' in job
-    assert '"startTime": start_time' in job
-    assert '"endTime": end_time' in job
-    assert 'log_payload.get("hasMore")' in job
-    assert 'log_payload.get("nextStartTime")' in job
-    assert 'log_payload.get("nextEndTime")' in job
-    assert 'query["startTime"], query["endTime"] = window' in job
-    assert "Render log pagination did not advance" in job
-    assert "vars.RENDER_OWNER_ID" in job
     assert "vars.RENDER_API_SERVICE_ID" in job
     assert "vars.RENDER_MCP_SERVICE_ID" in job
     assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
-    assert '("aasopharma-erp-pilot", os.environ["RENDER_FRONTEND_SERVICE_ID"], "build"),' in job
-    assert '"content_sha256": digest.hexdigest()' in job
-    assert '"log_summary": summarize(entries, log_type)' in job
-    assert "print(message" not in job
+    assert "select_latest_deploy(deploy_rows)" in job
+    assert 'query={"limit": 20}' in job
+    assert '"created_at": deploy.get("createdAt")' in job
+    assert '"finished_at": deploy.get("finishedAt")' in job
+    assert '"/logs"' not in job
+    assert 'get("message"' not in job
     assert "redact(" not in job
 
 

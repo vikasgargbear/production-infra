@@ -183,120 +183,33 @@ jobs:
       - uses: actions/checkout@v4
       - name: Read metadata-only deployment diagnostics
         env:
-          RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
           RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
           RENDER_MCP_SERVICE_ID: ${{ vars.RENDER_MCP_SERVICE_ID }}
           RENDER_FRONTEND_SERVICE_ID: ${{ vars.RENDER_FRONTEND_SERVICE_ID }}
         run: |
-          python3 - <<'PY'
-          import hashlib
+          PYTHONPATH=backend python3 - <<'PY'
           import json
           import os
-          from urllib.parse import urlencode
-          from urllib.request import Request, urlopen
+          from scripts.provision_render_pilot import RenderClient
+          from scripts.verify_render_pilot_sha import select_latest_deploy
 
-          api_key = os.environ["RENDER_API_KEY"]
-          owner_id = os.environ["RENDER_OWNER_ID"]
-          if not owner_id:
-              raise SystemExit("RENDER_OWNER_ID is required")
-
-          def get(path, query=None):
-              url = "https://api.render.com/v1" + path
-              if query:
-                  url += "?" + urlencode(query, doseq=True)
-              request = Request(
-                  url,
-                  headers={
-                      "Accept": "application/json",
-                      "Authorization": f"Bearer {api_key}",
-                  },
-              )
-              with urlopen(request, timeout=30) as response:
-                  return json.load(response)
-
-          def get_deploy_logs(
-              service_id,
-              *,
-              log_type,
-              start_time,
-              end_time,
-              max_pages=5,
-          ):
-              query = {
-                  "ownerId": owner_id,
-                  "resource": service_id,
-                  "direction": "backward",
-                  "limit": 100,
-                  "type": log_type,
-                  "startTime": start_time,
-                  "endTime": end_time,
-              }
-              entries = []
-              seen_windows = set()
-              for _ in range(max_pages):
-                  log_payload = get("/logs", query)
-                  entries.extend(log_payload.get("logs", []))
-                  if not log_payload.get("hasMore"):
-                      break
-                  window = (
-                      log_payload.get("nextStartTime"),
-                      log_payload.get("nextEndTime"),
-                  )
-                  if not all(window) or window in seen_windows:
-                      raise SystemExit(
-                          f"{service_id}: Render log pagination did not advance"
-                      )
-                  seen_windows.add(window)
-                  query["startTime"], query["endTime"] = window
-              return entries
-
-          def summarize(entries, expected_type):
-              rows = []
-              for entry in entries:
-                  labels = {
-                      label["name"]: label["value"]
-                      for label in entry.get("labels", [])
-                  }
-                  if labels.get("type") == expected_type:
-                      rows.append(entry)
-              rows.sort(key=lambda entry: entry.get("timestamp", ""))
-              digest = hashlib.sha256()
-              for entry in rows:
-                  digest.update(entry.get("timestamp", "").encode("utf-8"))
-                  digest.update(b"\0")
-                  digest.update(entry.get("message", "").encode("utf-8"))
-                  digest.update(b"\0")
-              return {
-                  "count": len(rows),
-                  "first_timestamp": rows[0].get("timestamp") if rows else None,
-                  "last_timestamp": rows[-1].get("timestamp") if rows else None,
-                  "content_sha256": digest.hexdigest(),
-              }
+          client = RenderClient(os.environ["RENDER_API_KEY"])
 
           diagnostic_targets = (
-              ("aasopharma-api-pilot", os.environ["RENDER_API_SERVICE_ID"], "app"),
-              ("aasopharma-mcp-pilot", os.environ["RENDER_MCP_SERVICE_ID"], "app"),
-              ("aasopharma-erp-pilot", os.environ["RENDER_FRONTEND_SERVICE_ID"], "build"),
+              ("aasopharma-api-pilot", os.environ["RENDER_API_SERVICE_ID"]),
+              ("aasopharma-mcp-pilot", os.environ["RENDER_MCP_SERVICE_ID"]),
+              ("aasopharma-erp-pilot", os.environ["RENDER_FRONTEND_SERVICE_ID"]),
           )
 
-          for name, service_id, log_type in diagnostic_targets:
+          for name, service_id in diagnostic_targets:
               if not service_id:
                   raise SystemExit(f"{name}: service ID is required")
-              deploy_rows = get(f"/services/{service_id}/deploys", {"limit": 3})
-              deploys = [row.get("deploy", row) for row in deploy_rows]
-              if not deploys:
-                  raise SystemExit(f"{name}: no deployments found")
-              deploy = deploys[0]
-              start_time = deploy.get("createdAt")
-              end_time = deploy.get("finishedAt") or deploy.get("updatedAt")
-              if not start_time or not end_time:
-                  raise SystemExit(f"{name}: latest deploy lacks a closed log window")
-              entries = get_deploy_logs(
-                  service_id,
-                  log_type=log_type,
-                  start_time=start_time,
-                  end_time=end_time,
+              deploy_rows = client.request(
+                  "GET",
+                  f"/services/{service_id}/deploys",
+                  query={"limit": 20},
               )
+              deploy = select_latest_deploy(deploy_rows)
               print(json.dumps({
                   "service": name,
                   "service_id": service_id,
@@ -304,11 +217,9 @@ jobs:
                       "id": deploy.get("id"),
                       "status": deploy.get("status"),
                       "commit": (deploy.get("commit") or {}).get("id"),
-                      "created_at": start_time,
-                      "finished_at": end_time,
+                      "created_at": deploy.get("createdAt"),
+                      "finished_at": deploy.get("finishedAt"),
                   },
-                  "log_type": log_type,
-                  "log_summary": summarize(entries, log_type),
               }, sort_keys=True))
           PY
 
