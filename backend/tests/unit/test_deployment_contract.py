@@ -568,7 +568,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE, INHERIT FALSE"
         in workflow
     )
-    assert workflow.count("WITH SET TRUE, INHERIT FALSE") == 3
+    assert workflow.count("WITH SET TRUE, INHERIT FALSE") == 4
     assert workflow.count("revoke_staging_postgres_set_roles.sh") == 4
     assert workflow.count("migration-owner-runtime") == 1
     assert workflow.count("migration-owner\n") == 3
@@ -853,7 +853,15 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "Refuse any target except the reviewed free staging project" in workflow
     assert "DROP TABLE IF EXISTS public.alembic_version" in workflow
     assert "DROP EXTENSION IF EXISTS btree_gist" in workflow
-    assert "GRANT %I TO %I" in workflow
+    assert "GRANT %I TO %I WITH SET TRUE, INHERIT FALSE" in workflow
+    assert "SET LOCAL ROLE erp_migration_owner" in workflow
+    assert workflow.index("SET LOCAL ROLE erp_migration_owner") < workflow.index(
+        "DROP SCHEMA IF EXISTS"
+    )
+    assert workflow.index("DROP SCHEMA IF EXISTS") < workflow.index("RESET ROLE")
+    assert workflow.index("RESET ROLE") < workflow.index(
+        "DROP EXTENSION IF EXISTS btree_gist"
+    )
     assert "DROP ROLE IF EXISTS erp_runtime" in workflow
     assert "to_regclass('auth.users') IS NOT NULL" in workflow
     assert "DROP SCHEMA auth" not in workflow

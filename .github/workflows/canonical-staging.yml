@@ -283,11 +283,16 @@ jobs:
               'erp_tax_provider', 'erp_app', 'erp_migration_owner'
             ] LOOP
               IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name) THEN
-                EXECUTE pg_catalog.format('GRANT %I TO %I', role_name, SESSION_USER);
+                EXECUTE pg_catalog.format(
+                  'GRANT %I TO %I WITH SET TRUE, INHERIT FALSE',
+                  role_name,
+                  SESSION_USER
+                );
               END IF;
             END LOOP;
           END
           $adopt_canonical_roles$;
+          SET LOCAL ROLE erp_migration_owner;
           DROP SCHEMA IF EXISTS
             erp_plumbing,
             erp_tax_provider_commands,
@@ -318,6 +323,7 @@ jobs:
             parties,
             core
           CASCADE;
+          RESET ROLE;
           DROP EXTENSION IF EXISTS btree_gist;
           DROP TABLE IF EXISTS public.alembic_version;
           DO $reset_canonical_roles$
