@@ -181,7 +181,7 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - name: Read sanitized API and MCP deployment diagnostics
+      - name: Read bounded sanitized deployment diagnostics
         env:
           RENDER_OWNER_ID: tea-da2nh58ae00c73ciaqog
         run: |
@@ -215,13 +215,13 @@ jobs:
               message = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[redacted-jwt]", message)
               return message[:1000]
 
-          def get_recent_logs(service_id, *, max_pages=5):
+          def get_recent_logs(service_id, *, log_type, max_pages=5):
               query = {
                   "ownerId": owner_id,
                   "resource": service_id,
                   "direction": "backward",
                   "limit": 100,
-                  "type": "app",
+                  "type": log_type,
               }
               entries = []
               seen_windows = set()
@@ -242,7 +242,17 @@ jobs:
                   query["startTime"], query["endTime"] = window
               return entries
 
-          for name in ("aasopharma-api-pilot", "aasopharma-mcp-pilot"):
+          diagnostic_targets = (
+              ("aasopharma-api-pilot", "app"),
+              ("aasopharma-mcp-pilot", "app"),
+              ("aasopharma-erp-pilot", "build"),
+          )
+          build_failure = re.compile(
+              r"(?i)(error|failed|failure|fatal|killed|out of memory|heap|"
+              r"npm err|module not found|cannot find|treating warnings)"
+          )
+
+          for name, log_type in diagnostic_targets:
               service_rows = get(
                   "/services",
                   {"ownerId": owner_id, "name": name, "includePreviews": "false", "limit": 20},
@@ -262,11 +272,18 @@ jobs:
                       "status=", deploy.get("status"),
                       "commit=", (deploy.get("commit") or {}).get("id"),
                   )
-              for entry in reversed(get_recent_logs(service_id)):
+              emitted = 0
+              for entry in reversed(get_recent_logs(service_id, log_type=log_type)):
                   labels = {label["name"]: label["value"] for label in entry.get("labels", [])}
-                  if labels.get("type") != "app":
+                  if labels.get("type") != log_type:
                       continue
-                  print(entry.get("timestamp"), labels.get("type"), redact(entry.get("message", "")))
+                  message = entry.get("message", "")
+                  if log_type == "build" and not build_failure.search(message):
+                      continue
+                  print(entry.get("timestamp"), labels.get("type"), redact(message))
+                  emitted += 1
+                  if log_type == "build" and emitted >= 40:
+                      break
           PY
 
   render-api-hotfix:
