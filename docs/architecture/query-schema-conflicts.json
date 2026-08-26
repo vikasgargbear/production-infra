@@ -6,7 +6,7 @@
   "live_evidence": "database/live-schema-evidence.json",
   "review_basis": [
     "docs/backend/database/schemas/sales.md",
-    "database/02-tables/04_sales_tables.sql",
+    "docs/architecture/canonical-field-dictionary.json",
     "database/schema-authority.json",
     "database/schema-source-classification.json",
     "backend application query and mutation paths"
@@ -36,8 +36,7 @@
       "documented_family": ["delivery_status", "transport_company"],
       "bootstrap_and_service_family": ["challan_status", "transporter_name"],
       "standalone_migration_fields": ["taxable_amount", "gst_amount"],
-      "standalone_migration": "database/migrations/add_challan_amount_columns.sql",
-      "disposition": "pending-live-baseline"
+      "disposition": "retired-noncanonical-contract"
     }
   ],
   "classifications": [
@@ -90,7 +89,7 @@
     },
     {
       "id": "retired-manual-patch-only",
-      "reason": "sales.invoices.credit_amount is absent from both compared table definitions and is added only by database/MASTER_DATABASE_FIXES.sql, which is classified retire.",
+      "reason": "sales.invoices.credit_amount is absent from the canonical field contract; the historical manual patch that introduced it has been retired.",
       "queries": [
         {"file":"backend/app/api/routes/reports/outstanding.py","line":310,"query_sha256":"66652bcf9d8f00613e0fe712e5618fad12736d3c81f0145b429fdce02c546f6a"}
       ]

@@ -45,10 +45,7 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Stop-ship gates
 
-1. `schema_readiness.py` previously reported roughly 151 legacy-oriented
-   blockers because its default RLS audit treated `database/02-tables` as the
-   target after that source had already been classified legacy-bootstrap-only.
-   Readiness now derives from the hash-bound canonical model and Alembic chain,
+1. Readiness derives from the hash-bound canonical model and Alembic chain,
    while a mounted-callable/source-graph contract keeps every unclassified or
    reachable competing source fail-closed. Production remains blocked by the
    explicit non-ready state, missing reviewed transaction-integrity evidence,

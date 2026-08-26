@@ -118,7 +118,7 @@ def test_live_schema_evidence_is_narrow_and_does_not_claim_baseline():
     )
     assert evidence["tenant_isolation"]["force_rls_enabled"] == 0
     assert authority["readiness_state"] == "migrating"
-    assert authority["latest_live_capture_evidence"] == "database/live-schema-evidence.json"
+    assert "latest_live_capture_evidence" not in authority
 
 
 def test_live_schema_evidence_loader_fails_closed_on_an_unreviewed_state(tmp_path: Path):
