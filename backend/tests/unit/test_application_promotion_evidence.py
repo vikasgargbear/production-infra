@@ -149,6 +149,7 @@ def _role_cleanup_facts() -> dict:
         "managed_role_count": 6,
         "login_role_count": 4,
         "login_role_password_present_count": 4,
+        "nonlogin_role_password_present_count": 0,
         "postgres_migration_owner_set": False,
         "postgres_migration_owner_usage": False,
         "role_catalog_sha256": "4" * 64,

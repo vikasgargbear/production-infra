@@ -495,10 +495,19 @@ def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict
                 raise ResetAuthorityError(
                     "postgres retains temporary migration-owner delegation"
                 )
-            password_present_count = sum(bool(row[11]) for row in role_rows)
-            if password_present_count != len(LOGIN_ROLES):
+            login_password_present_count = sum(
+                bool(row[11]) for row in role_rows if row[0] in LOGIN_ROLES
+            )
+            nonlogin_password_present_count = sum(
+                bool(row[11]) for row in role_rows if row[0] not in LOGIN_ROLES
+            )
+            if login_password_present_count != len(LOGIN_ROLES):
                 raise ResetAuthorityError(
                     "canonical login-role password presence is incomplete"
+                )
+            if nonlogin_password_present_count:
+                raise ResetAuthorityError(
+                    "canonical NOLOGIN roles retain stored passwords"
                 )
 
     serializable_roles = json.loads(json.dumps(roles, default=str))
@@ -510,7 +519,8 @@ def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict
         "project_ref": project_ref,
         "managed_role_count": len(role_rows),
         "login_role_count": len(LOGIN_ROLES),
-        "login_role_password_present_count": password_present_count,
+        "login_role_password_present_count": login_password_present_count,
+        "nonlogin_role_password_present_count": nonlogin_password_present_count,
         "postgres_migration_owner_set": False,
         "postgres_migration_owner_usage": False,
         "role_catalog_sha256": role_catalog_sha256,

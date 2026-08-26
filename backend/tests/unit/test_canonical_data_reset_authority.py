@@ -336,11 +336,28 @@ def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> N
 
     assert receipt["managed_role_count"] == 6
     assert receipt["login_role_password_present_count"] == 4
+    assert receipt["nonlogin_role_password_present_count"] == 0
     assert receipt["postgres_migration_owner_set"] is False
     assert receipt["postgres_migration_owner_usage"] is False
 
     connection.cursor_instance.fetchone_result = (True, False)
     with pytest.raises(ResetAuthorityError, match="retains temporary"):
+        reset_authority.verify_post_cleanup_role_state(
+            connection,
+            project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,
+        )
+
+    connection.cursor_instance.fetchone_result = (False, False)
+    dirty_role_rows = tuple(
+        (*row[:11], True if row[0] == "erp_app" else row[11])
+        for row in role_rows
+    )
+    monkeypatch.setattr(
+        reset_authority,
+        "_role_snapshot",
+        lambda cursor: (*dirty_role_rows, ("__memberships__", ())),
+    )
+    with pytest.raises(ResetAuthorityError, match="NOLOGIN roles"):
         reset_authority.verify_post_cleanup_role_state(
             connection,
             project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,

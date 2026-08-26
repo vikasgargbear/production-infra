@@ -115,3 +115,32 @@ def test_evidence_cleanup_annotation_classifies_missing_restricted_credential(
 
     assert metadata["diagnostic"] == "evidence_cleanup_credential_unavailable"
     assert "private-object-key" not in annotation
+
+
+def test_reset_annotation_classifies_nologin_password_drift(tmp_path) -> None:
+    log_path = tmp_path / "reset.log"
+    log_path.write_text(
+        "Traceback omitted\n"
+        "ResetAuthorityError: canonical NOLOGIN roles retain stored passwords\n",
+        encoding="utf-8",
+    )
+
+    annotation = safe_log_annotation(log_path, label="reset-role-cleanup")
+    metadata = json.loads(annotation.split("::", 2)[2])
+
+    assert metadata["diagnostic"] == "reset_nologin_password_present"
+    assert "NOLOGIN" not in annotation
+
+
+def test_reset_annotation_does_not_expose_unclassified_database_text(tmp_path) -> None:
+    log_path = tmp_path / "reset.log"
+    log_path.write_text(
+        "database failure contains private relation and operator details\n",
+        encoding="utf-8",
+    )
+
+    annotation = safe_log_annotation(log_path, label="reset")
+    metadata = json.loads(annotation.split("::", 2)[2])
+
+    assert "diagnostic" not in metadata
+    assert "private relation" not in annotation

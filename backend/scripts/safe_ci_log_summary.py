@@ -50,6 +50,11 @@ def safe_log_annotation(path: Path, *, label: str) -> str:
         diagnostic = _safe_evidence_cleanup_diagnostic(text)
         if diagnostic:
             summary["diagnostic"] = diagnostic
+    elif label in {"reset", "reset-role-cleanup"}:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        diagnostic = _safe_reset_diagnostic(text)
+        if diagnostic:
+            summary["diagnostic"] = diagnostic
     return (
         f"::error title={title}::"
         + json.dumps(summary, sort_keys=True, separators=(",", ":"))
@@ -108,6 +113,31 @@ def _safe_evidence_cleanup_diagnostic(text: str) -> Optional[str]:
         return "evidence_cleanup_protected_metadata_present"
     if "canonical evidence reset cleanup blocked:" in normalized:
         return "evidence_cleanup_contract_blocked"
+    return None
+
+
+def _safe_reset_diagnostic(text: str) -> Optional[str]:
+    """Classify reset failures without exposing relation names or SQL."""
+
+    normalized = " ".join(text.lower().split())
+    classifications = (
+        ("observed alembic head differs", "reset_alembic_head_mismatch"),
+        (
+            "canonical nologin roles retain stored passwords",
+            "reset_nologin_password_present",
+        ),
+        (
+            "canonical login-role password presence is incomplete",
+            "reset_login_password_incomplete",
+        ),
+        ("canonical reset left disposable rows", "reset_disposable_rows_remain"),
+        ("canceling statement due to lock timeout", "reset_lock_timeout"),
+        ("canceling statement due to statement timeout", "reset_statement_timeout"),
+        ("permission denied", "reset_permission_denied"),
+    )
+    for needle, diagnostic in classifications:
+        if needle in normalized:
+            return diagnostic
     return None
 
 

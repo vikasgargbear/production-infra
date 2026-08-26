@@ -234,6 +234,9 @@ def build_reset_attestation(
             "post_cleanup_login_password_present_count": cleanup[
                 "login_role_password_present_count"
             ],
+            "post_cleanup_nonlogin_password_present_count": cleanup[
+                "nonlogin_role_password_present_count"
+            ],
             "post_cleanup_postgres_migration_owner_set": False,
             "post_cleanup_postgres_migration_owner_usage": False,
             "post_cleanup_role_catalog_sha256": cleanup["role_catalog_sha256"],
@@ -336,6 +339,7 @@ def _validated_role_cleanup_facts(value: Mapping[str, Any]) -> dict[str, Any]:
         "managed_role_count": 6,
         "login_role_count": ISOLATED_ROLE_COUNT,
         "login_role_password_present_count": ISOLATED_ROLE_COUNT,
+        "nonlogin_role_password_present_count": 0,
         "postgres_migration_owner_set": False,
         "postgres_migration_owner_usage": False,
     }
@@ -873,6 +877,7 @@ def wrap_reviewed_input(
             "post_cleanup_managed_role_count": 6,
             "post_cleanup_login_role_count": ISOLATED_ROLE_COUNT,
             "post_cleanup_login_password_present_count": ISOLATED_ROLE_COUNT,
+            "post_cleanup_nonlogin_password_present_count": 0,
             "post_cleanup_postgres_migration_owner_set": False,
             "post_cleanup_postgres_migration_owner_usage": False,
             "evidence_writer_membership_open_after_cleanup": False,
@@ -1959,6 +1964,7 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
         or reset_payload.get("post_cleanup_login_role_count") != ISOLATED_ROLE_COUNT
         or reset_payload.get("post_cleanup_login_password_present_count")
         != ISOLATED_ROLE_COUNT
+        or reset_payload.get("post_cleanup_nonlogin_password_present_count") != 0
         or reset_payload.get("post_cleanup_postgres_migration_owner_set") is not False
         or reset_payload.get("post_cleanup_postgres_migration_owner_usage") is not False
         or reset_payload.get("evidence_writer_membership_open_after_cleanup") is not False
