@@ -208,7 +208,8 @@ jobs:
               --arg id "$id" \
               --arg config_file "$config_file" \
               '(.services[$id].source.rootDirectory // "/") == "/" and
-               .services[$id].configFile == $config_file' \
+               .services[$id].configFile == $config_file and
+               .services[$id].deploy.multiRegionConfig == {"asia-southeast1-eqsg3a":{"numReplicas":1}}' \
               railway-service-config.json >/dev/null || return 1
             actual_start=$(jq -r --arg id "$id" '.services[$id].deploy.startCommand // ""' railway-service-config.json)
             test -z "$actual_start"
@@ -217,7 +218,7 @@ jobs:
           if ! service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json || \
              ! service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json || \
              ! service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json; then
-            echo "::error title=Railway service configuration drift::All services must use repository-root context, their exact /deploy/railway/*.railway.json config file, and no dashboard start override. Correct drift separately; this workflow will not trigger an unbound intermediate deployment."
+            echo "::error title=Railway service configuration drift::All services must use repository-root context, their exact /deploy/railway/*.railway.json config file, one Singapore replica, and no dashboard start override. Correct drift separately; this workflow will not trigger an unbound intermediate deployment."
             exit 1
           fi
 

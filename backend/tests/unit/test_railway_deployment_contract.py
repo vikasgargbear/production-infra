@@ -177,6 +177,7 @@ def test_workflow_fails_closed_on_service_configuration_drift() -> None:
     assert 'service_matches "$RAILWAY_API_SERVICE" /deploy/railway/api.railway.json' in config_step
     assert 'service_matches "$RAILWAY_MCP_SERVICE" /deploy/railway/mcp.railway.json' in config_step
     assert 'service_matches "$RAILWAY_FRONTEND_SERVICE" /deploy/railway/frontend.railway.json' in config_step
+    assert f'multiRegionConfig == {{"{SINGAPORE_REGION}":{{"numReplicas":1}}}}' in config_step
     assert "exit 1" in config_step
 
 
@@ -432,7 +433,7 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert 'require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health "" "$frontend_deployment_message" false' in workflow
     assert ".meta.serviceManifest.deploy.healthcheckPath" in workflow
     assert ".meta.serviceManifest.deploy.ipv6EgressEnabled == $expected_ipv6" in workflow
-    assert workflow.count('multiRegionConfig == {"asia-southeast1-eqsg3a":{"numReplicas":1}}') == 2
+    assert workflow.count('multiRegionConfig == {"asia-southeast1-eqsg3a":{"numReplicas":1}}') == 3
     assert ".meta.fileServiceManifest.deploy.sleepApplication == true" in workflow
     assert ".meta.serviceManifest.deploy.sleepApplication == true" in workflow
 
