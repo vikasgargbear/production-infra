@@ -82,7 +82,7 @@ def load_direct_database_contract(
     project_ref, database = _database_document(path)
     expected_host = f"db.{project_ref}.supabase.co"
     required = {
-        "transport": "direct_ipv4",
+        "control_transport": "direct_ipv4",
         "host": expected_host,
         "port": 5432,
         "database": "postgres",

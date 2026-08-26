@@ -4,7 +4,7 @@
   "title": "AasoPharma deployment control plane",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "environment", "supabase", "providers", "configuration", "phases"],
+  "required": ["schema", "environment", "deployment", "supabase", "providers", "configuration", "phases"],
   "properties": {
     "schema": {"const": "aasopharma.deployment-control.v1"},
     "environment": {
@@ -16,6 +16,18 @@
         "classification": {"enum": ["disposable_test", "production"]},
         "github_environment": {"type": "string", "minLength": 1},
         "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selected_provider", "provider_environment", "required_services"],
+      "properties": {
+        "selected_provider": {"enum": ["render", "railway"]},
+        "provider_environment": {"const": "CANONICAL_APPLICATION_PROVIDER"},
+        "required_services": {
+          "const": ["api", "mcp", "frontend"]
+        }
       }
     },
     "supabase": {
@@ -69,7 +81,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "transport",
+        "control_transport",
         "host",
         "port",
         "database",
@@ -82,7 +94,7 @@
         "isolated_roles"
       ],
       "properties": {
-        "transport": {"const": "direct_ipv4"},
+        "control_transport": {"const": "direct_ipv4"},
         "host": {"type": "string", "pattern": "^db\\.[a-z0-9]{20}\\.supabase\\.co$"},
         "port": {"const": 5432},
         "database": {"const": "postgres"},
@@ -103,12 +115,13 @@
     "provider": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["authority", "services"],
+      "required": ["authority", "adapter", "services"],
       "properties": {
-        "authority": {"enum": ["active", "retired"]},
+        "authority": {"enum": ["active", "standby", "retired"]},
         "owner_id": {"type": "string", "minLength": 1},
         "project_id": {"type": "string", "minLength": 1},
         "environment_id": {"type": "string", "minLength": 1},
+        "adapter": {"$ref": "#/$defs/providerAdapter"},
         "services": {
           "type": "object",
           "additionalProperties": false,
@@ -121,17 +134,87 @@
         }
       }
     },
+    "providerAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "environment_prefix",
+        "commit_environment",
+        "application_database_transport",
+        "workflow",
+        "artifacts",
+        "origin_suffix",
+        "identity_environment"
+      ],
+      "properties": {
+        "kind": {"enum": ["render", "railway"]},
+        "environment_prefix": {"enum": ["RENDER", "RAILWAY"]},
+        "commit_environment": {"enum": ["RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA"]},
+        "application_database_transport": {"enum": ["supabase_direct_ipv4", "supabase_direct_ipv6"]},
+        "workflow": {"type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.yml$"},
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+$"}
+        },
+        "origin_suffix": {"enum": [".onrender.com", ".up.railway.app"]},
+        "identity_environment": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/configurationName"}
+        },
+        "suspension": {"$ref": "#/$defs/providerSuspension"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "render"}}, "required": ["kind"]},
+          "then": {
+            "properties": {
+              "environment_prefix": {"const": "RENDER"},
+              "commit_environment": {"const": "RENDER_GIT_COMMIT"},
+              "application_database_transport": {"const": "supabase_direct_ipv4"},
+              "origin_suffix": {"const": ".onrender.com"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "railway"}}, "required": ["kind"]},
+          "then": {
+            "properties": {
+              "environment_prefix": {"const": "RAILWAY"},
+              "commit_environment": {"const": "RAILWAY_GIT_COMMIT_SHA"},
+              "application_database_transport": {"const": "supabase_direct_ipv6"},
+              "origin_suffix": {"const": ".up.railway.app"}
+            }
+          }
+        }
+      ]
+    },
+    "providerSuspension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport_error", "diagnostic_code", "message", "next_action"],
+      "properties": {
+        "transport_error": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "diagnostic_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+        "message": {"type": "string", "minLength": 1},
+        "next_action": {"type": "string", "minLength": 1}
+      }
+    },
     "service": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "origin"],
+      "required": ["id", "name", "origin", "kind", "health"],
       "properties": {
         "id": {"type": "string", "minLength": 1},
         "name": {"type": "string", "minLength": 1},
         "origin": {"type": "string", "format": "uri"},
         "kind": {"enum": ["web_service", "static_site"]},
         "health": {"type": "string", "pattern": "^/"},
-        "readiness": {"type": "string", "pattern": "^/"}
+        "readiness": {"type": "string", "pattern": "^/"},
+        "closed_fence_status": {"enum": [200, 503]}
       }
     }
   }

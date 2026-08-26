@@ -6,13 +6,18 @@
     "github_environment": "canonical-staging",
     "repository": "vikasgargbear/production-infra"
   },
+  "deployment": {
+    "selected_provider": "railway",
+    "provider_environment": "CANONICAL_APPLICATION_PROVIDER",
+    "required_services": ["api", "mcp", "frontend"]
+  },
   "supabase": {
     "project_ref": "rgihahbmkrmhitjdjvev",
     "region": "ap-south-1",
     "origin": "https://rgihahbmkrmhitjdjvev.supabase.co",
     "oauth_issuer": "https://rgihahbmkrmhitjdjvev.supabase.co/auth/v1",
     "database": {
-      "transport": "direct_ipv4",
+      "control_transport": "direct_ipv4",
       "host": "db.rgihahbmkrmhitjdjvev.supabase.co",
       "port": 5432,
       "database": "postgres",
@@ -32,8 +37,28 @@
   },
   "providers": {
     "render": {
-      "authority": "active",
+      "authority": "standby",
       "owner_id": "tea-da2nh58ae00c73ciaqog",
+      "adapter": {
+        "kind": "render",
+        "environment_prefix": "RENDER",
+        "commit_environment": "RENDER_GIT_COMMIT",
+        "application_database_transport": "supabase_direct_ipv4",
+        "workflow": ".github/workflows/canonical-staging.yml",
+        "artifacts": [
+          "render.yaml",
+          "backend/Dockerfile",
+          "backend/mcp_runtime/Dockerfile"
+        ],
+        "origin_suffix": ".onrender.com",
+        "identity_environment": {"owner_id": "RENDER_OWNER_ID"},
+        "suspension": {
+          "transport_error": "provider_service_suspended",
+          "diagnostic_code": "RENDER_SERVICE_SUSPENDED",
+          "message": "Render reports that the service is suspended by its owner",
+          "next_action": "run the reviewed Render lifecycle recovery with recover_canonical_render_suspension=true"
+        }
+      },
       "services": {
         "api": {
           "id": "srv-da2sajon74is738juujg",
@@ -41,7 +66,8 @@
           "origin": "https://aasopharma-api-pilot.onrender.com",
           "kind": "web_service",
           "health": "/health",
-          "readiness": "/ready"
+          "readiness": "/ready",
+          "closed_fence_status": 200
         },
         "mcp": {
           "id": "srv-da39uem7bikc739guke0",
@@ -49,7 +75,8 @@
           "origin": "https://aasopharma-mcp-pilot.onrender.com",
           "kind": "web_service",
           "health": "/health",
-          "readiness": "/ready"
+          "readiness": "/ready",
+          "closed_fence_status": 503
         },
         "frontend": {
           "id": "srv-da2saj1t0dsc73b3fkbg",
@@ -61,24 +88,54 @@
       }
     },
     "railway": {
-      "authority": "retired",
+      "authority": "active",
       "project_id": "1edeb960-f398-4b19-87d8-14436aa8da37",
       "environment_id": "348f90ca-fc31-4b13-97f1-50c1e64c3367",
+      "adapter": {
+        "kind": "railway",
+        "environment_prefix": "RAILWAY",
+        "commit_environment": "RAILWAY_GIT_COMMIT_SHA",
+        "application_database_transport": "supabase_direct_ipv6",
+        "workflow": ".github/workflows/railway-canonical-staging.yml",
+        "artifacts": [
+          "deploy/railway/api.railway.json",
+          "deploy/railway/api.Dockerfile",
+          "deploy/railway/mcp.railway.json",
+          "deploy/railway/mcp.Dockerfile",
+          "deploy/railway/frontend.railway.json",
+          "frontend/Dockerfile"
+        ],
+        "origin_suffix": ".up.railway.app",
+        "identity_environment": {
+          "project_id": "RAILWAY_PROJECT_ID",
+          "environment_id": "RAILWAY_ENVIRONMENT_ID"
+        }
+      },
       "services": {
         "api": {
           "id": "9200378b-aa54-4a6f-8446-41e253c6175d",
           "name": "aasopharma-api-pilot",
-          "origin": "https://aasopharma-api-pilot-production.up.railway.app"
+          "origin": "https://aasopharma-api-pilot-production.up.railway.app",
+          "kind": "web_service",
+          "health": "/health",
+          "readiness": "/ready",
+          "closed_fence_status": 200
         },
         "mcp": {
           "id": "64896a64-7eae-4ece-a8a4-bc4499c7c7e0",
           "name": "aasopharma-mcp-pilot",
-          "origin": "https://pharma-backend-production-0c09.up.railway.app"
+          "origin": "https://pharma-backend-production-0c09.up.railway.app",
+          "kind": "web_service",
+          "health": "/health",
+          "readiness": "/ready",
+          "closed_fence_status": 503
         },
         "frontend": {
           "id": "c0ae6736-d7cc-46ee-bbcf-f9604b6c6950",
           "name": "aasopharma-erp-pilot",
-          "origin": "https://aasopharma-erp-pilot-production-eb9b.up.railway.app"
+          "origin": "https://aasopharma-erp-pilot-production-eb9b.up.railway.app",
+          "kind": "static_site",
+          "health": "/build-metadata.json"
         }
       }
     }
@@ -86,6 +143,8 @@
   "configuration": {
     "variables": [
       "CANONICAL_BASELINE_APPROVED_SHA256",
+      "CANONICAL_APPLICATION_DATABASE_TRANSPORT",
+      "CANONICAL_APPLICATION_PROVIDER",
       "CANONICAL_PRODUCTION_PROJECT_REFS",
       "CANONICAL_STAGING_PROJECT_REF",
       "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID",
@@ -112,6 +171,8 @@
       "RENDER_MCP_URL",
       "RENDER_OWNER_ID",
       "SUPABASE_OAUTH_ISSUER",
+      "SUPABASE_DIRECT_DATABASE_HOST",
+      "SUPABASE_DIRECT_DATABASE_PORT",
       "SUPABASE_URL"
     ],
     "secrets": [
@@ -147,8 +208,8 @@
     {"name": "close_fence", "after": ["migrate_reset"]},
     {"name": "deploy_exact_sha", "after": ["close_fence"]},
     {"name": "pre_fence_provenance", "after": ["deploy_exact_sha"]},
-    {"name": "prove_railway_retired", "after": ["pre_fence_provenance"]},
-    {"name": "open_fence", "after": ["prove_railway_retired"]},
+    {"name": "prove_competing_providers_inactive", "after": ["pre_fence_provenance"]},
+    {"name": "open_fence", "after": ["prove_competing_providers_inactive"]},
     {"name": "full_readiness", "after": ["open_fence"]},
     {"name": "oauth_demo_live18", "after": ["full_readiness"]},
     {"name": "promotion_evidence", "after": ["oauth_demo_live18"]}

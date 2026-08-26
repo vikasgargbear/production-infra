@@ -66,7 +66,6 @@ jobs:
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
-      SUPABASE_DIRECT_DATABASE_HOST: db.rgihahbmkrmhitjdjvev.supabase.co
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +73,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.reviewed_sha }}
 
-      - name: Verify the immutable source and Railway boundary
+      - name: Verify the immutable source
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
@@ -82,17 +81,6 @@ jobs:
             *[!0-9a-f]*|'') echo "reviewed_sha must be an exact lowercase commit SHA" >&2; exit 2 ;;
           esac
           test "${#REVIEWED_SHA}" = 40
-          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
-          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
-          test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
-          test "$RAILWAY_MCP_SERVICE" = aasopharma-mcp-pilot
-          test "$RAILWAY_FRONTEND_SERVICE" = aasopharma-erp-pilot
-          test "$RAILWAY_API_URL" = https://aasopharma-api-pilot-production.up.railway.app
-          test "$RAILWAY_MCP_URL" = https://pharma-backend-production-0c09.up.railway.app
-          case "$RAILWAY_FRONTEND_URL" in
-            https://*.up.railway.app) ;;
-            *) echo "Railway frontend URL must be one exact Railway HTTPS origin" >&2; exit 2 ;;
-          esac
 
       - uses: actions/setup-node@v4
         with:
@@ -101,6 +89,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Load and diagnose the selected provider authority
+        run: |
+          set -euo pipefail
+          python3 -m pip install jsonschema==4.23.0
+          python3 backend/scripts/deployment_control.py export-github-env \
+            --output "$GITHUB_ENV"
+
+      - name: Fail closed on selected provider configuration drift
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/deployment_control.py preflight \
+            --expected-sha "$REVIEWED_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --require-env CANONICAL_APPLICATION_PROVIDER \
+            --require-env CANONICAL_APPLICATION_DATABASE_TRANSPORT \
+            --require-env CANONICAL_STAGING_PROJECT_REF \
+            --require-env SUPABASE_DIRECT_DATABASE_HOST \
+            --require-env SUPABASE_DIRECT_DATABASE_PORT \
+            --require-env RAILWAY_API_TOKEN \
+            --require-env RAILWAY_PROJECT_ID \
+            --require-env RAILWAY_ENVIRONMENT_ID \
+            --require-env RAILWAY_API_SERVICE \
+            --require-env RAILWAY_MCP_SERVICE \
+            --require-env RAILWAY_FRONTEND_SERVICE
+          python3 backend/scripts/deployment_control.py \
+            assert-active-provider railway
 
       - name: Install the pinned Railway CLI
         run: npm install --global @railway/cli@5.43.4
@@ -368,7 +383,7 @@ jobs:
           set_variable "$RAILWAY_API_SERVICE" DATABASE_URL "$runtime_url"
           set_variable "$RAILWAY_API_SERVICE" ERP_CALCULATOR_DATABASE_URL "$calculator_url"
           set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_DATABASE_URL "$provider_url"
-          set_variable "$RAILWAY_API_SERVICE" DATABASE_TRANSPORT_REQUIREMENT supabase_direct_ipv6
+          set_variable "$RAILWAY_API_SERVICE" DATABASE_TRANSPORT_REQUIREMENT "$CANONICAL_APPLICATION_DATABASE_TRANSPORT"
           set_variable "$RAILWAY_API_SERVICE" DATABASE_POOL_SIZE 3
           set_variable "$RAILWAY_API_SERVICE" DATABASE_MAX_OVERFLOW 1
           set_variable "$RAILWAY_API_SERVICE" TAX_PROVIDER_INTERNAL_SERVICE_TOKEN "$TAX_PROVIDER_INTERNAL_SERVICE_TOKEN"
@@ -382,8 +397,8 @@ jobs:
           set_variable "$RAILWAY_API_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
           set_variable "$RAILWAY_API_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
 
-          # Railway is a retired application authority.  It must never receive
-          # the Render-only evidence service identity or its rotated password.
+          # Evidence storage remains scoped to its separately reviewed service
+          # identity. The application provider never receives that credential.
           set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED false
 
           set_variable "$RAILWAY_MCP_SERVICE" SUPABASE_OAUTH_ISSUER "$SUPABASE_OAUTH_ISSUER"
@@ -764,6 +779,13 @@ jobs:
           railway deployment list --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --limit 3 --json || true
           echo "Railway services did not converge on reviewed SHA $REVIEWED_SHA" >&2
           exit 1
+
+      - name: Prove Railway is selected and Render is inactive
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/deployment_control.py status \
+            --expected-sha "$REVIEWED_SHA" \
+            --fence open
 
       - name: Reconcile the exact Railway frontend OAuth redirect
         env:

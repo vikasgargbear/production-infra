@@ -863,7 +863,7 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
         "--deployment-instance \"$RAILWAY_API_DEPLOYMENT_INSTANCE_ID\"" in live18
     )
     assert "expected one exact running API instance" in live18
-    assert 'ref: ${{ inputs.canonical_staging_render_sha }}' in live18
+    assert 'ref: ${{ inputs.canonical_staging_deploy_sha }}' in live18
     assert '--project "$RAILWAY_PROJECT_ID"' in live18
     assert '--environment "$RAILWAY_ENVIRONMENT_ID"' in live18
     artifact = live18.split(

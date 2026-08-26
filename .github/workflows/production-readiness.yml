@@ -24,7 +24,7 @@ on:
       live18_provider:
         description: Exact-SHA staging application provider to certify
         required: true
-        default: render
+        default: railway
         type: choice
         options:
           - render
@@ -54,8 +54,8 @@ on:
         required: true
         default: false
         type: boolean
-      canonical_staging_render_sha:
-        description: Reviewed application SHA for free-staging Render deployment
+      canonical_staging_deploy_sha:
+        description: Reviewed application SHA for the selected staging provider
         required: false
         default: ""
         type: string
@@ -140,7 +140,7 @@ jobs:
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
       restart_staging_database: ${{ inputs.restart_canonical_staging }}
       rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
-      render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
+      render_deploy_sha: ${{ inputs.canonical_staging_deploy_sha }}
       recover_render_suspension: ${{ inputs.recover_canonical_render_suspension }}
     secrets: inherit
 
@@ -151,7 +151,7 @@ jobs:
       vars.DEPLOY_RAILWAY_PILOT == 'true'
     uses: ./.github/workflows/railway-canonical-staging.yml
     with:
-      reviewed_sha: ${{ inputs.canonical_staging_render_sha }}
+      reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
     secrets: inherit
 
   canonical-application-promotion-evidence:
@@ -762,7 +762,7 @@ jobs:
       cancel-in-progress: false
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
       PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
       PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
@@ -889,7 +889,7 @@ jobs:
         working-directory: frontend
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com
       PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: d3000000-0000-7000-8000-000000000001
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
@@ -991,7 +991,7 @@ jobs:
         working-directory: frontend
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
       PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
@@ -1126,7 +1126,7 @@ jobs:
       group: canonical-staging-live-browser-identities
       cancel-in-progress: false
     env:
-      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       LIVE18_PROVIDER: ${{ inputs.live18_provider }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
@@ -1139,7 +1139,7 @@ jobs:
       PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
       LIVE18_REQUIRED: "true"
       LIVE18_WRITE_ACK: canonical-disposable-only
-      LIVE18_EXPECTED_DEPLOYED_SHA: ${{ inputs.canonical_staging_render_sha }}
+      LIVE18_EXPECTED_DEPLOYED_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
       RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
       RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
@@ -1149,7 +1149,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.canonical_staging_render_sha }}
+          ref: ${{ inputs.canonical_staging_deploy_sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

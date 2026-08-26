@@ -31,6 +31,14 @@ def _workflow() -> str:
     )
 
 
+def _control_manifest() -> dict:
+    return json.loads(
+        (ROOT / "deploy/control-plane/canonical-staging.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
 def _workflow_run_script(step_name: str, next_step_name: str) -> str:
     workflow = _workflow()
     section = workflow.split(f"- name: {step_name}", 1)[1].split(
@@ -250,7 +258,10 @@ def test_workflow_uses_direct_isolated_roles_with_a_staging_pool_budget() -> Non
         workflow.index("Force-upload the exact source tree")
     ]
 
-    assert "SUPABASE_DIRECT_DATABASE_HOST: db.rgihahbmkrmhitjdjvev.supabase.co" in workflow
+    assert "deployment_control.py export-github-env" in workflow
+    assert _control_manifest()["supabase"]["database"]["host"] == (
+        "db.rgihahbmkrmhitjdjvev.supabase.co"
+    )
     assert "SUPABASE_POOLER_HOST:" not in workflow
     assert "SUPABASE_SESSION_POOLER_PORT:" not in workflow
     for principal in ("erp_runtime", "erp_calculator", "erp_tax_provider"):
@@ -259,7 +270,7 @@ def test_workflow_uses_direct_isolated_roles_with_a_staging_pool_budget() -> Non
     assert '.${CANONICAL_STAGING_PROJECT_REF}:' not in variable_step
     assert (
         'set_variable "$RAILWAY_API_SERVICE" DATABASE_TRANSPORT_REQUIREMENT '
-        "supabase_direct_ipv6"
+        '"$CANONICAL_APPLICATION_DATABASE_TRANSPORT"'
     ) in variable_step
     assert 'set_variable "$RAILWAY_API_SERVICE" DATABASE_POOL_SIZE 3' in variable_step
     assert 'set_variable "$RAILWAY_API_SERVICE" DATABASE_MAX_OVERFLOW 1' in variable_step
@@ -276,7 +287,7 @@ def test_workflow_exposes_a_railway_only_exact_sha_dispatch() -> None:
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in workflow
 
 
-def test_retired_railway_never_receives_evidence_storage_credentials() -> None:
+def test_railway_never_receives_render_evidence_storage_credentials() -> None:
     workflow = _workflow()
     variable_step = workflow[
         workflow.index("Populate canonical service variables without triggering stale deploys") :
@@ -624,7 +635,10 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
 def test_workflow_binds_frontend_origin_to_registered_railway_domain() -> None:
     workflow = _workflow()
 
-    assert "Railway frontend URL must be one exact Railway HTTPS origin" in workflow
+    assert '"origin_suffix": ".up.railway.app"' in (
+        ROOT / "deploy/control-plane/canonical-staging.json"
+    ).read_text(encoding="utf-8")
+    assert "deployment_control.py preflight" in workflow
     assert "railway domain list" in workflow
     assert '--service "$RAILWAY_FRONTEND_SERVICE"' in workflow
     assert '[.. | objects | .domain? // empty] | index($domain) != null' in workflow

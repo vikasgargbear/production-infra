@@ -84,7 +84,7 @@ def test_manifest_loads_exact_direct_ipv4_contract() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("transport", "session_pooler"),
+        ("control_transport", "session_pooler"),
         ("host", "aws-0-ap-south-1.pooler.supabase.com"),
         ("port", 6543),
         ("username_mode", "project_qualified_role"),

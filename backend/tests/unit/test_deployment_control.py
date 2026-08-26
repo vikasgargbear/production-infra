@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import importlib.util
 import json
 from pathlib import Path
@@ -29,13 +30,30 @@ def test_manifest_is_the_complete_static_workflow_authority() -> None:
     document = manifest()
 
     assert CONTROL.validate_manifest(document) == []
-    assert document["providers"]["render"]["authority"] == "active"
-    assert document["providers"]["railway"]["authority"] == "retired"
+    assert document["providers"]["render"]["authority"] == "standby"
+    assert document["providers"]["railway"]["authority"] == "active"
+    assert document["deployment"] == {
+        "selected_provider": "railway",
+        "provider_environment": "CANONICAL_APPLICATION_PROVIDER",
+        "required_services": ["api", "mcp", "frontend"],
+    }
+    for provider_name, provider in document["providers"].items():
+        adapter = provider["adapter"]
+        assert adapter["kind"] == provider_name
+        assert (ROOT / adapter["workflow"]).is_file()
+        assert all((ROOT / artifact).is_file() for artifact in adapter["artifacts"])
+        assert set(provider["services"]) == {"api", "mcp", "frontend"}
+    assert document["providers"]["render"]["adapter"][
+        "application_database_transport"
+    ] == "supabase_direct_ipv4"
+    assert document["providers"]["railway"]["adapter"][
+        "application_database_transport"
+    ] == "supabase_direct_ipv6"
     assert document["supabase"]["origin"] == (
         f"https://{document['supabase']['project_ref']}.supabase.co"
     )
     database = document["supabase"]["database"]
-    assert database["transport"] == "direct_ipv4"
+    assert database["control_transport"] == "direct_ipv4"
     assert database["host"] == (
         f"db.{document['supabase']['project_ref']}.supabase.co"
     )
@@ -43,6 +61,19 @@ def test_manifest_is_the_complete_static_workflow_authority() -> None:
     assert database["username_mode"] == "plain_role"
     assert database["shared_supavisor_fallback"] is False
     assert "RENDER_MCP_URL" in document["configuration"]["variables"]
+    assert CONTROL.active_provider_name(document) == "railway"
+    assert CONTROL.active_provider_services(document) == document["providers"][
+        "railway"
+    ]["services"]
+
+
+def test_provider_guard_rejects_non_selected_adapter(capsys) -> None:
+    assert CONTROL.main(["assert-active-provider", "railway"]) == 0
+    capsys.readouterr()
+
+    assert CONTROL.main(["assert-active-provider", "render"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["diagnostics"][0]["code"] == "CFG_PROVIDER_NOT_ACTIVE"
 
 
 def test_preflight_aggregates_missing_values_and_redacts_secrets() -> None:
@@ -77,11 +108,11 @@ def test_preflight_names_exact_drifted_binding() -> None:
     assert diagnostics[0].subject == "RENDER_MCP_URL"
 
 
-def test_public_status_reports_sha_and_retired_authority_failures(monkeypatch) -> None:
+def test_public_status_reports_sha_and_inactive_authority_failures(monkeypatch) -> None:
     document = manifest()
 
     def fake_get(url: str, _timeout: int):
-        if "railway.app" in url:
+        if "onrender.com" in url:
             return 200, {"status": "healthy"}, ""
         if url.endswith("/build-metadata.json"):
             return 200, {"git_commit": "b" * 40}, ""
@@ -98,7 +129,71 @@ def test_public_status_reports_sha_and_retired_authority_failures(monkeypatch) -
     )
 
     assert codes(diagnostics).count("LIVE_SHA_MISMATCH") == 1
-    assert codes(diagnostics).count("LIVE_RETIRED_AUTHORITY_REACHABLE") == 3
+    assert codes(diagnostics).count("LIVE_INACTIVE_AUTHORITY_REACHABLE") == 3
+    assert len(checks) == 8
+
+
+def test_provider_switch_uses_only_typed_manifest_authority(monkeypatch) -> None:
+    document = deepcopy(manifest())
+    document["deployment"]["selected_provider"] = "render"
+    document["providers"]["render"]["authority"] = "active"
+    document["providers"]["railway"]["authority"] = "standby"
+
+    def fake_get(url: str, _timeout: int):
+        if "railway.app" in url:
+            return 404, None, ""
+        if url.endswith("/build-metadata.json") or url.endswith("/health"):
+            return 200, {"git_commit": EXPECTED_SHA}, ""
+        return 200, {"status": "ready"}, ""
+
+    monkeypatch.setattr(CONTROL, "_get_json", fake_get)
+    diagnostics, checks = CONTROL.status_diagnostics(
+        document,
+        expected_sha=EXPECTED_SHA,
+        fence="open",
+        timeout=1,
+    )
+
+    assert diagnostics == []
+    assert len(checks) == 8
+    assert {check["provider"] for check in checks if check["check"] == "health"} == {
+        "render"
+    }
+    assert {check["provider"] for check in checks if check["check"] == "inactivity"} == {
+        "railway"
+    }
+
+
+def test_provider_authority_and_adapter_drift_fail_closed() -> None:
+    document = deepcopy(manifest())
+    document["providers"]["render"]["authority"] = "active"
+    document["providers"]["railway"]["adapter"]["environment_prefix"] = "RENDER"
+
+    diagnostics = CONTROL.validate_manifest(document)
+
+    assert "CFG_PROVIDER_AUTHORITY_INVALID" in codes(diagnostics)
+    assert "CFG_PROVIDER_ADAPTER_MISMATCH" in codes(diagnostics)
+
+
+def test_suspended_standby_provider_is_inactive(monkeypatch) -> None:
+    document = manifest()
+
+    def fake_get(url: str, _timeout: int):
+        if "onrender.com" in url:
+            return 503, None, "provider_service_suspended"
+        if url.endswith("/build-metadata.json") or url.endswith("/health"):
+            return 200, {"git_commit": EXPECTED_SHA}, ""
+        return 200, {"status": "ready"}, ""
+
+    monkeypatch.setattr(CONTROL, "_get_json", fake_get)
+    diagnostics, checks = CONTROL.status_diagnostics(
+        document,
+        expected_sha=EXPECTED_SHA,
+        fence="open",
+        timeout=1,
+    )
+
+    assert diagnostics == []
     assert len(checks) == 8
 
 
@@ -106,11 +201,11 @@ def test_closed_fence_distinguishes_expected_mcp_not_ready(monkeypatch) -> None:
     document = manifest()
 
     def fake_get(url: str, _timeout: int):
-        if "railway.app" in url:
+        if "onrender.com" in url:
             return 404, None, ""
         if url.endswith("/build-metadata.json") or url.endswith("/health"):
             return 200, {"git_commit": EXPECTED_SHA}, ""
-        if "mcp-pilot" in url and url.endswith("/ready"):
+        if "pharma-backend" in url and url.endswith("/ready"):
             return 503, {"status": "not_ready"}, ""
         return 200, {"status": "ready"}, ""
 
@@ -126,12 +221,15 @@ def test_closed_fence_distinguishes_expected_mcp_not_ready(monkeypatch) -> None:
 
 
 def test_render_suspension_names_lifecycle_recovery_once_per_service(monkeypatch) -> None:
-    document = manifest()
+    document = deepcopy(manifest())
+    document["deployment"]["selected_provider"] = "render"
+    document["providers"]["render"]["authority"] = "active"
+    document["providers"]["railway"]["authority"] = "standby"
 
     def fake_get(url: str, _timeout: int):
         if "railway.app" in url:
             return 404, None, ""
-        return 503, None, "render_service_suspended"
+        return 503, None, "provider_service_suspended"
 
     monkeypatch.setattr(CONTROL, "_get_json", fake_get)
     diagnostics, checks = CONTROL.status_diagnostics(
@@ -165,6 +263,14 @@ def test_export_contains_only_reviewed_public_bindings(tmp_path: Path) -> None:
         for line in output.read_text(encoding="utf-8").splitlines()
     )
     assert values["RENDER_MCP_URL"] == "https://aasopharma-mcp-pilot.onrender.com"
+    assert values["CANONICAL_APPLICATION_PROVIDER"] == "railway"
+    assert values["CANONICAL_APPLICATION_DATABASE_TRANSPORT"] == (
+        "supabase_direct_ipv6"
+    )
+    assert values["SUPABASE_DIRECT_DATABASE_HOST"] == (
+        "db.rgihahbmkrmhitjdjvev.supabase.co"
+    )
+    assert values["SUPABASE_DIRECT_DATABASE_PORT"] == "5432"
     assert values["CANONICAL_STAGING_PROJECT_REF"] == "rgihahbmkrmhitjdjvev"
     assert "RENDER_API_KEY" not in values
     assert "SUPABASE_DB_PASSWORD" not in values

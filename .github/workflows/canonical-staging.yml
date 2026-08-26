@@ -180,6 +180,10 @@ jobs:
             --expected-sha "$REVIEWED_DEPLOY_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             "${requirements[@]}"
+          if [ '${{ inputs.deploy_render_pilot }}' = true ]; then
+            python backend/scripts/deployment_control.py \
+              assert-active-provider render
+          fi
 
       - uses: actions/setup-node@v4
         if: inputs.deploy_render_pilot == true
