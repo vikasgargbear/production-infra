@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import jwt
@@ -249,6 +250,56 @@ def _decimal(value: Any, label: str) -> Decimal:
         raise ExerciseError(f"{label} is not an exact decimal string") from exc
 
 
+def _customer_delivery_address(customers: dict[str, Any]) -> tuple[str, str]:
+    if (
+        customers.get("match_state") != "exact_match"
+        or isinstance(customers.get("exact_match_count"), bool)
+        or customers.get("exact_match_count") != 1
+        or customers.get("requires_selection") is not False
+    ):
+        raise ExerciseError("Live customer resolution did not return one exact customer")
+    results = customers.get("results")
+    if not isinstance(results, list):
+        raise ExerciseError("Live customer resolution omitted its bounded results")
+    matches = [
+        result
+        for result in results
+        if isinstance(result, dict)
+        and result.get("customer_account_id") == DEMO_CUSTOMER_ACCOUNT_ID
+    ]
+    if len(matches) != 1:
+        raise ExerciseError("Live customer resolution omitted one canonical demo customer")
+    addresses = matches[0].get("primary_delivery_addresses")
+    if not isinstance(addresses, list) or len(addresses) != 1:
+        raise ExerciseError(
+            "Canonical demo customer must have one exact active primary delivery address"
+        )
+    address = addresses[0]
+    if not isinstance(address, dict):
+        raise ExerciseError("Canonical delivery-address resolution returned an invalid row")
+    address_id = address.get("delivery_address_id")
+    row_version = address.get("delivery_address_row_version")
+    if address.get("is_primary") is not True or address.get("address_kind") not in {
+        "registered",
+        "billing",
+        "shipping",
+    }:
+        raise ExerciseError(
+            "Canonical delivery-address resolution returned an ineligible primary row"
+        )
+    try:
+        normalized_address_id = str(UUID(address_id)) if isinstance(address_id, str) else ""
+    except ValueError as exc:
+        raise ExerciseError("Canonical delivery-address resolution returned an invalid UUID") from exc
+    if not normalized_address_id:
+        raise ExerciseError("Canonical delivery-address resolution returned an invalid UUID")
+    if isinstance(row_version, bool) or not isinstance(row_version, int) or row_version < 1:
+        raise ExerciseError(
+            "Canonical delivery-address resolution returned an invalid row version"
+        )
+    return normalized_address_id, str(row_version)
+
+
 def _verify_sales_order_readback(
     prepared: dict[str, Any],
     executed: dict[str, Any],
@@ -388,8 +439,9 @@ def _exercise_mcp(
     customers = call(
         "erp_customer_search", {"search_term": "CUST-DEMO-001", "limit": 20}
     )
-    if DEMO_CUSTOMER_ACCOUNT_ID not in json.dumps(customers):
-        raise ExerciseError("Live customer resolution omitted the canonical demo customer")
+    delivery_address_id, delivery_address_row_version = _customer_delivery_address(
+        customers
+    )
 
     run_id = os.getenv("GITHUB_RUN_ID", secrets.token_hex(6))
     business_date = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
@@ -407,6 +459,8 @@ def _exercise_mcp(
             "rounding_policy": "nearest_rupee",
             "zero_rated_payment_mode": "not_applicable",
             "customer_account_id": DEMO_CUSTOMER_ACCOUNT_ID,
+            "delivery_address_id": delivery_address_id,
+            "delivery_address_row_version": delivery_address_row_version,
             "lines": [
                 {
                     "product_id": DEMO_PRODUCT_ID,

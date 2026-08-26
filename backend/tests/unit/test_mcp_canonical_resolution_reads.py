@@ -172,12 +172,14 @@ def test_customer_search_signals_ambiguous_exact_matches_without_guessing():
             customer_account_id=uuid4(), party_id=uuid4(), customer_code="C-1",
             legal_name="Same Name", trade_name=None, gstin=None, phone=None,
             account_status="active", party_status="active", row_version=1,
+            primary_delivery_addresses=[],
             _exact_match=True,
         ),
         _row(
             customer_account_id=uuid4(), party_id=uuid4(), customer_code="C-2",
             legal_name="Same Name", trade_name=None, gstin=None, phone=None,
             account_status="active", party_status="active", row_version=3,
+            primary_delivery_addresses=[],
             _exact_match=True,
         ),
     ]
@@ -190,6 +192,58 @@ def test_customer_search_signals_ambiguous_exact_matches_without_guessing():
     assert result.exact_match_count == 2
     assert len(result.results) == 2
     assert database.calls[0][1]["limit"] == 50
+
+
+def test_customer_search_returns_bounded_tenant_scoped_primary_address_authority():
+    address_id = uuid4()
+    database = _Database([
+        _row(
+            customer_account_id=uuid4(), party_id=uuid4(), customer_code="C-1",
+            legal_name="One Customer", trade_name=None, gstin=None, phone=None,
+            account_status="active", party_status="active", row_version=1,
+            primary_delivery_addresses=[{
+                "delivery_address_id": address_id,
+                "delivery_address_row_version": 7,
+                "address_kind": "shipping",
+                "is_primary": True,
+            }],
+            _exact_match=True,
+        )
+    ])
+
+    result = reads.canonical_customer_search(
+        "C-1", 20,
+        _context("parties.customers.search", branch=False, sensitive=True),
+        database,
+    )
+
+    assert result.results[0].primary_delivery_addresses[0].delivery_address_id == address_id
+    assert result.results[0].primary_delivery_addresses[0].delivery_address_row_version == 7
+    sql = database.calls[0][0]
+    assert "org_id=customer.org_id" in sql
+    assert "party_id=customer.party_id" in sql
+    assert "status='active'" in sql
+    assert "is_primary IS TRUE" in sql
+    assert "LIMIT 2" in sql
+
+
+def test_customer_search_exposes_no_address_when_tenant_scope_resolves_none():
+    database = _Database([
+        _row(
+            customer_account_id=uuid4(), party_id=uuid4(), customer_code="C-1",
+            legal_name="One Customer", trade_name=None, gstin=None, phone=None,
+            account_status="active", party_status="active", row_version=1,
+            primary_delivery_addresses=[], _exact_match=True,
+        )
+    ])
+
+    result = reads.canonical_customer_search(
+        "C-1", 20,
+        _context("parties.customers.search", branch=False, sensitive=True),
+        database,
+    )
+
+    assert result.results[0].primary_delivery_addresses == []
 
 
 def test_branch_reads_fail_closed_without_exact_delegated_branch():

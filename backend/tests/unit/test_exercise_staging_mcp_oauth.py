@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -11,6 +12,136 @@ SPEC = importlib.util.spec_from_file_location("exercise_staging_mcp_oauth", SCRI
 assert SPEC and SPEC.loader
 exercise = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(exercise)
+
+
+def _customer_resolution(addresses):
+    return {
+        "match_state": "exact_match",
+        "requires_selection": False,
+        "exact_match_count": 1,
+        "results": [
+            {
+                "customer_account_id": exercise.DEMO_CUSTOMER_ACCOUNT_ID,
+                "primary_delivery_addresses": addresses,
+            }
+        ],
+    }
+
+
+def test_customer_delivery_address_uses_one_authoritative_resolved_identity() -> None:
+    address_id = str(uuid4())
+
+    assert exercise._customer_delivery_address(
+        _customer_resolution(
+            [{
+                "delivery_address_id": address_id,
+                "delivery_address_row_version": 7,
+                "address_kind": "shipping",
+                "is_primary": True,
+            }]
+        )
+    ) == (address_id, "7")
+
+
+@pytest.mark.parametrize(
+    "addresses",
+    [
+        [],
+        [
+            {
+                "delivery_address_id": str(uuid4()),
+                "delivery_address_row_version": 1,
+            },
+            {
+                "delivery_address_id": str(uuid4()),
+                "delivery_address_row_version": 2,
+            },
+        ],
+    ],
+)
+def test_customer_delivery_address_rejects_missing_or_ambiguous_authority(addresses) -> None:
+    with pytest.raises(exercise.ExerciseError, match="one exact active primary"):
+        exercise._customer_delivery_address(_customer_resolution(addresses))
+
+
+@pytest.mark.parametrize(
+    "address_id,row_version,message",
+    [
+        ("not-a-uuid", 1, "invalid UUID"),
+        (str(uuid4()), 0, "invalid row version"),
+        (str(uuid4()), True, "invalid row version"),
+        (str(uuid4()), "7", "invalid row version"),
+    ],
+)
+def test_customer_delivery_address_rejects_malformed_authority(
+    address_id, row_version, message: str
+) -> None:
+    with pytest.raises(exercise.ExerciseError, match=message):
+        exercise._customer_delivery_address(
+            _customer_resolution(
+                [{
+                    "delivery_address_id": address_id,
+                    "delivery_address_row_version": row_version,
+                    "address_kind": "shipping",
+                    "is_primary": True,
+                }]
+            )
+        )
+
+
+def test_customer_delivery_address_rejects_ineligible_address() -> None:
+    with pytest.raises(exercise.ExerciseError, match="ineligible primary"):
+        exercise._customer_delivery_address(
+            _customer_resolution(
+                [{
+                    "delivery_address_id": str(uuid4()),
+                    "delivery_address_row_version": 1,
+                    "address_kind": "warehouse",
+                    "is_primary": False,
+                }]
+            )
+        )
+
+
+def test_customer_delivery_address_rejects_wrong_customer_identity() -> None:
+    payload = _customer_resolution(
+        [{
+            "delivery_address_id": str(uuid4()),
+            "delivery_address_row_version": 1,
+            "address_kind": "shipping",
+            "is_primary": True,
+        }]
+    )
+    payload["results"][0]["customer_account_id"] = str(uuid4())
+
+    with pytest.raises(exercise.ExerciseError, match="canonical demo customer"):
+        exercise._customer_delivery_address(payload)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("match_state", "ambiguous"),
+        ("exact_match_count", True),
+        ("exact_match_count", 2),
+        ("requires_selection", True),
+    ],
+)
+def test_customer_delivery_address_rejects_nonexact_customer_authority(
+    field: str, value
+) -> None:
+    payload = _customer_resolution(
+        [{
+            "delivery_address_id": str(uuid4()),
+            "delivery_address_row_version": 1,
+            "address_kind": "shipping",
+            "is_primary": True,
+        }]
+    )
+    payload[field] = value
+
+    with pytest.raises(exercise.ExerciseError, match="one exact customer"):
+        exercise._customer_delivery_address(payload)
 
 
 def _documents():

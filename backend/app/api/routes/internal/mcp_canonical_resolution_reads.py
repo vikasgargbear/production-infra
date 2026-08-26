@@ -92,6 +92,13 @@ SearchMatchState = Literal["not_found", "partial_matches", "exact_match", "ambig
 DocumentMatchState = Literal["not_found", "matched", "ambiguous"]
 
 
+class CustomerDeliveryAddressMatch(StrictDTO):
+    delivery_address_id: UUID
+    delivery_address_row_version: int
+    address_kind: str
+    is_primary: bool
+
+
 class CustomerMatch(StrictDTO):
     customer_account_id: UUID
     party_id: UUID
@@ -103,6 +110,7 @@ class CustomerMatch(StrictDTO):
     account_status: str
     party_status: str
     row_version: int
+    primary_delivery_addresses: list[CustomerDeliveryAddressMatch]
 
 
 class CustomerSearchResponse(StrictDTO):
@@ -244,6 +252,8 @@ def canonical_customer_search(
                        registration.registration_number AS gstin, contact.phone,
                        customer.status AS account_status, party.status AS party_status,
                        customer.row_version,
+                       COALESCE(primary_address_data.primary_delivery_addresses, '[]'::jsonb)
+                           AS primary_delivery_addresses,
                        (lower(customer.customer_code)=lower(:search)
                         OR lower(party.legal_name)=lower(:search)
                         OR lower(COALESCE(party.trade_name,''))=lower(:search)
@@ -265,6 +275,29 @@ def canonical_customer_search(
                          AND status='active'
                        ORDER BY is_primary DESC, id LIMIT 1
                   ) AS contact ON true
+                  LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(
+                                 jsonb_build_object(
+                                     'delivery_address_id', address.id,
+                                     'delivery_address_row_version', address.row_version,
+                                     'address_kind', address.address_kind,
+                                     'is_primary', address.is_primary
+                                 ) ORDER BY address.id
+                             ) AS primary_delivery_addresses
+                        FROM (
+                            SELECT id, row_version, address_kind, is_primary
+                              FROM parties.addresses
+                             WHERE org_id=customer.org_id
+                               AND party_id=customer.party_id
+                               AND status='active'
+                               AND is_primary IS TRUE
+                               AND address_kind IN ('registered','billing','shipping')
+                               AND valid_from<=CURRENT_DATE
+                               AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                             ORDER BY id
+                             LIMIT 2
+                        ) AS address
+                  ) AS primary_address_data ON true
                  WHERE customer.org_id=:org_id
                    AND customer.status IN ('active','on_hold')
                    AND party.status IN ('active','blocked')

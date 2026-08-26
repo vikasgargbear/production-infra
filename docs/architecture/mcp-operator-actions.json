@@ -86,7 +86,7 @@
       "resource": "parties",
       "permission": "parties.customer.manage",
       "max_records": 50,
-      "description": "Resolve a customer by name, code, GSTIN, or phone inside the active organization; multiple matches require explicit selection."
+      "description": "Resolve a customer by name, code, GSTIN, or phone inside the active organization, including at most two active primary delivery-address identities so missing or ambiguous address authority fails closed; multiple customer matches require explicit selection."
     },
     {
       "tool": "erp_inventory_location_search",

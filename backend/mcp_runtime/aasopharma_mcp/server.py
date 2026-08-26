@@ -109,7 +109,7 @@ def create_app(
         ],
         limit: Annotated[int, Field(ge=1, le=50, description="Maximum candidate customers to return.")] = 20,
     ) -> Any:
-        """Resolve a customer; ambiguous results require explicit selection."""
+        """Resolve a customer and bounded active primary delivery-address authority."""
         return await operation_gateway.execute(
             OPERATIONS["erp_customer_search"], _access_token(),
             {"search_term": search_term, "limit": limit},
