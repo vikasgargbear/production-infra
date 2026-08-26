@@ -253,6 +253,11 @@ jobs:
             'Host ssh.railway.com' \
             "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
             '    StrictHostKeyChecking accept-new' \
+            '    BatchMode yes' \
+            '    IdentitiesOnly yes' \
+            '    ConnectTimeout 10' \
+            '    ServerAliveInterval 15' \
+            '    ServerAliveCountMax 2' \
             > "$HOME/.ssh/config"
           chmod 600 "$HOME/.ssh/config"
           ssh-keygen -q -t ed25519 -N '' \
@@ -292,27 +297,71 @@ jobs:
             *) echo 'invalid Railway reset remote root' >&2; exit 2 ;;
           esac
           mkdir -p railway-reset-evidence
-          curl --fail-with-body --silent --show-error --max-time 30 \
-            "$RAILWAY_API_URL/health" >/dev/null
-          railway status \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --json > "$RUNNER_TEMP/railway-reset-status.json"
-          deployment_id=$(jq -er \
-            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
-            --arg service "$RAILWAY_API_SERVICE" '
-              [.environments.edges[].node
-               | select(.id == $environment)
-               | .serviceInstances.edges[].node
-               | select(.serviceName == $service)
-               | .activeDeployments[]
-               | select(.status == "SUCCESS" or .status == "SLEEPING")
-               | select((.instances | length) == 1)
-               | {deployment_id:.id,instance_id:.instances[0].id}]
-              | if length == 1 then .[0] else error("expected one active Railway API execution host") end
-            ' "$RUNNER_TEMP/railway-reset-status.json")
-          RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID=$(jq -r .deployment_id <<<"$deployment_id")
-          RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID=$(jq -r .instance_id <<<"$deployment_id")
+          probe_nonce=$(openssl rand -hex 32)
+          [[ "$probe_nonce" =~ ^[0-9a-f]{64}$ ]]
+          bootstrap_ready=false
+          for attempt in $(seq 1 12); do
+            if curl --fail-with-body --silent --show-error --max-time 30 \
+              "$RAILWAY_API_URL/health" >/dev/null && \
+              railway status \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --json > "$RUNNER_TEMP/railway-reset-status.json"; then
+              deployment_id=$(jq -er \
+                --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+                --arg service "$RAILWAY_API_SERVICE" '
+                  [.environments.edges[].node
+                   | select(.id == $environment)
+                   | .serviceInstances.edges[].node
+                   | select(.serviceName == $service)
+                   | .activeDeployments[]
+                   | select(.status == "SUCCESS" and .deploymentStopped == false)
+                   | select((.instances | length) == 1)
+                   | select(.instances[0].status == "RUNNING")
+                   | {deployment_id:.id,instance_id:.instances[0].id}]
+                  | if length == 1 then .[0] else error("expected one running Railway API execution host") end
+                ' "$RUNNER_TEMP/railway-reset-status.json" 2>/dev/null || true)
+              if test -n "$deployment_id"; then
+                RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID=$(jq -r .deployment_id <<<"$deployment_id")
+                RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID=$(jq -r .instance_id <<<"$deployment_id")
+                probe_rc=0
+                # Expansion belongs to the remote shell.
+                # shellcheck disable=SC2016
+                probe=$(timeout --signal=TERM 20s railway ssh \
+                  --project "$RAILWAY_PROJECT_ID" \
+                  --environment "$RAILWAY_ENVIRONMENT_ID" \
+                  --service "$RAILWAY_API_SERVICE" \
+                  --deployment-instance "$RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID" \
+                  --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+                  -- /bin/sh -c 'printf "%s|%s" "$1" "$RAILWAY_GIT_COMMIT_SHA"' \
+                    sh "$probe_nonce" \
+                  2>"$RUNNER_TEMP/railway-reset-ssh-probe.err") || probe_rc=$?
+                if [[ "$probe" =~ ^${probe_nonce}\|([0-9a-f]{40})$ ]]; then
+                  if test "$probe_rc" -eq 0; then
+                    RAILWAY_RESET_BOOTSTRAP_HOST_SHA=${BASH_REMATCH[1]}
+                    bootstrap_ready=true
+                    break
+                  fi
+                  echo 'Railway SSH probe returned authenticated output with a failing status' >&2
+                  exit 1
+                fi
+                if test -n "$probe"; then
+                  echo 'Railway SSH probe returned unexpected output' >&2
+                  exit 1
+                fi
+                case "$probe_rc" in
+                  0|124|255) ;;
+                  *) echo "Railway SSH probe failed with non-transport status $probe_rc" >&2; exit 1 ;;
+                esac
+              fi
+            fi
+            echo "Railway API host or run-scoped SSH key is not ready (attempt $attempt/12)" >&2
+            sleep 5
+          done
+          if test "$bootstrap_ready" != true; then
+            echo 'Railway API did not expose one running SSH execution host after 12 attempts' >&2
+            exit 1
+          fi
           export RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID
           printf '%s\n' "$RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID" > \
             "$RUNNER_TEMP/railway-reset-bootstrap-deployment-id"
@@ -331,14 +380,47 @@ jobs:
           archive="$RUNNER_TEMP/railway-reset-source.tar.gz"
           git archive --format=tar.gz --output "$archive" "$REVIEWED_SHA" -- \
             backend database deploy/control-plane
+          archive_size=$(wc -c < "$archive")
+          if test "$archive_size" -le 0 || test "$archive_size" -gt 8388608; then
+            echo "Reviewed Railway reset source archive has invalid size: $archive_size bytes" >&2
+            exit 1
+          fi
           source_sha256=$(sha256sum "$archive" | cut -d' ' -f1)
           [[ "$source_sha256" =~ ^[0-9a-f]{64}$ ]]
-          # Expansion belongs to the remote shell.
-          # shellcheck disable=SC2016
-          remote_hash=$(remote_ssh /bin/sh -c \
-            'set -eu; root=$1; umask 077; test ! -e "$root"; mkdir -m 700 "$root"; cat > "$root/source.tar.gz"; sha256sum "$root/source.tar.gz" | cut -d" " -f1' \
-            sh "$RAILWAY_RESET_REMOTE_ROOT" < "$archive")
-          test "$remote_hash" = "$source_sha256"
+          upload_ready=false
+          for attempt in $(seq 1 3); do
+            upload_rc=0
+            # Expansion belongs to the remote shell.
+            # shellcheck disable=SC2016
+            upload_result=$(timeout --signal=TERM 60s railway ssh \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service "$RAILWAY_API_SERVICE" \
+              --deployment-instance "$RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID" \
+              --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+              -- /bin/sh -c \
+              'set -eu; root=$1; expected=$2; nonce=$3; umask 077; mkdir -p "$root"; chmod 700 "$root"; final="$root/source.tar.gz"; part="$root/source.tar.gz.part-$nonce"; if test -f "$final"; then actual=$(sha256sum "$final" | cut -d" " -f1); test "$actual" = "$expected"; printf "UPLOAD_OK:%s" "$actual"; exit 0; fi; trap '\''test ! -e "$part" || find "$part" -delete'\'' EXIT; cat > "$part"; actual=$(sha256sum "$part" | cut -d" " -f1); test "$actual" = "$expected"; mv "$part" "$final"; trap - EXIT; printf "UPLOAD_OK:%s" "$actual"' \
+              sh "$RAILWAY_RESET_REMOTE_ROOT" "$source_sha256" "$probe_nonce" \
+              < "$archive" 2>"$RUNNER_TEMP/railway-reset-ssh-upload.err") || upload_rc=$?
+            if test "$upload_result" = "UPLOAD_OK:$source_sha256" && test "$upload_rc" -eq 0; then
+              upload_ready=true
+              break
+            fi
+            if test -n "$upload_result"; then
+              echo 'Railway reset source upload returned unexpected output' >&2
+              exit 1
+            fi
+            case "$upload_rc" in
+              124|255) ;;
+              *) echo "Railway reset source upload failed with non-transport status $upload_rc" >&2; exit 1 ;;
+            esac
+            echo "Railway reset source upload transport is not ready (attempt $attempt/3)" >&2
+            sleep 5
+          done
+          if test "$upload_ready" != true; then
+            echo 'Railway reset source upload did not complete after 3 attempts' >&2
+            exit 1
+          fi
           # Expansion belongs to the remote shell.
           # shellcheck disable=SC2016
           remote_ssh /bin/sh -c \
@@ -346,6 +428,7 @@ jobs:
             sh "$RAILWAY_RESET_REMOTE_ROOT" >/dev/null
           host_deployed_sha=$(remote_ssh printenv RAILWAY_GIT_COMMIT_SHA)
           [[ "$host_deployed_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$host_deployed_sha" = "$RAILWAY_RESET_BOOTSTRAP_HOST_SHA"
           printf '%s\n' "$host_deployed_sha" > \
             "$RUNNER_TEMP/railway-reset-bootstrap-host-sha"
           printf '%s\n' "$source_sha256" > \
@@ -1211,19 +1294,41 @@ jobs:
           cleanup_failed=0
           if test -s "$RAILWAY_RESET_SSH_FINGERPRINT"; then
             fingerprint=$(<"$RAILWAY_RESET_SSH_FINGERPRINT")
-            railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt"
-            if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt" >/dev/null; then
-              railway ssh keys remove "$fingerprint" || cleanup_failed=1
-            fi
-            railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt"
-            if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt" >/dev/null; then
+            railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
+            ssh-add -d "$RAILWAY_RESET_SSH_PRIVATE_KEY" >/dev/null 2>&1 || true
+            rm -f "$RAILWAY_RESET_SSH_PRIVATE_KEY.pub"
+            key_removed=false
+            absent_observations=0
+            for attempt in $(seq 1 12); do
+              if railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt" && \
+                 ! grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt" >/dev/null; then
+                absent_observations=$((absent_observations + 1))
+                if test "$absent_observations" -eq 2; then
+                  key_removed=true
+                  break
+                fi
+              else
+                absent_observations=0
+              fi
+              echo "Waiting for Railway SSH key removal (attempt $attempt/12)" >&2
+              sleep 2
+            done
+            if test "$key_removed" != true; then
               echo 'Run-scoped Railway reset SSH key remained after cleanup' >&2
               cleanup_failed=1
             fi
           fi
           if test -f "$RAILWAY_RESET_SSH_AGENT_STARTED"; then
-            ssh-add -D >/dev/null 2>&1 || cleanup_failed=1
+            ssh-add -D >/dev/null 2>&1 || true
             ssh-agent -k >/dev/null 2>&1 || cleanup_failed=1
             rm -f "$RAILWAY_RESET_SSH_AGENT_STARTED"
           fi
+          rm -f "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
+            "$RAILWAY_RESET_SSH_PRIVATE_KEY.pub" \
+            "$RAILWAY_RESET_SSH_FINGERPRINT" \
+            "$RUNNER_TEMP/railway-reset-ssh-probe.err" \
+            "$RUNNER_TEMP/railway-reset-ssh-upload.err" \
+            "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt" \
+            "$RUNNER_TEMP/railway-reset-ssh-keys.txt" \
+            "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt"
           exit "$cleanup_failed"

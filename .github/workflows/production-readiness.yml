@@ -1182,7 +1182,7 @@ jobs:
             echo "LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH=$RUNNER_TEMP/live18-evidence-identity-prepare.json"
             echo "LIVE18_EVIDENCE_CREDENTIAL_RETIREMENT_PATH=$RUNNER_TEMP/live18-evidence-credential-retirement.json"
             echo "LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH=$RUNNER_TEMP/live18-railway-identity-response.json"
-            echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$HOME/.ssh/live18-railway-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$RUNNER_TEMP/live18-railway-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             echo "LIVE18_RAILWAY_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/live18-railway-ssh-fingerprint"
             echo "LIVE18_RAILWAY_SSH_REGISTERED_PATH=$RUNNER_TEMP/live18-railway-ssh-registered"
             echo "LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH=$RUNNER_TEMP/live18-railway-ssh-agent-started"
@@ -1351,6 +1351,11 @@ jobs:
             'Host ssh.railway.com' \
             "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
             '    StrictHostKeyChecking accept-new' \
+            '    BatchMode yes' \
+            '    IdentitiesOnly yes' \
+            '    ConnectTimeout 10' \
+            '    ServerAliveInterval 15' \
+            '    ServerAliveCountMax 2' \
             > "$HOME/.ssh/config"
           chmod 600 "$HOME/.ssh/config"
           ssh-keygen -q -t ed25519 -N '' \
@@ -1389,26 +1394,65 @@ jobs:
         run: |
           set -euo pipefail
           status="$RUNNER_TEMP/live18-railway-status.json"
-          railway status \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --json > "$status"
-          instance_id=$(jq -er \
-            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
-            --arg service "$RAILWAY_API_SERVICE" \
-            --arg deployment "$RAILWAY_API_DEPLOYMENT_ID" '
-              [.environments.edges[].node
-               | select(.id == $environment)
-               | .serviceInstances.edges[].node
-               | select(.serviceName == $service)
-               | .activeDeployments[]
-               | select(.id == $deployment and .status == "SUCCESS" and .deploymentStopped == false)
-               | .instances[]
-               | select(.status == "RUNNING")
-               | .id]
-              | if length == 1 then .[0] else error("expected one exact running API instance") end
-            ' "$status")
-          test -n "$instance_id"
+          probe_nonce=$(openssl rand -hex 32)
+          [[ "$probe_nonce" =~ ^[0-9a-f]{64}$ ]]
+          ssh_ready=false
+          for attempt in $(seq 1 12); do
+            if curl --fail-with-body --silent --show-error --max-time 30 \
+              "$LIVE18_API_ORIGIN/health" >/dev/null && \
+              railway status \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --json > "$status"; then
+              instance_id=$(jq -er \
+                --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+                --arg service "$RAILWAY_API_SERVICE" \
+                --arg deployment "$RAILWAY_API_DEPLOYMENT_ID" '
+                  [.environments.edges[].node
+                   | select(.id == $environment)
+                   | .serviceInstances.edges[].node
+                   | select(.serviceName == $service)
+                   | .activeDeployments[]
+                   | select(.id == $deployment and .status == "SUCCESS" and .deploymentStopped == false)
+                   | .instances[]
+                   | select(.status == "RUNNING")
+                   | .id]
+                  | if length == 1 then .[0] else error("expected one exact running API instance") end
+                ' "$status" 2>/dev/null || true)
+              if test -n "$instance_id"; then
+                probe_rc=0
+                # Expansion belongs to the remote shell.
+                # shellcheck disable=SC2016
+                probe=$(timeout --signal=TERM 20s railway ssh \
+                  --project "$RAILWAY_PROJECT_ID" \
+                  --environment "$RAILWAY_ENVIRONMENT_ID" \
+                  --service "$RAILWAY_API_SERVICE" \
+                  --deployment-instance "$instance_id" \
+                  --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+                  -- /bin/sh -c 'printf "%s|%s" "$1" "$RAILWAY_GIT_COMMIT_SHA"' \
+                    sh "$probe_nonce" \
+                  2>"$RUNNER_TEMP/live18-railway-ssh-probe.err") || probe_rc=$?
+                if test "$probe" = "$probe_nonce|$REVIEWED_DEPLOY_SHA" && test "$probe_rc" -eq 0; then
+                  ssh_ready=true
+                  break
+                fi
+                if test -n "$probe"; then
+                  echo 'Exact Railway API SSH probe returned unexpected provenance' >&2
+                  exit 1
+                fi
+                case "$probe_rc" in
+                  0|124|255) ;;
+                  *) echo "Exact Railway API SSH probe failed with non-transport status $probe_rc" >&2; exit 1 ;;
+                esac
+              fi
+            fi
+            echo "Exact Railway API instance or run-scoped SSH key is not ready (attempt $attempt/12)" >&2
+            sleep 5
+          done
+          if test "$ssh_ready" != true; then
+            echo 'Exact Railway API instance did not become SSH-ready after 12 attempts' >&2
+            exit 1
+          fi
           echo "RAILWAY_API_DEPLOYMENT_INSTANCE_ID=$instance_id" >> "$GITHUB_ENV"
           rm -f "$status"
       - name: Write compact externally reviewed scalar choices outside the repository
@@ -1961,19 +2005,32 @@ jobs:
           if [ -f "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH" ]; then
             fingerprint=$(<"$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH")
             case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
-            railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt"
-            if grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt" >/dev/null; then
-              railway ssh keys remove "$fingerprint" || cleanup_failed=1
-              rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"
-              railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"
-              if grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt" >/dev/null; then
-                echo "Run-scoped Railway SSH key remained registered" >&2
-                cleanup_failed=1
+            railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
+            ssh-add -d "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" >/dev/null 2>&1 || true
+            rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"
+            key_removed=false
+            absent_observations=0
+            for attempt in $(seq 1 12); do
+              if railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt" && \
+                 ! grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt" >/dev/null; then
+                absent_observations=$((absent_observations + 1))
+                if test "$absent_observations" -eq 2; then
+                  key_removed=true
+                  break
+                fi
+              else
+                absent_observations=0
               fi
+              echo "Waiting for Railway SSH key removal (attempt $attempt/12)" >&2
+              sleep 2
+            done
+            if test "$key_removed" != true; then
+              echo "Run-scoped Railway SSH key remained registered" >&2
+              cleanup_failed=1
             fi
           fi
           if [ -f "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH" ]; then
-            ssh-add -D >/dev/null 2>&1 || cleanup_failed=1
+            ssh-add -D >/dev/null 2>&1 || true
             ssh-agent -k >/dev/null 2>&1 || cleanup_failed=1
           fi
           rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
@@ -1981,6 +2038,7 @@ jobs:
             "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH" \
             "$LIVE18_RAILWAY_SSH_REGISTERED_PATH" \
             "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH" \
+            "$RUNNER_TEMP/live18-railway-ssh-probe.err" \
             "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt" \
             "$RUNNER_TEMP/live18-railway-ssh-keys.txt" \
             "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"

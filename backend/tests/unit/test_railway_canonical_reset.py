@@ -414,7 +414,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     )
     reset_block = workflow[reset:deploy]
     assert "git archive --format=tar.gz" in reset_block
-    assert 'test "$remote_hash" = "$source_sha256"' in reset_block
+    assert 'test "$upload_result" = "UPLOAD_OK:$source_sha256"' in reset_block
     assert "railway_reset_control_plane.py close-fence" in reset_block
     assert "railway_reset_control_plane.py reset-boundary" in reset_block
     assert 'execution_source:"reviewed_source_archive"' in reset_block
@@ -424,6 +424,15 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert 'eval "$(ssh-agent -s)"' in register_block
     assert 'ssh-add "$RAILWAY_RESET_SSH_PRIVATE_KEY"' in register_block
     assert '--key "$fingerprint"' in register_block
+    assert 'select(.status == "SUCCESS" and .deploymentStopped == false)' in reset_block
+    assert 'select(.instances[0].status == "RUNNING")' in reset_block
+    assert "for attempt in $(seq 1 12); do" in reset_block
+    assert 'printf "%s|%s" "$1" "$RAILWAY_GIT_COMMIT_SHA"' in reset_block
+    assert "timeout --signal=TERM 20s railway ssh" in reset_block
+    assert "8388608" in reset_block
+    assert "UPLOAD_OK:" in reset_block
+    assert "timeout --signal=TERM 60s railway ssh" in reset_block
+    assert "after 12 attempts" in reset_block
     preclose_marker = reset_block.index('touch "$RAILWAY_RESET_FENCE_CLOSED"')
     uncertain_marker = reset_block.index('rm -f "$RAILWAY_RESET_FENCE_CLOSED"')
     reset_call = reset_block.index("railway_reset_control_plane.py reset-boundary")
@@ -445,6 +454,10 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "Write-fence closure is unattested" in compensation
     assert "find \"$root\" -depth -delete" in workflow[remove_source:remove_key]
     assert "railway ssh keys remove" in workflow[remove_key:]
+    assert "Waiting for Railway SSH key removal" in workflow[remove_key:]
+    assert 'test "$key_removed" != true' in workflow[remove_key:]
+    assert 'ssh-add -d "$RAILWAY_RESET_SSH_PRIVATE_KEY"' in workflow[remove_key:]
+    assert 'absent_observations=$((absent_observations + 1))' in workflow[remove_key:]
     assert "ssh-add -D" in workflow[remove_key:]
     assert "ssh-agent -k" in workflow[remove_key:]
     assert "manage_render_pilot_lifecycle.py" not in workflow

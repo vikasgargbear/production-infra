@@ -870,7 +870,7 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     assert "railway ssh keys add" in live18
     assert "railway ssh keys remove" in live18
     assert (
-        'LIVE18_RAILWAY_SSH_PRIVATE_KEY=$HOME/.ssh/live18-railway-'
+        'LIVE18_RAILWAY_SSH_PRIVATE_KEY=$RUNNER_TEMP/live18-railway-'
         '${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in live18
     )
     assert 'mkdir -p "$HOME/.ssh"' in live18
@@ -910,6 +910,14 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
         "--deployment-instance \"$RAILWAY_API_DEPLOYMENT_INSTANCE_ID\"" in live18
     )
     assert "expected one exact running API instance" in live18
+    assert 'printf "%s|%s" "$1" "$RAILWAY_GIT_COMMIT_SHA"' in live18
+    assert "timeout --signal=TERM 20s railway ssh" in live18
+    assert "for attempt in $(seq 1 12); do" in live18
+    assert "Exact Railway API instance did not become SSH-ready after 12 attempts" in live18
+    assert "Waiting for Railway SSH key removal" in cleanup
+    assert 'test "$key_removed" != true' in cleanup
+    assert 'ssh-add -d "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in cleanup
+    assert 'absent_observations=$((absent_observations + 1))' in cleanup
     assert 'ref: ${{ inputs.canonical_staging_deploy_sha }}' in live18
     assert '--project "$RAILWAY_PROJECT_ID"' in live18
     assert '--environment "$RAILWAY_ENVIRONMENT_ID"' in live18
