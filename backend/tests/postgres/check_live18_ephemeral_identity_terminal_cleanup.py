@@ -163,8 +163,13 @@ def _seed_tenant(cursor, fixture: TenantFixture) -> None:
     _seed_authority(cursor, fixture)
 
 
-def _seed_authority(cursor, fixture: TenantFixture) -> None:
+def _seed_authority(
+    cursor, fixture: TenantFixture, *, agent_status: str = "active"
+) -> None:
     """Provision another disposable run under an already seeded organization."""
+
+    if agent_status not in {"active", "pending_consent"}:
+        raise ValueError("fixture agent status must be active or pending_consent")
 
     cursor.execute("RESET ROLE")
     cursor.execute(
@@ -231,45 +236,68 @@ def _seed_authority(cursor, fixture: TenantFixture) -> None:
             fixture.creator_membership_id,
         ),
     )
-    cursor.execute(
-        """
-        INSERT INTO automation.agent_grants(
-          org_id,id,subject_membership_id,client_id,client_display_name,
-          authorization_mode,consent_version,consent_text_hash,
-          consented_by_membership_id,consented_at,granted_by_membership_id,
-          granted_at,expires_at,status,created_by_membership_id,
-          updated_by_membership_id)
-        VALUES (%s,%s,%s,%s,'Live18 replacement denial observer','self_consent',
-                'live18-denial-v1',extensions.digest(%s,'sha256'),%s,
-                transaction_timestamp(),%s,transaction_timestamp(),
-                transaction_timestamp()+interval '2 hours','active',%s,%s)
-        """,
-        (
-            fixture.org_id,
-            fixture.agent_grant_id,
-            fixture.subject_membership_id,
-            identities.WEB_CLIENT_ID,
-            f"terminal-reprovision:{fixture.role_code}",
-            fixture.subject_membership_id,
-            fixture.creator_membership_id,
-            fixture.creator_membership_id,
-            fixture.creator_membership_id,
-        ),
-    )
-    cursor.execute(
-        """
-        INSERT INTO automation.agent_grant_capabilities(
-          org_id,agent_grant_id,capability_code,operation_mode,risk_class,
-          approval_policy,allow_sensitive_read,status,created_by_membership_id)
-        VALUES (%s,%s,'automation.command.status.get','read','read_only',
-                'none',false,'active',%s)
-        """,
-        (
-            fixture.org_id,
-            fixture.agent_grant_id,
-            fixture.creator_membership_id,
-        ),
-    )
+    if agent_status == "pending_consent":
+        cursor.execute(
+            """
+            INSERT INTO automation.agent_grants(
+              org_id,id,subject_membership_id,client_id,client_display_name,
+              authorization_mode,consent_version,consent_text_hash,expires_at,
+              status,created_by_membership_id,updated_by_membership_id)
+            VALUES (%s,%s,%s,%s,'Live18 pending denial observer','self_consent',
+                    'live18-denial-v1',extensions.digest(%s,'sha256'),
+                    transaction_timestamp()+interval '2 hours',
+                    'pending_consent',%s,%s)
+            """,
+            (
+                fixture.org_id,
+                fixture.agent_grant_id,
+                fixture.subject_membership_id,
+                identities.WEB_CLIENT_ID,
+                f"terminal-reprovision:{fixture.role_code}",
+                fixture.creator_membership_id,
+                fixture.creator_membership_id,
+            ),
+        )
+    else:
+        cursor.execute(
+            """
+            INSERT INTO automation.agent_grants(
+              org_id,id,subject_membership_id,client_id,client_display_name,
+              authorization_mode,consent_version,consent_text_hash,
+              consented_by_membership_id,consented_at,granted_by_membership_id,
+              granted_at,expires_at,status,created_by_membership_id,
+              updated_by_membership_id)
+            VALUES (%s,%s,%s,%s,'Live18 replacement denial observer','self_consent',
+                    'live18-denial-v1',extensions.digest(%s,'sha256'),%s,
+                    transaction_timestamp(),%s,transaction_timestamp(),
+                    transaction_timestamp()+interval '2 hours','active',%s,%s)
+            """,
+            (
+                fixture.org_id,
+                fixture.agent_grant_id,
+                fixture.subject_membership_id,
+                identities.WEB_CLIENT_ID,
+                f"terminal-reprovision:{fixture.role_code}",
+                fixture.subject_membership_id,
+                fixture.creator_membership_id,
+                fixture.creator_membership_id,
+                fixture.creator_membership_id,
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO automation.agent_grant_capabilities(
+              org_id,agent_grant_id,capability_code,operation_mode,risk_class,
+              approval_policy,allow_sensitive_read,status,created_by_membership_id)
+            VALUES (%s,%s,'automation.command.status.get','read','read_only',
+                    'none',false,'active',%s)
+            """,
+            (
+                fixture.org_id,
+                fixture.agent_grant_id,
+                fixture.creator_membership_id,
+            ),
+        )
 
 
 def _seed_disconnected_identity(cursor, fixture: TenantFixture) -> None:
@@ -302,6 +330,68 @@ def _seed_disconnected_identity(cursor, fixture: TenantFixture) -> None:
             fixture.creator_membership_id,
         ),
     )
+
+
+def _mark_authority_expired(cursor, fixture: TenantFixture) -> tuple[tuple, tuple]:
+    """Model authority whose validity elapsed before crash recovery began.
+
+    Transaction timestamps do not advance within this rollback-only fixture,
+    so the setup shifts the validity windows under narrowly disabled lifecycle
+    triggers. The production cleanup runs with every trigger enabled.
+    """
+
+    cursor.execute(
+        "ALTER TABLE automation.agent_grants "
+        "DISABLE TRIGGER agent_grants_state_guard_ct"
+    )
+    cursor.execute(
+        "ALTER TABLE core.access_grants "
+        "DISABLE TRIGGER access_grants_lifecycle_guard"
+    )
+    try:
+        cursor.execute(
+            """
+            UPDATE automation.agent_grants
+               SET status='expired',created_at=transaction_timestamp()-interval '2 hours',
+                   expires_at=transaction_timestamp()-interval '1 hour',
+                   updated_at=transaction_timestamp(),row_version=row_version+1
+             WHERE org_id=%s AND id=%s
+            """,
+            (fixture.org_id, fixture.agent_grant_id),
+        )
+        cursor.execute(
+            """
+            UPDATE core.access_grants
+               SET status='expired',valid_from_at=transaction_timestamp()-interval '2 hours',
+                   expires_at=transaction_timestamp()-interval '1 hour',
+                   row_version=row_version+1
+             WHERE org_id=%s AND id=%s
+            """,
+            (fixture.org_id, fixture.access_grant_id),
+        )
+    finally:
+        cursor.execute(
+            "ALTER TABLE automation.agent_grants "
+            "ENABLE TRIGGER agent_grants_state_guard_ct"
+        )
+        cursor.execute(
+            "ALTER TABLE core.access_grants "
+            "ENABLE TRIGGER access_grants_lifecycle_guard"
+        )
+    cursor.execute(
+        "SELECT status,row_version,created_at,expires_at FROM automation.agent_grants "
+        "WHERE org_id=%s AND id=%s",
+        (fixture.org_id, fixture.agent_grant_id),
+    )
+    grant = cursor.fetchone()
+    cursor.execute(
+        "SELECT status,row_version,valid_from_at,expires_at FROM core.access_grants "
+        "WHERE org_id=%s AND id=%s",
+        (fixture.org_id, fixture.access_grant_id),
+    )
+    access = cursor.fetchone()
+    assert grant[0] == access[0] == "expired"
+    return grant, access
 
 
 def _authority_snapshot(cursor, fixture: TenantFixture) -> tuple[tuple, ...]:
@@ -522,7 +612,7 @@ def _terminal_history_counts(cursor, fixture: TenantFixture) -> tuple[int, int, 
         SELECT
           (SELECT count(*) FROM automation.agent_grants
             WHERE org_id=%s AND consent_version='live18-denial-v1'
-              AND status='revoked'),
+              AND status IN ('revoked','expired')),
           (SELECT count(*)
              FROM automation.agent_grant_capabilities AS capability
              JOIN automation.agent_grants AS grant_row
@@ -537,7 +627,7 @@ def _terminal_history_counts(cursor, fixture: TenantFixture) -> tuple[int, int, 
                                     AND role.id=access_grant.role_id
             WHERE access_grant.org_id=%s
               AND role.code LIKE 'live18_denial_%%'
-              AND access_grant.status='revoked')
+              AND access_grant.status IN ('revoked','expired'))
         """,
         (fixture.org_id, fixture.org_id, fixture.org_id),
     )
@@ -669,6 +759,71 @@ def main() -> None:
             assert _role_permission_snapshot(cursor, replacement) == (
                 replacement_permissions
             )
+
+            # The production provisioner never leaves pending consent behind.
+            # A canonical pending grant has no capability, so cleanup must fail
+            # closed and preserve its Auth discovery anchor for investigation.
+            cursor.execute("SAVEPOINT pending_fixture")
+            pending = _authority_in_tenant(target, "pending")
+            _seed_authority(cursor, pending, agent_status="pending_consent")
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            pending_before = _authority_snapshot(cursor, pending)
+            with _patched_denial_constants(target, other_tenant):
+                pending_residue = identities._live18_denial_residue_counts(cursor)
+                _expect_ephemeral_identity_error(
+                    cursor,
+                    lambda: identities._cleanup_live18_denial_database(
+                        cursor, _cleanup_state(pending)
+                    ),
+                )
+                pending_residue_after = identities._live18_denial_residue_counts(
+                    cursor
+                )
+            assert pending_residue == pending_residue_after == (1, 3, 1)
+            assert _authority_snapshot(cursor, pending) == pending_before
+            assert _terminal_history_counts(cursor, target) == (3, 3, 3)
+            cursor.execute("ROLLBACK TO SAVEPOINT pending_fixture")
+            cursor.execute("RELEASE SAVEPOINT pending_fixture")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+
+            # Cleanup must accept authority that expired before recovery. It
+            # may revoke the still-active capability and identity surfaces,
+            # but must not rewrite terminal grant/access evidence.
+            expired = _authority_in_tenant(target, "expired")
+            _seed_authority(cursor, expired)
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            expired_grant_before, expired_access_before = (
+                _mark_authority_expired(cursor, expired)
+            )
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            with _patched_denial_constants(target, other_tenant):
+                identities._cleanup_live18_denial_database(
+                    cursor, _cleanup_state(expired)
+                )
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            cursor.execute(
+                "SELECT status,row_version,created_at,expires_at "
+                "FROM automation.agent_grants WHERE org_id=%s AND id=%s",
+                (expired.org_id, expired.agent_grant_id),
+            )
+            assert cursor.fetchone() == expired_grant_before
+            cursor.execute(
+                "SELECT status,row_version,valid_from_at,expires_at "
+                "FROM core.access_grants WHERE org_id=%s AND id=%s",
+                (expired.org_id, expired.access_grant_id),
+            )
+            assert cursor.fetchone() == expired_access_before
+            expired_terminal = {
+                row[0]: row for row in _authority_snapshot(cursor, expired)
+            }
+            assert expired_terminal["agent"][2] == "expired"
+            assert expired_terminal["access"][2] == "expired"
+            assert expired_terminal["capability"][2] == "revoked"
+            assert expired_terminal["membership"][2] == "revoked"
+            assert _terminal_history_counts(cursor, target) == (4, 4, 4)
 
             disconnected = _authority_in_tenant(target, "disconnected")
             _seed_disconnected_identity(cursor, disconnected)
