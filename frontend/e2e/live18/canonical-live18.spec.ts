@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
-  APIRequestContext, APIResponse, Browser, expect, Page, request, Response, test,
+  APIRequestContext, APIResponse, Browser, expect, Locator, Page, request, Response, test,
 } from '@playwright/test';
 
 import { loadBrowserConfig, verifyDeployedSha } from '../support/live18/config';
@@ -24,6 +24,8 @@ import {
 } from '../support/live18/session';
 import { runUiStep } from '../support/live18/uiDriver';
 import { waitForCapturedResponses } from '../../src/testing/live18ResponseSynchronization';
+import { captureLive18Screenshot } from './screenshotEvidence';
+import type { Live18ScreenshotEvidence } from './screenshotEvidence';
 
 const requiredLiveRun = process.env.LIVE18_REQUIRED === 'true';
 const matrix = loadReadyOperationMatrix();
@@ -275,6 +277,7 @@ async function runOperation(
       ...completedResources,
     };
     try {
+      const screenshotEvidence: Live18ScreenshotEvidence[] = [];
       await runSteps(
         requesterPage, reviewerPage, config.appOrigin, operationFixture.missing_required_steps,
         prePrepareRuntime, `${contract.id}.missing_required_steps`, progress,
@@ -305,6 +308,9 @@ async function runOperation(
       ).toEqual([]);
       missingRequiredHttpEvidence = captured.filter(item => item.method === 'POST'
         && item.path === preparePath && (item.status === 400 || item.status === 422));
+      screenshotEvidence.push(await captureLive18Screenshot(
+        requesterPage, config, contract.id, 'missing-required',
+      ));
       browserHealth.clear();
       captured.length = 0;
       await runSteps(
@@ -428,18 +434,25 @@ async function runOperation(
         `${contract.id} must show its operation-specific posted/readback state`,
       ).toBeVisible();
       const explicitResourceEvidence = requesterPage.getByTestId('canonical-posted-resource-id');
+      let postedResourceEvidence: Locator;
       if (await explicitResourceEvidence.count()) {
+        postedResourceEvidence = explicitResourceEvidence;
         await expect(
-          explicitResourceEvidence,
+          postedResourceEvidence,
           `${contract.id} must visibly identify the exact canonical resource it posted`,
         ).toBeVisible();
-        await expect(explicitResourceEvidence).toHaveText(resourceId);
+        await expect(postedResourceEvidence).toHaveText(resourceId);
       } else {
+        postedResourceEvidence = requesterPage.getByText(resourceId, { exact: false });
         await expect(
-          requesterPage.getByText(resourceId, { exact: false }),
+          postedResourceEvidence,
           `${contract.id} must visibly identify the exact canonical resource it posted`,
         ).toBeVisible();
       }
+      await postedResourceEvidence.scrollIntoViewIfNeeded();
+      screenshotEvidence.push(await captureLive18Screenshot(
+        requesterPage, config, contract.id, 'posted',
+      ));
 
       beginStage(progress, 'rest_readback');
       const readbackPath = resolveReadbackPath(contract, commandId, resourceId);
@@ -481,6 +494,7 @@ async function runOperation(
         self_approval_probe: selfApprovalProbe,
         missing_required_http_evidence: missingRequiredHttpEvidence,
         http_evidence: [...missingRequiredHttpEvidence, ...captured],
+        screenshots: screenshotEvidence,
         cleanup_id: findDeep(executions[0].responseBody, 'reversal_command_id') || null,
       };
       const root = evidenceRoot();

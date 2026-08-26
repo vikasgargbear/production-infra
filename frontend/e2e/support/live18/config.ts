@@ -2,6 +2,7 @@ import { expect, request } from '@playwright/test';
 
 const SHA = /^[0-9a-f]{40}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const CANONICAL_STAGING_PROJECT_REF = 'rgihahbmkrmhitjdjvev';
 
 const required = (name: string): string => {
   const value = process.env[name]?.trim();
@@ -40,6 +41,8 @@ export interface Live18BrowserConfig {
   reviewer: { email: string; password: string };
   denialAccessToken: string;
   runToken: string;
+  targetKind: 'disposable_test';
+  stagingProjectRef: typeof CANONICAL_STAGING_PROJECT_REF;
 }
 
 export function loadBrowserConfig(): Live18BrowserConfig {
@@ -73,6 +76,14 @@ export function loadBrowserConfig(): Live18BrowserConfig {
     password: required('LIVE18_REVIEWER_PASSWORD'),
   };
   if (requester.email === reviewer.email) throw new Error('Requester and reviewer must be distinct users.');
+  const targetKind = required('PHARMA_CANONICAL_LIVE_TARGET_KIND');
+  if (targetKind !== 'disposable_test') {
+    throw new Error('Live18 browser evidence is restricted to target kind disposable_test.');
+  }
+  const stagingProjectRef = required('CANONICAL_STAGING_PROJECT_REF');
+  if (stagingProjectRef !== CANONICAL_STAGING_PROJECT_REF) {
+    throw new Error('Live18 browser evidence is restricted to the exact canonical staging project.');
+  }
   const runToken = required('LIVE18_RUN_TOKEN');
   if (!/^[0-9]{1,20}-[0-9]{1,5}$/.test(runToken) || runToken.length > 26) {
     throw new Error('LIVE18_RUN_TOKEN must be the bounded GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT value.');
@@ -89,6 +100,8 @@ export function loadBrowserConfig(): Live18BrowserConfig {
     reviewer,
     denialAccessToken: required('LIVE18_DENIAL_ACCESS_TOKEN'),
     runToken,
+    targetKind,
+    stagingProjectRef,
   };
 }
 

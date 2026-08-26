@@ -13,6 +13,31 @@ import {
 import { buildOperationFailureEvidence } from './failureEvidence.ts';
 import { isExpectedSessionExchange } from './session.ts';
 
+test('reviewed screenshots stay manual, runner-local, and credential guarded', () => {
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const boundary = fs.readFileSync(path.join(
+    repositoryRoot, 'frontend/e2e/live18/screenshotEvidence.ts',
+  ), 'utf8');
+  const spec = fs.readFileSync(path.join(
+    repositoryRoot, 'frontend/e2e/live18/canonical-live18.spec.ts',
+  ), 'utf8');
+  const config = fs.readFileSync(path.join(
+    repositoryRoot, 'frontend/e2e/support/live18/config.ts',
+  ), 'utf8');
+  assert.match(boundary, /LIVE18_PLAYWRIGHT_ARTIFACT_DIR/);
+  assert.match(boundary, /path\.isAbsolute\(configuredRoot\)/);
+  assert.match(boundary, /input\[type="password"\]:visible/);
+  assert.match(boundary, /page\.screenshot\(/);
+  assert.match(boundary, /mode: 0o700/);
+  assert.match(boundary, /chmodSync\(destination, 0o600\)/);
+  assert.match(config, /targetKind !== 'disposable_test'/);
+  assert.match(config, /rgihahbmkrmhitjdjvev/);
+  assert.equal((spec.match(/captureLive18Screenshot\(/g) || []).length, 2);
+  assert.match(spec, /'missing-required'/);
+  assert.match(spec, /'posted'/);
+  assert.doesNotMatch(spec, /testInfo\.attach|page\.screenshot/);
+});
+
 test('session bootstrap accepts only the exact reviewed API origin', () => {
   assert.equal(isExpectedSessionExchange(
     'https://api.railway.example/api/auth/oauth/supabase/session',

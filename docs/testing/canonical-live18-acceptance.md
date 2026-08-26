@@ -32,8 +32,9 @@ A run is not live evidence unless all of the following are true:
    reconciliation. Missing authority fails the operation; it is never skipped
    and promoted to a pass.
 6. Evidence retains command/resource UUIDs, preview hash, actor identities,
-   HTTP request IDs, screenshots, exact financial/tax/stock assertions, and a
-   supported reversal or cleanup identifier where one exists.
+   HTTP request IDs, exact financial/tax/stock assertions, and a supported
+   reversal or cleanup identifier where one exists. Each operation also
+   produces two reviewed screenshot commitments as described below.
 
 At the checked-in base, all 18 business operations map to 17 published canonical
 prepare commands. Customer credit note and supplier debit note are two bounded
@@ -64,6 +65,26 @@ unavailable tokens fail fixture loading or execution.
 Every non-test-ID selector is an exact accessible locator, and every action
 must resolve exactly one element before it can run. Search results and dynamic
 rows use canonical-ID test IDs rather than display-name substring matches.
+
+### Privacy-safe screenshot boundary
+
+Each successful operation captures exactly two viewport PNGs: one after its
+visible missing-required validation and one after the UI visibly shows the
+posted canonical resource UUID. Across Live18 this is exactly 36 screenshots.
+Capture is allowed only when `PHARMA_CANONICAL_LIVE_TARGET_KIND` is
+`disposable_test`, `CANONICAL_STAGING_PROJECT_REF` is the exact reviewed
+canonical staging project, and `LIVE18_PLAYWRIGHT_ARTIFACT_DIR` is an absolute
+runner-temporary directory. A login/password form, sign-in screen, visibly
+rendered test credential or token, foreign application origin, or path outside
+that directory fails capture closed.
+
+The PNGs remain runner-local with owner-only permissions under
+`$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots`; they are never uploaded. The
+fixed-schema public manifest retains only each stage/filename, dimensions,
+byte count, and SHA-256 commitment after re-reading and verifying the
+runner-local file. Automatic Playwright screenshots, traces, videos, and HTML
+reports remain disabled so an unexpected authenticated failure cannot create
+an unreviewed rich artifact.
 
 Expense-claim certification additionally requires one externally reviewed
 synthetic PDF receipt. Canonical staging materializes it only from the protected

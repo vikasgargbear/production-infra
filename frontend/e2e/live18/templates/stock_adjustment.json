@@ -6,8 +6,8 @@
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/stock-management/stock-adjustment"},
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{fact.clock.business_date}}","exact":true},"value":"{{fact.clock.business_date}}"},
-      {"actor":"requester","action":"press","locator":{"kind":"role","role":"heading","name":"Adjustment Details","exact":true},"value":"Control+s"},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Enter the exact physical count time as canonical UTC: YYYY-MM-DDTHH:mm:ss.sssZ.","exact":true},"value":"Enter the exact physical count time as canonical UTC: YYYY-MM-DDTHH:mm:ss.sssZ."}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time.","exact":true},"value":"Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/stock-management/stock-adjustment"},

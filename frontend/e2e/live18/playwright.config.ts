@@ -18,8 +18,9 @@ export default defineConfig({
   reporter: [['line']],
   use: {
     ...devices['Desktop Chrome'],
-    // Authenticated traces, screenshots, and videos can contain session state or
-    // business data. Live18 publishes a separate fixed-schema evidence manifest.
+    // Unbounded automatic artifacts can contain session state or credentials.
+    // The spec captures only two reviewed, disposable-staging screenshots per
+    // operation through screenshotEvidence.ts and publishes hashes, not images.
     trace: 'off',
     screenshot: 'off',
     video: 'off',
