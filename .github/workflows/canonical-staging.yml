@@ -326,6 +326,17 @@ jobs:
           RESET ROLE;
           DROP EXTENSION IF EXISTS btree_gist;
           DROP TABLE IF EXISTS public.alembic_version;
+          DO $revoke_managed_schema_grants$
+          BEGIN
+            IF pg_catalog.to_regnamespace('extensions') IS NOT NULL
+               AND EXISTS (
+                 SELECT 1 FROM pg_catalog.pg_roles
+                  WHERE rolname = 'erp_migration_owner'
+               ) THEN
+              REVOKE USAGE ON SCHEMA extensions FROM erp_migration_owner;
+            END IF;
+          END
+          $revoke_managed_schema_grants$;
           DO $reset_canonical_roles$
           DECLARE
             role_name text;
