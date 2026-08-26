@@ -166,6 +166,21 @@ def test_sql_contract_uses_only_canonical_relations_and_exact_scope_predicates()
     assert "get_canonical_delegation" in source
 
 
+def test_sales_document_address_evidence_uses_hashed_immutable_request_bytes() -> None:
+    source = (
+        ROOT / "backend/app/api/routes/internal/mcp_canonical_resolution_reads.py"
+    ).read_text(encoding="utf-8")
+
+    assert "resolved_bytes" not in source
+    assert source.count("request.request_hash=pg_catalog.sha256(request.request_bytes)") == 2
+    assert source.count("request.request_bytes,'UTF8'") == 2
+    assert source.count("request_document->>'delivery_address_id'") == 3
+    assert source.count("request_document->>'delivery_address_row_version'") == 4
+    assert "document.shipping_address_id::text" in source
+    assert "request.operation='sales.order.approve'" in source
+    assert "request.operation='sales.invoice.post'" in source
+
+
 def test_customer_search_signals_ambiguous_exact_matches_without_guessing():
     customer_rows = [
         _row(

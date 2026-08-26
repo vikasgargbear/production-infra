@@ -752,20 +752,34 @@ def canonical_sales_order_get(
             SELECT document.id AS sales_order_id, document.branch_id,
                    document.customer_account_id,
                    document.shipping_address_id AS delivery_address_id,
-                   (command.resolution->>'shipping_address_row_version')::bigint
+                   (command.request_document->>'delivery_address_row_version')::bigint
                      AS delivery_address_row_version,
                    order_number, fiscal_year, order_date, status, currency_code,
                    grand_total, calculation_ruleset_version, row_version
               FROM sales.orders document
               JOIN LATERAL (
-                  SELECT pg_catalog.convert_from(request.resolved_bytes,'UTF8')::jsonb
-                           AS resolution
+                  SELECT evidence.request_document
                     FROM automation.command_requests request
+                    CROSS JOIN LATERAL (
+                      SELECT pg_catalog.convert_from(
+                        request.request_bytes,'UTF8'
+                      )::jsonb AS request_document
+                    ) evidence
                    WHERE request.org_id=document.org_id
+                     AND request.branch_id=document.branch_id
                      AND request.target_resource_type='sales_order'
                      AND request.target_resource_id=document.id
                      AND request.capability_code='sales.order.prepare'
+                     AND request.operation='sales.order.approve'
                      AND request.status='succeeded'
+                     AND request.result_resource_type='sales_order'
+                     AND request.result_resource_id=document.id
+                     AND request.response_status=200
+                     AND request.request_hash=pg_catalog.sha256(request.request_bytes)
+                     AND evidence.request_document->>'delivery_address_id'=
+                           document.shipping_address_id::text
+                     AND evidence.request_document->>'delivery_address_row_version'
+                           ~ '^[1-9][0-9]{0,18}$'
                    ORDER BY request.completed_at DESC,request.id DESC LIMIT 1
               ) command ON true
              WHERE document.org_id=:org_id AND document.branch_id=:branch_id
@@ -849,9 +863,9 @@ def canonical_sales_invoice_get(
             """
             SELECT document.id AS sales_invoice_id, document.branch_id,
                    document.customer_account_id,
-                   (command.resolution->>'shipping_address_id')::uuid
+                   (command.request_document->>'delivery_address_id')::uuid
                      AS delivery_address_id,
-                   (command.resolution->>'shipping_address_row_version')::bigint
+                   (command.request_document->>'delivery_address_row_version')::bigint
                      AS delivery_address_row_version,
                    seller_tax_registration_id, customer_tax_registration_id,
                    invoice_number, fiscal_year, invoice_date, due_date, invoice_type,
@@ -859,14 +873,28 @@ def canonical_sales_invoice_get(
                    calculation_ruleset_version, posted_at, row_version
               FROM sales.invoices document
               JOIN LATERAL (
-                  SELECT pg_catalog.convert_from(request.resolved_bytes,'UTF8')::jsonb
-                           AS resolution
+                  SELECT evidence.request_document
                     FROM automation.command_requests request
+                    CROSS JOIN LATERAL (
+                      SELECT pg_catalog.convert_from(
+                        request.request_bytes,'UTF8'
+                      )::jsonb AS request_document
+                    ) evidence
                    WHERE request.org_id=document.org_id
+                     AND request.branch_id=document.branch_id
                      AND request.target_resource_type='sales_invoice'
                      AND request.target_resource_id=document.id
                      AND request.capability_code='sales.invoice.prepare'
+                     AND request.operation='sales.invoice.post'
                      AND request.status='succeeded'
+                     AND request.result_resource_type='sales_invoice'
+                     AND request.result_resource_id=document.id
+                     AND request.response_status=200
+                     AND request.request_hash=pg_catalog.sha256(request.request_bytes)
+                     AND evidence.request_document->>'delivery_address_id'
+                           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+                     AND evidence.request_document->>'delivery_address_row_version'
+                           ~ '^[1-9][0-9]{0,18}$'
                    ORDER BY request.completed_at DESC,request.id DESC LIMIT 1
               ) command ON true
              WHERE document.org_id=:org_id AND document.branch_id=:branch_id
