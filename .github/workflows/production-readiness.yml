@@ -598,6 +598,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies for mounted-route authority analysis
+        run: pip install -r backend/requirements.txt
       - name: Require one classified canonical database migration authority
         run: python backend/scripts/schema_readiness.py --validate-authority
       - name: Require canonical topology and application ownership contracts

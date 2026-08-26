@@ -19,6 +19,34 @@
       "role": "hash-bound-canonical-production-migration-authority"
     }
   ],
+  "source_reachability": {
+    "analyzer": "canonical_alembic_source_graph_and_mounted_callable_relation_graph",
+    "current_sources": [
+      "backend/alembic"
+    ],
+    "unreachable_sources": [
+      "database/02-tables",
+      "database/09-deployment/01_deploy_to_supabase.sql",
+      "database/canonical/commands_tax_provider/tax-provider-commands.sql",
+      "database/canonical/ci/bootstrap_supabase_auth.sql",
+      "database/canonical/platform/trigger-foundations.sql",
+      "backend/migrations/add_gstr2b_tables.sql",
+      "backend/migrations/payroll_schema.sql",
+      "database/04-triggers/10_pricing_triggers.sql",
+      "database/05-functions/04_procurement_functions.sql",
+      "database/05-functions/05_gst_functions.sql",
+      "database/05-functions/06_compliance_functions.sql",
+      "database/05-functions/08_system_functions.sql",
+      "database/MASTER_DATABASE_FIXES.sql",
+      "database/migrations/add_payment_allocations.sql",
+      "database/migrations/create_number_sequences.sql",
+      "database/migrations/migrate_credit_debit_notes_to_financial.sql",
+      "database/tables/credit_debit_notes.sql",
+      "backend/migrations/versions/20260108_critical_indexes.py",
+      "backend/migrations/versions/20260108_p2_indexes.py"
+    ],
+    "reachable_competing_source_count": 0
+  },
   "legacy_deployment_plan": {
     "path": "database/09-deployment/01_deploy_to_supabase.sql",
     "classification": "retire",

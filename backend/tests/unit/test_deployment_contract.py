@@ -928,6 +928,7 @@ def test_production_blockers_target_canonical_promotion_not_retired_bootstrap():
     )[0]
 
     for required in (
+        "pip install -r backend/requirements.txt",
         "schema_readiness.py --validate-authority",
         "validate_canonical_model.py",
         "check_canonical_artifacts.py",
@@ -940,6 +941,10 @@ def test_production_blockers_target_canonical_promotion_not_retired_bootstrap():
         "test_implementation_audit.py",
     ):
         assert required in job
+
+    assert job.index("pip install -r backend/requirements.txt") < job.index(
+        "schema_readiness.py --validate-authority"
+    )
 
     for legacy_diagnostic in (
         "audit_schema.py",

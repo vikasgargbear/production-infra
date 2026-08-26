@@ -45,10 +45,14 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Stop-ship gates
 
-1. `schema_readiness.py` reports an unbaselined database and 149 blockers.
-   Competing DDL/migration sources and all 37 legacy deploy includes are now
-   classified; the deploy entrypoint fails closed until a live baseline exists.
-   Missing RLS or `FORCE RLS` coverage and authority conflicts remain.
+1. `schema_readiness.py` previously reported roughly 151 legacy-oriented
+   blockers because its default RLS audit treated `database/02-tables` as the
+   target after that source had already been classified legacy-bootstrap-only.
+   Readiness now derives from the hash-bound canonical model and Alembic chain,
+   while a mounted-callable/source-graph contract keeps every unclassified or
+   reachable competing source fail-closed. Production remains blocked by the
+   explicit non-ready state, missing reviewed transaction-integrity evidence,
+   and the canonical Alembic `FORCE RLS` findings reported by the current gate.
 2. `audit_schema.py` finds 36 application/query mismatches across 15 files. The
    checked-in schema documentation describes only 40 sales/master tables;
    finance, inventory, parties, and procurement documentation is incomplete.
