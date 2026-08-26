@@ -1,5 +1,5 @@
 /* eslint-disable jest/valid-expect, jest/valid-title, jest/no-conditional-expect, testing-library/prefer-screen-queries */
-import { expect, test } from '@playwright/test';
+import { expect, Locator, Page, Request, test } from '@playwright/test';
 import {
   assertNoVisibleFailure,
   authorizedJsonGet,
@@ -18,6 +18,43 @@ const liveEmail = process.env.PLAYWRIGHT_LIVE_EMAIL || '';
 const livePassword = process.env.PLAYWRIGHT_LIVE_PASSWORD || '';
 const liveConfigured = /^https:\/\//.test(liveBaseURL) && Boolean(liveEmail && livePassword);
 const writesEnabled = process.env.PLAYWRIGHT_LIVE_WRITES === 'true';
+const canonicalUuidSource = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const canonicalUuidPattern = new RegExp(`^${canonicalUuidSource}$`, 'i');
+
+type MasterKind = 'customer' | 'supplier' | 'product';
+
+const masterCreatePath = (kind: MasterKind): RegExp => new RegExp(
+  `^/api/${kind === 'product' ? 'products' : `${kind}s`}/?$`,
+);
+
+const isMasterCreateRequest = (request: Request, kind: MasterKind): boolean => (
+  request.method() === 'POST' && masterCreatePath(kind).test(new URL(request.url()).pathname)
+);
+
+const expectMasterCreateRequest = (request: Request, kind: MasterKind): void => {
+  const body = request.postDataJSON();
+  expect(body).not.toHaveProperty(`${kind}_code`);
+  expect(request.headers()['x-idempotency-key']).toMatch(new RegExp(
+    `^erp-web-master-${kind}-create:${canonicalUuidSource}$`,
+    'i',
+  ));
+};
+
+const doubleClickInOneBrowserTurn = async (button: Locator): Promise<void> => {
+  await button.evaluate((element: HTMLButtonElement) => {
+    element.click();
+    element.click();
+  });
+};
+
+const chooseCanonicalState = async (page: Page): Promise<void> => {
+  const select = page.getByLabel('GST state code (2 digits) *', { exact: true });
+  const option = select.locator('option').filter({ hasText: 'Maharashtra' });
+  await expect(option).toHaveCount(1);
+  const stateCode = await option.getAttribute('value');
+  expect(stateCode).toMatch(/^\d{2}$/);
+  await select.selectOption(stateCode!);
+};
 
 test.describe('live ERP pilot', () => {
   test.use({ baseURL: liveBaseURL || 'https://live-target-required.invalid' });
@@ -322,60 +359,156 @@ test.describe('live ERP pilot', () => {
   test('writes and reads back uniquely labeled pilot master data', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-chrome', 'Business writes run once in the desktop project.');
     test.skip(!writesEnabled, 'Set PLAYWRIGHT_LIVE_WRITES=true for the approved disposable pilot org.');
+    test.setTimeout(180_000);
     const failures = collectBrowserFailures(page);
     const suffix = `${Date.now()}`.slice(-8);
     const productName = `E2E Browser Product ${suffix}`;
     const customerName = `E2E Browser Customer ${suffix}`;
     const supplierName = `E2E Browser Supplier ${suffix}`;
-
-    await openHomeAction(page, 'Master Management');
-    await chooseHubModule(page, 'Master', 'Products');
-    await page.getByRole('button', { name: 'New draft' }).click();
-    await page.getByLabel('Product name').fill(productName);
-    const productWrite = await expectSuccessfulWrite(page, /\/api\/products\/?(?:\?|$)/, async () => {
-      await page.getByRole('button', { name: 'Save draft' }).click();
+    const masterPosts: Record<MasterKind, Request[]> = {
+      customer: [],
+      supplier: [],
+      product: [],
+    };
+    page.on('request', request => {
+      (Object.keys(masterPosts) as MasterKind[]).forEach(kind => {
+        if (isMasterCreateRequest(request, kind)) masterPosts[kind].push(request);
+      });
     });
+
+    // Create the customer through the invoice's real inline flow. The invalid
+    // attempt must visibly fail before any write request is emitted.
+    await openHomeAction(page, 'Sales');
+    await chooseHubModule(page, 'Sales', 'Create Invoice');
+    await page.getByRole('button', { name: 'Create Customer', exact: true }).click();
+    await expect(page.getByText('Internal customer code is generated automatically after saving.')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /customer code/i })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save Customer', exact: true }).first().click();
+    await expect(page.getByText('Customer name is required', { exact: true })).toBeVisible();
+    await expect(page.getByText('Credit limit is required; enter 0 for no credit', { exact: true })).toBeVisible();
+    expect(masterPosts.customer).toHaveLength(0);
+
+    await page.getByPlaceholder('Company name').fill(customerName);
+    await page.getByPlaceholder('10-digit').first().fill(`90${suffix}`);
+    await page.getByPlaceholder('Building, street address').fill('E2E Test Lane 1');
+    await page.getByPlaceholder('City').fill('Mumbai');
+    await chooseCanonicalState(page);
+    await page.getByPlaceholder('6-digit').fill('400001');
+    await page.getByPlaceholder('5000').fill('0');
+    await page.getByText('Credit Days', { exact: true }).locator('..').getByRole('spinbutton').fill('0');
+    const customerWrite = await expectSuccessfulWrite(page, /\/api\/customers\/?(?:\?|$)/, async () => {
+      await doubleClickInOneBrowserTurn(page.getByRole('button', { name: 'Save Customer', exact: true }).first());
+    });
+    await expect.poll(() => masterPosts.customer.length).toBe(1);
+    await page.waitForTimeout(300);
+    expect(masterPosts.customer).toHaveLength(1);
+    expectMasterCreateRequest(customerWrite.request(), 'customer');
+    const customerCreated = await customerWrite.json();
+    expect(String(customerCreated.customer_id)).toMatch(canonicalUuidPattern);
+    expect(String(customerCreated.party_id)).toMatch(canonicalUuidPattern);
+    expect(String(customerCreated.customer_code).trim()).not.toBe('');
+    expect(customerCreated.customer_name).toBe(customerName);
+    expect(customerCreated.status).toBe('active');
+    await expect(page.getByText(`Customer ${customerCreated.customer_code} created successfully.`, { exact: true })).toBeVisible();
+    await expect(page.getByText(customerName, { exact: true })).toBeVisible();
+
+    // Create a draft product through the invoice's inline flow. The returned
+    // draft must not be silently added to a saleable invoice line.
+    await page.getByRole('button', { name: 'Create Product', exact: true }).click();
+    await expect(page.getByText('Internal product code is generated automatically after saving.')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /product code/i })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByText(/String must contain at least 1 character/)).toBeVisible();
+    expect(masterPosts.product).toHaveLength(0);
+    await page.getByLabel('Product name').fill(productName);
+    await page.getByLabel('Product kind').selectOption('consumable');
+    const productWrite = await expectSuccessfulWrite(page, /\/api\/products\/?(?:\?|$)/, async () => {
+      await doubleClickInOneBrowserTurn(page.getByRole('button', { name: 'Save draft', exact: true }));
+    });
+    await expect.poll(() => masterPosts.product.length).toBe(1);
+    await page.waitForTimeout(300);
+    expect(masterPosts.product).toHaveLength(1);
+    expectMasterCreateRequest(productWrite.request(), 'product');
     const productCreated = await productWrite.json();
-    expect(String(productCreated.product_id)).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(String(productCreated.product_id)).toMatch(canonicalUuidPattern);
+    expect(String(productCreated.product_code).trim()).not.toBe('');
     expect(productCreated.product_name).toBe(productName);
     expect(productCreated.lifecycle_status).toBe('draft');
-    await page.getByPlaceholder('Search products').fill(productName);
-    await expect(page.getByRole('cell', { name: productName, exact: true })).toBeVisible();
-    const productRows = await authorizedJsonGet(
+    await expect(page.getByText(
+      `Product ${productCreated.product_code} created as a draft. Classification and activation are required before use.`,
+      { exact: true },
+    )).toBeVisible();
+    await expect(page.getByText('INVOICE ITEMS', { exact: true })).toHaveCount(0);
+
+    // Create the supplier through the purchase-order inline flow and prove the
+    // exact returned entity becomes the selected supplier.
+    await returnHome(page);
+    await openHomeAction(page, 'Purchase Entry');
+    await chooseHubModule(page, 'Purchase', 'Order');
+    await page.getByRole('button', { name: 'Create Supplier', exact: true }).click();
+    await expect(page.getByText('Internal supplier code is generated automatically after saving.')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /supplier code/i })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save Supplier', exact: true }).first().click();
+    await expect(page.getByText('Supplier name is required', { exact: true })).toBeVisible();
+    await expect(page.getByText('Payment days are required', { exact: true })).toBeVisible();
+    expect(masterPosts.supplier).toHaveLength(0);
+    await page.getByPlaceholder('e.g., ABC Pharmaceuticals').fill(supplierName);
+    await page.getByPlaceholder('Business phone').fill(`91${suffix}`);
+    await page.getByLabel('Building / Street Address *', { exact: true }).fill('E2E Supplier Lane 1');
+    await page.getByLabel('City *', { exact: true }).fill('Mumbai');
+    await chooseCanonicalState(page);
+    await page.getByLabel('Pincode *', { exact: true }).fill('400001');
+    await page.getByPlaceholder('Enter 0–180').fill('0');
+    const supplierWrite = await expectSuccessfulWrite(page, /\/api\/suppliers\/?(?:\?|$)/, async () => {
+      await doubleClickInOneBrowserTurn(page.getByRole('button', { name: 'Save Supplier', exact: true }).first());
+    });
+    await expect.poll(() => masterPosts.supplier.length).toBe(1);
+    await page.waitForTimeout(300);
+    expect(masterPosts.supplier).toHaveLength(1);
+    expectMasterCreateRequest(supplierWrite.request(), 'supplier');
+    const supplierCreated = await supplierWrite.json();
+    expect(String(supplierCreated.supplier_id)).toMatch(canonicalUuidPattern);
+    expect(String(supplierCreated.party_id)).toMatch(canonicalUuidPattern);
+    expect(String(supplierCreated.supplier_code).trim()).not.toBe('');
+    expect(supplierCreated.supplier_name).toBe(supplierName);
+    expect(supplierCreated.status).toBe('active');
+    await expect(page.getByText(`Supplier ${supplierCreated.supplier_code} created successfully.`, { exact: true })).toBeVisible();
+    await expect(page.getByText(supplierName, { exact: true })).toBeVisible();
+
+    // Search each canonical master by its server-generated code, then bind the
+    // visible row to the same UUID/code returned by its authoritative read API.
+    await returnHome(page);
+    await openHomeAction(page, 'Master Management');
+    await chooseHubModule(page, 'Master', 'Products');
+    await page.getByPlaceholder('Search products').fill(productCreated.product_code);
+    const productRow = page.getByRole('row').filter({ hasText: productName });
+    await expect(productRow).toContainText(productCreated.product_code);
+    const productReadback = await authorizedJsonGet(
       page,
       productWrite,
-      `/products?include_inactive=true&search=${encodeURIComponent(productName)}`,
+      `/products?include_inactive=true&search=${encodeURIComponent(productCreated.product_code)}`,
     );
-    expect(productRows).toHaveLength(1);
-    expect(productRows[0]).toEqual(expect.objectContaining({
+    expect(productReadback.products).toHaveLength(1);
+    expect(productReadback.products[0]).toEqual(expect.objectContaining({
       product_id: productCreated.product_id,
       product_name: productName,
       product_code: productCreated.product_code,
       status: 'draft',
       is_active: false,
     }));
+    await productRow.getByRole('button', { name: `Edit draft ${productName}`, exact: true }).click();
+    await expect(page.getByLabel('Immutable product code')).toHaveText(productCreated.product_code);
+    await expect(page.getByRole('textbox', { name: 'Product code', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close product form', exact: true }).click();
 
     await chooseHubModule(page, 'Master', 'Customers');
-    await page.getByRole('button', { name: 'Add Customer' }).click();
-    await page.getByPlaceholder('Company name').fill(customerName);
-    await page.getByPlaceholder('10-digit').first().fill(`90${suffix}`);
-    await page.getByPlaceholder('Building, street address').fill('E2E Test Lane 1');
-    await page.getByPlaceholder('City').fill('Mumbai');
-    await page.locator('select').filter({ hasText: 'Maharashtra' }).selectOption('Maharashtra');
-    await page.getByPlaceholder('6-digit').fill('400001');
-    const customerWrite = await expectSuccessfulWrite(page, /\/api\/customers\/?(?:\?|$)/, async () => {
-      await page.getByRole('button', { name: 'Save Customer', exact: true }).first().click();
-    });
-    const customerCreated = await customerWrite.json();
-    expect(String(customerCreated.customer_id)).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(customerCreated.customer_name).toBe(customerName);
-    expect(customerCreated.status).toBe('active');
-    await page.getByPlaceholder(/Search customers/).fill(customerName);
-    await expect(page.getByText(customerName, { exact: true })).toBeVisible();
+    await page.getByPlaceholder(/Search customers/).fill(customerCreated.customer_code);
+    const customerRow = page.getByRole('row').filter({ hasText: customerName });
+    await expect(customerRow).toContainText(customerCreated.customer_code);
     const customerReadback = await authorizedJsonGet(
       page,
       customerWrite,
-      `/customers?search=${encodeURIComponent(customerName)}`,
+      `/customers?search=${encodeURIComponent(customerCreated.customer_code)}`,
     );
     expect(customerReadback.customers).toHaveLength(1);
     expect(customerReadback.customers[0]).toEqual(expect.objectContaining({
@@ -388,26 +521,13 @@ test.describe('live ERP pilot', () => {
     }));
 
     await chooseHubModule(page, 'Master', 'Suppliers');
-    await page.getByRole('button', { name: 'Add Supplier' }).click();
-    await page.getByPlaceholder('e.g., ABC Pharmaceuticals').fill(supplierName);
-    await page.getByPlaceholder('Business phone').fill(`91${suffix}`);
-    await page.getByPlaceholder('Building, street address').fill('E2E Supplier Lane 1');
-    await page.getByPlaceholder('City').fill('Mumbai');
-    await page.locator('select').filter({ hasText: 'Maharashtra' }).selectOption('Maharashtra');
-    await page.getByPlaceholder('6-digit').fill('400001');
-    const supplierWrite = await expectSuccessfulWrite(page, /\/api\/suppliers\/?(?:\?|$)/, async () => {
-      await page.getByRole('button', { name: 'Save Supplier', exact: true }).first().click();
-    });
-    const supplierCreated = await supplierWrite.json();
-    expect(String(supplierCreated.supplier_id)).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(supplierCreated.supplier_name).toBe(supplierName);
-    expect(supplierCreated.status).toBe('active');
-    await page.getByPlaceholder(/Search suppliers/).fill(supplierName);
-    await expect(page.getByText(supplierName, { exact: true })).toBeVisible();
+    await page.getByPlaceholder(/Search suppliers/).fill(supplierCreated.supplier_code);
+    const supplierRow = page.getByRole('row').filter({ hasText: supplierName });
+    await expect(supplierRow).toContainText(supplierCreated.supplier_code);
     const supplierRows = await authorizedJsonGet(
       page,
       supplierWrite,
-      `/suppliers?search=${encodeURIComponent(supplierName)}`,
+      `/suppliers?search=${encodeURIComponent(supplierCreated.supplier_code)}`,
     );
     expect(supplierRows).toHaveLength(1);
     expect(supplierRows[0]).toEqual(expect.objectContaining({
@@ -419,12 +539,17 @@ test.describe('live ERP pilot', () => {
       is_active: true,
     }));
 
+    await testInfo.attach('master-generated-code-readback.png', {
+      body: await page.screenshot({ fullPage: false }),
+      contentType: 'image/png',
+    });
+
     await testInfo.attach('master-create-authoritative-readback.json', {
       contentType: 'application/json',
       body: JSON.stringify({
-        product_id: productCreated.product_id,
-        customer_id: customerCreated.customer_id,
-        supplier_id: supplierCreated.supplier_id,
+        product: { id: productCreated.product_id, code: productCreated.product_code },
+        customer: { id: customerCreated.customer_id, party_id: customerCreated.party_id, code: customerCreated.customer_code },
+        supplier: { id: supplierCreated.supplier_id, party_id: supplierCreated.party_id, code: supplierCreated.supplier_code },
       }, null, 2),
     });
 
