@@ -74,4 +74,5 @@ These checks are meant to answer:
 2. Run the finance/GST audit queries against the production-like database.
 3. Decide whether GST dashboards are branch-scoped or org-scoped and enforce that consistently.
 4. Finish migration off deprecated note/allocation tables and compatibility views.
-5. Record the audit results and exact pass/fail dates in `docs/backend/api/live-supabase-verification.md`.
+5. Bind the audit results and exact pass/fail timestamps into the exact-SHA
+   canonical application-promotion evidence artifact.

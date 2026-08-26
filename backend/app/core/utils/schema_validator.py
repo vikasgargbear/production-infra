@@ -1,17 +1,4 @@
-"""
-Schema Validator - Enforces Single Source of Truth from Database Schema Doc
-
-Prevents schema errors by validating SQL queries against the canonical schema.
-Fails fast in development to catch column name mismatches.
-
-Usage:
-    from app.core.utils.schema_validator import validate_query
-    
-    # This will throw if 'gstin' doesn't exist in parties.customers
-    validate_query('''
-        SELECT customer_name, gstin FROM parties.customers
-    ''')
-"""
+"""Static SQL validation against the checked-in canonical domain catalogs."""
 
 import hashlib
 import json
@@ -26,15 +13,8 @@ logger = logging.getLogger(__name__)
 _SCHEMA_CACHE: Optional[Dict[str, Set[str]]] = None
 
 
-def _default_schema_doc_paths() -> List[Path]:
-    """Return checked-in schema documents in deterministic order."""
-    repository_root = Path(__file__).resolve().parents[4]
-    schema_directory = repository_root / "docs" / "backend" / "database" / "schemas"
-    return sorted(schema_directory.glob("*.md"))
-
-
 def _default_canonical_domain_paths() -> List[Path]:
-    """Return canonical domain catalogs used during the legacy-read transition."""
+    """Return the sole reviewed static schema authority."""
     repository_root = Path(__file__).resolve().parents[4]
     return sorted((repository_root / "database" / "canonical" / "domains").glob("*.json"))
 
@@ -55,120 +35,31 @@ def _parse_canonical_domains(paths: Iterable[Path]) -> Dict[str, Set[str]]:
     return schema_map
 
 
-def _default_live_evidence_path() -> Path:
-    repository_root = Path(__file__).resolve().parents[4]
-    return repository_root / "database" / "live-schema-evidence.json"
-
-
-def _load_live_verified_columns(path: Optional[Path] = None) -> Dict[str, Set[str]]:
-    """Load the deliberately narrow query contract proven by a live capture."""
-    evidence_path = path or _default_live_evidence_path()
-    if not evidence_path.is_file():
-        return {}
-
-    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-    if evidence.get("evidence_state") != "captured_not_baselined":
-        raise ValueError("Live schema evidence must remain captured_not_baselined")
-
-    for hash_field in ("artifact_sha256", "capture_sql_sha256"):
-        value = evidence.get(hash_field, "")
-        if not re.fullmatch(r"[0-9a-f]{64}", value):
-            raise ValueError(f"Live schema evidence has invalid {hash_field}")
-
-    verified = evidence.get("query_contract_verification", {}).get("verified_columns")
-    if not isinstance(verified, dict):
-        raise ValueError("Live schema evidence has no verified_columns mapping")
-
-    schema_map: Dict[str, Set[str]] = {}
-    qualified_table = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
-    identifier = re.compile(r"^[A-Za-z_]\w*$")
-    for table, columns in verified.items():
-        if not qualified_table.fullmatch(table) or not isinstance(columns, list):
-            raise ValueError("Live schema evidence contains an invalid table contract")
-        if not columns or any(
-            not isinstance(column, str) or not identifier.fullmatch(column)
-            for column in columns
-        ):
-            raise ValueError(f"Live schema evidence contains invalid columns for {table}")
-        schema_map[table] = set(columns)
-
-    return schema_map
-
-
-def _parse_schema_docs(paths: Iterable[Path]) -> Dict[str, Set[str]]:
-    """Parse schema-qualified Markdown table headings and their column tables."""
-    schema_map: Dict[str, Set[str]] = {}
-    table_heading = re.compile(r"^###\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*$")
-
-    for schema_path in paths:
-        current_table = None
-
-        with schema_path.open("r", encoding="utf-8") as schema_file:
-            for raw_line in schema_file:
-                line = raw_line.strip()
-                heading_match = table_heading.match(line)
-                if heading_match:
-                    current_table = heading_match.group(1)
-                    schema_map.setdefault(current_table, set())
-                    continue
-
-                if line.startswith("### ") or line.startswith("---"):
-                    current_table = None
-                    continue
-
-                if current_table is None or not line.startswith("|"):
-                    continue
-
-                parts = [part.strip() for part in line.split("|")]
-                if len(parts) < 3:
-                    continue
-
-                column_name = parts[1].strip("`")
-                if (
-                    not column_name
-                    or column_name.lower() in {"column", "field"}
-                    or set(column_name) <= {"-", ":"}
-                ):
-                    continue
-
-                schema_map[current_table].add(column_name)
-
-    return {table: columns for table, columns in schema_map.items() if columns}
-
-
 def parse_schema_doc(required: bool = False) -> Dict[str, Set[str]]:
-    """
-    Parse the 07-DATABASE-SCHEMA.md file to extract all table columns.
-    
-    Returns:
-        Dict mapping "schema.table" -> Set of valid column names
-    """
+    """Load canonical domain catalogs as ``schema.table -> columns``."""
     global _SCHEMA_CACHE
     
     if _SCHEMA_CACHE is not None:
         return _SCHEMA_CACHE
     
-    schema_paths = _default_schema_doc_paths()
-    if not schema_paths:
-        message = "No schema documentation found under docs/backend/database/schemas"
+    domain_paths = _default_canonical_domain_paths()
+    if not domain_paths:
+        message = "No canonical domain catalogs found under database/canonical/domains"
         if required:
             raise FileNotFoundError(message)
         logger.warning("%s. Skipping validation.", message)
         return {}
 
-    schema_map = _parse_schema_docs(schema_paths)
+    schema_map = _parse_canonical_domains(domain_paths)
     if not schema_map:
-        message = "Schema documentation contains no usable table definitions"
+        message = "Canonical domain catalogs contain no usable table definitions"
         if required:
             raise ValueError(message)
         logger.warning("%s. Skipping validation.", message)
         return {}
 
-    for table, columns in _load_live_verified_columns().items():
-        schema_map.setdefault(table, set()).update(columns)
-    
     _SCHEMA_CACHE = schema_map
-    logger.info("Parsed schema docs: %s tables", len(schema_map))
+    logger.info("Parsed canonical domain catalogs: %s tables", len(schema_map))
     return schema_map
 
 
@@ -300,23 +191,7 @@ def validate_module(module_path: Path) -> Dict[str, any]:
         return {"error": f"File not found: {module_path}"}
     
     content = module_path.read_text()
-    schema_override = None
-    if (
-        module_path.name == "canonical_erp_reads.py"
-        or "CANONICAL_SCHEMA_CATALOGS = True" in content
-    ):
-        # Declared canonical routers read the reviewed domain catalogs. Keep
-        # legacy documentation only as a union while remaining route modules
-        # are retired. The declaration is explicit because some older modules
-        # named canonical_* still contain compatibility queries whose aliasing
-        # exceeds this static validator's parser.
-        schema_override = {
-            table: set(columns) for table, columns in parse_schema_doc().items()
-        }
-        for table, columns in _parse_canonical_domains(
-            _default_canonical_domain_paths()
-        ).items():
-            schema_override.setdefault(table, set()).update(columns)
+    schema_override = parse_schema_doc(required=True)
     
     # Extract SQL from text() calls and triple-quoted strings
     sql_pattern = r'(?:text\(["""\']{1,3}|["""\']{3})(.*?)(?:["""\']{1,3}\)|["""\']{3})'

@@ -11,7 +11,8 @@ claim.
 - `aasopharma-erp-pilot`: compiled React static site.
 - `aasopharma-mcp-pilot`: isolated Python 3.11 MCP source contract; readiness
   remains hard-failed by its OAuth consent and canonical-read gates.
-- Supabase project `jfrairkkzxwkhbtqejnz`: PostgreSQL and Supabase Auth.
+- A separately reviewed canonical PostgreSQL deployment and active Supabase Auth
+  project; neither may be the retired Supabase project.
 
 Do not create a Render database. Do not advertise `/mcp`; the transport source
 exists, but hosted OAuth consent and canonical read authorization are blocked.
@@ -36,7 +37,8 @@ Backend public configuration:
 
 - `CORS_ORIGINS`: exact Render frontend origin, without a wildcard.
 - `APP_URL`: the same frontend origin.
-- `SUPABASE_URL`: `https://jfrairkkzxwkhbtqejnz.supabase.co`.
+- `SUPABASE_URL`: exact active identity-provider origin from the reviewed
+  deployment evidence.
 - `SUPABASE_ANON_KEY`: Supabase publishable/anon key.
 - `SMTP_HOST` and `SMTP_PORT` when email is enabled.
 

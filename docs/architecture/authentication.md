@@ -8,7 +8,7 @@ login. The browser persists and refreshes the Supabase session through
 `POST /api/auth/oauth/supabase/session`; the ERP API verifies that token through
 Supabase `/auth/v1/user` and never accepts a browser-supplied email or user ID.
 
-The verified `auth.users.id` must match `master.org_users.auth_user_id`. The
+The verified `auth.users.id` must match `core.users.auth_user_id`. The
 exchange fails closed when the membership is absent, ambiguous, inactive, or
 has a different normalized email. It then issues a one-hour ERP access token
 containing the organization, branches, role, and permissions. Supabase
@@ -30,8 +30,8 @@ default tenant fallbacks, and email-only account linking are prohibited.
 
 The former ERP password endpoints `POST /api/auth/login` and
 `POST /api/auth/check-user` are retired. They had no frontend callers, exposed
-an OAuth2 password-flow contract that production rejected, and queried a
-`master.org_users.password_hash` column absent from the checked schema. Password
+an OAuth2 password-flow contract that production rejected, and queried retired
+password columns absent from the canonical schema. Password
 verification and recovery remain Supabase responsibilities.
 
 The supported ERP authentication endpoints are:
@@ -45,24 +45,16 @@ The supported ERP authentication endpoints are:
 OpenAPI advertises HTTP Bearer authentication only. It must not contain an
 OAuth2 password grant or a token URL pointing to the retired login endpoint.
 
-## Target Data Model
+## Canonical Data Model
 
-The live schema baseline must be reviewed before migrations are authored. The
-target separates these concepts:
+The canonical Alembic chain separates these concepts:
 
-- `user_accounts`: one immutable Supabase identity per human
-- `organization_memberships`: many organization memberships per identity
-- `membership_branches`: normalized branch grants per membership
-- `organization_invitations`: hashed token, inviter, role, expiry, status
-- `session_contexts`: explicit active organization and branch selection
+- `core.users`: one immutable cloud identity per human
+- `core.memberships`: organization memberships per identity
+- `core.access_grants`: explicit organization or branch role grants
+- `core.roles` and `core.role_permissions`: effective capability authority
 - `automation.agent_grants` and `automation.agent_grant_capabilities`:
   client-specific, expiring, revocable ERP capabilities
-
-The checked-in `master.org_users` currently combines identity and membership,
-uses a unique `auth_user_id`, and stores branch IDs as an array. That is usable
-for a single-organization pilot but cannot represent one user belonging to
-multiple organizations. Do not silently relax its uniqueness constraint or
-auto-link by email.
 
 ## Hosted MCP Consent
 
@@ -83,16 +75,13 @@ it cannot bypass current canonical grant disclosure.
 
 ## Operator Gates
 
-1. Capture project `jfrairkkzxwkhbtqejnz` with the fail-closed read-only command
-   in `docs/operations/supabase-live-schema-capture.md`; do not use CLI `db pull`
-   or `db push`, and never commit or share operator credentials.
-2. Reconcile the reviewed capture with the checked-in bootstrap before any
-   identity or membership DDL.
-3. Enable email confirmation and Google in Supabase. Google redirects to
-   `https://jfrairkkzxwkhbtqejnz.supabase.co/auth/v1/callback`; Supabase redirects
-   back to the exact Render frontend origin.
-4. Link pilot identities to existing ERP memberships by immutable UUID only.
-5. Verify sign-in, reload persistence, automatic refresh, sign-out, inactive
+1. Apply the canonical Alembic chain only to the disposable canonical database;
+   never use the retired project as a runtime or migration source.
+2. Configure email confirmation and Google in the active cloud identity
+   provider. Its callback is `${SUPABASE_URL}/auth/v1/callback`, and the provider
+   redirects only to reviewed frontend origins.
+3. Provision identities and canonical memberships by immutable UUID only.
+4. Verify sign-in, reload, automatic cloud-session refresh, sign-out, inactive
    membership denial, cross-tenant denial, and Google/email convergence.
 
 For MCP, standard Supabase OAuth scopes identify the user session; canonical

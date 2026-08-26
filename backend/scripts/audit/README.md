@@ -13,7 +13,6 @@ scripts/
 │   ├── transaction_integrity_audit.py # Stock and finance release blockers
 │   ├── contract_consistency_audit.py  # Identifier and API contract blockers
 │   └── README.md                       # This file
-├── audit_schema.py                     # Legacy schema audit
 ├── audit_sales_schema.py               # Sales module specific
 └── extract_schema_docs.py              # Schema documentation generator
 ```

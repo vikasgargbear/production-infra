@@ -6,8 +6,6 @@ that the target state is already implemented.
 
 ## Documents
 
-- [Production readiness](production-readiness.md): current evidence, release
-  blockers, test commands, and the Supabase baseline required for promotion.
 - [India compliance rules](india-compliance-rules.md): effective-dated GST and
   pharmaceutical rule ownership, evidence, and missing release gates.
 - [MCP readiness](mcp-readiness.md): the agent-facing contract, authorization,
@@ -19,8 +17,8 @@ that the target state is already implemented.
   internal pilot, production promotion options, and hosted MCP OAuth gates.
 - [Repository boundaries](repository-boundaries.md): the frontend/backend split
   and migration sequence.
-- [Authentication boundary](authentication.md): persistent Supabase login,
-  tenant membership resolution, and the target identity model.
+- [Authentication boundary](authentication.md): cloud identity verification,
+  canonical tenant membership resolution, and ERP session authority.
 - [Data model for agents](data-model-for-agents.md): rules for deciding whether
   to retain, merge, split, or retire tables.
 - [Canonical data model](canonical-data-model.md): the reviewed wholesale ERP
@@ -48,39 +46,9 @@ that the target state is already implemented.
 - [`spreadsheet-dependency-inventory.json`](spreadsheet-dependency-inventory.json):
   browser spreadsheet input/output contracts, security boundary, and pinned
   SheetJS distribution evidence.
-- [`query-schema-conflicts.json`](query-schema-conflicts.json): exact source
-  locations and hashes for application queries that require live-catalog
-  reconciliation before any column rename.
 - [`document-number-data-model-inventory.yaml`](document-number-data-model-inventory.yaml):
   machine-readable number ownership, canonical data-model mappings, retired
   duplication, and residual live-schema gates.
-
-## Current-state snapshot
-
-The snapshot below was taken from the repository on 2026-08-19. It must be
-regenerated from source and a live production-like database before any launch
-decision.
-
-- FastAPI is the intended backend boundary and publishes `/openapi.json`.
-- The checked-in SQL defines about 130 tables across `master`, `parties`,
-  `inventory`, `sales`, `procurement`, `financial`, `gst`, `compliance`,
-  `analytics`, and `system_config` schemas.
-- Route source contains more than 400 HTTP handlers. These are not all suitable
-  as MCP tools.
-- Tenant identity is carried as `org_id` in JWTs and most business tables.
-  Operational access may also be limited by branch.
-- Authorization is not expressed uniformly across all route modules. Some use
-  `PermissionChecker`, some use JWT organization dependencies, and some rely on
-  other tenant-aware helpers.
-- The unregistered RLS middleware and its unsigned organization-header fallback
-  have been retired. Live database RLS coverage is still unverified until a
-  reviewed Supabase baseline is available.
-- Payment create paths have a temporary fail-closed idempotency proof backend.
-  Cancel, reconciliation, and allocation require idempotency keys and return a
-  service-unavailable response before SQL until the dedicated store is implemented.
-
-These observations make a direct MCP-to-database adapter, direct OpenAPI import,
-or broad exposure of existing routes unacceptable for production.
 
 ## Release gates
 
