@@ -22,12 +22,12 @@ export function removeLegacyErpSessionKeys(): void {
 
 
 export function getErpAccessToken(): string | null {
-    return localStorage.getItem(ERP_SESSION_KEYS.accessToken);
+    return sessionStorage.getItem(ERP_SESSION_KEYS.accessToken);
 }
 
 
 export function getErpSessionUser<T>(): T | null {
-    const stored = localStorage.getItem(ERP_SESSION_KEYS.user);
+    const stored = sessionStorage.getItem(ERP_SESSION_KEYS.user);
     if (!stored) return null;
     try {
         return JSON.parse(stored) as T;
@@ -38,14 +38,14 @@ export function getErpSessionUser<T>(): T | null {
 
 
 export function saveErpSession<T>(accessToken: string, user: T): void {
-    localStorage.setItem(ERP_SESSION_KEYS.accessToken, accessToken);
-    localStorage.setItem(ERP_SESSION_KEYS.user, JSON.stringify(user));
+    sessionStorage.setItem(ERP_SESSION_KEYS.accessToken, accessToken);
+    sessionStorage.setItem(ERP_SESSION_KEYS.user, JSON.stringify(user));
     removeLegacyErpSessionKeys();
 }
 
 
 export function clearErpSessionStorage(): void {
-    localStorage.removeItem(ERP_SESSION_KEYS.accessToken);
-    localStorage.removeItem(ERP_SESSION_KEYS.user);
+    sessionStorage.removeItem(ERP_SESSION_KEYS.accessToken);
+    sessionStorage.removeItem(ERP_SESSION_KEYS.user);
     removeLegacyErpSessionKeys();
 }

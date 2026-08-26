@@ -126,6 +126,21 @@ describe('deferred production surfaces', () => {
     const apiClient = read('services/api/apiClient.ts');
     expect(authContext).toContain('saveErpSession');
     expect(erpSession).toContain('ERP_SESSION_KEYS');
+    expect(erpSession).toContain('sessionStorage');
+    expect(erpSession).not.toMatch(/localStorage\.(?:getItem|setItem)/);
     expect(apiClient).toContain('getErpAccessToken');
+  });
+
+  test('runtime identifiers do not use Math.random fallbacks', () => {
+    for (const relativePath of [
+      'utils/clientUuid.ts',
+      'utils/runtimeId.ts',
+      'contexts/EscapeKeyContext.tsx',
+      'components/global/ui/feedback/Toast.tsx',
+      'components/purchase/utils/productItemTransform.ts',
+    ]) {
+      expect(read(relativePath)).not.toContain('Math.random');
+    }
+    expect(read('utils/clientUuid.ts')).toContain('Secure UUID generation is unavailable');
   });
 });

@@ -40,9 +40,9 @@ interface SidebarProviderProps {
 
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) => {
     const [settings, setSettings] = useState<SidebarSettings>(() => {
-        // Load saved preferences from localStorage
+        // Load saved preferences for this browser tab.
         try {
-            const saved = localStorage.getItem(SIDEBAR_SETTINGS_KEY);
+            const saved = sessionStorage.getItem(SIDEBAR_SETTINGS_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 return {
@@ -59,10 +59,10 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) =>
     // Compute isExpanded based on hover state and lock setting
     const isExpanded = settings.lockExpanded || settings.isHovering;
 
-    // Save lockExpanded to localStorage whenever it changes
+    // Save lockExpanded for the current browser tab whenever it changes.
     useEffect(() => {
         try {
-            localStorage.setItem(SIDEBAR_SETTINGS_KEY, JSON.stringify({
+            sessionStorage.setItem(SIDEBAR_SETTINGS_KEY, JSON.stringify({
                 lockExpanded: settings.lockExpanded
             }));
         } catch (e) {

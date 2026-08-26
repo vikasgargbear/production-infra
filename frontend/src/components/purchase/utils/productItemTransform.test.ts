@@ -1,5 +1,6 @@
 import {
     cleanItemForBackend,
+    generateTempId,
     prepareItemForGRN,
     prepareItemForPurchaseOrder,
 } from './productItemTransform';
@@ -18,6 +19,14 @@ const product = {
 };
 
 describe('purchase item transformation authority', () => {
+    it('creates unique monotonic draft-row identities without random values', () => {
+        const first = generateTempId();
+        const second = generateTempId();
+
+        expect(first).toMatch(/^temp_\d+$/);
+        expect(Number(second.slice(5))).toBe(Number(first.slice(5)) + 1);
+    });
+
     it('uses only supplied facts and does not derive jurisdictional tax splits', () => {
         const order = prepareItemForPurchaseOrder(product);
         expect(order).toMatchObject({
