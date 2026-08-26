@@ -738,6 +738,15 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert '"portal_document_line_id": portal_line_id' in provisioner
     assert "def live18_supplier_invoice_purchase_order_payload" in provisioner
     assert "def supplier_invoice_portal_economics" in provisioner
+    assert "def _prepared_purchase_order_totals" in provisioner
+    preflight_action = provisioner.split("def preflight_action", 1)[1].split(
+        "\ndef exercise_action", 1
+    )[0]
+    assert "calculation.artifacts" not in preflight_action
+    assert (
+        "_prepared_purchase_order_totals(prepared, service_payload)"
+        in preflight_action
+    )
     assert '"taxable_amount": economics["gst_taxable_total"]' in provisioner
     assert "supplier_invoice_ui_purchase_order_payload" not in provisioner
     assert "supplier_invoice_ui_goods_receipt_payload" not in provisioner

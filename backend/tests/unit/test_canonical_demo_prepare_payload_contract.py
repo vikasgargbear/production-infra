@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -157,6 +158,65 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
             {"lines.0.batch_counts.0.batch_id": UUID_A},
         ),
     ]
+
+
+def test_purchase_order_preflight_totals_use_only_immutable_service_impacts() -> None:
+    module = _module()
+    prepared = SimpleNamespace(
+        financial_impact=({"currency_code": "INR", "supplier_commitment": "178.14"},),
+        tax_impact=({
+            "cgst_total": "9.54",
+            "sgst_total": "9.54",
+            "igst_total": "0.00",
+            "cess_total": "0.00",
+        },),
+    )
+
+    assert module._prepared_purchase_order_totals(
+        prepared, {"rounding_policy": "none"}
+    ) == {
+        "gst_taxable_total": module.Decimal("159.06"),
+        "cgst_total": module.Decimal("9.54"),
+        "sgst_total": module.Decimal("9.54"),
+        "igst_total": module.Decimal("0.00"),
+        "cess_total": module.Decimal("0.00"),
+        "grand_total": module.Decimal("178.14"),
+    }
+
+
+def test_purchase_order_preflight_totals_fail_closed_on_impact_drift() -> None:
+    module = _module()
+    prepared = SimpleNamespace(
+        financial_impact=({"currency_code": "USD", "supplier_commitment": "178.14"},),
+        tax_impact=({
+            "cgst_total": "9.54",
+            "sgst_total": "9.54",
+            "igst_total": "0.00",
+            "cess_total": "0.00",
+        },),
+    )
+
+    with pytest.raises(RuntimeError, match="currency changed"):
+        module._prepared_purchase_order_totals(
+            prepared, {"rounding_policy": "none"}
+        )
+
+    prepared.financial_impact = (
+        {"currency_code": "INR", "supplier_commitment": "178.14"},
+    )
+    with pytest.raises(RuntimeError, match="no rounding or charge lines"):
+        module._prepared_purchase_order_totals(
+            prepared,
+            {"rounding_policy": "nearest_rupee", "charge_lines": []},
+        )
+
+    prepared.financial_impact = (
+        {"currency_code": "INR", "supplier_commitment": "NaN"},
+    )
+    with pytest.raises(RuntimeError, match="impact is invalid"):
+        module._prepared_purchase_order_totals(
+            prepared, {"rounding_policy": "none"}
+        )
 
 
 def _value_at(payload: dict[str, Any], path: str) -> Any:

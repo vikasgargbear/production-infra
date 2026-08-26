@@ -17,7 +17,7 @@ import re
 import sys
 from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NamedTuple
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -348,14 +348,55 @@ def live18_reviewed_scalars() -> dict[str, Any]:
         raise RuntimeError("Live18 reviewed PO/GRN scalar authority is invalid") from exc
 
 
-def _artifact_totals(output: Any) -> dict[str, Decimal]:
-    if not isinstance(output, dict) or not isinstance(output.get("totals"), dict):
-        raise RuntimeError("demo calculation artifact lacks typed totals")
-    totals = output["totals"]
+def _prepared_purchase_order_totals(
+    prepared: Any, payload: dict[str, Any]
+) -> dict[str, Decimal]:
+    """Derive exact PO totals from the service result without table access.
+
+    The isolated calculator role deliberately has no SELECT privilege on
+    calculation.artifacts.  The purchase-order prepare result exposes the
+    immutable grand total and GST components that were hashed into its preview;
+    for this no-charge, no-rounding Live18 payload the taxable value is their
+    exact residual.
+    """
+
+    if payload.get("rounding_policy") != "none" or payload.get("charge_lines"):
+        raise RuntimeError(
+            "purchase-order preflight residual requires no rounding or charge lines"
+        )
+    if len(prepared.financial_impact) != 1 or len(prepared.tax_impact) != 1:
+        raise RuntimeError("purchase-order preflight impact cardinality changed")
+    financial = prepared.financial_impact[0]
+    tax = prepared.tax_impact[0]
+    if financial.get("currency_code") != "INR":
+        raise RuntimeError("purchase-order preflight currency changed")
+    try:
+        grand_total = Decimal(str(financial["supplier_commitment"]))
+        cgst_total = Decimal(str(tax["cgst_total"]))
+        sgst_total = Decimal(str(tax["sgst_total"]))
+        igst_total = Decimal(str(tax["igst_total"]))
+        cess_total = Decimal(str(tax["cess_total"]))
+    except (InvalidOperation, KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("purchase-order preflight impact is incomplete") from exc
+    components = (cgst_total, sgst_total, igst_total, cess_total)
+    if (
+        not grand_total.is_finite()
+        or grand_total <= 0
+        or any(not value.is_finite() or value < 0 for value in components)
+    ):
+        raise RuntimeError("purchase-order preflight impact is invalid")
+    gst_taxable_total = grand_total - sum(
+        components, Decimal("0")
+    )
+    if gst_taxable_total <= 0:
+        raise RuntimeError("purchase-order preflight taxable value is not positive")
     return {
-        field: Decimal(str(totals[field]))
-        for field in CALCULATION_TOTAL_FIELDS
-        if field in totals
+        "gst_taxable_total": gst_taxable_total,
+        "cgst_total": cgst_total,
+        "sgst_total": sgst_total,
+        "igst_total": igst_total,
+        "cess_total": cess_total,
+        "grand_total": grand_total,
     }
 
 
@@ -2460,17 +2501,11 @@ def preflight_action(operation: str, payload: dict[str, Any]) -> dict[str, Decim
         )
         if prepared.command_request_id is None or not prepared.preview_hash.startswith("sha256:"):
             raise RuntimeError(f"{operation} rollback preflight returned invalid evidence")
-        rows = calculator_connection.exec_driver_sql(
-            """
-            SELECT convert_from(output_bytes,'UTF8')::jsonb
-              FROM calculation.artifacts
-             WHERE org_id=%s::uuid AND command_request_id=%s::uuid
-            """,
-            (IDS["org"], str(prepared.command_request_id)),
-        ).fetchall()
-        if len(rows) != 1:
-            raise RuntimeError(f"{operation} rollback preflight lacks one calculation artifact")
-        totals = _artifact_totals(rows[0][0])
+        totals = (
+            _prepared_purchase_order_totals(prepared, service_payload)
+            if operation == "procurement.purchase_order.prepare"
+            else {}
+        )
     finally:
         calculator_transaction.rollback()
         runtime_transaction.rollback()
