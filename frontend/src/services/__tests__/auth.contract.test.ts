@@ -2,7 +2,7 @@
  * auth.contract.test.ts
  *
  * Verifies the frontend auth storage contract:
- *   - Correct localStorage key names (authToken / pharma_user)
+ *   - Correct tab-scoped session key names (authToken / pharma_user)
  *   - No offline / cached-credentials fallback that bypasses server validation
  *   - Legacy key purge on save and clear
  *   - decodeToken exp-check prevents stale token reuse
@@ -38,11 +38,15 @@ describe('ERP_SESSION_KEYS canonical names', () => {
 // ---------------------------------------------------------------------------
 
 describe('saveErpSession / getErpAccessToken / getErpSessionUser', () => {
-    beforeEach(() => localStorage.clear());
+    beforeEach(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+    });
 
     it('stores token under "authToken" key', () => {
         saveErpSession('tok-abc', { user_id: 1, org_id: 'org-1' });
-        expect(localStorage.getItem('authToken')).toBe('tok-abc');
+        expect(sessionStorage.getItem('authToken')).toBe('tok-abc');
+        expect(localStorage.getItem('authToken')).toBeNull();
     });
 
     it('getErpAccessToken returns the stored token', () => {
@@ -62,7 +66,7 @@ describe('saveErpSession / getErpAccessToken / getErpSessionUser', () => {
     });
 
     it('getErpSessionUser returns null on corrupt JSON', () => {
-        localStorage.setItem(ERP_SESSION_KEYS.user, '{not-json}');
+        sessionStorage.setItem(ERP_SESSION_KEYS.user, '{not-json}');
         expect(getErpSessionUser()).toBeNull();
     });
 });
@@ -116,13 +120,16 @@ describe('legacy key purge', () => {
 // ---------------------------------------------------------------------------
 
 describe('clearErpSessionStorage', () => {
-    beforeEach(() => localStorage.clear());
+    beforeEach(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+    });
 
     it('removes authToken and pharma_user', () => {
         saveErpSession('tok', { user_id: 5 });
         clearErpSessionStorage();
-        expect(localStorage.getItem('authToken')).toBeNull();
-        expect(localStorage.getItem('pharma_user')).toBeNull();
+        expect(sessionStorage.getItem('authToken')).toBeNull();
+        expect(sessionStorage.getItem('pharma_user')).toBeNull();
     });
 });
 
@@ -131,7 +138,10 @@ describe('clearErpSessionStorage', () => {
 // ---------------------------------------------------------------------------
 
 describe('offline-credential key cannot produce a session', () => {
-    beforeEach(() => localStorage.clear());
+    beforeEach(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+    });
 
     it('getErpAccessToken returns null when only pharma_offline_creds is set', () => {
         localStorage.setItem('pharma_offline_creds', JSON.stringify({ user_id: 99 }));

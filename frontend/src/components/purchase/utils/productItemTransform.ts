@@ -6,12 +6,16 @@
  */
 
 import type { BasePurchaseItem, PurchaseOrderItem, GRNItem } from '../types';
+import { createRuntimeIdCounter } from '../../../utils/runtimeId';
+
+
+const nextDraftItemId = createRuntimeIdCounter();
 
 /**
  * Generate a client-only draft-row identity.
  */
 export function generateTempId(): string {
-    return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `temp_${nextDraftItemId()}`;
 }
 
 const requiredNumber = (

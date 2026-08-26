@@ -53,7 +53,6 @@ class PurchaseErrorBoundary extends React.Component<Props, State> {
     //   errorInfo: errorInfo.componentStack,
     //   timestamp: new Date().toISOString(),
     //   module: 'purchase',
-    //   user: localStorage.getItem('userId')
     // });
   };
 

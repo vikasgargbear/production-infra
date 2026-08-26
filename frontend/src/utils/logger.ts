@@ -6,7 +6,7 @@
  */
 
 const isDevelopment = process.env.NODE_ENV === 'development';
-const isDebugEnabled = typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_MODE') === 'true';
+const isDebugEnabled = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('DEBUG_MODE') === 'true';
 
 class Logger {
     enabled: boolean;
@@ -16,16 +16,16 @@ class Logger {
     }
 
     enable() {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('DEBUG_MODE', 'true');
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('DEBUG_MODE', 'true');
         }
         this.enabled = true;
         console.log('✅ Debug logging enabled. Refresh page to see logs.');
     }
 
     disable() {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('DEBUG_MODE');
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('DEBUG_MODE');
         }
         this.enabled = false;
         console.log('🔇 Debug logging disabled. Console will be clean.');

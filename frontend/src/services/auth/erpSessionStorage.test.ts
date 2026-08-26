@@ -7,7 +7,10 @@ import {
 } from './erpSessionStorage';
 
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+});
 
 
 test('stores one canonical ERP token and user record', () => {
@@ -15,8 +18,10 @@ test('stores one canonical ERP token and user record', () => {
 
     expect(getErpAccessToken()).toBe('access-token');
     expect(getErpSessionUser()).toEqual({ user_id: 7, org_id: 'org-7' });
-    expect(localStorage.getItem(ERP_SESSION_KEYS.accessToken)).toBe('access-token');
-    expect(localStorage.getItem(ERP_SESSION_KEYS.user)).not.toBeNull();
+    expect(sessionStorage.getItem(ERP_SESSION_KEYS.accessToken)).toBe('access-token');
+    expect(sessionStorage.getItem(ERP_SESSION_KEYS.user)).not.toBeNull();
+    expect(localStorage.getItem(ERP_SESSION_KEYS.accessToken)).toBeNull();
+    expect(localStorage.getItem(ERP_SESSION_KEYS.user)).toBeNull();
 });
 
 
