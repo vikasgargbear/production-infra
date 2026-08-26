@@ -11,6 +11,9 @@ SET LOCAL session_replication_role = replica;
 INSERT INTO auth.users (id) VALUES
     ('10000000-0000-0000-0000-000000000001'),
     ('10000000-0000-0000-0000-000000000002');
+-- auth.users is Supabase-owned. The remaining fixture must explicitly assume
+-- the reviewed canonical owner instead of relying on inherited postgres grants.
+SET LOCAL ROLE "erp_migration_owner";
 INSERT INTO core.users (id, auth_user_id, display_name) VALUES
     ('10000000-0000-0000-0000-000000000011', '10000000-0000-0000-0000-000000000001', 'Command Subject'),
     ('10000000-0000-0000-0000-000000000012', '10000000-0000-0000-0000-000000000002', 'Command Approver');
@@ -71,7 +74,12 @@ INSERT INTO core.access_grants (
     '10000000-0000-0000-0000-000000000021'
 );
 
+-- session_replication_role is controlled by the staging bootstrap role, not by
+-- the canonical owner. Restore triggers as bootstrap, then resume owner-only
+-- fixture work without inheriting its privileges through postgres.
+RESET ROLE;
 SET LOCAL session_replication_role = origin;
+SET LOCAL ROLE "erp_migration_owner";
 
 DO $seed_audit$
 DECLARE

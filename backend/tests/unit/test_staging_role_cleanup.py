@@ -43,15 +43,17 @@ if test "$FAKE_PSQL_SCENARIO" = readback_fail_once && test "$readback_count" = 1
   exit 1
 fi
 if test "$FAKE_PSQL_SCENARIO" = wrong_state || { test "$FAKE_PSQL_SCENARIO" = wrong_state_once && test "$readback_count" = 1; }; then
-  printf '%s\n' '2|2|2|2|2|1|2'
+  printf '%s\n' '2|2|2|2|1|2'
 elif test "$FAKE_PSQL_SCENARIO" = indirect_path; then
-  printf '%s\n' '2|2|2|2|2|1|1'
+  printf '%s\n' '2|2|2|2|1|1'
 elif test "$FAKE_PSQL_SCENARIO" = superuser; then
-  printf '%s\n' '2|2|2|2|0|0|0'
+  printf '%s\n' '2|2|2|0|0|0'
+elif test "$FAKE_PSQL_SCENARIO" = malformed_readback; then
+  printf '%s\n' 'secret-response-from-provider'
 elif [[ "$query" == *erp_runtime* ]]; then
-  printf '%s\n' '2|2|2|2|2|2|2'
+  printf '%s\n' '2|2|2|2|2|2'
 else
-  printf '%s\n' '1|1|1|1|1|1|1'
+  printf '%s\n' '1|1|1|1|1|1'
 fi
 """,
         encoding="utf-8",
@@ -95,11 +97,11 @@ def test_staging_role_cleanup_attests_exact_catalog_state(tmp_path: Path) -> Non
     expected_grants = {
         "migration-owner": (
             "grant:GRANT erp_migration_owner TO postgres "
-            "WITH ADMIN FALSE, SET FALSE, INHERIT FALSE"
+            "WITH SET FALSE, INHERIT FALSE"
         ),
         "migration-owner-runtime": (
             "grant:GRANT erp_migration_owner, erp_runtime TO postgres "
-            "WITH ADMIN FALSE, SET FALSE, INHERIT FALSE"
+            "WITH SET FALSE, INHERIT FALSE"
         ),
     }
     for mode, expected_grant in expected_grants.items():
@@ -107,6 +109,22 @@ def test_staging_role_cleanup_attests_exact_catalog_state(tmp_path: Path) -> Non
         assert result.returncode == 0, result.stderr
         calls = _calls(tmp_path, mode, "success")
         assert calls == [expected_grant, "readback"]
+
+
+def test_staging_role_cleanup_accepts_safe_multi_grantor_admin_history(
+    tmp_path: Path,
+) -> None:
+    result = _run_cleanup(
+        tmp_path,
+        "migration-owner-runtime",
+        "multi_grantor_admin_true",
+    )
+    assert result.returncode == 0, result.stderr
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert "bool_and(membership.set_option IS FALSE)" in script
+    assert "bool_and(membership.inherit_option IS FALSE)" in script
+    assert "GROUP BY granted_role.oid, member_role.rolsuper" in script
+    assert "membership.admin_option" not in script
 
 
 def test_staging_role_cleanup_fails_closed_without_leaking_database_url(
@@ -118,6 +136,7 @@ def test_staging_role_cleanup_fails_closed_without_leaking_database_url(
         "wrong_state",
         "indirect_path",
         "superuser",
+        "malformed_readback",
     ):
         result = _run_cleanup(tmp_path, "migration-owner-runtime", scenario)
         assert result.returncode != 0
@@ -126,6 +145,16 @@ def test_staging_role_cleanup_fails_closed_without_leaking_database_url(
         assert calls.count("readback") == (0 if scenario == "grant_fail" else 3)
         assert "secret" not in result.stdout
         assert "secret" not in result.stderr
+        assert "reason=" in result.stderr
+        assert "state=" in result.stderr
+        expected_reason = {
+            "grant_fail": "grant_failed",
+            "readback_fail": "readback_failed",
+            "malformed_readback": "malformed_readback",
+        }.get(scenario, "state_mismatch")
+        assert f"reason={expected_reason}" in result.stderr
+        if scenario in {"grant_fail", "readback_fail", "malformed_readback"}:
+            assert "state=unavailable" in result.stderr
 
 
 def test_staging_role_cleanup_retries_the_whole_idempotent_boundary(

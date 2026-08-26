@@ -242,6 +242,16 @@ def test_approval_fixture_rejects_subject_and_accepts_distinct_authorized_member
     ).read_text(encoding="utf-8")
 
     assert "same-subject separate approval was accepted" in fixture
+    owner_role = 'SET LOCAL ROLE "erp_migration_owner";'
+    assert fixture.count(owner_role) == 2
+    first_owner = fixture.index(owner_role)
+    second_owner = fixture.index(owner_role, first_owner + 1)
+    assert fixture.index("INSERT INTO auth.users") < first_owner < fixture.index(
+        "INSERT INTO core.users"
+    )
+    assert first_owner < fixture.index("RESET ROLE;") < fixture.index(
+        "SET LOCAL session_replication_role = origin;"
+    ) < second_owner < fixture.index("DO $seed_audit$")
     assert fixture.count("'10000000-0000-0000-0000-000000000021', 'approved'") == 1
     assert fixture.count("'10000000-0000-0000-0000-000000000022', 'approved'") == 1
     assert "'10000000-0000-0000-0000-000000000022',\n    '10000000-0000-0000-0000-000000000030'" in fixture

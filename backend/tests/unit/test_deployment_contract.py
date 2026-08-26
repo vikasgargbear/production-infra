@@ -552,10 +552,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'test "$fixture_status" = 124' in workflow
     assert 'test "$fixture_passed" != true' in workflow
     assert (
-        "GRANT erp_migration_owner, erp_runtime TO postgres WITH ADMIN FALSE, SET TRUE, INHERIT FALSE"
+        "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE, INHERIT FALSE"
         in workflow
     )
-    assert workflow.count("WITH ADMIN FALSE, SET TRUE, INHERIT FALSE") == 3
+    assert workflow.count("WITH SET TRUE, INHERIT FALSE") == 3
     assert workflow.count("revoke_staging_postgres_set_roles.sh") == 3
     assert workflow.count("migration-owner-runtime") == 1
     assert workflow.count("migration-owner\n") == 2

@@ -444,7 +444,7 @@ jobs:
                 alembic -c alembic.ini upgrade 20260820_0001
                 cd ..
                 psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-                  -c 'GRANT erp_migration_owner TO postgres WITH ADMIN FALSE, SET TRUE, INHERIT FALSE' >/dev/null
+                  -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' >/dev/null
                 cd backend
                 alembic -c alembic.ini upgrade head
                 alembic -c alembic.ini upgrade head
@@ -856,7 +856,7 @@ jobs:
           }
           trap cleanup_fixture_roles_on_exit EXIT
           psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner, erp_runtime TO postgres WITH ADMIN FALSE, SET TRUE, INHERIT FALSE' \
+            -c 'GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE, INHERIT FALSE' \
             >/dev/null
 
           mapfile -t canonical_fixtures < <(
@@ -1196,7 +1196,7 @@ jobs:
           }
           trap cleanup_demo_role_on_exit EXIT
           psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner TO postgres WITH ADMIN FALSE, SET TRUE, INHERIT FALSE' >/dev/null
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' >/dev/null
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
           importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${CANONICAL_ACTIVE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_importer"
