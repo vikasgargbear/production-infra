@@ -448,6 +448,10 @@ if test "$command" = up; then
     printf '%s\n' '{"code":"SECRET_SHOULD_NOT_APPEAR","error":"ERROR_SECRET_SHOULD_NOT_APPEAR","hint":"HINT_SECRET_SHOULD_NOT_APPEAR"}'
     exit 1
   fi
+  if test "$FAKE_RAILWAY_SCENARIO" = unmatched_upload_error_api && test "$service" = api-service; then
+    printf '%s\n' '{"code":"UPLOAD_FAILED","error":"ERROR_SECRET_SHOULD_NOT_APPEAR","hint":"HINT_SECRET_SHOULD_NOT_APPEAR"}'
+    exit 1
+  fi
   if test "$FAKE_RAILWAY_SCENARIO" = multidoc_api && test "$service" = api-service; then
     printf '%s\\n%s\\n' '{"deploymentId":"11111111-1111-4111-8111-111111111111"}' '{"deploymentId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}'
     exit 0
@@ -569,6 +573,13 @@ exit 45
     assert "provider_code=UNCLASSIFIED http_status=NONE" in secret_code.stdout
     assert "SECRET_SHOULD_NOT_APPEAR" not in secret_code.stdout
     assert "SECRET_SHOULD_NOT_APPEAR" not in secret_code.stderr
+
+    unmatched, unmatched_calls = run_scenario("unmatched_upload_error_api")
+    assert unmatched.returncode != 0
+    assert unmatched_calls == ["up api-service"]
+    assert "provider_code=UPLOAD_FAILED http_status=NONE" in unmatched.stdout
+    assert "SECRET_SHOULD_NOT_APPEAR" not in unmatched.stdout
+    assert "SECRET_SHOULD_NOT_APPEAR" not in unmatched.stderr
 
     for failing_name in (
         "nonretry_api",

@@ -466,7 +466,7 @@ jobs:
               then
                 [(.[0].code | safe_code),
                  (if .[0].code == "UPLOAD_FAILED" and (.[0].error | type) == "string"
-                  then (try (.[0].error | capture("^Failed to upload code with status code (?<status>[0-9]{3})( [A-Za-z][A-Za-z -]*)?$"; "i").status) catch "NONE")
+                  then ([.[0].error | capture("^Failed to upload code with status code (?<status>[0-9]{3})( .*)?$"; "i")] | if length == 1 then .[0].status else "NONE" end)
                   else "NONE" end)] | @tsv
               else "NONE\tNONE"
               end' "$1" 2>/dev/null || printf '%s\n' $'NONE\tNONE'
