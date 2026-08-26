@@ -32,8 +32,8 @@ def test_only_allowlisted_operational_failures_are_transient() -> None:
     verifier = _load()
 
     class SqlstateOperationalError(psycopg2.OperationalError):
-        def __init__(self, pgcode: str) -> None:
-            super().__init__("provider detail must remain private")
+        def __init__(self, pgcode: str, message: str = "provider detail") -> None:
+            super().__init__(message)
             self._pgcode = pgcode
 
         @property
@@ -53,7 +53,13 @@ def test_only_allowlisted_operational_failures_are_transient() -> None:
     ) == "connection_refused"
     assert verifier._transient_kind(
         psycopg2.OperationalError("password authentication failed")
-    ) == "credential_propagation_pending"
+    ) is None
+    assert verifier._transient_kind(
+        psycopg2.OperationalError("server didn't return client encoding")
+    ) == "protocol_handshake_incomplete"
+    assert verifier._transient_kind(
+        SqlstateOperationalError("08006", "server didn't return client encoding")
+    ) == "protocol_handshake_incomplete"
     assert verifier._transient_kind(SqlstateOperationalError("08006")) == (
         "connection_exception"
     )
@@ -82,8 +88,8 @@ def test_connection_failures_are_reduced_to_fixed_non_secret_kinds(monkeypatch) 
             host="pooler.example",
             port="5432",
         )
-    assert captured.value.kind == "credential_propagation_pending"
-    assert captured.value.transient is True
+    assert captured.value.kind == "invalid_credentials"
+    assert captured.value.transient is False
     assert secret not in str(captured.value)
 
 
@@ -132,6 +138,66 @@ def test_complete_cohort_retry_is_bounded_and_restarts_from_first_role() -> None
     assert sleeps == []
 
 
+def test_password_failure_retries_once_only_when_rotation_scope_is_explicit() -> None:
+    verifier = _load()
+    calls: list[str] = []
+    sleeps: list[float] = []
+
+    def stale_password_then_success(**kwargs) -> None:
+        calls.append(kwargs["port"])
+        if len(calls) == 1:
+            raise verifier.RoleVerificationFailure(
+                "erp_runtime", "invalid_credentials", transient=False
+            )
+
+    with pytest.raises(verifier.RoleVerificationFailure):
+        verifier.verify_role_set_with_retry(
+            roles=_roles(),
+            project_ref="a" * 20,
+            host="pooler.example",
+            port="5432",
+            verify_set_once=stale_password_then_success,
+            sleep=sleeps.append,
+        )
+    assert calls == ["5432"]
+    assert sleeps == []
+
+    calls.clear()
+    verifier.verify_role_set_with_retry(
+        roles=_roles(),
+        project_ref="a" * 20,
+        host="pooler.example",
+        port="5432",
+        rotation_scoped=True,
+        verify_set_once=stale_password_then_success,
+        sleep=sleeps.append,
+    )
+    assert calls == ["5432", "5432"]
+    assert sleeps == [verifier.RETRY_DELAY_SECONDS]
+
+    calls.clear()
+    sleeps.clear()
+
+    def persistently_invalid(**kwargs) -> None:
+        calls.append(kwargs["port"])
+        raise verifier.RoleVerificationFailure(
+            "erp_runtime", "invalid_credentials", transient=False
+        )
+
+    with pytest.raises(verifier.RoleVerificationFailure):
+        verifier.verify_role_set_with_retry(
+            roles=_roles(),
+            project_ref="a" * 20,
+            host="pooler.example",
+            port="5432",
+            rotation_scoped=True,
+            verify_set_once=persistently_invalid,
+            sleep=sleeps.append,
+        )
+    assert calls == ["5432", "5432"]
+    assert sleeps == [verifier.RETRY_DELAY_SECONDS]
+
+
 def test_one_cohort_sweep_uses_reviewed_role_order_and_stops_on_failure() -> None:
     verifier = _load()
     calls: list[str] = []
@@ -154,30 +220,27 @@ def test_one_cohort_sweep_uses_reviewed_role_order_and_stops_on_failure() -> Non
     assert calls == ["erp_runtime", "erp_calculator", "erp_tax_provider"]
 
 
-def test_pooler_selection_rechecks_the_complete_set_on_transaction_mode() -> None:
+def test_runtime_pooler_certification_is_session_only_after_transient_failure() -> None:
     verifier = _load()
     roles = _roles()
     calls: list[tuple[str, tuple[str, ...]]] = []
 
     def verify_set(**kwargs) -> None:
         calls.append((kwargs["port"], tuple(kwargs["roles"])))
-        if kwargs["port"] == "5432":
-            raise verifier.RoleVerificationFailure(
-                "erp_regulatory_importer", "connection_refused", transient=True
-            )
+        raise verifier.RoleVerificationFailure(
+            "erp_regulatory_importer", "connection_refused", transient=True
+        )
 
-    assert verifier.select_pooler(
-        roles=roles,
-        project_ref="a" * 20,
-        host="pooler.example",
-        session_port="5432",
-        transaction_port="6543",
-        verify_set=verify_set,
-    ) == ("6543", "transaction")
-    assert calls == [
-        ("5432", tuple(roles)),
-        ("6543", tuple(roles)),
-    ]
+    with pytest.raises(verifier.PoolerVerificationFailure) as captured:
+        verifier.select_pooler(
+            roles=roles,
+            project_ref="a" * 20,
+            host="pooler.example",
+            session_port="5432",
+            verify_set=verify_set,
+        )
+    assert captured.value.mode == "session"
+    assert calls == [("5432", tuple(roles))]
 
 
 def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -> None:
@@ -260,40 +323,34 @@ def test_non_transient_session_failure_never_falls_back() -> None:
             project_ref="a" * 20,
             host="pooler.example",
             session_port="5432",
-            transaction_port="6543",
             verify_set=verify_set,
         )
     assert captured.value.mode == "session"
     assert calls == ["5432"]
 
 
-def test_transaction_mode_must_pass_the_complete_set() -> None:
+def test_auth_query_and_circuit_failures_do_not_fan_out_pooler_modes() -> None:
     verifier = _load()
-    calls: list[str] = []
+    for kind in ("auth_query_unavailable", "pooler_circuit_open"):
+        calls: list[str] = []
 
-    def verify_set(**kwargs) -> None:
-        calls.append(kwargs["port"])
-        role = (
-            "erp_runtime"
-            if kwargs["port"] == "5432"
-            else "erp_tax_provider"
-        )
-        raise verifier.RoleVerificationFailure(
-            role, "connection_timeout", transient=True
-        )
+        def verify_set(**kwargs) -> None:
+            calls.append(kwargs["port"])
+            raise verifier.RoleVerificationFailure(
+                "erp_runtime", kind, transient=True
+            )
 
-    with pytest.raises(verifier.PoolerVerificationFailure) as captured:
-        verifier.select_pooler(
-            roles=_roles(),
-            project_ref="a" * 20,
-            host="pooler.example",
-            session_port="5432",
-            transaction_port="6543",
-            verify_set=verify_set,
-        )
-    assert captured.value.mode == "transaction"
-    assert captured.value.failure.role == "erp_tax_provider"
-    assert calls == ["5432", "6543"]
+        with pytest.raises(verifier.PoolerVerificationFailure) as captured:
+            verifier.select_pooler(
+                roles=_roles(),
+                project_ref="a" * 20,
+                host="pooler.example",
+                session_port="5432",
+                verify_set=verify_set,
+            )
+        assert captured.value.mode == "session"
+        assert captured.value.failure.kind == kind
+        assert calls == ["5432"]
 
 
 def test_configuration_rejects_unreviewed_hosts_ports_and_credentials() -> None:
@@ -324,8 +381,17 @@ def test_configuration_rejects_unreviewed_hosts_ports_and_credentials() -> None:
     with pytest.raises(ValueError):
         verifier._configuration(invalid)
 
+    assert verifier._rotation_scoped(environment) is False
+    assert verifier._rotation_scoped(
+        dict(environment, CANONICAL_STAGING_ROTATION_SCOPED_VERIFY="true")
+    ) is True
+    with pytest.raises(ValueError):
+        verifier._rotation_scoped(
+            dict(environment, CANONICAL_STAGING_ROTATION_SCOPED_VERIFY="TRUE")
+        )
 
-def test_transaction_selection_preflights_admin_before_environment_write(
+
+def test_runtime_cohort_precedes_admin_preflight_and_environment_write(
     monkeypatch, tmp_path
 ) -> None:
     verifier = _load()
@@ -340,30 +406,37 @@ def test_transaction_selection_preflights_admin_before_environment_write(
             "SUPABASE_POOLER_HOST": "aws-0-ap-south-1.pooler.supabase.com",
             "SUPABASE_SESSION_POOLER_PORT": "5432",
             "SUPABASE_POOLER_PORT": "6543",
+            "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY": "true",
             "GITHUB_ENV": str(github_env),
         }
     )
-    events: list[str] = []
+    events: list[tuple[str, str | bool]] = []
     monkeypatch.setattr(verifier.os, "environ", environment)
-    monkeypatch.setattr(
-        verifier,
-        "select_pooler",
-        lambda **kwargs: ("6543", "transaction"),
-    )
+
+    def select(**kwargs) -> tuple[str, str]:
+        events.append(("cohort", kwargs["session_port"]))
+        events.append(("rotation-scoped", kwargs["rotation_scoped"]))
+        return "5432", "session"
 
     def preflight(**kwargs) -> None:
-        events.append("admin-preflight")
+        events.append(("admin-preflight", kwargs["port"]))
 
     def write(**kwargs) -> None:
-        events.append("environment-write")
+        events.append(("environment-write", kwargs["port"]))
 
+    monkeypatch.setattr(verifier, "select_pooler", select)
     monkeypatch.setattr(verifier, "verify_admin_with_retry", preflight)
     monkeypatch.setattr(verifier, "_write_pooler_environment", write)
     assert verifier.main([]) == 0
-    assert events == ["admin-preflight", "environment-write"]
+    assert events == [
+        ("cohort", "5432"),
+        ("rotation-scoped", True),
+        ("admin-preflight", "5432"),
+        ("environment-write", "5432"),
+    ]
 
 
-def test_failed_transaction_admin_preflight_never_writes_environment(
+def test_failed_runtime_admin_preflight_never_writes_environment(
     monkeypatch, tmp_path
 ) -> None:
     verifier = _load()
@@ -385,7 +458,7 @@ def test_failed_transaction_admin_preflight_never_writes_environment(
     monkeypatch.setattr(
         verifier,
         "select_pooler",
-        lambda **kwargs: ("6543", "transaction"),
+        lambda **kwargs: ("5432", "session"),
     )
 
     def fail_admin(**kwargs) -> None:
@@ -432,8 +505,14 @@ def test_main_emits_only_bounded_failure_metadata(monkeypatch, capsys) -> None:
             ),
         )
 
+    writes: list[object] = []
     monkeypatch.setattr(verifier.os, "environ", environment)
     monkeypatch.setattr(verifier, "select_pooler", fail_selection)
+    monkeypatch.setattr(
+        verifier,
+        "_write_pooler_environment",
+        lambda **kwargs: writes.append(kwargs),
+    )
     assert verifier.main([]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -441,3 +520,4 @@ def test_main_emits_only_bounded_failure_metadata(monkeypatch, capsys) -> None:
     assert "role=erp_regulatory_importer" in captured.err
     assert "kind=auth_query_timeout" in captured.err
     assert secret not in captured.err
+    assert writes == []

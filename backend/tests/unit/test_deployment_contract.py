@@ -481,7 +481,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     role_provisioning = workflow.split(
         "Provision isolated staging login credentials", 1
     )[1].split("Verify Alembic-owned canonical command definitions", 1)[0]
-    assert "inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in role_provisioning
+    assert "if: inputs.rotate_role_passwords == true" in role_provisioning
+    assert "inputs.reset_disposable_data" not in role_provisioning
     assert "inputs.provision_demo_data" not in role_provisioning
     assert 're.fullmatch(r"[A-Za-z0-9_-]{48,96}", password)' in workflow
     assert "ALTER ROLE" in role_provisioning
@@ -549,13 +550,22 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "for role, password in roles.items():" in pooler_verifier
     assert "verify_set(" in pooler_verifier
     assert "port=session_port" in pooler_verifier
+    runtime_selector = pooler_verifier.split("def select_pooler(", 1)[1].split(
+        "def select_admin_pooler(", 1
+    )[0]
+    assert "transaction_port" not in runtime_selector
+    assert 'return session_port, "session"' in runtime_selector
     assert "if not session_failure.transient:" in pooler_verifier
     assert "port=transaction_port" in pooler_verifier
-    assert "A partial session-mode pass grants no authority to mix pooler modes" in pooler_verifier
-    assert "range(1, MAX_ATTEMPTS + 1)" in pooler_verifier
-    assert "if not failure.transient or attempt == MAX_ATTEMPTS:" in pooler_verifier
+    assert "rotation_cache_retries_remaining = 1 if rotation_scoped else 0" in pooler_verifier
+    assert 'return "invalid_credentials", False' in pooler_verifier
+    assert '"protocol_handshake_incomplete"' in pooler_verifier
     assert "Require one complete role cohort to pass" in pooler_verifier
-    assert '("password authentication failed", "credential_propagation_pending")' in pooler_verifier
+    assert "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY" in pooler_verifier
+    assert (
+        "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY: ${{ inputs.rotate_role_passwords }}"
+        in workflow
+    )
     assert "MAX_ATTEMPTS = 2" in pooler_verifier
     assert "connect_timeout=5" in pooler_verifier
     assert "str(error)" in pooler_verifier
@@ -565,11 +575,13 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "str(error)" not in role_verification
     assert "message = str(last_error)" not in role_verification
     assert "Diagnose bounded Supavisor role verification failure" in workflow
+    assert "if: steps.verify_pooler_roles.outcome == 'failure'" in workflow
     assert "/analytics/endpoints/logs" in workflow
     assert "source = 'supavisor_logs'" in workflow
     assert "jq -c '{result,error}'" not in workflow
     assert "Response shape was not the reviewed counter schema" in workflow
-    assert "| {eauthquery_count, circuit_breaker_count, worker_not_found_count, authentication_count, supavisor_event_count}" in workflow
+    assert "def bounded_uint:" in workflow
+    assert 'elif type == "string" and test("^[0-9]+$") then tonumber' in workflow
     assert "echo \"::notice title=Bounded Supavisor diagnostic::$summary\"" in workflow
     assert "EAUTHQUERY" in workflow
     assert "ECIRCUITBREAKER" in workflow
@@ -619,7 +631,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'detail = "canonical demo failure summary unavailable"' in workflow
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
-    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 8
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 11
     assert "--label render-config" not in workflow
     assert '--label "render-$service_name"' not in workflow
     assert '--label readiness "$api_log"' in workflow
@@ -644,7 +656,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         in workflow
     )
     assert workflow.count("WITH SET TRUE, INHERIT FALSE") == 4
-    assert workflow.count("run_canonical_write_fence.sh") == 3
+    assert workflow.count("run_canonical_write_fence.sh") == 4
+    assert workflow.index("Close canonical writes before the disposable data reset") < (
+        workflow.index("Reset canonical data on the pinned disposable project")
+    )
     assert "@railway/cli@5.43.4" in workflow
     assert workflow.count("verify_retired_railway_authority.py") == 2
     for service_id in (
@@ -672,9 +687,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     )[1].split("Verify and exercise the reviewed hosted OAuth server boundary", 1)[0]
     assert "run_canonical_write_fence.sh" in opened_fence
     assert 'open "$GITHUB_SHA"' in opened_fence
-    assert workflow.count("revoke_staging_postgres_set_roles.sh") == 4
+    assert workflow.count("revoke_staging_postgres_set_roles.sh") == 5
     assert workflow.count("migration-owner-runtime") == 1
-    assert workflow.count("migration-owner\n") == 3
+    assert workflow.count("migration-owner\n") == 4
     assert "cleanup_alembic_on_exit" in workflow
     assert 'cat "$log_file"' not in workflow
     assert "unclassified_migration_failure" in workflow
@@ -686,7 +701,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "cleanup_fixture_roles_on_exit" in workflow
     assert "cleanup_demo_role_on_exit" in workflow
     assert "cleanup_demo_on_exit" in workflow
-    assert workflow.count("postgres retained unverified") == 9
+    assert workflow.count("postgres retained unverified") == 11
     assert "unverified migration-owner delegation" in workflow
     assert "unverified fixture role delegation" in workflow
     assert "unverified demo role delegation" in workflow
@@ -952,6 +967,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
 
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     workflow = _read(".github/workflows/canonical-staging.yml")
+    reset_authority = _read("backend/scripts/canonical_data_reset_authority.py")
     production_workflow = _read(".github/workflows/production-readiness.yml")
     reset_step = workflow.split(
         "Reset canonical data on the pinned disposable project", 1
@@ -960,38 +976,27 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "reset_disposable_data:" in workflow
     assert "if: inputs.reset_disposable_data == true" in workflow
     assert "Refuse any target except the reviewed free staging project" in workflow
-    assert "DROP TABLE IF EXISTS public.alembic_version" in workflow
-    assert "DROP EXTENSION IF EXISTS btree_gist" in workflow
-    assert "GRANT %I TO %I WITH SET TRUE, INHERIT FALSE" in reset_step
-    assert "SET LOCAL ROLE erp_migration_owner" in reset_step
-    assert reset_step.index("SET LOCAL ROLE erp_migration_owner") < reset_step.index(
-        "DROP SCHEMA IF EXISTS"
-    )
-    assert reset_step.index("DROP SCHEMA IF EXISTS") < reset_step.index("RESET ROLE")
-    assert reset_step.index("RESET ROLE") < reset_step.index(
-        "DROP EXTENSION IF EXISTS btree_gist"
-    )
-    managed_schema_cleanup = reset_step.split(
-        "DO $revoke_managed_schema_grants$", 1
-    )[1].split("$revoke_managed_schema_grants$;", 1)[0]
-    assert "to_regnamespace('extensions') IS NOT NULL" in managed_schema_cleanup
-    assert "rolname = 'erp_migration_owner'" in managed_schema_cleanup
-    assert (
-        "REVOKE USAGE ON SCHEMA extensions FROM erp_migration_owner"
-        in managed_schema_cleanup
-    )
-    role_cleanup = reset_step.split("DO $reset_canonical_roles$", 1)[1].split(
-        "$reset_canonical_roles$;", 1
-    )[0]
-    assert "SET LOCAL ROLE %I" in role_cleanup
-    assert role_cleanup.index("SET LOCAL ROLE %I") < role_cleanup.index(
-        "DROP OWNED BY %I CASCADE"
-    )
-    assert role_cleanup.index("DROP OWNED BY %I CASCADE") < role_cleanup.index(
-        "RESET ROLE"
-    )
-    assert "DROP ROLE IF EXISTS erp_runtime" in workflow
-    assert "to_regclass('auth.users') IS NOT NULL" in workflow
+    assert "Close canonical writes before the disposable data reset" in workflow
+    assert "canonical_data_reset_authority.py" in reset_step
+    assert "--execute-reset" in reset_step
+    assert "--expected-evidence-object-count 0" in reset_step
+    assert "canonical-data-reset-facts.json" in reset_step
+    assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reset_step
+    assert "revoke_staging_postgres_set_roles.sh migration-owner" in reset_step
+    assert "PRESERVED_SEED_RELATIONS" in reset_authority
+    assert "EXPECTED_CANONICAL_RELATION_COUNT = 119" in reset_authority
+    assert "EXPECTED_EPHEMERAL_RELATION_COUNT = 7" in reset_authority
+    assert "if re.search(r\"\\bCASCADE\\b\"" in reset_authority
+    assert "before_roles != after_roles" in reset_authority
+    assert "before_seed_digest != after_seed_digest" in reset_authority
+    assert "before_catalog.relation_oids != after_catalog.relation_oids" in reset_authority
+    assert "before_catalog.schema_oids != after_catalog.schema_oids" in reset_authority
+    assert "evidence_storage_object_count_after_reset" in reset_authority
+    assert "DROP TABLE IF EXISTS public.alembic_version" not in workflow
+    assert "DROP EXTENSION IF EXISTS btree_gist" not in workflow
+    assert "DROP OWNED BY" not in workflow
+    assert "DROP ROLE IF EXISTS erp_runtime" not in workflow
+    assert "ALTER ROLE %I NOLOGIN" not in workflow
     assert "DROP SCHEMA auth" not in workflow
     assert "DROP SCHEMA storage" not in workflow
     assert "reset_canonical_staging:" in production_workflow
@@ -1013,7 +1018,6 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert '"pool_mode":"transaction"' in refresh_step
     assert "/config/database/pooler" in refresh_step
     assert "sleep 125" in refresh_step
-    assert "ALTER ROLE %I NOLOGIN" in workflow
     assert "pg_catalog.pg_terminate_backend(activity.pid)" in workflow
     assert "activity.usename IN" in workflow
     assert "restart_staging_database:" in workflow
@@ -1032,11 +1036,12 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
 
 def test_reset_emits_hashable_attestation_after_database_postconditions():
     workflow = _read(".github/workflows/canonical-staging.yml")
-    postcondition = "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')"
+    postcondition = "staging-evidence/canonical-data-reset-facts.json"
     attestation = "reset-attestation"
     assert postcondition in workflow
     assert "staging-evidence/canonical-staging-reset.json" in workflow
     assert workflow.index(postcondition) < workflow.index(attestation)
+    assert "--reset-facts staging-evidence/canonical-data-reset-facts.json" in workflow
     assert '--workflow-run-id "$GITHUB_RUN_ID"' in workflow
     assert '--reviewed-deploy-sha "$reviewed_deploy_sha"' in workflow
 

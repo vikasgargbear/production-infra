@@ -178,3 +178,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_input_credit_force_rls.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_input_credit_force_rls_migration_principal.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_data_reset_authority.py

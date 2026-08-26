@@ -112,6 +112,67 @@ def _binding(git_commit: str, deployment: dict | None = None) -> dict:
     )
 
 
+def _reset_facts(
+    completed_at: str = "2026-08-25T11:00:00+00:00",
+) -> dict:
+    return {
+        "contract_version": evidence.RESET_CONTRACT_VERSION,
+        "project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
+        "alembic_head": "20260826_0028",
+        "alembic_schema_count": evidence.RESET_ALEMBIC_SCHEMA_COUNT,
+        "authority_manifest_sha256": "1" * 64,
+        "catalog_fingerprint_sha256": "2" * 64,
+        "canonical_relation_count": evidence.RESET_CANONICAL_RELATION_COUNT,
+        "ephemeral_scope_relation_count": evidence.RESET_EPHEMERAL_RELATION_COUNT,
+        "catalog_relation_count": evidence.RESET_CATALOG_RELATION_COUNT,
+        "preserved_seed_relation_count": evidence.RESET_PRESERVED_SEED_RELATION_COUNT,
+        "preserved_seed_digest_sha256": "3" * 64,
+        "reset_relation_count": evidence.RESET_DISPOSABLE_RELATION_COUNT,
+        "truncate_relation_count": evidence.RESET_TRUNCATE_RELATION_COUNT,
+        "disposable_row_count_before_reset": 123,
+        "disposable_row_count_after_reset": 0,
+        "evidence_storage_object_count_after_reset": 0,
+        "auth_schema_preserved": True,
+        "storage_schema_preserved": True,
+        "schema_oids_preserved": True,
+        "relation_oids_preserved": True,
+        "isolated_role_posture_preserved": True,
+        "isolated_role_catalog_preserved": True,
+        "completed_at": completed_at,
+    }
+
+
+def _role_cleanup_facts() -> dict:
+    return {
+        "contract_version": evidence.RESET_CONTRACT_VERSION,
+        "project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
+        "managed_role_count": 6,
+        "login_role_count": 4,
+        "login_role_password_present_count": 4,
+        "postgres_migration_owner_set": False,
+        "postgres_migration_owner_usage": False,
+        "role_catalog_sha256": "4" * 64,
+        "verified_at": "2026-08-25T11:00:01+00:00",
+    }
+
+
+def _evidence_cleanup_facts() -> dict:
+    return {
+        "contract_version": evidence.EVIDENCE_RESET_CLEANUP_VERSION,
+        "state": "empty",
+        "project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
+        "bucket": evidence.EVIDENCE_STORAGE_BUCKET,
+        "database_date": "2026-08-25",
+        "reconciled_object_count": 1,
+        "deleted_object_count": 1,
+        "remaining_object_count": 0,
+        "object_key_set_sha256": "5" * 64,
+        "legal_hold_count": 0,
+        "retention_in_force_deleted_count": 1,
+        "completed_at": "2026-08-25T10:59:59+00:00",
+    }
+
+
 def _live18_manifest(git_commit: str, binding: dict) -> dict:
     matrix = json.loads(evidence.LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
     browser = []
@@ -285,6 +346,9 @@ def _bundle(tmp_path: Path):
         workflow_repository="acme/erp",
         workflow_run_id=123,
         workflow_run_attempt=1,
+        reset_facts=_reset_facts(),
+        role_cleanup_facts=_role_cleanup_facts(),
+        evidence_cleanup_facts=_evidence_cleanup_facts(),
         reset_completed_at="2026-08-25T11:00:00+00:00",
     )
     reset_attestation_hash = hashlib.sha256(
@@ -716,13 +780,16 @@ def test_reset_attestation_binds_exact_run_and_rejects_wrong_project():
         workflow_repository="acme/erp",
         workflow_run_id=123,
         workflow_run_attempt=2,
+        reset_facts=_reset_facts(),
+        role_cleanup_facts=_role_cleanup_facts(),
+        evidence_cleanup_facts=_evidence_cleanup_facts(),
         reset_completed_at="2026-08-25T11:00:00+00:00",
     )
     assert attestation["payload"]["workflow_run_url"] == (
         "https://github.com/acme/erp/actions/runs/123"
     )
     assert attestation["payload"]["auth_schema_preserved"] is True
-    assert attestation["payload"]["canonical_schema_count_after_reset"] == 0
+    assert attestation["payload"]["catalog_relation_count_after_reset"] == 126
     with pytest.raises(evidence.EvidenceError, match="restricted to canonical staging"):
         evidence.build_reset_attestation(
             project_ref=evidence.RETIRED_SOURCE_PROJECT_REF,
@@ -731,6 +798,55 @@ def test_reset_attestation_binds_exact_run_and_rejects_wrong_project():
             workflow_repository="acme/erp",
             workflow_run_id=123,
             workflow_run_attempt=2,
+            reset_facts=_reset_facts(),
+            role_cleanup_facts=_role_cleanup_facts(),
+            evidence_cleanup_facts=_evidence_cleanup_facts(),
+            reset_completed_at="2026-08-25T11:00:00+00:00",
+        )
+
+    drifted = _reset_facts()
+    drifted["catalog_relation_count"] = 125
+    with pytest.raises(evidence.EvidenceError, match="data-reset contract"):
+        evidence.build_reset_attestation(
+            project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+            git_commit="a" * 40,
+            reviewed_deploy_sha="b" * 40,
+            workflow_repository="acme/erp",
+            workflow_run_id=123,
+            workflow_run_attempt=2,
+            reset_facts=drifted,
+            role_cleanup_facts=_role_cleanup_facts(),
+            evidence_cleanup_facts=_evidence_cleanup_facts(),
+            reset_completed_at="2026-08-25T11:00:00+00:00",
+        )
+
+    with pytest.raises(evidence.EvidenceError, match="completion time differs"):
+        evidence.build_reset_attestation(
+            project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+            git_commit="a" * 40,
+            reviewed_deploy_sha="b" * 40,
+            workflow_repository="acme/erp",
+            workflow_run_id=123,
+            workflow_run_attempt=2,
+            reset_facts=_reset_facts(),
+            role_cleanup_facts=_role_cleanup_facts(),
+            evidence_cleanup_facts=_evidence_cleanup_facts(),
+            reset_completed_at="2026-08-25T11:00:01+00:00",
+        )
+
+    invalid_cleanup = _evidence_cleanup_facts()
+    invalid_cleanup["retention_in_force_deleted_count"] = 2
+    with pytest.raises(evidence.EvidenceError, match="retention override count"):
+        evidence.build_reset_attestation(
+            project_ref=evidence.CANONICAL_STAGING_PROJECT_REF,
+            git_commit="a" * 40,
+            reviewed_deploy_sha="b" * 40,
+            workflow_repository="acme/erp",
+            workflow_run_id=123,
+            workflow_run_attempt=2,
+            reset_facts=_reset_facts(),
+            role_cleanup_facts=_role_cleanup_facts(),
+            evidence_cleanup_facts=invalid_cleanup,
             reset_completed_at="2026-08-25T11:00:00+00:00",
         )
 
@@ -747,6 +863,9 @@ def test_source_disposition_consumes_exact_reset_attestation(tmp_path: Path):
             workflow_repository="acme/erp",
             workflow_run_id=123,
             workflow_run_attempt=1,
+            reset_facts=_reset_facts(),
+            role_cleanup_facts=_role_cleanup_facts(),
+            evidence_cleanup_facts=_evidence_cleanup_facts(),
             reset_completed_at="2026-08-25T11:00:00+00:00",
         ),
     )

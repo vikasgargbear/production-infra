@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select one Supavisor mode only after every isolated role verifies on it."""
+"""Certify isolated roles on Supavisor without widening runtime transport."""
 
 from __future__ import annotations
 
@@ -24,10 +24,6 @@ PASSWORD_PATTERN = re.compile(r"[A-Za-z0-9_-]{48,96}")
 PROJECT_REF_PATTERN = re.compile(r"[a-z0-9]{20}")
 POOLER_HOST_PATTERN = re.compile(r"[a-z0-9.-]+\.pooler\.supabase\.com")
 TRANSIENT_MARKERS = (
-    # A just-rotated password can be rejected by a stale Supavisor auth worker.
-    # The verifier remains fail-closed: one complete cohort retry is bounded,
-    # and a wrong secret never becomes an accepted connection.
-    ("password authentication failed", "credential_propagation_pending"),
     ("eauthquery", "auth_query_unavailable"),
     ("auth_query secret check timed out", "auth_query_timeout"),
     ("ecircuitbreaker", "pooler_circuit_open"),
@@ -38,11 +34,13 @@ TRANSIENT_MARKERS = (
     ("econnrefused", "connection_refused"),
     ("connection refused", "connection_refused"),
     ("could not connect to server", "connection_unavailable"),
-    ("server didn't return client encoding", "connection_unavailable"),
+    ("server didn't return client encoding", "protocol_handshake_incomplete"),
     ("network is unreachable", "network_unavailable"),
     ("temporary failure in name resolution", "dns_unavailable"),
     ("could not translate host name", "dns_unavailable"),
 )
+PASSWORD_AUTHENTICATION_MARKER = "password authentication failed"
+ROTATION_SCOPED_ENV = "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY"
 MAX_ATTEMPTS = 2
 RETRY_DELAY_SECONDS = 125
 QUIET_WINDOW_FAILURE_KINDS = frozenset(
@@ -72,13 +70,31 @@ class PoolerVerificationFailure(RuntimeError):
 def _transient_kind(error: BaseException) -> str | None:
     if not isinstance(error, psycopg2.OperationalError):
         return None
+    message = " ".join(str(error).lower().split())
+    marker_kind = next(
+        (kind for marker, kind in TRANSIENT_MARKERS if marker in message), None
+    )
+    if marker_kind is not None:
+        return marker_kind
     sqlstate = getattr(error, "pgcode", None)
     if isinstance(sqlstate, str) and sqlstate.startswith("08"):
         return "connection_exception"
     if sqlstate in {"57P01", "57P02", "57P03"}:
         return "database_temporarily_unavailable"
-    message = " ".join(str(error).lower().split())
-    return next((kind for marker, kind in TRANSIENT_MARKERS if marker in message), None)
+    return None
+
+
+def _classified_failure(error: BaseException) -> tuple[str, bool]:
+    if isinstance(error, psycopg2.OperationalError):
+        message = " ".join(str(error).lower().split())
+        if PASSWORD_AUTHENTICATION_MARKER in message:
+            return "invalid_credentials", False
+    transient_kind = _transient_kind(error)
+    return (
+        (transient_kind, True)
+        if transient_kind is not None
+        else ("non_transient_verification_failure", False)
+    )
 
 
 def _role_url(*, role: str, password: str, project_ref: str, host: str, port: str) -> str:
@@ -116,11 +132,11 @@ def verify_role_once(
     except RoleVerificationFailure:
         raise
     except Exception as error:
-        transient_kind = _transient_kind(error)
+        failure_kind, transient = _classified_failure(error)
         raise RoleVerificationFailure(
             role,
-            transient_kind or "non_transient_verification_failure",
-            transient=transient_kind is not None,
+            failure_kind,
+            transient=transient,
         ) from None
 
 
@@ -147,11 +163,11 @@ def verify_admin_once(
     except RoleVerificationFailure:
         raise
     except Exception as error:
-        transient_kind = _transient_kind(error)
+        failure_kind, transient = _classified_failure(error)
         raise RoleVerificationFailure(
             "postgres",
-            transient_kind or "non_transient_verification_failure",
-            transient=transient_kind is not None,
+            failure_kind,
+            transient=transient,
         ) from None
 
 
@@ -204,12 +220,15 @@ def verify_role_set_with_retry(
     project_ref: str,
     host: str,
     port: str,
+    rotation_scoped: bool = False,
     verify_set_once: Callable[..., None] = verify_role_set_once,
     sleep: Callable[[float], None] = time.sleep,
 ) -> None:
     """Require one complete role cohort to pass in the same bounded sweep."""
 
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    transient_retries_remaining = MAX_ATTEMPTS - 1
+    rotation_cache_retries_remaining = 1 if rotation_scoped else 0
+    while True:
         try:
             verify_set_once(
                 roles=roles,
@@ -219,10 +238,18 @@ def verify_role_set_with_retry(
             )
             return
         except RoleVerificationFailure as failure:
-            if not failure.transient or attempt == MAX_ATTEMPTS:
-                raise
-            sleep(RETRY_DELAY_SECONDS)
-    raise AssertionError("bounded cohort verification loop did not terminate")
+            if (
+                failure.kind == "invalid_credentials"
+                and rotation_cache_retries_remaining
+            ):
+                rotation_cache_retries_remaining -= 1
+                sleep(RETRY_DELAY_SECONDS)
+                continue
+            if failure.transient and transient_retries_remaining:
+                transient_retries_remaining -= 1
+                sleep(RETRY_DELAY_SECONDS)
+                continue
+            raise
 
 
 def select_pooler(
@@ -231,29 +258,22 @@ def select_pooler(
     project_ref: str,
     host: str,
     session_port: str,
-    transaction_port: str,
+    rotation_scoped: bool = False,
     verify_set: Callable[..., None] = verify_role_set_with_retry,
 ) -> tuple[str, str]:
+    """Certify all runtime roles on the session pooler only."""
+
     try:
         verify_set(
-            roles=roles, project_ref=project_ref, host=host, port=session_port
+            roles=roles,
+            project_ref=project_ref,
+            host=host,
+            port=session_port,
+            rotation_scoped=rotation_scoped,
         )
         return session_port, "session"
     except RoleVerificationFailure as session_failure:
-        if not session_failure.transient:
-            raise PoolerVerificationFailure("session", session_failure) from None
-        if session_failure.kind in QUIET_WINDOW_FAILURE_KINDS:
-            raise PoolerVerificationFailure("session", session_failure) from None
-
-    try:
-        # A partial session-mode pass grants no authority to mix pooler modes.
-        # Every reviewed role is verified again from the beginning here.
-        verify_set(
-            roles=roles, project_ref=project_ref, host=host, port=transaction_port
-        )
-        return transaction_port, "transaction"
-    except RoleVerificationFailure as transaction_failure:
-        raise PoolerVerificationFailure("transaction", transaction_failure) from None
+        raise PoolerVerificationFailure("session", session_failure) from None
 
 
 def select_admin_pooler(
@@ -321,6 +341,13 @@ def _configuration(environment: Mapping[str, str]) -> tuple[
     return roles, project_ref, host, session_port, transaction_port
 
 
+def _rotation_scoped(environment: Mapping[str, str]) -> bool:
+    value = environment.get(ROTATION_SCOPED_ENV, "false")
+    if value not in {"false", "true"}:
+        raise ValueError("invalid rotation-scoped verifier setting")
+    return value == "true"
+
+
 def _write_pooler_environment(
     *,
     environment: Mapping[str, str],
@@ -332,7 +359,7 @@ def _write_pooler_environment(
     admin_password = environment.get("SUPABASE_DB_PASSWORD", "")
     github_env = environment.get("GITHUB_ENV", "")
     if not admin_password or not github_env:
-        raise ValueError("transaction pooler environment is incomplete")
+        raise ValueError("pooler environment is incomplete")
     psycopg_url = (
         f"postgresql://postgres.{project_ref}:{quote(admin_password, safe='')}"
         f"@{host}:{port}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15"
@@ -374,7 +401,7 @@ def main(arguments: list[str] | None = None) -> int:
                 project_ref=project_ref,
                 host=host,
                 session_port=session_port,
-                transaction_port=transaction_port,
+                rotation_scoped=_rotation_scoped(os.environ),
             )
             try:
                 verify_admin_with_retry(

@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import inspect
@@ -30,6 +30,19 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
 RETIRED_SOURCE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
 SCHEMA_VERSION = "2.0.0"
+RESET_SCOPE = "canonical_disposable_data_v1"
+RESET_CONTRACT_VERSION = "canonical-data-reset-v1"
+EVIDENCE_RESET_CLEANUP_VERSION = "canonical-evidence-reset-cleanup-v1"
+EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
+RESET_ALEMBIC_SCHEMA_COUNT = 30
+RESET_CANONICAL_RELATION_COUNT = 119
+RESET_EPHEMERAL_RELATION_COUNT = 7
+RESET_CATALOG_RELATION_COUNT = 126
+RESET_PRESERVED_SEED_RELATION_COUNT = 5
+RESET_DISPOSABLE_RELATION_COUNT = 114
+RESET_TRUNCATE_RELATION_COUNT = 121
+ALEMBIC_REVISION = re.compile(r"^[0-9]{8}_[0-9]{4}$")
+ISOLATED_ROLE_COUNT = 4
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 PREVIEW_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -142,6 +155,9 @@ def build_reset_attestation(
     workflow_repository: str,
     workflow_run_id: int,
     workflow_run_attempt: int,
+    reset_facts: Mapping[str, Any],
+    role_cleanup_facts: Mapping[str, Any],
+    evidence_cleanup_facts: Mapping[str, Any],
     reset_completed_at: str,
 ) -> dict[str, Any]:
     """Build the immutable receipt for a completed disposable staging reset."""
@@ -157,6 +173,17 @@ def build_reset_attestation(
     if workflow_run_id <= 0 or workflow_run_attempt <= 0:
         raise EvidenceError("reset workflow run identity must be positive")
     completed_at = _timestamp(reset_completed_at, "reset_completed_at")
+    facts = _validated_reset_facts(reset_facts)
+    cleanup = _validated_role_cleanup_facts(role_cleanup_facts)
+    evidence_cleanup = _validated_evidence_cleanup_facts(evidence_cleanup_facts)
+    if facts["project_ref"] != project_ref:
+        raise EvidenceError("reset facts project differs from attestation project")
+    if facts["completed_at"] != completed_at:
+        raise EvidenceError("reset facts completion time differs from attestation")
+    if cleanup["project_ref"] != project_ref:
+        raise EvidenceError("role cleanup facts project differs from attestation project")
+    if evidence_cleanup["project_ref"] != project_ref:
+        raise EvidenceError("evidence cleanup facts project differs from attestation project")
     workflow_url = (
         f"https://github.com/{workflow_repository}/actions/runs/{workflow_run_id}"
     )
@@ -171,13 +198,166 @@ def build_reset_attestation(
             "workflow_run_attempt": workflow_run_attempt,
             "workflow_run_url": workflow_url,
             "reset_completed_at": completed_at,
-            "reset_scope": "canonical_schemas_and_isolated_roles",
+            "reset_scope": RESET_SCOPE,
             "retired_source_accessed": False,
             "auth_schema_preserved": True,
-            "alembic_version_removed": True,
-            "canonical_schema_count_after_reset": 0,
+            "storage_schema_preserved": True,
+            "alembic_version_preserved": facts["alembic_head"],
+            "alembic_schema_count_after_reset": facts["alembic_schema_count"],
+            "reset_authority_manifest_sha256": facts[
+                "authority_manifest_sha256"
+            ],
+            "catalog_fingerprint_sha256": facts["catalog_fingerprint_sha256"],
+            "preserved_seed_digest_sha256": facts[
+                "preserved_seed_digest_sha256"
+            ],
+            "canonical_relation_count_after_reset": facts[
+                "canonical_relation_count"
+            ],
+            "ephemeral_scope_relation_count_after_reset": facts[
+                "ephemeral_scope_relation_count"
+            ],
+            "catalog_relation_count_after_reset": facts["catalog_relation_count"],
+            "preserved_seed_relation_count_after_reset": facts[
+                "preserved_seed_relation_count"
+            ],
+            "disposable_relation_count_after_reset": facts["reset_relation_count"],
+            "truncate_relation_count": facts["truncate_relation_count"],
+            "disposable_row_count_after_reset": 0,
+            "evidence_storage_object_count_after_reset": 0,
+            "schema_oids_preserved": True,
+            "relation_oids_preserved": True,
+            "isolated_role_posture_preserved": True,
+            "isolated_role_catalog_preserved": True,
+            "post_cleanup_managed_role_count": cleanup["managed_role_count"],
+            "post_cleanup_login_role_count": cleanup["login_role_count"],
+            "post_cleanup_login_password_present_count": cleanup[
+                "login_role_password_present_count"
+            ],
+            "post_cleanup_postgres_migration_owner_set": False,
+            "post_cleanup_postgres_migration_owner_usage": False,
+            "post_cleanup_role_catalog_sha256": cleanup["role_catalog_sha256"],
+            "post_cleanup_verified_at": cleanup["verified_at"],
+            "post_cleanup_facts_sha256": hashlib.sha256(
+                _json_bytes(dict(cleanup))
+            ).hexdigest(),
+            "evidence_cleanup_deleted_object_count": evidence_cleanup[
+                "deleted_object_count"
+            ],
+            "evidence_cleanup_retention_override_count": evidence_cleanup[
+                "retention_in_force_deleted_count"
+            ],
+            "evidence_cleanup_object_key_set_sha256": evidence_cleanup[
+                "object_key_set_sha256"
+            ],
+            "evidence_cleanup_completed_at": evidence_cleanup["completed_at"],
+            "evidence_cleanup_facts_sha256": hashlib.sha256(
+                _json_bytes(dict(evidence_cleanup))
+            ).hexdigest(),
+            "reset_facts_sha256": hashlib.sha256(
+                _json_bytes(dict(facts))
+            ).hexdigest(),
         },
     }
+
+
+def _validated_reset_facts(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise EvidenceError("reset facts must be a JSON object")
+    facts = dict(value)
+    exact = {
+        "contract_version": RESET_CONTRACT_VERSION,
+        "project_ref": CANONICAL_STAGING_PROJECT_REF,
+        "alembic_schema_count": RESET_ALEMBIC_SCHEMA_COUNT,
+        "canonical_relation_count": RESET_CANONICAL_RELATION_COUNT,
+        "ephemeral_scope_relation_count": RESET_EPHEMERAL_RELATION_COUNT,
+        "catalog_relation_count": RESET_CATALOG_RELATION_COUNT,
+        "preserved_seed_relation_count": RESET_PRESERVED_SEED_RELATION_COUNT,
+        "reset_relation_count": RESET_DISPOSABLE_RELATION_COUNT,
+        "truncate_relation_count": RESET_TRUNCATE_RELATION_COUNT,
+        "disposable_row_count_after_reset": 0,
+        "evidence_storage_object_count_after_reset": 0,
+        "auth_schema_preserved": True,
+        "storage_schema_preserved": True,
+        "schema_oids_preserved": True,
+        "relation_oids_preserved": True,
+        "isolated_role_posture_preserved": True,
+        "isolated_role_catalog_preserved": True,
+    }
+    if any(facts.get(key) != expected for key, expected in exact.items()):
+        raise EvidenceError("reset facts do not match the reviewed data-reset contract")
+    if ALEMBIC_REVISION.fullmatch(str(facts.get("alembic_head", ""))) is None:
+        raise EvidenceError("reset facts lack an exact Alembic head")
+    for field in (
+        "authority_manifest_sha256",
+        "catalog_fingerprint_sha256",
+        "preserved_seed_digest_sha256",
+    ):
+        if SHA256.fullmatch(str(facts.get(field, ""))) is None:
+            raise EvidenceError(f"reset facts lack {field}")
+    before_count = facts.get("disposable_row_count_before_reset")
+    if not isinstance(before_count, int) or isinstance(before_count, bool) or before_count < 0:
+        raise EvidenceError("reset facts contain an invalid pre-reset row count")
+    _timestamp(facts.get("completed_at"), "reset_facts.completed_at")
+    return facts
+
+
+def _validated_role_cleanup_facts(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise EvidenceError("role cleanup facts must be a JSON object")
+    facts = dict(value)
+    exact = {
+        "contract_version": RESET_CONTRACT_VERSION,
+        "project_ref": CANONICAL_STAGING_PROJECT_REF,
+        "managed_role_count": 6,
+        "login_role_count": ISOLATED_ROLE_COUNT,
+        "login_role_password_present_count": ISOLATED_ROLE_COUNT,
+        "postgres_migration_owner_set": False,
+        "postgres_migration_owner_usage": False,
+    }
+    if any(facts.get(key) != expected for key, expected in exact.items()):
+        raise EvidenceError("role cleanup facts do not match the reviewed contract")
+    if SHA256.fullmatch(str(facts.get("role_catalog_sha256", ""))) is None:
+        raise EvidenceError("role cleanup facts lack role_catalog_sha256")
+    _timestamp(facts.get("verified_at"), "role_cleanup_facts.verified_at")
+    return facts
+
+
+def _validated_evidence_cleanup_facts(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise EvidenceError("evidence cleanup facts must be a JSON object")
+    facts = dict(value)
+    exact = {
+        "contract_version": EVIDENCE_RESET_CLEANUP_VERSION,
+        "state": "empty",
+        "project_ref": CANONICAL_STAGING_PROJECT_REF,
+        "bucket": EVIDENCE_STORAGE_BUCKET,
+        "remaining_object_count": 0,
+        "legal_hold_count": 0,
+    }
+    if any(facts.get(key) != expected for key, expected in exact.items()):
+        raise EvidenceError("evidence cleanup facts do not match the reviewed contract")
+    integer_fields = (
+        "reconciled_object_count",
+        "deleted_object_count",
+        "retention_in_force_deleted_count",
+    )
+    for field in integer_fields:
+        count = facts.get(field)
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise EvidenceError(f"evidence cleanup facts contain invalid {field}")
+    if facts["reconciled_object_count"] != facts["deleted_object_count"]:
+        raise EvidenceError("evidence cleanup reconciled and deleted counts differ")
+    if facts["retention_in_force_deleted_count"] > facts["deleted_object_count"]:
+        raise EvidenceError("evidence cleanup retention override count is impossible")
+    if SHA256.fullmatch(str(facts.get("object_key_set_sha256", ""))) is None:
+        raise EvidenceError("evidence cleanup facts lack object_key_set_sha256")
+    try:
+        date.fromisoformat(str(facts.get("database_date", "")))
+    except ValueError as exc:
+        raise EvidenceError("evidence cleanup facts lack database_date") from exc
+    _timestamp(facts.get("completed_at"), "evidence_cleanup_facts.completed_at")
+    return facts
 
 
 def _timestamp(value: Any, label: str) -> str:
@@ -621,13 +801,37 @@ def wrap_reviewed_input(
             "project_ref": CANONICAL_STAGING_PROJECT_REF,
             "workflow_run_url": reset_run,
             "reset_completed_at": value.get("reset_completed_at"),
-            "reset_scope": "canonical_schemas_and_isolated_roles",
+            "reset_scope": RESET_SCOPE,
             "retired_source_accessed": False,
             "auth_schema_preserved": True,
-            "alembic_version_removed": True,
-            "canonical_schema_count_after_reset": 0,
+            "storage_schema_preserved": True,
+            "alembic_schema_count_after_reset": RESET_ALEMBIC_SCHEMA_COUNT,
+            "canonical_relation_count_after_reset": RESET_CANONICAL_RELATION_COUNT,
+            "ephemeral_scope_relation_count_after_reset": (
+                RESET_EPHEMERAL_RELATION_COUNT
+            ),
+            "catalog_relation_count_after_reset": RESET_CATALOG_RELATION_COUNT,
+            "preserved_seed_relation_count_after_reset": (
+                RESET_PRESERVED_SEED_RELATION_COUNT
+            ),
+            "disposable_relation_count_after_reset": RESET_DISPOSABLE_RELATION_COUNT,
+            "truncate_relation_count": RESET_TRUNCATE_RELATION_COUNT,
+            "disposable_row_count_after_reset": 0,
+            "evidence_storage_object_count_after_reset": 0,
+            "schema_oids_preserved": True,
+            "relation_oids_preserved": True,
+            "isolated_role_posture_preserved": True,
+            "isolated_role_catalog_preserved": True,
+            "post_cleanup_managed_role_count": 6,
+            "post_cleanup_login_role_count": ISOLATED_ROLE_COUNT,
+            "post_cleanup_login_password_present_count": ISOLATED_ROLE_COUNT,
+            "post_cleanup_postgres_migration_owner_set": False,
+            "post_cleanup_postgres_migration_owner_usage": False,
         }
-        if any(reset_payload.get(key) != expected for key, expected in required_reset.items()):
+        if any(
+            reset_payload.get(key) != expected
+            for key, expected in required_reset.items()
+        ):
             raise EvidenceError(
                 "source disposition disagrees with the hash-bound reset attestation"
             )
@@ -635,6 +839,46 @@ def wrap_reviewed_input(
         _exact_sha(
             reset_payload.get("reviewed_deploy_sha"),
             "reset attestation reviewed_deploy_sha",
+        )
+        if ALEMBIC_REVISION.fullmatch(
+            str(reset_payload.get("alembic_version_preserved", ""))
+        ) is None:
+            raise EvidenceError(
+                "source disposition reset attestation lacks the preserved Alembic revision"
+            )
+        for field in (
+            "reset_authority_manifest_sha256",
+            "catalog_fingerprint_sha256",
+            "preserved_seed_digest_sha256",
+            "reset_facts_sha256",
+            "post_cleanup_role_catalog_sha256",
+            "post_cleanup_facts_sha256",
+            "evidence_cleanup_object_key_set_sha256",
+            "evidence_cleanup_facts_sha256",
+        ):
+            if SHA256.fullmatch(str(reset_payload.get(field, ""))) is None:
+                raise EvidenceError(
+                    f"source disposition reset attestation lacks {field}"
+                )
+        deleted_count = reset_payload.get("evidence_cleanup_deleted_object_count")
+        override_count = reset_payload.get(
+            "evidence_cleanup_retention_override_count"
+        )
+        if (
+            not isinstance(deleted_count, int)
+            or isinstance(deleted_count, bool)
+            or deleted_count < 0
+            or not isinstance(override_count, int)
+            or isinstance(override_count, bool)
+            or override_count < 0
+            or override_count > deleted_count
+        ):
+            raise EvidenceError(
+                "source disposition reset attestation has invalid evidence cleanup counts"
+            )
+        _timestamp(
+            reset_payload.get("evidence_cleanup_completed_at"),
+            "reset attestation evidence_cleanup_completed_at",
         )
         payload_reset_attestation = reset_attestation
     elif kind == "rollback_plan":
@@ -1619,10 +1863,72 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
         != source_payload.get("reset_completed_at")
         or reset_payload.get("retired_source_accessed") is not False
         or reset_payload.get("auth_schema_preserved") is not True
-        or reset_payload.get("alembic_version_removed") is not True
-        or reset_payload.get("canonical_schema_count_after_reset") != 0
+        or reset_payload.get("storage_schema_preserved") is not True
+        or reset_payload.get("alembic_schema_count_after_reset")
+        != RESET_ALEMBIC_SCHEMA_COUNT
+        or reset_payload.get("reset_scope") != RESET_SCOPE
+        or reset_payload.get("canonical_relation_count_after_reset")
+        != RESET_CANONICAL_RELATION_COUNT
+        or reset_payload.get("ephemeral_scope_relation_count_after_reset")
+        != RESET_EPHEMERAL_RELATION_COUNT
+        or reset_payload.get("catalog_relation_count_after_reset")
+        != RESET_CATALOG_RELATION_COUNT
+        or reset_payload.get("preserved_seed_relation_count_after_reset")
+        != RESET_PRESERVED_SEED_RELATION_COUNT
+        or reset_payload.get("disposable_relation_count_after_reset")
+        != RESET_DISPOSABLE_RELATION_COUNT
+        or reset_payload.get("truncate_relation_count")
+        != RESET_TRUNCATE_RELATION_COUNT
+        or reset_payload.get("disposable_row_count_after_reset") != 0
+        or reset_payload.get("evidence_storage_object_count_after_reset") != 0
+        or reset_payload.get("schema_oids_preserved") is not True
+        or reset_payload.get("relation_oids_preserved") is not True
+        or reset_payload.get("isolated_role_posture_preserved") is not True
+        or reset_payload.get("isolated_role_catalog_preserved") is not True
+        or reset_payload.get("post_cleanup_managed_role_count") != 6
+        or reset_payload.get("post_cleanup_login_role_count") != ISOLATED_ROLE_COUNT
+        or reset_payload.get("post_cleanup_login_password_present_count")
+        != ISOLATED_ROLE_COUNT
+        or reset_payload.get("post_cleanup_postgres_migration_owner_set") is not False
+        or reset_payload.get("post_cleanup_postgres_migration_owner_usage") is not False
     ):
         raise EvidenceError("source disposition reset attestation is invalid")
+    evidence_deleted = reset_payload.get("evidence_cleanup_deleted_object_count")
+    evidence_overridden = reset_payload.get("evidence_cleanup_retention_override_count")
+    if (
+        not isinstance(evidence_deleted, int)
+        or isinstance(evidence_deleted, bool)
+        or evidence_deleted < 0
+        or not isinstance(evidence_overridden, int)
+        or isinstance(evidence_overridden, bool)
+        or evidence_overridden < 0
+        or evidence_overridden > evidence_deleted
+    ):
+        raise EvidenceError("source disposition reset attestation is invalid")
+    if ALEMBIC_REVISION.fullmatch(
+        str(reset_payload.get("alembic_version_preserved", ""))
+    ) is None or any(
+        SHA256.fullmatch(str(reset_payload.get(field, ""))) is None
+        for field in (
+            "reset_authority_manifest_sha256",
+            "catalog_fingerprint_sha256",
+            "preserved_seed_digest_sha256",
+            "reset_facts_sha256",
+            "post_cleanup_role_catalog_sha256",
+            "post_cleanup_facts_sha256",
+            "evidence_cleanup_object_key_set_sha256",
+            "evidence_cleanup_facts_sha256",
+        )
+    ):
+        raise EvidenceError("source disposition reset attestation is invalid")
+    _timestamp(
+        reset_payload.get("post_cleanup_verified_at"),
+        "source disposition post_cleanup_verified_at",
+    )
+    _timestamp(
+        reset_payload.get("evidence_cleanup_completed_at"),
+        "source disposition evidence_cleanup_completed_at",
+    )
     if hashlib.sha256(_json_bytes(reset_attestation)).hexdigest() != source_payload.get(
         "reset_artifact_sha256"
     ):
@@ -1776,6 +2082,9 @@ def main() -> int:
     reset.add_argument("--workflow-repository", required=True)
     reset.add_argument("--workflow-run-id", required=True, type=int)
     reset.add_argument("--workflow-run-attempt", required=True, type=int)
+    reset.add_argument("--reset-facts", required=True)
+    reset.add_argument("--role-cleanup-facts", required=True)
+    reset.add_argument("--evidence-cleanup-facts", required=True)
     reset.add_argument("--reset-completed-at", required=True)
     reset.add_argument("--output", required=True)
 
@@ -1848,6 +2157,11 @@ def main() -> int:
                 workflow_repository=args.workflow_repository,
                 workflow_run_id=args.workflow_run_id,
                 workflow_run_attempt=args.workflow_run_attempt,
+                reset_facts=_load_json(Path(args.reset_facts)),
+                role_cleanup_facts=_load_json(Path(args.role_cleanup_facts)),
+                evidence_cleanup_facts=_load_json(
+                    Path(args.evidence_cleanup_facts)
+                ),
                 reset_completed_at=args.reset_completed_at,
             )
             _write_json(Path(args.output), value)
