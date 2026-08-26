@@ -758,7 +758,7 @@ def test_reset_rotates_existing_identity_without_reopening_storage_writer() -> N
     cleanup = workflow.split(
         "Remove reconciled unprotected evidence objects before the disposable reset",
         1,
-    )[1].split("Reset canonical data on the pinned disposable project", 1)[0]
+    )[1].split("Apply or verify the approved canonical migration head", 1)[0]
     post_migration = workflow.split(
         "Provision canonical private evidence storage", 1
     )[1].split("Prove canonical evidence storage least privilege", 1)[0]
@@ -1041,12 +1041,15 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     production_workflow = _read(".github/workflows/production-readiness.yml")
     reset_step = workflow.split(
         "Reset canonical data on the pinned disposable project", 1
-    )[1].split("Apply or verify the approved canonical migration head", 1)[0]
+    )[1].split("Provision isolated staging login credentials", 1)[0]
 
     assert "reset_disposable_data:" in workflow
     assert "if: inputs.reset_disposable_data == true" in workflow
     assert "Refuse any target except the reviewed free staging project" in workflow
     assert "Close canonical writes before the disposable data reset" in workflow
+    assert workflow.index(
+        "Apply or verify the approved canonical migration head"
+    ) < workflow.index("Reset canonical data on the pinned disposable project")
     assert "canonical_data_reset_authority.py" in reset_step
     assert "--execute-reset" in reset_step
     assert "--expected-evidence-object-count 0" in reset_step

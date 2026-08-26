@@ -747,8 +747,8 @@ def test_workflow_decouples_empty_cleanup_from_post_reset_runtime_provisioning()
         < render_quiesced
         < pre_cleanup_provision
         < cleanup
-        < reset
         < migration
+        < reset
         < provision
     )
     pre_cleanup_step = workflow[pre_cleanup_provision:cleanup]

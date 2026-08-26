@@ -496,90 +496,6 @@ jobs:
              and .retention_in_force_deleted_count >= 0' \
             staging-evidence/canonical-evidence-storage-reset-cleanup.json >/dev/null
 
-      - name: Reset canonical data on the pinned disposable project
-        if: inputs.reset_disposable_data == true
-        run: |
-          set -euo pipefail
-          mkdir -p staging-evidence
-          reset_log=$(mktemp)
-          if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
-          SELECT pg_catalog.pg_terminate_backend(activity.pid)
-            FROM pg_catalog.pg_stat_activity AS activity
-           WHERE activity.pid <> pg_catalog.pg_backend_pid()
-             AND activity.usename IN (
-               'erp_runtime', 'erp_calculator', 'erp_regulatory_importer',
-               'erp_tax_provider'
-             );
-          SQL
-          then
-            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
-            exit 1
-          fi
-
-          cleanup_role_membership() {
-            bash backend/scripts/revoke_staging_postgres_set_roles.sh migration-owner
-          }
-          cleanup_role_membership_on_exit() {
-            local prior_status=$?
-            trap - EXIT
-            if ! cleanup_role_membership; then
-              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
-              exit 1
-            fi
-            exit "$prior_status"
-          }
-          trap cleanup_role_membership_on_exit EXIT
-
-          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' \
-            >/dev/null
-          if ! python3 backend/scripts/canonical_data_reset_authority.py \
-              --execute-reset \
-              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-              --database-url-env PSYCOPG_DATABASE_URL \
-              --expected-evidence-object-count 0 \
-              --receipt staging-evidence/canonical-data-reset-facts.json \
-              >"$reset_log" 2>&1; then
-            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
-            exit 1
-          fi
-          if ! cleanup_role_membership; then
-            trap - EXIT
-            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
-            exit 1
-          fi
-          trap - EXIT
-
-          if ! python3 backend/scripts/canonical_data_reset_authority.py \
-              --verify-role-cleanup \
-              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-              --database-url-env PSYCOPG_DATABASE_URL \
-              --receipt staging-evidence/canonical-post-reset-role-facts.json \
-              >>"$reset_log" 2>&1; then
-            python3 backend/scripts/safe_ci_log_summary.py --label reset-role-cleanup "$reset_log"
-            exit 1
-          fi
-
-          reviewed_deploy_sha='${{ inputs.render_deploy_sha }}'
-          if [ -z "$reviewed_deploy_sha" ]; then
-            reviewed_deploy_sha="$GITHUB_SHA"
-          fi
-          reset_completed_at=$(jq -er '.completed_at' \
-            staging-evidence/canonical-data-reset-facts.json)
-          python3 backend/scripts/audit/application_promotion_evidence.py \
-            reset-attestation \
-            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --git-commit "$GITHUB_SHA" \
-            --reviewed-deploy-sha "$reviewed_deploy_sha" \
-            --workflow-repository "$GITHUB_REPOSITORY" \
-            --workflow-run-id "$GITHUB_RUN_ID" \
-            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --reset-facts staging-evidence/canonical-data-reset-facts.json \
-            --role-cleanup-facts staging-evidence/canonical-post-reset-role-facts.json \
-            --evidence-cleanup-facts staging-evidence/canonical-evidence-storage-reset-cleanup.json \
-            --reset-completed-at "$reset_completed_at" \
-            --output staging-evidence/canonical-staging-reset.json
-
       - name: Apply or verify the approved canonical migration head
         run: |
           set -euo pipefail
@@ -731,6 +647,90 @@ jobs:
           PY
             exit 1
           fi
+
+      - name: Reset canonical data on the pinned disposable project
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          reset_log=$(mktemp)
+          if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
+          SELECT pg_catalog.pg_terminate_backend(activity.pid)
+            FROM pg_catalog.pg_stat_activity AS activity
+           WHERE activity.pid <> pg_catalog.pg_backend_pid()
+             AND activity.usename IN (
+               'erp_runtime', 'erp_calculator', 'erp_regulatory_importer',
+               'erp_tax_provider'
+             );
+          SQL
+          then
+            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
+            exit 1
+          fi
+
+          cleanup_role_membership() {
+            bash backend/scripts/revoke_staging_postgres_set_roles.sh migration-owner
+          }
+          cleanup_role_membership_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            if ! cleanup_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_role_membership_on_exit EXIT
+
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' \
+            >/dev/null
+          if ! python3 backend/scripts/canonical_data_reset_authority.py \
+              --execute-reset \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --database-url-env PSYCOPG_DATABASE_URL \
+              --expected-evidence-object-count 0 \
+              --receipt staging-evidence/canonical-data-reset-facts.json \
+              >"$reset_log" 2>&1; then
+            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
+            exit 1
+          fi
+          if ! cleanup_role_membership; then
+            trap - EXIT
+            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
+            exit 1
+          fi
+          trap - EXIT
+
+          if ! python3 backend/scripts/canonical_data_reset_authority.py \
+              --verify-role-cleanup \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --database-url-env PSYCOPG_DATABASE_URL \
+              --receipt staging-evidence/canonical-post-reset-role-facts.json \
+              >>"$reset_log" 2>&1; then
+            python3 backend/scripts/safe_ci_log_summary.py --label reset-role-cleanup "$reset_log"
+            exit 1
+          fi
+
+          reviewed_deploy_sha='${{ inputs.render_deploy_sha }}'
+          if [ -z "$reviewed_deploy_sha" ]; then
+            reviewed_deploy_sha="$GITHUB_SHA"
+          fi
+          reset_completed_at=$(jq -er '.completed_at' \
+            staging-evidence/canonical-data-reset-facts.json)
+          python3 backend/scripts/audit/application_promotion_evidence.py \
+            reset-attestation \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$GITHUB_SHA" \
+            --reviewed-deploy-sha "$reviewed_deploy_sha" \
+            --workflow-repository "$GITHUB_REPOSITORY" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --reset-facts staging-evidence/canonical-data-reset-facts.json \
+            --role-cleanup-facts staging-evidence/canonical-post-reset-role-facts.json \
+            --evidence-cleanup-facts staging-evidence/canonical-evidence-storage-reset-cleanup.json \
+            --reset-completed-at "$reset_completed_at" \
+            --output staging-evidence/canonical-staging-reset.json
 
       - name: Provision isolated staging login credentials
         if: inputs.rotate_role_passwords == true
