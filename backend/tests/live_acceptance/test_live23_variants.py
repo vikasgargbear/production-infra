@@ -8,7 +8,6 @@ import pytest
 from scripts.live_acceptance.live23_variants import (
     EXPECTED_VARIANTS,
     Live23VariantError,
-    compile_final_return_variant,
     compile_ready_variant,
     derive_final_return_choices,
     load_variant_registry,
@@ -173,7 +172,7 @@ def test_ready_variants_compile_as_exact_ui_driven_residual_writes(
     billed: str,
     free: str,
 ) -> None:
-    operation = compile_final_return_variant(scenario_id, _facts(), _scalars())
+    operation = compile_ready_variant(scenario_id, _facts(), _scalars())
     serialized = json.dumps(operation)
     assert resource_token in serialized
     assert billed in serialized

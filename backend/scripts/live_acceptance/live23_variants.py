@@ -2,8 +2,9 @@
 
 This module deliberately does not turn partial readiness into a live pass.  It
 derives the two residual-return quantities from the reviewed Live18 scalar
-pack and compiles only repository-owned UI intent.  The other three variants
-remain blocked until canonical fixture and document-policy authority exists.
+pack and compiles only repository-owned UI intent.  Four variants are ready;
+commercial-only sales return remains blocked until reviewed tax-policy
+authority exists.
 """
 
 from __future__ import annotations
@@ -176,6 +177,3 @@ def compile_ready_variant(
     )
     _validate_compiled_steps(row["operation_id"], operation, approval_policy)
     return operation
-
-
-compile_final_return_variant = compile_ready_variant
