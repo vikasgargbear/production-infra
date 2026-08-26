@@ -36,7 +36,7 @@
   },
   "migration_revision": "20260826_0027",
   "migration_sql": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
-  "migration_sql_sha256": "9702a336715e81b7b936dedaa96519990fa96b73d49adbd99a379cb7d528de3f",
+  "migration_sql_sha256": "6c124371fdf68550c33ea0eb348b341b687e006f59650258d1f606e580543a2d",
   "public_request_code_fields": [],
   "relation": "core.master_code_sequences",
   "retention": {

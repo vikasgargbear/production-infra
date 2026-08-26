@@ -1,7 +1,6 @@
 CREATE SCHEMA erp_master_commands AUTHORIZATION erp_migration_owner;
-REVOKE ALL ON SCHEMA erp_master_commands FROM PUBLIC, erp_app, erp_runtime;
-
 SET LOCAL ROLE erp_migration_owner;
+REVOKE ALL ON SCHEMA erp_master_commands FROM PUBLIC, erp_app, erp_runtime;
 
 CREATE TABLE core.master_code_sequences (
     org_id uuid NOT NULL,

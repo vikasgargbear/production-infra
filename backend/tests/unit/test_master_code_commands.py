@@ -34,10 +34,17 @@ def _load(path: Path, name: str):
 def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
     revision = _load(REVISION, "master_code_revision")
     source = SQL.read_bytes()
+    sql = source.decode("utf-8")
 
     assert revision.revision == "20260826_0027"
     assert revision.down_revision == "20260826_0026"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(source).hexdigest()
+    assert sql.index(
+        "CREATE SCHEMA erp_master_commands AUTHORIZATION erp_migration_owner;"
+    ) < sql.index("SET LOCAL ROLE erp_migration_owner;")
+    assert sql.index("SET LOCAL ROLE erp_migration_owner;") < sql.index(
+        "REVOKE ALL ON SCHEMA erp_master_commands"
+    )
     assert canonical_erp_reads.__name__
 
     deployment = _load(
