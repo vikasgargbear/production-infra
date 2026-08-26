@@ -33,6 +33,34 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
    bucket policy, exact service identity, hook readback, and retention setting have
    all been verified.
 
+## Credential cutover
+
+Replacing the earlier custom secret API key is a two-phase deployment, not an
+in-place credential swap:
+
+1. **Prepare:** reconcile and verify the service user, but retain the exact
+   legacy Supabase key and both legacy Render environment variables. Deploy the
+   reviewed SHA with the new service-user configuration while the legacy
+   credential remains a bounded rollback authority.
+2. **Prove:** bind all three Render services to that SHA and complete Live18.
+   The reconciliation receipt must include the successful browser-driven
+   `POST /api/web/evidence/expense-receipts`; that response is emitted only
+   after the deployed backend stores and reads back the exact PDF bytes.
+3. **Retire:** accept only the same-run prepare and reconciliation receipts,
+   remove and read back the two Render variables, then delete and read back the
+   exact provider key observed during prepare. A missing, mismatched, stale, or
+   non-Render proof fails before mutation. A mid-retirement failure records the
+   completed boundary without logging any credential.
+
+Render's environment-variable API saves these configuration deletions without
+deploying them; the already certified exact-SHA instance remains running. The
+dead variables disappear from the process environment on its next explicit,
+exact-SHA-bound deploy.
+
+The Auth-hook rollout is intentionally separate from retirement. Retirement
+never patches Auth configuration, rotates the service user, or invents a
+fallback credential.
+
 The object key is immutable and content-addressed:
 
 ```text

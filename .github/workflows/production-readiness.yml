@@ -1154,6 +1154,8 @@ jobs:
             echo "LIVE18_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live18-database-evidence.json"
             echo "LIVE18_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live18-reconciliation-attestation.json"
             echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"
+            echo "LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH=$RUNNER_TEMP/live18-evidence-identity-prepare.json"
+            echo "LIVE18_EVIDENCE_CREDENTIAL_RETIREMENT_PATH=$RUNNER_TEMP/live18-evidence-credential-retirement.json"
             echo "LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH=$RUNNER_TEMP/live18-railway-identity-response.json"
             echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$HOME/.ssh/live18-railway-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             echo "LIVE18_RAILWAY_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/live18-railway-ssh-fingerprint"
@@ -1237,27 +1239,34 @@ jobs:
           [[ "$artifact_id" =~ ^[1-9][0-9]*$ ]]
           gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
             > "$archive"
-          python3 - "$archive" "$LIVE18_DEMO_EVIDENCE_PATH" <<'PY'
+          python3 - "$archive" "$LIVE18_DEMO_EVIDENCE_PATH" \
+            "$LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH" <<'PY'
           import os
           from pathlib import Path, PurePosixPath
           import sys
           from zipfile import ZipFile
 
           archive = Path(sys.argv[1])
-          output = Path(sys.argv[2])
           with ZipFile(archive) as bundle:
-              matches = [
-                  row for row in bundle.infolist()
-                  if not row.is_dir()
-                  and PurePosixPath(row.filename).name
-                  == "live18-render-demo-receipt.json"
-              ]
-              if len(matches) != 1 or matches[0].file_size > 65536:
-                  raise SystemExit("same-run Render demo receipt is missing or ambiguous")
-              payload = bundle.read(matches[0])
-          descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-          with os.fdopen(descriptor, "wb") as handle:
-              handle.write(payload)
+              for filename, target in (
+                  ("live18-render-demo-receipt.json", Path(sys.argv[2])),
+                  ("canonical-evidence-storage-identity.json", Path(sys.argv[3])),
+              ):
+                  matches = [
+                      row for row in bundle.infolist()
+                      if not row.is_dir()
+                      and PurePosixPath(row.filename).name == filename
+                  ]
+                  if len(matches) != 1 or matches[0].file_size > 65536:
+                      raise SystemExit(
+                          f"same-run {filename} is missing or ambiguous"
+                      )
+                  payload = bundle.read(matches[0])
+                  descriptor = os.open(
+                      target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                  )
+                  with os.fdopen(descriptor, "wb") as handle:
+                      handle.write(payload)
           PY
           PYTHONPATH=backend python3 - "$LIVE18_DEMO_EVIDENCE_PATH" \
             "$RUNNER_TEMP/live18-deployed-sha.json" <<'PY'
@@ -1770,6 +1779,24 @@ jobs:
             --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
             --provider "$LIVE18_PROVIDER" \
             --output "$LIVE18_RECONCILIATION_EVIDENCE_PATH"
+      - name: Retire the legacy evidence credential after exact-SHA backend proof
+        id: evidence_credential_retirement
+        if: >-
+          always() && env.LIVE18_PROVIDER == 'render' &&
+          steps.live18_reconciliation.outcome == 'success'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/retire_canonical_evidence_storage_credential.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --reviewed-sha "$REVIEWED_DEPLOY_SHA" \
+            --prepare-receipt "$LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH" \
+            --proof-receipt "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
+            --render-api-service-id "$RENDER_API_SERVICE_ID" \
+            --receipt "$LIVE18_EVIDENCE_CREDENTIAL_RETIREMENT_PATH"
       - name: Always suspend temporary MCP authorities
         if: always() && env.LIVE18_PROVIDER == 'render'
         env:
@@ -1941,5 +1968,13 @@ jobs:
         with:
           name: canonical-live18-acceptance-evidence
           path: ${{ runner.temp }}/live18-upload/live18-evidence-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload bounded evidence credential cutover receipt
+        if: always() && steps.evidence_credential_retirement.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-evidence-credential-cutover-${{ github.run_id }}
+          path: ${{ runner.temp }}/live18-evidence-credential-retirement.json
           if-no-files-found: error
           retention-days: 30

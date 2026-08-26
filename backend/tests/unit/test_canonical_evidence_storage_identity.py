@@ -620,10 +620,14 @@ def test_main_runs_hosted_read_only_probe_before_global_hook_patch(
     monkeypatch.setattr(
         provision, "verify_password_session", lambda *_args: service_claims()
     )
-    monkeypatch.setattr(provision, "retire_custom_api_key", lambda _client: None)
+    monkeypatch.setattr(
+        provision, "inspect_retired_custom_api_key", lambda _client: None
+    )
 
     assert provision.main(
         [
+            "--phase",
+            "prepare",
             "--project-ref",
             provision.PROJECT_REF,
             "--reviewed-sha",
@@ -635,4 +639,4 @@ def test_main_runs_hosted_read_only_probe_before_global_hook_patch(
         ]
     ) == 0
     assert calls == ["hosted-read-only-probe", "global-hook-config"]
-    assert json.loads(receipt.read_text(encoding="utf-8"))["state"] == "ready"
+    assert json.loads(receipt.read_text(encoding="utf-8"))["state"] == "prepared"

@@ -70,6 +70,7 @@ def build_attestation(
         )
 
     rows: list[dict[str, Any]] = []
+    evidence_storage_backend_proof: dict[str, Any] | None = None
     for operation_id, command_operation in sorted(expected.items()):
         path = evidence_dir / f"{operation_id}.json"
         value = _read_json(path)
@@ -86,6 +87,33 @@ def build_attestation(
             "operation_id": operation_id,
             "raw_evidence_sha256": _digest(path),
         })
+        if operation_id == "expense_claim" and provider == "render":
+            http_rows = value.get("http_evidence")
+            if not isinstance(http_rows, list):
+                raise ArtifactManifestError(
+                    "expense claim omitted backend HTTP evidence"
+                )
+            uploads = [
+                row
+                for row in http_rows
+                if isinstance(row, dict)
+                and row.get("actor") == "requester"
+                and row.get("method") == "POST"
+                and str(row.get("path", "")).split("?", 1)[0]
+                == "/api/web/evidence/expense-receipts"
+                and row.get("status") in {200, 201}
+            ]
+            if len(uploads) != 1:
+                raise ArtifactManifestError(
+                    "expense claim must prove exactly one successful backend evidence upload"
+                )
+            evidence_storage_backend_proof = {
+                "actor": "requester",
+                "method": "POST",
+                "path": "/api/web/evidence/expense-receipts",
+                "status": uploads[0]["status"],
+                "browser_evidence_sha256": _digest(path),
+            }
 
     database_path = (
         database_evidence
@@ -99,7 +127,12 @@ def build_attestation(
             f"{provider.title()} reconciliation requires captured database evidence"
         )
 
-    return {
+    if provider == "render" and evidence_storage_backend_proof is None:
+        raise ArtifactManifestError(
+            "reconciliation omitted the evidence-storage backend proof"
+        )
+
+    result = {
         "schema": RECONCILIATION_SCHEMA,
         "status": "success",
         "provider": provider,
@@ -115,6 +148,9 @@ def build_attestation(
         }[provider],
         "database_evidence_sha256": _digest(database_path),
     }
+    if evidence_storage_backend_proof is not None:
+        result["evidence_storage_backend_proof"] = evidence_storage_backend_proof
+    return result
 
 
 def main() -> None:

@@ -60,6 +60,18 @@ def _matrix_operations() -> list[dict[str, str]]:
     return value["operations"]
 
 
+def _http_evidence(operation_id: str) -> list[dict[str, object]]:
+    if operation_id != "expense_claim":
+        return []
+    return [{
+        "actor": "requester",
+        "method": "POST",
+        "path": "/api/web/evidence/expense-receipts",
+        "status": 200,
+        "requestId": "render-expense-receipt-upload",
+    }]
+
+
 def _write_minimal_browser_set(directory: Path) -> None:
     for operation in _matrix_operations():
         _write(directory / f"{operation['id']}.json", {
@@ -67,6 +79,7 @@ def _write_minimal_browser_set(directory: Path) -> None:
             "tested_sha": SHA,
             "operation_id": operation["id"],
             "command_operation": operation["command_operation"],
+            "http_evidence": _http_evidence(operation["id"]),
         })
 
 
@@ -272,7 +285,7 @@ def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
             "cleanup_id": None,
             "self_approval_probe": None,
             "missing_required_http_evidence": [],
-            "http_evidence": [],
+            "http_evidence": _http_evidence(operation_id),
             "screenshots": screenshots,
         })
 
@@ -387,7 +400,7 @@ def test_success_rejects_reconciliation_from_another_run(tmp_path: Path) -> None
             "cleanup_id": None,
             "self_approval_probe": None,
             "missing_required_http_evidence": [],
-            "http_evidence": [],
+            "http_evidence": _http_evidence(operation_id),
             "screenshots": screenshots,
         })
     database = _write(
