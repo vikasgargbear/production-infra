@@ -552,13 +552,23 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'test "$fixture_status" = 124' in workflow
     assert 'test "$fixture_passed" != true' in workflow
     assert (
-        "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE"
+        "GRANT erp_migration_owner, erp_runtime TO postgres WITH ADMIN FALSE, SET TRUE, INHERIT FALSE"
         in workflow
     )
-    assert (
-        "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET FALSE"
-        in workflow
-    )
+    assert workflow.count("WITH ADMIN FALSE, SET TRUE, INHERIT FALSE") == 3
+    assert workflow.count("revoke_staging_postgres_set_roles.sh") == 3
+    assert workflow.count("migration-owner-runtime") == 1
+    assert workflow.count("migration-owner\n") == 2
+    assert "cleanup_alembic_on_exit" in workflow
+    assert "cleanup_fixture_roles_on_exit" in workflow
+    assert "cleanup_demo_role_on_exit" in workflow
+    assert "cleanup_demo_on_exit" in workflow
+    assert workflow.count("postgres retained unverified") == 7
+    assert "unverified migration-owner delegation" in workflow
+    assert "unverified fixture role delegation" in workflow
+    assert "unverified demo role delegation" in workflow
+    assert "cleanup_role_membership EXIT" not in workflow
+    assert "cleanup_demo_role_membership' EXIT" not in workflow
     assert 'mutation_boundary: "BEGIN_ROLLBACK_or_read_only"' in workflow
 
 
