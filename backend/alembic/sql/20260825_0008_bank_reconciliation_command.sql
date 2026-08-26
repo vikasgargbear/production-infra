@@ -404,3 +404,5 @@ DROP TRIGGER IF EXISTS finance_reconciliation_matches_outbox_trg ON finance.reco
 CREATE TRIGGER finance_reconciliation_matches_outbox_trg
 AFTER INSERT ON finance.reconciliation_matches FOR EACH ROW
 EXECUTE FUNCTION erp_plumbing.enqueue_state_outbox('reconciliation_match','matched,reversed');
+
+RESET ROLE;

@@ -317,3 +317,5 @@ BEGIN
 END
 $function$;
 ALTER FUNCTION "erp_automation_commands"."resolve_purchase_return_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, purchase_return_id uuid, request_document jsonb) OWNER TO "erp_migration_owner";
+
+RESET ROLE;

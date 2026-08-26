@@ -75,6 +75,9 @@ def test_every_incremental_migration_assumes_the_canonical_owner_role() -> None:
             f"{sql_path.name} mutates canonical owner objects without explicitly "
             "assuming erp_migration_owner"
         )
+        assert sql.rstrip().endswith("RESET ROLE;"), (
+            f"{sql_path.name} does not restore the Alembic session role"
+        )
 
 
 def test_all_18_operation_relations_exist_in_the_migration_chain() -> None:

@@ -1174,3 +1174,5 @@ ALTER FUNCTION "erp_automation_commands"."execute_approved_command"(organization
 REVOKE ALL ON FUNCTION "erp_automation_commands"."execute_approved_command"(organization_id uuid, command_request_id uuid) FROM PUBLIC, "erp_app", "erp_runtime";
 
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."execute_approved_command"(organization_id uuid, command_request_id uuid) TO "erp_runtime";
+
+RESET ROLE;

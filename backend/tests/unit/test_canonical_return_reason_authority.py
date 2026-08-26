@@ -38,7 +38,8 @@ def test_return_reason_migration_preserves_full_purchase_return_resolver():
     ):
         assert authority in source
     assert source.count("CREATE OR REPLACE FUNCTION") == 1
-    assert source.rstrip().endswith('OWNER TO "erp_migration_owner";')
+    assert 'OWNER TO "erp_migration_owner";' in source
+    assert source.rstrip().endswith("RESET ROLE;")
 
 
 def test_return_reason_revision_is_hash_bound_and_forward_only():

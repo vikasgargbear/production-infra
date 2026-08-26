@@ -1734,3 +1734,5 @@ END
 $function$;
 ALTER FUNCTION "erp_calculation_authority"."issue_artifact"(uuid,uuid,varchar,varchar,uuid,bigint,uuid,uuid,uuid,bytea,bytea,bytea,varchar,varchar,varchar,timestamptz) OWNER TO "erp_migration_owner";
 REVOKE ALL ON FUNCTION "erp_calculation_authority"."issue_artifact"(uuid,uuid,varchar,varchar,uuid,bigint,uuid,uuid,uuid,bytea,bytea,bytea,varchar,varchar,varchar,timestamptz) FROM PUBLIC, "erp_app", "erp_runtime";
+
+RESET ROLE;

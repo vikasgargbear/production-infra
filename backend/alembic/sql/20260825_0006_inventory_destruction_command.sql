@@ -733,3 +733,5 @@ $function$;
 ALTER FUNCTION "erp_automation_commands"."execute_inventory_destruction_command"(uuid,uuid) OWNER TO "erp_migration_owner";
 REVOKE ALL ON FUNCTION "erp_automation_commands"."execute_inventory_destruction_command"(uuid,uuid) FROM PUBLIC,"erp_app","erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."execute_inventory_destruction_command"(uuid,uuid) TO "erp_runtime";
+
+RESET ROLE;
