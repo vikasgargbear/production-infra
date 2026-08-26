@@ -740,6 +740,14 @@ def test_workflow_is_read_only_and_never_changes_readiness():
     assert "test \"$CANONICAL_STAGING_PROJECT_REF\" != jfrairkkzxwkhbtqejnz" in workflow
     assert "deployment_workflow_run_id" in workflow
     assert "railway-canonical-staging / deploy" in workflow
+    assert "canonical-free-staging / baseline" in workflow
+    assert 'test "$((railway_success + render_success))" = 1' in workflow
+    assert 'deployment_name="railway-canonical-staging-$REVIEWED_SHA"' in workflow
+    assert (
+        'deployment_name="canonical-staging-baseline-$DEPLOYMENT_WORKFLOW_RUN_ID"'
+        in workflow
+    )
+    assert "render-pilot-evidence.json" in workflow
     assert '"live18-acceptance" and .conclusion == "success"' in workflow
     assert "canonical-live18-acceptance-evidence" in workflow
     assert "capture-live18" in workflow
@@ -758,6 +766,26 @@ def test_workflow_is_read_only_and_never_changes_readiness():
     assert "approved_app_contract_v1" not in workflow
     assert "production_ready" not in workflow
     assert "deploy_render" not in workflow
+
+
+def test_canonical_staging_emits_exact_render_deployment_evidence() -> None:
+    workflow = (
+        REPOSITORY_ROOT / ".github/workflows/canonical-staging.yml"
+    ).read_text(encoding="utf-8")
+    polling = workflow.index('case "$deploy_status" in')
+    evidence_output = workflow.index(
+        "> staging-evidence/render-pilot-evidence.json"
+    )
+    artifact_upload = workflow.index(
+        "name: canonical-staging-baseline-${{ github.run_id }}"
+    )
+
+    assert polling < evidence_output < artifact_upload
+    assert 'provider: "render"' in workflow
+    assert 'commit_sha: $sha' in workflow
+    assert 'status: "live"' in workflow
+    for immutable_field in ("service_id:", "deploy_id:", "url:"):
+        assert immutable_field in workflow
 
 
 def test_current_mounted_callable_graph_has_no_reachable_retired_relation():

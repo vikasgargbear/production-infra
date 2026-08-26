@@ -75,7 +75,7 @@ on:
         default: ""
         type: string
       canonical_promotion_deployment_run_id:
-        description: Exact completed Production readiness run containing Railway deploy and Live18 artifacts
+        description: Exact completed Production readiness run containing one reviewed deploy and Live18 artifacts
         required: false
         default: 0
         type: number

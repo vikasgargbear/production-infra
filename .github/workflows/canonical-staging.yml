@@ -1106,6 +1106,41 @@ jobs:
                }
              }' staging-evidence/render-pilot.json \
              > staging-evidence/render-pilot-smoke.json
+          jq -e --arg sha "$CANONICAL_RENDER_DEPLOY_SHA" '
+            def render_service($name): {
+              service_id: .services[$name].id,
+              deploy_id: .deployed[$name].id,
+              status: "live",
+              commit_sha: $sha,
+              url: .services[$name].url
+            };
+            if .mode == "applied" and
+               (.services | keys) == [
+                 "aasopharma-api-pilot",
+                 "aasopharma-erp-pilot",
+                 "aasopharma-mcp-pilot"
+               ] and
+               (.deployed | keys) == [
+                 "aasopharma-api-pilot",
+                 "aasopharma-erp-pilot",
+                 "aasopharma-mcp-pilot"
+               ] and
+               .smoke.api_ready == true and
+               .smoke.frontend_ready == true and
+               .smoke.mcp_healthy == true
+            then {
+              provider: "render",
+              commit_sha: $sha,
+              services: {
+                "aasopharma-api-pilot": render_service("aasopharma-api-pilot"),
+                "aasopharma-erp-pilot": render_service("aasopharma-erp-pilot"),
+                "aasopharma-mcp-pilot": render_service("aasopharma-mcp-pilot")
+              }
+            }
+            else error("Render deployment evidence did not reconcile")
+            end
+          ' staging-evidence/render-pilot-smoke.json \
+            > staging-evidence/render-pilot-evidence.json
 
       - name: Verify and exercise the reviewed hosted OAuth server boundary
         if: inputs.deploy_render_pilot == true

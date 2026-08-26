@@ -11,7 +11,7 @@ write business data. It proves one common project and commit binding across:
 
 - the effective mounted FastAPI route graph and its reachable local import
   graph;
-- the exact successful Railway deployment artifact and the scrubbed exact-run
+- one exact successful Render or Railway deployment artifact and the scrubbed exact-run
   Live18 evidence for all 18 browser, REST, MCP, RLS, and PostgreSQL paths;
 - the deployed Alembic revision, runtime role posture, every tenant table's
   forced-RLS catalog state, a same-tenant read, and a cross-tenant denial;

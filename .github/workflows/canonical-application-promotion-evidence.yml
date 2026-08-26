@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       deployment_workflow_run_id:
-        description: Exact Production readiness run containing Railway deploy and Live18 evidence
+        description: Exact Production readiness run containing one reviewed deployment and Live18 evidence
         required: true
         type: number
       source_disposition:
@@ -41,7 +41,7 @@ on:
         required: true
         type: string
       deployment_workflow_run_id:
-        description: Exact Production readiness run containing Railway deploy and Live18 evidence
+        description: Exact Production readiness run containing one reviewed deployment and Live18 evidence
         required: true
         type: number
       source_disposition:
@@ -136,7 +136,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends postgresql-client
           pip install -r backend/requirements.txt
 
-      - name: Bind exact successful Railway deployment and Live18 artifacts
+      - name: Bind one exact successful deployment and Live18 artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -151,12 +151,20 @@ jobs:
           jobs_json=$(gh api --paginate \
             "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID/jobs?per_page=100" \
             --slurp | jq '{jobs: map(.jobs[]) }')
-          test "$(jq '[.jobs[] | select(.name == "railway-canonical-staging / deploy" and .conclusion == "success")] | length' <<<"$jobs_json")" = 1
+          railway_success=$(jq '[.jobs[] | select(.name == "railway-canonical-staging / deploy" and .conclusion == "success")] | length' <<<"$jobs_json")
+          render_success=$(jq '[.jobs[] | select(.name == "canonical-free-staging / baseline" and .conclusion == "success")] | length' <<<"$jobs_json")
+          test "$((railway_success + render_success))" = 1
           test "$(jq '[.jobs[] | select(.name == "live18-acceptance" and .conclusion == "success")] | length' <<<"$jobs_json")" = 1
           artifacts_json=$(gh api --paginate \
             "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID/artifacts?per_page=100" \
             --slurp | jq '{artifacts: map(.artifacts[]) }')
-          deployment_name="railway-canonical-staging-$REVIEWED_SHA"
+          if test "$railway_success" = 1; then
+            deployment_provider=railway
+            deployment_name="railway-canonical-staging-$REVIEWED_SHA"
+          else
+            deployment_provider=render
+            deployment_name="canonical-staging-baseline-$DEPLOYMENT_WORKFLOW_RUN_ID"
+          fi
           deployment_id=$(jq -er --arg name "$deployment_name" \
             '[.artifacts[] | select(.name == $name and .expired == false)] | select(length == 1) | .[0].id' \
             <<<"$artifacts_json")
@@ -173,12 +181,22 @@ jobs:
           live18_zip="$RUNNER_TEMP/live18-acceptance.zip"
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$deployment_id/zip" > "$deployment_zip"
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$live18_id/zip" > "$live18_zip"
-          test "$(unzip -Z1 "$deployment_zip" | sort | tr '\n' ' ')" = \
-            "_temp/railway-oauth-evidence/canonical-staging-oauth-client.json production-infra/production-infra/railway-pilot-evidence.json production-infra/production-infra/railway-supabase-auth-redirect.json "
           test "$(unzip -Z1 "$live18_zip")" = live18-evidence-manifest.json
-          unzip -p "$deployment_zip" \
-            production-infra/production-infra/railway-pilot-evidence.json \
-            > staging-evidence/deployment.json
+          case "$deployment_provider" in
+            railway)
+              test "$(unzip -Z1 "$deployment_zip" | sort | tr '\n' ' ')" = \
+                "_temp/railway-oauth-evidence/canonical-staging-oauth-client.json production-infra/production-infra/railway-pilot-evidence.json production-infra/production-infra/railway-supabase-auth-redirect.json "
+              unzip -p "$deployment_zip" \
+                production-infra/production-infra/railway-pilot-evidence.json \
+                > staging-evidence/deployment.json
+              ;;
+            render)
+              test "$(unzip -Z1 "$deployment_zip" | grep -Fxc render-pilot-evidence.json)" = 1
+              unzip -p "$deployment_zip" render-pilot-evidence.json \
+                > staging-evidence/deployment.json
+              ;;
+            *) exit 2 ;;
+          esac
           unzip -p "$live18_zip" live18-evidence-manifest.json \
             > staging-evidence/live18-evidence-manifest.json
           test -s staging-evidence/deployment.json
