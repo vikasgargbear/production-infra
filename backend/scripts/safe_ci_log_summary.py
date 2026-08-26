@@ -12,10 +12,13 @@ from typing import BinaryIO, Optional
 
 
 _ANNOTATION_TITLES = {
+    "evidence-cleanup": "Canonical evidence reset cleanup failed",
+    "evidence-key": "Canonical evidence key provisioning failed",
     "fixture": "Live canonical fixture failed",
     "readiness": "Canonical CI API failed readiness",
     "render": "Render reconciliation blocked",
     "reset": "Disposable canonical reset failed",
+    "reset-role-cleanup": "Canonical reset role cleanup failed",
     "runtime": "Canonical CI API runtime diagnostic",
 }
 _CHUNK_SIZE = 1024 * 1024
@@ -37,7 +40,7 @@ def safe_log_annotation(path: Path, *, label: str) -> str:
     title = _ANNOTATION_TITLES[label]
     with path.open("rb") as stream:
         summary = fingerprint_stream(stream)
-    if label == "render":
+    if label in {"evidence-key", "render"}:
         text = path.read_text(encoding="utf-8", errors="replace")
         diagnostic = _safe_render_diagnostic(text)
         if diagnostic:
@@ -58,8 +61,12 @@ def _safe_render_diagnostic(text: str) -> Optional[str]:
         )
         if evidence_key:
             message = evidence_key.group(1)
-            if "HTTP" in message:
-                return "evidence_storage_management_api_blocked"
+            http_status = re.search(r"failed with HTTP ([0-9]{3})$", message)
+            if http_status:
+                return (
+                    "evidence_storage_management_api_http_"
+                    + http_status.group(1)
+                )
             return "evidence_storage_key_contract_blocked"
         missing = re.fullmatch(
             r"provisioning blocked: Missing required operator values: ([A-Z0-9_, ]+)",

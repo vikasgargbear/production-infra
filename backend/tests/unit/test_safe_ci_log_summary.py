@@ -10,7 +10,16 @@ def test_all_external_log_boundaries_have_fixed_annotation_titles(tmp_path):
     log_path = tmp_path / "external.log"
     log_path.write_bytes(b"provider secret and customer data")
 
-    for label in ("fixture", "readiness", "render", "reset", "runtime"):
+    for label in (
+        "evidence-cleanup",
+        "evidence-key",
+        "fixture",
+        "readiness",
+        "render",
+        "reset",
+        "reset-role-cleanup",
+        "runtime",
+    ):
         annotation = safe_log_annotation(log_path, label=label)
         assert "provider secret" not in annotation
         assert '"byte_count":33' in annotation
@@ -62,7 +71,7 @@ def test_render_annotation_exposes_only_allowlisted_contract_diagnostic(tmp_path
         encoding="utf-8",
     )
 
-    annotation = safe_log_annotation(log_path, label="render")
+    annotation = safe_log_annotation(log_path, label="evidence-key")
     metadata = json.loads(annotation.split("::", 2)[2])
 
     assert metadata["diagnostic"] == (
@@ -85,5 +94,5 @@ def test_render_annotation_classifies_evidence_key_failure_without_echoing_it(
     annotation = safe_log_annotation(log_path, label="render")
     metadata = json.loads(annotation.split("::", 2)[2])
 
-    assert metadata["diagnostic"] == "evidence_storage_management_api_blocked"
+    assert metadata["diagnostic"] == "evidence_storage_management_api_http_403"
     assert "private-must-not-escape" not in annotation

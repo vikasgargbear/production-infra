@@ -644,6 +644,17 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
     assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 11
+    for label in (
+        "evidence-cleanup",
+        "evidence-key",
+        "fixture",
+        "readiness",
+        "render",
+        "reset",
+        "reset-role-cleanup",
+        "runtime",
+    ):
+        assert f"--label {label}" in workflow
     assert "--label render-config" not in workflow
     assert '--label "render-$service_name"' not in workflow
     assert '--label readiness "$api_log"' in workflow
