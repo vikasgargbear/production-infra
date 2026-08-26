@@ -555,8 +555,20 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     )[0]
     assert "transaction_port" not in runtime_selector
     assert 'return session_port, "session"' in runtime_selector
-    assert "if not session_failure.transient:" in pooler_verifier
-    assert "port=transaction_port" in pooler_verifier
+    bootstrap_selector = pooler_verifier.split("def select_admin_pooler(", 1)[1].split(
+        "def _validated_port(", 1
+    )[0]
+    assert "verify_admin: Callable[..., None] = verify_admin_once" in bootstrap_selector
+    assert 'modes = (("session", session_port), ("transaction", transaction_port))' in (
+        bootstrap_selector
+    )
+    assert "for sweep in range(MAX_ATTEMPTS):" in bootstrap_selector
+    assert "for mode, port in modes:" in bootstrap_selector
+    assert "all(failure.transient for failure in sweep_failures)" in bootstrap_selector
+    assert "sleep(RETRY_DELAY_SECONDS)" in bootstrap_selector
+    assert "attempts.append((mode, failure.kind))" in bootstrap_selector
+    assert "verify_admin_with_retry" not in bootstrap_selector
+    assert "attempts=tuple(attempts)" in bootstrap_selector
     assert "rotation_cache_retries_remaining = 1 if rotation_scoped else 0" in pooler_verifier
     assert 'return "invalid_credentials", False' in pooler_verifier
     assert '"protocol_handshake_incomplete"' in pooler_verifier

@@ -243,9 +243,10 @@ def test_runtime_pooler_certification_is_session_only_after_transient_failure() 
     assert calls == [("5432", tuple(roles))]
 
 
-def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -> None:
+def test_bootstrap_selection_sweeps_both_modes_without_per_mode_waits() -> None:
     verifier = _load()
     calls: list[str] = []
+    sleeps: list[float] = []
 
     def verify_admin(**kwargs) -> None:
         calls.append(kwargs["port"])
@@ -261,8 +262,10 @@ def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -
         session_port="5432",
         transaction_port="6543",
         verify_admin=verify_admin,
+        sleep=sleeps.append,
     ) == ("6543", "transaction")
     assert calls == ["5432", "6543"]
+    assert sleeps == []
 
     calls.clear()
 
@@ -272,7 +275,7 @@ def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -
             "postgres", "bootstrap_posture_mismatch", transient=False
         )
 
-    with pytest.raises(verifier.PoolerVerificationFailure):
+    with pytest.raises(verifier.PoolerVerificationFailure) as captured:
         verifier.select_admin_pooler(
             password="secret",
             project_ref="a" * 20,
@@ -280,13 +283,20 @@ def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -
             session_port="5432",
             transaction_port="6543",
             verify_admin=permanent_failure,
+            sleep=sleeps.append,
         )
-    assert calls == ["5432"]
+    assert calls == ["5432", "6543"]
+    assert sleeps == []
+    assert captured.value.attempts == (
+        ("session", "bootstrap_posture_mismatch"),
+        ("transaction", "bootstrap_posture_mismatch"),
+    )
 
 
-def test_pooler_circuit_stops_after_the_bounded_quiet_window() -> None:
+def test_bootstrap_retry_is_one_quiet_window_for_the_whole_sweep() -> None:
     verifier = _load()
     calls: list[str] = []
+    sleeps: list[float] = []
 
     def verify_admin(**kwargs) -> None:
         calls.append(kwargs["port"])
@@ -302,9 +312,47 @@ def test_pooler_circuit_stops_after_the_bounded_quiet_window() -> None:
             session_port="5432",
             transaction_port="6543",
             verify_admin=verify_admin,
+            sleep=sleeps.append,
         )
-    assert captured.value.mode == "session"
-    assert calls == ["5432"]
+    assert captured.value.mode == "transaction"
+    assert calls == ["5432", "6543", "5432", "6543"]
+    assert sleeps == [verifier.RETRY_DELAY_SECONDS]
+    assert captured.value.attempts == (
+        ("session", "pooler_circuit_open"),
+        ("transaction", "pooler_circuit_open"),
+        ("session", "pooler_circuit_open"),
+        ("transaction", "pooler_circuit_open"),
+    )
+
+
+def test_bootstrap_retry_recovers_after_one_shared_quiet_window() -> None:
+    verifier = _load()
+    calls: list[str] = []
+    sleeps: list[float] = []
+
+    def verify_admin(**kwargs) -> None:
+        calls.append(kwargs["port"])
+        if len(calls) <= 2:
+            kind = (
+                "connection_timeout"
+                if kwargs["port"] == "5432"
+                else "protocol_handshake_incomplete"
+            )
+            raise verifier.RoleVerificationFailure(
+                "postgres", kind, transient=True
+            )
+
+    assert verifier.select_admin_pooler(
+        password="secret",
+        project_ref="a" * 20,
+        host="pooler.example",
+        session_port="5432",
+        transaction_port="6543",
+        verify_admin=verify_admin,
+        sleep=sleeps.append,
+    ) == ("5432", "session")
+    assert calls == ["5432", "6543", "5432"]
+    assert sleeps == [verifier.RETRY_DELAY_SECONDS]
 
 
 def test_non_transient_session_failure_never_falls_back() -> None:
@@ -499,9 +547,15 @@ def test_main_emits_only_bounded_failure_metadata(monkeypatch, capsys) -> None:
 
     def fail_selection(**kwargs):
         raise verifier.PoolerVerificationFailure(
-            "session",
+            "transaction",
             verifier.RoleVerificationFailure(
-                "erp_regulatory_importer", "auth_query_timeout", transient=True
+                "postgres", "protocol_handshake_incomplete", transient=True
+            ),
+            attempts=(
+                ("session", "connection_timeout"),
+                ("transaction", "protocol_handshake_incomplete"),
+                ("session", "pooler_circuit_open"),
+                ("transaction", "protocol_handshake_incomplete"),
             ),
         )
 
@@ -516,8 +570,14 @@ def test_main_emits_only_bounded_failure_metadata(monkeypatch, capsys) -> None:
     assert verifier.main([]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "mode=session" in captured.err
-    assert "role=erp_regulatory_importer" in captured.err
-    assert "kind=auth_query_timeout" in captured.err
+    assert "mode=transaction" in captured.err
+    assert "role=postgres" in captured.err
+    assert "kind=protocol_handshake_incomplete" in captured.err
+    assert (
+        "attempts=session:connection_timeout,"
+        "transaction:protocol_handshake_incomplete,"
+        "session:pooler_circuit_open,"
+        "transaction:protocol_handshake_incomplete"
+    ) in captured.err
     assert secret not in captured.err
     assert writes == []

@@ -43,9 +43,6 @@ PASSWORD_AUTHENTICATION_MARKER = "password authentication failed"
 ROTATION_SCOPED_ENV = "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY"
 MAX_ATTEMPTS = 2
 RETRY_DELAY_SECONDS = 125
-QUIET_WINDOW_FAILURE_KINDS = frozenset(
-    {"auth_query_unavailable", "auth_query_timeout", "pooler_circuit_open"}
-)
 
 
 class RoleVerificationFailure(RuntimeError):
@@ -61,10 +58,17 @@ class RoleVerificationFailure(RuntimeError):
 class PoolerVerificationFailure(RuntimeError):
     """The exact pooler mode on which a reviewed role set failed."""
 
-    def __init__(self, mode: str, failure: RoleVerificationFailure) -> None:
+    def __init__(
+        self,
+        mode: str,
+        failure: RoleVerificationFailure,
+        *,
+        attempts: tuple[tuple[str, str], ...] | None = None,
+    ) -> None:
         super().__init__(f"{mode}:{failure.role}:{failure.kind}")
         self.mode = mode
         self.failure = failure
+        self.attempts = attempts or ((mode, failure.kind),)
 
 
 def _transient_kind(error: BaseException) -> str | None:
@@ -283,34 +287,45 @@ def select_admin_pooler(
     host: str,
     session_port: str,
     transaction_port: str,
-    verify_admin: Callable[..., None] = verify_admin_with_retry,
+    verify_admin: Callable[..., None] = verify_admin_once,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[str, str]:
-    """Select one reachable pooler mode before reset or migration writes."""
+    """Select a bootstrap mode with one sweep and one shared quiet-window retry."""
 
-    try:
-        verify_admin(
-            password=password,
-            project_ref=project_ref,
-            host=host,
-            port=session_port,
-        )
-        return session_port, "session"
-    except RoleVerificationFailure as session_failure:
-        if not session_failure.transient:
-            raise PoolerVerificationFailure("session", session_failure) from None
-        if session_failure.kind in QUIET_WINDOW_FAILURE_KINDS:
-            raise PoolerVerificationFailure("session", session_failure) from None
+    attempts: list[tuple[str, str]] = []
+    last_failure: RoleVerificationFailure | None = None
+    last_mode = "transaction"
+    modes = (("session", session_port), ("transaction", transaction_port))
 
-    try:
-        verify_admin(
-            password=password,
-            project_ref=project_ref,
-            host=host,
-            port=transaction_port,
-        )
-        return transaction_port, "transaction"
-    except RoleVerificationFailure as transaction_failure:
-        raise PoolerVerificationFailure("transaction", transaction_failure) from None
+    for sweep in range(MAX_ATTEMPTS):
+        sweep_failures: list[RoleVerificationFailure] = []
+        for mode, port in modes:
+            try:
+                verify_admin(
+                    password=password,
+                    project_ref=project_ref,
+                    host=host,
+                    port=port,
+                )
+                return port, mode
+            except RoleVerificationFailure as failure:
+                attempts.append((mode, failure.kind))
+                sweep_failures.append(failure)
+                last_mode = mode
+                last_failure = failure
+
+        if sweep == 0 and all(failure.transient for failure in sweep_failures):
+            sleep(RETRY_DELAY_SECONDS)
+            continue
+        break
+
+    if last_failure is None:
+        raise AssertionError("bootstrap pooler sweep completed without a result")
+    raise PoolerVerificationFailure(
+        last_mode,
+        last_failure,
+        attempts=tuple(attempts),
+    ) from None
 
 
 def _validated_port(value: str) -> str:
@@ -424,10 +439,14 @@ def main(arguments: list[str] | None = None) -> int:
         return 0
     except PoolerVerificationFailure as failure:
         detail = failure.failure
+        attempt_history = ",".join(
+            f"{mode}:{kind}" for mode, kind in failure.attempts
+        )
         print(
             "::error title=Canonical staging role verification failed::"
             f"mode={failure.mode}; role={detail.role}; kind={detail.kind}; "
-            f"transient={str(detail.transient).lower()}",
+            f"transient={str(detail.transient).lower()}; "
+            f"attempts={attempt_history}",
             file=sys.stderr,
         )
         return 1
