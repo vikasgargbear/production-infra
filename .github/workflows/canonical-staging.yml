@@ -998,7 +998,7 @@ jobs:
           python3 backend/scripts/verify_staging_pooler_roles.py
 
       - name: Diagnose bounded Supavisor role verification failure
-        if: steps.verify_pooler_roles.outcome == 'failure'
+        if: ${{ failure() && steps.verify_pooler_roles.outcome == 'failure' }}
         run: |
           set -euo pipefail
           query=$(cat <<'SQL'

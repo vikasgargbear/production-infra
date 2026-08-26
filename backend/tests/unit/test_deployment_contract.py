@@ -600,7 +600,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "str(error)" not in role_verification
     assert "message = str(last_error)" not in role_verification
     assert "Diagnose bounded Supavisor role verification failure" in workflow
-    assert "if: steps.verify_pooler_roles.outcome == 'failure'" in workflow
+    assert (
+        "if: ${{ failure() && steps.verify_pooler_roles.outcome == 'failure' }}"
+        in workflow
+    )
     assert "/analytics/endpoints/logs" in workflow
     assert "source = 'supavisor_logs'" in workflow
     assert "jq -c '{result,error}'" not in workflow
