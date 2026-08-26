@@ -218,9 +218,11 @@ jobs:
           pooler_port=$(sed -E 's#^postgresql://[^@]+@([^:]+):([0-9]+)/.*#\2#' <<<"$pooler_url")
           test "$pooler_host" = aws-0-ap-south-1.pooler.supabase.com
           test "$pooler_port" = 6543
-          echo "SUPABASE_POOLER_HOST=$pooler_host" >> "$GITHUB_ENV"
-          echo "SUPABASE_POOLER_PORT=$pooler_port" >> "$GITHUB_ENV"
-          echo "SUPABASE_SESSION_POOLER_PORT=5432" >> "$GITHUB_ENV"
+          {
+            echo "SUPABASE_POOLER_HOST=$pooler_host"
+            echo "SUPABASE_POOLER_PORT=$pooler_port"
+            echo "SUPABASE_SESSION_POOLER_PORT=5432"
+          } >> "$GITHUB_ENV"
 
       - name: Validate the reviewed Render deployment transaction
         env:
@@ -1077,9 +1079,11 @@ jobs:
           echo "::add-mask::$runtime_url"
           echo "::add-mask::$calculator_url"
           echo "::add-mask::$provider_url"
-          echo "DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
-          echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url" >> "$GITHUB_ENV"
-          echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
+          {
+            echo "DATABASE_URL=$runtime_url"
+            echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url"
+            echo "TAX_PROVIDER_DATABASE_URL=$provider_url"
+          } >> "$GITHUB_ENV"
 
       - name: Provision canonical private evidence storage
         if: inputs.deploy_render_pilot == true
@@ -1382,7 +1386,7 @@ jobs:
 
           discovery_url="$SUPABASE_URL/.well-known/oauth-authorization-server/auth/v1"
           discovery=''
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             if discovery=$(curl --fail --silent --show-error --max-time 15 "$discovery_url"); then
               break
             fi
@@ -1503,7 +1507,7 @@ jobs:
           }
           trap cleanup_demo_on_exit EXIT
           api_ready=false
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             if curl --fail --silent --show-error --max-time 10 \
               "$CANONICAL_DEMO_API_URL/health" >/dev/null \
               && curl --fail --silent --show-error --max-time 10 \
