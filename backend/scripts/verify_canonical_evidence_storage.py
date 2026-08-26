@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import json
 import os
 from pathlib import Path
+import time
 from typing import Any
 
 import httpx
@@ -30,6 +32,46 @@ class EvidenceCanaryError(RuntimeError):
     """The restricted Storage authority did not match its reviewed contract."""
 
 
+def _object_presence(client: httpx.Client, object_url: str) -> bool:
+    response = client.get(object_url)
+    if response.status_code == 200:
+        return True
+    if response.status_code == 404:
+        return False
+    raise EvidenceCanaryError(
+        "canonical evidence canary presence check returned "
+        f"HTTP {response.status_code}"
+    )
+
+
+def _delete_and_prove_absent(
+    client: httpx.Client,
+    object_url: str,
+    *,
+    sleep: Callable[[float], None],
+) -> None:
+    """Delete the fixed canary key and positively prove terminal absence."""
+
+    last_failure = "absence was not observed"
+    for attempt in range(1, 4):
+        try:
+            response = client.delete(object_url)
+            if response.status_code not in {200, 204, 404}:
+                last_failure = f"delete returned HTTP {response.status_code}"
+            elif not _object_presence(client, object_url):
+                return
+            else:
+                last_failure = "object remained readable after delete"
+        except httpx.RequestError:
+            last_failure = "Storage request did not complete"
+        if attempt < 3:
+            sleep(float(attempt))
+    raise EvidenceCanaryError(
+        "canonical evidence canary cleanup could not prove exact-key absence: "
+        + last_failure
+    )
+
+
 def _status(response: httpx.Response, allowed: set[int], operation: str) -> str:
     if response.status_code not in allowed:
         raise EvidenceCanaryError(
@@ -43,10 +85,12 @@ def verify_canary(
     project_ref: str,
     token_provider: EvidenceServiceTokenProvider,
     transport: httpx.BaseTransport | None = None,
+    cleanup_sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     origin = f"https://{project_ref}.supabase.co/storage/v1"
     object_url = f"{origin}/object/{BUCKET}/{OBJECT_KEY}"
     cleanup_required = False
+    recovered_preexisting_object = False
     try:
         headers = token_provider.authorization_headers()
     except EvidenceCredentialUnavailable as exc:
@@ -55,13 +99,19 @@ def verify_canary(
         ) from exc
     with httpx.Client(headers=headers, timeout=20.0, transport=transport) as client:
         try:
+            if _object_presence(client, object_url):
+                _delete_and_prove_absent(client, object_url, sleep=cleanup_sleep)
+                recovered_preexisting_object = True
+
+            # Storage may accept an upload even when its response is lost. From
+            # this point every exit path owns exact-key cleanup.
+            cleanup_required = True
             upload = client.post(
                 object_url,
                 content=FIXTURE,
                 headers={"Content-Type": "application/pdf", "x-upsert": "false"},
             )
             upload_status = _status(upload, {200, 201}, "upload")
-            cleanup_required = True
 
             read = client.get(object_url)
             read_status = _status(read, {200}, "read")
@@ -109,9 +159,15 @@ def verify_canary(
 
             delete = client.delete(object_url)
             delete_status = _status(delete, {200, 204}, "delete")
+            if _object_presence(client, object_url):
+                raise EvidenceCanaryError(
+                    "canonical evidence canary remained readable after delete"
+                )
             cleanup_required = False
             return {
                 "state": "verified",
+                "recovered_preexisting_object": recovered_preexisting_object,
+                "cleanup_absence_verified": True,
                 "allowed": {
                     "upload": upload_status,
                     "read": read_status,
@@ -126,10 +182,7 @@ def verify_canary(
             }
         finally:
             if cleanup_required:
-                try:
-                    client.delete(object_url)
-                except httpx.RequestError:
-                    pass
+                _delete_and_prove_absent(client, object_url, sleep=cleanup_sleep)
 
 
 def _write_receipt(path: Path, value: dict[str, Any]) -> None:
