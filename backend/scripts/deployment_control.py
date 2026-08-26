@@ -23,7 +23,18 @@ from urllib.request import Request, urlopen
 from jsonschema import Draft202012Validator, FormatChecker
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _resolve_repository_root(script_path: Path = Path(__file__)) -> Path:
+    """Resolve both source-checkout and flattened runtime-image layouts."""
+
+    resolved = script_path.resolve()
+    candidates = (resolved.parents[2], resolved.parents[1])
+    for candidate in candidates:
+        if (candidate / "deploy/control-plane/canonical-staging.json").is_file():
+            return candidate
+    return candidates[0]
+
+
+REPO_ROOT = _resolve_repository_root()
 DEFAULT_MANIFEST = REPO_ROOT / "deploy/control-plane/canonical-staging.json"
 SCHEMA_PATH = REPO_ROOT / "deploy/control-plane/control-plane-v1.schema.json"
 BASE_WORKFLOWS = (

@@ -18,6 +18,17 @@ MANIFEST_PATH = ROOT / "deploy/control-plane/canonical-staging.json"
 EXPECTED_SHA = "a" * 40
 
 
+def test_repository_root_resolves_flattened_runtime_image(tmp_path: Path) -> None:
+    script = tmp_path / "app/scripts/deployment_control.py"
+    authority = tmp_path / "app/deploy/control-plane/canonical-staging.json"
+    script.parent.mkdir(parents=True)
+    authority.parent.mkdir(parents=True)
+    script.touch()
+    authority.write_text("{}", encoding="utf-8")
+
+    assert CONTROL._resolve_repository_root(script) == tmp_path / "app"
+
+
 def manifest() -> dict:
     return CONTROL.load_manifest(MANIFEST_PATH)
 

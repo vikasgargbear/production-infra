@@ -910,6 +910,7 @@ def test_api_image_packages_every_import_time_live18_contract():
         "COPY docs/architecture/mcp-operator-actions.json "
         "/app/docs/architecture/mcp-operator-actions.json"
     ) in dockerfile
+    assert "COPY deploy/control-plane /app/deploy/control-plane" in dockerfile
     assert identities.LIVE18_MATRIX_PATH == (
         identities.BACKEND_ROOT / "tests/live_acceptance/operation_matrix.json"
     )

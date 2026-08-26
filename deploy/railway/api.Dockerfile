@@ -16,6 +16,7 @@ COPY backend/ .
 COPY docs/architecture/mcp-operator-actions.json /app/docs/architecture/mcp-operator-actions.json
 COPY database/schema-authority.json /app/database/schema-authority.json
 COPY database/canonical/domains/_contract.json /app/database/canonical/domains/_contract.json
+COPY deploy/control-plane /app/deploy/control-plane
 COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
 RUN python scripts/canonical_migration_contract.py --print-head

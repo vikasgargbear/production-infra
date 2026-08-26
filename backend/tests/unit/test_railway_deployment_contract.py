@@ -137,6 +137,7 @@ def test_api_watches_every_packaged_migration_authority_input() -> None:
         "/backend/**",
         "/database/schema-authority.json",
         "/database/canonical/domains/_contract.json",
+        "/deploy/control-plane/**",
         "/deploy/railway/api.*",
     } <= patterns
 
