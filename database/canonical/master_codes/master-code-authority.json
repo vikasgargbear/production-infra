@@ -37,6 +37,31 @@
   "migration_revision": "20260826_0027",
   "migration_sql": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
   "migration_sql_sha256": "6c124371fdf68550c33ea0eb348b341b687e006f59650258d1f606e580543a2d",
+  "onboarding": {
+    "activation_event": "first_active_membership",
+    "authority": "erp_master_commands.provision_organization_code_sequences",
+    "defaults": {
+      "customer": {
+        "padding": 6,
+        "prefix": "CUST-",
+        "suffix": ""
+      },
+      "product": {
+        "padding": 6,
+        "prefix": "PROD-",
+        "suffix": ""
+      },
+      "supplier": {
+        "padding": 6,
+        "prefix": "SUP-",
+        "suffix": ""
+      }
+    },
+    "existing_organization_backfill": "active_memberships_only",
+    "idempotent": true,
+    "migration_sql": "backend/alembic/sql/20260826_0028_organization_master_code_onboarding.sql",
+    "migration_sql_sha256": "f6a19b84259323c0b475d21483d70c2a867da04f1bf90aa0acf102486b797de8"
+  },
   "public_request_code_fields": [],
   "relation": "core.master_code_sequences",
   "retention": {
