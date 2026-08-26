@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import base64
 import hashlib
-import json
 
 import httpx
 import pytest
@@ -20,11 +18,7 @@ from app.infrastructure.evidence_storage import (
 )
 
 
-def _jwt(role: str) -> str:
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"role": role}, separators=(",", ":")).encode("utf-8")
-    ).rstrip(b"=").decode("ascii")
-    return f"e30.{payload}.test-signature"
+SERVER_API_KEY = "sb_secret_" + "a" * 32
 
 
 def _blank_pdf() -> bytes:
@@ -60,8 +54,7 @@ def test_storage_configuration_fails_closed_without_explicit_enable(monkeypatch)
     monkeypatch.delenv("EVIDENCE_STORAGE_ENABLED", raising=False)
     monkeypatch.setenv("SUPABASE_URL", "https://canonical.supabase.co")
     monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "canonicalcanonical12")
-    monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt("erp_evidence_storage"))
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
 
     with pytest.raises(EvidenceStorageUnavailable, match="not enabled"):
         EvidenceStorageConfig.from_environment()
@@ -71,8 +64,7 @@ def test_storage_configuration_requires_https_and_server_only_authority(monkeypa
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://canonical.supabase.co")
     monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "canonicalcanonical12")
-    monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_JWT", raising=False)
+    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_API_KEY", raising=False)
 
     with pytest.raises(EvidenceStorageUnavailable, match="HTTPS"):
         EvidenceStorageConfig.from_environment()
@@ -83,8 +75,7 @@ def test_storage_configuration_binds_the_exact_reviewed_staging_project(monkeypa
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
     monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
     monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
-    monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt("erp_evidence_storage"))
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
 
     config = EvidenceStorageConfig.from_environment()
 
@@ -105,26 +96,56 @@ def test_storage_rejects_retired_or_mismatched_project_authority(
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
     monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
     monkeypatch.setenv("SUPABASE_URL", base_url)
-    monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt("erp_evidence_storage"))
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
 
     with pytest.raises(EvidenceStorageUnavailable, match="reviewed environment"):
         EvidenceStorageConfig.from_environment()
 
 
-@pytest.mark.parametrize("role", ["service_role", "authenticated", "", "erp_runtime"])
-def test_storage_rejects_any_jwt_role_except_bucket_restricted_authority(
-    monkeypatch, role
-):
+@pytest.mark.parametrize(
+    "api_key",
+    [
+        "service_role",
+        "eyJhbGciOiJIUzI1NiJ9.payload.signature",
+        "sb_publishable_public",
+        "sb_secret_short",
+        "sb_secret_" + "a" * 23,
+        "sb_secret_" + "a" * 24 + " ",
+    ],
+)
+def test_storage_rejects_non_secret_or_malformed_server_api_keys(monkeypatch, api_key):
     project_ref = "canonicalcanonical12"
     monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
     monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
     monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
-    monkeypatch.setenv("SUPABASE_ANON_KEY", "public-anon")
-    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_JWT", _jwt(role))
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", api_key)
 
-    with pytest.raises(EvidenceStorageUnavailable, match="erp_evidence_storage"):
+    with pytest.raises(EvidenceStorageUnavailable, match="sb_secret_"):
         EvidenceStorageConfig.from_environment()
+
+
+def test_storage_requires_the_server_api_key_when_enabled(monkeypatch):
+    project_ref = "canonicalcanonical12"
+    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
+    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
+    monkeypatch.delenv("EVIDENCE_STORAGE_SERVER_API_KEY", raising=False)
+
+    with pytest.raises(EvidenceStorageUnavailable, match="not configured"):
+        EvidenceStorageConfig.from_environment()
+
+
+def test_storage_does_not_depend_on_the_browser_anon_key(monkeypatch):
+    project_ref = "canonicalcanonical12"
+    monkeypatch.setenv("EVIDENCE_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", project_ref)
+    monkeypatch.setenv("SUPABASE_URL", f"https://{project_ref}.supabase.co")
+    monkeypatch.setenv("EVIDENCE_STORAGE_SERVER_API_KEY", SERVER_API_KEY)
+    monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+
+    config = EvidenceStorageConfig.from_environment()
+
+    assert config.server_api_key == SERVER_API_KEY
 
 
 @pytest.mark.parametrize(
@@ -177,8 +198,7 @@ def test_private_adapter_creates_without_upsert_and_reads_back_exact_bytes():
     storage = SupabaseEvidenceStorage(
         EvidenceStorageConfig(
             base_url="https://canonical.supabase.co",
-            anon_key="public-anon",
-            server_jwt="bucket-restricted-server-jwt",
+            server_api_key=SERVER_API_KEY,
             project_ref="canonicalcanonical12",
         ),
         transport=httpx.MockTransport(handler),
@@ -188,8 +208,8 @@ def test_private_adapter_creates_without_upsert_and_reads_back_exact_bytes():
     assert storage.create(key, PDF) is True
     assert storage.read(key) == PDF
     assert requests[0].headers["x-upsert"] == "false"
-    assert requests[0].headers["authorization"] == "Bearer bucket-restricted-server-jwt"
-    assert requests[0].headers["apikey"] == "public-anon"
+    assert "authorization" not in requests[0].headers
+    assert requests[0].headers["apikey"] == SERVER_API_KEY
     assert requests[0].url.path == f"/storage/v1/object/{EVIDENCE_BUCKET}/{key}"
 
 
@@ -204,8 +224,7 @@ def test_existing_object_is_not_overwritten_and_can_be_verified_by_readback():
     storage = SupabaseEvidenceStorage(
         EvidenceStorageConfig(
             base_url="https://canonical.supabase.co",
-            anon_key="anon",
-            server_jwt="restricted",
+            server_api_key=SERVER_API_KEY,
             project_ref="canonicalcanonical12",
         ),
         transport=httpx.MockTransport(handler),
@@ -218,8 +237,7 @@ def test_storage_auth_failure_is_unavailable_not_fake_success():
     storage = SupabaseEvidenceStorage(
         EvidenceStorageConfig(
             base_url="https://canonical.supabase.co",
-            anon_key="anon",
-            server_jwt="wrong-authority",
+            server_api_key=SERVER_API_KEY,
             project_ref="canonicalcanonical12",
         ),
         transport=httpx.MockTransport(
@@ -235,8 +253,7 @@ def test_cleanup_requires_one_exact_object_key():
     storage = SupabaseEvidenceStorage(
         EvidenceStorageConfig(
             base_url="https://canonical.supabase.co",
-            anon_key="anon",
-            server_jwt="restricted",
+            server_api_key=SERVER_API_KEY,
             project_ref="canonicalcanonical12",
         ),
         transport=httpx.MockTransport(lambda _request: httpx.Response(204)),

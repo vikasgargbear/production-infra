@@ -12,10 +12,12 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
    `database/09-deployment/canonical-evidence-storage.sql` to that same Supabase
    project. Confirm the bucket is private, limited to 10 MiB PDF objects, and
    has no UPDATE policy.
-3. From the canonical project's JWT signing authority, issue a server-only JWT
-   whose `role` claim is exactly `erp_evidence_storage`. Store it only in the
-   backend secret `EVIDENCE_STORAGE_SERVER_JWT`. Never use or expose the
-   Supabase service-role key.
+3. Create a server-only Supabase secret API key whose custom database role is
+   exactly `erp_evidence_storage`. Store the resulting `sb_secret_...` value
+   only in the backend secret `EVIDENCE_STORAGE_SERVER_API_KEY`. Never use or
+   expose the Supabase `service_role` key, and never send this key to a browser.
+   The backend sends this credential only in Supabase's `apikey` header; it
+   does not pair it with an anon key or an `Authorization` bearer header.
 4. Set `EVIDENCE_STORAGE_EXPECTED_PROJECT_REF` for the reviewed environment and
    its exact matching `SUPABASE_URL`. Keep retired-project denial in the
    deployment/promotion allowlist rather than in application source.
@@ -24,7 +26,8 @@ SHA-256 digest; PDF bytes never enter PostgreSQL.
    numeric value reviewed for that organization's applicable retention rules.
    The upload API remains closed if this policy fact is absent.
 6. Set `EVIDENCE_STORAGE_ENABLED=true` only after the PostgreSQL migration,
-   bucket policy, restricted JWT, and retention setting have all been verified.
+   bucket policy, restricted custom-role API key, and retention setting have
+   all been verified.
 
 The object key is immutable and content-addressed:
 
@@ -33,9 +36,9 @@ The object key is immutable and content-addressed:
 ```
 
 The backend creates without upsert, fetches the bytes back through the
-bucket-restricted role, parses the bounded PDF structure and at least one page,
-recomputes SHA-256, and
-only then changes canonical metadata from `pending_upload` to `verified`.
+bucket-restricted API key, parses the bounded PDF structure and at least one
+page, recomputes SHA-256, and only then changes canonical metadata from
+`pending_upload` to `verified`.
 Missing configuration, storage errors, and integrity mismatches fail closed.
 
 ## Retention and cleanup

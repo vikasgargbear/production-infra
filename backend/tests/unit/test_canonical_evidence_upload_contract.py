@@ -40,9 +40,19 @@ def test_server_storage_credential_is_absent_from_browser_source():
     frontend = ROOT / "frontend"
     for path in frontend.rglob("*"):
         if path.is_file() and path.suffix in {".ts", ".tsx", ".js", ".json", ".html"}:
-            assert "EVIDENCE_STORAGE_SERVER_JWT" not in path.read_text(
-                encoding="utf-8", errors="ignore"
-            ), path
+            source = path.read_text(encoding="utf-8", errors="ignore")
+            assert "EVIDENCE_STORAGE_SERVER_API_KEY" not in source, path
+            assert "EVIDENCE_STORAGE_SERVER_JWT" not in source, path
+
+
+def test_storage_adapter_uses_only_the_custom_role_secret_api_key_header():
+    adapter = (
+        ROOT / "backend/app/infrastructure/evidence_storage.py"
+    ).read_text(encoding="utf-8")
+    assert '"apikey": self._config.server_api_key' in adapter
+    assert '"Authorization"' not in adapter
+    assert "EVIDENCE_STORAGE_SERVER_JWT" not in adapter
+    assert "SUPABASE_ANON_KEY" not in adapter
 
 
 def test_storage_policy_has_no_update_or_service_role_authority():

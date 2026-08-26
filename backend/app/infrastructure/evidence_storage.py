@@ -7,10 +7,8 @@ bounded cleanup.  Canonical metadata and tenant authority remain in PostgreSQL.
 
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from io import BytesIO
-import json
 import os
 import re
 from urllib.parse import quote, urlparse
@@ -26,7 +24,7 @@ EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 MAX_EVIDENCE_BYTES = 10 * 1024 * 1024
 PDF_MEDIA_TYPE = "application/pdf"
 PROJECT_REF_PATTERN = re.compile(r"[a-z0-9]{20}")
-EVIDENCE_STORAGE_JWT_ROLE = "erp_evidence_storage"
+SERVER_API_KEY_PATTERN = re.compile(r"sb_secret_[A-Za-z0-9._-]{24,}")
 
 
 class EvidenceStorageError(RuntimeError):
@@ -54,8 +52,7 @@ class ValidatedPdf:
 @dataclass(frozen=True)
 class EvidenceStorageConfig:
     base_url: str
-    anon_key: str
-    server_jwt: str
+    server_api_key: str
     project_ref: str
     bucket: str = EVIDENCE_BUCKET
     timeout_seconds: float = 15.0
@@ -66,8 +63,7 @@ class EvidenceStorageConfig:
             raise EvidenceStorageUnavailable("Canonical evidence storage is not enabled")
         base_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
         project_ref = os.getenv("EVIDENCE_STORAGE_EXPECTED_PROJECT_REF", "").strip()
-        anon_key = os.getenv("SUPABASE_ANON_KEY", "").strip()
-        server_jwt = os.getenv("EVIDENCE_STORAGE_SERVER_JWT", "").strip()
+        server_api_key = os.getenv("EVIDENCE_STORAGE_SERVER_API_KEY", "")
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc or parsed.path:
             raise EvidenceStorageUnavailable(
@@ -80,37 +76,19 @@ class EvidenceStorageConfig:
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage project authority does not match the reviewed environment"
             )
-        if not anon_key or not server_jwt:
+        if not server_api_key:
             raise EvidenceStorageUnavailable(
                 "Canonical evidence storage server authority is not configured"
             )
-        if _unverified_jwt_role(server_jwt) != EVIDENCE_STORAGE_JWT_ROLE:
+        if SERVER_API_KEY_PATTERN.fullmatch(server_api_key) is None:
             raise EvidenceStorageUnavailable(
-                "Canonical evidence storage requires the restricted erp_evidence_storage JWT role"
+                "Canonical evidence storage requires a restricted Supabase sb_secret_ API key"
             )
         return cls(
             base_url=base_url,
-            anon_key=anon_key,
-            server_jwt=server_jwt,
+            server_api_key=server_api_key,
             project_ref=project_ref,
         )
-
-
-def _unverified_jwt_role(token: str) -> str | None:
-    """Read only the role hint; Supabase still authenticates the JWT signature."""
-
-    parts = token.split(".")
-    if len(parts) != 3:
-        return None
-    try:
-        encoded = parts[1] + "=" * (-len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(encoded).decode("utf-8"))
-    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    role = payload.get("role")
-    return role if isinstance(role, str) else None
 
 
 def validate_pdf(filename: str | None, media_type: str | None, content: bytes) -> ValidatedPdf:
@@ -167,8 +145,7 @@ class SupabaseEvidenceStorage:
             timeout=self._config.timeout_seconds,
             transport=self._transport,
             headers={
-                "apikey": self._config.anon_key,
-                "Authorization": f"Bearer {self._config.server_jwt}",
+                "apikey": self._config.server_api_key,
             },
         )
 
