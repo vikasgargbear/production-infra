@@ -19,23 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Document type configurations
 DOCUMENT_CONFIGS = {
-    "invoice": {
-        "prefix": "INV",
-        "table": "sales.invoices",
-        "column": "invoice_number",
-        "id_column": "invoice_id"
-    },
     "grn": {
         "prefix": "GRN",
         "table": "procurement.goods_receipt_notes",
         "column": "grn_number",
         "id_column": "grn_id"
-    },
-    "delivery_challan": {
-        "prefix": "DC",
-        "table": "sales.delivery_challans",
-        "column": "challan_number",
-        "id_column": "challan_id"
     },
     "payment": {
         "prefix": "PAY",
@@ -48,36 +36,6 @@ DOCUMENT_CONFIGS = {
         "table": "financial.payments",
         "column": "payment_number",
         "id_column": "payment_id"
-    },
-    "journal_entry": {
-        "prefix": "JV",
-        "table": "financial.journal_entries",
-        "column": "journal_number",
-        "id_column": "journal_id"
-    },
-    "expense_claim": {
-        "prefix": "EXP",
-        "table": "financial.expense_claims",
-        "column": "claim_number",
-        "id_column": "claim_id"
-    },
-    "branch": {
-        "prefix": "BR",
-        "table": "master.org_branches",
-        "column": "branch_code",
-        "id_column": "branch_id"
-    },
-    "department": {
-        "prefix": "DEPT",
-        "table": "master.departments",
-        "column": "department_code",
-        "id_column": "department_id"
-    },
-    "employee": {
-        "prefix": "EMP",
-        "table": "master.employees",
-        "column": "employee_code",
-        "id_column": "employee_id"
     },
 }
 

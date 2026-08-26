@@ -245,15 +245,14 @@ def test_bulk_payment_allocation_cannot_exceed_locked_payment_balance(monkeypatc
     assert reconciled == [("org-1", 10, 21), ("org-1", 10, 22)]
 
 
-def test_finance_mutations_require_rbac_and_compensating_reversal():
-    allocation_routes = _read("backend/app/api/routes/finance/allocation/routes.py")
-    journal_routes = _read("backend/app/api/routes/finance/journal/routes.py")
-
-    assert allocation_routes.count('PermissionChecker("finance", "edit")') >= 3
-    assert 'PermissionChecker("finance", "delete")' in allocation_routes
-    assert 'PermissionChecker("finance", "create")' in journal_routes
-    assert 'PermissionChecker("finance", "approve")' in journal_routes
-    assert "Compensating journal posted successfully" in journal_routes
+def test_unmounted_finance_mutation_routes_are_retired():
+    for relative_path in (
+        "backend/app/api/routes/finance/allocation/routes.py",
+        "backend/app/api/routes/finance/expenses/routes.py",
+        "backend/app/api/routes/finance/journal/routes.py",
+        "backend/app/api/routes/finance/payments/routes.py",
+    ):
+        assert not (REPOSITORY_ROOT / relative_path).exists()
 
 
 def test_all_payment_balance_decisions_lock_rows():
@@ -263,14 +262,13 @@ def test_all_payment_balance_decisions_lock_rows():
         assert "FOR UPDATE" in _method_source(source, method_name), method_name
 
 
-def test_payment_creation_has_durable_locked_idempotency():
-    routes = _read("backend/app/api/routes/finance/payments/routes.py")
+def test_retired_payment_routes_cannot_reintroduce_temporary_idempotency():
     service = _read("backend/app/api/services/finance/payment/service.py")
     tables = _read("database/02-tables/06_financial_tables.sql")
 
-    assert routes.count('alias="X-Idempotency-Key"') >= 3
-    assert "X-Idempotency-Replayed" in routes
-    assert "IdempotencyConflictError" in routes
+    assert not (
+        REPOSITORY_ROOT / "backend/app/api/routes/finance/payments/routes.py"
+    ).exists()
     assert "pg_advisory_xact_lock" in service
     assert "internal_notes LIKE :marker_pattern" in service
     assert "claim.pending_marker" in service
@@ -294,15 +292,14 @@ def test_legacy_credit_and_debit_note_writes_are_replaced_by_reviewed_commands()
     assert "WHERE note.org_id=:org_id AND note.id=:note_id" in readback
 
 
-def test_journal_is_draft_until_all_lines_are_inserted():
+def test_retired_journal_route_cannot_bypass_draft_service_ordering():
     service = _read("backend/app/api/services/finance/journal/service.py")
-    route = _read("backend/app/api/routes/finance/journal/routes.py")
 
+    assert not (
+        REPOSITORY_ROOT / "backend/app/api/routes/finance/journal/routes.py"
+    ).exists()
     assert "'draft', :is_reversal, :reversal_of_journal_id" in service
     assert "def post_journal_entry" in service
-    assert route.index("JournalService.insert_journal_line") < route.index(
-        "JournalService.post_journal_entry"
-    )
 
 
 def test_journal_reversal_posts_one_linked_compensating_entry():

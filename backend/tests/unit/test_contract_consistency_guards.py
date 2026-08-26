@@ -60,9 +60,9 @@ def _load_audit():
 
 
 def test_document_number_validator_matches_generated_format():
-    assert DocumentNumberService.validate_format("INV-202608190001", "invoice")
-    assert not DocumentNumberService.validate_format("INV-2608190001", "invoice")
-    assert not DocumentNumberService.validate_format("PO-202608190001", "invoice")
+    assert DocumentNumberService.validate_format("RCT-202608190001", "receipt")
+    assert not DocumentNumberService.validate_format("RCT-2608190001", "receipt")
+    assert not DocumentNumberService.validate_format("PAY-202608190001", "receipt")
 
 
 def test_document_number_generation_requires_tenant_before_database_access():
@@ -71,7 +71,7 @@ def test_document_number_generation_requires_tenant_before_database_access():
             pytest.fail("database must not be accessed without an organization")
 
     with pytest.raises(ValueError, match="org_id is required"):
-        DocumentNumberService.generate_number(Database(), "invoice", "")
+        DocumentNumberService.generate_number(Database(), "receipt", "")
 
 
 def test_document_number_registry_has_only_owned_types_and_canonical_targets():
@@ -82,6 +82,7 @@ def test_document_number_registry_has_only_owned_types_and_canonical_targets():
         "sales_return", "stock_transfer",
     }
     assert retired_types.isdisjoint(DOCUMENT_CONFIGS)
+    assert set(DOCUMENT_CONFIGS) == {"grn", "payment", "receipt"}
     assert DOCUMENT_CONFIGS["receipt"]["table"] == "financial.payments"
     assert DOCUMENT_CONFIGS["receipt"]["column"] == "payment_number"
 
