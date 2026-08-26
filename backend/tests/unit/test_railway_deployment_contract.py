@@ -48,6 +48,16 @@ def _workflow_run_script(step_name: str, next_step_name: str) -> str:
     return textwrap.dedent(run_block)
 
 
+def test_no_ambiguous_repository_root_railway_manifest_exists() -> None:
+    assert not (ROOT / "railway.json").exists()
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "railway up\n" not in readme
+    assert "Do not run an unqualified local `railway up`" in readme
+    for service in ("api", "mcp", "frontend"):
+        assert (ROOT / "deploy/railway" / f"{service}.railway.json").is_file()
+
+
 def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
     expected_dockerfiles = {
         "api": "/deploy/railway/api.Dockerfile",
@@ -60,6 +70,11 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
         "mcp": MCP_RAILWAY_START_COMMAND,
         "frontend": None,
     }
+    expected_ipv6 = {
+        "api": True,
+        "mcp": False,
+        "frontend": False,
+    }
 
     for service, dockerfile in expected_dockerfiles.items():
         config = _config(service)
@@ -67,6 +82,7 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
         assert config["build"]["builder"] == "DOCKERFILE"
         assert config["build"]["dockerfilePath"] == dockerfile
         assert config["deploy"]["startCommand"] == expected_start_commands[service]
+        assert config["deploy"]["ipv6EgressEnabled"] is expected_ipv6[service]
         assert config["deploy"]["sleepApplication"] is True
         assert config["deploy"]["multiRegionConfig"] == {
             SINGAPORE_REGION: {"numReplicas": 1}
@@ -220,35 +236,33 @@ def test_workflow_reconciles_one_reviewed_oauth_authority_before_deploy() -> Non
     assert "evidence_sha256:$oauth_evidence_sha256" in workflow
 
 
-def test_workflow_enables_only_api_ipv6_and_commits_the_exact_staged_patch() -> None:
+def test_workflow_verifies_manifest_owned_api_ipv6_without_live_mutation() -> None:
     workflow = _workflow()
     ipv6_step = workflow[
-        workflow.index("Require API outbound IPv6 without absorbing other staged changes") :
+        workflow.index(
+            "Verify manifest-owned API outbound IPv6 and a clean staged boundary"
+        ) :
         workflow.index("Fail closed on Railway service configuration drift")
     ]
 
     assert "@railway/cli@5.43.4" in workflow
     assert "@railway/cli@4.30.2" not in workflow
     assert 'railway outbound-network ipv6 status \\' in ipv6_step
-    assert 'railway outbound-network ipv6 enable \\' in ipv6_step
+    assert "railway outbound-network ipv6 enable" not in ipv6_step
     assert '--service "$RAILWAY_API_SERVICE"' in ipv6_step
     assert '--service "$RAILWAY_MCP_SERVICE"' not in ipv6_step
     assert '--service "$RAILWAY_FRONTEND_SERVICE"' not in ipv6_step
     assert ".service.name == $service" in ipv6_step
     assert ".environment.id == $environment" in ipv6_step
+    assert ".ipv6.enabled == true" in ipv6_step
     assert ".ipv6.staged == false" in ipv6_step
-    assert "normalize_staged_patch" in ipv6_step
-    assert "startCommand: null" in ipv6_step
-    assert "ipv6EgressEnabled: true" in ipv6_step
-    assert "railway-staged-expected.json" in ipv6_step
-    assert "railway-staged-reviewed.json" in ipv6_step
-    assert "environmentPatchCommitStaged" in ipv6_step
-    assert "skipDeploys: true" in ipv6_step
-    assert "Converge MCP dashboard override and API direct IPv6 transport" in ipv6_step
-    assert ".ipv6.enabled == true and .ipv6.staged == false" in ipv6_step
-    assert "railway-staged-after.json" in ipv6_step
-    assert "'. == {}' railway-staged-after.json" in ipv6_step
-    assert "Railway has unrelated staged configuration" in ipv6_step
+    assert ".deploy.ipv6EgressEnabled == true" in ipv6_step
+    assert ipv6_step.count(".deploy.ipv6EgressEnabled == false") == 2
+    assert "environmentStagedChanges" in ipv6_step
+    assert ".data.environmentStagedChanges.patch == {}" in ipv6_step
+    assert "environmentPatchCommitStaged" not in ipv6_step
+    assert "sleep " not in ipv6_step
+    assert "Railway has staged configuration outside the reviewed source manifests" in ipv6_step
 
 
 def test_workflow_uses_direct_isolated_roles_with_a_staging_pool_budget() -> None:
@@ -267,6 +281,7 @@ def test_workflow_uses_direct_isolated_roles_with_a_staging_pool_budget() -> Non
     for principal in ("erp_runtime", "erp_calculator", "erp_tax_provider"):
         assert f'postgresql://{principal}:$(encode' in variable_step
     assert "@${SUPABASE_DIRECT_DATABASE_HOST}:5432/postgres" in variable_step
+    assert variable_step.count("gssencmode=disable") == 3
     assert '.${CANONICAL_STAGING_PROJECT_REF}:' not in variable_step
     assert (
         'set_variable "$RAILWAY_API_SERVICE" DATABASE_TRANSPORT_REQUIREMENT '
@@ -276,6 +291,16 @@ def test_workflow_uses_direct_isolated_roles_with_a_staging_pool_budget() -> Non
     assert 'set_variable "$RAILWAY_API_SERVICE" DATABASE_MAX_OVERFLOW 1' in variable_step
     assert 'set_variable "$RAILWAY_MCP_SERVICE" DATABASE_' not in variable_step
     assert 'set_variable "$RAILWAY_FRONTEND_SERVICE" DATABASE_' not in variable_step
+
+
+def test_railway_lane_has_no_render_or_supavisor_transport_dependency() -> None:
+    workflow = _workflow().lower()
+
+    assert "render" not in workflow
+    assert "supavisor" not in workflow
+    assert "pooler" not in workflow
+    assert ":6543" not in workflow
+    assert "supabase_direct_ipv6" in workflow
 
 
 def test_workflow_exposes_a_railway_only_exact_sha_dispatch() -> None:
@@ -393,15 +418,22 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert ".meta.configFile == $config_file" in workflow
     assert ".meta.cliMessage == $message" in workflow
     assert 'local expected_message=$7' in workflow
+    assert 'local expected_ipv6=$8' in workflow
     assert '--arg message "$expected_message"' in workflow
+    assert '--argjson expected_ipv6 "$expected_ipv6"' in workflow
     assert ".meta.fileServiceManifest.build.builder" in workflow
     assert ".meta.fileServiceManifest.build.dockerfilePath" in workflow
     assert ".meta.fileServiceManifest.deploy.startCommand" in workflow
     assert ".meta.serviceManifest.build.builder" in workflow
     assert ".meta.serviceManifest.build.dockerfilePath" in workflow
     assert ".meta.serviceManifest.deploy.startCommand" in workflow
-    assert 'require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command"' in workflow
+    assert 'require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready "" "$api_deployment_message" true' in workflow
+    assert 'require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command" "$mcp_deployment_message" false' in workflow
+    assert 'require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health "" "$frontend_deployment_message" false' in workflow
     assert ".meta.serviceManifest.deploy.healthcheckPath" in workflow
+    assert ".meta.serviceManifest.deploy.ipv6EgressEnabled == $expected_ipv6" in workflow
+    assert workflow.count('multiRegionConfig == {"asia-southeast1-eqsg3a":{"numReplicas":1}}') == 2
+    assert ".meta.fileServiceManifest.deploy.sleepApplication == true" in workflow
     assert ".meta.serviceManifest.deploy.sleepApplication == true" in workflow
 
 

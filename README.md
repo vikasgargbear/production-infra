@@ -241,7 +241,7 @@ production-infra/
 │   └── deployment/            # Deployment docs
 │
 ├── docker-compose.yml          # Local Docker setup
-├── railway.json                # Railway deployment config
+├── deploy/railway/             # Service-specific Railway manifests and Dockerfiles
 └── .github/workflows/          # CI/CD workflows
 ```
 
@@ -295,19 +295,15 @@ npm run lint               # ESLint
 
 ## 🚀 Deployment
 
-### Railway (Recommended)
+### Railway
 
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
+Railway deployments are exact-SHA, three-service releases controlled by
+`.github/workflows/railway-canonical-staging.yml`. The API, MCP runtime, and
+frontend each use their own checked-in manifest under `deploy/railway/`.
 
-# Login and link
-railway login
-railway link
-
-# Deploy
-railway up
-```
+Do not run an unqualified local `railway up`: it bypasses the reviewed SHA,
+service-manifest, health, and build-metadata gates. Dispatch the Production
+readiness workflow with Railway selected after the candidate SHA is reviewed.
 
 ### Docker
 

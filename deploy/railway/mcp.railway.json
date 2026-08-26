@@ -10,6 +10,7 @@
   },
   "deploy": {
     "startCommand": "/bin/sh -c \"exec uvicorn aasopharma_mcp.server:create_app --factory --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'\"",
+    "ipv6EgressEnabled": false,
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "sleepApplication": true,
