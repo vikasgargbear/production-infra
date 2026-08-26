@@ -5,7 +5,7 @@
  * Streamlined layout following CustomerFlow/ProductFlow pattern.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
     Building2, Phone, MapPin, FileText,
     AlertTriangle, ArrowLeft, Loader2, Save,
@@ -36,11 +36,9 @@ interface SupplierFormData {
     supplier_name: string;
     // Contact
     phone: string;
-    whatsapp_number: string;
     email: string;
     // Contact Person
     contact_person: string;
-    contact_person_phone: string;
     // Address
     address_line1: string;
     address_line2: string;
@@ -72,18 +70,14 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
     const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('supplier'));
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
-    const [useBusinessPhone, setUseBusinessPhone] = useState(false);
-
     const [formData, setFormData] = useState<SupplierFormData>({
         // Basic Info
         supplier_name: '',
         // Contact
         phone: '',
-        whatsapp_number: '',
         email: '',
         // Contact Person
         contact_person: '',
-        contact_person_phone: '',
         // Address
         address_line1: '',
         address_line2: '',
@@ -114,13 +108,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         'SupplierFlow-Main'
     );
 
-    // Auto-sync WhatsApp with business phone
-    useEffect(() => {
-        if (useBusinessPhone && formData.phone) {
-            setFormData(prev => ({ ...prev, whatsapp_number: prev.phone }));
-        }
-    }, [useBusinessPhone, formData.phone]);
-
     // Save supplier
     const handleSave = async () => {
         if (submissionInFlightRef.current) return;
@@ -144,10 +131,8 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             const supplierData = {
                 supplier_name: formData.supplier_name,
                 primary_phone: formData.phone,
-                secondary_phone: formData.whatsapp_number !== formData.phone ? formData.whatsapp_number : undefined,
                 primary_email: formData.email || undefined,
                 contact_person: formData.contact_person || undefined,
-                contact_person_phone: formData.contact_person_phone || undefined,
                 address_line1: formData.address_line1 || undefined,
                 address_line2: formData.address_line2 || undefined,
                 city: formData.city,
@@ -264,7 +249,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <Phone className="w-5 h-5 text-blue-600" />
                             Contact Information
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Phone <span className="text-red-500">*</span>
@@ -280,28 +265,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
-                                    <span>WhatsApp</span>
-                                    <label className="text-xs font-normal flex items-center gap-1">
-                                        <input
-                                            type="checkbox"
-                                            checked={useBusinessPhone}
-                                            onChange={(e) => setUseBusinessPhone(e.target.checked)}
-                                            className="rounded"
-                                        />
-                                        Same
-                                    </label>
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={formData.whatsapp_number}
-                                    onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })}
-                                    disabled={useBusinessPhone}
-                                    className={`${inputClass} ${useBusinessPhone ? 'bg-gray-100' : ''}`}
-                                    placeholder="WhatsApp"
-                                />
-                            </div>
-                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                 <input
                                     type="email"
@@ -314,7 +277,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </div>
 
                         {/* Contact Person row */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="grid grid-cols-1 gap-4 mt-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
                                 <input
@@ -323,16 +286,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
                                     className={inputClass}
                                     placeholder="Contact person name"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person Phone</label>
-                                <input
-                                    type="tel"
-                                    value={formData.contact_person_phone}
-                                    onChange={(e) => setFormData({ ...formData, contact_person_phone: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="Direct line"
                                 />
                             </div>
                         </div>

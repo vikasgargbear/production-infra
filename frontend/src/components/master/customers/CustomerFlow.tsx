@@ -8,7 +8,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     User, Phone, Mail, MapPin, Building, FileText, Shield,
-    CreditCard, MessageCircle, AlertCircle,
+    CreditCard, AlertCircle,
     ArrowLeft, Loader2, Save, Users
 } from 'lucide-react';
 import { customersApi } from '../../../services/api';
@@ -32,12 +32,9 @@ interface CustomerFormData {
     customer_name: string;
     primary_phone: string;
     primary_email: string;
-    whatsapp_number: string;
-    secondary_phone: string;
     customer_type: 'individual' | 'organization';
     // Contact Person
     contact_person_name: string;
-    contact_person_phone: string;
     // Compliance
     gst_number: string;
     pan_number: string;
@@ -51,7 +48,6 @@ interface CustomerFormData {
         city: string;
         state_code: string;
         pincode: string;
-        country: string;
     };
 }
 
@@ -80,12 +76,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         customer_name: '',
         primary_phone: '',
         primary_email: '',
-        whatsapp_number: '',
-        secondary_phone: '',
         customer_type: getInitialCustomerType(),
         // Contact Person
         contact_person_name: '',
-        contact_person_phone: '',
         // Compliance
         gst_number: '',
         pan_number: '',
@@ -98,8 +91,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             address_line2: '',
             city: '',
             state_code: '',
-            pincode: '',
-            country: 'India'
+            pincode: ''
         }
     });
 
@@ -173,8 +165,17 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 newErrors.push('GSTIN state code must match the address GST state code');
             }
         }
-        if (formData.credit_limit === '') newErrors.push('Credit limit is required; enter 0 for no credit');
-        if (formData.credit_days === '') newErrors.push('Credit days are required; enter 0 for immediate payment');
+        if (formData.credit_limit === '') {
+            newErrors.push('Credit limit is required; enter 0 for no credit');
+        } else if (!/^(?:0|[1-9]\d{0,17})(?:\.\d{1,2})?$/.test(formData.credit_limit)) {
+            newErrors.push('Credit limit must be a non-negative amount with at most 2 decimal places');
+        }
+        if (formData.credit_days === '') {
+            newErrors.push('Credit days are required; enter 0 for immediate payment');
+        } else if (!Number.isInteger(formData.credit_days)
+            || formData.credit_days < 0 || formData.credit_days > 365) {
+            newErrors.push('Credit days must be a whole number from 0 to 365');
+        }
 
         setErrors(newErrors);
         return newErrors.length === 0;
@@ -195,13 +196,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             const customerData = {
                 customer_name: formData.customer_name,
                 primary_phone: formData.primary_phone,
-                whatsapp_number: formData.whatsapp_number || null,
-                secondary_phone: formData.secondary_phone || null,
                 primary_email: formData.primary_email || null,
                 customer_type: formData.customer_type,
                 // Contact Person
                 contact_person_name: formData.contact_person_name || null,
-                contact_person_phone: formData.contact_person_phone || null,
                 // Compliance
                 gst_number: formData.gst_number || null,
                 pan_number: formData.pan_number || null,
@@ -382,21 +380,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>WhatsApp</label>
-                                    <div className="relative">
-                                        <MessageCircle className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                                        <input
-                                            type="text"
-                                            value={formData.whatsapp_number}
-                                            onChange={(e) => updateField('whatsapp_number', e.target.value)}
-                                            className={inputClass}
-                                            placeholder="10-digit"
-                                            maxLength={10}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
                                     <label className={labelClass}>Email</label>
                                     <div className="relative">
                                         <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -420,7 +403,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     Contact Person
                                 </h3>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 gap-3">
                                     <div>
                                         <label className={labelClass}>Name</label>
                                         <div className="relative">
@@ -435,20 +418,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <label className={labelClass}>Phone</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={formData.contact_person_phone}
-                                                onChange={(e) => updateField('contact_person_phone', e.target.value)}
-                                                className={inputClass}
-                                                placeholder="10-digit"
-                                                maxLength={10}
-                                            />
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         )}
@@ -473,8 +442,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     />
                                 </div>
 
-                                {/* Row 2: Address Line 2 + Landmark */}
-                                <div className="grid grid-cols-2 gap-3">
+                                {/* Row 2: Address Line 2 */}
+                                <div className="grid grid-cols-1 gap-3">
                                     <div>
                                         <label className={labelClass}>Address Line 2</label>
                                         <input
@@ -483,14 +452,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             onChange={(e) => updateAddress('address_line2', e.target.value)}
                                             className={inputNoIconClass}
                                             placeholder="Additional address"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className={labelClass}>Landmark</label>
-                                        <input
-                                            type="text"
-                                            className={inputNoIconClass}
-                                            placeholder="Near / Opposite to"
                                         />
                                     </div>
                                 </div>
@@ -579,9 +540,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                             </div>
                         )}
 
-                        {/* Credit & Payment Terms - B2B Only */}
-                        {isBusinessCustomer && (
-                            <div className="bg-gray-50 rounded-lg p-4">
+                        {/* Credit terms are explicit for every canonical customer account. */}
+                        <div className="bg-gray-50 rounded-lg p-4">
                                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                     <CreditCard className="w-4 h-4 text-blue-600" />
                                     Credit & Payment Terms
@@ -589,7 +549,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
-                                        <label className={labelClass}>Credit Limit (₹)</label>
+                                        <label className={labelClass}>Credit Limit (₹) *</label>
                                         <input
                                             type="number"
                                             inputMode="decimal"
@@ -603,7 +563,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     </div>
 
                                     <div>
-                                        <label className={labelClass}>Credit Days</label>
+                                        <label className={labelClass}>Credit Days *</label>
                                         <input
                                             type="number"
                                             value={formData.credit_days}
@@ -615,7 +575,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     </div>
                                 </div>
                             </div>
-                        )}
                     </div>
                 </div>
             </div>

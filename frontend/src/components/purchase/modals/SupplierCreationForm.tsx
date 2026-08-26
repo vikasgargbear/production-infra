@@ -1,17 +1,40 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Building2, MapPin, CreditCard, Save, User, Banknote } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Building2, MapPin, CreditCard, Save, User } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { apiErrorMessage } from '../../../services/api/utils/apiError';
 import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
 import { toast } from 'react-toastify';
 import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
+import type { CanonicalSupplierCreateResponse } from '../../../services/api/modules/master/masterCreationContract';
+
+interface CanonicalSupplierFormData {
+  supplier_name: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state_code: string;
+  pincode: string;
+  gst_number: string;
+  pan_number: string;
+  payment_days: number | '';
+}
+
+interface SupplierCreationFormProps {
+  initialData?: Partial<CanonicalSupplierFormData>;
+  onSupplierCreated?: (supplier: CanonicalSupplierCreateResponse) => void;
+  onCancel?: () => void;
+  embedded?: boolean;
+}
 
 // ==================== INLINE TRANSFORMER ====================
 
 /**
  * Transform supplier data for API submission
  */
-const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
+const transformSupplierForAPI = (formData: CanonicalSupplierFormData) => ({
   supplier_name: formData.supplier_name,
   contact_person: formData.contact_person || null,
   primary_phone: formData.phone || null,
@@ -35,73 +58,34 @@ const SupplierCreationForm = ({
   onSupplierCreated,
   onCancel,
   embedded = false
-}) => {
+}: SupplierCreationFormProps) => {
   const submissionInFlightRef = useRef(false);
   const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('supplier'));
   const [saving, setSaving] = useState(false);
-  const [useBusinessPhoneForWhatsApp, setUseBusinessPhoneForWhatsApp] = useState(false);
-  const [useBusinessContactForPerson, setUseBusinessContactForPerson] = useState(false);
 
-  const [formData, setFormData] = useState({
-    // Basic Information
-    supplier_name: '',
-    contact_person: '',
-    contact_person_phone: '',
-    contact_person_email: '',
-    phone: '',
-    whatsapp_number: '',
-    secondary_phone: '',
-    email: '',
-    website: '',
-
-    // Address Information
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    state_code: '',
-    pincode: '',
-    country: 'India',
-
-    // Tax & Compliance
-    gst_number: '',
-    pan_number: '',
-    drug_license_no: '',
-    drug_license_validity: '',
-
-    // Banking Details
-    payment_days: '',
-    bank_name: '',
-    bank_account_no: '',
-    bank_ifsc_code: '',
-    account_holder_name: '',
-
-    // Additional Info
-    notes: '',
-    is_active: true,
-    ...initialData
-  });
+  // PDF extraction is advisory. Admit only fields owned by the reviewed
+  // canonical supplier-create contract into editable state.
+  const [formData, setFormData] = useState<CanonicalSupplierFormData>(() => ({
+    supplier_name: initialData.supplier_name || '',
+    contact_person: initialData.contact_person || '',
+    phone: initialData.phone || '',
+    email: initialData.email || '',
+    address_line1: initialData.address_line1 || '',
+    address_line2: initialData.address_line2 || '',
+    city: initialData.city || '',
+    state_code: initialData.state_code || '',
+    pincode: initialData.pincode || '',
+    gst_number: initialData.gst_number || '',
+    pan_number: initialData.pan_number || '',
+    payment_days: initialData.payment_days ?? '',
+  }));
 
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
-  // Copy phone to WhatsApp if checkbox is checked
-  useEffect(() => {
-    if (useBusinessPhoneForWhatsApp && formData.phone) {
-      setFormData(prev => ({ ...prev, whatsapp_number: formData.phone }));
-    }
-  }, [useBusinessPhoneForWhatsApp, formData.phone]);
-
-  // Copy business contact to person if checkbox is checked
-  useEffect(() => {
-    if (useBusinessContactForPerson) {
-      setFormData(prev => ({
-        ...prev,
-        contact_person_phone: formData.phone,
-        contact_person_email: formData.email
-      }));
-    }
-  }, [useBusinessContactForPerson, formData.phone, formData.email]);
-
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (
+    field: keyof CanonicalSupplierFormData,
+    value: string | number,
+  ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error for this field when user starts typing
     if (errors[field]) {
@@ -134,15 +118,18 @@ const SupplierCreationForm = ({
       && formData.gst_number.slice(0, 2) !== formData.state_code) {
       newErrors.gst_number = 'GSTIN state code must match the address GST state code';
     }
-    if (formData.payment_days === '' || !Number.isInteger(Number(formData.payment_days))) {
-      newErrors.payment_days = 'Payment days are required';
+    if (formData.payment_days === ''
+      || !Number.isInteger(Number(formData.payment_days))
+      || Number(formData.payment_days) < 0
+      || Number(formData.payment_days) > 180) {
+      newErrors.payment_days = 'Payment days must be a whole number from 0 to 180';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
 
     if (!validateForm()) {
@@ -205,11 +192,30 @@ const SupplierCreationForm = ({
                 <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>
               )}
             </div>
-
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Payment days *
+              </label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={180}
+                step={1}
+                value={formData.payment_days}
+                onChange={(e) => handleInputChange('payment_days', e.target.value === '' ? '' : Number(e.target.value))}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.payment_days ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                placeholder="Enter payment days"
+              />
+              {errors.payment_days && (
+                <p className="mt-1 text-xs text-red-600">{errors.payment_days}</p>
+              )}
+            </div>
           </div>
 
           {/* Business Contact - Single Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Phone *
@@ -228,30 +234,6 @@ const SupplierCreationForm = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center justify-between">
-                <span>WhatsApp</span>
-                <label className="text-xs font-normal">
-                  <input
-                    type="checkbox"
-                    checked={useBusinessPhoneForWhatsApp}
-                    onChange={(e) => setUseBusinessPhoneForWhatsApp(e.target.checked)}
-                    className="mr-1"
-                  />
-                  Same
-                </label>
-              </label>
-              <input
-                type="tel"
-                value={formData.whatsapp_number}
-                onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
-                disabled={useBusinessPhoneForWhatsApp}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${useBusinessPhoneForWhatsApp ? 'bg-gray-100' : ''
-                  } border-gray-300`}
-                placeholder="WhatsApp"
-              />
-            </div>
-
-            <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Email
               </label>
@@ -265,18 +247,6 @@ const SupplierCreationForm = ({
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Website
-              </label>
-              <input
-                type="url"
-                value={formData.website}
-                onChange={(e) => handleInputChange('website', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="example.com"
-              />
-            </div>
           </div>
 
           {/* Contact Person - Optional compact section */}
@@ -284,17 +254,8 @@ const SupplierCreationForm = ({
             <summary className="text-sm font-semibold text-gray-800 cursor-pointer flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-600" />
               Contact Person (Optional)
-              <label className="ml-auto text-xs font-normal">
-                <input
-                  type="checkbox"
-                  checked={useBusinessContactForPerson}
-                  onChange={(e) => setUseBusinessContactForPerson(e.target.checked)}
-                  className="mr-1"
-                />
-                Use business info
-              </label>
             </summary>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3">
+            <div className="grid grid-cols-1 gap-3 mt-3">
               <div>
                 <input
                   type="text"
@@ -302,28 +263,6 @@ const SupplierCreationForm = ({
                   onChange={(e) => handleInputChange('contact_person', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500"
                   placeholder="Contact person name"
-                />
-              </div>
-              <div>
-                <input
-                  type="tel"
-                  value={formData.contact_person_phone}
-                  onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
-                  disabled={useBusinessContactForPerson}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${useBusinessContactForPerson ? 'bg-gray-100' : ''
-                    } border-gray-200`}
-                  placeholder="Contact phone"
-                />
-              </div>
-              <div>
-                <input
-                  type="email"
-                  value={formData.contact_person_email}
-                  onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
-                  disabled={useBusinessContactForPerson}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${useBusinessContactForPerson ? 'bg-gray-100' : ''
-                    } border-gray-200`}
-                  placeholder="Contact email"
                 />
               </div>
             </div>
@@ -365,7 +304,7 @@ const SupplierCreationForm = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 City
@@ -399,18 +338,6 @@ const SupplierCreationForm = ({
                 onChange={(e) => handleInputChange('pincode', e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                 placeholder="000000"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Country
-              </label>
-              <input
-                type="text"
-                value={formData.country}
-                onChange={(e) => handleInputChange('country', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="India"
               />
             </div>
           </div>
@@ -451,105 +378,6 @@ const SupplierCreationForm = ({
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
               placeholder="AAAAA0000A"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Drug License No.
-            </label>
-            <input
-              type="text"
-              value={formData.drug_license_no}
-              onChange={(e) => handleInputChange('drug_license_no', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="License number"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Drug License Validity
-            </label>
-            <input
-              type="date"
-              value={formData.drug_license_validity}
-              onChange={(e) => handleInputChange('drug_license_validity', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-        </div>
-      </details>
-
-      {/* Banking Details Section */}
-      <details className="border rounded-lg p-3 bg-gray-50">
-        <summary className="text-sm font-semibold text-gray-800 cursor-pointer flex items-center gap-2">
-          <Banknote className="w-4 h-4 text-orange-600" />
-          Banking Details
-        </summary>
-        <div className="space-y-3 mt-3">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Bank Name
-              </label>
-              <input
-                type="text"
-                value={formData.bank_name}
-                onChange={(e) => handleInputChange('bank_name', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="e.g., State Bank of India"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Account Holder Name
-              </label>
-              <input
-                type="text"
-                value={formData.account_holder_name}
-                onChange={(e) => handleInputChange('account_holder_name', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="Account holder name"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Account Number
-              </label>
-              <input
-                type="text"
-                value={formData.bank_account_no}
-                onChange={(e) => handleInputChange('bank_account_no', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="Account number"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                IFSC Code
-              </label>
-              <input
-                type="text"
-                value={formData.bank_ifsc_code}
-                onChange={(e) => handleInputChange('bank_ifsc_code', e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="IFSC0000000"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Payment days
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formData.payment_days}
-                onChange={(e) => handleInputChange('payment_days', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="Enter payment days"
-              />
-              {errors.payment_days && <p className="mt-1 text-xs text-red-600">{errors.payment_days}</p>}
-            </div>
           </div>
         </div>
       </details>

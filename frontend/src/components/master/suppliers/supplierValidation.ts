@@ -5,8 +5,6 @@ export interface SupplierMandatoryFields {
     city: string;
     state_code: string;
     pincode: string;
-    whatsapp_number?: string;
-    contact_person_phone?: string;
     gst_number?: string;
     pan_number?: string;
 }
@@ -38,12 +36,6 @@ export const validateSupplierMandatoryFields = (
         errors.push('Pincode is required');
     } else if (!/^\d{6}$/.test(form.pincode.trim())) {
         errors.push('Pincode must be exactly 6 digits');
-    }
-    if (form.whatsapp_number?.trim() && !indianPhone(form.whatsapp_number)) {
-        errors.push('WhatsApp number must be a valid 10-digit Indian mobile number');
-    }
-    if (form.contact_person_phone?.trim() && !indianPhone(form.contact_person_phone)) {
-        errors.push('Contact person phone must be a valid 10-digit Indian mobile number');
     }
     if (form.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gst_number)) {
         errors.push('Invalid GSTIN format');
