@@ -163,7 +163,6 @@ class CanonicalSupplierCreate(BaseModel):
     """Reviewed supplier-account creation contract used by the live ERP UI."""
 
     supplier_name: str = Field(min_length=1, max_length=200)
-    supplier_code: str = Field(min_length=1, max_length=50)
     primary_phone: Optional[str] = Field(default=None, pattern=r"^\d{10}$")
     primary_email: Optional[EmailStr] = None
     contact_person: Optional[str] = Field(default=None, max_length=100)

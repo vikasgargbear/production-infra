@@ -8,13 +8,14 @@ only a non-transactional draft.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from typing import Annotated, Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, Security, status
 from fastapi.security import HTTPBearer
 from pydantic import (
     BaseModel,
@@ -25,7 +26,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
@@ -37,6 +38,39 @@ from ..schemas.master.supplier import CanonicalSupplierCreate
 
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
 logger = logging.getLogger(__name__)
+
+
+_MASTER_CREATE_SQLSTATE_RESPONSES = {
+    "22023": (status.HTTP_422_UNPROCESSABLE_ENTITY, "Master data is invalid"),
+    "22003": (status.HTTP_409_CONFLICT, "Master code sequence is exhausted"),
+    "23505": (status.HTTP_409_CONFLICT, "Master data already exists"),
+    "23514": (status.HTTP_409_CONFLICT, "Master data configuration is incomplete"),
+    "P0002": (status.HTTP_409_CONFLICT, "Required canonical master data is missing"),
+    "40001": (status.HTTP_503_SERVICE_UNAVAILABLE, "Master data changed; retry safely"),
+    "42501": (status.HTTP_403_FORBIDDEN, "Master data creation is not authorized"),
+    "55000": (status.HTTP_409_CONFLICT, "Idempotency key is not executable"),
+}
+
+
+def _raise_master_create_database_error(exc: DBAPIError) -> None:
+    """Translate only reviewed database outcomes; unknown failures stay server errors."""
+
+    original = exc.orig
+    sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+    mapped = _MASTER_CREATE_SQLSTATE_RESPONSES.get(sqlstate)
+    if mapped is None:
+        raise exc
+    http_status, detail = mapped
+    logger.info("Canonical master create rejected", extra={"sqlstate": sqlstate})
+    headers = {"Retry-After": "1"} if sqlstate == "40001" else None
+    raise HTTPException(status_code=http_status, detail=detail, headers=headers) from exc
+
+
+def _set_master_idempotency_headers(
+    response: Response, idempotency_key: str, replayed: bool
+) -> None:
+    response.headers["X-Idempotency-Key"] = idempotency_key
+    response.headers["X-Idempotency-Replayed"] = str(bool(replayed)).lower()
 
 
 def _quantity_wire(value: Decimal) -> str:
@@ -249,30 +283,10 @@ def _validated_state_code(
     return state_code
 
 
-def _party_posting_account(db: Session, org_id: UUID, account_type: str) -> UUID:
-    account_id = db.execute(text("""
-        SELECT id FROM finance.accounts
-         WHERE org_id=:org_id AND account_type=:account_type
-           AND allows_party_posting AND status='active' AND currency_code='INR'
-         ORDER BY code, id LIMIT 1
-    """), {"org_id": org_id, "account_type": account_type}).scalar()
-    if account_id is None:
-        raise HTTPException(
-            status_code=409,
-            detail=f"No active INR party-posting {account_type} account is configured",
-        )
-    return account_id
-
-
 class CanonicalProductDraftCreate(BaseModel):
     """Small, honest product-draft contract for the canonical catalog."""
 
     product_name: str = Field(min_length=1, max_length=255)
-    product_code: str = Field(
-        min_length=1,
-        max_length=64,
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
-    )
     generic_name: Optional[str] = Field(default=None, max_length=255)
     product_kind: str = Field(pattern=r"^(medicine|medical_device|consumable)$")
 
@@ -380,6 +394,14 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
 @router.post("/products/", status_code=status.HTTP_201_CREATED)
 def create_product_draft(
     product: CanonicalProductDraftCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
     user: dict = Depends(PermissionChecker("master", "create")),
     db: Session = Depends(get_db),
 ):
@@ -392,58 +414,39 @@ def create_product_draft(
     """
 
     org_id = _activate(db, user)
-    duplicate = db.execute(
-        text("""
-            SELECT 1 FROM catalog.products
-             WHERE org_id=:org_id AND lower(btrim(name))=lower(btrim(:name))
-             LIMIT 1
-        """),
-        {"org_id": org_id, "name": product.product_name},
-    ).first()
-    if duplicate:
-        raise HTTPException(status_code=409, detail="Product name already exists")
-
-    sku = product.product_code
     try:
         created = db.execute(
             text("""
-                INSERT INTO catalog.products (
-                    org_id, sku, product_kind, name, generic_name,
-                    base_uom_code, hsn_code, cold_chain_required, status
-                ) VALUES (
-                    :org_id, :sku, :product_kind, :name, :generic_name,
-                    'EA', '0000', false, 'draft'
-                )
-                RETURNING id, sku, name
+                SELECT product_id,product_code,idempotency_replayed
+                  FROM erp_master_commands.create_product_draft(
+                    :org_id,:name,:generic_name,:product_kind,
+                    :idempotency_key_hash,
+                    transaction_timestamp()+interval '24 hours'
+                  )
             """),
             {
                 "org_id": org_id,
-                "sku": sku,
                 "product_kind": product.product_kind,
                 "name": product.product_name,
                 "generic_name": product.generic_name,
+                "idempotency_key_hash": hashlib.sha256(
+                    idempotency_key.encode("utf-8")
+                ).digest(),
             },
-        ).one()
+        ).mappings().one()
         db.commit()
-    except IntegrityError as exc:
+    except DBAPIError as exc:
         db.rollback()
-        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
-        logger.warning(
-            "Canonical product draft insert rejected by constraint=%s",
-            constraint_name or "unknown",
-            exc_info=True,
-        )
-        detail = (
-            "Product code already exists"
-            if constraint_name == "products_sku_uq"
-            else "Product draft does not satisfy the canonical catalog rules"
-        )
-        raise HTTPException(status_code=409, detail=detail) from exc
+        _raise_master_create_database_error(exc)
 
+    _set_master_idempotency_headers(
+        response, idempotency_key, created["idempotency_replayed"]
+    )
     return {
-        "product_id": created.id,
-        "product_code": created.sku,
-        "product_name": created.name,
+        "product_id": created["product_id"],
+        "product_code": created["product_code"],
+        "product_name": product.product_name,
+        "idempotency_replayed": created["idempotency_replayed"],
         "lifecycle_status": "draft",
         "message": "Product draft created; classification is required before sale",
     }
@@ -704,100 +707,6 @@ def product_batches(
     return {"batches": rows}
 
 
-def _insert_party_contact_address_and_tax(
-    db: Session,
-    *,
-    org_id: UUID,
-    legal_name: str,
-    party_kind: str,
-    pan: Optional[str],
-    contact_name: str,
-    phone: Optional[str],
-    email: Optional[str],
-    address_line1: Optional[str],
-    address_line2: Optional[str],
-    city: Optional[str],
-    state_code: Optional[str],
-    postal_code: Optional[str],
-    gstin: Optional[str],
-) -> UUID:
-    duplicate = db.execute(text("""
-        SELECT 1 FROM parties.parties
-         WHERE org_id=:org_id AND lower(btrim(legal_name))=lower(btrim(:legal_name))
-           AND status IN ('draft','active','blocked') LIMIT 1
-    """), {"org_id": org_id, "legal_name": legal_name}).first()
-    if duplicate:
-        raise HTTPException(status_code=409, detail="A party with this legal name already exists")
-
-    party_id = db.execute(text("""
-        INSERT INTO "parties"."parties" (
-            org_id, party_kind, legal_name, pan, pan_verification_status, status
-        ) VALUES (:org_id, :party_kind, :legal_name, :pan, 'unverified', 'draft')
-        RETURNING id
-    """), {
-        "org_id": org_id, "party_kind": party_kind,
-        "legal_name": legal_name, "pan": pan,
-    }).scalar_one()
-
-    if phone or email:
-        db.execute(text("""
-            INSERT INTO "parties"."contacts" (
-                org_id, party_id, contact_kind, name, email, phone, is_primary, status
-            ) VALUES (
-                :org_id, :party_id, 'business', :name, :email, :phone, true, 'active'
-            )
-        """), {
-            "org_id": org_id, "party_id": party_id, "name": contact_name,
-            "email": str(email) if email else None, "phone": phone,
-        })
-
-    address_values = [address_line1, city, state_code, postal_code]
-    if any(address_values) and not all(address_values):
-        raise HTTPException(
-            status_code=422,
-            detail="Address line, city, state code, and pincode must be supplied together",
-        )
-    state_code = _validated_state_code(state_code, gstin)
-    if all(address_values):
-        db.execute(text("""
-            INSERT INTO "parties"."addresses" (
-                org_id, party_id, address_kind, line1, line2, city, state_code,
-                postal_code, country_code, is_primary, status
-            ) VALUES (
-                :org_id, :party_id, 'billing', :line1, :line2, :city, :state_code,
-                :postal_code, 'IN', true, 'active'
-            )
-        """), {
-            "org_id": org_id, "party_id": party_id, "line1": address_line1,
-            "line2": address_line2, "city": city, "state_code": state_code,
-            "postal_code": postal_code,
-        })
-
-    if gstin:
-        db.execute(text("""
-            INSERT INTO "parties"."tax_registrations" (
-                org_id, party_id, registration_type, registration_number,
-                registered_legal_name, state_code, taxpayer_type, status
-            ) VALUES (
-                :org_id, :party_id, 'GSTIN', :gstin,
-                :legal_name, :state_code, 'regular', 'pending_verification'
-            )
-        """), {
-            "org_id": org_id, "party_id": party_id, "gstin": gstin,
-            "legal_name": legal_name, "state_code": state_code,
-        })
-
-    activated_party = db.execute(text("""
-        UPDATE parties.parties
-           SET status='active', updated_at=transaction_timestamp(), row_version=row_version+1
-         WHERE org_id=:org_id AND id=:party_id AND status='draft'
-     RETURNING id
-    """), {"org_id": org_id, "party_id": party_id}).scalar_one_or_none()
-    if activated_party is None:
-        raise HTTPException(status_code=409, detail="Party activation failed")
-    return party_id
-
-
 @router.post(
     "/customers/",
     status_code=status.HTTP_201_CREATED,
@@ -805,53 +714,55 @@ def _insert_party_contact_address_and_tax(
 )
 def create_customer(
     customer: CanonicalCustomerCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
     user: dict = Depends(PermissionChecker("master", "create")),
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
-    receivable_account_id = _party_posting_account(db, org_id, "asset")
     try:
-        party_id = _insert_party_contact_address_and_tax(
-            db,
-            org_id=org_id,
-            legal_name=customer.customer_name,
-            party_kind="individual" if customer.customer_type == "individual" else "organization",
-            pan=customer.pan_number,
-            contact_name=customer.contact_person_name or customer.customer_name,
-            phone=customer.primary_phone,
-            email=customer.primary_email,
-            address_line1=customer.address_line1,
-            address_line2=customer.address_line2,
-            city=customer.city,
-            state_code=customer.state_code,
-            postal_code=customer.pincode,
-            gstin=customer.gst_number,
-        )
-        customer_code = customer.customer_code
         account = db.execute(text("""
-            INSERT INTO "parties"."customer_accounts" (
-                org_id, party_id, customer_code, credit_limit, credit_days,
-                default_receivable_account_id, status
-            ) VALUES (
-                :org_id, :party_id, :code, :credit_limit, :credit_days,
-                :account_id, 'active'
-            ) RETURNING id
+            SELECT customer_account_id,party_id,customer_code,idempotency_replayed
+              FROM erp_master_commands.create_customer(
+                :org_id,:customer_name,:customer_type,:primary_phone,
+                :primary_email,:contact_person_name,:address_line1,:address_line2,
+                :city,:state_code,:postal_code,:gstin,:pan,:credit_limit,
+                :credit_days,:idempotency_key_hash,
+                transaction_timestamp()+interval '24 hours'
+              )
         """), {
-            "org_id": org_id, "party_id": party_id, "code": customer_code,
+            "org_id": org_id, "customer_name": customer.customer_name,
+            "customer_type": customer.customer_type,
+            "primary_phone": customer.primary_phone,
+            "primary_email": str(customer.primary_email) if customer.primary_email else None,
+            "contact_person_name": customer.contact_person_name,
+            "address_line1": customer.address_line1,
+            "address_line2": customer.address_line2,
+            "city": customer.city,"state_code": customer.state_code,
+            "postal_code": customer.pincode,"gstin": customer.gst_number,
+            "pan": customer.pan_number,
             "credit_limit": customer.credit_limit, "credit_days": customer.credit_days,
-            "account_id": receivable_account_id,
-        }).scalar_one()
+            "idempotency_key_hash": hashlib.sha256(
+                idempotency_key.encode("utf-8")
+            ).digest(),
+        }).mappings().one()
         db.commit()
-    except HTTPException:
+    except DBAPIError as exc:
         db.rollback()
-        raise
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Customer code or contact already exists") from exc
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, account["idempotency_replayed"]
+    )
     return {
-        "customer_id": account,
-        "party_id": party_id,
-        "customer_code": customer_code,
+        "customer_id": account["customer_account_id"],
+        "party_id": account["party_id"],
+        "customer_code": account["customer_code"],
         "customer_name": customer.customer_name,
         "primary_phone": customer.primary_phone,
         "primary_email": customer.primary_email,
@@ -861,6 +772,7 @@ def create_customer(
         "credit_days": customer.credit_days,
         "is_active": True,
         "status": "active",
+        "idempotency_replayed": account["idempotency_replayed"],
         "message": "Customer created",
     }
 
@@ -872,52 +784,53 @@ def create_customer(
 )
 def create_supplier(
     supplier: CanonicalSupplierCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
     user: dict = Depends(PermissionChecker("master", "create")),
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
-    payable_account_id = _party_posting_account(db, org_id, "liability")
     try:
-        party_id = _insert_party_contact_address_and_tax(
-            db,
-            org_id=org_id,
-            legal_name=supplier.supplier_name,
-            party_kind="organization",
-            pan=supplier.pan_number,
-            contact_name=supplier.contact_person or supplier.supplier_name,
-            phone=supplier.primary_phone,
-            email=supplier.primary_email,
-            address_line1=supplier.address_line1,
-            address_line2=supplier.address_line2,
-            city=supplier.city,
-            state_code=supplier.state_code,
-            postal_code=supplier.pincode,
-            gstin=supplier.gst_number,
-        )
-        supplier_code = supplier.supplier_code
         account = db.execute(text("""
-            INSERT INTO "parties"."supplier_accounts" (
-                org_id, party_id, supplier_code, payment_days,
-                default_payable_account_id, status
-            ) VALUES (
-                :org_id, :party_id, :code, :payment_days, :account_id, 'active'
-            ) RETURNING id
+            SELECT supplier_account_id,party_id,supplier_code,idempotency_replayed
+              FROM erp_master_commands.create_supplier(
+                :org_id,:supplier_name,:primary_phone,:primary_email,
+                :contact_person_name,:address_line1,:address_line2,:city,
+                :state_code,:postal_code,:gstin,:pan,:payment_days,
+                :idempotency_key_hash,
+                transaction_timestamp()+interval '24 hours'
+              )
         """), {
-            "org_id": org_id, "party_id": party_id, "code": supplier_code,
+            "org_id": org_id,"supplier_name": supplier.supplier_name,
+            "primary_phone": supplier.primary_phone,
+            "primary_email": str(supplier.primary_email) if supplier.primary_email else None,
+            "contact_person_name": supplier.contact_person,
+            "address_line1": supplier.address_line1,
+            "address_line2": supplier.address_line2,"city": supplier.city,
+            "state_code": supplier.state_code,"postal_code": supplier.pincode,
+            "gstin": supplier.gst_number,"pan": supplier.pan_number,
             "payment_days": supplier.payment_days,
-            "account_id": payable_account_id,
-        }).scalar_one()
+            "idempotency_key_hash": hashlib.sha256(
+                idempotency_key.encode("utf-8")
+            ).digest(),
+        }).mappings().one()
         db.commit()
-    except HTTPException:
+    except DBAPIError as exc:
         db.rollback()
-        raise
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Supplier code or contact already exists") from exc
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, account["idempotency_replayed"]
+    )
     return {
-        "supplier_id": account,
-        "party_id": party_id,
-        "supplier_code": supplier_code,
+        "supplier_id": account["supplier_account_id"],
+        "party_id": account["party_id"],
+        "supplier_code": account["supplier_code"],
         "supplier_name": supplier.supplier_name,
         "primary_phone": supplier.primary_phone,
         "primary_email": supplier.primary_email,
@@ -925,6 +838,7 @@ def create_supplier(
         "payment_days": supplier.payment_days,
         "is_active": True,
         "status": "active",
+        "idempotency_replayed": account["idempotency_replayed"],
         "message": "Supplier created",
     }
 

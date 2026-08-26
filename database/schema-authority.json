@@ -79,6 +79,10 @@
     "backend/alembic/sql/20260826_0025_typed_command_read_projections.sql",
     "backend/alembic/versions/20260826_0026_command_read_privilege_cutover.py",
     "backend/alembic/sql/20260826_0026_command_read_privilege_cutover.sql",
+    "backend/alembic/versions/20260826_0027_master_code_commands.py",
+    "backend/alembic/sql/20260826_0027_master_code_commands.sql",
+    "database/canonical/master_codes/master-code-authority.json",
+    "database/canonical/master_codes/generate_master_code_contract.py",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],

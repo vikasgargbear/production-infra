@@ -87,6 +87,9 @@ CONTRACTS = (
     GeneratorContract(
         "commands_commercial/generate_commercial_commands.py", ("MAPPING_PATH", "MANIFEST_PATH")
     ),
+    GeneratorContract(
+        "master_codes/generate_master_code_contract.py", ("MANIFEST_PATH",)
+    ),
 )
 
 

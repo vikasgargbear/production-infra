@@ -39,14 +39,12 @@ def test_product_draft_create_rejects_browser_owned_regulatory_fact(field):
 def test_product_draft_create_serializes_only_identity_facts():
     draft = CanonicalProductDraftCreate.model_validate({
         "product_name": "  Saline  ",
-        "product_code": "SALINE-001",
         "generic_name": "  Sodium chloride  ",
         "product_kind": "medicine",
     })
 
     assert draft.model_dump() == {
         "product_name": "Saline",
-        "product_code": "SALINE-001",
         "generic_name": "Sodium chloride",
         "product_kind": "medicine",
     }
@@ -69,7 +67,6 @@ def test_openapi_exposes_only_canonical_product_draft_mutations():
     update_properties = set(schemas["CanonicalProductDraftUpdate"]["properties"])
     assert create_properties == {
         "product_name",
-        "product_code",
         "generic_name",
         "product_kind",
     }

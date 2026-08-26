@@ -1,0 +1,55 @@
+{
+  "allocation": {
+    "forbidden_strategies": [
+      "application_generated",
+      "count_plus_one",
+      "max_plus_one",
+      "random_code",
+      "uuid_code"
+    ],
+    "idempotency": "core.idempotency_keys",
+    "strategy": "row_lock_increment_once"
+  },
+  "authority": "post_baseline_alembic",
+  "code_kinds": [
+    "customer",
+    "product",
+    "supplier"
+  ],
+  "commands": [
+    "erp_master_commands.create_customer",
+    "erp_master_commands.create_product_draft",
+    "erp_master_commands.create_supplier"
+  ],
+  "create_privilege_cutover": {
+    "legacy_update_privilege": "preserved_with_code_immutability_guard",
+    "relations": [
+      "catalog.products",
+      "parties.customer_accounts",
+      "parties.supplier_accounts"
+    ],
+    "revoked_from": [
+      "erp_app",
+      "erp_runtime"
+    ],
+    "supersedes": "baseline erp_insert grants at migration head"
+  },
+  "migration_revision": "20260826_0027",
+  "migration_sql": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
+  "migration_sql_sha256": "9702a336715e81b7b936dedaa96519990fa96b73d49adbd99a379cb7d528de3f",
+  "public_request_code_fields": [],
+  "relation": "core.master_code_sequences",
+  "retention": {
+    "assigned_code": "immutable",
+    "reuse": "forbidden",
+    "sequence": "permanent"
+  },
+  "reviewed_configuration": [
+    "prefix",
+    "suffix",
+    "padding"
+  ],
+  "runtime_authority": "execute_typed_commands_only_for_create",
+  "scope": "organization_global_perpetual",
+  "version": 1
+}

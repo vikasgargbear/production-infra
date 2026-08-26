@@ -346,6 +346,58 @@ def validate_contract(
     for duplicate in sorted(_duplicates(names)):
         errors.append(f"duplicate canonical model table: {duplicate}")
     relation_index = set(names)
+    post_baseline_manifests = authority.get("post_baseline_manifests", [])
+    if not isinstance(post_baseline_manifests, list) or not all(
+        isinstance(path, str) for path in post_baseline_manifests
+    ):
+        errors.append("data_authority.post_baseline_manifests must be a string array")
+        post_baseline_manifests = []
+    for relative_path in post_baseline_manifests:
+        if (
+            not relative_path.startswith("database/canonical/")
+            or ".." in Path(relative_path).parts
+        ):
+            errors.append(f"invalid post-baseline authority path: {relative_path}")
+            continue
+        try:
+            supplemental = _load_json(repository_root / relative_path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"cannot load post-baseline authority {relative_path}: {exc}")
+            continue
+        relation = supplemental.get("relation")
+        revision = supplemental.get("migration_revision")
+        migration_sql = supplemental.get("migration_sql")
+        expected_digest = supplemental.get("migration_sql_sha256")
+        if supplemental.get("authority") != "post_baseline_alembic":
+            errors.append(f"post-baseline authority kind is invalid: {relative_path}")
+        if not isinstance(relation, str) or QUALIFIED_NAME.fullmatch(relation) is None:
+            errors.append(f"post-baseline authority relation is invalid: {relative_path}")
+            continue
+        if relation in relation_index:
+            errors.append(f"duplicate post-baseline authority relation: {relation}")
+            continue
+        if (
+            not isinstance(revision, str)
+            or re.fullmatch(r"[0-9]{8}_[0-9]{4}", revision) is None
+            or not isinstance(migration_sql, str)
+            or not migration_sql.startswith(f"backend/alembic/sql/{revision}_")
+            or not migration_sql.endswith(".sql")
+            or ".." in Path(migration_sql).parts
+            or not isinstance(expected_digest, str)
+            or SHA256.fullmatch(expected_digest) is None
+        ):
+            errors.append(f"post-baseline migration authority is invalid: {relative_path}")
+            continue
+        migration_path = repository_root / migration_sql
+        try:
+            actual_digest = hashlib.sha256(migration_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            errors.append(f"cannot load post-baseline migration {migration_sql}: {exc}")
+            continue
+        if actual_digest != expected_digest:
+            errors.append(f"post-baseline migration hash differs: {migration_sql}")
+            continue
+        relation_index.add(relation)
     if authority.get("expected_table_count") != len(relation_index):
         errors.append(
             "canonical model table count differs from app contract: "
@@ -574,7 +626,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         "app-data-contract: OK "
-        f"({len(relation_names(model))} canonical tables, {len(contract['workflows'])} "
+        f"({contract['data_authority']['expected_table_count']} canonical relations, "
+        f"{len(contract['workflows'])} "
         f"workflows, {len(contract['mcp_operations'])} reviewed MCP operations)"
     )
     return 0

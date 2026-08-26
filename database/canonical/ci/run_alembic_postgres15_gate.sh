@@ -154,6 +154,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_runtime_deployment_readiness.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_master_code_sequence_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_sales_invoice_incremental_definition_guards.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_calculation_schema_c_collation_migration.py

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
@@ -941,16 +941,19 @@ def test_offline_sync_routes_are_not_registered() -> None:
 
 
 def test_party_creation_activates_party_before_active_account_commit() -> None:
-    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
-    assert "SET status='active', updated_at=transaction_timestamp()" in source
-    assert "WHERE org_id=:org_id AND id=:party_id AND status='draft'" in source
-    assert "Party activation failed" in source
+    source = (
+        Path(__file__).parents[2]
+        / "alembic/sql/20260826_0027_master_code_commands.sql"
+    ).read_text(encoding="utf-8")
+    activation = source.index("UPDATE parties.parties")
+    account = source.index("INSERT INTO parties.customer_accounts")
+    assert activation < account
+    assert "WHERE org_id=organization_id AND id=party_identifier AND status='draft'" in source
 
 
 def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> None:
     customer = canonical_erp_reads.CanonicalCustomerCreate.model_validate({
         "customer_name": "E2E Browser Customer",
-        "customer_code": "CUST-E2E",
         "customer_type": "organization",
         "primary_phone": "9876543210",
         "primary_email": "buyer@example.com",
@@ -965,7 +968,6 @@ def test_reviewed_customer_create_contract_accepts_the_active_form_shape() -> No
     assert customer.primary_phone == "9876543210"
     assert customer.model_dump(exclude_none=True) == {
         "customer_name": "E2E Browser Customer",
-        "customer_code": "CUST-E2E",
         "customer_type": "organization",
         "primary_phone": "9876543210",
         "primary_email": "buyer@example.com",
@@ -982,7 +984,6 @@ def test_reviewed_party_create_contracts_reject_unowned_and_partial_facts() -> N
     try:
         canonical_erp_reads.CanonicalCustomerCreate.model_validate({
             "customer_name": "Bad Boundary",
-            "customer_code": "CUST-BAD-BOUNDARY",
             "customer_type": "organization",
             "primary_phone": "9876543210",
             "credit_limit": "0.00",
@@ -997,7 +998,6 @@ def test_reviewed_party_create_contracts_reject_unowned_and_partial_facts() -> N
     try:
         canonical_erp_reads.CanonicalSupplierCreate.model_validate({
             "supplier_name": "Partial Address Supplier",
-            "supplier_code": "SUP-PARTIAL",
             "primary_phone": "9876543210",
             "city": "Mumbai",
             "payment_days": 30,
@@ -1009,20 +1009,25 @@ def test_reviewed_party_create_contracts_reject_unowned_and_partial_facts() -> N
 
 
 class _CreatedAccountResult:
-    def __init__(self, account_id):
-        self.account_id = account_id
+    def __init__(self, row):
+        self.row = row
 
-    def scalar_one(self):
-        return self.account_id
+    def mappings(self):
+        return self
+
+    def one(self):
+        return self.row
 
 
 class _CreatedAccountSession:
-    def __init__(self, account_id):
-        self.account_id = account_id
+    def __init__(self, row):
+        self.row = row
         self.committed = False
 
-    def execute(self, *_args, **_kwargs):
-        return _CreatedAccountResult(self.account_id)
+    def execute(self, statement, *_args, **_kwargs):
+        if "activate_context" in str(statement):
+            return SimpleNamespace()
+        return _CreatedAccountResult(self.row)
 
     def commit(self):
         self.committed = True
@@ -1034,30 +1039,26 @@ class _CreatedAccountSession:
 def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch) -> None:
     org_id = uuid4()
     party_id = uuid4()
-    posting_id = uuid4()
     monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
-    monkeypatch.setattr(
-        canonical_erp_reads,
-        "_party_posting_account",
-        lambda _db, _org_id, _account_type: posting_id,
-    )
-    monkeypatch.setattr(
-        canonical_erp_reads,
-        "_insert_party_contact_address_and_tax",
-        lambda *_args, **_kwargs: party_id,
-    )
 
     customer_account_id = uuid4()
-    customer_db = _CreatedAccountSession(customer_account_id)
+    customer_db = _CreatedAccountSession({
+        "customer_account_id": customer_account_id,
+        "party_id": party_id,
+        "customer_code": "CUST-000001",
+        "idempotency_replayed": False,
+    })
+    customer_response = Response()
     customer = canonical_erp_reads.create_customer(
         canonical_erp_reads.CanonicalCustomerCreate(
             customer_name="Active Customer",
-            customer_code="CUST-ACTIVE",
             primary_phone="9876543210",
             customer_type="organization",
             credit_limit="0.00",
             credit_days=0,
         ),
+        response=customer_response,
+        idempotency_key="customer-test-key",
         user={},
         db=customer_db,
     )
@@ -1065,18 +1066,26 @@ def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch
     assert customer["party_id"] == party_id
     assert customer["is_active"] is True
     assert customer["status"] == "active"
-    assert customer["customer_code"] == "CUST-ACTIVE"
+    assert customer["customer_code"] == "CUST-000001"
+    assert customer_response.headers["X-Idempotency-Replayed"] == "false"
     assert customer_db.committed
 
     supplier_account_id = uuid4()
-    supplier_db = _CreatedAccountSession(supplier_account_id)
+    supplier_db = _CreatedAccountSession({
+        "supplier_account_id": supplier_account_id,
+        "party_id": party_id,
+        "supplier_code": "SUP-000001",
+        "idempotency_replayed": True,
+    })
+    supplier_response = Response()
     supplier = canonical_erp_reads.create_supplier(
         canonical_erp_reads.CanonicalSupplierCreate(
             supplier_name="Active Supplier",
-            supplier_code="SUP-ACTIVE",
             primary_phone="9876543210",
             payment_days=30,
         ),
+        response=supplier_response,
+        idempotency_key="supplier-test-key",
         user={},
         db=supplier_db,
     )
@@ -1084,7 +1093,8 @@ def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch
     assert supplier["party_id"] == party_id
     assert supplier["is_active"] is True
     assert supplier["status"] == "active"
-    assert supplier["supplier_code"] == "SUP-ACTIVE"
+    assert supplier["supplier_code"] == "SUP-000001"
+    assert supplier_response.headers["X-Idempotency-Replayed"] == "true"
     assert supplier_db.committed
 
 
@@ -1830,11 +1840,15 @@ class ProductDraftDatabase:
         self.statements.append(sql)
         if "activate_context" in sql:
             return SimpleNamespace()
-        if "SELECT 1 FROM catalog.products" in sql:
-            return SimpleNamespace(first=lambda: None)
-        if "INSERT INTO catalog.products" in sql:
-            row = SimpleNamespace(id=uuid4(), sku=params["sku"], name=params["name"])
-            return SimpleNamespace(one=lambda: row)
+        if "erp_master_commands.create_product_draft" in sql:
+            row = {
+                "product_id": uuid4(),
+                "product_code": "PROD-000001",
+                "idempotency_replayed": False,
+            }
+            return SimpleNamespace(
+                mappings=lambda: SimpleNamespace(one=lambda: row)
+            )
         raise AssertionError(sql)
 
     def commit(self):
@@ -1843,22 +1857,25 @@ class ProductDraftDatabase:
 
 def test_product_draft_write_uses_canonical_catalog_and_returns_uuid() -> None:
     database = ProductDraftDatabase()
+    response = Response()
     result = canonical_erp_reads.create_product_draft(
         canonical_erp_reads.CanonicalProductDraftCreate(
             product_name="E2E draft",
-            product_code="PROD-E2E",
             product_kind="medicine",
         ),
+        response=response,
+        idempotency_key="product-test-key",
         user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
         db=database,
     )
 
     assert result["lifecycle_status"] == "draft"
-    assert result["product_code"] == "PROD-E2E"
+    assert result["product_code"] == "PROD-000001"
     assert str(result["product_id"])
     assert database.commits == 1
     sql = "\n".join(database.statements)
-    assert "catalog.products" in sql
+    assert "erp_master_commands.create_product_draft" in sql
+    assert "INSERT INTO catalog.products" not in sql
     assert "inventory.products" not in sql
 
 
@@ -1866,7 +1883,6 @@ def test_master_write_classifications_have_no_hidden_business_defaults() -> None
     with pytest.raises(ValidationError) as product_error:
         canonical_erp_reads.CanonicalProductDraftCreate(product_name="Unclassified")
     assert {error["loc"] for error in product_error.value.errors()} == {
-        ("product_code",),
         ("product_kind",),
     }
 
@@ -1888,7 +1904,6 @@ def test_master_write_classifications_have_no_hidden_business_defaults() -> None
             primary_phone="9876543210",
         )
     assert {error["loc"] for error in customer_error.value.errors()} == {
-        ("customer_code",),
         ("customer_type",),
         ("credit_limit",),
         ("credit_days",),
@@ -1897,21 +1912,21 @@ def test_master_write_classifications_have_no_hidden_business_defaults() -> None
     with pytest.raises(ValidationError) as supplier_error:
         canonical_erp_reads.CanonicalSupplierCreate(supplier_name="Unclassified supplier")
     assert {error["loc"] for error in supplier_error.value.errors()} == {
-        ("supplier_code",),
         ("payment_days",),
     }
 
 
-def test_master_codes_are_explicit_and_never_derived_from_request_uuids() -> None:
+def test_master_codes_are_server_generated_and_cannot_be_injected() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
     for generated_prefix in ("CUST-{uuid4", "SUP-{uuid4", "DRAFT-{uuid4"):
         assert generated_prefix not in source
 
-    assert canonical_erp_reads.CanonicalProductDraftCreate(
-        product_name="Explicit product",
-        product_code="PROD-001",
-        product_kind="medicine",
-    ).product_code == "PROD-001"
+    with pytest.raises(ValidationError):
+        canonical_erp_reads.CanonicalProductDraftCreate(
+            product_name="Injected product",
+            product_code="PROD-001",
+            product_kind="medicine",
+        )
 
 
 def test_party_address_state_code_has_no_application_owned_name_mapping() -> None:
