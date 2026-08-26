@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes.internal import mcp_agent_grants, mcp_canonical_reads
 from app.api.routes.internal.mcp_agent_grants import GrantRequest
@@ -232,6 +233,30 @@ def test_grant_readiness_checks_authority_without_cross_tenant_enumeration(monke
     assert len(calls) == 1
     assert "to_regclass('automation.agent_grants')" in calls[0][0]
     assert "SELECT count(*)" not in calls[0][0]
+
+
+def test_grant_readiness_reports_database_authority_failure_as_not_ready(monkeypatch):
+    rolled_back = []
+
+    def execute(_statement, _params=None):
+        raise SQLAlchemyError("database authority unavailable")
+
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 48)
+    database = SimpleNamespace(
+        execute=execute,
+        rollback=lambda: rolled_back.append(True),
+    )
+
+    with pytest.raises(HTTPException) as unavailable:
+        mcp_agent_grants.agent_grant_readiness(
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 48),
+            database,
+        )
+
+    assert unavailable.value.status_code == 503
+    assert unavailable.value.detail == "Canonical agent-grant authority is unavailable"
+    assert rolled_back == [True]
 
 
 class _Result:

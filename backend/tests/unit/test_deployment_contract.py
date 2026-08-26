@@ -16,7 +16,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
 
     assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}" in production
     assert "if: inputs.deploy_render_pilot == true" in staging
-    assert staging.count("if: inputs.deploy_render_pilot == true") == 10
+    assert staging.count("if: inputs.deploy_render_pilot == true") == 11
     assert "Close canonical writes before Render promotion" in staging
     assert "Open canonical writes after exact-SHA verification" in staging
     provision = staging.split("Provision and exercise the disposable demo organization", 1)[1]
@@ -715,8 +715,11 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert workflow.index(
         "Prove the competing Railway authority is retired before lifecycle changes"
     ) < workflow.index("Close canonical writes before Render promotion")
-    assert workflow.index("render-pilot-public-evidence.json") < workflow.index(
+    assert workflow.index("render-pilot-provenance-evidence.json") < workflow.index(
         "Open canonical writes after exact-SHA verification"
+    )
+    assert workflow.index("Open canonical writes after exact-SHA verification") < (
+        workflow.index("render-pilot-public-evidence.json")
     )
     opened_fence = workflow.split(
         "Open canonical writes after exact-SHA verification", 1
@@ -1340,7 +1343,15 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "timeout-minutes: 360" in workflow
     assert "reviewed worst case is about 326 minutes" in workflow
     assert "18 rollback fixtures" in workflow
-    readiness = workflow.split("Wait for free service smoke readiness", 1)[1].split(
+    pre_fence = workflow.split(
+        "Verify public exact-SHA provenance before opening canonical writes", 1
+    )[1].split("Open canonical writes after exact-SHA verification", 1)[0]
+    assert "verify_pre_fence_deployment_sha.py" in pre_fence
+    assert "verify_live18_deployment_sha.py" not in pre_fence
+    assert "/ready" not in pre_fence
+    readiness = workflow.split(
+        "Verify full public readiness after opening canonical writes", 1
+    )[1].split(
         "Verify and exercise the reviewed hosted OAuth server boundary", 1
     )[0]
     assert "verify_live18_deployment_sha.py" in readiness
@@ -1348,6 +1359,9 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "api_ready=false" not in readiness
     assert "frontend_ready=false" not in readiness
     assert "mcp_healthy=false" not in readiness
+    assert workflow.index(
+        "Open canonical writes after exact-SHA verification"
+    ) < workflow.index("Verify full public readiness after opening canonical writes")
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
 
     hosted_business_flow_step = workflow[

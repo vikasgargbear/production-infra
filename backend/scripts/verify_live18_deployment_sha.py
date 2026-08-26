@@ -114,7 +114,7 @@ def _require_status(
         )
 
 
-def verify(
+def verify_provenance(
     *,
     provider: str,
     commit_sha: str,
@@ -123,7 +123,7 @@ def verify(
     mcp_origin: str,
     fetch: Fetch = _public_fetch,
 ) -> dict[str, Any]:
-    """Return deterministic public evidence or fail on any service mismatch."""
+    """Prove the public services are live on one SHA without requiring DB access."""
 
     if provider not in PROVIDERS:
         raise Live18DeploymentVerificationError(
@@ -157,34 +157,28 @@ def verify(
         )
 
     api_health = _json_object(fetch, f"{api}/health", "API health")
-    api_ready = _json_object(fetch, f"{api}/ready", "API readiness")
     _require_status(
         api_health,
         label="API health",
         expected_status="healthy",
         expected_sha=commit_sha,
     )
-    _require_status(api_ready, label="API readiness", expected_status="ready")
 
     mcp_health = _json_object(fetch, f"{mcp}/health", "MCP health")
-    mcp_ready = _json_object(fetch, f"{mcp}/ready", "MCP readiness")
     _require_status(
         mcp_health,
         label="MCP health",
         expected_status="ok",
         expected_sha=commit_sha,
     )
-    _require_status(mcp_ready, label="MCP readiness", expected_status="ready")
-
     return {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "schema": "aasopharma.deployment-provenance.v1",
         "provider": provider,
         "commit_sha": commit_sha,
         "services": {
             "api": {
                 "origin": api,
                 "health": {"status": "healthy", "git_commit": commit_sha},
-                "readiness": {"status": "ready"},
             },
             "frontend": {
                 "origin": frontend,
@@ -197,6 +191,49 @@ def verify(
             "mcp": {
                 "origin": mcp,
                 "health": {"status": "ok", "git_commit": commit_sha},
+            },
+        },
+    }
+
+
+def verify(
+    *,
+    provider: str,
+    commit_sha: str,
+    frontend_origin: str,
+    api_origin: str,
+    mcp_origin: str,
+    fetch: Fetch = _public_fetch,
+) -> dict[str, Any]:
+    """Return deterministic public evidence or fail on any service mismatch."""
+
+    provenance = verify_provenance(
+        provider=provider,
+        commit_sha=commit_sha,
+        frontend_origin=frontend_origin,
+        api_origin=api_origin,
+        mcp_origin=mcp_origin,
+        fetch=fetch,
+    )
+    api = provenance["services"]["api"]["origin"]
+    mcp = provenance["services"]["mcp"]["origin"]
+    api_ready = _json_object(fetch, f"{api}/ready", "API readiness")
+    mcp_ready = _json_object(fetch, f"{mcp}/ready", "MCP readiness")
+    _require_status(api_ready, label="API readiness", expected_status="ready")
+    _require_status(mcp_ready, label="MCP readiness", expected_status="ready")
+
+    return {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": provider,
+        "commit_sha": commit_sha,
+        "services": {
+            "api": {
+                **provenance["services"]["api"],
+                "readiness": {"status": "ready"},
+            },
+            "frontend": provenance["services"]["frontend"],
+            "mcp": {
+                **provenance["services"]["mcp"],
                 "readiness": {"status": "ready"},
             },
         },

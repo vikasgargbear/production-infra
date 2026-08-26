@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ....core.auth.jwt_auth import create_access_token
@@ -717,15 +718,22 @@ def agent_grant_readiness(
             status_code=503,
             detail="No reviewed pre-registered OAuth client path is configured",
         )
-    relations = db.execute(
-        text(
-            """
-            SELECT to_regclass('automation.agent_grants') IS NOT NULL
-                   AND to_regclass('automation.agent_grant_capabilities') IS NOT NULL
-                   AS available
-            """
-        )
-    ).scalar()
+    try:
+        relations = db.execute(
+            text(
+                """
+                SELECT to_regclass('automation.agent_grants') IS NOT NULL
+                       AND to_regclass('automation.agent_grant_capabilities') IS NOT NULL
+                       AS available
+                """
+            )
+        ).scalar()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Canonical agent-grant authority is unavailable",
+        ) from exc
     if relations is not True:
         raise HTTPException(status_code=503, detail="Canonical agent-grant authority is unavailable")
     return {"status": "ready", "grant_authority": "automation.agent_grants"}

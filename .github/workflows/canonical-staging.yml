@@ -1349,7 +1349,7 @@ jobs:
               .value.deploy_id == $provision.deployed[.key].id)
           ' staging-evidence/render-pilot.json >/dev/null
 
-      - name: Wait for free service smoke readiness
+      - name: Verify public exact-SHA provenance before opening canonical writes
         if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
@@ -1360,30 +1360,30 @@ jobs:
             echo "::add-mask::$url"
           done
 
-          public_evidence=$(mktemp)
-          all_ready=false
+          provenance_evidence=$(mktemp)
+          all_live=false
           for _attempt in 1 2 3 4 5; do
-            : >"$public_evidence"
-            if PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+            : >"$provenance_evidence"
+            if PYTHONPATH=backend python3 backend/scripts/verify_pre_fence_deployment_sha.py \
               --provider render \
               --commit-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
               --frontend-origin "$frontend_url" \
               --api-origin "$api_url" \
               --mcp-origin "$mcp_url" \
-              >"$public_evidence" 2>/dev/null; then
-              all_ready=true
+              >"$provenance_evidence" 2>/dev/null; then
+              all_live=true
               break
             fi
             sleep 30
           done
-          test "$all_ready" = true
-          mv "$public_evidence" staging-evidence/render-pilot-public-evidence.json
+          test "$all_live" = true
+          mv "$provenance_evidence" staging-evidence/render-pilot-provenance-evidence.json
 
       - name: Open canonical writes after exact-SHA verification
         if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
-          test -f staging-evidence/render-pilot-public-evidence.json
+          test -f staging-evidence/render-pilot-provenance-evidence.json
           test -n "$RAILWAY_API_TOKEN"
           test -n "$RAILWAY_PROJECT_ID"
           test -n "$RAILWAY_ENVIRONMENT_ID"
@@ -1410,6 +1410,37 @@ jobs:
           jq -e --arg sha "$GITHUB_SHA" \
             '.state == "open" and .commit_sha == $sha' \
             staging-evidence/canonical-write-fence-opened.json >/dev/null
+
+      - name: Verify full public readiness after opening canonical writes
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test -f staging-evidence/canonical-write-fence-opened.json
+          api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          mcp_url=$(jq -er '.services["aasopharma-mcp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          for url in "$api_url" "$frontend_url" "$mcp_url"; do
+            echo "::add-mask::$url"
+          done
+
+          public_evidence=$(mktemp)
+          all_ready=false
+          for _attempt in 1 2 3 4 5; do
+            : >"$public_evidence"
+            if PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+              --provider render \
+              --commit-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+              --frontend-origin "$frontend_url" \
+              --api-origin "$api_url" \
+              --mcp-origin "$mcp_url" \
+              >"$public_evidence" 2>/dev/null; then
+              all_ready=true
+              break
+            fi
+            sleep 30
+          done
+          test "$all_ready" = true
+          mv "$public_evidence" staging-evidence/render-pilot-public-evidence.json
 
       - name: Verify and exercise the reviewed hosted OAuth server boundary
         if: inputs.deploy_render_pilot == true
