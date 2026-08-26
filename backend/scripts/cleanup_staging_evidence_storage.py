@@ -288,6 +288,25 @@ def close_writer_authority(connection: Any) -> WriterClosure:
         _unexpected_member_count_before_closure,
         _inherited_role_count_before_closure,
     ) = _writer_closure_catalog(connection)
+    if not role_installed_before_closure:
+        # A session cannot retain membership in a role that does not exist.
+        # This is the expected first-install state before the evidence-storage
+        # migration runs. Supabase's ``authenticator`` role is shared platform
+        # infrastructure, so probing or terminating its sessions here would be
+        # both unnecessary and disruptive.
+        return WriterClosure(
+            membership_open=False,
+            role_posture_safe=True,
+            unexpected_member_count=0,
+            inherited_role_count=0,
+            observed_authenticator_session_count=0,
+            terminated_authenticator_session_count=0,
+            remaining_preclosure_authenticator_session_count=0,
+            verified_at=_utc_now(),
+            role_installed=False,
+            role_absence_verified=True,
+        )
+
     if role_installed_before_closure:
         with connection.cursor() as cursor:
             cursor.execute(CLOSE_WRITER_SQL)

@@ -271,13 +271,7 @@ def test_writer_closure_proves_absent_first_install_role_without_revoke():
 
     class Connection:
         def __init__(self):
-            self.cursors = iter(
-                (
-                    Cursor(),
-                    Cursor(singletons=((0,),)),
-                    Cursor(),
-                )
-            )
+            self.cursors = iter((Cursor(),))
 
         def cursor(self):
             return next(self.cursors)
@@ -288,10 +282,14 @@ def test_writer_closure_proves_absent_first_install_role_without_revoke():
     closure = close_writer_authority(Connection())
 
     assert all(sql != CLOSE_WRITER_SQL for sql, _parameters in executed)
+    assert all("pg_stat_activity" not in sql for sql, _parameters in executed)
+    assert all("pg_terminate_backend" not in sql for sql, _parameters in executed)
     assert closure.role_installed is False
     assert closure.role_absence_verified is True
     assert closure.role_posture_safe is True
     assert closure.membership_open is False
+    assert closure.observed_authenticator_session_count == 0
+    assert closure.terminated_authenticator_session_count == 0
 
 
 def test_writer_open_is_exact_and_verified():
