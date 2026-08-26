@@ -528,6 +528,9 @@ def _patched_denial_constants(
         "DEMO_REVIEWER_AUTH_USER_ID": str(demo.creator_auth_user_id),
         "DEMO_REVIEWER_USER_ID": str(demo.creator_user_id),
         "DEMO_REVIEWER_MEMBERSHIP_ID": str(demo.creator_membership_id),
+        # The denial fixture itself carries a web-client grant. Recovery's
+        # demo-side browser boundary must use its own empty client namespace.
+        "WEB_CLIENT_ID": f"live18-terminal-{demo.org_id}",
     }
     original = {name: getattr(identities, name) for name in names}
     try:

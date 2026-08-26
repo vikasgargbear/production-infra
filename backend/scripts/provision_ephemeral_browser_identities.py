@@ -303,6 +303,38 @@ LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS = _baseline_capability_bounds(
         "actor_confirmation",
     ),)
 )
+
+
+def _temporary_capability_bounds(
+    capabilities: tuple[tuple[str, str, str, str], ...],
+) -> tuple[dict[str, object], ...]:
+    """Mirror the strict two-hour browser-grant capability envelope."""
+
+    return tuple(
+        {
+            "capability_code": capability,
+            "operation_mode": operation_mode,
+            "risk_class": risk_class,
+            "approval_policy": approval_policy,
+            "maximum_amount": 1_000_000 if operation_mode == "write" else None,
+            "currency_code": "INR" if operation_mode == "write" else None,
+            "allow_sensitive_read": False,
+            "status": "active",
+        }
+        for capability, operation_mode, risk_class, approval_policy in sorted(
+            capabilities
+        )
+    )
+
+
+LIVE18_TEMPORARY_CAPABILITY_BOUNDS = {
+    DEMO_OPERATOR_MEMBERSHIP_ID: _temporary_capability_bounds(
+        LIVE18_REQUESTER_CAPABILITIES
+    ),
+    DEMO_REVIEWER_MEMBERSHIP_ID: _temporary_capability_bounds(
+        REVIEWER_CAPABILITIES
+    ),
+}
 LIVE18_IDENTITIES = IDENTITIES
 
 PROFILE_TWO_USER = "two-user-approvals"
@@ -998,14 +1030,16 @@ def _recover_stale_live18_database(
             _set_reviewer_context(cursor)
             cursor.execute(
                 """
-                SELECT count(*)
+                SELECT count(*),
+                       count(*) FILTER (
+                         WHERE consent_version IN (
+                           'browser-e2e-v1','canonical-live-e2e-v1'
+                         )
+                       )
                   FROM automation.agent_grants
                  WHERE org_id=%s
                    AND subject_membership_id IN (%s::uuid,%s::uuid)
                    AND client_id=%s
-                   AND consent_version IN (
-                     'browser-e2e-v1','canonical-live-e2e-v1'
-                   )
                    AND status='active'
                 """,
                 (
@@ -1018,68 +1052,114 @@ def _recover_stale_live18_database(
             temporary_count_row = cursor.fetchone()
             if (
                 not isinstance(temporary_count_row, tuple)
-                or len(temporary_count_row) != 1
-                or type(temporary_count_row[0]) is not int
-                or temporary_count_row[0] < 0
+                or len(temporary_count_row) != 2
+                or any(
+                    type(value) is not int or value < 0
+                    for value in temporary_count_row
+                )
             ):
                 raise EphemeralIdentityError(
                     "Live18 temporary grant recovery count was not exact"
                 )
-            active_temporary_grant_count = temporary_count_row[0]
+            (
+                active_web_grant_count,
+                active_temporary_grant_count,
+            ) = temporary_count_row
+            if active_web_grant_count != active_temporary_grant_count:
+                raise EphemeralIdentityError(
+                    "Live18 recovery found active web authority outside the "
+                    "ephemeral grant boundary"
+                )
             cursor.execute(
                 """
-                WITH expected(subject_membership_id,consent_version) AS (
-                  VALUES
-                    (%s::uuid,'demo-v2'::varchar),
-                    (%s::uuid,'demo-v2-approver'::varchar)
-                )
-                SELECT baseline.id::text,
-                       baseline.subject_membership_id::text,
-                       baseline.row_version
+                SELECT temporary.id::text,
+                       temporary.subject_membership_id::text,
+                       capability.capability_code,
+                       capability.operation_mode,
+                       capability.risk_class,
+                       capability.approval_policy,
+                       capability.maximum_amount,
+                       capability.currency_code,
+                       capability.allow_sensitive_read,
+                       capability.status
                   FROM automation.agent_grants AS temporary
-                  JOIN expected
-                    ON expected.subject_membership_id=
-                       temporary.subject_membership_id
-                  JOIN automation.agent_grants AS baseline
-                    ON baseline.org_id=temporary.org_id
-                   AND baseline.subject_membership_id=
-                       temporary.subject_membership_id
-                   AND baseline.client_id=temporary.client_id
-                   AND baseline.consent_version=expected.consent_version
-                   AND baseline.status='suspended'
-                   AND baseline.suspended_at=temporary.granted_at
-                   AND baseline.expires_at>transaction_timestamp()
+                  JOIN automation.agent_grant_capabilities AS capability
+                    ON capability.org_id=temporary.org_id
+                   AND capability.agent_grant_id=temporary.id
                  WHERE temporary.org_id=%s
                    AND temporary.client_id=%s
-                   AND temporary.consent_version IN (
-                     'browser-e2e-v1','canonical-live-e2e-v1'
-                   )
+                   AND temporary.consent_version='browser-e2e-v1'
+                   AND temporary.authorization_mode='self_consent'
+                   AND temporary.branch_id IS NULL
+                   AND temporary.consented_by_membership_id=
+                       temporary.subject_membership_id
+                   AND temporary.granted_by_membership_id=%s::uuid
+                   AND temporary.created_by_membership_id=%s::uuid
+                   AND temporary.updated_by_membership_id=%s::uuid
+                   AND temporary.consented_at=temporary.granted_at
+                   AND temporary.expires_at=
+                       temporary.granted_at + interval '2 hours'
+                   AND temporary.expires_at>transaction_timestamp()
                    AND temporary.status='active'
-                 ORDER BY baseline.subject_membership_id
-                 FOR UPDATE OF temporary,baseline
+                   AND (
+                     (temporary.subject_membership_id=%s::uuid AND
+                      temporary.client_display_name=
+                        'Ephemeral staging browser requester') OR
+                     (temporary.subject_membership_id=%s::uuid AND
+                      temporary.client_display_name=
+                        'Ephemeral staging browser reviewer')
+                   )
+                 ORDER BY temporary.subject_membership_id,
+                          capability.capability_code
+                 FOR UPDATE OF temporary,capability
                 """,
                 (
-                    DEMO_OPERATOR_MEMBERSHIP_ID,
-                    DEMO_REVIEWER_MEMBERSHIP_ID,
                     DEMO_ORG_ID,
                     WEB_CLIENT_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DEMO_OPERATOR_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
                 ),
             )
-            baseline_rows = cursor.fetchall()
+            temporary_rows = cursor.fetchall()
+            actual_temporary_bounds: dict[str, list[dict[str, object]]] = {}
+            grant_ids_by_membership: dict[str, set[str]] = {}
+            for row in temporary_rows:
+                grant_ids_by_membership.setdefault(row[1], set()).add(row[0])
+                actual_temporary_bounds.setdefault(row[1], []).append(
+                    {
+                        "capability_code": row[2],
+                        "operation_mode": row[3],
+                        "risk_class": row[4],
+                        "approval_policy": row[5],
+                        "maximum_amount": row[6],
+                        "currency_code": row[7],
+                        "allow_sensitive_read": row[8],
+                        "status": row[9],
+                    }
+                )
+            normalized_temporary_bounds = {
+                membership_id: tuple(bounds)
+                for membership_id, bounds in actual_temporary_bounds.items()
+            }
+            exact_temporary_pair = (
+                set(grant_ids_by_membership)
+                == set(LIVE18_TEMPORARY_CAPABILITY_BOUNDS)
+                and all(
+                    len(grant_ids) == 1
+                    for grant_ids in grant_ids_by_membership.values()
+                )
+                and normalized_temporary_bounds == LIVE18_TEMPORARY_CAPABILITY_BOUNDS
+            )
             if active_temporary_grant_count not in (0, 2) or (
-                len(baseline_rows) != active_temporary_grant_count
+                active_temporary_grant_count == 0 and temporary_rows
+            ) or (
+                active_temporary_grant_count == 2 and not exact_temporary_pair
             ):
                 raise EphemeralIdentityError(
-                    "Live18 temporary grants do not have exact suspended baseline lineage"
-                )
-            if baseline_rows and {
-                row[1] for row in baseline_rows
-            } != {
-                DEMO_OPERATOR_MEMBERSHIP_ID,
-                DEMO_REVIEWER_MEMBERSHIP_ID,
-            }:
-                raise EphemeralIdentityError(
-                    "Live18 suspended baseline grants are not membership-complete"
+                    "Live18 temporary grants do not match the exact ephemeral authority"
                 )
             cursor.execute(
                 """
@@ -1120,41 +1200,6 @@ def _recover_stale_live18_database(
                     WEB_CLIENT_ID,
                 ),
             )
-            if baseline_rows:
-                baseline_ids = [row[0] for row in baseline_rows]
-                cursor.execute(
-                    """
-                    UPDATE automation.agent_grants
-                       SET status='active',suspended_at=NULL,
-                           updated_at=transaction_timestamp(),
-                           updated_by_membership_id=%s,row_version=row_version+1
-                     WHERE org_id=%s
-                       AND id=ANY(CAST(%s AS uuid[]))
-                       AND client_id=%s
-                       AND status='suspended'
-                       AND expires_at>transaction_timestamp()
-                    """,
-                    (
-                        DEMO_REVIEWER_MEMBERSHIP_ID,
-                        DEMO_ORG_ID,
-                        baseline_ids,
-                        WEB_CLIENT_ID,
-                    ),
-                )
-                cursor.execute(
-                    """
-                    SELECT count(*)
-                      FROM automation.agent_grants
-                     WHERE org_id=%s
-                       AND id=ANY(CAST(%s AS uuid[]))
-                       AND client_id=%s AND status='active'
-                    """,
-                    (DEMO_ORG_ID, baseline_ids, WEB_CLIENT_ID),
-                )
-                if cursor.fetchone() != (2,):
-                    raise EphemeralIdentityError(
-                        "Live18 suspended baseline grants were not restored exactly"
-                    )
             cursor.execute(
                 """
                 SELECT user_row.id::text,user_row.auth_user_id::text,
@@ -1562,9 +1607,9 @@ def _classify_live18_identity_boundary(management_token: str) -> str:
         exact_active_denial_creator_membership_count=1,
         active_demo_access_grant_count=2,
         exact_active_demo_access_grant_count=2,
-        active_web_grant_count=2,
-        exact_active_baseline_web_grant_count=2,
-        exact_active_baseline_capability_grant_count=2,
+        active_web_grant_count=0,
+        exact_active_baseline_web_grant_count=0,
+        exact_active_baseline_capability_grant_count=0,
         active_temporary_grant_count=0,
     )
     if denial_state != (0, 0, 0):
@@ -2168,6 +2213,11 @@ def _provision_database(
                 }
                 for row in cursor.fetchall()
             ]
+            if profile == PROFILE_LIVE18 and state["prior_active_grants"]:
+                raise EphemeralIdentityError(
+                    "Live18 requires zero durable web grants before ephemeral "
+                    "browser authority is created"
+                )
             _write_state(state_path, state)
 
             cursor.execute(

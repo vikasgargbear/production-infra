@@ -522,7 +522,7 @@ def test_stale_recovery_preserves_unscoped_auth_bindings(
             return next(fetches)
 
         def fetchone(self):
-            return (0,)
+            return (0, 0)
 
         def __enter__(self):
             return self
@@ -648,7 +648,7 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
 
         def fetchone(self):
             self.fetchone_calls += 1
-            return (0,) if self.fetchone_calls == 1 else (1,)
+            return (0, 0) if self.fetchone_calls == 1 else (1,)
 
         def __enter__(self):
             return self
@@ -686,26 +686,39 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
     assert events == ["demo", "denial"]
 
 
-def test_stale_recovery_restores_run_scoped_baseline_grants_by_lineage(monkeypatch):
+def test_stale_recovery_accepts_exact_temporary_pair_without_durable_web_grants(
+    monkeypatch,
+):
     operator_grant_id = "d5000000-0000-7000-8000-000000000001"
     reviewer_grant_id = "d5000000-0000-7000-8000-000000000002"
+    grant_ids = {
+        identities.DEMO_OPERATOR_MEMBERSHIP_ID: operator_grant_id,
+        identities.DEMO_REVIEWER_MEMBERSHIP_ID: reviewer_grant_id,
+    }
+    temporary_rows = [
+        (
+            grant_ids[membership_id],
+            membership_id,
+            bound["capability_code"],
+            bound["operation_mode"],
+            bound["risk_class"],
+            bound["approval_policy"],
+            bound["maximum_amount"],
+            bound["currency_code"],
+            bound["allow_sensitive_read"],
+            bound["status"],
+        )
+        for membership_id, bounds in (
+            identities.LIVE18_TEMPORARY_CAPABILITY_BOUNDS.items()
+        )
+        for bound in bounds
+    ]
     statements = []
 
     class Cursor:
-        fetchone_values = iter(((2,), (2,)))
+        fetchone_values = iter(((2, 2),))
         fetchall_values = iter((
-            [
-                (
-                    operator_grant_id,
-                    identities.DEMO_OPERATOR_MEMBERSHIP_ID,
-                    8,
-                ),
-                (
-                    reviewer_grant_id,
-                    identities.DEMO_REVIEWER_MEMBERSHIP_ID,
-                    13,
-                ),
-            ],
+            temporary_rows,
             [],
             [],
         ))
@@ -758,8 +771,7 @@ def test_stale_recovery_restores_run_scoped_baseline_grants_by_lineage(monkeypat
         and "id=ANY" in statement
         and "SET status='active'" in statement
     ]
-    assert len(baseline_updates) == 1
-    assert baseline_updates[0][2] == [operator_grant_id, reviewer_grant_id]
+    assert baseline_updates == []
     temporary_updates = [
         params
         for statement, params in statements
@@ -771,6 +783,56 @@ def test_stale_recovery_restores_run_scoped_baseline_grants_by_lineage(monkeypat
     assert temporary_updates[0][-1] == identities.WEB_CLIENT_ID
     assert "d3000000-0000-7000-8000-000000000020" not in str(statements)
     assert "d3000000-0000-7000-8000-000000000021" not in str(statements)
+
+
+@pytest.mark.parametrize(
+    ("counts", "message"),
+    (
+        ((1, 0), "outside the ephemeral grant boundary"),
+        ((1, 1), "exact ephemeral authority"),
+        ((2, 1), "outside the ephemeral grant boundary"),
+    ),
+)
+def test_stale_recovery_rejects_partial_or_unrelated_web_authority(
+    monkeypatch, counts, message
+):
+    class Cursor:
+        def execute(self, *_args, **_kwargs):
+            pass
+
+        def fetchone(self):
+            return counts
+
+        def fetchall(self):
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(identities, "_set_reviewer_context", lambda _cursor: None)
+
+    with pytest.raises(identities.EphemeralIdentityError, match=message):
+        identities._recover_stale_live18_database(
+            "management-token",
+            {"d4000000-0000-7000-8000-000000000001"},
+        )
 
 
 def test_auth_deletion_retries_transient_admin_failure(monkeypatch):
@@ -1260,9 +1322,9 @@ def _seeded_live18_identity_boundary(**overrides):
         "exact_active_denial_creator_membership_count": 1,
         "active_demo_access_grant_count": 2,
         "exact_active_demo_access_grant_count": 2,
-        "active_web_grant_count": 2,
-        "exact_active_baseline_web_grant_count": 2,
-        "exact_active_baseline_capability_grant_count": 2,
+        "active_web_grant_count": 0,
+        "exact_active_baseline_web_grant_count": 0,
+        "exact_active_baseline_capability_grant_count": 0,
         "active_temporary_grant_count": 0,
     }
     values.update(overrides)
@@ -1328,6 +1390,7 @@ def test_live18_final_cleanup_rejects_identity_pristine_boundary(monkeypatch):
             ),
             (0, 0, 0),
         ),
+        (_seeded_live18_identity_boundary(active_web_grant_count=1), (0, 0, 0)),
         (
             _seeded_live18_identity_boundary(
                 exact_active_baseline_web_grant_count=1
