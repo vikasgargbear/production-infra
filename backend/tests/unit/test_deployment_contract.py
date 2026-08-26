@@ -1295,7 +1295,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
 
     provisioner = _read("backend/scripts/provision_staging_mcp_oauth.py")
     exercise = _read("backend/scripts/exercise_staging_mcp_oauth.py")
-    assert 'PROJECT_REF = "rgihahbmkrmhitjdjvev"' in provisioner
+    assert 'PROJECT_REF = _DEPLOYMENT_MANIFEST["supabase"]["project_ref"]' in provisioner
+    assert 'SUPABASE_URL = _DEPLOYMENT_MANIFEST["supabase"]["origin"]' in provisioner
     assert '"client_type": "public"' in provisioner
     assert '"token_endpoint_auth_method": "none"' in provisioner
     assert 'headers["apikey"] = token' in provisioner

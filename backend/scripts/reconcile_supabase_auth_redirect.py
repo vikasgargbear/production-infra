@@ -12,6 +12,21 @@ import tempfile
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
+if __package__:
+    from .deployment_control import (
+        DEFAULT_MANIFEST,
+        active_provider_name,
+        active_provider_services,
+        load_manifest,
+    )
+else:
+    from deployment_control import (
+        DEFAULT_MANIFEST,
+        active_provider_name,
+        active_provider_services,
+        load_manifest,
+    )
+
 
 MANAGEMENT_API = "https://api.supabase.com"
 
@@ -33,6 +48,19 @@ def normalize_https_origin(value: str) -> str:
     ):
         raise ValueError("frontend origin must be an exact HTTPS origin")
     return f"https://{parsed.hostname.lower()}"
+
+
+def reviewed_frontend_origin(provider: str, *, project_ref: str | None = None) -> str:
+    manifest = load_manifest(DEFAULT_MANIFEST)
+    if (
+        project_ref is not None
+        and project_ref != manifest["supabase"]["project_ref"]
+    ):
+        raise RuntimeError("project ref does not match deployment authority")
+    if active_provider_name(manifest) != provider:
+        raise RuntimeError(f"provider {provider!r} is not the active application authority")
+    services = active_provider_services(manifest)
+    return normalize_https_origin(services["frontend"]["origin"])
 
 
 def parse_allow_list(value: object) -> list[str]:
@@ -148,12 +176,20 @@ def reconcile(
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--provider", required=True)
     parser.add_argument("--project-ref", required=True)
     parser.add_argument("--frontend-origin", required=True)
     parser.add_argument("--reviewed-sha", required=True)
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
+    authoritative_origin = reviewed_frontend_origin(
+        arguments.provider, project_ref=arguments.project_ref
+    )
+    if normalize_https_origin(arguments.frontend_origin) != authoritative_origin:
+        raise ValueError(
+            "frontend origin does not match the active provider authority"
+        )
     evidence = reconcile(
         arguments.project_ref,
         arguments.frontend_origin,

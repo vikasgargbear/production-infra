@@ -27,6 +27,12 @@ if __package__:
         mask_auth_admin_secret,
         resolve_auth_admin_authority,
     )
+    from .deployment_control import (
+        DEFAULT_MANIFEST,
+        active_provider_name,
+        active_provider_services,
+        load_manifest,
+    )
 else:
     from canonical_staging_database import (
         build_direct_dsn,
@@ -39,16 +45,27 @@ else:
         mask_auth_admin_secret,
         resolve_auth_admin_authority,
     )
+    from deployment_control import (
+        DEFAULT_MANIFEST,
+        active_provider_name,
+        active_provider_services,
+        load_manifest,
+    )
 
 
-PROJECT_REF = "rgihahbmkrmhitjdjvev"
-SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
+_DEPLOYMENT_MANIFEST = load_manifest(DEFAULT_MANIFEST)
+PROJECT_REF = _DEPLOYMENT_MANIFEST["supabase"]["project_ref"]
+SUPABASE_URL = _DEPLOYMENT_MANIFEST["supabase"]["origin"]
 CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
 WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
 UNISSUED_CLIENT_ID = "disabled-unissued-canonical-staging"
-TEST_CALLBACK = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
+ACTIVE_PROVIDER = active_provider_name(_DEPLOYMENT_MANIFEST)
+ACTIVE_PROVIDER_SERVICES = active_provider_services(_DEPLOYMENT_MANIFEST)
+TEST_CALLBACK = (
+    ACTIVE_PROVIDER_SERVICES["frontend"]["origin"] + "/oauth/staging-callback"
+)
 REDIRECT_URIS = (
     TEST_CALLBACK,
     "https://claude.ai/api/mcp/auth_callback",
@@ -877,6 +894,7 @@ def _write_client_evidence(
     evidence_path = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))
     evidence_path.mkdir(parents=True, exist_ok=True)
     evidence: dict[str, Any] = {
+        "application_provider": ACTIVE_PROVIDER,
         "project_ref": PROJECT_REF,
         "client_id": client_id,
         "client_name": CLIENT_NAME,

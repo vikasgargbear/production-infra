@@ -716,6 +716,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 backend/scripts/reconcile_supabase_auth_redirect.py \
+            --provider railway \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --frontend-origin "$RAILWAY_FRONTEND_URL" \
             --reviewed-sha "$REVIEWED_SHA" \

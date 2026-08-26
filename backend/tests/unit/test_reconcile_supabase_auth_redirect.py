@@ -176,5 +176,24 @@ def test_only_railway_deployment_owns_staging_auth_redirect_authority() -> None:
     assert "site_url: $site_url" not in canonical
     assert "hosted_consent_origin: $hosted_consent_origin" in canonical
     assert "backend/scripts/reconcile_supabase_auth_redirect.py" in railway
+    assert "--provider railway" in railway
     assert "--reviewed-sha" in railway
     assert "SUPABASE_ACCESS_TOKEN" in railway
+
+
+def test_redirect_authority_rejects_retired_provider_before_network() -> None:
+    with pytest.raises(RuntimeError, match="not the active"):
+        redirect.reviewed_frontend_origin("render")
+
+
+def test_redirect_authority_resolves_exact_canonical_railway_domain() -> None:
+    assert redirect.reviewed_frontend_origin("railway") == (
+        "https://aasopharma-erp-pilot-production-eb9b.up.railway.app"
+    )
+
+
+def test_redirect_authority_rejects_another_project_before_network() -> None:
+    with pytest.raises(RuntimeError, match="project ref"):
+        redirect.reviewed_frontend_origin(
+            "railway", project_ref="abcdefghijklmnopqrst"
+        )

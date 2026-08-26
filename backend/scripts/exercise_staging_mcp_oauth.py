@@ -22,12 +22,40 @@ import jwt
 import psycopg2
 import requests
 
+if __package__:
+    from .deployment_control import (
+        DEFAULT_MANIFEST,
+        active_provider_name,
+        active_provider_services,
+        load_manifest,
+    )
+else:
+    try:
+        from scripts.deployment_control import (
+            DEFAULT_MANIFEST,
+            active_provider_name,
+            active_provider_services,
+            load_manifest,
+        )
+    except ModuleNotFoundError:
+        from deployment_control import (
+            DEFAULT_MANIFEST,
+            active_provider_name,
+            active_provider_services,
+            load_manifest,
+        )
 
-PROJECT_REF = "rgihahbmkrmhitjdjvev"
-SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
+
+_DEPLOYMENT_MANIFEST = load_manifest(DEFAULT_MANIFEST)
+PROJECT_REF = _DEPLOYMENT_MANIFEST["supabase"]["project_ref"]
+SUPABASE_URL = _DEPLOYMENT_MANIFEST["supabase"]["origin"]
 ISSUER = f"{SUPABASE_URL}/auth/v1"
-MCP_URL = "https://aasopharma-mcp-pilot.onrender.com/mcp"
-CALLBACK_URL = "https://aasopharma-erp-pilot.onrender.com/oauth/staging-callback"
+ACTIVE_PROVIDER = active_provider_name(_DEPLOYMENT_MANIFEST)
+ACTIVE_PROVIDER_SERVICES = active_provider_services(_DEPLOYMENT_MANIFEST)
+MCP_URL = ACTIVE_PROVIDER_SERVICES["mcp"]["origin"] + "/mcp"
+CALLBACK_URL = (
+    ACTIVE_PROVIDER_SERVICES["frontend"]["origin"] + "/oauth/staging-callback"
+)
 SCOPES = "openid offline_access"
 DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
 DEMO_BRANCH_ID = "d3000000-0000-7000-8000-000000000005"

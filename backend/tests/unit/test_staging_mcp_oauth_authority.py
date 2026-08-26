@@ -23,6 +23,15 @@ def _set_reviewed_database_environment(monkeypatch: pytest.MonkeyPatch) -> str:
     )
 
 
+def test_oauth_callback_derives_from_sole_active_provider() -> None:
+    assert provision.ACTIVE_PROVIDER == "railway"
+    assert provision.TEST_CALLBACK == (
+        "https://aasopharma-erp-pilot-production-eb9b.up.railway.app"
+        "/oauth/staging-callback"
+    )
+    assert all("onrender.com" not in uri for uri in provision.REDIRECT_URIS)
+
+
 def test_client_authority_only_does_not_create_identity_or_bind_database(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -68,6 +77,7 @@ def test_client_authority_only_does_not_create_identity_or_bind_database(
         )
     )
     assert evidence == {
+        "application_provider": "railway",
         "client_id": "reviewed-public-client",
         "client_name": provision.CLIENT_NAME,
         "client_type": "public",
