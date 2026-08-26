@@ -51,3 +51,21 @@ def test_log_fingerprint_streams_large_content_without_echoing_it(tmp_path) -> N
         "sha256": hashlib.sha256(content).hexdigest(),
     }
     assert "private-token" not in json.dumps(summary)
+
+
+def test_render_annotation_exposes_only_allowlisted_contract_diagnostic(tmp_path) -> None:
+    log_path = tmp_path / "render.log"
+    log_path.write_text(
+        "provisioning blocked: Existing aasopharma-api-pilot has unreviewed "
+        "environment keys: OLD_FLAG, UNUSED_KEY\n"
+        "Bearer secret-must-not-escape\n",
+        encoding="utf-8",
+    )
+
+    annotation = safe_log_annotation(log_path, label="render")
+    metadata = json.loads(annotation.split("::", 2)[2])
+
+    assert metadata["diagnostic"] == (
+        "unreviewed_environment_keys:aasopharma-api-pilot:OLD_FLAG,UNUSED_KEY"
+    )
+    assert "secret-must-not-escape" not in annotation

@@ -1110,7 +1110,7 @@ jobs:
               --apply \
               --branch "$GITHUB_REF_NAME" \
               > staging-evidence/render-pilot-config.json 2>"$config_log"; then
-            python3 backend/scripts/safe_ci_log_summary.py --label render-config "$config_log"
+            python3 backend/scripts/safe_ci_log_summary.py --label render "$config_log"
             exit 1
           fi
           deploy_one_service() {
@@ -1141,7 +1141,7 @@ jobs:
                 --commit-id "$deploy_sha" \
                 >"staging-evidence/$receipt_name" 2>"$provision_log"; then
               python3 backend/scripts/safe_ci_log_summary.py \
-                --label "render-$service_name" "$provision_log"
+                --label render "$provision_log"
               exit 1
             fi
             service_id=$(jq -er --arg service "$service_name" \

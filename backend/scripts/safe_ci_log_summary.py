@@ -6,8 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Optional
 
 
 _ANNOTATION_TITLES = {
@@ -36,10 +37,49 @@ def safe_log_annotation(path: Path, *, label: str) -> str:
     title = _ANNOTATION_TITLES[label]
     with path.open("rb") as stream:
         summary = fingerprint_stream(stream)
+    if label == "render":
+        text = path.read_text(encoding="utf-8", errors="replace")
+        diagnostic = _safe_render_diagnostic(text)
+        if diagnostic:
+            summary["diagnostic"] = diagnostic
     return (
         f"::error title={title}::"
         + json.dumps(summary, sort_keys=True, separators=(",", ":"))
     )
+
+
+def _safe_render_diagnostic(text: str) -> Optional[str]:
+    """Classify known provisioner failures without emitting provider payloads."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in reversed(lines):
+        missing = re.fullmatch(
+            r"provisioning blocked: Missing required operator values: ([A-Z0-9_, ]+)",
+            line,
+        )
+        if missing:
+            return "missing_operator_values:" + missing.group(1).replace(" ", "")
+        environment = re.fullmatch(
+            r"provisioning blocked: Existing ([a-z0-9-]+) has unreviewed "
+            r"environment keys: ([A-Z0-9_, ]+)",
+            line,
+        )
+        if environment:
+            return (
+                "unreviewed_environment_keys:"
+                + environment.group(1)
+                + ":"
+                + environment.group(2).replace(" ", "")
+            )
+        http = re.fullmatch(
+            r"provisioning blocked: Render API (GET|POST|PATCH|DELETE) .+ "
+            r"failed with HTTP ([0-9]{3})",
+            line,
+        )
+        if http:
+            return f"render_api_{http.group(1).lower()}_http_{http.group(2)}"
+        if line.startswith("provisioning blocked:"):
+            return "provisioning_contract_blocked"
+    return None
 
 
 def main() -> int:
