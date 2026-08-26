@@ -147,6 +147,91 @@ async def test_tool_authorizes_app_owned_grant_then_uses_only_delegated_token() 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "lookup",
+    [
+        {
+            "sales_order_id": "0198ea37-2b21-7c8d-9123-123456789abc",
+            "order_number": None,
+            "fiscal_year": None,
+        },
+        {
+            "sales_order_id": None,
+            "order_number": "SO-2026-0001",
+            "fiscal_year": 2026,
+        },
+    ],
+)
+async def test_document_reads_omit_none_and_delegate_branch_without_query_leakage(
+    lookup: dict,
+) -> None:
+    access = _access()
+    branch_id = str(uuid4())
+    grant = _grant(access, "erp_sales_order_get")
+    grant["branch_ids"] = [branch_id]
+    calls: list[tuple] = []
+    gateway = OperationGateway(
+        settings(),
+        lambda: Client(
+            [
+                Response(200, grant),
+                Response(200, {"match_state": "matched", "results": []}),
+            ],
+            calls,
+        ),
+    )
+
+    await gateway.execute(
+        OPERATIONS["erp_sales_order_get"],
+        access,
+        {"branch_id": branch_id, **lookup},
+    )
+
+    grant_call, api_call = calls
+    assert grant_call[2]["json"]["branch_id"] == branch_id
+    assert grant_call[2]["json"]["organization_id"] == access.claims["organization_id"]
+    assert api_call[2]["params"] == {
+        key: value for key, value in lookup.items() if value is not None
+    }
+    assert "branch_id" not in api_call[2]["params"]
+
+
+@pytest.mark.asyncio
+async def test_read_gateway_omits_only_none_optional_parameters() -> None:
+    access = _access()
+    calls: list[tuple] = []
+    gateway = OperationGateway(
+        settings(),
+        lambda: Client(
+            [
+                Response(200, _grant(access, "erp_product_search")),
+                Response(200, []),
+            ],
+            calls,
+        ),
+    )
+
+    await gateway.execute(
+        OPERATIONS["erp_product_search"],
+        access,
+        {
+            "search_term": "",
+            "limit": 0,
+            "offset": 0,
+            "include_inactive": False,
+            "optional_filter": None,
+        },
+    )
+
+    assert calls[1][2]["params"] == {
+        "search_term": "",
+        "limit": 0,
+        "offset": 0,
+        "include_inactive": False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_grant_response_echo_and_record_limits_fail_closed() -> None:
     access = _access()
     bad_grant = _grant(access, "erp_product_search")

@@ -281,6 +281,9 @@ class OperationGateway:
             if not isinstance(raw_branch, str) or not raw_branch:
                 raise ValueError(f"{operation.branch_parameter} is required")
             branch_id = raw_branch
+        request_params = {
+            key: value for key, value in request_params.items() if value is not None
+        }
         delegated = await self._grant(operation, access, branch_id)
         async with self._client_factory() as client:
             response = await client.get(
