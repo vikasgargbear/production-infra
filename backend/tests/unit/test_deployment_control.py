@@ -117,6 +117,36 @@ def test_closed_fence_distinguishes_expected_mcp_not_ready(monkeypatch) -> None:
     assert diagnostics == []
 
 
+def test_render_suspension_names_lifecycle_recovery_once_per_service(monkeypatch) -> None:
+    document = manifest()
+
+    def fake_get(url: str, _timeout: int):
+        if "railway.app" in url:
+            return 404, None, ""
+        return 503, None, "render_service_suspended"
+
+    monkeypatch.setattr(CONTROL, "_get_json", fake_get)
+    diagnostics, checks = CONTROL.status_diagnostics(
+        document,
+        expected_sha=EXPECTED_SHA,
+        fence="closed",
+        timeout=1,
+    )
+
+    assert codes(diagnostics) == ["RENDER_SERVICE_SUSPENDED"] * 3
+    assert {diagnostic.subject for diagnostic in diagnostics} == {
+        "render.frontend",
+        "render.api",
+        "render.mcp",
+    }
+    assert all(not diagnostic.retryable for diagnostic in diagnostics)
+    assert all(
+        "recover_canonical_render_suspension=true" in diagnostic.next_action
+        for diagnostic in diagnostics
+    )
+    assert len(checks) == 8
+
+
 def test_export_contains_only_reviewed_public_bindings(tmp_path: Path) -> None:
     output = tmp_path / "github-env"
 

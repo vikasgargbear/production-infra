@@ -338,6 +338,14 @@ def _get_json(url: str, timeout: int) -> tuple[int, dict[str, Any] | None, str]:
         body = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError):
         body = None
+        # Render returns a small HTML document rather than a provider API status
+        # when an owner suspends a service.  Preserve only the stable condition,
+        # never the response body, so status diagnostics can name the recovery
+        # action without leaking arbitrary upstream content.
+        if b"<title>Service Suspended</title>" in raw or (
+            b"This service has been suspended by its owner." in raw
+        ):
+            return status, None, "render_service_suspended"
     return status, body if isinstance(body, dict) else None, ""
 
 
@@ -350,6 +358,7 @@ def status_diagnostics(
 ) -> tuple[list[Diagnostic], list[dict[str, Any]]]:
     diagnostics = validate_manifest(manifest)
     checks: list[dict[str, Any]] = []
+    suspended_services: set[str] = set()
     render = manifest["providers"]["render"]["services"]
     for service_name in ("frontend", "api", "mcp"):
         service = render[service_name]
@@ -367,6 +376,22 @@ def status_diagnostics(
             }
         )
         if status != 200:
+            if transport_error == "render_service_suspended":
+                suspended_services.add(service_name)
+                diagnostics.append(
+                    Diagnostic(
+                        "RENDER_SERVICE_SUSPENDED",
+                        "deployment_health",
+                        f"render.{service_name}",
+                        "Render reports that the service is suspended by its owner",
+                        retryable=False,
+                        next_action=(
+                            "run the reviewed Render lifecycle recovery with "
+                            "recover_canonical_render_suspension=true"
+                        ),
+                    )
+                )
+                continue
             diagnostics.append(
                 Diagnostic(
                     "LIVE_HEALTH_UNAVAILABLE",
@@ -402,6 +427,11 @@ def status_diagnostics(
                 "reported_status": body.get("status") if body else None,
             }
         )
+        if service_name in suspended_services:
+            # Health already emitted the precise provider lifecycle condition.
+            # Do not replace it with a second, generic readiness failure or
+            # mistake a suspended MCP 503 for correct closed-fence behavior.
+            continue
         expected_ready = fence == "open" or service_name == "api"
         if expected_ready and (status != 200 or not body or body.get("status") != "ready"):
             diagnostics.append(
