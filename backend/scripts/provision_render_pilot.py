@@ -547,11 +547,23 @@ class RenderClient:
                         f"Stale deploy cancellation did not settle for {service.name}"
                     )
                 time.sleep(15)
-        result = self.request(
-            "POST",
-            f"/services/{service.id}/deploys",
-            payload={"clearCache": "do_not_clear", "commitId": commit_id},
-        )
+        result = None
+        for attempt in range(5):
+            try:
+                result = self.request(
+                    "POST",
+                    f"/services/{service.id}/deploys",
+                    payload={"clearCache": "do_not_clear", "commitId": commit_id},
+                )
+                break
+            except ProvisioningError as error:
+                # Render can briefly reject an exact deploy while a resume or
+                # configuration-only deployment settles. Retry only that
+                # explicit conflict; authentication and other API failures
+                # remain immediate hard failures.
+                if "HTTP 409" not in str(error) or attempt == 4:
+                    raise
+                time.sleep(15)
         if not isinstance(result, dict) or not isinstance(result.get("id"), str):
             raise ProvisioningError(
                 f"Render did not return a deploy ID for {service.name}"

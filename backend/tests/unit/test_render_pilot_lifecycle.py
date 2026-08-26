@@ -176,3 +176,254 @@ def test_unreviewed_suspension_state_fails_closed(tmp_path):
             receipt_path=tmp_path / "lifecycle.json",
             sleep=lambda _: None,
         )
+
+
+def test_certification_refuses_preexisting_suspension_before_mutation(tmp_path):
+    client = FakeClient(initially_suspended={lifecycle.API_NAME})
+    with pytest.raises(lifecycle.ProvisioningError, match="requires active"):
+        lifecycle.quiesce(
+            client,
+            owner_id="owner",
+            commit_sha="1" * 40,
+            receipt_path=tmp_path / "lifecycle.json",
+            require_active=True,
+            sleep=lambda _: None,
+        )
+    assert not any(method == "POST" for method, _ in client.calls)
+
+
+def test_explicit_recovery_adopts_and_resumes_preexisting_suspension(tmp_path):
+    client = FakeClient(initially_suspended={lifecycle.API_NAME})
+    receipt = tmp_path / "lifecycle.json"
+    lifecycle.quiesce(
+        client,
+        owner_id="owner",
+        commit_sha="2" * 40,
+        receipt_path=receipt,
+        require_active=True,
+        adopt_preexisting=True,
+        sleep=lambda _: None,
+    )
+
+    result = lifecycle.resume_owned(
+        client,
+        owner_id="owner",
+        commit_sha="2" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    assert result["services"][lifecycle.API_NAME]["adopted_by_run"] is True
+    assert client.services[lifecycle.API_NAME].raw["suspended"] == "not_suspended"
+
+
+def test_deploy_failure_requiesces_only_run_owned_services(tmp_path):
+    client = FakeClient(initially_suspended={lifecycle.MCP_NAME})
+    receipt = tmp_path / "lifecycle.json"
+    lifecycle.quiesce(
+        client,
+        owner_id="owner",
+        commit_sha="3" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    lifecycle.resume_owned(
+        client,
+        owner_id="owner",
+        commit_sha="3" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+
+    result = lifecycle.requiesce_owned(
+        client,
+        owner_id="owner",
+        commit_sha="3" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    assert result["phase"] == "quiesced_after_failure"
+    assert client.services[lifecycle.API_NAME].raw["suspended"] == "suspended"
+    assert client.services[lifecycle.FRONTEND_NAME].raw["suspended"] == "suspended"
+    assert client.services[lifecycle.MCP_NAME].raw["suspended"] == "suspended"
+    assert "resuspended_after_failure" not in result["services"][lifecycle.MCP_NAME]
+
+
+def test_resume_can_stage_dependencies_without_waking_frontend(tmp_path):
+    client = FakeClient()
+    receipt = tmp_path / "lifecycle.json"
+    lifecycle.quiesce(
+        client,
+        owner_id="owner",
+        commit_sha="4" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    client.calls.clear()
+
+    result = lifecycle.resume_owned(
+        client,
+        owner_id="owner",
+        commit_sha="4" * 40,
+        receipt_path=receipt,
+        service_names=[lifecycle.API_NAME],
+        sleep=lambda _: None,
+    )
+
+    assert result["phase"] == "partially_resumed"
+    assert client.services[lifecycle.API_NAME].raw["suspended"] == "not_suspended"
+    assert client.services[lifecycle.MCP_NAME].raw["suspended"] == "suspended"
+    assert client.services[lifecycle.FRONTEND_NAME].raw["suspended"] == "suspended"
+
+
+def test_requiesce_attempts_every_owned_service_after_first_failure(tmp_path):
+    client = FakeClient()
+    receipt = tmp_path / "lifecycle.json"
+    lifecycle.quiesce(
+        client,
+        owner_id="owner",
+        commit_sha="5" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    lifecycle.resume_owned(
+        client,
+        owner_id="owner",
+        commit_sha="5" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    original_request = client.request
+
+    def request(method, path, payload=None, query=None):
+        if method == "POST" and path == "/services/srv-1/suspend":
+            raise lifecycle.ProvisioningError("simulated ingress failure")
+        return original_request(method, path, payload, query)
+
+    client.request = request  # type: ignore[method-assign]
+    with pytest.raises(lifecycle.ProvisioningError, match="safe suspended state"):
+        lifecycle.requiesce_owned(
+            client,
+            owner_id="owner",
+            commit_sha="5" * 40,
+            receipt_path=receipt,
+            sleep=lambda _: None,
+        )
+
+    persisted = json.loads(receipt.read_text())
+    assert persisted["phase"] == "requiesce_failed"
+    assert persisted["requiesce_failed_services"] == [lifecycle.FRONTEND_NAME]
+    assert client.services[lifecycle.MCP_NAME].raw["suspended"] == "suspended"
+    assert client.services[lifecycle.API_NAME].raw["suspended"] == "suspended"
+
+
+def test_requiesce_reconciles_ambiguous_transient_suspend_without_duplicate(tmp_path):
+    client = FakeClient()
+    receipt = tmp_path / "lifecycle.json"
+    lifecycle.quiesce(
+        client,
+        owner_id="owner",
+        commit_sha="6" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    lifecycle.resume_owned(
+        client,
+        owner_id="owner",
+        commit_sha="6" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    client.calls.clear()
+    original_request = client.request
+    ambiguous_failure = True
+
+    def request(method, path, payload=None, query=None):
+        nonlocal ambiguous_failure
+        if (
+            ambiguous_failure
+            and method == "POST"
+            and path == "/services/srv-1/suspend"
+        ):
+            ambiguous_failure = False
+            original_request(method, path, payload, query)
+            raise lifecycle.ProvisioningError(
+                "Render API POST /services/srv-1/suspend failed with HTTP 503"
+            )
+        return original_request(method, path, payload, query)
+
+    client.request = request  # type: ignore[method-assign]
+    result = lifecycle.requiesce_owned(
+        client,
+        owner_id="owner",
+        commit_sha="6" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+
+    ingress_suspend_calls = [
+        path
+        for method, path in client.calls
+        if method == "POST" and path == "/services/srv-1/suspend"
+    ]
+    assert ingress_suspend_calls == ["/services/srv-1/suspend"]
+    assert result["phase"] == "quiesced_after_failure"
+    assert all(
+        service.raw["suspended"] == "suspended"
+        for service in client.services.values()
+    )
+
+
+def test_requiesce_retries_allowlisted_transient_but_not_permanent_failure(tmp_path):
+    client = FakeClient()
+    receipt = tmp_path / "lifecycle.json"
+    lifecycle.quiesce(
+        client,
+        owner_id="owner",
+        commit_sha="7" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    lifecycle.resume_owned(
+        client,
+        owner_id="owner",
+        commit_sha="7" * 40,
+        receipt_path=receipt,
+        sleep=lambda _: None,
+    )
+    client.calls.clear()
+    original_request = client.request
+    transient_failures = 0
+    permanent_failures = 0
+
+    def request(method, path, payload=None, query=None):
+        nonlocal transient_failures, permanent_failures
+        if method == "POST" and path == "/services/srv-1/suspend":
+            transient_failures += 1
+            if transient_failures < lifecycle.MAX_REQUIESCE_ATTEMPTS:
+                raise lifecycle.ProvisioningError(
+                    "Render API POST /services/srv-1/suspend failed with HTTP 429"
+                )
+        if method == "POST" and path == "/services/srv-2/suspend":
+            permanent_failures += 1
+            raise lifecycle.ProvisioningError(
+                "Render API POST /services/srv-2/suspend failed with HTTP 403"
+            )
+        return original_request(method, path, payload, query)
+
+    client.request = request  # type: ignore[method-assign]
+    with pytest.raises(lifecycle.ProvisioningError, match="safe suspended state"):
+        lifecycle.requiesce_owned(
+            client,
+            owner_id="owner",
+            commit_sha="7" * 40,
+            receipt_path=receipt,
+            sleep=lambda _: None,
+        )
+
+    assert transient_failures == lifecycle.MAX_REQUIESCE_ATTEMPTS
+    assert permanent_failures == 1
+    assert client.services[lifecycle.FRONTEND_NAME].raw["suspended"] == "suspended"
+    assert client.services[lifecycle.MCP_NAME].raw["suspended"] == "not_suspended"
+    assert client.services[lifecycle.API_NAME].raw["suspended"] == "suspended"
+    persisted = json.loads(receipt.read_text())
+    assert persisted["requiesce_failed_services"] == [lifecycle.MCP_NAME]

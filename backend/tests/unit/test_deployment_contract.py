@@ -16,7 +16,9 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
 
     assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}" in production
     assert "if: inputs.deploy_render_pilot == true" in staging
-    assert staging.count("if: inputs.deploy_render_pilot == true") == 3
+    assert staging.count("if: inputs.deploy_render_pilot == true") == 8
+    assert "Close canonical writes before Render promotion" in staging
+    assert "Open canonical writes after exact-SHA verification" in staging
     provision = staging.split("Provision and exercise the disposable demo organization", 1)[1]
     assert "if [ '${{ inputs.deploy_render_pilot }}' != true ]; then" in provision
     assert "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" in provision
@@ -516,9 +518,28 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert workflow.index("manage_render_pilot_lifecycle.py quiesce") < workflow.index(
         "Restart the pinned free staging database"
     )
-    assert workflow.index("manage_render_pilot_lifecycle.py resume-owned") < workflow.index(
-        "provision_render_pilot.py"
+    render_deploy = workflow.split("Reconcile and deploy the free Render pilot", 1)[1]
+    assert render_deploy.index("provision_render_pilot.py") < render_deploy.index(
+        "manage_render_pilot_lifecycle.py resume-owned"
     )
+    assert render_deploy.index("manage_render_pilot_lifecycle.py resume-owned") < (
+        render_deploy.index("--deploy")
+    )
+    assert "manage_render_pilot_lifecycle.py requiesce-owned" in workflow
+    assert "inputs.deploy_render_pilot == true ||" in workflow
+    assert "--require-active" in workflow
+    assert "--adopt-preexisting" in workflow
+    assert "Database lifecycle changes require an exact-SHA Render deployment" in workflow
+    assert "REVIEWED_RENDER_DEPLOY_SHA: ${{ inputs.render_deploy_sha }}" in workflow
+    assert "always() && !success()" in workflow
+    render_deploy = workflow.split("Reconcile and deploy the free Render pilot", 1)[1]
+    assert render_deploy.index(
+        "deploy_one_service aasopharma-api-pilot"
+    ) < render_deploy.index("deploy_one_service aasopharma-mcp-pilot")
+    assert render_deploy.index(
+        "deploy_one_service aasopharma-mcp-pilot"
+    ) < render_deploy.index("deploy_one_service aasopharma-erp-pilot")
+    assert "timeout-minutes: 360" in workflow
     assert "--request POST" in workflow
     assert "Canonical staging network-ban count" in workflow
     assert "def verify_role_set_once(" in pooler_verifier
@@ -595,7 +616,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'detail = "canonical demo failure summary unavailable"' in workflow
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
-    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 6
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 7
     assert '--label readiness "$api_log"' in workflow
     assert '--label runtime "$api_log"' in workflow
     assert 'tail -c 3500 "$api_log"' not in workflow
@@ -618,6 +639,34 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         in workflow
     )
     assert workflow.count("WITH SET TRUE, INHERIT FALSE") == 4
+    assert workflow.count("run_canonical_write_fence.sh") == 3
+    assert "@railway/cli@5.43.4" in workflow
+    assert workflow.count("verify_retired_railway_authority.py") == 2
+    for service_id in (
+        "RAILWAY_API_SERVICE_ID",
+        "RAILWAY_MCP_SERVICE_ID",
+        "RAILWAY_FRONTEND_SERVICE_ID",
+    ):
+        assert service_id in workflow
+    assert "railway-authority-retired-before-close.json" in workflow
+    assert "railway-authority-retired-before-open.json" in workflow
+    assert "local deploy_deadline=$((SECONDS + 1800))" in workflow
+    assert "while (( SECONDS < deploy_deadline ))" in workflow
+    assert "attempt<=60" not in workflow
+    assert workflow.index("run_canonical_write_fence.sh") < workflow.index(
+        "deploy_one_service aasopharma-api-pilot"
+    )
+    assert workflow.index(
+        "Prove the competing Railway authority is retired before closing writes"
+    ) < workflow.index("Close canonical writes before Render promotion")
+    assert workflow.index("render-pilot-public-evidence.json") < workflow.index(
+        "Open canonical writes after exact-SHA verification"
+    )
+    opened_fence = workflow.split(
+        "Open canonical writes after exact-SHA verification", 1
+    )[1].split("Verify and exercise the reviewed hosted OAuth server boundary", 1)[0]
+    assert "run_canonical_write_fence.sh" in opened_fence
+    assert 'open "$GITHUB_SHA"' in opened_fence
     assert workflow.count("revoke_staging_postgres_set_roles.sh") == 4
     assert workflow.count("migration-owner-runtime") == 1
     assert workflow.count("migration-owner\n") == 3
@@ -1205,8 +1254,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
         "revoke_staging_postgres_set_roles.sh migration-owner" in bind_step
     )
     assert bind < cleanup < exercise
-    assert "timeout-minutes: 300" in workflow
-    assert "reviewed worst case is about 278 minutes" in workflow
+    assert "timeout-minutes: 360" in workflow
+    assert "reviewed worst case is about 326 minutes" in workflow
     assert "18 rollback fixtures" in workflow
     readiness = workflow.split("Wait for free service smoke readiness", 1)[1].split(
         "Verify and exercise the reviewed hosted OAuth server boundary", 1

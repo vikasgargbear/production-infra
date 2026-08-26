@@ -64,6 +64,11 @@ on:
         required: false
         default: ""
         type: string
+      recover_canonical_render_suspension:
+        description: Explicitly adopt a reviewed pre-existing Render suspension after a failed certification run
+        required: true
+        default: false
+        type: boolean
       capture_canonical_promotion_evidence:
         description: Capture read-only exact-SHA application promotion evidence
         required: true
@@ -142,6 +147,7 @@ jobs:
       rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
       refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}
       render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
+      recover_render_suspension: ${{ inputs.recover_canonical_render_suspension }}
     secrets: inherit
 
   railway-canonical-staging:

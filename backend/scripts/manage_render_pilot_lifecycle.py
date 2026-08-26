@@ -59,6 +59,11 @@ ACTIVE_DEPLOY_STATUSES = frozenset(
 SUSPENSION_STATES = frozenset({"suspended", "not_suspended"})
 MAX_STATE_CHECKS = 20
 STATE_CHECK_DELAY_SECONDS = 5
+MAX_REQUIESCE_ATTEMPTS = 3
+REQUIESCE_RETRY_DELAY_SECONDS = 5
+TRANSIENT_CONTROL_PLANE_HTTP_STATUSES = frozenset(
+    {408, 409, 425, 429, 500, 502, 503, 504}
+)
 
 
 def _utc_now() -> str:
@@ -123,6 +128,20 @@ def _require_no_active_deploy(client: RenderClient, service: ServiceRef) -> None
             )
 
 
+def _is_transient_control_plane_failure(error: BaseException) -> bool:
+    if isinstance(error, OSError):
+        return True
+    if not isinstance(error, ProvisioningError):
+        return False
+    message = str(error)
+    if "did not reach suspended within the bounded wait" in message:
+        return True
+    return any(
+        message.endswith(f"failed with HTTP {status}")
+        for status in TRANSIENT_CONTROL_PLANE_HTTP_STATUSES
+    )
+
+
 def _write_new_receipt(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -178,11 +197,23 @@ def quiesce(
     owner_id: str,
     commit_sha: str,
     receipt_path: Path,
+    require_active: bool = False,
+    adopt_preexisting: bool = False,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     services = _resolve_services(client, owner_id)
     for service in services.values():
         _require_no_active_deploy(client, service)
+    initial_states = {
+        name: _service_state(service) for name, service in services.items()
+    }
+    preexisting_suspensions = {
+        name for name, state in initial_states.items() if state == "suspended"
+    }
+    if require_active and preexisting_suspensions and not adopt_preexisting:
+        raise ProvisioningError(
+            "Render certification requires active services or explicit recovery ownership"
+        )
 
     payload: dict[str, Any] = {
         "version": 1,
@@ -195,8 +226,11 @@ def quiesce(
                 "id": service.id,
                 "name": service.name,
                 "type": service.type,
-                "initial_state": _service_state(service),
-                "suspended_by_run": False,
+                "initial_state": initial_states[name],
+                "suspended_by_run": name in preexisting_suspensions
+                and adopt_preexisting,
+                "adopted_by_run": name in preexisting_suspensions
+                and adopt_preexisting,
                 "resumed_by_run": False,
             }
             for name, service in services.items()
@@ -219,7 +253,7 @@ def quiesce(
     return payload
 
 
-def resume_owned(
+def requiesce_owned(
     client: RenderClient,
     *,
     owner_id: str,
@@ -229,10 +263,84 @@ def resume_owned(
 ) -> dict[str, Any]:
     payload = _load_receipt(receipt_path, commit_sha=commit_sha, owner_id=owner_id)
     services = _resolve_services(client, owner_id)
+    payload["phase"] = "requiescing_after_failure"
+    _replace_receipt(receipt_path, payload)
+
+    failures: list[str] = []
+    for name, _ in QUIESCE_ORDER:
+        service = services[name]
+        record = payload["services"][name]
+        try:
+            if (record.get("id"), record.get("name"), record.get("type")) != (
+                service.id,
+                service.name,
+                service.type,
+            ):
+                raise ProvisioningError(
+                    f"Render lifecycle receipt identity mismatch for {name}"
+                )
+            if not record.get("suspended_by_run"):
+                continue
+            for attempt in range(1, MAX_REQUIESCE_ATTEMPTS + 1):
+                try:
+                    current = _service_by_id(client, service)
+                    if _service_state(current) == "not_suspended":
+                        client.request("POST", f"/services/{service.id}/suspend")
+                    _wait_for_state(client, service, "suspended", sleep=sleep)
+                    break
+                except (OSError, ProvisioningError, ValueError) as error:
+                    if (
+                        not _is_transient_control_plane_failure(error)
+                        or attempt == MAX_REQUIESCE_ATTEMPTS
+                    ):
+                        raise
+                    sleep(REQUIESCE_RETRY_DELAY_SECONDS)
+            record["resumed_by_run"] = False
+            record["resuspended_after_failure"] = True
+            record.pop("requiesce_failed", None)
+        except (OSError, ProvisioningError, ValueError):
+            # Continue across the complete owned service set. A failure to
+            # suspend one ingress must never prevent attempts to stop the API
+            # and MCP processes behind it.
+            record["requiesce_failed"] = True
+            failures.append(name)
+        _replace_receipt(receipt_path, payload)
+
+    if failures:
+        payload["phase"] = "requiesce_failed"
+        payload["requiesce_failed_services"] = failures
+        _replace_receipt(receipt_path, payload)
+        raise ProvisioningError(
+            "Render services did not all reach the safe suspended state"
+        )
+
+    payload["phase"] = "quiesced_after_failure"
+    payload["requiesced_at"] = _utc_now()
+    _replace_receipt(receipt_path, payload)
+    return payload
+
+
+def resume_owned(
+    client: RenderClient,
+    *,
+    owner_id: str,
+    commit_sha: str,
+    receipt_path: Path,
+    service_names: Iterable[str] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    payload = _load_receipt(receipt_path, commit_sha=commit_sha, owner_id=owner_id)
+    services = _resolve_services(client, owner_id)
+    requested = set(service_names or (name for name, _ in RESUME_ORDER))
+    reviewed = {name for name, _ in RESUME_ORDER}
+    if not requested or not requested <= reviewed:
+        raise ProvisioningError("Render resume selection is empty or unreviewed")
     payload["phase"] = "resuming"
     _replace_receipt(receipt_path, payload)
 
     for name, _ in RESUME_ORDER:
+        if name not in requested:
+            continue
         service = services[name]
         record = payload["services"][name]
         if (record.get("id"), record.get("name"), record.get("type")) != (
@@ -253,18 +361,33 @@ def resume_owned(
         record["resumed_by_run"] = True
         _replace_receipt(receipt_path, payload)
 
-    payload["phase"] = "resumed"
-    payload["resumed_at"] = _utc_now()
+    run_owned = [
+        record for record in payload["services"].values()
+        if record.get("suspended_by_run")
+    ]
+    completely_resumed = all(record.get("resumed_by_run") for record in run_owned)
+    payload["phase"] = "resumed" if completely_resumed else "partially_resumed"
+    payload["resumed_at" if completely_resumed else "partially_resumed_at"] = _utc_now()
     _replace_receipt(receipt_path, payload)
     return payload
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("quiesce", "resume-owned"))
+    parser.add_argument(
+        "action", choices=("quiesce", "resume-owned", "requiesce-owned")
+    )
     parser.add_argument("--owner-id", default=DEFAULT_OWNER_ID)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--require-active", action="store_true")
+    parser.add_argument("--adopt-preexisting", action="store_true")
+    parser.add_argument(
+        "--service",
+        action="append",
+        choices=tuple(name for name, _ in RESUME_ORDER),
+        help="Resume only this reviewed service; repeat as needed",
+    )
     return parser.parse_args(argv)
 
 
@@ -273,13 +396,34 @@ def main(argv: Iterable[str] | None = None) -> int:
     try:
         commit_sha = _validate_commit_sha(args.commit_sha)
         client = RenderClient(os.getenv("RENDER_API_KEY", ""))
-        operation = quiesce if args.action == "quiesce" else resume_owned
-        result = operation(
-            client,
-            owner_id=args.owner_id,
-            commit_sha=commit_sha,
-            receipt_path=args.receipt,
-        )
+        if args.adopt_preexisting and args.action != "quiesce":
+            raise ProvisioningError("pre-existing suspension adoption is quiesce-only")
+        if args.service and args.action != "resume-owned":
+            raise ProvisioningError("service selection is resume-only")
+        if args.action == "quiesce":
+            result = quiesce(
+                client,
+                owner_id=args.owner_id,
+                commit_sha=commit_sha,
+                receipt_path=args.receipt,
+                require_active=args.require_active,
+                adopt_preexisting=args.adopt_preexisting,
+            )
+        else:
+            operation = (
+                resume_owned if args.action == "resume-owned" else requiesce_owned
+            )
+            result = operation(
+                client,
+                owner_id=args.owner_id,
+                commit_sha=commit_sha,
+                receipt_path=args.receipt,
+                **(
+                    {"service_names": args.service}
+                    if args.action == "resume-owned"
+                    else {}
+                ),
+            )
         print(
             json.dumps(
                 {
@@ -288,6 +432,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                         name: {
                             "initial_state": record["initial_state"],
                             "suspended_by_run": record["suspended_by_run"],
+                            "adopted_by_run": record.get("adopted_by_run", False),
                             "resumed_by_run": record["resumed_by_run"],
                         }
                         for name, record in result["services"].items()

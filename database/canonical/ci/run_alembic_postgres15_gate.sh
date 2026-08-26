@@ -97,6 +97,9 @@ test "$(psql -X -Atqc "
       ]))
 ")" = "t|t|t|t|t|t|t|t"
 
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_write_fence.py
+
 fixture_count=0
 while IFS= read -r fixture; do
   psql -X -v ON_ERROR_STOP=1 -f "$fixture"

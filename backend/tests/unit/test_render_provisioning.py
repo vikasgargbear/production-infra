@@ -352,6 +352,66 @@ def test_deploy_requires_exact_commit_argument():
         provision.parse_args(["--apply", "--deploy"])
 
 
+def test_deploy_retries_only_bounded_render_conflicts(monkeypatch):
+    client = RecordingClient(
+        [
+            [],
+            provision.ProvisioningError("Render API POST failed with HTTP 409"),
+            {"id": "dep-exact", "status": "created"},
+        ]
+    )
+    original_request = client.request
+
+    def request(*args, **kwargs):
+        response = original_request(*args, **kwargs)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    client.request = request
+    monkeypatch.setattr(provision.time, "sleep", lambda _: None)
+    service = provision.ServiceRef(
+        "srv-api",
+        provision.API_NAME,
+        "web_service",
+        "https://api.onrender.com",
+        {},
+    )
+
+    assert client.deploy(service, "d" * 40)["id"] == "dep-exact"
+    assert [call[0] for call in client.calls] == ["GET", "POST", "POST"]
+
+
+def test_deploy_does_not_retry_non_conflict_api_failure(monkeypatch):
+    client = RecordingClient(
+        [
+            [],
+            provision.ProvisioningError("Render API POST failed with HTTP 401"),
+        ]
+    )
+    original_request = client.request
+
+    def request(*args, **kwargs):
+        response = original_request(*args, **kwargs)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    client.request = request
+    monkeypatch.setattr(provision.time, "sleep", lambda _: None)
+    service = provision.ServiceRef(
+        "srv-api",
+        provision.API_NAME,
+        "web_service",
+        "https://api.onrender.com",
+        {},
+    )
+
+    with pytest.raises(provision.ProvisioningError, match="HTTP 401"):
+        client.deploy(service, "e" * 40)
+    assert [call[0] for call in client.calls] == ["GET", "POST"]
+
+
 class ConvergeClient:
     def __init__(self):
         self.deployed = []
