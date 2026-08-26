@@ -578,19 +578,29 @@ def test_workflow_decouples_empty_cleanup_from_post_reset_runtime_provisioning()
     render_quiesced = workflow.index(
         "Quiesce reviewed Render clients before deployment or database lifecycle changes"
     )
-    assert railway_retired < render_quiesced < cleanup < reset < migration < provision
-    assert (
+    pre_cleanup_provision = workflow.index(
         "Provision restricted evidence cleanup authority before the disposable reset"
-        not in workflow
     )
+    assert (
+        railway_retired
+        < render_quiesced
+        < pre_cleanup_provision
+        < cleanup
+        < reset
+        < migration
+        < provision
+    )
+    pre_cleanup_step = workflow[pre_cleanup_provision:cleanup]
+    assert "provision_canonical_evidence_storage_identity.py" in pre_cleanup_step
+    assert "canonical-evidence-storage.sql" not in pre_cleanup_step
+    assert "GRANT erp_evidence_storage TO authenticator" not in pre_cleanup_step
+    assert "hook_exists" in pre_cleanup_step
+    assert 'test "$object_count" = 0' in pre_cleanup_step
     cleanup_step = workflow[cleanup:reset]
     assert "cleanup_staging_evidence_storage.py" in cleanup_step
     assert "provision_canonical_evidence_storage_key.py" not in cleanup_step
     assert "EVIDENCE_STORAGE_SERVER_API_KEY" not in workflow
-    assert (
-        "EVIDENCE_STORAGE_SERVICE_PASSWORD: "
-        "${{ secrets.EVIDENCE_STORAGE_SERVICE_PASSWORD }}"
-    ) in workflow
+    assert "${{ secrets.EVIDENCE_STORAGE_SERVICE_PASSWORD }}" not in workflow
     assert "EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID" in workflow
     assert "DELETE FROM storage.objects" not in workflow
     assert "canonical-evidence-storage-reset-cleanup.json" in cleanup_step
