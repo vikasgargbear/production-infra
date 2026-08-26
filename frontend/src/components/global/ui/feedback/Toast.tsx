@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useCallback, ReactNode, ComponentType, ReactElement } from 'react';
+import React, { useState, createContext, useContext, useCallback, ReactNode, ReactElement } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle, Sparkles, Zap, Shield, LucideIcon } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -49,14 +49,19 @@ interface ToastContainerProps {
 // ==================== CONTEXT ====================
 
 const ToastContext = createContext<ToastMethods | undefined>(undefined);
+let nextToastId = 1;
 
 // ==================== PROVIDER ====================
 
 export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+    const removeToast = useCallback((id: number) => {
+        setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, []);
+
     const addToast = useCallback((message: string, type: ToastType = 'info', duration: number = 4000, options: ToastOptions = {}) => {
-        const id = Date.now() + Math.random();
+        const id = nextToastId++;
         const newToast: ToastItem = {
             id,
             message,
@@ -74,11 +79,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
                 removeToast(id);
             }, duration);
         }
-    }, []);
-
-    const removeToast = useCallback((id: number) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, []);
+    }, [removeToast]);
 
     const toast: ToastMethods = {
         success: (message, duration = 4000, options = {}) => addToast(message, 'success', duration, options),
