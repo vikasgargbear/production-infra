@@ -147,6 +147,42 @@ async def test_tool_authorizes_app_owned_grant_then_uses_only_delegated_token() 
 
 
 @pytest.mark.asyncio
+async def test_master_create_uses_scoped_write_grant_and_canonical_backend_route() -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATOR_OPERATIONS["erp_product_create"]
+    grant = _operator_grant(access, "erp_product_create")
+    grant["permission_code"] = "catalog.product.manage"
+    grant["organization_scope"] = True
+    responses = [
+        Response(200, grant),
+        Response(200, {
+            "product_id": str(uuid4()),
+            "product_code": "PROD-000001",
+            "idempotency_replayed": False,
+        }),
+    ]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+    arguments = {
+        "product_name": "Canonical MCP Product",
+        "product_kind": "medicine",
+        "idempotency_key": "mcp-product-create-0001",
+    }
+
+    result = await gateway.execute_operator(operation, access, arguments)
+
+    grant_call, command_call = calls
+    assert grant_call[0] == "POST"
+    assert grant_call[2]["json"]["operation_key"] == "catalog.product_draft.create"
+    assert grant_call[2]["json"]["operation_mode"] == "write"
+    assert grant_call[2]["json"]["branch_ids"] == []
+    assert command_call[0] == "POST"
+    assert command_call[1].endswith("/api/internal/mcp/master/products")
+    assert command_call[2]["json"] == arguments
+    assert result["product_code"] == "PROD-000001"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "lookup",
     [

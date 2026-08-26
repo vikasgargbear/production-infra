@@ -64,6 +64,11 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_supplier_search",
     "erp_gst_settings_get",
 }
+EXPECTED_MASTER_CREATE_TOOLS = {
+    "erp_product_create",
+    "erp_customer_create",
+    "erp_supplier_create",
+}
 EXPECTED_UNAVAILABLE_PREPARE_TOOLS = set()
 EXPECTED_RESOLUTION_TOOLS = {
     "erp_customer_search",
@@ -819,6 +824,7 @@ def validate(
     expected_published_actions = published_prepare_tools | EXPECTED_SHARED_TOOLS
     expected_live_tools = (
         EXPECTED_BASE_READ_TOOLS
+        | EXPECTED_MASTER_CREATE_TOOLS
         | EXPECTED_RESOLUTION_TOOLS
         | expected_published_actions
     )
@@ -828,6 +834,8 @@ def validate(
         issues.append("MCP service contract does not export bounded operator actions")
     if set(operator_service.get("published_tools", [])) != expected_published_actions:
         issues.append("MCP service published tool list drifted")
+    if set(operator_service.get("direct_master_writes", [])) != EXPECTED_MASTER_CREATE_TOOLS:
+        issues.append("MCP service direct master write list drifted")
     if set(operator_service.get("unavailable_tools", [])) != EXPECTED_UNAVAILABLE_PREPARE_TOOLS:
         issues.append("MCP service unavailable tool list drifted")
     if set(operator_service.get("published_resolution_tools", [])) != planned_resolution:
@@ -902,6 +910,16 @@ def validate(
             or app_operation.get("idempotency") != "required"
         ):
             issues.append(f"{tool}: prepare metadata drifted from non-posting preview semantics")
+
+    for tool in EXPECTED_MASTER_CREATE_TOOLS:
+        app_operation = app_by_tool.get(tool, {})
+        if (
+            app_operation.get("mode") != "write"
+            or app_operation.get("risk") != "reversible_write"
+            or app_operation.get("approval") != "actor_confirmation"
+            or app_operation.get("idempotency") != "required"
+        ):
+            issues.append(f"{tool}: canonical master create metadata drifted")
 
     execute_operation = app_by_tool.get("erp_operation_execute", {})
     if execute_operation.get("approval") != "command_policy":

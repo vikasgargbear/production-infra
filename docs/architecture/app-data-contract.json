@@ -156,6 +156,9 @@
     {"resource":"reports","api_routes":["/api/dashboard/*","/api/reports/*","/api/collection-center/*"],"frontend_modules":["analytics/*.api.ts"],"relations":["sales.invoices","sales.invoice_lines","procurement.supplier_invoices","procurement.supplier_invoice_lines","inventory.stock_balances","finance.open_items","finance.journal_lines","tax.return_documents"],"query_shapes":["bounded aggregates with mandatory organization and date predicates","cursor drill-down from aggregate to source facts"],"mcp_resources":["erp://organizations/{organization_id}/reports/{report_key}"],"mcp_tools":["erp_run_report","erp_get_dashboard_kpis"],"approval_boundary":"read only; exports require permission and record limits"}
   ],
   "mcp_operations": [
+    {"tool":"erp_product_create","resource":"catalog","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
+    {"tool":"erp_customer_create","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
+    {"tool":"erp_supplier_create","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_product_search","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_supplier_search","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_gst_settings_get","resource":"tax","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
