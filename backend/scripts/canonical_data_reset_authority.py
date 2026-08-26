@@ -430,7 +430,7 @@ def _role_snapshot(cursor: Any) -> tuple[tuple[object, ...], ...]:
         SELECT role.rolname, role.oid, role.rolcanlogin, role.rolsuper,
                role.rolinherit, role.rolcreaterole, role.rolcreatedb,
                role.rolreplication, role.rolbypassrls, role.rolconnlimit,
-               role.rolvaliduntil, role.rolpassword IS NOT NULL
+               role.rolvaliduntil
           FROM pg_catalog.pg_roles AS role
          WHERE role.rolname=ANY(%s)
          ORDER BY role.rolname
@@ -473,6 +473,24 @@ def _role_snapshot(cursor: Any) -> tuple[tuple[object, ...], ...]:
     return (*roles, ("__memberships__", memberships))
 
 
+def _role_password_presence(cursor: Any) -> tuple[tuple[str, bool], ...]:
+    """Read password-presence booleans from the privileged unmasked catalog."""
+
+    cursor.execute(
+        """
+        SELECT role.rolname, role.rolpassword IS NOT NULL
+          FROM pg_catalog.pg_authid AS role
+         WHERE role.rolname=ANY(%s)
+         ORDER BY role.rolname
+        """,
+        (list(MANAGED_ROLES),),
+    )
+    presence = tuple((str(name), bool(has_password)) for name, has_password in cursor.fetchall())
+    if tuple(name for name, _ in presence) != MANAGED_ROLES:
+        raise ResetAuthorityError("canonical managed role credential set is incomplete")
+    return presence
+
+
 def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict[str, object]:
     """Attest role posture after temporary migration delegation is revoked."""
 
@@ -482,24 +500,31 @@ def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict
         with connection.cursor() as cursor:
             roles = _role_snapshot(cursor)
             role_rows = roles[:-1]
+            password_presence = _role_password_presence(cursor)
             cursor.execute(
                 """
-                SELECT pg_catalog.pg_has_role('postgres', role.oid, 'SET'),
-                       pg_catalog.pg_has_role('postgres', role.oid, 'USAGE')
-                  FROM pg_catalog.pg_roles AS role
-                 WHERE role.rolname='erp_migration_owner'
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM pg_catalog.pg_auth_members AS membership
+                      JOIN pg_catalog.pg_roles AS granted
+                        ON granted.oid=membership.roleid
+                      JOIN pg_catalog.pg_roles AS member
+                        ON member.oid=membership.member
+                     WHERE granted.rolname='erp_migration_owner'
+                       AND member.rolname='postgres'
+                )
                 """
             )
             delegation = cursor.fetchone()
-            if delegation is None or delegation != (False, False):
+            if delegation is None or delegation != (False,):
                 raise ResetAuthorityError(
                     "postgres retains temporary migration-owner delegation"
                 )
             login_password_present_count = sum(
-                bool(row[11]) for row in role_rows if row[0] in LOGIN_ROLES
+                present for role, present in password_presence if role in LOGIN_ROLES
             )
             nonlogin_password_present_count = sum(
-                bool(row[11]) for row in role_rows if row[0] not in LOGIN_ROLES
+                present for role, present in password_presence if role not in LOGIN_ROLES
             )
             if login_password_present_count != len(LOGIN_ROLES):
                 raise ResetAuthorityError(
@@ -512,7 +537,12 @@ def verify_post_cleanup_role_state(connection: Any, *, project_ref: str) -> dict
 
     serializable_roles = json.loads(json.dumps(roles, default=str))
     role_catalog_sha256 = hashlib.sha256(
-        _canonical_json({"roles": serializable_roles})
+        _canonical_json(
+            {
+                "roles": serializable_roles,
+                "password_presence": [list(item) for item in password_presence],
+            }
+        )
     ).hexdigest()
     return {
         "contract_version": CONTRACT_VERSION,
@@ -600,6 +630,7 @@ def execute_reset(
                     f"expected={expected_evidence_object_count} observed={before_objects}"
                 )
             before_roles = _role_snapshot(cursor)
+            before_role_passwords = _role_password_presence(cursor)
             before_seed_digest = _seed_digest(
                 cursor, authority.preserved_seed_relations
             )
@@ -618,6 +649,7 @@ def execute_reset(
             )
             after_objects = _evidence_object_count(cursor)
             after_roles = _role_snapshot(cursor)
+            after_role_passwords = _role_password_presence(cursor)
             after_seed_digest = _seed_digest(cursor, authority.preserved_seed_relations)
             after_counts = _relation_row_counts(cursor, authority.truncate_relations)
 
@@ -630,6 +662,10 @@ def execute_reset(
             if before_roles != after_roles:
                 raise ResetAuthorityError(
                     "canonical role catalog changed during reset"
+                )
+            if before_role_passwords != after_role_passwords:
+                raise ResetAuthorityError(
+                    "canonical role credential posture changed during reset"
                 )
             if before_seed_digest != after_seed_digest:
                 raise ResetAuthorityError("deterministic seed rows changed during reset")

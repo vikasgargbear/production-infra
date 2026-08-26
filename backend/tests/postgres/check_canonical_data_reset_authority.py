@@ -76,6 +76,17 @@ def main() -> int:
         second_connection.close()
     assert second["disposable_row_count_before_reset"] == 0
 
+    cleanup_connection = _connect()
+    try:
+        cleanup = reset_authority.verify_post_cleanup_role_state(
+            cleanup_connection,
+            project_ref=PROJECT_REF,
+        )
+    finally:
+        cleanup_connection.close()
+    assert cleanup["login_role_password_present_count"] == 4
+    assert cleanup["nonlogin_role_password_present_count"] == 0
+
     with _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(

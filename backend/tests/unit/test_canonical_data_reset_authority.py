@@ -264,6 +264,11 @@ def test_transactional_reset_emits_safe_exact_catalog_facts(monkeypatch) -> None
         lambda cursor, alembic_schemas: next(catalogs),
     )
     monkeypatch.setattr(reset_authority, "_role_snapshot", lambda cursor: next(roles))
+    monkeypatch.setattr(
+        reset_authority,
+        "_role_password_presence",
+        lambda cursor: (("erp_runtime", True),),
+    )
     monkeypatch.setattr(reset_authority, "_seed_digest", lambda cursor, relations: next(digests))
     monkeypatch.setattr(
         reset_authority,
@@ -295,17 +300,19 @@ def test_transactional_reset_emits_safe_exact_catalog_facts(monkeypatch) -> None
     assert all("CASCADE" not in statement.upper() for statement in statements)
 
 
-def test_role_snapshot_uses_hosted_supabase_readable_catalog_only() -> None:
-    source = inspect.getsource(reset_authority._role_snapshot)
+def test_role_posture_and_password_presence_use_the_correct_catalogs() -> None:
+    posture_source = inspect.getsource(reset_authority._role_snapshot)
+    credential_source = inspect.getsource(reset_authority._role_password_presence)
 
-    assert "pg_catalog.pg_roles" in source
-    assert "pg_catalog.pg_authid" not in source
-    assert "rolpassword IS NOT NULL" in source
+    assert "pg_catalog.pg_roles" in posture_source
+    assert "rolpassword" not in posture_source
+    assert "pg_catalog.pg_authid" in credential_source
+    assert "rolpassword IS NOT NULL" in credential_source
 
 
 def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> None:
     connection = _FakeConnection()
-    connection.cursor_instance.fetchone_result = (False, False)
+    connection.cursor_instance.fetchone_result = (False,)
     role_rows = tuple(
         (
             role,
@@ -319,7 +326,6 @@ def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> N
             role == "erp_migration_owner",
             -1,
             None,
-            role in reset_authority.LOGIN_ROLES,
         )
         for index, role in enumerate(reset_authority.MANAGED_ROLES, 1)
     )
@@ -327,6 +333,15 @@ def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> N
         reset_authority,
         "_role_snapshot",
         lambda cursor: (*role_rows, ("__memberships__", ())),
+    )
+    password_presence = tuple(
+        (role, role in reset_authority.LOGIN_ROLES)
+        for role in reset_authority.MANAGED_ROLES
+    )
+    monkeypatch.setattr(
+        reset_authority,
+        "_role_password_presence",
+        lambda cursor: password_presence,
     )
 
     receipt = reset_authority.verify_post_cleanup_role_state(
@@ -340,22 +355,21 @@ def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> N
     assert receipt["postgres_migration_owner_set"] is False
     assert receipt["postgres_migration_owner_usage"] is False
 
-    connection.cursor_instance.fetchone_result = (True, False)
+    connection.cursor_instance.fetchone_result = (True,)
     with pytest.raises(ResetAuthorityError, match="retains temporary"):
         reset_authority.verify_post_cleanup_role_state(
             connection,
             project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,
         )
 
-    connection.cursor_instance.fetchone_result = (False, False)
-    dirty_role_rows = tuple(
-        (*row[:11], True if row[0] == "erp_app" else row[11])
-        for row in role_rows
-    )
+    connection.cursor_instance.fetchone_result = (False,)
     monkeypatch.setattr(
         reset_authority,
-        "_role_snapshot",
-        lambda cursor: (*dirty_role_rows, ("__memberships__", ())),
+        "_role_password_presence",
+        lambda cursor: tuple(
+            (role, True if role == "erp_app" else present)
+            for role, present in password_presence
+        ),
     )
     with pytest.raises(ResetAuthorityError, match="NOLOGIN roles"):
         reset_authority.verify_post_cleanup_role_state(
@@ -375,6 +389,11 @@ def test_transactional_reset_rolls_back_on_seed_drift(monkeypatch) -> None:
         lambda cursor, alembic_schemas: catalog,
     )
     monkeypatch.setattr(reset_authority, "_role_snapshot", lambda cursor: (("same",),))
+    monkeypatch.setattr(
+        reset_authority,
+        "_role_password_presence",
+        lambda cursor: (("same", True),),
+    )
     digests = iter(("a" * 64, "b" * 64))
     monkeypatch.setattr(reset_authority, "_seed_digest", lambda cursor, relations: next(digests))
     monkeypatch.setattr(
