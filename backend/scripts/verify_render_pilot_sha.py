@@ -81,6 +81,9 @@ def verify(client: RenderClient, owner_id: str, commit_sha: str) -> dict[str, An
         except ProvisioningError as exc:
             raise ProvisioningError(f"{name}: {exc}") from exc
         deployed_sha = (deploy.get("commit") or {}).get("id") if isinstance(deploy, dict) else None
+        deploy_id = deploy.get("id")
+        if not isinstance(deploy_id, str) or not deploy_id.strip():
+            raise ProvisioningError(f"{name}: latest deployment has no immutable ID")
         if deploy.get("status") != "live" or deployed_sha != commit_sha:
             raise ProvisioningError(
                 f"{name} is not live on reviewed SHA {commit_sha}; "
@@ -88,7 +91,7 @@ def verify(client: RenderClient, owner_id: str, commit_sha: str) -> dict[str, An
             )
         evidence["services"][name] = {
             "service_id": service.id,
-            "deploy_id": deploy.get("id"),
+            "deploy_id": deploy_id,
             "status": "live",
             "commit_sha": deployed_sha,
             "url": service.url,

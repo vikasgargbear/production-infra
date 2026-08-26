@@ -94,7 +94,12 @@ concurrency:
 jobs:
   baseline:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # The reviewed worst case is about 278 minutes: 18 rollback fixtures with
+    # three 180-second attempts (167m), Render polling (42m), public readiness
+    # (9m), demo exercise (26m), and 34m for migrations/restarts/OAuth. Keep one
+    # fail-closed job until those stateful phases can be split without transporting
+    # database authority, with a bounded 22-minute shutdown/cleanup margin.
+    timeout-minutes: 300
     environment: canonical-staging
     env:
       CANONICAL_BASELINE_APPROVED_SHA256: ${{ vars.CANONICAL_BASELINE_APPROVED_SHA256 }}
@@ -947,8 +952,8 @@ jobs:
           case "$deploy_sha" in
             *[!0-9a-f]*) echo "Render deploy SHA must be lowercase hexadecimal" >&2; exit 2 ;;
           esac
+          test "$deploy_sha" = "$GITHUB_SHA"
           git cat-file -e "$deploy_sha^{commit}"
-          git merge-base --is-ancestor "$deploy_sha" "$GITHUB_SHA"
           echo "CANONICAL_RENDER_DEPLOY_SHA=$deploy_sha" >> "$GITHUB_ENV"
           provision_log=$(mktemp)
           if ! python3 backend/scripts/provision_render_pilot.py \
@@ -978,10 +983,19 @@ jobs:
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             all_live=true
             while IFS=$'\t' read -r service_name service_id deploy_id; do
-              deploy_status=$(curl --fail --silent --show-error \
+              deploy_response=$(mktemp)
+              curl --fail --silent --show-error --max-time 30 \
                 --header "Authorization: Bearer $RENDER_API_KEY" \
                 "https://api.render.com/v1/services/$service_id/deploys/$deploy_id" \
-                | jq -er '.status')
+                >"$deploy_response"
+              deploy_status=$(jq -er '.status' "$deploy_response")
+              deployed_sha=$(jq -er \
+                '.commit.id | select(type == "string" and test("^[0-9a-f]{40}$"))' \
+                "$deploy_response")
+              if [ "$deployed_sha" != "$deploy_sha" ]; then
+                echo "::error title=Render deploy provenance mismatch::$service_name did not report the reviewed commit"
+                exit 1
+              fi
               printf '%s deploy %s status: %s\n' "$service_name" "$deploy_id" "$deploy_status"
               case "$deploy_status" in
                 live) ;;
@@ -1003,95 +1017,57 @@ jobs:
             sleep 180
           done
 
+          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+            --commit-sha "$deploy_sha" \
+            > staging-evidence/render-pilot-evidence.json
+          jq -e --slurpfile readback staging-evidence/render-pilot-evidence.json '
+            . as $provision |
+            .mode == "applied" and
+            (.services | keys) == [
+              "aasopharma-api-pilot",
+              "aasopharma-erp-pilot",
+              "aasopharma-mcp-pilot"
+            ] and
+            (.deployed | keys) == [
+              "aasopharma-api-pilot",
+              "aasopharma-erp-pilot",
+              "aasopharma-mcp-pilot"
+            ] and
+            ($readback | length) == 1 and
+            ($readback[0].services | keys) == (.services | keys) and
+            all($readback[0].services | to_entries[];
+              .value.deploy_id == $provision.deployed[.key].id)
+          ' staging-evidence/render-pilot.json >/dev/null
+
       - name: Wait for free service smoke readiness
         if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
-          api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
-          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot.json)
-          mcp_url=$(jq -er '.services["aasopharma-mcp-pilot"].url' staging-evidence/render-pilot.json)
+          api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          mcp_url=$(jq -er '.services["aasopharma-mcp-pilot"].url' staging-evidence/render-pilot-evidence.json)
           for url in "$api_url" "$frontend_url" "$mcp_url"; do
             echo "::add-mask::$url"
           done
 
-          api_ready=false
-          frontend_ready=false
-          mcp_healthy=false
+          public_evidence=$(mktemp)
+          all_ready=false
           for _attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error --max-time 20 "$api_url/health" >/dev/null \
-              && curl --fail --silent --show-error --max-time 20 "$api_url/ready" >/dev/null; then
-              api_ready=true
-            fi
-            if curl --fail --silent --show-error --max-time 20 "$frontend_url/" >/dev/null; then
-              frontend_ready=true
-            fi
-            if curl --fail --silent --show-error --max-time 20 "$mcp_url/health" >/dev/null; then
-              mcp_healthy=true
-            fi
-            if [ "$api_ready" = true ] && [ "$frontend_ready" = true ] \
-              && [ "$mcp_healthy" = true ]; then
+            : >"$public_evidence"
+            if PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+              --provider render \
+              --commit-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+              --frontend-origin "$frontend_url" \
+              --api-origin "$api_url" \
+              --mcp-origin "$mcp_url" \
+              >"$public_evidence" 2>/dev/null; then
+              all_ready=true
               break
             fi
             sleep 30
           done
-          test "$api_ready" = true
-          test "$frontend_ready" = true
-          test "$mcp_healthy" = true
-
-          mcp_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
-            --max-time 20 "$mcp_url/ready" || true)
-          jq --arg api "$api_url" \
-             --arg frontend "$frontend_url" \
-             --arg mcp "$mcp_url" \
-             --arg mcp_status "$mcp_status" \
-             '. + {
-               smoke: {
-                 api_url: $api,
-                 api_ready: true,
-                 frontend_url: $frontend,
-                 frontend_ready: true,
-                 mcp_url: $mcp,
-                 mcp_healthy: true,
-                 mcp_readiness_http_status: $mcp_status,
-                 mcp_advertised: false
-               }
-             }' staging-evidence/render-pilot.json \
-             > staging-evidence/render-pilot-smoke.json
-          jq -e --arg sha "$CANONICAL_RENDER_DEPLOY_SHA" '
-            def render_service($name): {
-              service_id: .services[$name].id,
-              deploy_id: .deployed[$name].id,
-              status: "live",
-              commit_sha: $sha,
-              url: .services[$name].url
-            };
-            if .mode == "applied" and
-               (.services | keys) == [
-                 "aasopharma-api-pilot",
-                 "aasopharma-erp-pilot",
-                 "aasopharma-mcp-pilot"
-               ] and
-               (.deployed | keys) == [
-                 "aasopharma-api-pilot",
-                 "aasopharma-erp-pilot",
-                 "aasopharma-mcp-pilot"
-               ] and
-               .smoke.api_ready == true and
-               .smoke.frontend_ready == true and
-               .smoke.mcp_healthy == true
-            then {
-              provider: "render",
-              commit_sha: $sha,
-              services: {
-                "aasopharma-api-pilot": render_service("aasopharma-api-pilot"),
-                "aasopharma-erp-pilot": render_service("aasopharma-erp-pilot"),
-                "aasopharma-mcp-pilot": render_service("aasopharma-mcp-pilot")
-              }
-            }
-            else error("Render deployment evidence did not reconcile")
-            end
-          ' staging-evidence/render-pilot-smoke.json \
-            > staging-evidence/render-pilot-evidence.json
+          test "$all_ready" = true
+          mv "$public_evidence" staging-evidence/render-pilot-public-evidence.json
 
       - name: Verify and exercise the reviewed hosted OAuth server boundary
         if: inputs.deploy_render_pilot == true

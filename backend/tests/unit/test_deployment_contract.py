@@ -1183,7 +1183,17 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
         "revoke_staging_postgres_set_roles.sh migration-owner" in bind_step
     )
     assert bind < cleanup < exercise
-    assert "timeout-minutes: 35" in workflow
+    assert "timeout-minutes: 300" in workflow
+    assert "reviewed worst case is about 278 minutes" in workflow
+    assert "18 rollback fixtures" in workflow
+    readiness = workflow.split("Wait for free service smoke readiness", 1)[1].split(
+        "Verify and exercise the reviewed hosted OAuth server boundary", 1
+    )[0]
+    assert "verify_live18_deployment_sha.py" in readiness
+    assert ': >"$public_evidence"' in readiness
+    assert "api_ready=false" not in readiness
+    assert "frontend_ready=false" not in readiness
+    assert "mcp_healthy=false" not in readiness
     assert "SUPABASE_SERVICE_ROLE_KEY" not in workflow
 
     hosted_business_flow_step = workflow[

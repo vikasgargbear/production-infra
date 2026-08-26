@@ -906,11 +906,13 @@ def test_canonical_staging_emits_exact_render_deployment_evidence() -> None:
     )
 
     assert polling < evidence_output < artifact_upload
-    assert 'provider: "render"' in workflow
-    assert 'commit_sha: $sha' in workflow
-    assert 'status: "live"' in workflow
-    for immutable_field in ("service_id:", "deploy_id:", "url:"):
-        assert immutable_field in workflow
+    assert 'test "$deploy_sha" = "$GITHUB_SHA"' in workflow
+    assert "verify_render_pilot_sha.py" in workflow
+    assert "verify_live18_deployment_sha.py" in workflow
+    assert '.value.deploy_id == $provision.deployed[.key].id' in workflow
+    assert 'deployed_sha=$(jq -er' in workflow
+    assert 'if [ "$deployed_sha" != "$deploy_sha" ]; then' in workflow
+    assert "render-pilot-public-evidence.json" in workflow
     receipt = workflow.index("- name: Publish exact-run Render demo receipt")
     assert workflow.index(
         "- name: Provision and exercise the disposable demo organization"
