@@ -514,6 +514,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Diagnose bounded Supavisor role verification failure" in workflow
     assert "/analytics/endpoints/logs" in workflow
     assert "source = 'supavisor_logs'" in workflow
+    assert "jq -c '{result,error}'" not in workflow
+    assert "Response shape was not the reviewed counter schema" in workflow
+    assert "| {eauthquery_count, circuit_breaker_count, worker_not_found_count, authentication_count, supavisor_event_count}" in workflow
+    assert "echo \"::notice title=Bounded Supavisor diagnostic::$summary\"" in workflow
     assert "EAUTHQUERY" in workflow
     assert "ECIRCUITBREAKER" in workflow
     assert "CANONICAL_ACTIVE_POOLER_PORT" in workflow

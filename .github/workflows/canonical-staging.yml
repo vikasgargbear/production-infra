@@ -782,11 +782,20 @@ jobs:
             --data-urlencode "sql=$query" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/analytics/endpoints/logs" \
             >"$response"; then
-            summary=$(jq -c '{result,error}' "$response")
-            summary=${summary//'%'/'%25'}
-            summary=${summary//$'\r'/'%0D'}
-            summary=${summary//$'\n'/'%0A'}
-            echo "::notice title=Bounded Supavisor diagnostic::$summary"
+            if summary=$(jq -cer '
+              select((.result | type) == "array" and (.result | length) == 1)
+              | .result[0]
+              | select((.eauthquery_count | type) == "number" and .eauthquery_count >= 0 and (.eauthquery_count | floor) == .eauthquery_count)
+              | select((.circuit_breaker_count | type) == "number" and .circuit_breaker_count >= 0 and (.circuit_breaker_count | floor) == .circuit_breaker_count)
+              | select((.worker_not_found_count | type) == "number" and .worker_not_found_count >= 0 and (.worker_not_found_count | floor) == .worker_not_found_count)
+              | select((.authentication_count | type) == "number" and .authentication_count >= 0 and (.authentication_count | floor) == .authentication_count)
+              | select((.supavisor_event_count | type) == "number" and .supavisor_event_count >= 0 and (.supavisor_event_count | floor) == .supavisor_event_count)
+              | {eauthquery_count, circuit_breaker_count, worker_not_found_count, authentication_count, supavisor_event_count}
+            ' "$response" 2>/dev/null); then
+              echo "::notice title=Bounded Supavisor diagnostic::$summary"
+            else
+              echo "::warning title=Bounded Supavisor diagnostic unavailable::Response shape was not the reviewed counter schema"
+            fi
           else
             echo "::warning title=Bounded Supavisor diagnostic unavailable::Management API log query failed"
           fi
