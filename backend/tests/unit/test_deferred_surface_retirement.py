@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from app.api.routes import canonical_erp_reads
 from app.main import app
 
 
@@ -71,9 +72,19 @@ def test_retired_audit_and_settings_routes_are_absent() -> None:
     assert not any(path.startswith("/api/audit-logs") for path in paths)
     assert not any(path.startswith("/api/settings/business") for path in paths)
     settings_routes = [
-        route for route in api_routes if route.path.startswith("/api/settings/")
+        route for route in canonical_erp_reads.router.routes
+        if route.path.startswith("/settings/")
     ]
-    assert settings_routes
+    assert {
+        route.path for route in settings_routes
+    } == {
+        "/settings/company-info",
+        "/settings/features",
+        "/settings/integrations",
+        "/settings/system",
+    }
     assert {
         route.endpoint.__module__ for route in settings_routes
     } == {"app.api.routes.canonical_erp_reads"}
+    main_source = (BACKEND_ROOT / "app/main.py").read_text(encoding="utf-8")
+    assert "api.include_router(canonical_erp_reads.router" in main_source
