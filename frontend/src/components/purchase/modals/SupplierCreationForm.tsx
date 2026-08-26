@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Building2, MapPin, CreditCard, Save, User, Banknote } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { apiErrorMessage } from '../../../services/api/utils/apiError';
 import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
+import { toast } from 'react-toastify';
+import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
 
 // ==================== INLINE TRANSFORMER ====================
 
@@ -11,7 +13,6 @@ import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
  */
 const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
   supplier_name: formData.supplier_name,
-  supplier_code: String(formData.supplier_code ?? '').trim(),
   contact_person: formData.contact_person || null,
   primary_phone: formData.phone || null,
   primary_email: formData.email || null,
@@ -26,18 +27,6 @@ const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
 });
 
 /**
- * Transform supplier response for display
- */
-const transformSupplierResponse = (supplier: Record<string, unknown>) => ({
-  supplier_id: String(supplier.supplier_id || supplier.id || ''),
-  supplier_name: String(supplier.supplier_name || supplier.name || ''),
-  supplier_code: String(supplier.supplier_code || ''),
-  primary_phone: String(supplier.primary_phone || supplier.phone || ''),
-  primary_email: String(supplier.primary_email || supplier.email || ''),
-  is_active: supplier.is_active !== false,
-});
-
-/**
  * Supplier Creation Form - Extracted from global component for inline use
  * Clean layout matching the global component design
  */
@@ -47,6 +36,8 @@ const SupplierCreationForm = ({
   onCancel,
   embedded = false
 }) => {
+  const submissionInFlightRef = useRef(false);
+  const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('supplier'));
   const [saving, setSaving] = useState(false);
   const [useBusinessPhoneForWhatsApp, setUseBusinessPhoneForWhatsApp] = useState(false);
   const [useBusinessContactForPerson, setUseBusinessContactForPerson] = useState(false);
@@ -54,7 +45,6 @@ const SupplierCreationForm = ({
   const [formData, setFormData] = useState({
     // Basic Information
     supplier_name: '',
-    supplier_code: '',
     contact_person: '',
     contact_person_phone: '',
     contact_person_email: '',
@@ -125,10 +115,6 @@ const SupplierCreationForm = ({
     if (!formData.supplier_name) {
       newErrors.supplier_name = 'Supplier name is required';
     }
-    if (!formData.supplier_code.trim()) {
-      newErrors.supplier_code = 'Supplier code is required';
-    }
-
     if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
     }
@@ -162,21 +148,22 @@ const SupplierCreationForm = ({
     if (!validateForm()) {
       return;
     }
+    if (submissionInFlightRef.current) return;
 
+    submissionInFlightRef.current = true;
     setSaving(true);
 
     try {
       // Transform data for API
       const dataToSend = transformSupplierForAPI(formData);
 
-      const response = await suppliersApi.create(dataToSend);
+      const response = await suppliersApi.create(dataToSend, idempotencyKeyRef.current);
 
       if (response) {
-        // Transform response data
-        const transformedSupplier = transformSupplierResponse(response.data || response);
-
+        toast.success(`Supplier ${response.data.supplier_code} created successfully.`);
+        idempotencyKeyRef.current = newMasterCreateIdempotencyKey('supplier');
         if (onSupplierCreated) {
-          onSupplierCreated(transformedSupplier);
+          onSupplierCreated(response.data);
         }
       } else {
         throw new Error('Failed to create supplier');
@@ -184,6 +171,7 @@ const SupplierCreationForm = ({
     } catch (error: unknown) {
       setErrors({ submit: apiErrorMessage(error, 'Failed to create supplier') });
     } finally {
+      submissionInFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -196,6 +184,9 @@ const SupplierCreationForm = ({
           <Building2 className="w-4 h-4 text-blue-600" />
           Basic Information
         </h3>
+        <p className="mb-3 text-xs text-gray-500">
+          Internal supplier code is generated automatically after saving.
+        </p>
         <div className="space-y-3">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div className="lg:col-span-2">
@@ -215,23 +206,6 @@ const SupplierCreationForm = ({
               )}
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Supplier Code *
-              </label>
-              <input
-                required
-                maxLength={50}
-                value={formData.supplier_code}
-                onChange={(e) => handleInputChange('supplier_code', e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.supplier_code ? 'border-red-300' : 'border-gray-300'}`}
-                placeholder="e.g., SUP-001"
-              />
-              <p className="mt-1 text-xs text-gray-500">Your unique internal supplier account code; it will not be generated.</p>
-              {errors.supplier_code && (
-                <p className="mt-1 text-xs text-red-600">{errors.supplier_code}</p>
-              )}
-            </div>
           </div>
 
           {/* Business Contact - Single Row */}

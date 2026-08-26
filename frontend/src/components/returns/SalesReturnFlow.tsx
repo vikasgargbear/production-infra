@@ -27,6 +27,7 @@ import { ReturnReviewPanel } from './components/ReturnReviewPanel';
 import { useSalesReturnState } from './hooks/useSalesReturnState';
 import type { SalesReturnFlowProps } from './types/return.types';
 import type { Customer, Invoice } from '../../types/api.types';
+import type { CanonicalCustomerCreateResponse } from '../../services/api/modules/master/masterCreationContract';
 
 import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBoundaries';
 import { updateSalesReturnItem } from './utils/salesReturnProjection';
@@ -274,7 +275,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   }, [dispatch]);
 
   // Handle customer selection
-  const handleCustomerSelect = useCallback(async (customer: Customer | null) => {
+  const handleCustomerSelect = useCallback(async (
+    customer: Customer | CanonicalCustomerCreateResponse | null,
+  ) => {
     if (!customer) {
       dispatch({ type: 'SET_SELECTED_CUSTOMER', customer: null });
       dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });

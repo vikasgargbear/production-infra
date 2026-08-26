@@ -387,7 +387,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           onSupplierCreated={(supplier) => {
             handleSupplierSelect(supplier);
             setShowSupplierModal(false);
-            toast.success('Supplier created successfully');
           }}
         />
       )}
@@ -398,10 +397,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           onClose={() => setShowProductModal(false)}
           onProductCreated={(product) => {
             setShowProductModal(false);
-            toast.success('Product created successfully');
-            if (product) {
-              handleAddItem(product);
-            }
+            toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before purchasing it.`);
           }}
         />
       )}

@@ -6,10 +6,11 @@
  */
 import React from 'react';
 import CustomerFlow from '../../master/customers/CustomerFlow';
+import type { CanonicalCustomerCreateResponse } from '../../../services/api/modules/master/masterCreationContract';
 
 interface CustomerCreationProps {
     onClose: () => void;
-    onCustomerCreated?: (customer: any) => void;
+    onCustomerCreated?: (customer: CanonicalCustomerCreateResponse) => void;
     forceMode?: string | null;
     showToggle?: boolean;
 }
@@ -31,4 +32,3 @@ const CustomerCreation: React.FC<CustomerCreationProps> = ({
 };
 
 export default CustomerCreation;
-

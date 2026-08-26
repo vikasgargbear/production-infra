@@ -17,18 +17,19 @@ import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
 import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
+import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
+import type { CanonicalCustomerCreateResponse } from '../../../services/api/modules/master/masterCreationContract';
 
 // ==================== TYPES ====================
 
 interface CustomerFlowProps {
     open?: boolean;
     onClose?: () => void;
-    onCustomerCreated?: (customer: any) => void;
+    onCustomerCreated?: (customer: CanonicalCustomerCreateResponse) => void;
 }
 
 interface CustomerFormData {
     customer_name: string;
-    customer_code: string;
     primary_phone: string;
     primary_email: string;
     whatsapp_number: string;
@@ -64,6 +65,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const { customerMode, isB2BOnly, isB2COnly, features } = useFeatureFlags();
 
     const formRef = useRef<HTMLDivElement>(null);
+    const submissionInFlightRef = useRef(false);
+    const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('customer'));
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
 
@@ -75,7 +78,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const [isBusinessCustomer, setIsBusinessCustomer] = useState(!isB2COnly);
     const [formData, setFormData] = useState<CustomerFormData>({
         customer_name: '',
-        customer_code: '',
         primary_phone: '',
         primary_email: '',
         whatsapp_number: '',
@@ -143,7 +145,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         const newErrors: string[] = [];
 
         if (!formData.customer_name.trim()) newErrors.push('Customer name is required');
-        if (!formData.customer_code.trim()) newErrors.push('Customer code is required');
         if (!formData.primary_phone.trim()) {
             newErrors.push('Phone number is required');
         } else if (!/^\d{10}$/.test(formData.primary_phone.replace(/\D/g, ''))) {
@@ -184,14 +185,15 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             toast.error('Please fix the errors');
             return;
         }
+        if (submissionInFlightRef.current) return;
 
+        submissionInFlightRef.current = true;
         setSaving(true);
         setErrors([]);
 
         try {
             const customerData = {
                 customer_name: formData.customer_name,
-                customer_code: formData.customer_code.trim(),
                 primary_phone: formData.primary_phone,
                 whatsapp_number: formData.whatsapp_number || null,
                 secondary_phone: formData.secondary_phone || null,
@@ -214,15 +216,15 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 pincode: formData.address.pincode,
             };
 
-            const response = await customersApi.create(customerData);
+            const response = await customersApi.create(customerData, idempotencyKeyRef.current);
 
             if (response?.data) {
-                toast.success('Customer created!');
+                toast.success(`Customer ${response.data.customer_code} created successfully.`);
+                idempotencyKeyRef.current = newMasterCreateIdempotencyKey('customer');
                 if (onCustomerCreated) onCustomerCreated(response.data);
                 if (onClose) onClose();
             }
         } catch (error: any) {
-            console.error('Error creating customer:', error);
             if (error.response?.data?.detail) {
                 const detail = error.response.data.detail;
                 if (Array.isArray(detail)) {
@@ -235,6 +237,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             }
             toast.error('Failed to create customer');
         } finally {
+            submissionInFlightRef.current = false;
             setSaving(false);
         }
     };
@@ -338,6 +341,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 <User className="w-4 h-4 text-blue-600" />
                                 Basic Information
                             </h3>
+                            <p className="mb-3 text-xs text-gray-500">
+                                Internal customer code is generated automatically after saving.
+                            </p>
 
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="col-span-3 sm:col-span-2">
@@ -353,19 +359,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             autoFocus
                                         />
                                     </div>
-                                </div>
-
-                                <div>
-                                    <label className={labelClass}>Customer Code *</label>
-                                    <input
-                                        required
-                                        maxLength={50}
-                                        value={formData.customer_code}
-                                        onChange={(e) => updateField('customer_code', e.target.value)}
-                                        className={inputNoIconClass}
-                                        placeholder="e.g. CUST-001"
-                                    />
-                                    <p className="mt-1 text-xs text-gray-500">Your unique internal customer account code; it will not be generated.</p>
                                 </div>
 
                                 <div>

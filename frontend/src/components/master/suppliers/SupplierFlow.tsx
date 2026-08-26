@@ -17,6 +17,8 @@ import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
 import { validateSupplierMandatoryFields } from './supplierValidation';
 import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
+import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
+import type { CanonicalSupplierCreateResponse } from '../../../services/api/modules/master/masterCreationContract';
 
 // ==================== TYPES ====================
 
@@ -25,14 +27,13 @@ interface SupplierFlowProps {
     show?: boolean;  // Alias for backward compatibility
     isOpen?: boolean;  // Another alias used by some components
     onClose?: () => void;
-    onSupplierCreated?: (supplier: any) => void;
+    onSupplierCreated?: (supplier: CanonicalSupplierCreateResponse) => void;
     initialData?: Partial<SupplierFormData>;
 }
 
 interface SupplierFormData {
     // Basic Info
     supplier_name: string;
-    supplier_code: string;
     // Contact
     phone: string;
     whatsapp_number: string;
@@ -67,6 +68,8 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
     const isOpen = open ?? show ?? isOpenProp ?? true;
 
     const formRef = useRef<HTMLDivElement>(null);
+    const submissionInFlightRef = useRef(false);
+    const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('supplier'));
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
     const [useBusinessPhone, setUseBusinessPhone] = useState(false);
@@ -74,7 +77,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
     const [formData, setFormData] = useState<SupplierFormData>({
         // Basic Info
         supplier_name: '',
-        supplier_code: '',
         // Contact
         phone: '',
         whatsapp_number: '',
@@ -121,6 +123,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
 
     // Save supplier
     const handleSave = async () => {
+        if (submissionInFlightRef.current) return;
         setSaving(true);
         setErrors([]);
 
@@ -136,10 +139,10 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             return;
         }
 
+        submissionInFlightRef.current = true;
         try {
             const supplierData = {
                 supplier_name: formData.supplier_name,
-                supplier_code: formData.supplier_code.trim(),
                 primary_phone: formData.phone,
                 secondary_phone: formData.whatsapp_number !== formData.phone ? formData.whatsapp_number : undefined,
                 primary_email: formData.email || undefined,
@@ -155,15 +158,15 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                 payment_days: formData.credit_days
             };
 
-            const response = await suppliersApi.create(supplierData);
+            const response = await suppliersApi.create(supplierData, idempotencyKeyRef.current);
 
             if (response.data) {
-                toast.success(`Supplier "${formData.supplier_name}" created successfully!`);
+                toast.success(`Supplier ${response.data.supplier_code} created successfully.`);
+                idempotencyKeyRef.current = newMasterCreateIdempotencyKey('supplier');
                 onSupplierCreated?.(response.data);
                 onClose?.();
             }
         } catch (error: any) {
-            console.error('Error creating supplier:', error);
             const detail = error.response?.data?.detail;
             if (typeof detail === 'string') {
                 setErrors([detail]);
@@ -174,6 +177,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             }
             toast.error('Failed to create supplier');
         } finally {
+            submissionInFlightRef.current = false;
             setSaving(false);
         }
     };
@@ -234,6 +238,9 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <Building2 className="w-5 h-5 text-blue-600" />
                             Basic Information
                         </h2>
+                        <p className="mb-4 text-sm text-gray-500">
+                            Internal supplier code is generated automatically after saving.
+                        </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -247,21 +254,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     className={inputClass}
                                     placeholder="e.g., ABC Pharmaceuticals"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Supplier Code <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    maxLength={50}
-                                    value={formData.supplier_code}
-                                    onChange={(e) => setFormData({ ...formData, supplier_code: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="e.g., SUP-001"
-                                />
-                                <p className="mt-1 text-xs text-gray-500">Your unique internal supplier account code; it will not be generated.</p>
                             </div>
                         </div>
                     </section>

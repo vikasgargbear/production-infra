@@ -123,7 +123,6 @@ export interface Customer {
 }
 
 export interface CustomerCreateInput {
-  customer_code?: string; // Auto-generated if not provided
   customer_name: string;
   customer_type: Customer['customer_type'];
   contact_info: {

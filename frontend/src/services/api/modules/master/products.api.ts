@@ -14,8 +14,11 @@ import {
   ProductUpdateInput,
 } from '../../../../types/models/product';
 import type { AxiosResponse } from 'axios';
-import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import { decodeCanonicalProductList } from './canonicalMasterReads';
+import {
+  decodeCanonicalProductDraftCreateResponse,
+  masterCreateRequestConfig,
+} from './masterCreationContract';
 
 // ============================================================================
 // TYPES
@@ -50,8 +53,18 @@ export const productsApi = {
   getAll: (params: ProductParams = {}) => apiHelpers.get('/products', { params })
     .then(response => ({ ...response, data: decodeCanonicalProductList(response.data) })),
 
-  create: (data: ProductCreateInput): Promise<AxiosResponse<ProductMutationResponse>> => {
-    return apiHelpers.post('/products/', productCreateSchema.parse(data));
+  create: (
+    data: ProductCreateInput,
+    idempotencyKey: string,
+  ): Promise<AxiosResponse<ProductMutationResponse>> => {
+    return apiHelpers.post<ProductMutationResponse>(
+      '/products/',
+      productCreateSchema.parse(data),
+      masterCreateRequestConfig(idempotencyKey),
+    ).then(response => ({
+      ...response,
+      data: decodeCanonicalProductDraftCreateResponse(response.data),
+    }));
   },
 
   update: (

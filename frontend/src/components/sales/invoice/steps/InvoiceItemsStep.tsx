@@ -312,7 +312,6 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onCustomerCreated={(customer: Customer) => {
                         handleCustomerSelect(customer);
                         setShowCustomerModal(false);
-                        toast.success('Customer created successfully');
                     }}
                 />
             )}
@@ -321,14 +320,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 <ProductCreationModal
                     show={showProductModal}
                     onClose={() => setShowProductModal(false)}
-                    onProductCreated={(product: unknown) => {
+                    onProductCreated={(product) => {
                         setShowProductModal(false);
-                        // Toast is already shown in ProductCreationModal
-
-                        // Optionally auto-add the product to invoice
-                        if (product && typeof handleAddItem === 'function') {
-                            handleAddItem(product);
-                        }
+                        toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before invoicing it.`);
                     }}
                 />
             )}

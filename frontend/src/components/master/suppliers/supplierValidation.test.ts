@@ -2,7 +2,6 @@ import { validateSupplierMandatoryFields } from './supplierValidation';
 
 const validSupplier = {
     supplier_name: 'Canonical Supplier',
-    supplier_code: 'SUP-001',
     phone: '9876543210',
     address_line1: '101 Test Lane',
     city: 'Mumbai',
@@ -29,13 +28,6 @@ describe('supplier creation client contract', () => {
             'GST state code must contain exactly 2 digits',
             'Pincode is required',
         ]);
-    });
-
-    it('requires an explicit supplier code', () => {
-        expect(validateSupplierMandatoryFields({
-            ...validSupplier,
-            supplier_code: ' ',
-        })).toContain('Supplier code is required');
     });
 
     it('rejects a GSTIN whose prefix differs from the address state code', () => {

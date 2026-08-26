@@ -20,6 +20,7 @@ import OrderItemsStep from './steps/OrderItemsStep';
 import OrderReviewStep from './steps/OrderReviewStep';
 import type { Customer } from '../../../types/models';
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
+import { toast } from 'react-toastify';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -209,10 +210,10 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                                 setShowProductModal(false);
                                 setNewProductName('');
                             }}
-                            onProductCreated={(product: any) => {
-                                handleProductSelect(product);
+                            onProductCreated={(product) => {
                                 setShowProductModal(false);
                                 setNewProductName('');
+                                toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before ordering it.`);
                             }}
                             initialProductName={newProductName}
                         />

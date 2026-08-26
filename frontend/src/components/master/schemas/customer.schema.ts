@@ -84,10 +84,6 @@ export const customerStatusSchema = z.enum([
 
 // Customer creation schema
 export const customerCreateSchema = z.object({
-  customer_code: z.string()
-    .min(3, 'Customer code must be at least 3 characters')
-    .max(50, 'Customer code must not exceed 50 characters')
-    .optional(),
   customer_name: z.string()
     .min(2, 'Customer name must be at least 2 characters')
     .max(255, 'Customer name must not exceed 255 characters'),
@@ -158,18 +154,10 @@ export const customerCreateSchema = z.object({
     .max(1000, 'Notes must not exceed 1000 characters')
     .optional()
     .nullable(),
-}).refine((data) => {
-  // If GST number is provided, extract and validate state code
-  if (data.gst_number) {
-    const stateCode = data.gst_number.substring(0, 2);
-    // You can add state code validation here
-  }
-  return true;
 });
 
 // Customer update schema (all fields optional)
 export const customerUpdateSchema = z.object({
-  customer_code: z.string().optional(),
   customer_name: z.string().optional(),
   customer_type: customerTypeSchema.optional(),
   contact_info: contactInfoSchema.partial().optional(),

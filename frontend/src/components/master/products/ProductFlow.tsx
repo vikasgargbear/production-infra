@@ -13,6 +13,7 @@ import {
   type ProductUpdateInput,
 } from '../../../types/models/product';
 import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
+import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
 
 interface ProductFlowProps {
   open?: boolean;
@@ -56,6 +57,8 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
   const isOpen = open ?? show ?? true;
   const isEditing = product?.product_id !== undefined;
   const formRef = useRef<HTMLDivElement>(null);
+  const submissionInFlightRef = useRef(false);
+  const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('product'));
   const toast = useToast();
   const [form, setForm] = useState<DraftForm>(() => initialForm(product, initialProductName));
   const [saving, setSaving] = useState(false);
@@ -70,24 +73,32 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
 
   const payload = useMemo(() => ({
     product_name: form.product_name,
-    product_code: form.product_code.trim(),
     generic_name: optionalText(form.generic_name),
     product_kind: form.product_kind,
   }), [form]);
 
   const save = async () => {
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
     setSaving(true);
     setErrors([]);
     try {
       let response;
       if (isEditing) {
-        const { product_code: _immutableCode, ...updateFields } = payload;
-        const update = productUpdateSchema.parse(updateFields) as ProductUpdateInput;
+        const update = productUpdateSchema.parse(payload) as ProductUpdateInput;
         response = await productsApi.update(product!.product_id!, update);
       } else {
-        response = await productsApi.create(productCreateSchema.parse(payload));
+        response = await productsApi.create(
+          productCreateSchema.parse(payload),
+          idempotencyKeyRef.current,
+        );
       }
-      toast.success(response.data.message);
+      toast.success(
+        isEditing
+          ? response.data.message
+          : `Product ${response.data.product_code} created as a draft. Classification and activation are required before use.`,
+      );
+      if (!isEditing) idempotencyKeyRef.current = newMasterCreateIdempotencyKey('product');
       onProductCreated?.(response.data);
       onClose?.();
     } catch (error: any) {
@@ -102,6 +113,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
         setErrors(['Failed to save the product draft.']);
       }
     } finally {
+      submissionInFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -143,14 +155,23 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             <p className="mb-4 text-sm text-gray-600">
               Drafts cannot be sold or purchased until HSN, manufacturer, tax, and regulatory details are reviewed.
             </p>
+            {!isEditing && (
+              <p className="mb-4 text-sm text-gray-500">
+                Internal product code is generated automatically after saving.
+              </p>
+            )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">Product name
               <input autoFocus value={form.product_name} onChange={event => set('product_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
             </label>
-            <label className="text-sm font-medium text-gray-700">Product code <span aria-hidden="true" className="text-red-600">*</span>
-              <input required maxLength={64} value={form.product_code} disabled={isEditing} onChange={event => set('product_code', event.target.value)} placeholder="e.g. PARA-500-TAB" className="mt-1 w-full border border-gray-300 px-3 py-2 disabled:bg-gray-100" />
-              {!isEditing && <span className="mt-1 block text-xs font-normal text-gray-500">Enter your unique internal product code. It will not be generated automatically.</span>}
-            </label>
+            {isEditing && (
+              <div className="text-sm font-medium text-gray-700">
+                Product code
+                <p className="mt-1 min-h-11 border border-gray-200 bg-gray-100 px-3 py-2 font-normal text-gray-700" aria-label="Immutable product code">
+                  {form.product_code}
+                </p>
+              </div>
+            )}
             <label className="text-sm font-medium text-gray-700">Generic display name
               <input value={form.generic_name} onChange={event => set('generic_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
             </label>

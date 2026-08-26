@@ -15,29 +15,43 @@ jest.mock('../api/apiClient', () => ({
 }));
 
 describe('canonical master mutation endpoints', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (apiHelpers.post as jest.Mock)
+      .mockResolvedValueOnce({ data: {
+        product_id: '11111111-1111-7111-8111-111111111111',
+        product_code: 'GENERATED-PRODUCT', product_name: 'E2E product',
+        lifecycle_status: 'draft', message: 'Draft created',
+      } })
+      .mockResolvedValueOnce({ data: {
+        supplier_id: '22222222-2222-7222-8222-222222222222',
+        party_id: '33333333-3333-7333-8333-333333333333',
+        supplier_code: 'GENERATED-SUPPLIER', supplier_name: 'E2E supplier',
+        is_active: true, status: 'active', message: 'Supplier created',
+      } });
+  });
 
   it('uses only bounded canonical master authoring paths', async () => {
-    productsApi.create({
-      product_name: 'E2E product', product_code: 'PROD-E2E', product_kind: 'medicine',
-    });
-    suppliersApi.create({
-      supplier_name: 'E2E supplier', supplier_code: 'SUP-E2E', payment_days: 30,
-    });
+    await productsApi.create(
+      { product_name: 'E2E product', product_kind: 'medicine' },
+      'erp-web-master-product-create:11111111-1111-4111-8111-111111111111',
+    );
+    await suppliersApi.create(
+      { supplier_name: 'E2E supplier', payment_days: 30 },
+      'erp-web-master-supplier-create:22222222-2222-4222-8222-222222222222',
+    );
     await expect(branchesApi.create({ branch_name: 'E2E branch' })).rejects.toMatchObject({
       code: 'CANONICAL_WRITE_UNAVAILABLE',
     });
 
     expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/products/', {
       product_name: 'E2E product',
-      product_code: 'PROD-E2E',
       product_kind: 'medicine',
-    });
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-product-create:11111111-1111-4111-8111-111111111111' } });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(2, '/suppliers/', {
       supplier_name: 'E2E supplier',
-      supplier_code: 'SUP-E2E',
       payment_days: 30,
-    });
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-supplier-create:22222222-2222-4222-8222-222222222222' } });
     expect(apiHelpers.post).toHaveBeenCalledTimes(2);
   });
 
@@ -49,21 +63,27 @@ describe('canonical master mutation endpoints', () => {
     expect(apiHelpers.get).toHaveBeenCalledWith(`/products/${productId}/batches`);
   });
 
-  it('keeps the complete bounded canonical master authoring set effective', () => {
+  it('keeps the complete bounded canonical master authoring set effective', async () => {
     const productId = '11111111-1111-7111-8111-111111111111';
     const customerId = '22222222-2222-7222-8222-222222222222';
     const addressId = '33333333-3333-7333-8333-333333333333';
 
     productsApi.update(productId, { product_name: 'Renamed draft' });
     productsApi.delete(productId);
-    customersApi.create({
+    (apiHelpers.post as jest.Mock).mockReset().mockResolvedValueOnce({ data: {
+      customer_id: customerId,
+      party_id: '44444444-4444-7444-8444-444444444444',
+      customer_code: 'GENERATED-CUSTOMER', customer_name: 'E2E customer',
+      customer_type: 'organization', primary_phone: '9876543210',
+      is_active: true, status: 'active', message: 'Customer created',
+    } }).mockReturnValueOnce(undefined).mockReturnValueOnce(undefined);
+    await customersApi.create({
       customer_name: 'E2E customer',
-      customer_code: 'CUST-E2E',
       customer_type: 'organization',
       primary_phone: '9876543210',
       credit_limit: '0.00',
       credit_days: 0,
-    });
+    }, 'erp-web-master-customer-create:33333333-3333-4333-8333-333333333333');
     const address = {
       address_line1: 'Test lane', city: 'Pune', state_code: '27', pincode: '411001',
       address_type: 'billing', is_default: true,
@@ -77,12 +97,11 @@ describe('canonical master mutation endpoints', () => {
     expect(apiHelpers.delete).toHaveBeenCalledWith(`/products/${productId}`);
     expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/customers/', {
       customer_name: 'E2E customer',
-      customer_code: 'CUST-E2E',
       customer_type: 'organization',
       primary_phone: '9876543210',
       credit_limit: '0.00',
       credit_days: 0,
-    });
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-customer-create:33333333-3333-4333-8333-333333333333' } });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(
       2, `/customers/${customerId}/addresses/`, address,
     );

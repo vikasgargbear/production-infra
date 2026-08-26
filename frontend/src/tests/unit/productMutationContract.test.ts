@@ -22,26 +22,24 @@ describe('product mutation contract', () => {
   ])('rejects separate or unverified field %s', (field, value) => {
     expect(() => productCreateSchema.parse({
       product_name: 'Draft product',
-      product_code: 'PROD-001',
+      product_kind: 'medicine',
       [field]: value,
     })).toThrow();
   });
 
-  it('requires an explicit product code and classification', () => {
+  it('requires classification while leaving code generation to the backend', () => {
     expect(() => productCreateSchema.parse({ product_name: 'Draft product' })).toThrow();
     expect(productCreateSchema.parse({
       product_name: 'Draft product',
-      product_code: 'PROD-001',
       product_kind: 'medicine',
     })).toEqual({
       product_name: 'Draft product',
-      product_code: 'PROD-001',
       product_kind: 'medicine',
     });
     expect(() => productCreateSchema.parse({
       product_name: 'Draft product',
-      product_code: '   ',
       product_kind: 'medicine',
+      product_code: 'CLIENT-INJECTION',
     })).toThrow();
   });
 
@@ -53,7 +51,7 @@ describe('product mutation contract', () => {
   it('rejects inventory policy fields that belong to later commands', () => {
     expect(() => productCreateSchema.parse({
       product_name: 'Draft product',
-      product_code: 'PROD-001',
+      product_kind: 'medicine',
       min_stock_quantity: 20,
       max_stock_quantity: 10,
     })).toThrow();
