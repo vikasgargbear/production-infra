@@ -49,7 +49,7 @@ try:
         active_provider_name,
         load_manifest,
     )
-    from .manage_canonical_write_fence import apply_fence
+    from .manage_canonical_write_fence import FenceError, apply_fence
 except ImportError:  # direct ``python backend/scripts/...`` execution
     from canonical_data_reset_authority import (
         execute_reset,
@@ -63,7 +63,7 @@ except ImportError:  # direct ``python backend/scripts/...`` execution
         verify_direct_database,
     )
     from deployment_control import DEFAULT_MANIFEST, active_provider_name, load_manifest
-    from manage_canonical_write_fence import apply_fence
+    from manage_canonical_write_fence import FenceError, apply_fence
 
 
 RECEIPT_SCHEMA = "aasopharma.railway-canonical-reset.v1"
@@ -671,6 +671,10 @@ def _set_fence_after_deploy(
             )
     except RailwayCanonicalResetError:
         raise
+    except FenceError as error:
+        raise RailwayCanonicalResetError(
+            f"railway_write_fence_{action}_failed:{error}"
+        ) from None
     except Exception as error:
         raise RailwayCanonicalResetError(
             f"railway_write_fence_{action}_failed:"

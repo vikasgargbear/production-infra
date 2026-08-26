@@ -87,3 +87,34 @@ def test_sqlalchemy_psycopg2_url_is_normalized_for_the_driver() -> None:
     assert fence._psycopg_dsn(
         "postgresql+psycopg2://user:secret@localhost/database"
     ) == "postgresql://user:secret@localhost/database"
+
+
+def test_database_failure_code_is_secret_free_and_keeps_sqlstate() -> None:
+    class InjectedDatabaseError(Exception):
+        pgcode = "42501"
+
+    error = InjectedDatabaseError("secret query and relation details")
+
+    assert fence._database_failure_code(error) == (
+        "InjectedDatabaseError:sqlstate_42501"
+    )
+    assert "secret" not in fence._database_failure_code(error)
+
+
+def test_apply_fence_classifies_connection_failure_without_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_connect(*_args: object, **_kwargs: object) -> object:
+        raise fence.psycopg2.ProgrammingError("secret connection details")
+
+    monkeypatch.setattr(fence.psycopg2, "connect", fail_connect)
+
+    with pytest.raises(
+        fence.FenceError,
+        match=r"^write_fence_close_connect_failed:ProgrammingError$",
+    ):
+        fence.apply_fence(
+            "postgresql://user:secret@host/database",
+            action="close",
+            commit_sha="a" * 40,
+        )
