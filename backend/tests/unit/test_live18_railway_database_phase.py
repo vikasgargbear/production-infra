@@ -886,7 +886,9 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     assert live18.index('> "$HOME/.ssh/config"') < live18.index(
         'railway ssh \\\n'
     )
-    assert '--key "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"' in live18
+    assert 'eval "$(ssh-agent -s)"' in live18
+    assert 'ssh-add "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
+    assert '--key "$fingerprint"' in live18
     assert '--identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
     assert 'rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"' in live18
     cleanup = live18.split(
@@ -900,6 +902,10 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
         'railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"'
     )
     assert remote_remove < local_remove < post_remove_list
+    assert "ssh-add -D" in cleanup
+    assert "ssh-agent -k" in cleanup
+    assert 'rm -f "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH"' not in cleanup
+    assert '"$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH"' in cleanup
     assert (
         "--deployment-instance \"$RAILWAY_API_DEPLOYMENT_INSTANCE_ID\"" in live18
     )

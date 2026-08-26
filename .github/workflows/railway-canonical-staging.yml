@@ -83,6 +83,7 @@ jobs:
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
       RAILWAY_RESET_SSH_PRIVATE_KEY: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh
       RAILWAY_RESET_SSH_FINGERPRINT: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-fingerprint
+      RAILWAY_RESET_SSH_AGENT_STARTED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-agent-started
       RAILWAY_RESET_REMOTE_ROOT: /tmp/canonical-reset-${{ github.run_id }}-${{ github.run_attempt }}
       RAILWAY_RESET_FENCE_OPENED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-fence-opened
       RAILWAY_RESET_FENCE_CLOSED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-fence-closed
@@ -261,8 +262,19 @@ jobs:
             "$RAILWAY_RESET_SSH_PRIVATE_KEY.pub" | awk '{print $2}')
           case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
           printf '%s\n' "$fingerprint" > "$RAILWAY_RESET_SSH_FINGERPRINT"
+          eval "$(ssh-agent -s)"
+          case "$SSH_AUTH_SOCK" in /*) ;; *) exit 2 ;; esac
+          [[ "$SSH_AGENT_PID" =~ ^[1-9][0-9]*$ ]]
+          {
+            printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK"
+            printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID"
+          } >> "$GITHUB_ENV"
+          touch "$RAILWAY_RESET_SSH_AGENT_STARTED"
+          ssh-add "$RAILWAY_RESET_SSH_PRIVATE_KEY" >/dev/null
+          test "$(ssh-add -l | awk 'NR==1 {print $2}')" = "$fingerprint"
+          test "$(ssh-add -l | wc -l)" -eq 1
           railway ssh keys add \
-            --key "$RAILWAY_RESET_SSH_PRIVATE_KEY.pub" \
+            --key "$fingerprint" \
             --name "railway-reset-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >/dev/null
           railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys.txt"
           grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys.txt" >/dev/null
@@ -1196,16 +1208,22 @@ jobs:
         if: always() && inputs.reset_disposable_data == true
         run: |
           set -euo pipefail
-          if test ! -s "$RAILWAY_RESET_SSH_FINGERPRINT"; then
-            exit 0
+          cleanup_failed=0
+          if test -s "$RAILWAY_RESET_SSH_FINGERPRINT"; then
+            fingerprint=$(<"$RAILWAY_RESET_SSH_FINGERPRINT")
+            railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt"
+            if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt" >/dev/null; then
+              railway ssh keys remove "$fingerprint" || cleanup_failed=1
+            fi
+            railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt"
+            if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt" >/dev/null; then
+              echo 'Run-scoped Railway reset SSH key remained after cleanup' >&2
+              cleanup_failed=1
+            fi
           fi
-          fingerprint=$(<"$RAILWAY_RESET_SSH_FINGERPRINT")
-          railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt"
-          if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-before-remove.txt" >/dev/null; then
-            railway ssh keys remove "$fingerprint"
+          if test -f "$RAILWAY_RESET_SSH_AGENT_STARTED"; then
+            ssh-add -D >/dev/null 2>&1 || cleanup_failed=1
+            ssh-agent -k >/dev/null 2>&1 || cleanup_failed=1
+            rm -f "$RAILWAY_RESET_SSH_AGENT_STARTED"
           fi
-          railway ssh keys list > "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt"
-          if grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys-after-remove.txt" >/dev/null; then
-            echo 'Run-scoped Railway reset SSH key remained after cleanup' >&2
-            exit 1
-          fi
+          exit "$cleanup_failed"

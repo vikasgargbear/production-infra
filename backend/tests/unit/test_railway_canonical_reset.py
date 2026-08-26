@@ -420,6 +420,10 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert 'execution_source:"reviewed_source_archive"' in reset_block
     assert 'action="close-fence"' in reset_block
     assert "verify_response(reset_response" in reset_block
+    register_block = workflow[register_key:reset]
+    assert 'eval "$(ssh-agent -s)"' in register_block
+    assert 'ssh-add "$RAILWAY_RESET_SSH_PRIVATE_KEY"' in register_block
+    assert '--key "$fingerprint"' in register_block
     preclose_marker = reset_block.index('touch "$RAILWAY_RESET_FENCE_CLOSED"')
     uncertain_marker = reset_block.index('rm -f "$RAILWAY_RESET_FENCE_CLOSED"')
     reset_call = reset_block.index("railway_reset_control_plane.py reset-boundary")
@@ -441,6 +445,8 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "Write-fence closure is unattested" in compensation
     assert "find \"$root\" -depth -delete" in workflow[remove_source:remove_key]
     assert "railway ssh keys remove" in workflow[remove_key:]
+    assert "ssh-add -D" in workflow[remove_key:]
+    assert "ssh-agent -k" in workflow[remove_key:]
     assert "manage_render_pilot_lifecycle.py" not in workflow
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production
 
