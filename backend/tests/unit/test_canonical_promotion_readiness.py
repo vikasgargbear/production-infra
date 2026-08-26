@@ -175,7 +175,7 @@ def _fixture_root(
         reset_facts={
             "contract_version": promotion_evidence.RESET_CONTRACT_VERSION,
             "project_ref": promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
-            "alembic_head": "20260826_0028",
+            "alembic_head": "20260826_0029",
             "alembic_schema_count": 30,
             "authority_manifest_sha256": "1" * 64,
             "catalog_fingerprint_sha256": "2" * 64,

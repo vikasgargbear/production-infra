@@ -38,8 +38,6 @@ on:
         required: true
       TAX_PROVIDER_INTERNAL_HMAC_SECRET:
         required: true
-      EVIDENCE_STORAGE_SERVER_API_KEY:
-        required: false
 
 permissions:
   contents: read
@@ -68,8 +66,6 @@ jobs:
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
-      EVIDENCE_STORAGE_ENABLED: ${{ vars.EVIDENCE_STORAGE_ENABLED }}
-      EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.EVIDENCE_STORAGE_EXPECTED_PROJECT_REF }}
       SUPABASE_DIRECT_DATABASE_HOST: db.rgihahbmkrmhitjdjvev.supabase.co
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
     steps:
@@ -314,7 +310,6 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
           TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
-          EVIDENCE_STORAGE_SERVER_API_KEY: ${{ secrets.EVIDENCE_STORAGE_SERVER_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -387,27 +382,9 @@ jobs:
           set_variable "$RAILWAY_API_SERVICE" MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
           set_variable "$RAILWAY_API_SERVICE" RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"
 
-          evidence_storage_enabled=${EVIDENCE_STORAGE_ENABLED:-false}
-          case "$evidence_storage_enabled" in
-            false)
-              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED false
-              ;;
-            true)
-              test "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF" = "$CANONICAL_STAGING_PROJECT_REF"
-              test -n "$EVIDENCE_STORAGE_SERVER_API_KEY"
-              case "$EVIDENCE_STORAGE_SERVER_API_KEY" in
-                sb_secret_*) ;;
-                *) echo "Evidence storage requires a restricted Supabase secret API key" >&2; exit 2 ;;
-              esac
-              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_EXPECTED_PROJECT_REF "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
-              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_API_KEY "$EVIDENCE_STORAGE_SERVER_API_KEY"
-              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED true
-              ;;
-            *)
-              echo "EVIDENCE_STORAGE_ENABLED must be exactly true or false" >&2
-              exit 2
-              ;;
-          esac
+          # Railway is a retired application authority.  It must never receive
+          # the Render-only evidence service identity or its rotated password.
+          set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED false
 
           set_variable "$RAILWAY_MCP_SERVICE" SUPABASE_OAUTH_ISSUER "$SUPABASE_OAUTH_ISSUER"
           set_variable "$RAILWAY_MCP_SERVICE" MCP_RESOURCE_SERVER_URL "$RAILWAY_MCP_URL/mcp"

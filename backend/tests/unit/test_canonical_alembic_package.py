@@ -171,6 +171,7 @@ def test_disposable_postgres_bootstrap_matches_supabase_crypto_prerequisite() ->
 
     assert "CREATE SCHEMA extensions;" in bootstrap
     assert "CREATE EXTENSION pgcrypto WITH SCHEMA extensions;" in bootstrap
+    assert "CREATE ROLE supabase_auth_admin NOLOGIN NOINHERIT NOBYPASSRLS" in bootstrap
     assert "CREATE SCHEMA auth;" in bootstrap
 
 

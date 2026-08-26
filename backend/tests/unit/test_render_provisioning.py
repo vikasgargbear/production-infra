@@ -29,7 +29,9 @@ def _values():
         "SUPABASE_OAUTH_ISSUER": "https://canonicalcanonical12.supabase.co/auth/v1",
         "EVIDENCE_STORAGE_ENABLED": "true",
         "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF": "canonicalcanonical12",
-        "EVIDENCE_STORAGE_SERVER_API_KEY": "sb_secret_" + "e" * 32,
+        "EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID": "d3000000-0000-4000-8000-0000000000e1",
+        "EVIDENCE_STORAGE_SERVICE_EMAIL": "canonical-evidence-storage@service.aasopharma.invalid",
+        "EVIDENCE_STORAGE_SERVICE_PASSWORD": "p" * 64,
         "MCP_INTERNAL_SERVICE_TOKEN": "internal-service-secret-value-123456",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": "reviewed-client-id",
     }
@@ -119,7 +121,9 @@ def test_environment_mapping_uses_derived_service_origins():
         "SUPABASE_ANON_KEY",
         "EVIDENCE_STORAGE_ENABLED",
         "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF",
-        "EVIDENCE_STORAGE_SERVER_API_KEY",
+        "EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID",
+        "EVIDENCE_STORAGE_SERVICE_EMAIL",
+        "EVIDENCE_STORAGE_SERVICE_PASSWORD",
         "MCP_INTERNAL_SERVICE_TOKEN",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
     }
@@ -168,9 +172,19 @@ def test_redacted_payload_never_prints_operator_values():
             "does not match SUPABASE_URL",
         ),
         (
-            "EVIDENCE_STORAGE_SERVER_API_KEY",
-            "not-a-secret-key",
-            "requires a Supabase secret API key",
+            "EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID",
+            "00000000-0000-4000-8000-000000000001",
+            "service Auth user ID drifted",
+        ),
+        (
+            "EVIDENCE_STORAGE_SERVICE_EMAIL",
+            "wrong@example.invalid",
+            "service email drifted",
+        ),
+        (
+            "EVIDENCE_STORAGE_SERVICE_PASSWORD",
+            "short",
+            "requires one generated service password",
         ),
     ],
 )
@@ -210,8 +224,17 @@ def test_per_key_env_reconciliation_is_idempotent_and_non_destructive():
     assert "/env-vars/EXISTING" in client.calls[0][1]
 
 
-def test_retired_evidence_jwt_is_deleted_before_exact_env_validation():
-    client = RecordingClient([{"key": "EVIDENCE_STORAGE_SERVER_JWT"}, None])
+@pytest.mark.parametrize(
+    "retired_key",
+    ["EVIDENCE_STORAGE_SERVER_API_KEY", "EVIDENCE_STORAGE_SERVER_JWT"],
+)
+def test_retired_evidence_credentials_are_deleted_before_exact_env_validation(retired_key):
+    responses = (
+        [{"key": retired_key}, None, None]
+        if retired_key == "EVIDENCE_STORAGE_SERVER_API_KEY"
+        else [None, {"key": retired_key}, None]
+    )
+    client = RecordingClient(responses)
     service = provision.ServiceRef(
         id="srv-test",
         name=provision.API_NAME,
@@ -221,8 +244,9 @@ def test_retired_evidence_jwt_is_deleted_before_exact_env_validation():
     )
 
     assert client.retire_env(service, provision.RETIRED_API_ENV_KEYS) is True
-    assert [call[0] for call in client.calls] == ["GET", "DELETE"]
-    assert all("EVIDENCE_STORAGE_SERVER_JWT" in call[1] for call in client.calls)
+    delete_calls = [call for call in client.calls if call[0] == "DELETE"]
+    assert len(delete_calls) == 1
+    assert retired_key in delete_calls[0][1]
 
 
 def test_existing_config_patch_keeps_auto_deploy_off_and_reconciles_drift():

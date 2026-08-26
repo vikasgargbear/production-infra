@@ -276,23 +276,17 @@ def test_workflow_exposes_a_railway_only_exact_sha_dispatch() -> None:
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in workflow
 
 
-def test_evidence_storage_is_explicit_restricted_and_fail_closed() -> None:
+def test_retired_railway_never_receives_evidence_storage_credentials() -> None:
     workflow = _workflow()
     variable_step = workflow[
         workflow.index("Populate canonical service variables without triggering stale deploys") :
         workflow.index("Force-upload the exact source tree")
     ]
 
-    assert "EVIDENCE_STORAGE_SERVER_API_KEY:" in workflow
-    assert "required: false" in workflow.split("EVIDENCE_STORAGE_SERVER_API_KEY:", 1)[1].splitlines()[1]
-    assert "evidence_storage_enabled=${EVIDENCE_STORAGE_ENABLED:-false}" in variable_step
     assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED false' in variable_step
-    assert 'test "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF" = "$CANONICAL_STAGING_PROJECT_REF"' in variable_step
-    assert 'test -n "$EVIDENCE_STORAGE_SERVER_API_KEY"' in variable_step
-    assert 'sb_secret_*)' in variable_step
-    assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_API_KEY "$EVIDENCE_STORAGE_SERVER_API_KEY"' in variable_step
-    assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED true' in variable_step
-    assert "EVIDENCE_STORAGE_ENABLED must be exactly true or false" in variable_step
+    assert "EVIDENCE_STORAGE_SERVER_API_KEY" not in workflow
+    assert "EVIDENCE_STORAGE_SERVICE_PASSWORD" not in workflow
+    assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED true' not in variable_step
     assert 'set_variable "$RAILWAY_MCP_SERVICE" EVIDENCE_STORAGE' not in variable_step
     assert 'set_variable "$RAILWAY_FRONTEND_SERVICE" EVIDENCE_STORAGE' not in variable_step
     assert "--skip-deploys" in variable_step

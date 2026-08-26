@@ -181,4 +181,6 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_evidence_storage_deployment_principal.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_evidence_storage_auth_hook.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_data_reset_authority.py

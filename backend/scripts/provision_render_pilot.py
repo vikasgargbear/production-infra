@@ -28,6 +28,13 @@ DEFAULT_BRANCH = "main"
 API_NAME = "aasopharma-api-pilot"
 FRONTEND_NAME = "aasopharma-erp-pilot"
 MCP_NAME = "aasopharma-mcp-pilot"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE_IDENTITY_AUTHORITY = json.loads(
+    (
+        REPO_ROOT
+        / "database/canonical/security/evidence-storage-service-identity.json"
+    ).read_text(encoding="utf-8")
+)
 
 BACKEND_REQUIRED = (
     "DATABASE_URL",
@@ -42,7 +49,9 @@ BACKEND_REQUIRED = (
     "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
     "EVIDENCE_STORAGE_ENABLED",
     "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF",
-    "EVIDENCE_STORAGE_SERVER_API_KEY",
+    "EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID",
+    "EVIDENCE_STORAGE_SERVICE_EMAIL",
+    "EVIDENCE_STORAGE_SERVICE_PASSWORD",
 )
 MCP_SHARED_REQUIRED = (
     "SUPABASE_OAUTH_ISSUER",
@@ -85,7 +94,9 @@ FRONTEND_ALLOWED_ENV_KEYS = frozenset(
         "REACT_APP_SUPABASE_ANON_KEY",
     }
 )
-RETIRED_API_ENV_KEYS = frozenset({"EVIDENCE_STORAGE_SERVER_JWT"})
+RETIRED_API_ENV_KEYS = frozenset(
+    {"EVIDENCE_STORAGE_SERVER_API_KEY", "EVIDENCE_STORAGE_SERVER_JWT"}
+)
 
 
 class ProvisioningError(RuntimeError):
@@ -141,12 +152,24 @@ def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
         raise ProvisioningError(
             "canonical evidence storage project authority does not match SUPABASE_URL"
         )
+    if values["EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID"] != (
+        EVIDENCE_IDENTITY_AUTHORITY["auth_user_id"]
+    ):
+        raise ProvisioningError(
+            "canonical evidence storage service Auth user ID drifted"
+        )
+    if values["EVIDENCE_STORAGE_SERVICE_EMAIL"] != (
+        EVIDENCE_IDENTITY_AUTHORITY["email"]
+    ):
+        raise ProvisioningError(
+            "canonical evidence storage service email drifted"
+        )
     if re.fullmatch(
-        r"sb_secret_[A-Za-z0-9._-]{24,}",
-        values["EVIDENCE_STORAGE_SERVER_API_KEY"],
+        r"[A-Za-z0-9_-]{64,128}",
+        values["EVIDENCE_STORAGE_SERVICE_PASSWORD"],
     ) is None:
         raise ProvisioningError(
-            "canonical evidence storage requires a Supabase secret API key"
+            "canonical evidence storage requires one generated service password"
         )
     configured_smtp = [key for key in SMTP_KEYS if values.get(key, "").strip()]
     if configured_smtp and len(configured_smtp) != len(SMTP_KEYS):
