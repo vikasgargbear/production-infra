@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.services.document_number_service import (
+    CanonicalDocumentCommandRequired,
     DOCUMENT_CONFIGS,
     DocumentNumberService,
 )
@@ -59,31 +60,21 @@ def _load_audit():
     return module
 
 
-def test_document_number_validator_matches_generated_format():
-    assert DocumentNumberService.validate_format("INV-202608190001", "invoice")
-    assert not DocumentNumberService.validate_format("INV-2608190001", "invoice")
-    assert not DocumentNumberService.validate_format("PO-202608190001", "invoice")
+def test_document_number_validator_does_not_infer_canonical_identity():
+    assert not DocumentNumberService.validate_format("INV-202608190001", "invoice")
 
 
-def test_document_number_generation_requires_tenant_before_database_access():
+def test_document_number_generation_fails_closed_before_database_access():
     class Database:
         def execute(self, *_args, **_kwargs):
             pytest.fail("database must not be accessed without an organization")
 
-    with pytest.raises(ValueError, match="org_id is required"):
-        DocumentNumberService.generate_number(Database(), "invoice", "")
+    with pytest.raises(CanonicalDocumentCommandRequired, match="canonical command prepare"):
+        DocumentNumberService.generate_number(Database(), "invoice", "org-id")
 
 
-def test_document_number_registry_has_only_owned_types_and_canonical_targets():
-    retired_types = {
-        "purchase", "quotation", "stock_adjustment", "stock_count", "scheme",
-        "stock_receipt", "stock_issue", "writeoff", "gst_filing",
-        "adjustment", "credit_note", "debit_note", "purchase_return",
-        "sales_return", "stock_transfer",
-    }
-    assert retired_types.isdisjoint(DOCUMENT_CONFIGS)
-    assert DOCUMENT_CONFIGS["receipt"]["table"] == "financial.payments"
-    assert DOCUMENT_CONFIGS["receipt"]["column"] == "payment_number"
+def test_document_number_registry_has_no_standalone_targets():
+    assert DOCUMENT_CONFIGS == {}
 
 
 def test_stock_transfer_persists_same_reference_on_both_movements(monkeypatch):
@@ -328,9 +319,7 @@ def test_consistency_audit_keeps_unresolved_contracts_release_visible():
     assert "COMPETING_DOCUMENT_SEQUENCE_AUTHORITIES" not in codes
     assert "NULLABLE_DOCUMENT_SEQUENCE_TENANT" not in codes
     assert "DOCUMENT_TYPE_ALIAS_PREFIX_DIVERGENCE" not in codes
-    # The retired bootstrap DDL no longer masks this mounted legacy number
-    # service. Keep the gap release-visible until that product flow is retired.
-    assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" in codes
+    assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" not in codes
     assert "DOCUMENT_CONFIG_WITHOUT_PROVEN_CALLER" not in codes
     assert "AD_HOC_REFERENCE_GENERATORS" not in codes
     assert "DUPLICATE_PURCHASE_SERVICE_SURFACES" not in codes
