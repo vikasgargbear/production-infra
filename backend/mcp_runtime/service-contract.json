@@ -37,6 +37,7 @@
     "erp_adjustment_note_readback_get",
     "erp_bank_reconciliation_get",
     "erp_bank_reconciliation_prepare",
+    "erp_customer_create",
     "erp_customer_receipt_prepare",
     "erp_customer_receipt_readback",
     "erp_customer_search",
@@ -57,6 +58,7 @@
     "erp_operation_execute",
     "erp_operation_review_get",
     "erp_operation_status_get",
+    "erp_product_create",
     "erp_product_search",
     "erp_purchase_order_get",
     "erp_purchase_order_prepare",
@@ -74,6 +76,7 @@
     "erp_stock_batch_search",
     "erp_supplier_advance_prepare",
     "erp_supplier_advance_readback",
+    "erp_supplier_create",
     "erp_supplier_invoice_get",
     "erp_supplier_invoice_prepare",
     "erp_supplier_payment_prepare",
@@ -85,6 +88,11 @@
     "contract": "docs/architecture/mcp-operator-actions.json",
     "status": "published_bounded",
     "exported": true,
+    "direct_master_writes": [
+      "erp_customer_create",
+      "erp_product_create",
+      "erp_supplier_create"
+    ],
     "published_tools": [
       "erp_adjustment_note_prepare",
       "erp_bank_reconciliation_get",

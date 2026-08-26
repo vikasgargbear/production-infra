@@ -12,6 +12,8 @@ from mcp.server.auth.provider import AccessToken
 
 from .config import Settings
 from .operator_actions import (
+    IDEMPOTENCY_KEY_PATTERN,
+    MONEY_PATTERN,
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
     SHARED_ACTION_SCHEMAS,
@@ -139,6 +141,92 @@ OPERATOR_OPERATIONS.update(
         "erp_operation_status_get": OperatorOperation(
             "erp_operation_status_get", "automation.command.status.get",
             SHARED_ACTION_SCHEMAS["erp_operation_status_get"], "status",
+        ),
+    }
+)
+
+
+def _master_create_schema(
+    properties: Mapping[str, Any], required: tuple[str, ...]
+) -> Mapping[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            **properties,
+            "idempotency_key": {
+                "type": "string",
+                "pattern": IDEMPOTENCY_KEY_PATTERN,
+                "description": "Stable caller key for exact replay of this create request.",
+            },
+        },
+        "required": [*required, "idempotency_key"],
+    }
+
+
+MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
+    "erp_product_create": _master_create_schema(
+        {
+            "product_name": {"type": "string", "minLength": 1, "maxLength": 255},
+            "generic_name": {"type": "string", "maxLength": 255},
+            "product_kind": {
+                "type": "string",
+                "enum": ["medicine", "medical_device", "consumable"],
+            },
+        },
+        ("product_name", "product_kind"),
+    ),
+    "erp_customer_create": _master_create_schema(
+        {
+            "customer_name": {"type": "string", "minLength": 1, "maxLength": 200},
+            "customer_type": {"type": "string", "enum": ["individual", "organization"]},
+            "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
+            "primary_email": {"type": "string", "format": "email", "maxLength": 320},
+            "contact_person_name": {"type": "string", "maxLength": 100},
+            "address_line1": {"type": "string", "maxLength": 255},
+            "address_line2": {"type": "string", "maxLength": 255},
+            "city": {"type": "string", "maxLength": 100},
+            "state_code": {"type": "string", "pattern": r"^[0-9]{2}$"},
+            "pincode": {"type": "string", "pattern": r"^[0-9]{6}$"},
+            "gst_number": {"type": "string", "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"},
+            "pan_number": {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+            "credit_limit": {"type": "string", "pattern": MONEY_PATTERN},
+            "credit_days": {"type": "integer", "minimum": 0, "maximum": 365},
+        },
+        ("customer_name", "customer_type", "primary_phone", "credit_limit", "credit_days"),
+    ),
+    "erp_supplier_create": _master_create_schema(
+        {
+            "supplier_name": {"type": "string", "minLength": 1, "maxLength": 200},
+            "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
+            "primary_email": {"type": "string", "format": "email", "maxLength": 320},
+            "contact_person": {"type": "string", "maxLength": 100},
+            "address_line1": {"type": "string", "maxLength": 255},
+            "address_line2": {"type": "string", "maxLength": 255},
+            "city": {"type": "string", "maxLength": 100},
+            "state_code": {"type": "string", "pattern": r"^[0-9]{2}$"},
+            "pincode": {"type": "string", "pattern": r"^[0-9]{6}$"},
+            "gst_number": {"type": "string", "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"},
+            "pan_number": {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+            "payment_days": {"type": "integer", "minimum": 0, "maximum": 180},
+        },
+        ("supplier_name", "payment_days"),
+    ),
+}
+
+OPERATOR_OPERATIONS.update(
+    {
+        "erp_product_create": OperatorOperation(
+            "erp_product_create", "catalog.product_draft.create",
+            MASTER_CREATE_SCHEMAS["erp_product_create"], "master_write",
+        ),
+        "erp_customer_create": OperatorOperation(
+            "erp_customer_create", "parties.customer.create",
+            MASTER_CREATE_SCHEMAS["erp_customer_create"], "master_write",
+        ),
+        "erp_supplier_create": OperatorOperation(
+            "erp_supplier_create", "parties.supplier.create",
+            MASTER_CREATE_SCHEMAS["erp_supplier_create"], "master_write",
         ),
     }
 )
@@ -408,6 +496,14 @@ class OperationGateway:
         if operation.kind == "prepare":
             method = "POST"
             path = f"/api/internal/mcp/actions/{operation.operation_key}/prepare"
+            payload = arguments
+        elif operation.kind == "master_write":
+            method = "POST"
+            path = {
+                "catalog.product_draft.create": "/api/internal/mcp/master/products",
+                "parties.customer.create": "/api/internal/mcp/master/customers",
+                "parties.supplier.create": "/api/internal/mcp/master/suppliers",
+            }[operation.operation_key]
             payload = arguments
         elif operation.kind in {"approve", "execute"}:
             method = "POST"

@@ -24,6 +24,9 @@ RELEASE_GATES: Mapping[str, bool] = {
 }
 
 OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
+    "erp_product_create": "Create one canonical product draft with a server-allocated immutable product code and exact replay protection.",
+    "erp_customer_create": "Create one canonical customer with a server-allocated immutable customer code and exact replay protection.",
+    "erp_supplier_create": "Create one canonical supplier with a server-allocated immutable supplier code and exact replay protection.",
     "erp_sales_order_prepare": "Prepare a customer sales order with exact UOM, quantity, price, discount, and backend-derived India tax facts without posting it.",
     "erp_sales_dispatch_prepare": "Prepare a delivery challan and physical dispatch against an approved sales order using exact released batches.",
     "erp_sales_invoice_prepare": "Prepare an India GST sales invoice with exact fulfillment, discount, batch, and logistics facts without posting it.",

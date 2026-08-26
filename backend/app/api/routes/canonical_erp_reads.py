@@ -73,6 +73,97 @@ def _set_master_idempotency_headers(
     response.headers["X-Idempotency-Replayed"] = str(bool(replayed)).lower()
 
 
+def _execute_canonical_product_create(
+    db: Session,
+    org_id: UUID,
+    product: "CanonicalProductDraftCreate",
+    idempotency_key: str,
+):
+    return db.execute(
+        text("""
+            SELECT product_id,product_code,idempotency_replayed
+              FROM erp_master_commands.create_product_draft(
+                :org_id,:name,:generic_name,:product_kind,
+                :idempotency_key_hash,
+                transaction_timestamp()+interval '24 hours'
+              )
+        """),
+        {
+            "org_id": org_id,
+            "product_kind": product.product_kind,
+            "name": product.product_name,
+            "generic_name": product.generic_name,
+            "idempotency_key_hash": hashlib.sha256(
+                idempotency_key.encode("utf-8")
+            ).digest(),
+        },
+    ).mappings().one()
+
+
+def _execute_canonical_customer_create(
+    db: Session,
+    org_id: UUID,
+    customer: CanonicalCustomerCreate,
+    idempotency_key: str,
+):
+    return db.execute(text("""
+        SELECT customer_account_id,party_id,customer_code,idempotency_replayed
+          FROM erp_master_commands.create_customer(
+            :org_id,:customer_name,:customer_type,:primary_phone,
+            :primary_email,:contact_person_name,:address_line1,:address_line2,
+            :city,:state_code,:postal_code,:gstin,:pan,:credit_limit,
+            :credit_days,:idempotency_key_hash,
+            transaction_timestamp()+interval '24 hours'
+          )
+    """), {
+        "org_id": org_id, "customer_name": customer.customer_name,
+        "customer_type": customer.customer_type,
+        "primary_phone": customer.primary_phone,
+        "primary_email": str(customer.primary_email) if customer.primary_email else None,
+        "contact_person_name": customer.contact_person_name,
+        "address_line1": customer.address_line1,
+        "address_line2": customer.address_line2,
+        "city": customer.city,"state_code": customer.state_code,
+        "postal_code": customer.pincode,"gstin": customer.gst_number,
+        "pan": customer.pan_number,
+        "credit_limit": customer.credit_limit, "credit_days": customer.credit_days,
+        "idempotency_key_hash": hashlib.sha256(
+            idempotency_key.encode("utf-8")
+        ).digest(),
+    }).mappings().one()
+
+
+def _execute_canonical_supplier_create(
+    db: Session,
+    org_id: UUID,
+    supplier: CanonicalSupplierCreate,
+    idempotency_key: str,
+):
+    return db.execute(text("""
+        SELECT supplier_account_id,party_id,supplier_code,idempotency_replayed
+          FROM erp_master_commands.create_supplier(
+            :org_id,:supplier_name,:primary_phone,:primary_email,
+            :contact_person_name,:address_line1,:address_line2,:city,
+            :state_code,:postal_code,:gstin,:pan,:payment_days,
+            :idempotency_key_hash,
+            transaction_timestamp()+interval '24 hours'
+          )
+    """), {
+        "org_id": org_id,"supplier_name": supplier.supplier_name,
+        "primary_phone": supplier.primary_phone,
+        "primary_email": str(supplier.primary_email) if supplier.primary_email else None,
+        "contact_person_name": supplier.contact_person,
+        "address_line1": supplier.address_line1,
+        "address_line2": supplier.address_line2,"city": supplier.city,
+        "state_code": supplier.state_code,"postal_code": supplier.pincode,
+        "gstin": supplier.gst_number,"pan": supplier.pan_number,
+        "payment_days": supplier.payment_days,
+        "idempotency_key_hash": hashlib.sha256(
+            idempotency_key.encode("utf-8")
+        ).digest(),
+    }).mappings().one()
+
+
 def _quantity_wire(value: Decimal) -> str:
     return format(value, ".6f")
 
@@ -415,25 +506,9 @@ def create_product_draft(
 
     org_id = _activate(db, user)
     try:
-        created = db.execute(
-            text("""
-                SELECT product_id,product_code,idempotency_replayed
-                  FROM erp_master_commands.create_product_draft(
-                    :org_id,:name,:generic_name,:product_kind,
-                    :idempotency_key_hash,
-                    transaction_timestamp()+interval '24 hours'
-                  )
-            """),
-            {
-                "org_id": org_id,
-                "product_kind": product.product_kind,
-                "name": product.product_name,
-                "generic_name": product.generic_name,
-                "idempotency_key_hash": hashlib.sha256(
-                    idempotency_key.encode("utf-8")
-                ).digest(),
-            },
-        ).mappings().one()
+        created = _execute_canonical_product_create(
+            db, org_id, product, idempotency_key
+        )
         db.commit()
     except DBAPIError as exc:
         db.rollback()
@@ -727,31 +802,9 @@ def create_customer(
 ):
     org_id = _activate(db, user)
     try:
-        account = db.execute(text("""
-            SELECT customer_account_id,party_id,customer_code,idempotency_replayed
-              FROM erp_master_commands.create_customer(
-                :org_id,:customer_name,:customer_type,:primary_phone,
-                :primary_email,:contact_person_name,:address_line1,:address_line2,
-                :city,:state_code,:postal_code,:gstin,:pan,:credit_limit,
-                :credit_days,:idempotency_key_hash,
-                transaction_timestamp()+interval '24 hours'
-              )
-        """), {
-            "org_id": org_id, "customer_name": customer.customer_name,
-            "customer_type": customer.customer_type,
-            "primary_phone": customer.primary_phone,
-            "primary_email": str(customer.primary_email) if customer.primary_email else None,
-            "contact_person_name": customer.contact_person_name,
-            "address_line1": customer.address_line1,
-            "address_line2": customer.address_line2,
-            "city": customer.city,"state_code": customer.state_code,
-            "postal_code": customer.pincode,"gstin": customer.gst_number,
-            "pan": customer.pan_number,
-            "credit_limit": customer.credit_limit, "credit_days": customer.credit_days,
-            "idempotency_key_hash": hashlib.sha256(
-                idempotency_key.encode("utf-8")
-            ).digest(),
-        }).mappings().one()
+        account = _execute_canonical_customer_create(
+            db, org_id, customer, idempotency_key
+        )
         db.commit()
     except DBAPIError as exc:
         db.rollback()
@@ -797,29 +850,9 @@ def create_supplier(
 ):
     org_id = _activate(db, user)
     try:
-        account = db.execute(text("""
-            SELECT supplier_account_id,party_id,supplier_code,idempotency_replayed
-              FROM erp_master_commands.create_supplier(
-                :org_id,:supplier_name,:primary_phone,:primary_email,
-                :contact_person_name,:address_line1,:address_line2,:city,
-                :state_code,:postal_code,:gstin,:pan,:payment_days,
-                :idempotency_key_hash,
-                transaction_timestamp()+interval '24 hours'
-              )
-        """), {
-            "org_id": org_id,"supplier_name": supplier.supplier_name,
-            "primary_phone": supplier.primary_phone,
-            "primary_email": str(supplier.primary_email) if supplier.primary_email else None,
-            "contact_person_name": supplier.contact_person,
-            "address_line1": supplier.address_line1,
-            "address_line2": supplier.address_line2,"city": supplier.city,
-            "state_code": supplier.state_code,"postal_code": supplier.pincode,
-            "gstin": supplier.gst_number,"pan": supplier.pan_number,
-            "payment_days": supplier.payment_days,
-            "idempotency_key_hash": hashlib.sha256(
-                idempotency_key.encode("utf-8")
-            ).digest(),
-        }).mappings().one()
+        account = _execute_canonical_supplier_create(
+            db, org_id, supplier, idempotency_key
+        )
         db.commit()
     except DBAPIError as exc:
         db.rollback()

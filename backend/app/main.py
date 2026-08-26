@@ -67,6 +67,7 @@ from .api.routes.internal import (
     mcp_agent_grants,
     mcp_canonical_reads,
     mcp_canonical_resolution_reads,
+    mcp_master_commands,
     tax_provider,
 )
 from .infrastructure.operator_actions import install_sqlalchemy_operator_action_service
@@ -294,6 +295,7 @@ api.include_router(auth_oauth.router, tags=["OAuth"])
 api.include_router(mcp_agent_grants.router)
 api.include_router(mcp_canonical_reads.router)
 api.include_router(mcp_canonical_resolution_reads.router)
+api.include_router(mcp_master_commands.router)
 api.include_router(mcp_actions.router)
 api.include_router(web_operator_actions.router)
 api.include_router(tax_provider.router)

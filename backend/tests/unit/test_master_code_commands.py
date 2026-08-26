@@ -12,11 +12,14 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError
 
 from app.api.routes import canonical_erp_reads
+from app.api.routes.internal import mcp_master_commands, mcp_master_contract
 
 
 ROOT = Path(__file__).parents[3]
 SQL = ROOT / "backend/alembic/sql/20260826_0027_master_code_commands.sql"
 REVISION = ROOT / "backend/alembic/versions/20260826_0027_master_code_commands.py"
+ONBOARDING_SQL = ROOT / "backend/alembic/sql/20260826_0028_organization_master_code_onboarding.sql"
+ONBOARDING_REVISION = ROOT / "backend/alembic/versions/20260826_0028_organization_master_code_onboarding.py"
 GENERATOR = (
     ROOT / "database/canonical/master_codes/generate_master_code_contract.py"
 )
@@ -33,12 +36,19 @@ def _load(path: Path, name: str):
 
 def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
     revision = _load(REVISION, "master_code_revision")
+    onboarding_revision = _load(ONBOARDING_REVISION, "master_code_onboarding_revision")
     source = SQL.read_bytes()
+    onboarding_source = ONBOARDING_SQL.read_bytes()
     sql = source.decode("utf-8")
 
     assert revision.revision == "20260826_0027"
     assert revision.down_revision == "20260826_0026"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(source).hexdigest()
+    assert onboarding_revision.revision == "20260826_0028"
+    assert onboarding_revision.down_revision == revision.revision
+    assert onboarding_revision.EXPECTED_SQL_SHA256 == hashlib.sha256(
+        onboarding_source
+    ).hexdigest()
     assert sql.index(
         "CREATE SCHEMA erp_master_commands AUTHORIZATION erp_migration_owner;"
     ) < sql.index("SET LOCAL ROLE erp_migration_owner;")
@@ -51,7 +61,7 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         ROOT / "backend/app/infrastructure/operator_actions/deployment_contract.py",
         "master_code_deployment_contract",
     )
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == revision.revision
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == onboarding_revision.revision
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:
@@ -70,6 +80,41 @@ def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:
         "random_code",
         "uuid_code",
     }
+    assert contract["migration_revision"] == "20260826_0027"
+    assert contract["onboarding"] == {
+        "activation_event": "first_active_membership",
+        "authority": "erp_master_commands.provision_organization_code_sequences",
+        "defaults": {
+            "customer": {"padding": 6, "prefix": "CUST-", "suffix": ""},
+            "product": {"padding": 6, "prefix": "PROD-", "suffix": ""},
+            "supplier": {"padding": 6, "prefix": "SUP-", "suffix": ""},
+        },
+        "existing_organization_backfill": "active_memberships_only",
+        "idempotent": True,
+        "migration_sql": "backend/alembic/sql/20260826_0028_organization_master_code_onboarding.sql",
+        "migration_sql_sha256": hashlib.sha256(ONBOARDING_SQL.read_bytes()).hexdigest(),
+    }
+
+
+def test_onboarding_is_backend_owned_idempotent_and_collision_checked() -> None:
+    sql = ONBOARDING_SQL.read_text(encoding="utf-8")
+
+    assert "CREATE FUNCTION erp_master_commands.provision_organization_code_sequences" in sql
+    assert "AFTER INSERT OR UPDATE OF status ON core.memberships" in sql
+    assert "('customer'::text,'CUST-'::text,''::text,6::smallint)" in sql
+    assert "('supplier'::text,'SUP-'::text,''::text,6::smallint)" in sql
+    assert "('product'::text,'PROD-'::text,''::text,6::smallint)" in sql
+    assert "pg_advisory_xact_lock" in sql
+    assert "assigned_code_conflicts" in sql
+    assert "existing master code sequence is not an active valid configuration" in sql
+    assert "exactly three active master code sequences" in sql
+    assert "GRANT EXECUTE ON FUNCTION erp_master_commands.provision_organization_code_sequences(uuid)\n  TO erp_runtime" in sql
+    assert "INSERT INTO erp_core_commands.command_scopes" in sql
+    assert "organization_master_code_onboard" in sql
+    assert "ON CONFLICT DO NOTHING" in sql
+    assert "core.organization.manage" in sql
+    assert "ac270000" not in sql
+    assert "DEMO-" not in sql
 
 
 def test_app_contract_requires_safe_hash_bound_post_baseline_authority(
@@ -190,6 +235,78 @@ def test_routes_require_bounded_idempotency_and_use_typed_commands() -> None:
     assert 'response.headers["X-Idempotency-Replayed"]' in source
 
 
+def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
+    rest_source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
+    mcp_source = Path(mcp_master_commands.__file__).read_text(encoding="utf-8")
+
+    for helper_name, command_name in (
+        ("_execute_canonical_product_create", "create_product_draft"),
+        ("_execute_canonical_customer_create", "create_customer"),
+        ("_execute_canonical_supplier_create", "create_supplier"),
+    ):
+        assert rest_source.count(helper_name) >= 2
+        assert mcp_source.count(helper_name) >= 2
+        assert f"erp_master_commands.{command_name}" in rest_source
+    assert "erp_master_commands." not in mcp_source
+    assert "INSERT INTO catalog.products" not in mcp_source
+    assert "INSERT INTO parties.customer_accounts" not in mcp_source
+    assert "INSERT INTO parties.supplier_accounts" not in mcp_source
+
+    assert set(mcp_master_contract.MASTER_CREATE_POLICIES) == {
+        "catalog.product_draft.create",
+        "parties.customer.create",
+        "parties.supplier.create",
+    }
+    assert all(
+        policy.branch_fields == () and policy.risk_class == "reversible_write"
+        for policy in mcp_master_contract.MASTER_CREATE_POLICIES.values()
+    )
+
+
+@pytest.mark.parametrize(
+    ("model", "payload", "field"),
+    [
+        (
+            mcp_master_commands.MCPProductDraftCreate,
+            {
+                "product_name": "Product",
+                "product_kind": "medicine",
+                "product_code": "FORGED",
+                "idempotency_key": "mcp-product-create-0001",
+            },
+            "product_code",
+        ),
+        (
+            mcp_master_commands.MCPCustomerCreate,
+            {
+                "customer_name": "Customer",
+                "customer_type": "organization",
+                "primary_phone": "9876543210",
+                "credit_limit": "0.00",
+                "credit_days": 0,
+                "customer_code": "FORGED",
+                "idempotency_key": "mcp-customer-create-0001",
+            },
+            "customer_code",
+        ),
+        (
+            mcp_master_commands.MCPSupplierCreate,
+            {
+                "supplier_name": "Supplier",
+                "payment_days": 30,
+                "supplier_code": "FORGED",
+                "idempotency_key": "mcp-supplier-create-0001",
+            },
+            "supplier_code",
+        ),
+    ],
+)
+def test_mcp_master_create_contract_rejects_code_injection(model, payload, field) -> None:
+    with pytest.raises(ValidationError) as error:
+        model.model_validate(payload)
+    assert any(item["loc"] == (field,) for item in error.value.errors())
+
+
 def test_unknown_database_failure_is_not_mislabeled_as_a_conflict() -> None:
     class UnknownDatabaseFailure(Exception):
         pgcode = "XX999"
@@ -208,19 +325,13 @@ def test_unknown_database_failure_is_not_mislabeled_as_a_conflict() -> None:
     assert mapped.value.status_code == 409
 
 
-def test_demo_prefixes_are_reviewed_fixture_configuration_only() -> None:
+def test_demo_provisioner_uses_canonical_organization_onboarding() -> None:
     demo = (
         ROOT / "backend/scripts/provision_canonical_demo.py"
     ).read_text(encoding="utf-8")
-    production_sources = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (ROOT / "backend/app").rglob("*.py")
-    ) + SQL.read_text(encoding="utf-8")
 
-    for prefix in ("DEMO-CUST-", "DEMO-SUP-", "DEMO-PROD-"):
-        assert prefix in demo
-        assert prefix not in production_sources
-    assert "DEMO_MASTER_CODE_CONFIGURATION" in demo
+    assert "INSERT INTO core.master_code_sequences" not in demo
+    assert "canonical organization onboarding did not provision master codes" in demo
 
 
 def test_postgres_acceptance_is_wired_into_the_alembic_gate() -> None:

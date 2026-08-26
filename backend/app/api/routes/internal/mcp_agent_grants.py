@@ -20,6 +20,7 @@ from ....core.database import get_db
 from ....domain.operator_actions import ActionPolicy
 from ....domain.operator_actions import policy_for as operator_policy_for
 from .mcp_contract import policy_for
+from .mcp_master_contract import master_create_policy_for
 router = APIRouter(
     prefix="/internal/mcp/agent-grants", tags=["Internal MCP"], include_in_schema=False
 )
@@ -620,7 +621,9 @@ def authorize_operator_action(
     """Issue one short-lived, command/branch-bound operator delegation."""
     _internal_auth(credentials)
     _require_operator_release_gates()
-    policy = operator_policy_for(request.operation_key)
+    policy = operator_policy_for(request.operation_key) or master_create_policy_for(
+        request.operation_key
+    )
     if policy is None:
         raise HTTPException(status_code=403, detail="Operation is not an allowlisted operator action")
     operation_mode, capability_approval_policy = _validate_operator_request(request, policy)
