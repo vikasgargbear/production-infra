@@ -29,29 +29,27 @@ def _method_source(source: str, method_name: str) -> str:
 
 
 def test_stock_movement_has_one_balance_mutation_owner():
-    trigger_source = _read("database/04-triggers/02_inventory_triggers.sql")
-    movement_function = trigger_source.split(
-        "CREATE OR REPLACE FUNCTION track_inventory_movement()", 1
-    )[1].split("$$ LANGUAGE plpgsql;", 1)[0]
+    migration = _read("backend/alembic/sql/20260820_0001_canonical_v1.sql")
 
-    assert "UPDATE inventory.location_wise_stock" not in movement_function
-    assert "INSERT INTO inventory.location_wise_stock" not in movement_function
-    assert "apply the same movement a second time" in movement_function
+    assert 'CREATE FUNCTION "erp_trade_commands"."post_inventory_document"' in migration
+    assert 'CREATE TRIGGER "stock_ledger_command_owner_guard"' in migration
+    assert 'CREATE TRIGGER "stock_balances_projector_owner_guard"' in migration
+    assert 'CREATE TABLE "inventory"."stock_balances"' in migration
 
 
 def test_invoice_stock_has_one_application_owner():
     legacy_service = (
         REPOSITORY_ROOT / "backend/app/api/services/sales/invoice/invoice_service.py"
     )
-    triggers = _read("database/04-triggers/11_core_operations_triggers.sql")
     commands = _read(
         "database/canonical/commands_automation/generate_automation_commands.py"
     )
+    migration = _read("backend/alembic/sql/20260820_0001_canonical_v1.sql")
 
     assert not legacy_service.exists()
-    assert "CREATE OR REPLACE FUNCTION update_inventory_on_sale()" not in triggers
-    assert "trigger_inventory_update_on_sale" not in triggers
-    assert "trigger_inventory_update_on_cancellation" not in triggers
+    assert "CREATE OR REPLACE FUNCTION update_inventory_on_sale()" not in migration
+    assert "trigger_inventory_update_on_sale" not in migration
+    assert "trigger_inventory_update_on_cancellation" not in migration
     assert '"persist_sales_invoice_prepare"' in commands
     assert "inventory.stock_ledger_entries" in commands
     assert "inventory.stock_balances" in commands
@@ -266,7 +264,7 @@ def test_all_payment_balance_decisions_lock_rows():
 def test_payment_creation_has_durable_locked_idempotency():
     routes = _read("backend/app/api/routes/finance/payments/routes.py")
     service = _read("backend/app/api/services/finance/payment/service.py")
-    tables = _read("database/02-tables/06_financial_tables.sql")
+    migration = _read("backend/alembic/sql/20260820_0001_canonical_v1.sql")
 
     assert routes.count('alias="X-Idempotency-Key"') >= 3
     assert "X-Idempotency-Replayed" in routes
@@ -275,7 +273,9 @@ def test_payment_creation_has_durable_locked_idempotency():
     assert "internal_notes LIKE :marker_pattern" in service
     assert "claim.pending_marker" in service
     assert "claim.completed_marker(public_response)" in service
-    assert "internal_notes TEXT" in tables
+    assert 'CONSTRAINT "command_requests_idempotency_uq" UNIQUE' in migration
+    assert 'CREATE FUNCTION "erp_automation_commands"."persist_customer_receipt_prepare"' in migration
+    assert 'CREATE FUNCTION "erp_automation_commands"."persist_supplier_payment_prepare"' in migration
 
 
 def test_legacy_credit_and_debit_note_writes_are_replaced_by_reviewed_commands():
@@ -388,19 +388,17 @@ def test_journal_reversal_swaps_debits_and_credits_before_posting():
 
 
 def test_posted_journal_lines_are_database_immutable():
-    triggers = _read("database/04-triggers/01_financial_triggers.sql")
+    migration = _read("backend/alembic/sql/20260820_0001_canonical_v1.sql")
 
-    assert "trigger_protect_posted_journal_lines" in triggers
-    assert "entry_status IN ('posted', 'reversed')" in triggers
-    assert "BEFORE INSERT OR UPDATE OR DELETE ON financial.journal_entry_lines" in triggers
+    assert "journal lines may change only while parent is draft" in migration
+    assert 'CREATE CONSTRAINT TRIGGER "journal_lines_guard_ct"' in migration
 
 
 def test_posted_journal_headers_reject_edits_and_deletes():
-    triggers = _read("database/04-triggers/01_financial_triggers.sql")
+    migration = _read("backend/alembic/sql/20260820_0001_canonical_v1.sql")
 
-    assert "trigger_protect_posted_journal_entries" in triggers
-    assert "BEFORE UPDATE OR DELETE ON financial.journal_entries" in triggers
-    assert "OLD.entry_status IN ('posted', 'reversed')" in triggers
+    assert "posted journal financial fields are immutable" in migration
+    assert 'CREATE CONSTRAINT TRIGGER "journal_entries_guard_ct"' in migration
 
 
 def test_release_audit_distinguishes_retired_capture_from_canonical_evidence():

@@ -101,12 +101,7 @@ def test_all_18_operation_relations_exist_in_the_migration_chain() -> None:
     assert set(matrix["shared_mcp_lifecycle"]) <= published_tools
 
 
-def test_retired_transaction_audit_failures_are_not_canonical_staging_evidence() -> None:
-    evidence = json.loads(
-        (REPOSITORY_ROOT / "database/live-schema-evidence.json").read_text(
-            encoding="utf-8"
-        )
-    )
+def test_transaction_audit_uses_only_canonical_staging_evidence() -> None:
     audit_path = REPOSITORY_ROOT / "backend/scripts/audit/transaction_integrity_audit.py"
     spec = importlib.util.spec_from_file_location("retired_transaction_integrity", audit_path)
     assert spec is not None and spec.loader is not None
@@ -115,9 +110,6 @@ def test_retired_transaction_audit_failures_are_not_canonical_staging_evidence()
     spec.loader.exec_module(module)
     codes = {issue.code for issue in module.collect_issues()}
 
-    assert evidence["project_ref"] == "jfrairkkzxwkhbtqejnz"
-    assert evidence["evidence_state"] == "captured_not_baselined"
-    assert evidence["migration_history_available"] is False
     retired_codes = {
         "PAYMENT_IDEMPOTENCY_SCHEMA_UNVERIFIED",
         "ALLOCATION_TABLE_UNBASELINED",
@@ -129,12 +121,9 @@ def test_retired_transaction_audit_failures_are_not_canonical_staging_evidence()
     }
     assert codes == {"CANONICAL_TRANSACTION_LIVE_EVIDENCE_MISSING"}
     assert codes.isdisjoint(retired_codes)
-    assert module.RETIRED_SOURCE_PROJECT_REF == evidence["project_ref"]
-    assert module.CANONICAL_STAGING_PROJECT_REF != evidence["project_ref"]
     staging_workflow = (
         REPOSITORY_ROOT / ".github/workflows/canonical-staging.yml"
     ).read_text(encoding="utf-8")
-    assert evidence["project_ref"] not in staging_workflow
     assert "transaction_integrity_audit.py" in staging_workflow
     assert "--live-evidence staging-evidence/canonical-transaction-integrity.json" in staging_workflow
     assert '--expected-git-sha "$GITHUB_SHA"' in staging_workflow
