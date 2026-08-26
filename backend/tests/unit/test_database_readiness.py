@@ -77,7 +77,7 @@ def test_repository_source_classification_is_exhaustive_and_machine_readable():
     assert not schema_readiness.check_source_classification(authority, REPO_ROOT)
 
 
-def test_repository_reset_authority_contract_reports_only_real_canonical_rls_gap():
+def test_repository_reset_authority_contract_has_no_canonical_rls_gap():
     authority = schema_readiness.load_authority(REPO_ROOT)
     classification = schema_readiness.load_source_classification(authority, REPO_ROOT)
     canonical_sources = {
@@ -89,13 +89,7 @@ def test_repository_reset_authority_contract_reports_only_real_canonical_rls_gap
         "hash-bound-canonical-production-migration-authority"
     )
     assert canonical_sources["database/02-tables"]["role"] == "legacy-bootstrap-only"
-    issues = schema_readiness.audit_authority_contract(REPO_ROOT)
-    assert {issue.code for issue in issues} == {
-        "canonical_tenant_table_missing_force_rls"
-    }
-    assert {"tax.input_credit_lots", "tax.input_credit_applications", "tax.input_credit_reversal_events"} == {
-        issue.message.rsplit(": ", 1)[1].rstrip(".") for issue in issues
-    }
+    assert not schema_readiness.audit_authority_contract(REPO_ROOT)
 
 
 def test_repository_deployment_entrypoint_is_explicitly_fail_closed():
@@ -225,7 +219,7 @@ def test_default_repository_audit_no_longer_treats_legacy_bootstrap_as_target_mo
     assert "tenant_table_missing_force_rls" not in codes
     assert "tenant_child_missing_scope" not in codes
     assert "rls_targets_unknown_table" not in codes
-    assert "canonical_tenant_table_missing_force_rls" in codes
+    assert "canonical_tenant_table_missing_force_rls" not in codes
 
 
 def test_competing_ddl_outside_authority_is_reported(tmp_path: Path):

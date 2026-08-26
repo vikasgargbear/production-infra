@@ -1,6 +1,6 @@
 """Exact database migration contract required by this application build."""
 
-EXPECTED_CANONICAL_ALEMBIC_HEAD = "20260826_0023"
+EXPECTED_CANONICAL_ALEMBIC_HEAD = "20260826_0024"
 
 
 __all__ = ["EXPECTED_CANONICAL_ALEMBIC_HEAD"]

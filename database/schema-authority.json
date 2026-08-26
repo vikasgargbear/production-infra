@@ -73,6 +73,8 @@
     "backend/alembic/sql/20260825_0022_branch_scoped_evidence_attachments.sql",
     "backend/alembic/versions/20260826_0023_partial_input_credit_stock_lineage.py",
     "backend/alembic/sql/20260826_0023_partial_input_credit_stock_lineage.sql",
+    "backend/alembic/versions/20260826_0024_force_input_credit_rls.py",
+    "backend/alembic/sql/20260826_0024_force_input_credit_rls.sql",
     "backend/migration_support/canonical_baseline.py",
     "backend/scripts/package_canonical_baseline_migration.py"
   ],
