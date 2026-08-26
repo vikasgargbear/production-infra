@@ -643,9 +643,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'detail = "canonical demo failure summary unavailable"' in workflow
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
-    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 9
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 11
     for label in (
         "evidence-cleanup",
+        "evidence-identity",
         "fixture",
         "readiness",
         "render",
@@ -730,6 +731,37 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "cleanup_role_membership EXIT" not in workflow
     assert "cleanup_demo_role_membership' EXIT" not in workflow
     assert 'mutation_boundary: "BEGIN_ROLLBACK_or_read_only"' in workflow
+
+
+def test_reset_rotates_existing_identity_without_reopening_storage_writer() -> None:
+    workflow = _read(".github/workflows/canonical-staging.yml")
+    pre_reset = workflow.split(
+        "Provision restricted evidence cleanup authority before the disposable reset",
+        1,
+    )[1].split(
+        "Remove reconciled unprotected evidence objects before the disposable reset",
+        1,
+    )[0]
+    cleanup = workflow.split(
+        "Remove reconciled unprotected evidence objects before the disposable reset",
+        1,
+    )[1].split("Reset canonical data on the pinned disposable project", 1)[0]
+    post_migration = workflow.split(
+        "Provision canonical private evidence storage", 1
+    )[1].split("Prove canonical evidence storage least privilege", 1)[0]
+
+    assert "hook_exists" in pre_reset
+    assert "provision_canonical_evidence_storage_identity.py" in pre_reset
+    assert "canonical-evidence-storage.sql" not in pre_reset
+    assert "object_count" in pre_reset
+    assert "first_install_empty_shortcut" not in cleanup
+    assert cleanup.count("cleanup_staging_evidence_storage.py") == 1
+    assert "canonical-evidence-storage.sql" in post_migration
+    assert post_migration.index(
+        "check_evidence_storage_auth_hook.py"
+    ) < post_migration.index("provision_canonical_evidence_storage_identity.py")
+    assert 'DATABASE_URL="$PSYCOPG_DATABASE_URL"' in post_migration
+    assert 'EVIDENCE_STORAGE_IDENTITY_READY:-false' in post_migration
 
 
 def test_demo_runtime_computes_activation_hash_without_extensions_access():

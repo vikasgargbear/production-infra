@@ -411,6 +411,39 @@ jobs:
             '.state == "closed" and .commit_sha == $sha' \
             staging-evidence/canonical-write-fence-closed.json >/dev/null
 
+      - name: Provision restricted evidence cleanup authority before the disposable reset
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
+          hook_exists=$(psql -X -Atqc \
+            "SELECT to_regprocedure('erp_security.canonical_evidence_storage_access_token_hook(jsonb)') IS NOT NULL" \
+            "$PSYCOPG_DATABASE_URL")
+          if [ "$hook_exists" = t ]; then
+            identity_log=$(mktemp)
+            if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+                --reviewed-sha "$GITHUB_SHA" \
+                --github-env "$GITHUB_ENV" \
+                --receipt staging-evidence/canonical-evidence-storage-identity.json \
+                >staging-evidence/canonical-evidence-storage-identity-summary.json \
+                2>"$identity_log"; then
+              python3 backend/scripts/safe_ci_log_summary.py --label evidence-identity "$identity_log"
+              exit 1
+            fi
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=true" >> "$GITHUB_ENV"
+          else
+            # The first 0029 deployment has no hook yet. It may proceed only
+            # when the private bucket is absent or empty, so no old credential
+            # is needed and no evidence is silently abandoned.
+            object_count=$(psql -X -Atqc \
+              "SELECT CASE WHEN to_regclass('storage.objects') IS NULL THEN 0 ELSE (SELECT count(*) FROM storage.objects WHERE bucket_id='canonical-evidence-private-v1') END" \
+              "$PSYCOPG_DATABASE_URL")
+            test "$object_count" = 0
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=false" >> "$GITHUB_ENV"
+          fi
+
       - name: Remove reconciled unprotected evidence objects before the disposable reset
         if: inputs.reset_disposable_data == true
         run: |
@@ -1074,15 +1107,31 @@ jobs:
           test "$(psql -X -Atqc \
             "SELECT count(*) FROM pg_catalog.pg_policy WHERE polrelid='storage.objects'::regclass AND polname IN ('canonical_evidence_server_select','canonical_evidence_server_insert','canonical_evidence_server_delete')" \
             "$PSYCOPG_DATABASE_URL")" = 3
+          DATABASE_URL="$PSYCOPG_DATABASE_URL" PYTHONPATH=backend \
+            python3 backend/tests/postgres/check_evidence_storage_auth_hook.py
+          if [ "${EVIDENCE_STORAGE_IDENTITY_READY:-false}" != true ]; then
+            identity_log=$(mktemp)
+            if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+                --reviewed-sha "$GITHUB_SHA" \
+                --github-env "$GITHUB_ENV" \
+                --receipt staging-evidence/canonical-evidence-storage-identity.json \
+                >staging-evidence/canonical-evidence-storage-identity-summary.json \
+                2>"$identity_log"; then
+              python3 backend/scripts/safe_ci_log_summary.py --label render "$identity_log"
+              exit 1
+            fi
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=true" >> "$GITHUB_ENV"
+          fi
 
       - name: Prove canonical evidence storage least privilege
         if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
           test "$EVIDENCE_STORAGE_ENABLED" = true
-          test -n "$EVIDENCE_STORAGE_SERVICE_EMAIL"
+          test "$EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID" = d3000000-0000-4000-8000-0000000000e1
+          test "$EVIDENCE_STORAGE_SERVICE_EMAIL" = canonical-evidence-storage@service.aasopharma.invalid
           test -n "$EVIDENCE_STORAGE_SERVICE_PASSWORD"
-          test -n "$EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID"
           PYTHONPATH=backend python3 backend/scripts/verify_canonical_evidence_storage.py \
             --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
             --receipt staging-evidence/canonical-evidence-storage-canary.json
