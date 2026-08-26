@@ -204,20 +204,7 @@ jobs:
           python3 database/canonical/domains/validate_domain_catalog.py
 
       - name: Build and mask the staging bootstrap connection
-        run: |
-          set -euo pipefail
-          encoded_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
-          # Canonical migrations, role DDL, and rollback fixtures require a persistent
-          # PostgreSQL session. Supabase reserves 6543 transaction mode for short-lived
-          # serverless traffic; the IPv4 session pooler is exposed on 5432.
-          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_staging_ci"
-          database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
-          echo "::add-mask::$database_url"
-          echo "::add-mask::$psycopg_database_url"
-          echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
-          echo "PSYCOPG_DATABASE_URL=$psycopg_database_url" >> "$GITHUB_ENV"
-          echo "CANONICAL_ACTIVE_POOLER_PORT=$SUPABASE_SESSION_POOLER_PORT" >> "$GITHUB_ENV"
-          echo "CANONICAL_ACTIVE_POOLER_MODE=session" >> "$GITHUB_ENV"
+        run: python3 backend/scripts/verify_staging_pooler_roles.py --bootstrap-only
 
       - name: Refresh the reviewed free-tier Supavisor configuration
         if: inputs.refresh_pooler_configuration == true

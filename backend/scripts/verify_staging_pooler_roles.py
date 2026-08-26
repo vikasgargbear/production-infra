@@ -245,6 +245,41 @@ def select_pooler(
         raise PoolerVerificationFailure("transaction", transaction_failure) from None
 
 
+def select_admin_pooler(
+    *,
+    password: str,
+    project_ref: str,
+    host: str,
+    session_port: str,
+    transaction_port: str,
+    verify_admin: Callable[..., None] = verify_admin_with_retry,
+) -> tuple[str, str]:
+    """Select one reachable pooler mode before reset or migration writes."""
+
+    try:
+        verify_admin(
+            password=password,
+            project_ref=project_ref,
+            host=host,
+            port=session_port,
+        )
+        return session_port, "session"
+    except RoleVerificationFailure as session_failure:
+        if not session_failure.transient:
+            raise PoolerVerificationFailure("session", session_failure) from None
+
+    try:
+        verify_admin(
+            password=password,
+            project_ref=project_ref,
+            host=host,
+            port=transaction_port,
+        )
+        return transaction_port, "transaction"
+    except RoleVerificationFailure as transaction_failure:
+        raise PoolerVerificationFailure("transaction", transaction_failure) from None
+
+
 def _validated_port(value: str) -> str:
     if not value.isdigit() or not 1 <= int(value) <= 65535:
         raise ValueError("invalid pooler port")
@@ -273,8 +308,13 @@ def _configuration(environment: Mapping[str, str]) -> tuple[
     return roles, project_ref, host, session_port, transaction_port
 
 
-def _write_transaction_environment(
-    *, environment: Mapping[str, str], project_ref: str, host: str, port: str
+def _write_pooler_environment(
+    *,
+    environment: Mapping[str, str],
+    project_ref: str,
+    host: str,
+    port: str,
+    mode: str,
 ) -> None:
     admin_password = environment.get("SUPABASE_DB_PASSWORD", "")
     github_env = environment.get("GITHUB_ENV", "")
@@ -294,38 +334,53 @@ def _write_transaction_environment(
         env_file.write(f"PSYCOPG_DATABASE_URL={psycopg_url}\n")
         env_file.write(f"DATABASE_URL={sqlalchemy_url}\n")
         env_file.write(f"CANONICAL_ACTIVE_POOLER_PORT={port}\n")
-        env_file.write("CANONICAL_ACTIVE_POOLER_MODE=transaction\n")
+        env_file.write(f"CANONICAL_ACTIVE_POOLER_MODE={mode}\n")
 
 
-def main() -> int:
+def main(arguments: list[str] | None = None) -> int:
     try:
         roles, project_ref, host, session_port, transaction_port = _configuration(
             os.environ
         )
-        active_port, active_mode = select_pooler(
-            roles=roles,
-            project_ref=project_ref,
-            host=host,
-            session_port=session_port,
-            transaction_port=transaction_port,
-        )
-        if active_mode == "transaction":
+        admin_password = os.environ.get("SUPABASE_DB_PASSWORD", "")
+        parsed_arguments = sys.argv[1:] if arguments is None else arguments
+        bootstrap_only = parsed_arguments == ["--bootstrap-only"]
+        if parsed_arguments not in ([], ["--bootstrap-only"]):
+            raise ValueError("unsupported verifier mode")
+        if bootstrap_only:
+            active_port, active_mode = select_admin_pooler(
+                password=admin_password,
+                project_ref=project_ref,
+                host=host,
+                session_port=session_port,
+                transaction_port=transaction_port,
+            )
+        else:
+            active_port, active_mode = select_pooler(
+                roles=roles,
+                project_ref=project_ref,
+                host=host,
+                session_port=session_port,
+                transaction_port=transaction_port,
+            )
             try:
                 verify_admin_with_retry(
-                    password=os.environ.get("SUPABASE_DB_PASSWORD", ""),
+                    password=admin_password,
                     project_ref=project_ref,
                     host=host,
                     port=active_port,
                 )
             except RoleVerificationFailure as failure:
-                raise PoolerVerificationFailure("transaction", failure) from None
-            _write_transaction_environment(
-                environment=os.environ,
-                project_ref=project_ref,
-                host=host,
-                port=active_port,
-            )
-        print(f"{active_mode.capitalize()} pooler verified for all reviewed roles")
+                raise PoolerVerificationFailure(active_mode, failure) from None
+        _write_pooler_environment(
+            environment=os.environ,
+            project_ref=project_ref,
+            host=host,
+            port=active_port,
+            mode=active_mode,
+        )
+        verified_subject = "bootstrap administrator" if bootstrap_only else "all reviewed roles"
+        print(f"{active_mode.capitalize()} pooler verified for {verified_subject}")
         return 0
     except PoolerVerificationFailure as failure:
         detail = failure.failure

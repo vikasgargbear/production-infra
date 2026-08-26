@@ -433,20 +433,21 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Control plane verified exact canonical revision and topology" in workflow
     assert 'test "$pooler_port" = 6543' in workflow
     assert 'echo "SUPABASE_SESSION_POOLER_PORT=5432"' in workflow
-    assert "@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres" in workflow
+    assert "f\"@{host}:{port}/postgres?sslmode=require" in pooler_verifier
     bootstrap = workflow.split("Build and mask the staging bootstrap connection", 1)[1].split(
         "Reset canonical data", 1
     )[0]
-    assert "${SUPABASE_SESSION_POOLER_PORT}/postgres" in bootstrap
-    assert "${SUPABASE_POOLER_PORT}/postgres" not in bootstrap
-    assert "Supabase reserves 6543 transaction mode" in bootstrap
+    assert "verify_staging_pooler_roles.py --bootstrap-only" in bootstrap
+    assert "select_admin_pooler(" in pooler_verifier
+    assert "port=session_port" in pooler_verifier
+    assert "port=transaction_port" in pooler_verifier
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
     assert workflow.count("connect_timeout=15") + pooler_verifier.count(
         "connect_timeout=15"
-    ) == 7
-    assert "application_name=canonical_staging_ci" in workflow
+    ) == 6
+    assert "application_name=canonical_staging_ci" in pooler_verifier
     assert "application_name=canonical_staging_verify" in pooler_verifier
     assert workflow.count("gssencmode=disable") + pooler_verifier.count(
         "gssencmode=disable"
@@ -485,6 +486,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
     assert "python3 backend/scripts/verify_staging_pooler_roles.py" in workflow
+    assert "python3 backend/scripts/verify_staging_pooler_roles.py --bootstrap-only" in workflow
+    assert "def select_admin_pooler(" in pooler_verifier
     assert "ROLE_POSTURE_QUERY" in workflow
     assert "role.rolpassword IS NOT NULL AS password_present" in workflow
     assert "password_unexpired" in workflow

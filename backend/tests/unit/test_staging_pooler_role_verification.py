@@ -175,6 +175,47 @@ def test_pooler_selection_rechecks_the_complete_set_on_transaction_mode() -> Non
     ]
 
 
+def test_bootstrap_selection_falls_back_only_after_transient_session_failure() -> None:
+    verifier = _load()
+    calls: list[str] = []
+
+    def verify_admin(**kwargs) -> None:
+        calls.append(kwargs["port"])
+        if kwargs["port"] == "5432":
+            raise verifier.RoleVerificationFailure(
+                "postgres", "connection_refused", transient=True
+            )
+
+    assert verifier.select_admin_pooler(
+        password="secret",
+        project_ref="a" * 20,
+        host="pooler.example",
+        session_port="5432",
+        transaction_port="6543",
+        verify_admin=verify_admin,
+    ) == ("6543", "transaction")
+    assert calls == ["5432", "6543"]
+
+    calls.clear()
+
+    def permanent_failure(**kwargs) -> None:
+        calls.append(kwargs["port"])
+        raise verifier.RoleVerificationFailure(
+            "postgres", "bootstrap_posture_mismatch", transient=False
+        )
+
+    with pytest.raises(verifier.PoolerVerificationFailure):
+        verifier.select_admin_pooler(
+            password="secret",
+            project_ref="a" * 20,
+            host="pooler.example",
+            session_port="5432",
+            transaction_port="6543",
+            verify_admin=permanent_failure,
+        )
+    assert calls == ["5432"]
+
+
 def test_non_transient_session_failure_never_falls_back() -> None:
     verifier = _load()
     calls: list[str] = []
@@ -289,8 +330,8 @@ def test_transaction_selection_preflights_admin_before_environment_write(
         events.append("environment-write")
 
     monkeypatch.setattr(verifier, "verify_admin_with_retry", preflight)
-    monkeypatch.setattr(verifier, "_write_transaction_environment", write)
-    assert verifier.main() == 0
+    monkeypatch.setattr(verifier, "_write_pooler_environment", write)
+    assert verifier.main([]) == 0
     assert events == ["admin-preflight", "environment-write"]
 
 
@@ -327,10 +368,10 @@ def test_failed_transaction_admin_preflight_never_writes_environment(
     monkeypatch.setattr(verifier, "verify_admin_with_retry", fail_admin)
     monkeypatch.setattr(
         verifier,
-        "_write_transaction_environment",
+        "_write_pooler_environment",
         lambda **kwargs: writes.append(kwargs),
     )
-    assert verifier.main() == 1
+    assert verifier.main([]) == 1
     assert writes == []
     invalid = dict(environment, SUPABASE_POOLER_PORT="not-a-port")
     with pytest.raises(ValueError):
@@ -365,7 +406,7 @@ def test_main_emits_only_bounded_failure_metadata(monkeypatch, capsys) -> None:
 
     monkeypatch.setattr(verifier.os, "environ", environment)
     monkeypatch.setattr(verifier, "select_pooler", fail_selection)
-    assert verifier.main() == 1
+    assert verifier.main([]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "mode=session" in captured.err
