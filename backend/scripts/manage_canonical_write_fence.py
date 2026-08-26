@@ -11,6 +11,7 @@ never copies mutable ACL state from the database.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -258,90 +259,93 @@ def apply_fence(
 
     stage = "connect"
     try:
-        with psycopg2.connect(
-            _psycopg_dsn(database_url), connect_timeout=15
+        with contextlib.closing(
+            psycopg2.connect(_psycopg_dsn(database_url), connect_timeout=15)
         ) as connection:
-            stage = "cursor"
-            with connection.cursor() as cursor:
-                stage = "advisory_lock"
-                cursor.execute(
-                    "SELECT pg_catalog.pg_advisory_xact_lock(%s)",
-                    (FENCE_LOCK_KEY,),
-                )
-                stage = "catalog"
-                _assert_catalog(cursor)
-                if action != "status":
-                    stage = "runtime_membership"
-                    _set_runtime_membership(cursor, open_fence=action == "open")
-                stage = "migration_owner_role"
-                cursor.execute("SET LOCAL ROLE erp_migration_owner")
-                if action != "status":
-                    stage = "schema_usage"
-                    _set_usage(cursor, open_fence=action == "open")
-                stage = "matrix_readback"
-                matrix = _read_matrix(cursor)
-                stage = "runtime_membership_readback"
-                runtime_inherits_app = _runtime_inherits_app(cursor)
-                stage = "mutation_privilege_readback"
-                mutation_privileges = _service_mutation_privileges(cursor)
-                if action != "status":
-                    stage = "matrix_validation"
-                    _validate_matrix(matrix, open_fence=action == "open")
-                stage = "state_validation"
-                if action == "close":
-                    if runtime_inherits_app:
-                        raise FenceError(
-                            "closed write fence retained erp_runtime membership in erp_app"
-                        )
-                    offenders = {
-                        principal: counts
-                        for principal, counts in mutation_privileges.items()
-                        if any(counts.values())
-                    }
-                    if offenders:
-                        raise FenceError(
-                            "closed write fence retained effective service mutation privileges: "
-                            + json.dumps(
-                                offenders, sort_keys=True, separators=(",", ":")
+            with connection:
+                stage = "cursor"
+                with connection.cursor() as cursor:
+                    stage = "advisory_lock"
+                    cursor.execute(
+                        "SELECT pg_catalog.pg_advisory_xact_lock(%s)",
+                        (FENCE_LOCK_KEY,),
+                    )
+                    stage = "catalog"
+                    _assert_catalog(cursor)
+                    if action != "status":
+                        stage = "runtime_membership"
+                        _set_runtime_membership(cursor, open_fence=action == "open")
+                    stage = "migration_owner_role"
+                    cursor.execute("SET LOCAL ROLE erp_migration_owner")
+                    if action != "status":
+                        stage = "schema_usage"
+                        _set_usage(cursor, open_fence=action == "open")
+                    stage = "matrix_readback"
+                    matrix = _read_matrix(cursor)
+                    stage = "runtime_membership_readback"
+                    runtime_inherits_app = _runtime_inherits_app(cursor)
+                    stage = "mutation_privilege_readback"
+                    mutation_privileges = _service_mutation_privileges(cursor)
+                    if action != "status":
+                        stage = "matrix_validation"
+                        _validate_matrix(matrix, open_fence=action == "open")
+                    stage = "state_validation"
+                    if action == "close":
+                        if runtime_inherits_app:
+                            raise FenceError(
+                                "closed write fence retained erp_runtime membership in erp_app"
                             )
+                        offenders = {
+                            principal: counts
+                            for principal, counts in mutation_privileges.items()
+                            if any(counts.values())
+                        }
+                        if offenders:
+                            raise FenceError(
+                                "closed write fence retained effective service mutation privileges: "
+                                + json.dumps(
+                                    offenders, sort_keys=True, separators=(",", ":")
+                                )
+                            )
+                    elif action == "open" and not runtime_inherits_app:
+                        raise FenceError(
+                            "open write fence did not restore erp_runtime membership in erp_app"
                         )
-                elif action == "open" and not runtime_inherits_app:
-                    raise FenceError(
-                        "open write fence did not restore erp_runtime membership in erp_app"
-                    )
 
-                schema_usage_open = all(
-                    {
-                        principal
-                        for principal, allowed in row.items()
-                        if allowed
-                    }
-                    == set(EXPECTED_OPEN_EFFECTIVE_USAGE[schema_name])
-                    for schema_name, row in matrix.items()
-                )
-                schema_usage_closed = not any(
-                    allowed for row in matrix.values() for allowed in row.values()
-                )
-                no_service_mutations = not any(
-                    count
-                    for counts in mutation_privileges.values()
-                    for count in counts.values()
-                )
-                state = (
-                    "open"
-                    if schema_usage_open and runtime_inherits_app
-                    else "closed"
-                    if schema_usage_closed
-                    and not runtime_inherits_app
-                    and no_service_mutations
-                    else "drifted"
-                )
-                if action == "status" and state == "drifted":
-                    raise FenceError("canonical write-fence ACL matrix is drifted")
-                if action != "status" and state != action.replace("close", "closed"):
-                    raise FenceError(
-                        f"canonical write fence did not reach {action} state"
+                    schema_usage_open = all(
+                        {
+                            principal
+                            for principal, allowed in row.items()
+                            if allowed
+                        }
+                        == set(EXPECTED_OPEN_EFFECTIVE_USAGE[schema_name])
+                        for schema_name, row in matrix.items()
                     )
+                    schema_usage_closed = not any(
+                        allowed for row in matrix.values() for allowed in row.values()
+                    )
+                    no_service_mutations = not any(
+                        count
+                        for counts in mutation_privileges.values()
+                        for count in counts.values()
+                    )
+                    state = (
+                        "open"
+                        if schema_usage_open and runtime_inherits_app
+                        else "closed"
+                        if schema_usage_closed
+                        and not runtime_inherits_app
+                        and no_service_mutations
+                        else "drifted"
+                    )
+                    if action == "status" and state == "drifted":
+                        raise FenceError("canonical write-fence ACL matrix is drifted")
+                    if action != "status" and state != action.replace(
+                        "close", "closed"
+                    ):
+                        raise FenceError(
+                            f"canonical write fence did not reach {action} state"
+                        )
     except FenceError:
         raise
     except Exception as error:

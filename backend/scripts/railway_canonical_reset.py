@@ -302,7 +302,7 @@ def _admin_database_url(
 
 def _set_owner_delegation(database_url: str, *, enabled: bool) -> None:
     try:
-        with psycopg2.connect(database_url) as connection:
+        with contextlib.closing(psycopg2.connect(database_url)) as connection:
             connection.autocommit = True
             with connection.cursor() as cursor:
                 cursor.execute("SHOW server_version_num")
@@ -338,17 +338,33 @@ def _temporary_owner_delegation(
         yield
     finally:
         _set_owner_delegation(database_url, enabled=False)
-        # The verifier owns its transaction context.  Use closing() here so
-        # psycopg2 is not asked to re-enter the same connection context.
+        _verify_owner_cleanup(database_url, project_ref=project_ref)
+
+
+def _verify_owner_cleanup(
+    database_url: str, *, project_ref: str
+) -> dict[str, object]:
+    """Verify owner delegation cleanup with one explicit transaction owner."""
+
+    try:
         with contextlib.closing(psycopg2.connect(database_url)) as connection:
-            verify_post_cleanup_role_state(connection, project_ref=project_ref)
+            return verify_post_cleanup_role_state(
+                connection, project_ref=project_ref
+            )
+    except RailwayCanonicalResetError:
+        raise
+    except Exception as error:
+        raise RailwayCanonicalResetError(
+            "railway_migration_owner_cleanup_attestation_failed:"
+            f"{_database_failure_code(error)}"
+        ) from None
 
 
 def _terminate_isolated_sessions(database_url: str) -> dict[str, int]:
     """Terminate the exact pre-reset isolated-role sessions and prove absence."""
 
     roles = load_direct_database_contract().isolated_roles
-    with psycopg2.connect(database_url) as connection:
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
         connection.autocommit = True
         with connection.cursor() as cursor:
             cursor.execute(
@@ -554,10 +570,7 @@ def prepare_reset_boundary(
         migration_receipt = _upgrade_exact_migration_head(
             database_url, authority=authority, project_ref=project_ref
         )
-    with contextlib.closing(psycopg2.connect(database_url)) as connection:
-        role_receipt = verify_post_cleanup_role_state(
-            connection, project_ref=project_ref
-        )
+    role_receipt = _verify_owner_cleanup(database_url, project_ref=project_ref)
     return {
         "schema": RECEIPT_SCHEMA,
         "action": "prepare-reset",
@@ -613,10 +626,7 @@ def reset_disposable_staging(
                 project_ref=project_ref,
                 expected_evidence_object_count=0,
             )
-    with contextlib.closing(psycopg2.connect(database_url)) as connection:
-        role_receipt = verify_post_cleanup_role_state(
-            connection, project_ref=project_ref
-        )
+    role_receipt = _verify_owner_cleanup(database_url, project_ref=project_ref)
     return {
         "schema": RECEIPT_SCHEMA,
         "action": "reset",
@@ -682,10 +692,7 @@ def _set_fence_after_deploy(
             f"railway_write_fence_{action}_failed:"
             f"{_database_failure_code(error)}"
         ) from None
-    with contextlib.closing(psycopg2.connect(database_url)) as connection:
-        role_receipt = verify_post_cleanup_role_state(
-            connection, project_ref=project_ref
-        )
+    role_receipt = _verify_owner_cleanup(database_url, project_ref=project_ref)
     return {
         "schema": RECEIPT_SCHEMA,
         "action": f"{action}-fence",

@@ -113,7 +113,11 @@ jobs:
       - name: Load and diagnose the selected provider authority
         run: |
           set -euo pipefail
-          python3 -m pip install jsonschema==4.23.0
+          python3 -m pip install \
+            jsonschema==4.23.0 \
+            httpx==0.25.2 \
+            psycopg2-binary==2.9.9 \
+            requests==2.34.2
           python3 backend/scripts/deployment_control.py export-github-env \
             --output "$GITHUB_ENV"
 
@@ -553,9 +557,6 @@ jobs:
           CANONICAL_DEMO_EVIDENCE_DIR: ${{ runner.temp }}/railway-oauth-evidence
         run: |
           set -euo pipefail
-          python3 -m pip install \
-            psycopg2-binary==2.9.9 \
-            requests==2.34.2
           python3 backend/scripts/provision_staging_mcp_oauth.py \
             --mode client-authority-only
 

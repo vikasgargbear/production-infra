@@ -484,7 +484,8 @@ def test_railway_reset_reuses_version_safe_role_cleanup_authority() -> None:
     assert source.count("pg_has_role(") == 1
     assert "pg_has_role(current_user,'erp_migration_owner','MEMBER')" in source
     assert "pg_has_role(current_user,'erp_migration_owner','SET')" not in source
-    assert "verify_post_cleanup_role_state(connection, project_ref=project_ref)" in source
+    assert "return verify_post_cleanup_role_state(" in source
+    assert "_verify_owner_cleanup(database_url, project_ref=project_ref)" in source
 
 
 def test_database_failure_codes_are_stage_bound_without_error_text() -> None:
