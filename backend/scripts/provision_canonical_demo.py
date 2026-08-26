@@ -95,9 +95,6 @@ IDS = {
     "uom_conversion": "d3000000-0000-7000-8000-000000000016",
     "count_uom_conversion": "d3000000-0000-7000-8000-000000000026",
     "sales_order_sequence": "d3000000-0000-7000-8000-000000000017",
-    "customer_code_sequence": "d3000000-0000-7000-8000-000000000030",
-    "supplier_code_sequence": "d3000000-0000-7000-8000-000000000031",
-    "product_code_sequence": "d3000000-0000-7000-8000-000000000032",
     "customer_gstin": "d3000000-0000-7000-8000-000000000018",
     "request": "d3000000-0000-7000-8000-000000000019",
     "tax_release": "d3100000-0000-7000-8000-000000000001",
@@ -150,11 +147,6 @@ INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
 ).date()
 DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS = Decimal("84")
-DEMO_MASTER_CODE_CONFIGURATION = (
-    ("customer_code_sequence", "customer", "DEMO-CUST-", "", 6),
-    ("supplier_code_sequence", "supplier", "DEMO-SUP-", "", 6),
-    ("product_code_sequence", "product", "DEMO-PROD-", "", 6),
-)
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
 DEMO_RUN_ATTEMPT = os.getenv("GITHUB_RUN_ATTEMPT", "1")
 DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"
@@ -787,44 +779,24 @@ def bootstrap_identity(
         cursor.execute(
             "SELECT set_config('app.auth_user_id', %s, true)", (IDS["reviewer_auth_user"],)
         )
-        cursor.executemany(
-            """
-            INSERT INTO core.master_code_sequences (
-                org_id,id,code_kind,prefix,suffix,padding,next_value,status,
-                created_by_membership_id,updated_by_membership_id
-            ) VALUES (%s,%s,%s,%s,%s,%s,1,'active',%s,%s)
-            ON CONFLICT (org_id,code_kind) DO NOTHING
-            """,
-            [
-                (
-                    IDS["org"], IDS[id_key], code_kind, prefix, suffix, padding,
-                    IDS["reviewer_membership"], IDS["reviewer_membership"],
-                )
-                for id_key, code_kind, prefix, suffix, padding
-                in DEMO_MASTER_CODE_CONFIGURATION
-            ],
-        )
         cursor.execute(
             """
-            SELECT id::text,code_kind,prefix,suffix,padding,status
+            SELECT code_kind,status
               FROM core.master_code_sequences
-             WHERE org_id=%s AND code_kind=ANY(%s)
+             WHERE org_id=%s
              ORDER BY code_kind
             """,
-            (IDS["org"], [row[1] for row in DEMO_MASTER_CODE_CONFIGURATION]),
+            (IDS["org"],),
         )
         actual_master_code_configuration = cursor.fetchall()
-        expected_master_code_configuration = sorted(
-            (
-                (IDS[id_key], code_kind, prefix, suffix, padding, "active")
-                for id_key, code_kind, prefix, suffix, padding
-                in DEMO_MASTER_CODE_CONFIGURATION
-            ),
-            key=lambda row: row[1],
-        )
+        expected_master_code_configuration = [
+            ("customer", "active"),
+            ("product", "active"),
+            ("supplier", "active"),
+        ]
         if actual_master_code_configuration != expected_master_code_configuration:
             raise RuntimeError(
-                "disposable demo master code configuration does not match reviewed facts"
+                "canonical organization onboarding did not provision master codes"
             )
         cursor.execute(
             """

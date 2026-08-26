@@ -13,6 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_SQL = (
     REPO_ROOT / "backend/alembic/sql/20260826_0027_master_code_commands.sql"
 )
+ONBOARDING_MIGRATION_SQL = (
+    REPO_ROOT
+    / "backend/alembic/sql/20260826_0028_organization_master_code_onboarding.sql"
+)
 MANIFEST_PATH = Path(__file__).with_name("master-code-authority.json")
 
 
@@ -25,6 +29,21 @@ def render() -> str:
         "migration_revision": "20260826_0027",
         "migration_sql": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
         "migration_sql_sha256": migration_hash,
+        "onboarding": {
+            "activation_event": "first_active_membership",
+            "authority": "erp_master_commands.provision_organization_code_sequences",
+            "defaults": {
+                "customer": {"prefix": "CUST-", "suffix": "", "padding": 6},
+                "product": {"prefix": "PROD-", "suffix": "", "padding": 6},
+                "supplier": {"prefix": "SUP-", "suffix": "", "padding": 6},
+            },
+            "existing_organization_backfill": "active_memberships_only",
+            "idempotent": True,
+            "migration_sql": "backend/alembic/sql/20260826_0028_organization_master_code_onboarding.sql",
+            "migration_sql_sha256": hashlib.sha256(
+                ONBOARDING_MIGRATION_SQL.read_bytes()
+            ).hexdigest(),
+        },
         "scope": "organization_global_perpetual",
         "code_kinds": ["customer", "product", "supplier"],
         "reviewed_configuration": ["prefix", "suffix", "padding"],

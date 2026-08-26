@@ -40,16 +40,16 @@ BRANCH_USER = UUID("ac270000-0000-7000-8000-000000000013")
 BRANCH_AUTH_USER = UUID("ac270000-0000-7000-8000-000000000014")
 BRANCH_MEMBERSHIP = UUID("ac270000-0000-7000-8000-000000000015")
 BRANCH_ACCESS_GRANT = UUID("ac270000-0000-7000-8000-000000000016")
+COLLISION_ORG = UUID("ac270000-0000-7000-8000-000000000017")
+COLLISION_MEMBERSHIP = UUID("ac270000-0000-7000-8000-000000000018")
 
 SEED_TRIGGER_TABLES = (
     "core.organizations",
     "core.users",
-    "core.memberships",
     "core.branches",
     "core.roles",
     "core.role_permissions",
     "core.access_grants",
-    "core.master_code_sequences",
     "finance.accounts",
 )
 
@@ -98,6 +98,9 @@ def _seed(admin_dsn: str) -> None:
         )
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+        cursor.execute(
+            "SELECT set_config('app.request_id',%s,true)", (str(uuid4()),)
+        )
         for table in SEED_TRIGGER_TABLES:
             cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER USER")
         try:
@@ -111,7 +114,9 @@ def _seed(admin_dsn: str) -> None:
                   (%s,'PG15 Master Code Acceptance','1 Atomic Road','Mumbai',
                    '27','400001','active',%s,%s),
                   (%s,'PG15 Hidden Tenant','2 Tenant Road','Pune',
-                   '27','411001','active',%s,%s);
+                   '27','411001','active',%s,%s),
+                  (%s,'PG15 Collision Tenant','3 Collision Road','Pune',
+                   '27','411002','active',%s,%s);
                 INSERT INTO core.users(id,auth_user_id,display_name,status)
                 VALUES (%s,%s,'Master Code Runtime Actor','active'),
                        (%s,NULL,'Hidden Tenant Actor','active'),
@@ -122,7 +127,8 @@ def _seed(admin_dsn: str) -> None:
                 VALUES
                   (%s,%s,%s,'active',transaction_timestamp(),%s,%s),
                   (%s,%s,%s,'active',transaction_timestamp(),%s,%s),
-                  (%s,%s,%s,'active',transaction_timestamp(),%s,%s);
+                  (%s,%s,%s,'active',transaction_timestamp(),%s,%s),
+                  (%s,%s,%s,'invited',NULL,%s,%s);
                 SET CONSTRAINTS ALL IMMEDIATE;
                 SELECT set_config('app.org_id',%s,true),
                        set_config('app.membership_id',%s,true),
@@ -139,7 +145,7 @@ def _seed(admin_dsn: str) -> None:
                 SELECT %s,%s,permission_code,%s
                   FROM unnest(ARRAY[
                     'parties.customer.manage','parties.supplier.manage',
-                    'catalog.product.manage'
+                    'catalog.product.manage','core.organization.manage'
                   ]::text[]) AS permission_code;
                 INSERT INTO core.branches(
                   org_id,id,code,name,address_line1,city,state_code,postal_code,
@@ -164,23 +170,19 @@ def _seed(admin_dsn: str) -> None:
                    true,false,'active',%s,%s),
                   (%s,%s,'2100-PG27','PG15 trade payables','liability','INR',
                    true,false,'active',%s,%s);
-
-                INSERT INTO core.master_code_sequences(
-                  org_id,code_kind,prefix,suffix,padding,next_value,status,
-                  created_by_membership_id,updated_by_membership_id)
-                VALUES
-                  (%s,'customer','PGC-','-T',5,1,'active',%s,%s),
-                  (%s,'product','PGP-','-T',5,1,'active',%s,%s);
                 """,
                 (
                     ORG, MEMBERSHIP, MEMBERSHIP,
                     OTHER_ORG, OTHER_MEMBERSHIP, OTHER_MEMBERSHIP,
+                    COLLISION_ORG, COLLISION_MEMBERSHIP, COLLISION_MEMBERSHIP,
                     USER, AUTH_USER, OTHER_USER, BRANCH_USER, BRANCH_AUTH_USER,
                     ORG, MEMBERSHIP, USER, MEMBERSHIP, MEMBERSHIP,
                     OTHER_ORG, OTHER_MEMBERSHIP, OTHER_USER,
                     OTHER_MEMBERSHIP, OTHER_MEMBERSHIP,
                     ORG, BRANCH_MEMBERSHIP, BRANCH_USER,
                     BRANCH_MEMBERSHIP, BRANCH_MEMBERSHIP,
+                    COLLISION_ORG, COLLISION_MEMBERSHIP, OTHER_USER,
+                    COLLISION_MEMBERSHIP, COLLISION_MEMBERSHIP,
                     str(ORG), str(MEMBERSHIP), str(AUTH_USER), str(uuid4()),
                     ORG, ROLE, MEMBERSHIP, MEMBERSHIP,
                     ORG, ROLE, MEMBERSHIP,
@@ -190,8 +192,6 @@ def _seed(admin_dsn: str) -> None:
                     BRANCH, MEMBERSHIP,
                     ORG, RECEIVABLE_ACCOUNT, MEMBERSHIP, MEMBERSHIP,
                     ORG, PAYABLE_ACCOUNT, MEMBERSHIP, MEMBERSHIP,
-                    ORG, MEMBERSHIP, MEMBERSHIP,
-                    ORG, MEMBERSHIP, MEMBERSHIP,
                 ),
             )
         finally:
@@ -246,46 +246,94 @@ def _create_supplier(admin_dsn: str, name: str, key: str):
         return cursor.fetchone()
 
 
-def _provision_supplier_sequence(admin_dsn: str) -> None:
+def _assert_onboarding_is_exact_and_replay_safe(admin_dsn: str) -> None:
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        _activate_runtime(cursor)
+        cursor.execute(
+            "SELECT erp_master_commands.provision_organization_code_sequences(%s)",
+            (ORG,),
+        )
+        assert cursor.fetchone() == (3,)
+        cursor.execute(
+            "SELECT erp_master_commands.provision_organization_code_sequences(%s)",
+            (ORG,),
+        )
+        assert cursor.fetchone() == (3,)
+        connection.commit()
+
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT code_kind,prefix,suffix,padding,next_value,status
+              FROM core.master_code_sequences
+             WHERE org_id=%s
+             ORDER BY code_kind
+            """,
+            (ORG,),
+        )
+        assert cursor.fetchall() == [
+            ("customer", "CUST-", "", 6, 1, "active"),
+            ("product", "PROD-", "", 6, 1, "active"),
+            ("supplier", "SUP-", "", 6, 1, "active"),
+        ]
+
+
+def _assert_onboarding_rejects_future_code_collision(admin_dsn: str) -> None:
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute(
             "SELECT set_config('app.org_id',%s,true),"
             "set_config('app.membership_id',%s,true),"
-            "set_config('app.auth_user_id',%s,true),"
             "set_config('app.request_id',%s,true)",
-            (str(ORG), str(MEMBERSHIP), str(AUTH_USER), str(uuid4())),
+            (str(COLLISION_ORG), str(COLLISION_MEMBERSHIP), str(uuid4())),
         )
+        cursor.execute("ALTER TABLE catalog.products DISABLE TRIGGER USER")
         cursor.execute(
             """
-            INSERT INTO core.master_code_sequences(
-              org_id,code_kind,prefix,suffix,padding,next_value,status,
-              created_by_membership_id,updated_by_membership_id)
-            VALUES (%s,'supplier','PGS-','-T',5,1,'active',%s,%s)
+            INSERT INTO catalog.products(
+              org_id,sku,product_kind,name,base_uom_code,hsn_code,
+              cold_chain_required,status,created_by_membership_id,
+              updated_by_membership_id)
+            VALUES (%s,'PROD-000001','medicine','Legacy Collision Product',
+                    'EA','0000',false,'draft',%s,%s)
             """,
-            (ORG, MEMBERSHIP, MEMBERSHIP),
+            (COLLISION_ORG, COLLISION_MEMBERSHIP, COLLISION_MEMBERSHIP),
         )
+        cursor.execute("ALTER TABLE catalog.products ENABLE TRIGGER USER")
+        connection.commit()
 
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        cursor.execute(
+            "SELECT set_config('app.request_id',%s,true)", (str(uuid4()),)
+        )
+        try:
+            cursor.execute(
+                """
+                UPDATE core.memberships
+                   SET status='active',joined_at=transaction_timestamp(),
+                       updated_at=transaction_timestamp(),row_version=row_version+1
+                 WHERE org_id=%s AND id=%s AND status='invited'
+                """,
+                (COLLISION_ORG, COLLISION_MEMBERSHIP),
+            )
+        except psycopg2.Error as error:
+            assert error.pgcode == "23505"
+            connection.rollback()
+        else:
+            raise AssertionError("organization onboarding accepted a future code collision")
 
-def _assert_missing_configuration(admin_dsn: str) -> None:
-    key = "pg15-missing-supplier-sequence"
-    try:
-        _create_supplier(admin_dsn, "PG15 Missing Config Supplier", key)
-    except psycopg2.Error as error:
-        assert error.pgcode == "P0002"
-    else:
-        raise AssertionError("supplier create succeeded without a configured sequence")
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT count(*) FROM core.idempotency_keys
-             WHERE org_id=%s AND operation='parties.supplier.create'
-               AND idempotency_key_hash=%s
+            SELECT
+              (SELECT status FROM core.memberships
+                WHERE org_id=%s AND id=%s),
+              (SELECT count(*) FROM core.master_code_sequences WHERE org_id=%s)
             """,
-            (ORG, _digest(key)),
+            (COLLISION_ORG, COLLISION_MEMBERSHIP, COLLISION_ORG),
         )
-        assert cursor.fetchone() == (0,)
-    _provision_supplier_sequence(admin_dsn)
+        assert cursor.fetchone() == ("invited", 0)
 
 
 def _assert_concurrent_product_allocation(admin_dsn: str) -> list[tuple]:
@@ -300,7 +348,7 @@ def _assert_concurrent_product_allocation(admin_dsn: str) -> list[tuple]:
         rows = list(pool.map(create, range(1, 17)))
     assert len({row[0] for row in rows}) == 16
     assert {row[1] for row in rows} == {
-        f"PGP-{value:05d}-T" for value in range(1, 17)
+        f"PROD-{value:06d}" for value in range(1, 17)
     }
     assert all(row[2] is False for row in rows)
     return rows
@@ -314,7 +362,7 @@ def _assert_replay_and_conflict(admin_dsn: str) -> tuple[tuple, tuple]:
         admin_dsn, "PG15 Exact Replay Customer", "pg15-customer-replay"
     )
     assert replay[:3] == customer[:3]
-    assert customer[2] == "PGC-00001-T"
+    assert customer[2] == "CUST-000001"
     assert customer[3] is False and replay[3] is True
 
     try:
@@ -329,7 +377,7 @@ def _assert_replay_and_conflict(admin_dsn: str) -> tuple[tuple, tuple]:
     supplier = _create_supplier(
         admin_dsn, "PG15 Canonical Supplier", "pg15-supplier-create"
     )
-    assert supplier[2:] == ("PGS-00001-T", False)
+    assert supplier[2:] == ("SUP-000001", False)
     return customer, supplier
 
 
@@ -348,7 +396,7 @@ def _assert_same_key_concurrent_replay(admin_dsn: str) -> tuple:
         rows = list(pool.map(create, range(8)))
     assert len({row[0] for row in rows}) == 1
     assert len({row[1] for row in rows}) == 1
-    assert {row[2] for row in rows} == {"PGC-00002-T"}
+    assert {row[2] for row in rows} == {"CUST-000002"}
     assert sum(row[3] is False for row in rows) == 1
     assert sum(row[3] is True for row in rows) == 7
     return rows[0]
@@ -372,7 +420,7 @@ def _assert_normalized_duplicate_name_race(admin_dsn: str) -> tuple:
     created = [value for status, value in outcomes if status == "created"]
     rejected = [value for status, value in outcomes if status == "rejected"]
     assert len(created) == 1 and rejected == ["23505"], outcomes
-    assert created[0][1:] == ("PGP-00018-T", False)
+    assert created[0][1:] == ("PROD-000018", False)
     return created[0]
 
 
@@ -440,7 +488,7 @@ def _assert_failed_create_rolls_back_number_and_claim(admin_dsn: str) -> tuple:
         connection.commit()
 
     created = _create_product(admin_dsn, name, key)
-    assert created[1:] == ("PGP-00017-T", False)
+    assert created[1:] == ("PROD-000017", False)
     return created
 
 
@@ -470,6 +518,11 @@ def _assert_tenant_and_write_boundaries(
                 "UPDATE core.master_code_sequences SET next_value=1 "
                 "WHERE org_id=%s AND code_kind='product'",
                 (ORG,),
+                "42501",
+            ),
+            (
+                "SELECT erp_master_commands.provision_organization_code_sequences(%s)",
+                (OTHER_ORG,),
                 "42501",
             ),
             (
@@ -585,16 +638,30 @@ def _assert_catalog_contract(admin_dsn: str) -> None:
                 'erp_runtime',
                 'erp_master_commands.create_supplier(uuid,text,text,text,text,text,text,text,text,text,text,text,integer,bytea,timestamptz)',
                 'EXECUTE'),
+              has_function_privilege(
+                'erp_runtime',
+                'erp_master_commands.provision_organization_code_sequences(uuid)',
+                'EXECUTE'),
+              NOT has_function_privilege(
+                'erp_app',
+                'erp_master_commands.provision_organization_code_sequences(uuid)',
+                'EXECUTE'),
               (SELECT NOT rolsuper AND NOT rolbypassrls
                  FROM pg_catalog.pg_roles WHERE rolname='erp_runtime'),
               (SELECT relrowsecurity AND relforcerowsecurity
                  FROM pg_catalog.pg_class
-                WHERE oid='core.master_code_sequences'::regclass)
+                WHERE oid='core.master_code_sequences'::regclass),
+              EXISTS (
+                SELECT 1 FROM pg_catalog.pg_trigger
+                 WHERE tgrelid='core.memberships'::regclass
+                   AND tgname='zz_memberships_master_code_onboarding_trg'
+                   AND NOT tgisinternal
+              )
             """
         )
         assert cursor.fetchone() == (
             False, False, False, False, False, False,
-            True, True, True, True, True,
+            True, True, True, True, True, True, True, True,
         )
 
 
@@ -640,8 +707,8 @@ def _assert_inactive_and_overflow_fail_closed(admin_dsn: str) -> None:
         cursor.execute(
             """
             UPDATE core.master_code_sequences
-               SET prefix='OVERFLOWPREFIX12',suffix='-TAILEND',padding=8,
-                   next_value=9223372036854775807,
+               SET prefix='OVERFLOW-',suffix='',padding=18,
+                   next_value=1000000000000000000,
                    updated_at=transaction_timestamp(),
                    updated_by_membership_id=%s,row_version=row_version+1
              WHERE org_id=%s AND code_kind='product' AND status='active'
@@ -675,7 +742,7 @@ def _assert_inactive_and_overflow_fail_closed(admin_dsn: str) -> None:
             (ORG, ORG, ORG, _digest(inactive_key), _digest(overflow_key)),
         )
         assert cursor.fetchone() == (
-            "closed:3", 9223372036854775807, 0,
+            "closed:3", 1000000000000000000, 0,
         )
 
 
@@ -683,7 +750,8 @@ def main() -> None:
     admin_dsn = _admin_dsn()
     _seed(admin_dsn)
     _assert_catalog_contract(admin_dsn)
-    _assert_missing_configuration(admin_dsn)
+    _assert_onboarding_is_exact_and_replay_safe(admin_dsn)
+    _assert_onboarding_rejects_future_code_collision(admin_dsn)
     concurrent_products = _assert_concurrent_product_allocation(admin_dsn)
     customer, supplier = _assert_replay_and_conflict(admin_dsn)
     _assert_same_key_concurrent_replay(admin_dsn)
