@@ -56,9 +56,10 @@ from provision_ephemeral_browser_identities import (  # noqa: E402
     _validate_target,
 )
 from provision_staging_mcp_oauth import (  # noqa: E402
+    _auth_admin_authority,
     _reconcile_client,
-    _service_role_key,
 )
+from supabase_auth_admin import mask_auth_admin_secret  # noqa: E402
 
 
 STATE_VERSION = 1
@@ -584,9 +585,9 @@ def provision(state_path: Path, browser_state_path: Path) -> None:
         raise CanonicalLiveIdentityError(
             f"Provision the {PROFILE_TWO_USER} or {PROFILE_LIVE18} ephemeral identity profile first"
         )
-    service_key = _service_role_key(management_token)
-    _mask(service_key)
-    client = _reconcile_client(service_key)
+    auth_admin = _auth_admin_authority(management_token)
+    mask_auth_admin_secret(auth_admin)
+    client = _reconcile_client(auth_admin)
     client_id = str(client["client_id"])
     state = {
         "version": STATE_VERSION,

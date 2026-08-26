@@ -187,7 +187,8 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     assert "live-erp-two-user-approval-evidence" in workflow
     assert 'EXPECTED_PROJECT_REF = "rgihahbmkrmhitjdjvev"' in provisioner
     assert "from provision_staging_mcp_oauth import" in provisioner
-    assert "_service_role_key" in provisioner
+    assert "_auth_admin_authority" in provisioner
+    assert "_service_role_key" not in provisioner
     assert 'WEB_CLIENT_ID = "aasopharma-erp-web"' in provisioner
     assert "status='suspended'" in provisioner
     assert "_clear_browser_environment()" in provisioner
@@ -1348,7 +1349,9 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert '"client_type": "public"' in provisioner
     assert '"token_endpoint_auth_method": "none"' in provisioner
     assert 'headers["apikey"] = token' in provisioner
-    assert provisioner.count("include_api_key=True") == 6
+    assert "resolve_auth_admin_authority" in provisioner
+    assert "auth_admin_request" in provisioner
+    assert "_service_role_key" not in provisioner
     assert "if TEST_CALLBACK in (client.get(\"redirect_uris\") or ())" in provisioner
     assert 'client.get("name")' not in provisioner
     assert '"app_metadata": {' in provisioner

@@ -6,6 +6,12 @@ import pytest
 from scripts import provision_staging_mcp_oauth as provision
 
 
+def _auth_admin() -> provision.SupabaseAuthAdminAuthority:
+    return provision.SupabaseAuthAdminAuthority(
+        provision.PROJECT_REF, "sb_secret_" + "x" * 32
+    )
+
+
 def _set_reviewed_database_environment(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setenv("SUPABASE_POOLER_HOST", provision.REVIEWED_POOLER_HOST)
     monkeypatch.setenv("CANONICAL_ACTIVE_POOLER_PORT", "5432")
@@ -30,7 +36,7 @@ def test_client_authority_only_does_not_create_identity_or_bind_database(
     monkeypatch.setenv("CANONICAL_DEMO_EVIDENCE_DIR", str(evidence_dir))
     monkeypatch.delenv("PSYCOPG_DATABASE_URL", raising=False)
     monkeypatch.delenv(provision.WEB_TEST_AUTH_USER_ENV, raising=False)
-    monkeypatch.setattr(provision, "_service_role_key", lambda _token: "service-key")
+    monkeypatch.setattr(provision, "_auth_admin_authority", lambda _token: _auth_admin())
     monkeypatch.setattr(
         provision,
         "_reconcile_client",
@@ -124,7 +130,7 @@ def test_bind_existing_demo_missing_password_fails_before_oauth_mutation(
     monkeypatch.delenv("CANONICAL_STAGING_MCP_TEST_PASSWORD", raising=False)
     monkeypatch.setattr(
         provision,
-        "_service_role_key",
+        "_auth_admin_authority",
         lambda *_args: pytest.fail("missing password reached Supabase authority"),
     )
     with pytest.raises(provision.ProvisioningError, match="TEST_PASSWORD is required"):
@@ -173,7 +179,7 @@ def test_bind_mode_rejects_wrong_database_before_oauth_mutation(
     )
     monkeypatch.setattr(
         provision,
-        "_service_role_key",
+        "_auth_admin_authority",
         lambda *_args: pytest.fail("wrong database target reached OAuth mutation"),
     )
 

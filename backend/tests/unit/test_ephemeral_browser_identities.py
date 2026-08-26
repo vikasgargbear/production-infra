@@ -18,6 +18,12 @@ assert SPEC and SPEC.loader
 SPEC.loader.exec_module(identities)
 
 
+def _auth_admin():
+    return identities.SupabaseAuthAdminAuthority(
+        identities.EXPECTED_PROJECT_REF, "sb_secret_" + "x" * 32
+    )
+
+
 def _environment(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     state_path = tmp_path / "ephemeral-state.json"
     github_env = tmp_path / "github-env"
@@ -26,11 +32,10 @@ def _environment(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     monkeypatch.setenv("SUPABASE_URL", identities.SUPABASE_URL)
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
     monkeypatch.setenv("SUPABASE_DB_PASSWORD", "database-password")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_ENV", str(github_env))
     monkeypatch.setattr(identities, "_validate_target", lambda token: None)
-    monkeypatch.setattr(
-        identities, "_service_role_key", lambda token: "temporary-service-key"
-    )
+    monkeypatch.setattr(identities, "_auth_admin_authority", lambda token: _auth_admin())
     return state_path, github_env
 
 
@@ -718,7 +723,7 @@ def test_provision_exports_credentials_only_to_masked_same_job_environment(
     assert requester_email != reviewer_email
     output = capsys.readouterr().out
     for value in (
-        "temporary-service-key",
+        _auth_admin().secret_key,
         requester_email,
         reviewer_email,
     ):
@@ -1029,7 +1034,7 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
 
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
     monkeypatch.setattr(identities, "_validate_target", lambda _token: None)
-    monkeypatch.setattr(identities, "_service_role_key", lambda _token: "service-key")
+    monkeypatch.setattr(identities, "_auth_admin_authority", lambda _token: _auth_admin())
     monkeypatch.setattr(identities, "_mask", lambda _value: None)
     monkeypatch.setattr(
         identities,
@@ -1074,7 +1079,7 @@ def test_lost_state_preserves_auth_anchor_until_database_boundary_is_clean(
     stale_id = "d4000000-0000-7000-8000-000000000001"
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
     monkeypatch.setattr(identities, "_validate_target", lambda _token: None)
-    monkeypatch.setattr(identities, "_service_role_key", lambda _token: "service-key")
+    monkeypatch.setattr(identities, "_auth_admin_authority", lambda _token: _auth_admin())
     monkeypatch.setattr(identities, "_mask", lambda _value: None)
     monkeypatch.setattr(
         identities,

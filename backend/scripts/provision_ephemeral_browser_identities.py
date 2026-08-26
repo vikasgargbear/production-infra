@@ -29,13 +29,17 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
-# Keep the management-token -> legacy service-role resolution in one reviewed
-# implementation.  In particular, do not accept a service-role key as input.
 from provision_staging_mcp_oauth import (  # noqa: E402
     PROJECT_REF,
     SUPABASE_URL,
+    _auth_admin_authority,
     _request_json,
-    _service_role_key,
+)
+from supabase_auth_admin import (  # noqa: E402
+    SupabaseAuthAdminAuthority,
+    SupabaseAuthAdminError,
+    auth_admin_request,
+    mask_auth_admin_secret,
 )
 
 
@@ -419,33 +423,29 @@ def _clear_browser_environment() -> None:
 def _admin_request(
     method: str,
     path: str,
-    service_key: str,
+    authority: SupabaseAuthAdminAuthority,
     *,
     payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
     allow_missing: bool = False,
 ) -> Any:
-    response = requests.request(
-        method,
-        f"{SUPABASE_URL}/auth/v1/admin/{path.lstrip('/')}",
-        headers={
-            "Authorization": f"Bearer {service_key}",
-            "apikey": service_key,
-        },
-        json=payload,
-        timeout=20,
-    )
-    if allow_missing and response.status_code == 404:
-        return None
-    if not response.ok:
-        raise EphemeralIdentityError(
-            f"Supabase Auth admin {method} {path} failed with HTTP "
-            f"{response.status_code}"
+    try:
+        return auth_admin_request(
+            authority,
+            method,
+            path,
+            payload=payload,
+            params=params,
+            allow_missing=allow_missing,
         )
-    return response.json() if response.content else None
+    except SupabaseAuthAdminError as error:
+        raise EphemeralIdentityError(
+            f"Supabase Auth Admin request blocked: {error.code}"
+        ) from error
 
 
 def _create_auth_user(
-    service_key: str,
+    authority: SupabaseAuthAdminAuthority,
     *,
     purpose: str,
     role: str,
@@ -457,7 +457,7 @@ def _create_auth_user(
     result = _admin_request(
         "POST",
         "users",
-        service_key,
+        authority,
         payload={
             "email": email,
             "password": password,
@@ -489,12 +489,13 @@ def _create_auth_user(
 
 
 def _list_run_auth_user_ids(
-    service_key: str, run_token: str, purpose: str
+    authority: SupabaseAuthAdminAuthority, run_token: str, purpose: str
 ) -> set[str]:
     matches: set[str] = set()
     for page in range(1, 11):
         result = _admin_request(
-            "GET", f"users?page={page}&per_page=1000", service_key
+            "GET", "users", authority,
+            params={"page": page, "per_page": 1000},
         )
         users = result.get("users", []) if isinstance(result, dict) else []
         if not isinstance(users, list):
@@ -514,13 +515,16 @@ def _list_run_auth_user_ids(
     return matches
 
 
-def _list_purpose_auth_user_ids(service_key: str, purpose: str) -> set[str]:
+def _list_purpose_auth_user_ids(
+    authority: SupabaseAuthAdminAuthority, purpose: str
+) -> set[str]:
     """Find stale disposable users without depending on a lost runner state file."""
 
     matches: set[str] = set()
     for page in range(1, 11):
         result = _admin_request(
-            "GET", f"users?page={page}&per_page=1000", service_key
+            "GET", "users", authority,
+            params={"page": page, "per_page": 1000},
         )
         users = result.get("users", []) if isinstance(result, dict) else []
         if not isinstance(users, list):
@@ -536,12 +540,14 @@ def _list_purpose_auth_user_ids(service_key: str, purpose: str) -> set[str]:
     return matches
 
 
-def _delete_auth_user(service_key: str, auth_user_id: str) -> None:
+def _delete_auth_user(
+    authority: SupabaseAuthAdminAuthority, auth_user_id: str
+) -> None:
     last_error: EphemeralIdentityError | None = None
     for attempt in range(3):
         try:
             _admin_request(
-                "DELETE", f"users/{UUID(auth_user_id)}", service_key,
+                "DELETE", f"users/{UUID(auth_user_id)}", authority,
                 allow_missing=True,
             )
             return
@@ -1183,10 +1189,10 @@ def recover_lost_live18_state() -> dict[str, int]:
 
     management_token = _required("SUPABASE_ACCESS_TOKEN")
     _validate_target(management_token)
-    service_key = _service_role_key(management_token)
-    _mask(service_key)
+    auth_admin = _auth_admin_authority(management_token)
+    mask_auth_admin_secret(auth_admin)
     stale_auth_user_ids = _list_purpose_auth_user_ids(
-        service_key, LIVE18_PURPOSE
+        auth_admin, LIVE18_PURPOSE
     )
     _recover_stale_live18_database(management_token, stale_auth_user_ids)
     # Never delete the durable Auth discovery anchors until every database
@@ -1194,9 +1200,9 @@ def recover_lost_live18_state() -> dict[str, int]:
     _assert_live18_database_boundary(management_token)
     if stale_auth_user_ids:
         for auth_user_id in sorted(stale_auth_user_ids):
-            _delete_auth_user(service_key, auth_user_id)
+            _delete_auth_user(auth_admin, auth_user_id)
     remaining_auth_user_ids = _list_purpose_auth_user_ids(
-        service_key, LIVE18_PURPOSE
+        auth_admin, LIVE18_PURPOSE
     )
     if remaining_auth_user_ids:
         raise EphemeralIdentityError(
@@ -2010,15 +2016,15 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
     purpose = _profile_purpose(profile)
     identities = _profile_identities(profile)
     _validate_target(management_token)
-    service_key = _service_role_key(management_token)
-    _mask(service_key)
+    auth_admin = _auth_admin_authority(management_token)
+    mask_auth_admin_secret(auth_admin)
     if profile == PROFILE_LIVE18:
-        stale_auth_user_ids = _list_purpose_auth_user_ids(service_key, purpose)
+        stale_auth_user_ids = _list_purpose_auth_user_ids(auth_admin, purpose)
         if stale_auth_user_ids:
             _recover_stale_live18_database(management_token, stale_auth_user_ids)
             for auth_user_id in sorted(stale_auth_user_ids):
-                _delete_auth_user(service_key, auth_user_id)
-            if _list_purpose_auth_user_ids(service_key, purpose):
+                _delete_auth_user(auth_admin, auth_user_id)
+            if _list_purpose_auth_user_ids(auth_admin, purpose):
                 raise EphemeralIdentityError(
                     "Stale disposable live18 Auth identities remained after recovery"
                 )
@@ -2053,7 +2059,7 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
         _mask(email)
         _mask(password)
         auth_user_id = _create_auth_user(
-            service_key,
+            auth_admin,
             purpose=purpose,
             role=role,
             run_token=run_token,
@@ -2074,7 +2080,7 @@ def provision(state_path: Path, profile: str = PROFILE_TWO_USER) -> None:
         _mask(denial_email)
         _mask(denial_password)
         denial_auth_user_id = _create_auth_user(
-            service_key,
+            auth_admin,
             purpose=purpose,
             role="denial",
             run_token=run_token,
@@ -2141,20 +2147,20 @@ def cleanup(state_path: Path) -> None:
             errors.append(f"database cleanup: {exc}")
         if database_cleaned:
             try:
-                service_key = _service_role_key(management_token)
-                _mask(service_key)
+                auth_admin = _auth_admin_authority(management_token)
+                mask_auth_admin_secret(auth_admin)
                 auth_user_ids = {
                     entry["auth_user_id"] for entry in state.get("auth_users", [])
                 }
                 auth_user_ids.update(
                     _list_run_auth_user_ids(
-                        service_key,
+                        auth_admin,
                         str(state["run_token"]),
                         str(state["purpose"]),
                     )
                 )
                 for auth_user_id in sorted(auth_user_ids):
-                    _delete_auth_user(service_key, auth_user_id)
+                    _delete_auth_user(auth_admin, auth_user_id)
             except Exception as exc:  # report after credentials are cleared
                 errors.append(f"Auth cleanup: {exc}")
     finally:

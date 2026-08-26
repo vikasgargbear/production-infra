@@ -16,6 +16,23 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 import psycopg2
 import requests
 
+if __package__:
+    from .supabase_auth_admin import (
+        SupabaseAuthAdminAuthority,
+        SupabaseAuthAdminError,
+        auth_admin_request,
+        mask_auth_admin_secret,
+        resolve_auth_admin_authority,
+    )
+else:
+    from supabase_auth_admin import (
+        SupabaseAuthAdminAuthority,
+        SupabaseAuthAdminError,
+        auth_admin_request,
+        mask_auth_admin_secret,
+        resolve_auth_admin_authority,
+    )
+
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
@@ -111,20 +128,35 @@ def _request_json(
     return response.json() if response.content else None
 
 
-def _service_role_key(management_token: str) -> str:
-    keys = _request_json(
-        "GET",
-        f"https://api.supabase.com/v1/projects/{PROJECT_REF}/api-keys",
-        management_token,
-    )
-    matches = [
-        item.get("api_key")
-        for item in keys
-        if item.get("name") == "service_role" and item.get("api_key")
-    ]
-    if len(matches) != 1:
-        raise ProvisioningError("Expected exactly one legacy service_role project key")
-    return str(matches[0])
+def _auth_admin_authority(management_token: str) -> SupabaseAuthAdminAuthority:
+    try:
+        return resolve_auth_admin_authority(management_token, PROJECT_REF)
+    except SupabaseAuthAdminError as error:
+        raise ProvisioningError(
+            f"Supabase Auth Admin authority blocked: {error.code}"
+        ) from error
+
+
+def _auth_admin_json(
+    authority: SupabaseAuthAdminAuthority,
+    method: str,
+    path: str,
+    *,
+    payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> Any:
+    try:
+        return auth_admin_request(
+            authority,
+            method,
+            path,
+            payload=payload,
+            params=params,
+        )
+    except SupabaseAuthAdminError as error:
+        raise ProvisioningError(
+            f"Supabase Auth Admin request blocked: {error.code}"
+        ) from error
 
 
 def _client_shape(client: dict[str, Any]) -> tuple[Any, ...]:
@@ -135,14 +167,13 @@ def _client_shape(client: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _reconcile_client(service_key: str) -> dict[str, Any]:
-    endpoint = f"{SUPABASE_URL}/auth/v1/admin/oauth/clients"
-    listed = _request_json(
+def _reconcile_client(authority: SupabaseAuthAdminAuthority) -> dict[str, Any]:
+    endpoint = "oauth/clients"
+    listed = _auth_admin_json(
+        authority,
         "GET",
         endpoint,
-        service_key,
         params={"per_page": 100},
-        include_api_key=True,
     )
     clients = listed.get("clients", []) if isinstance(listed, dict) else []
     matches = [
@@ -163,16 +194,15 @@ def _reconcile_client(service_key: str) -> dict[str, Any]:
     if matches:
         client = matches[0]
         if _client_shape(client) != _client_shape(payload):
-            client = _request_json(
+            client = _auth_admin_json(
+                authority,
                 "PATCH",
                 f"{endpoint}/{client['client_id']}",
-                service_key,
                 payload=payload,
-                include_api_key=True,
             )
     else:
-        client = _request_json(
-            "POST", endpoint, service_key, payload=payload, include_api_key=True
+        client = _auth_admin_json(
+            authority, "POST", endpoint, payload=payload
         )
     if not isinstance(client, dict) or _client_shape(client) != _client_shape(payload):
         raise ProvisioningError("OAuth client response did not match the reviewed public-client contract")
@@ -182,14 +212,15 @@ def _reconcile_client(service_key: str) -> dict[str, Any]:
     return client
 
 
-def _reconcile_test_user(service_key: str, password: str) -> str:
-    endpoint = f"{SUPABASE_URL}/auth/v1/admin/users"
-    listed = _request_json(
+def _reconcile_test_user(
+    authority: SupabaseAuthAdminAuthority, password: str
+) -> str:
+    endpoint = "users"
+    listed = _auth_admin_json(
+        authority,
         "GET",
         endpoint,
-        service_key,
         params={"page": 1, "per_page": 1000},
-        include_api_key=True,
     )
     users = listed.get("users", []) if isinstance(listed, dict) else []
     matches = [user for user in users if user.get("email") == TEST_EMAIL]
@@ -205,16 +236,15 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
         },
     }
     if matches:
-        user = _request_json(
+        user = _auth_admin_json(
+            authority,
             "PUT",
             f"{endpoint}/{matches[0]['id']}",
-            service_key,
             payload=payload,
-            include_api_key=True,
         )
     else:
-        user = _request_json(
-            "POST", endpoint, service_key, payload=payload, include_api_key=True
+        user = _auth_admin_json(
+            authority, "POST", endpoint, payload=payload
         )
     user_id = user.get("id") if isinstance(user, dict) else None
     if not isinstance(user_id, str) or not user_id.strip():
@@ -878,10 +908,10 @@ def main(argv: list[str] | None = None) -> int:
         if mode not in {"client-authority-only", "client-only"}
         else ""
     )
-    service_key = _service_role_key(management_token)
-    print(f"::add-mask::{service_key}")
-    print("Resolved the staging project admin key")
-    client = _reconcile_client(service_key)
+    auth_admin = _auth_admin_authority(management_token)
+    mask_auth_admin_secret(auth_admin)
+    print("Resolved the staging project Auth Admin secret")
+    client = _reconcile_client(auth_admin)
     client_id = _reviewed_client_id(client)
     print("Reconciled the reviewed public OAuth client")
     if mode == "client-authority-only":
@@ -906,7 +936,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     password = existing_password or secrets.token_urlsafe(32)
     print(f"::add-mask::{password}")
-    auth_user_id = _reconcile_test_user(service_key, password)
+    auth_user_id = _reconcile_test_user(auth_admin, password)
     print("Reconciled the disposable OAuth test identity")
     try:
         web_auth_user_id = str(UUID(_required(WEB_TEST_AUTH_USER_ENV)))
