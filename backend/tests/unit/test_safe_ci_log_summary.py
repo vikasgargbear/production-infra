@@ -96,3 +96,21 @@ def test_render_annotation_classifies_evidence_key_failure_without_echoing_it(
 
     assert metadata["diagnostic"] == "evidence_storage_management_api_http_403"
     assert "private-must-not-escape" not in annotation
+
+
+def test_evidence_cleanup_annotation_classifies_missing_restricted_credential(
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "evidence-cleanup.log"
+    log_path.write_text(
+        "canonical evidence reset cleanup blocked: evidence cleanup requires "
+        "the bucket-restricted Supabase secret API key\n"
+        f"private-object-key/{'a' * 64}.pdf\n",
+        encoding="utf-8",
+    )
+
+    annotation = safe_log_annotation(log_path, label="evidence-cleanup")
+    metadata = json.loads(annotation.split("::", 2)[2])
+
+    assert metadata["diagnostic"] == "evidence_cleanup_credential_unavailable"
+    assert "private-object-key" not in annotation

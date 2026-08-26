@@ -130,6 +130,7 @@ jobs:
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      EVIDENCE_STORAGE_SERVER_API_KEY: ${{ secrets.EVIDENCE_STORAGE_SERVER_API_KEY }}
       CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
       TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
@@ -380,30 +381,6 @@ jobs:
           jq -e --arg sha "$GITHUB_SHA" \
             '.state == "closed" and .commit_sha == $sha' \
             staging-evidence/canonical-write-fence-closed.json >/dev/null
-
-      - name: Provision restricted evidence cleanup authority before the disposable reset
-        if: inputs.reset_disposable_data == true
-        run: |
-          set -euo pipefail
-          canonical_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
-          observed_head=$(psql -X -Atqc \
-            "SELECT version_num FROM public.alembic_version" \
-            "$PSYCOPG_DATABASE_URL")
-          test "$observed_head" = "$canonical_head"
-          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
-          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
-          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -f database/09-deployment/canonical-evidence-storage.sql >/dev/null
-          key_log=$(mktemp)
-          if ! python3 backend/scripts/provision_canonical_evidence_storage_key.py \
-              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
-              --github-env "$GITHUB_ENV" \
-              --receipt staging-evidence/canonical-evidence-storage-key.json \
-              >staging-evidence/canonical-evidence-storage-key-summary.json \
-              2>"$key_log"; then
-            python3 backend/scripts/safe_ci_log_summary.py --label evidence-key "$key_log"
-            exit 1
-          fi
 
       - name: Remove reconciled unprotected evidence objects before the disposable reset
         if: inputs.reset_disposable_data == true
@@ -1039,7 +1016,7 @@ jobs:
           echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
 
       - name: Provision canonical private evidence storage
-        if: inputs.deploy_render_pilot == true && inputs.reset_disposable_data != true
+        if: inputs.deploy_render_pilot == true
         run: |
           set -euo pipefail
           test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
@@ -1067,7 +1044,7 @@ jobs:
               --receipt staging-evidence/canonical-evidence-storage-key.json \
               >staging-evidence/canonical-evidence-storage-key-summary.json \
               2>"$key_log"; then
-            python3 backend/scripts/safe_ci_log_summary.py --label render "$key_log"
+            python3 backend/scripts/safe_ci_log_summary.py --label evidence-key "$key_log"
             exit 1
           fi
 

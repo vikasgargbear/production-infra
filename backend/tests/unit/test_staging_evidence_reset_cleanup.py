@@ -74,6 +74,9 @@ def test_admin_inventory_reads_exact_bucket_keys_and_canonical_metadata():
 
         def execute(self, sql, parameters=None):
             executed.append((sql, parameters))
+            if sql.startswith("SET TRANSACTION"):
+                self.rows = []
+                return
             self.rows = next(result_sets)
 
         def fetchone(self):
@@ -96,11 +99,15 @@ def test_admin_inventory_reads_exact_bucket_keys_and_canonical_metadata():
 
     assert inventory == _inventory()
     assert connection.commits == 1
-    assert "FROM storage.objects WHERE bucket_id=%s" in executed[1][0]
-    assert executed[1][1] == (BUCKET,)
-    assert "FROM core.attachments" in executed[2][0]
-    assert "WHERE storage_bucket=%s" in executed[2][0]
+    assert executed[0] == (
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        None,
+    )
+    assert "FROM storage.objects WHERE bucket_id=%s" in executed[2][0]
     assert executed[2][1] == (BUCKET,)
+    assert "FROM core.attachments" in executed[3][0]
+    assert "WHERE storage_bucket=%s" in executed[3][0]
+    assert executed[3][1] == (BUCKET,)
 
 
 def test_exact_expired_rejected_object_is_a_cleanup_candidate():
@@ -221,6 +228,31 @@ def test_empty_bucket_needs_no_api_call_or_placeholder_credential():
         ),
     )
     assert receipt["deleted_object_count"] == 0
+    assert receipt["reconciled_object_count"] == 0
+    assert receipt["remaining_object_count"] == 0
+    assert receipt["object_key_set_sha256"] == (
+        "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    )
+
+
+def test_nonempty_reconciled_inventory_requires_the_supported_credential():
+    with pytest.raises(
+        EvidenceResetCleanupError,
+        match="bucket-restricted Supabase secret API key",
+    ):
+        execute_cleanup(
+            project_ref=CANONICAL_STAGING_PROJECT_REF,
+            api_key="",
+            inventory=_inventory(),
+            observed_bucket_count=lambda: pytest.fail(
+                "cleanup must fail before claiming an empty postcondition"
+            ),
+            transport=httpx.MockTransport(
+                lambda _request: pytest.fail(
+                    "cleanup must not use an unsupported credential fallback"
+                )
+            ),
+        )
 
 
 def test_receipt_counts_explicit_disposable_retention_override():
@@ -285,21 +317,33 @@ def test_cleanup_is_pinned_to_the_reviewed_staging_project(project_ref):
         )
 
 
-def test_workflow_provisions_restricted_authority_and_cleans_before_reset():
+def test_workflow_decouples_empty_cleanup_from_post_reset_runtime_provisioning():
     workflow = (
         Path(__file__).resolve().parents[3]
         / ".github/workflows/canonical-staging.yml"
     ).read_text(encoding="utf-8")
-    provision = workflow.index(
-        "Provision restricted evidence cleanup authority before the disposable reset"
-    )
     cleanup = workflow.index(
         "Remove reconciled unprotected evidence objects before the disposable reset"
     )
     reset = workflow.index("Reset canonical data on the pinned disposable project")
-    assert provision < cleanup < reset
+    migration = workflow.index("Apply or verify the approved canonical migration head")
+    provision = workflow.index("Provision canonical private evidence storage")
+    assert cleanup < reset < migration < provision
+    assert (
+        "Provision restricted evidence cleanup authority before the disposable reset"
+        not in workflow
+    )
     cleanup_step = workflow[cleanup:reset]
     assert "cleanup_staging_evidence_storage.py" in cleanup_step
-    assert "EVIDENCE_STORAGE_SERVER_API_KEY" not in cleanup_step
+    assert "provision_canonical_evidence_storage_key.py" not in cleanup_step
+    assert (
+        "EVIDENCE_STORAGE_SERVER_API_KEY: "
+        "${{ secrets.EVIDENCE_STORAGE_SERVER_API_KEY }}"
+    ) in workflow
     assert "DELETE FROM storage.objects" not in workflow
     assert "canonical-evidence-storage-reset-cleanup.json" in cleanup_step
+    provision_step = workflow[provision:workflow.index(
+        "Prove canonical evidence storage least privilege"
+    )]
+    assert "if: inputs.deploy_render_pilot == true" in provision_step
+    assert "inputs.reset_disposable_data" not in provision_step

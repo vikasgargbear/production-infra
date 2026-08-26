@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Remove exact, non-held fixture evidence before a disposable staging reset.
+"""Reconcile evidence before a disposable staging reset.
 
 The cleanup authority is deliberately narrower than the normal application
 adapter.  It resolves every object key from PostgreSQL with an administrator
 connection, requires a one-to-one match with canonical attachment metadata,
-and sends one exact-key bulk delete to Supabase Storage. The explicit reset
-authorization may override fixture retention only on the pinned disposable
-project; legal holds still fail closed. It never mutates
+and sends one exact-key bulk delete to Supabase Storage only when reconciled
+objects exist. An exactly empty database inventory needs no Storage credential.
+The explicit reset authorization may override fixture retention only on the
+pinned disposable project; legal holds still fail closed. It never mutates
 ``storage.objects`` with SQL and never prints or records object keys or API
 credentials.
 """
@@ -89,6 +90,7 @@ def load_inventory(connection: Any) -> EvidenceInventory:
     """Read the complete bucket/metadata inventory through the admin database."""
 
     with connection.cursor() as cursor:
+        cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         cursor.execute("SELECT CURRENT_DATE")
         current_row = cursor.fetchone()
         if current_row is None or not isinstance(current_row[0], date):
@@ -236,12 +238,18 @@ def execute_cleanup(
 
     _validate_project_ref(project_ref)
     keys = validated_cleanup_keys(inventory)
-    deleted_count = _delete_exact_keys(
-        project_ref=project_ref,
-        api_key=api_key,
-        keys=keys,
-        transport=transport,
-    )
+    if keys:
+        deleted_count = _delete_exact_keys(
+            project_ref=project_ref,
+            api_key=api_key,
+            keys=keys,
+            transport=transport,
+        )
+    else:
+        # The two inventory queries share one repeatable-read snapshot.  When
+        # both sets are exactly empty, a Storage credential adds no evidence
+        # and must not become a prerequisite for the canonical database reset.
+        deleted_count = 0
     remaining = observed_bucket_count()
     if not isinstance(remaining, int) or isinstance(remaining, bool) or remaining < 0:
         raise EvidenceResetCleanupError("post-cleanup bucket count is invalid")

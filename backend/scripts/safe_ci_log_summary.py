@@ -45,6 +45,11 @@ def safe_log_annotation(path: Path, *, label: str) -> str:
         diagnostic = _safe_render_diagnostic(text)
         if diagnostic:
             summary["diagnostic"] = diagnostic
+    elif label == "evidence-cleanup":
+        text = path.read_text(encoding="utf-8", errors="replace")
+        diagnostic = _safe_evidence_cleanup_diagnostic(text)
+        if diagnostic:
+            summary["diagnostic"] = diagnostic
     return (
         f"::error title={title}::"
         + json.dumps(summary, sort_keys=True, separators=(",", ":"))
@@ -95,6 +100,21 @@ def _safe_render_diagnostic(text: str) -> Optional[str]:
             return f"render_api_{http.group(1).lower()}_http_{http.group(2)}"
         if line.startswith("provisioning blocked:"):
             return "provisioning_contract_blocked"
+    return None
+
+
+def _safe_evidence_cleanup_diagnostic(text: str) -> Optional[str]:
+    """Classify cleanup failures without emitting object keys or provider data."""
+
+    normalized = " ".join(text.lower().split())
+    if "requires the bucket-restricted supabase secret api key" in normalized:
+        return "evidence_cleanup_credential_unavailable"
+    if "do not reconcile one-to-one" in normalized:
+        return "evidence_cleanup_inventory_reconciliation_failed"
+    if "refused protected metadata" in normalized:
+        return "evidence_cleanup_protected_metadata_present"
+    if "canonical evidence reset cleanup blocked:" in normalized:
+        return "evidence_cleanup_contract_blocked"
     return None
 
 
