@@ -847,19 +847,22 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     workflow = _read(".github/workflows/canonical-staging.yml")
     production_workflow = _read(".github/workflows/production-readiness.yml")
+    reset_step = workflow.split(
+        "Reset canonical data on the pinned disposable project", 1
+    )[1].split("Apply or verify the approved canonical migration head", 1)[0]
 
     assert "reset_disposable_data:" in workflow
     assert "if: inputs.reset_disposable_data == true" in workflow
     assert "Refuse any target except the reviewed free staging project" in workflow
     assert "DROP TABLE IF EXISTS public.alembic_version" in workflow
     assert "DROP EXTENSION IF EXISTS btree_gist" in workflow
-    assert "GRANT %I TO %I WITH SET TRUE, INHERIT FALSE" in workflow
-    assert "SET LOCAL ROLE erp_migration_owner" in workflow
-    assert workflow.index("SET LOCAL ROLE erp_migration_owner") < workflow.index(
+    assert "GRANT %I TO %I WITH SET TRUE, INHERIT FALSE" in reset_step
+    assert "SET LOCAL ROLE erp_migration_owner" in reset_step
+    assert reset_step.index("SET LOCAL ROLE erp_migration_owner") < reset_step.index(
         "DROP SCHEMA IF EXISTS"
     )
-    assert workflow.index("DROP SCHEMA IF EXISTS") < workflow.index("RESET ROLE")
-    assert workflow.index("RESET ROLE") < workflow.index(
+    assert reset_step.index("DROP SCHEMA IF EXISTS") < reset_step.index("RESET ROLE")
+    assert reset_step.index("RESET ROLE") < reset_step.index(
         "DROP EXTENSION IF EXISTS btree_gist"
     )
     assert "DROP ROLE IF EXISTS erp_runtime" in workflow
