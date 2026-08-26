@@ -1207,6 +1207,23 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "needs.railway-canonical-staging.result" in live18
     assert "inputs.provision_canonical_demo }}' != true" in live18
     assert "same-run canonical demo provision" in live18
+    job_environment = live18.split("\n    steps:", 1)[0]
+    assert "secrets.RAILWAY_API_TOKEN" not in job_environment
+    railway_token_steps = {
+        block.splitlines()[0].strip()
+        for block in live18.split("\n      - name: ")[1:]
+        if "RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}" in block
+    }
+    assert railway_token_steps == {
+        "Register one run-scoped Railway SSH key",
+        "Resolve the one running instance of the exact Railway API deployment",
+        "Recover stale Railway-direct identities before demo provisioning",
+        "Verify exact migration head and provision same-run demo over Railway direct IPv6",
+        "Provision disposable identities and MCP authority over Railway direct IPv6",
+        "Capture PostgreSQL evidence from exact Railway deployment over direct IPv6",
+        "Always clean Railway-direct temporary identities and authorities",
+        "Always remove the run-scoped Railway SSH key",
+    }
     recovery_step = "Recover stale Railway-direct identities before demo provisioning"
     demo_step = "Verify exact migration head and provision same-run demo over Railway direct IPv6"
     identity_step = "Provision disposable identities and MCP authority over Railway direct IPv6"
@@ -1255,6 +1272,20 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         'echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"'
         in live18
     )
+    assert (
+        'echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"'
+        in live18
+    )
+    assert "LIVE18_RAILWAY_DEMO_EVIDENCE_PATH" not in live18
+    render_database_step = live18.split(
+        "- name: Build the masked exact erp_runtime connection", 1
+    )[1].split("\n      - name:", 1)[0]
+    assert (
+        'echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH='
+        '$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"'
+        in render_database_step
+    )
+    assert "if: env.LIVE18_PROVIDER == 'render'" in render_database_step
     assert "secrets.LIVE18_REVIEWED_SCALARS_JSON" in live18
     assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" in live18
     assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" in live18
@@ -1279,7 +1310,35 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json" in live18
     assert "e2e/live18/playwright.config.ts" in live18
     assert "test_browser_evidence_reconciliation.py" in live18
+    assert "id: live18_reconciliation" in live18
+    reconciliation_step = live18.split(
+        "- name: Reconcile every template-ready browser resource through MCP and PostgreSQL",
+        1,
+    )[1].split("\n      - name:", 1)[0]
+    assert "steps.live18_browser.outcome == 'success'" in reconciliation_step
+    assert "build_live18_reconciliation_attestation.py" in live18
+    assert "live18-reconciliation.txt" not in live18
+    assert (
+        live18.index("test_browser_evidence_reconciliation.py")
+        < live18.index("build_live18_reconciliation_attestation.py")
+        < live18.index("build_live18_artifact_manifest.py")
+    )
+    assert '--reconciliation-evidence "$LIVE18_RECONCILIATION_EVIDENCE_PATH"' in live18
+    assert live18.count(
+        "--operation-matrix backend/tests/live_acceptance/operation_matrix.json"
+    ) == 2
     assert "build_live18_artifact_manifest.py" in live18
+    assert "Extract and verify the same-run Render demo receipt" in live18
+    render_receipt_step = live18.split(
+        "- name: Extract and verify the same-run Render demo receipt", 1
+    )[1].split("\n      - name:", 1)[0]
+    assert "if: env.LIVE18_PROVIDER == 'render'" in render_receipt_step
+    assert "GH_TOKEN: ${{ github.token }}" in render_receipt_step
+    assert "canonical-staging-baseline-${GITHUB_RUN_ID}" in render_receipt_step
+    assert "live18-render-demo-receipt.json" in render_receipt_step
+    assert "canonical-demo-summary.json" not in render_receipt_step
+    assert "_demo_summary(" in render_receipt_step
+    assert '--demo-evidence "$LIVE18_DEMO_EVIDENCE_PATH"' in live18
     assert "${{ runner.temp }}/live18-upload/live18-evidence-manifest.json" in live18
     upload = live18.split(
         "- name: Upload scrubbed allowlisted live18 evidence only", 1
@@ -1287,7 +1346,10 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "${{ runner.temp }}/live18-browser-identities.json" not in upload
     assert "${{ runner.temp }}/live18-playwright" not in upload
     assert "id: live18_browser" in live18
-    assert "if: always() && steps.live18_browser.outcome != 'skipped'" in live18
+    assert (
+        "if: always() && env.LIVE18_PROVIDER == 'railway' && "
+        "steps.live18_browser.outcome != 'skipped'"
+    ) in live18
     assert "maxFailures: 0" in playwright_config
     assert "trace: 'off'" in playwright_config
     assert "screenshot: 'off'" in playwright_config

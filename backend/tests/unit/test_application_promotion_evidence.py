@@ -86,7 +86,9 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
                 {
                     "actor": "requester", "method": "POST",
                     "path": f"/api/web/actions/{operation['command_operation']}/prepare",
-                    "status": 200, "request_id": f"prepare-{index}",
+                    "status": 200, "request_id": hashlib.sha256(
+                        f"prepare-{index}".encode()
+                    ).hexdigest(),
                 },
                 {
                     "actor": (
@@ -96,12 +98,16 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
                     ),
                     "method": "POST",
                     "path": f"/api/web/actions/commands/{command_id}/approve",
-                    "status": 200, "request_id": f"approve-{index}",
+                    "status": 200, "request_id": hashlib.sha256(
+                        f"approve-{index}".encode()
+                    ).hexdigest(),
                 },
                 {
                     "actor": "requester", "method": "POST",
                     "path": f"/api/web/actions/commands/{command_id}/execute",
-                    "status": 200, "request_id": f"execute-{index}",
+                    "status": 200, "request_id": hashlib.sha256(
+                        f"execute-{index}".encode()
+                    ).hexdigest(),
                 },
             ],
             "raw_evidence_sha256": f"{index:064x}",
@@ -124,6 +130,20 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
             "cross_tenant_denied": True,
             "database_sha256": f"{index + 100:064x}",
         }
+    provider = binding["deployment_provider"]
+    operation_set_sha256 = hashlib.sha256(json.dumps(
+        {
+            operation["id"]: operation["command_operation"]
+            for operation in matrix["operations"]
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()).hexdigest()
+    browser_evidence_set_sha256 = hashlib.sha256(json.dumps(
+        {row["operation_id"]: row["raw_evidence_sha256"] for row in browser},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()).hexdigest()
     return {
         "schema": "aasopharma.live18.upload-manifest.v1",
         "run": {"id": "123", "attempt": "1", "browser_outcome": "success"},
@@ -138,21 +158,51 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
             "raw_evidence_sha256": "e" * 64,
         },
         "browser": browser,
+        "browser_failures": [],
         "database": {
+            "expected_sha": git_commit,
+            "project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
             "organization_id": "30000000-0000-4000-8000-000000000003",
             "denial_organization_id": "30000000-0000-4000-8000-000000000005",
-            "runtime_role": {
+            "runtime_role": ({
                 "current_user": "erp_runtime", "superuser": False,
                 "bypassrls": False, "migration_owner_member": False,
                 "network_family": 6,
                 "transport": "supabase_direct_ipv6_from_railway",
-            },
+            } if provider == "railway" else {
+                "current_user": "erp_runtime", "superuser": False,
+                "bypassrls": False, "migration_owner_member": False,
+                "row_security": True, "network_family": 4,
+                "transport": "supabase_session_pooler_from_github_actions",
+            }),
             "resources": resources,
             "raw_evidence_sha256": "b" * 64,
         },
         "demo": {
-            "action": "provision-demo", "content_sha256": "c" * 64,
+            "action": "provision-demo",
+            "provider": provider,
+            "commit_sha": git_commit,
+            "project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
+            "run": {"id": "123", "attempt": "1"},
+            "summary_sha256": "a" * 64 if provider == "render" else None,
+            "content_sha256": "c" * 64,
             "raw_evidence_sha256": "d" * 64,
+        },
+        "reconciliation": {
+            "status": "success",
+            "provider": provider,
+            "commit_sha": git_commit,
+            "operation_count": 18,
+            "operation_ids": sorted(resources),
+            "operation_set_sha256": operation_set_sha256,
+            "browser_evidence_set_sha256": browser_evidence_set_sha256,
+            "database_mode": (
+                "captured_railway"
+                if provider == "railway"
+                else "captured_render_runtime"
+            ),
+            "database_evidence_sha256": "b" * 64,
+            "raw_attestation_sha256": "f" * 64,
         },
     }
 
@@ -339,7 +389,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
     )["http"].append({
         "actor": "requester", "method": "POST",
         "path": "/api/web/actions/commands/10000000-0000-4000-8000-000000000001/execute",
-        "status": 409, "request_id": "stale-replay-diagnostic",
+        "status": 409, "request_id": "1" * 64,
     })
     evidence.capture_live18_acceptance(
         manifest=replay_diagnostic, binding=binding,
@@ -374,7 +424,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
         item for item in sales_invoice["http"]
         if item["path"].endswith("/execute")
     )
-    sales_invoice["http"].append({**execute, "request_id": "duplicate-ui-execute"})
+    sales_invoice["http"].append({**execute, "request_id": "2" * 64})
     with pytest.raises(evidence.EvidenceError, match="execute exactly once"):
         evidence.capture_live18_acceptance(
             manifest=duplicate_execute, binding=binding,
@@ -391,7 +441,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
     missing_required_row = {
         "actor": "requester", "method": "POST",
         "path": "/api/web/actions/sales.invoice.prepare/prepare",
-        "status": 422, "request_id": "invalid-form-rejected",
+        "status": 422, "request_id": "3" * 64,
     }
     sales_invoice["http"].append(missing_required_row)
     sales_invoice["missing_required_http"] = [missing_required_row]
@@ -410,7 +460,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
     successful_missing_row = {
         "actor": "requester", "method": "POST",
         "path": "/api/web/actions/sales.invoice.prepare/prepare",
-        "status": 200, "request_id": "invalid-form-prepared",
+        "status": 200, "request_id": "4" * 64,
     }
     sales_invoice["http"].append(successful_missing_row)
     sales_invoice["missing_required_http"] = [successful_missing_row]
@@ -430,7 +480,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
     sales_invoice["missing_required_http"] = [{
         "actor": "requester", "method": "POST",
         "path": "/api/web/actions/sales.invoice.prepare/prepare",
-        "status": 422, "request_id": "invented-missing-required",
+        "status": 422, "request_id": "5" * 64,
     }]
     with pytest.raises(evidence.EvidenceError, match="not part of the browser capture"):
         evidence.capture_live18_acceptance(
@@ -479,9 +529,27 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
         )
     bypass = json.loads(json.dumps(manifest))
     bypass["database"]["runtime_role"]["bypassrls"] = True
-    with pytest.raises(evidence.EvidenceError, match="isolated Railway runtime role"):
+    with pytest.raises(evidence.EvidenceError, match="provider-matched isolated runtime role"):
         evidence.capture_live18_acceptance(
             manifest=bypass, binding=binding,
+            workflow_run_id=123, workflow_run_attempt=1, artifact_id=456,
+            artifact_sha256="f" * 64,
+            artifact_digest="sha256:" + "8" * 64,
+        )
+    wrong_reconciliation = json.loads(json.dumps(manifest))
+    wrong_reconciliation["reconciliation"]["browser_evidence_set_sha256"] = "0" * 64
+    with pytest.raises(evidence.EvidenceError, match="reconciliation attestation"):
+        evidence.capture_live18_acceptance(
+            manifest=wrong_reconciliation, binding=binding,
+            workflow_run_id=123, workflow_run_attempt=1, artifact_id=456,
+            artifact_sha256="f" * 64,
+            artifact_digest="sha256:" + "8" * 64,
+        )
+    raw_request_id = json.loads(json.dumps(manifest))
+    raw_request_id["browser"][0]["http"][0]["request_id"] = "provider-request-id"
+    with pytest.raises(evidence.EvidenceError, match="HTTP evidence row"):
+        evidence.capture_live18_acceptance(
+            manifest=raw_request_id, binding=binding,
             workflow_run_id=123, workflow_run_attempt=1, artifact_id=456,
             artifact_sha256="f" * 64,
             artifact_digest="sha256:" + "8" * 64,
@@ -552,6 +620,52 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
             deployment_evidence_sha256="a" * 64,
             deployment_artifact_id=123,
             deployment_artifact_digest="sha256:" + "9" * 64,
+        )
+
+
+def test_live18_render_acceptance_requires_direct_isolated_runtime_evidence():
+    git_commit = "a" * 40
+    binding = _binding(git_commit, _render(git_commit))
+    manifest = _live18_manifest(git_commit, binding)
+
+    artifact = evidence.capture_live18_acceptance(
+        manifest=manifest,
+        binding=binding,
+        workflow_run_id=123,
+        workflow_run_attempt=1,
+        artifact_id=456,
+        artifact_sha256="f" * 64,
+        artifact_digest="sha256:" + "8" * 64,
+    )
+    assert artifact["payload"]["operation_count"] == 18
+
+    wrong_transport = json.loads(json.dumps(manifest))
+    wrong_transport["database"]["runtime_role"]["transport"] = (
+        "supabase_direct_ipv6_from_railway"
+    )
+    with pytest.raises(
+        evidence.EvidenceError, match="provider-matched isolated runtime role"
+    ):
+        evidence.capture_live18_acceptance(
+            manifest=wrong_transport,
+            binding=binding,
+            workflow_run_id=123,
+            workflow_run_attempt=1,
+            artifact_id=456,
+            artifact_sha256="f" * 64,
+            artifact_digest="sha256:" + "8" * 64,
+        )
+    wrong_demo_provider = json.loads(json.dumps(manifest))
+    wrong_demo_provider["demo"]["provider"] = "railway"
+    with pytest.raises(evidence.EvidenceError, match="same-run demo evidence"):
+        evidence.capture_live18_acceptance(
+            manifest=wrong_demo_provider,
+            binding=binding,
+            workflow_run_id=123,
+            workflow_run_attempt=1,
+            artifact_id=456,
+            artifact_sha256="f" * 64,
+            artifact_digest="sha256:" + "8" * 64,
         )
 
 
@@ -797,6 +911,17 @@ def test_canonical_staging_emits_exact_render_deployment_evidence() -> None:
     assert 'status: "live"' in workflow
     for immutable_field in ("service_id:", "deploy_id:", "url:"):
         assert immutable_field in workflow
+    receipt = workflow.index("- name: Publish exact-run Render demo receipt")
+    assert workflow.index(
+        "- name: Provision and exercise the disposable demo organization"
+    ) < receipt < artifact_upload
+    receipt_step = workflow[receipt:artifact_upload]
+    assert "build_live18_render_demo_receipt.py" in receipt_step
+    assert "inputs.provision_demo_data == true" in receipt_step
+    assert "inputs.deploy_render_pilot == true" in receipt_step
+    assert '--deployed-sha "$CANONICAL_RENDER_DEPLOY_SHA"' in receipt_step
+    assert '--commit-sha "$GITHUB_SHA"' in receipt_step
+    assert "live18-render-demo-receipt.json" in receipt_step
 
 
 def test_current_mounted_callable_graph_has_no_reachable_retired_relation():

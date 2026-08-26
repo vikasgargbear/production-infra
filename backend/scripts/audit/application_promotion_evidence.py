@@ -917,7 +917,13 @@ def _live18_http_rows(value: Any, label: str) -> list[Mapping[str, Any]]:
             or isinstance(status, bool)
             or status < 100
             or status > 599
-            or (request_id is not None and not isinstance(request_id, str))
+            or (
+                request_id is not None
+                and (
+                    not isinstance(request_id, str)
+                    or SHA256.fullmatch(request_id) is None
+                )
+            )
         ):
             raise EvidenceError(f"Live18 {label} HTTP evidence row is invalid")
         rows.append(row)
@@ -1107,23 +1113,50 @@ def capture_live18_acceptance(
         raise EvidenceError("Live18 browser evidence does not cover the exact operation matrix")
     if screenshot_commitment_count != 36:
         raise EvidenceError("Live18 evidence must retain exactly 36 screenshot commitments")
+    if manifest.get("browser_failures") != []:
+        raise EvidenceError("Successful Live18 evidence cannot retain browser failures")
 
     database = manifest.get("database")
     if not isinstance(database, dict):
         raise EvidenceError("Live18 database reconciliation evidence is missing")
     if SHA256.fullmatch(str(database.get("raw_evidence_sha256", ""))) is None:
         raise EvidenceError("Live18 database reconciliation lacks its raw evidence hash")
+    if (
+        database.get("expected_sha") != binding.get("git_commit")
+        or database.get("project_ref") != CANONICAL_STAGING_PROJECT_REF
+    ):
+        raise EvidenceError("Live18 database evidence differs from the promotion binding")
     runtime = database.get("runtime_role")
-    expected_runtime = {
+    runtime_common = {
         "current_user": "erp_runtime",
         "superuser": False,
         "bypassrls": False,
         "migration_owner_member": False,
-        "network_family": 6,
-        "transport": "supabase_direct_ipv6_from_railway",
     }
-    if runtime != expected_runtime:
-        raise EvidenceError("Live18 database evidence did not use the isolated Railway runtime role")
+    provider = deployment["provider"]
+    if provider == "railway":
+        expected_runtime = {
+            **runtime_common,
+            "network_family": 6,
+            "transport": "supabase_direct_ipv6_from_railway",
+        }
+        runtime_valid = runtime == expected_runtime
+    else:
+        expected_runtime = {
+            **runtime_common,
+            "row_security": True,
+            "transport": "supabase_session_pooler_from_github_actions",
+        }
+        runtime_valid = (
+            isinstance(runtime, dict)
+            and set(runtime) == {*expected_runtime, "network_family"}
+            and all(runtime.get(key) == value for key, value in expected_runtime.items())
+            and runtime.get("network_family") in {4, 6}
+        )
+    if not runtime_valid:
+        raise EvidenceError(
+            "Live18 database evidence did not use the provider-matched isolated runtime role"
+        )
     if database.get("organization_id") != organization:
         raise EvidenceError("Live18 database organization differs from browser evidence")
     denial_organization = database.get("denial_organization_id")
@@ -1148,10 +1181,86 @@ def capture_live18_acceptance(
             or not SHA256.fullmatch(str(resource.get("database_sha256", "")))
         ):
             raise EvidenceError("Live18 browser and database resource evidence did not reconcile")
+    operation_set_sha256 = hashlib.sha256(
+        json.dumps(
+            {key: value[0] for key, value in required.items()},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    browser_evidence_set_sha256 = hashlib.sha256(
+        json.dumps(
+            {
+                operation_id: row["raw_evidence_sha256"]
+                for operation_id, row in by_operation.items()
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    reconciliation = manifest.get("reconciliation")
+    expected_reconciliation_keys = {
+        "status",
+        "provider",
+        "commit_sha",
+        "operation_count",
+        "operation_ids",
+        "operation_set_sha256",
+        "browser_evidence_set_sha256",
+        "database_mode",
+        "database_evidence_sha256",
+        "raw_attestation_sha256",
+    }
+    if (
+        not isinstance(reconciliation, dict)
+        or set(reconciliation) != expected_reconciliation_keys
+        or reconciliation.get("status") != "success"
+        or reconciliation.get("provider") != provider
+        or reconciliation.get("commit_sha") != binding.get("git_commit")
+        or reconciliation.get("operation_count") != 18
+        or reconciliation.get("operation_ids") != sorted(required)
+        or reconciliation.get("operation_set_sha256") != operation_set_sha256
+        or reconciliation.get("browser_evidence_set_sha256")
+        != browser_evidence_set_sha256
+        or reconciliation.get("database_mode")
+        != {
+            "railway": "captured_railway",
+            "render": "captured_render_runtime",
+        }[provider]
+        or reconciliation.get("database_evidence_sha256")
+        != database.get("raw_evidence_sha256")
+        or SHA256.fullmatch(
+            str(reconciliation.get("raw_attestation_sha256", ""))
+        )
+        is None
+    ):
+        raise EvidenceError(
+            "Live18 reconciliation attestation differs from provider-bound evidence"
+        )
     demo = manifest.get("demo")
     if (
         not isinstance(demo, dict)
+        or set(demo) != {
+            "action",
+            "provider",
+            "commit_sha",
+            "project_ref",
+            "run",
+            "summary_sha256",
+            "content_sha256",
+            "raw_evidence_sha256",
+        }
         or demo.get("action") != "provision-demo"
+        or demo.get("provider") != provider
+        or demo.get("commit_sha") != binding.get("git_commit")
+        or demo.get("project_ref") != CANONICAL_STAGING_PROJECT_REF
+        or demo.get("run")
+        != {"id": str(workflow_run_id), "attempt": str(workflow_run_attempt)}
+        or (
+            provider == "render"
+            and SHA256.fullmatch(str(demo.get("summary_sha256", ""))) is None
+        )
+        or (provider == "railway" and demo.get("summary_sha256") is not None)
         or not SHA256.fullmatch(str(demo.get("content_sha256", "")))
         or not SHA256.fullmatch(str(demo.get("raw_evidence_sha256", "")))
     ):
@@ -1174,6 +1283,12 @@ def capture_live18_acceptance(
             "branch_id": branch,
             "deployment_raw_evidence_sha256": deployment.get("raw_evidence_sha256"),
             "database_raw_evidence_sha256": database.get("raw_evidence_sha256"),
+            "reconciliation_raw_evidence_sha256": reconciliation.get(
+                "raw_attestation_sha256"
+            ),
+            "operation_set_sha256": operation_set_sha256,
+            "browser_evidence_set_sha256": browser_evidence_set_sha256,
+            "demo_raw_evidence_sha256": demo.get("raw_evidence_sha256"),
         },
     )
 

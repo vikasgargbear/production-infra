@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.build_live18_artifact_manifest import ArtifactManifestError, build_manifest
+from scripts.build_live18_artifact_manifest import (
+    ArtifactManifestError,
+    _http_summary,
+    build_manifest,
+)
+from scripts.build_live18_reconciliation_attestation import build_attestation
+from scripts.build_live18_render_demo_receipt import build_receipt
 
 
 SHA = "a" * 40
@@ -20,6 +26,7 @@ RESOURCE = "018f0000-0000-7000-8000-000000000002"
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII="
 )
+MATRIX_PATH = Path("backend/tests/live_acceptance/operation_matrix.json")
 
 
 def _write(path: Path, value: object) -> Path:
@@ -46,6 +53,101 @@ def _screenshots(root: Path, operation_id: str) -> tuple[list[dict[str, object]]
             "height": 1,
         })
     return rows, directory
+
+
+def _matrix_operations() -> list[dict[str, str]]:
+    value = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
+    return value["operations"]
+
+
+def _write_minimal_browser_set(directory: Path) -> None:
+    for operation in _matrix_operations():
+        _write(directory / f"{operation['id']}.json", {
+            "evidence_schema": "aasopharma.live18.browser.v1",
+            "tested_sha": SHA,
+            "operation_id": operation["id"],
+            "command_operation": operation["command_operation"],
+        })
+
+
+def _matrix_database_resources() -> dict[str, object]:
+    return {
+        operation["id"]: {
+            "command_operation": operation["command_operation"],
+            "command_request_id": COMMAND,
+            "resource_id": RESOURCE,
+            "cross_tenant_denied": True,
+            "database": {"row_count": 1},
+        }
+        for operation in _matrix_operations()
+    }
+
+
+def _signed_database(*, provider: str, resources: dict[str, object]) -> dict[str, object]:
+    value: dict[str, object] = {
+        "schema": (
+            "aasopharma.live18.railway-database-response.v1"
+            if provider == "railway"
+            else "aasopharma.live18.database-evidence.v1"
+        ),
+        "action": "capture-evidence",
+        "expected_sha": SHA,
+        "project_ref": "rgihahbmkrmhitjdjvev",
+        "organization_id": ORG,
+        "denial_organization_id": "d3000000-0000-7000-8000-00000000002c",
+        "runtime_role": {
+            "current_user": "erp_runtime",
+            "superuser": False,
+            "bypassrls": False,
+            "migration_owner_member": False,
+            **({"row_security": True} if provider == "render" else {}),
+            "network_family": 6,
+            "transport": (
+                "supabase_direct_ipv6_from_railway"
+                if provider == "railway"
+                else "supabase_session_pooler_from_github_actions"
+            ),
+        },
+        "resources": resources,
+    }
+    unsigned = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    value["content_sha256"] = hashlib.sha256(unsigned).hexdigest()
+    return value
+
+
+def _render_demo_receipt(tmp_path: Path, *, run_id: str, run_attempt: str) -> Path:
+    summary = _write(tmp_path / "canonical-demo-summary.json", {
+        "project_ref": "rgihahbmkrmhitjdjvev",
+        "organization_id": ORG,
+        "rls_denial_organization_id": "d3000000-0000-7000-8000-00000000002c",
+        "organization_classification": "disposable_synthetic_demo",
+    })
+    return _write(
+        tmp_path / "render-demo-receipt.json",
+        build_receipt(
+            summary_path=summary,
+            project_ref="rgihahbmkrmhitjdjvev",
+            commit_sha=SHA,
+            deployed_sha=SHA,
+            run_id=run_id,
+            run_attempt=run_attempt,
+        ),
+    )
+
+
+def _railway_demo_receipt(*, run_id: str, run_attempt: str) -> dict[str, object]:
+    value: dict[str, object] = {
+        "schema": "aasopharma.live18.railway-database-response.v1",
+        "action": "provision-demo",
+        "expected_sha": SHA,
+        "project_ref": "rgihahbmkrmhitjdjvev",
+        "run_id": run_id,
+        "run_attempt": run_attempt,
+    }
+    value["content_sha256"] = hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return value
 
 
 def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Path) -> None:
@@ -78,25 +180,16 @@ def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Pa
         "screenshots": screenshots,
         "http_evidence": [{
             "actor": "requester", "method": "POST", "path": "/api/web/actions/sales.invoice.prepare/prepare?email=must-not-upload%40example.com",
-            "status": 200, "requestId": "request-1",
+            "status": 200,
+            "requestId": "Bearer must-not-upload\r\npostgresql://user:password@example/db",
             "requestBody": {"authorization": "Bearer must-not-upload"},
             "responseBody": {"access_token": "must-not-upload"},
         }],
         "rest_readback": {"customer_email": "must-not-upload@example.com"},
     })
-    database = _write(tmp_path / "database.json", {
-        "action": "capture-evidence",
-        "organization_id": ORG,
-        "denial_organization_id": "d3000000-0000-7000-8000-00000000002c",
-        "runtime_role": {
-            "current_user": "erp_runtime",
-            "superuser": False,
-            "bypassrls": False,
-            "migration_owner_member": False,
-            "network_family": 6,
-            "transport": "supabase_direct_ipv6_from_railway",
-        },
-        "resources": {
+    database = _write(
+        tmp_path / "database.json",
+        _signed_database(provider="railway", resources={
             "sales_invoice": {
                 "command_operation": "sales.invoice.prepare",
                 "command_request_id": COMMAND,
@@ -104,13 +197,18 @@ def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Pa
                 "cross_tenant_denied": True,
                 "database": {"customer_email": "must-not-upload@example.com"},
             },
-        },
-    })
-    demo = _write(tmp_path / "demo.json", {
-        "action": "provision-demo",
-        "content_sha256": "c" * 64,
-        "demo_summary": {"password": "must-not-upload"},
-    })
+        }),
+    )
+    demo_value = _railway_demo_receipt(run_id="123", run_attempt="2")
+    demo_value["demo_summary"] = {"password": "must-not-upload"}
+    demo_value["content_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in demo_value.items() if key != "content_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    demo = _write(tmp_path / "demo.json", demo_value)
 
     manifest = build_manifest(
         deployed_sha=deployed,
@@ -135,7 +233,9 @@ def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Pa
         "method": "POST",
         "path": "/api/web/actions/sales.invoice.prepare/prepare",
         "status": 200,
-        "request_id": "request-1",
+        "request_id": hashlib.sha256(
+            b"Bearer must-not-upload\r\npostgresql://user:password@example/db"
+        ).hexdigest(),
     }]
     assert manifest["browser"][0]["screenshots"] == screenshots
 
@@ -145,7 +245,7 @@ def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
 ) -> None:
     deployed = _write(tmp_path / "deployed.json", {
         "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
+        "provider": "render",
         "commit_sha": SHA,
         "services": {
             name: {"origin": f"https://{name}.example"}
@@ -154,14 +254,14 @@ def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
     })
     evidence_dir = tmp_path / "evidence"
     screenshot_dir = tmp_path / "screenshots"
-    for index in range(18):
-        operation_id = f"operation_{index:02d}"
+    for operation in _matrix_operations():
+        operation_id = operation["id"]
         screenshots, screenshot_dir = _screenshots(tmp_path, operation_id)
         _write(evidence_dir / f"{operation_id}.json", {
             "evidence_schema": "aasopharma.live18.browser.v1",
             "tested_sha": SHA,
             "operation_id": operation_id,
-            "command_operation": "test.operation.prepare",
+            "command_operation": operation["command_operation"],
             "command_request_id": COMMAND,
             "resource_id": RESOURCE,
             "preview_hash": "sha256:" + "b" * 64,
@@ -176,19 +276,39 @@ def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
             "screenshots": screenshots,
         })
 
+    database = _write(
+        tmp_path / "database.json",
+        _signed_database(provider="render", resources=_matrix_database_resources()),
+    )
+    demo = _render_demo_receipt(tmp_path, run_id="123", run_attempt="1")
+    attestation = _write(
+        tmp_path / "reconciliation.json",
+        build_attestation(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            operation_matrix=MATRIX_PATH,
+            database_evidence=database,
+            provider="render",
+            run_id="123",
+            run_attempt="1",
+        ),
+    )
     manifest = build_manifest(
         deployed_sha=deployed,
         evidence_dir=evidence_dir,
-        database_evidence=None,
-        demo_evidence=None,
+        database_evidence=database,
+        demo_evidence=demo,
         browser_outcome="success",
         run_id="123",
         run_attempt="1",
         screenshot_dir=screenshot_dir,
+        reconciliation_evidence=attestation,
+        operation_matrix=MATRIX_PATH,
     )
 
     assert len(manifest["browser"]) == 18
     assert sum(len(row["screenshots"]) for row in manifest["browser"]) == 36
+    assert len(manifest["reconciliation"]["operation_set_sha256"]) == 64
 
     (screenshot_dir / "unreviewed.png").write_bytes(PNG_1X1)
     (screenshot_dir / "unreviewed.png").chmod(0o600)
@@ -196,12 +316,169 @@ def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
         build_manifest(
             deployed_sha=deployed,
             evidence_dir=evidence_dir,
-            database_evidence=None,
+            database_evidence=database,
+            demo_evidence=demo,
+            browser_outcome="success",
+            run_id="123",
+            run_attempt="1",
+            screenshot_dir=screenshot_dir,
+            reconciliation_evidence=attestation,
+            operation_matrix=MATRIX_PATH,
+        )
+
+
+@pytest.mark.parametrize("request_id", ["", "é" * 129, 123])
+def test_http_summary_rejects_invalid_or_oversized_request_ids(request_id: object) -> None:
+    with pytest.raises(ArtifactManifestError, match="request ID"):
+        _http_summary({
+            "actor": "requester",
+            "method": "GET",
+            "path": "/api/invoices",
+            "status": 200,
+            "requestId": request_id,
+        })
+
+
+def test_render_demo_receipt_rejects_deployment_drift(tmp_path: Path) -> None:
+    summary = _write(tmp_path / "canonical-demo-summary.json", {
+        "project_ref": "rgihahbmkrmhitjdjvev",
+        "organization_id": ORG,
+        "rls_denial_organization_id": "d3000000-0000-7000-8000-00000000002c",
+        "organization_classification": "disposable_synthetic_demo",
+    })
+    with pytest.raises(ArtifactManifestError, match="exact-run Render evidence"):
+        build_receipt(
+            summary_path=summary,
+            project_ref="rgihahbmkrmhitjdjvev",
+            commit_sha=SHA,
+            deployed_sha="b" * 40,
+            run_id="123",
+            run_attempt="1",
+        )
+
+
+def test_success_rejects_reconciliation_from_another_run(tmp_path: Path) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "render",
+        "commit_sha": SHA,
+        "services": {
+            name: {"origin": f"https://{name}.example"}
+            for name in ("api", "frontend", "mcp")
+        },
+    })
+    evidence_dir = tmp_path / "evidence"
+    screenshot_dir = tmp_path / "screenshots"
+    for operation in _matrix_operations():
+        operation_id = operation["id"]
+        screenshots, screenshot_dir = _screenshots(tmp_path, operation_id)
+        _write(evidence_dir / f"{operation_id}.json", {
+            "evidence_schema": "aasopharma.live18.browser.v1",
+            "tested_sha": SHA,
+            "operation_id": operation_id,
+            "command_operation": operation["command_operation"],
+            "command_request_id": COMMAND,
+            "resource_id": RESOURCE,
+            "preview_hash": "sha256:" + "b" * 64,
+            "requester_user_id": REQUESTER,
+            "reviewer_user_id": REVIEWER,
+            "organization_id": ORG,
+            "branch_id": BRANCH,
+            "cleanup_id": None,
+            "self_approval_probe": None,
+            "missing_required_http_evidence": [],
+            "http_evidence": [],
+            "screenshots": screenshots,
+        })
+    database = _write(
+        tmp_path / "database.json",
+        _signed_database(provider="render", resources=_matrix_database_resources()),
+    )
+    value = build_attestation(
+        deployed_sha=deployed,
+        evidence_dir=evidence_dir,
+        operation_matrix=MATRIX_PATH,
+        database_evidence=database,
+        provider="render",
+        run_id="other-run",
+        run_attempt="1",
+    )
+    attestation = _write(tmp_path / "reconciliation.json", value)
+
+    with pytest.raises(ArtifactManifestError, match="exact Live18 run"):
+        build_manifest(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            database_evidence=database,
             demo_evidence=None,
             browser_outcome="success",
             run_id="123",
             run_attempt="1",
             screenshot_dir=screenshot_dir,
+            reconciliation_evidence=attestation,
+            operation_matrix=MATRIX_PATH,
+        )
+
+
+def test_railway_attestation_requires_and_binds_database_evidence(
+    tmp_path: Path,
+) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "railway",
+        "commit_sha": SHA,
+    })
+    evidence_dir = tmp_path / "evidence"
+    _write_minimal_browser_set(evidence_dir)
+    with pytest.raises(ArtifactManifestError, match="database evidence"):
+        build_attestation(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            operation_matrix=MATRIX_PATH,
+            database_evidence=None,
+            provider="railway",
+            run_id="123",
+            run_attempt="1",
+        )
+
+    database = _write(tmp_path / "database.json", {"action": "capture-evidence"})
+    attestation = build_attestation(
+        deployed_sha=deployed,
+        evidence_dir=evidence_dir,
+        operation_matrix=MATRIX_PATH,
+        database_evidence=database,
+        provider="railway",
+        run_id="123",
+        run_attempt="1",
+    )
+
+    assert attestation["database_mode"] == "captured_railway"
+    assert attestation["database_evidence_sha256"] == hashlib.sha256(
+        database.read_bytes()
+    ).hexdigest()
+
+
+def test_attestation_rejects_operation_matrix_drift(tmp_path: Path) -> None:
+    deployed = _write(tmp_path / "deployed.json", {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": "render",
+        "commit_sha": SHA,
+    })
+    evidence_dir = tmp_path / "evidence"
+    _write_minimal_browser_set(evidence_dir)
+    drifted = json.loads((evidence_dir / "sales_invoice.json").read_text())
+    drifted["command_operation"] = "sales.order.prepare"
+    _write(evidence_dir / "sales_invoice.json", drifted)
+
+    with pytest.raises(ArtifactManifestError, match="sales_invoice"):
+        build_attestation(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            operation_matrix=MATRIX_PATH,
+            database_evidence=None,
+            provider="render",
+            run_id="123",
+            run_attempt="1",
         )
 
 
@@ -381,6 +658,7 @@ def test_live18_workflow_uploads_only_fixed_manifest() -> None:
         "live18-playwright-list.txt",
         "live18-reconciliation.txt",
         "live18-database-evidence.json",
+        "live18-demo-evidence.json",
         "live18-railway-demo.json",
         "live18-evidence\n",
         "live18-playwright\n",

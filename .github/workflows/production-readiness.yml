@@ -1113,7 +1113,6 @@ jobs:
       LIVE18_WRITE_ACK: canonical-disposable-only
       LIVE18_EXPECTED_DEPLOYED_SHA: ${{ inputs.canonical_staging_render_sha }}
       LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
-      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
       RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
       RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
       RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
@@ -1147,7 +1146,8 @@ jobs:
             echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"
             echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright"
             echo "LIVE18_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live18-database-evidence.json"
-            echo "LIVE18_RAILWAY_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-railway-demo.json"
+            echo "LIVE18_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live18-reconciliation-attestation.json"
+            echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"
             echo "LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH=$RUNNER_TEMP/live18-railway-identity-response.json"
             echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$HOME/.ssh/live18-railway-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             echo "LIVE18_RAILWAY_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/live18-railway-ssh-fingerprint"
@@ -1210,6 +1210,66 @@ jobs:
             --mcp-origin "$LIVE18_MCP_ORIGIN" \
             > "$RUNNER_TEMP/live18-deployed-sha.json"
           echo "LIVE18_DEPLOYMENT_BOUND=true" >> "$GITHUB_ENV"
+      - name: Extract and verify the same-run Render demo receipt
+        if: env.LIVE18_PROVIDER == 'render'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/live18-render-baseline.zip"
+          trap 'rm -f "$archive"' EXIT
+          artifact_name="canonical-staging-baseline-${GITHUB_RUN_ID}"
+          artifact_id=$(
+            gh api --paginate \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+              | jq -ser --arg name "$artifact_name" '
+                  [.[].artifacts[] | select(.name == $name and .expired == false)]
+                  | if length == 1 then .[0].id
+                    else error("expected exactly one same-run staging artifact") end
+                '
+          )
+          [[ "$artifact_id" =~ ^[1-9][0-9]*$ ]]
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+            > "$archive"
+          python3 - "$archive" "$LIVE18_DEMO_EVIDENCE_PATH" <<'PY'
+          import os
+          from pathlib import Path, PurePosixPath
+          import sys
+          from zipfile import ZipFile
+
+          archive = Path(sys.argv[1])
+          output = Path(sys.argv[2])
+          with ZipFile(archive) as bundle:
+              matches = [
+                  row for row in bundle.infolist()
+                  if not row.is_dir()
+                  and PurePosixPath(row.filename).name
+                  == "live18-render-demo-receipt.json"
+              ]
+              if len(matches) != 1 or matches[0].file_size > 65536:
+                  raise SystemExit("same-run Render demo receipt is missing or ambiguous")
+              payload = bundle.read(matches[0])
+          descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(descriptor, "wb") as handle:
+              handle.write(payload)
+          PY
+          PYTHONPATH=backend python3 - "$LIVE18_DEMO_EVIDENCE_PATH" \
+            "$RUNNER_TEMP/live18-deployed-sha.json" <<'PY'
+          from pathlib import Path
+          import os
+          import sys
+          from scripts.build_live18_artifact_manifest import (
+              _demo_summary,
+              _deployment_summary,
+          )
+
+          _demo_summary(
+              Path(sys.argv[1]),
+              deployment=_deployment_summary(Path(sys.argv[2])),
+              run_id=os.environ["GITHUB_RUN_ID"],
+              run_attempt=os.environ["GITHUB_RUN_ATTEMPT"],
+          )
+          PY
       - name: Refuse any target except canonical disposable staging
         run: |
           set -euo pipefail
@@ -1234,6 +1294,8 @@ jobs:
           npx playwright install --with-deps chromium ffmpeg
       - name: Register one run-scoped Railway SSH key
         if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$RAILWAY_API_TOKEN"
@@ -1270,6 +1332,8 @@ jobs:
           grep -F -- "$key_name" "$RUNNER_TEMP/live18-railway-ssh-keys.txt" >/dev/null
       - name: Resolve the one running instance of the exact Railway API deployment
         if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           status="$RUNNER_TEMP/live18-railway-status.json"
@@ -1320,6 +1384,7 @@ jobs:
       - name: Recover stale Railway-direct identities before demo provisioning
         if: env.LIVE18_PROVIDER == 'railway'
         env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -1401,6 +1466,7 @@ jobs:
       - name: Verify exact migration head and provision same-run demo over Railway direct IPv6
         if: env.LIVE18_PROVIDER == 'railway'
         env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           ERP_REGULATORY_IMPORTER_PASSWORD: ${{ secrets.ERP_REGULATORY_IMPORTER_PASSWORD }}
         run: |
@@ -1458,8 +1524,8 @@ jobs:
             --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
             -- python scripts/live18_railway_database_phase.py provision-demo \
               --input - --output - \
-            < "$request" > "$LIVE18_RAILWAY_DEMO_EVIDENCE_PATH"
-          PYTHONPATH=backend python3 - "$LIVE18_RAILWAY_DEMO_EVIDENCE_PATH" "$request" <<'PY'
+            < "$request" > "$LIVE18_DEMO_EVIDENCE_PATH"
+          PYTHONPATH=backend python3 - "$LIVE18_DEMO_EVIDENCE_PATH" "$request" <<'PY'
           import json
           import os
           from pathlib import Path
@@ -1487,6 +1553,7 @@ jobs:
           runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=15&application_name=canonical_live18"
           echo "::add-mask::$runtime_url"
           echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
+          echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"
       - name: Provision disposable live18 requester, reviewer, and denial identities
         if: env.LIVE18_PROVIDER == 'render'
         env:
@@ -1500,6 +1567,7 @@ jobs:
       - name: Provision disposable identities and MCP authority over Railway direct IPv6
         if: env.LIVE18_PROVIDER == 'railway'
         env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -1620,6 +1688,8 @@ jobs:
         run: npx playwright test --config e2e/live18/playwright.config.ts
       - name: Capture PostgreSQL evidence from exact Railway deployment over direct IPv6
         if: always() && env.LIVE18_PROVIDER == 'railway' && steps.live18_browser.outcome != 'skipped'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           request="$RUNNER_TEMP/live18-railway-evidence-request.json"
@@ -1679,14 +1749,21 @@ jobs:
           PY
           echo "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH=$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"
       - name: Reconcile every template-ready browser resource through MCP and PostgreSQL
-        if: always() && steps.live18_browser.outcome != 'skipped'
+        id: live18_reconciliation
+        if: always() && steps.live18_browser.outcome == 'success'
         env:
           PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
         run: |
-          set -o pipefail
+          set -euo pipefail
           PYTHONPATH=backend pytest -q \
-            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py \
-            | tee "$RUNNER_TEMP/live18-reconciliation.txt"
+            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py
+          python3 backend/scripts/build_live18_reconciliation_attestation.py \
+            --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
+            --evidence-dir "$LIVE18_EVIDENCE_DIR" \
+            --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
+            --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
+            --provider "$LIVE18_PROVIDER" \
+            --output "$LIVE18_RECONCILIATION_EVIDENCE_PATH"
       - name: Always suspend temporary MCP authorities
         if: always() && env.LIVE18_PROVIDER == 'render'
         env:
@@ -1716,6 +1793,7 @@ jobs:
       - name: Always clean Railway-direct temporary identities and authorities
         if: always() && env.LIVE18_PROVIDER == 'railway'
         env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -1805,6 +1883,8 @@ jobs:
           rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"
       - name: Always remove the run-scoped Railway SSH key
         if: always() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           if [ -f "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH" ]; then
@@ -1842,7 +1922,9 @@ jobs:
             --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
             --evidence-dir "$LIVE18_EVIDENCE_DIR" \
             --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
-            --demo-evidence "$LIVE18_RAILWAY_DEMO_EVIDENCE_PATH" \
+            --demo-evidence "$LIVE18_DEMO_EVIDENCE_PATH" \
+            --reconciliation-evidence "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
+            --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
             --browser-outcome "${LIVE18_BROWSER_OUTCOME:-skipped}" \
             --screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots" \
             --output "$output"

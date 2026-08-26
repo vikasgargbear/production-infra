@@ -28,6 +28,7 @@ UUID = re.compile(
 PREVIEW_HASH = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
 SAFE_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 SAFE_ERROR_KIND = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,79}$")
+SAFE_PROJECT_REF = re.compile(r"^[a-z0-9]{20}$")
 SAFE_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 SAFE_ACTORS = {"requester", "reviewer"}
 SAFE_UI_ACTIONS = {
@@ -38,6 +39,14 @@ SAFE_LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
 SAFE_SCREENSHOT_STAGES = ("missing-required", "posted")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+DEFAULT_OPERATION_MATRIX = (
+    Path(__file__).resolve().parents[1]
+    / "tests"
+    / "live_acceptance"
+    / "operation_matrix.json"
+)
+RECONCILIATION_SCHEMA = "aasopharma.live18.reconciliation-attestation.v1"
+RENDER_DEMO_RECEIPT_SCHEMA = "aasopharma.live18.render-demo-receipt.v1"
 
 
 class ArtifactManifestError(RuntimeError):
@@ -53,6 +62,13 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _content_sha256(value: dict[str, Any]) -> str:
+    unsigned = {key: item for key, item in value.items() if key != "content_sha256"}
+    return hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _optional_nonempty_file(path: Path | None) -> Path | None:
@@ -76,6 +92,17 @@ def _optional_uuid(value: Any) -> str | None:
     return value
 
 
+def _request_id_sha256(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ArtifactManifestError("invalid HTTP request ID")
+    encoded = value.encode("utf-8")
+    if not encoded or len(encoded) > 256:
+        raise ArtifactManifestError("HTTP request ID must contain 1 to 256 UTF-8 bytes")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _http_summary(row: Any) -> dict[str, Any]:
     if not isinstance(row, dict):
         raise ArtifactManifestError("HTTP evidence row must be an object")
@@ -93,7 +120,6 @@ def _http_summary(row: Any) -> dict[str, Any]:
         or status < 100
         or status > 599
         or actor not in {"requester", "reviewer"}
-        or (request_id is not None and not isinstance(request_id, str))
     ):
         raise ArtifactManifestError("invalid HTTP evidence metadata")
     scrubbed_path = path.split("?", 1)[0]
@@ -102,8 +128,51 @@ def _http_summary(row: Any) -> dict[str, Any]:
         "method": method,
         "path": scrubbed_path,
         "status": status,
-        "request_id": request_id,
+        # Preserve the reviewed manifest schema while committing only the hash.
+        "request_id": _request_id_sha256(request_id),
     }
+
+
+def _expected_operations(path: Path) -> dict[str, str]:
+    value = _read_json(path)
+    rows = value.get("operations")
+    if value.get("required_operation_count") != 18 or not isinstance(rows, list):
+        raise ArtifactManifestError("operation matrix must declare exactly 18 operations")
+    expected: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict) or row.get("availability") != "published":
+            raise ArtifactManifestError("every Live18 operation must be published")
+        operation_id = row.get("id")
+        command_operation = row.get("command_operation")
+        if (
+            not isinstance(operation_id, str)
+            or SAFE_IDENTIFIER.fullmatch(operation_id) is None
+            or not isinstance(command_operation, str)
+            or not command_operation.endswith(".prepare")
+            or operation_id in expected
+        ):
+            raise ArtifactManifestError("operation matrix contains an invalid operation")
+        expected[operation_id] = command_operation
+    if len(expected) != 18:
+        raise ArtifactManifestError("operation matrix must contain 18 unique operations")
+    return expected
+
+
+def _evidence_set_sha256(rows: list[dict[str, Any]]) -> str:
+    commitments = {
+        row["operation_id"]: row["raw_evidence_sha256"] for row in rows
+    }
+    return hashlib.sha256(
+        json.dumps(commitments, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _operation_set_sha256(expected_operations: dict[str, str]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            expected_operations, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _screenshot_summaries(
@@ -257,17 +326,70 @@ def _deployment_summary(path: Path) -> dict[str, Any]:
     }
 
 
-def _database_summary(path: Path) -> dict[str, Any]:
+def _database_summary(
+    path: Path, deployment: dict[str, Any]
+) -> dict[str, Any]:
     value = _read_json(path)
-    if value.get("action") != "capture-evidence":
-        raise ArtifactManifestError("wrong database evidence action")
+    provider = deployment["provider"]
+    expected_schema = {
+        "railway": "aasopharma.live18.railway-database-response.v1",
+        "render": "aasopharma.live18.database-evidence.v1",
+    }[provider]
+    expected_content_hash = _content_sha256(value)
+    if (
+        value.get("schema") != expected_schema
+        or value.get("action") != "capture-evidence"
+        or value.get("expected_sha") != deployment["commit_sha"]
+        or not isinstance(value.get("project_ref"), str)
+        or SAFE_PROJECT_REF.fullmatch(value["project_ref"]) is None
+        or value.get("content_sha256") != expected_content_hash
+    ):
+        raise ArtifactManifestError("invalid provider-bound database evidence")
     resources = value.get("resources")
     runtime_role = value.get("runtime_role")
     if not isinstance(resources, dict) or not isinstance(runtime_role, dict):
         raise ArtifactManifestError("invalid database evidence")
+    runtime_common = {
+        "current_user": "erp_runtime",
+        "superuser": False,
+        "bypassrls": False,
+        "migration_owner_member": False,
+    }
+    if provider == "railway":
+        expected_runtime = {
+            **runtime_common,
+            "network_family": 6,
+            "transport": "supabase_direct_ipv6_from_railway",
+        }
+        runtime_valid = runtime_role == expected_runtime
+    else:
+        expected_runtime = {
+            **runtime_common,
+            "row_security": True,
+            "transport": "supabase_session_pooler_from_github_actions",
+        }
+        runtime_valid = (
+            set(runtime_role) == {*expected_runtime, "network_family"}
+            and all(
+                runtime_role.get(key) == expected
+                for key, expected in expected_runtime.items()
+            )
+            and runtime_role.get("network_family") in {4, 6}
+        )
+    if not runtime_valid:
+        raise ArtifactManifestError(
+            "database evidence did not use the provider-matched isolated runtime role"
+        )
     safe_resources: dict[str, Any] = {}
     for operation, resource in sorted(resources.items()):
-        if not isinstance(operation, str) or not isinstance(resource, dict):
+        database_value = resource.get("database") if isinstance(resource, dict) else None
+        if (
+            not isinstance(operation, str)
+            or SAFE_IDENTIFIER.fullmatch(operation) is None
+            or not isinstance(resource, dict)
+            or not isinstance(database_value, dict)
+            or not database_value
+        ):
             raise ArtifactManifestError("invalid database resource evidence")
         safe_resources[operation] = {
             "command_operation": resource.get("command_operation"),
@@ -276,36 +398,143 @@ def _database_summary(path: Path) -> dict[str, Any]:
             "cross_tenant_denied": resource.get("cross_tenant_denied") is True,
             "database_sha256": hashlib.sha256(
                 json.dumps(
-                    resource.get("database"), sort_keys=True, separators=(",", ":"), default=str
+                    database_value, sort_keys=True, separators=(",", ":"), default=str
                 ).encode("utf-8")
             ).hexdigest(),
         }
+    runtime_keys = (
+        "current_user",
+        "superuser",
+        "bypassrls",
+        "migration_owner_member",
+    ) + (("row_security",) if provider == "render" else ()) + (
+        "network_family",
+        "transport",
+    )
     return {
+        "expected_sha": deployment["commit_sha"],
+        "project_ref": value["project_ref"],
         "organization_id": _required_text(value, "organization_id", UUID),
         "denial_organization_id": _required_text(value, "denial_organization_id", UUID),
         "runtime_role": {
-            key: runtime_role.get(key)
-            for key in (
-                "current_user", "superuser", "bypassrls", "migration_owner_member",
-                "network_family", "transport",
-            )
+            key: runtime_role.get(key) for key in runtime_keys
         },
         "resources": safe_resources,
         "raw_evidence_sha256": _digest(path),
     }
 
 
-def _hashed_optional(path: Path | None, expected_action: str) -> dict[str, Any] | None:
-    path = _optional_nonempty_file(path)
-    if path is None:
-        return None
+def _demo_summary(
+    path: Path,
+    *,
+    deployment: dict[str, Any],
+    run_id: str,
+    run_attempt: str,
+) -> dict[str, Any]:
     value = _read_json(path)
-    if value.get("action") != expected_action:
-        raise ArtifactManifestError(f"wrong {expected_action} evidence action")
+    provider = deployment["provider"]
+    if (
+        value.get("action") != "provision-demo"
+        or value.get("project_ref") is None
+        or not isinstance(value.get("project_ref"), str)
+        or SAFE_PROJECT_REF.fullmatch(value["project_ref"]) is None
+        or value.get("content_sha256") != _content_sha256(value)
+    ):
+        raise ArtifactManifestError("invalid provider-bound demo evidence")
+    if provider == "render":
+        if (
+            set(value) != {
+                "schema",
+                "action",
+                "provider",
+                "project_ref",
+                "commit_sha",
+                "deployed_sha",
+                "run",
+                "summary_sha256",
+                "content_sha256",
+            }
+            or value.get("schema") != RENDER_DEMO_RECEIPT_SCHEMA
+            or value.get("provider") != "render"
+            or value.get("commit_sha") != deployment["commit_sha"]
+            or value.get("deployed_sha") != deployment["commit_sha"]
+            or value.get("run") != {"id": run_id, "attempt": run_attempt}
+            or SHA256.fullmatch(str(value.get("summary_sha256", ""))) is None
+        ):
+            raise ArtifactManifestError("Render demo receipt differs from this exact run")
+        summary_sha256 = value["summary_sha256"]
+    else:
+        if (
+            value.get("schema")
+            != "aasopharma.live18.railway-database-response.v1"
+            or value.get("expected_sha") != deployment["commit_sha"]
+            or value.get("run_id") != run_id
+            or value.get("run_attempt") != run_attempt
+        ):
+            raise ArtifactManifestError("Railway demo receipt differs from this exact run")
+        summary_sha256 = None
     return {
-        "action": expected_action,
+        "action": "provision-demo",
+        "provider": provider,
+        "commit_sha": deployment["commit_sha"],
+        "project_ref": value["project_ref"],
+        "run": {"id": run_id, "attempt": run_attempt},
+        "summary_sha256": summary_sha256,
         "content_sha256": value.get("content_sha256"),
         "raw_evidence_sha256": _digest(path),
+    }
+
+
+def _reconciliation_summary(
+    path: Path,
+    *,
+    deployment: dict[str, Any],
+    browser: list[dict[str, Any]],
+    expected_operations: dict[str, str],
+    run_id: str,
+    run_attempt: str,
+    database_evidence: Path | None,
+) -> dict[str, Any]:
+    value = _read_json(path)
+    provider = deployment["provider"]
+    expected_database_path = _optional_nonempty_file(database_evidence)
+    expected_database_mode = {
+        "railway": "captured_railway",
+        "render": "captured_render_runtime",
+    }[provider]
+    expected_database_hash = (
+        _digest(expected_database_path) if expected_database_path is not None else None
+    )
+    if (
+        value.get("schema") != RECONCILIATION_SCHEMA
+        or value.get("status") != "success"
+        or value.get("provider") != provider
+        or value.get("commit_sha") != deployment["commit_sha"]
+        or value.get("run") != {"id": run_id, "attempt": run_attempt}
+        or value.get("operation_count") != len(expected_operations)
+        or value.get("operation_ids") != sorted(expected_operations)
+        or value.get("operation_set_sha256")
+        != _operation_set_sha256(expected_operations)
+        or value.get("browser_evidence_set_sha256")
+        != _evidence_set_sha256(browser)
+        or value.get("database_mode") != expected_database_mode
+        or value.get("database_evidence_sha256") != expected_database_hash
+        or expected_database_path is None
+    ):
+        raise ArtifactManifestError(
+            "reconciliation attestation does not match this exact Live18 run"
+        )
+    return {
+        "status": "success",
+        "provider": provider,
+        "commit_sha": deployment["commit_sha"],
+        "operation_count": len(expected_operations),
+        "operation_ids": sorted(expected_operations),
+        "operation_set_sha256": _operation_set_sha256(expected_operations),
+        "browser_evidence_set_sha256": value["browser_evidence_set_sha256"],
+        "database_mode": expected_database_mode,
+        "database_evidence_sha256": expected_database_hash,
+        "raw_attestation_sha256": _digest(path),
     }
 
 
@@ -319,6 +548,8 @@ def build_manifest(
     run_id: str,
     run_attempt: str,
     screenshot_dir: Path | None = None,
+    reconciliation_evidence: Path | None = None,
+    operation_matrix: Path = DEFAULT_OPERATION_MATRIX,
 ) -> dict[str, Any]:
     if browser_outcome not in {"success", "failure", "cancelled", "skipped"}:
         raise ArtifactManifestError("invalid browser outcome")
@@ -343,9 +574,15 @@ def build_manifest(
         raise ArtifactManifestError("duplicate browser operation failure evidence")
     if browser_outcome == "success" and browser_failures:
         raise ArtifactManifestError("successful browser outcome cannot include failure evidence")
+    expected_operations = _expected_operations(operation_matrix)
+    actual_operations = {
+        row["operation_id"]: row["command_operation"] for row in browser
+    }
     if browser_outcome == "success":
-        if len(browser) != 18:
-            raise ArtifactManifestError("successful browser outcome requires exactly 18 operations")
+        if actual_operations != expected_operations:
+            raise ArtifactManifestError(
+                "successful browser outcome requires the exact registered 18 operations"
+            )
         if screenshot_dir is None or not screenshot_dir.is_dir():
             raise ArtifactManifestError("successful browser outcome requires screenshot evidence")
         expected_files = {
@@ -361,18 +598,91 @@ def build_manifest(
             raise ArtifactManifestError(
                 "successful browser outcome requires exactly 36 reviewed screenshots"
             )
+    deployment = _deployment_summary(deployed_sha)
+    reconciliation_path = _optional_nonempty_file(reconciliation_evidence)
+    if browser_outcome == "success" and reconciliation_path is None:
+        raise ArtifactManifestError(
+            "successful browser outcome requires reconciliation attestation"
+        )
+    if browser_outcome != "success" and reconciliation_path is not None:
+        raise ArtifactManifestError(
+            "reconciliation attestation requires a successful browser outcome"
+        )
+    reconciliation = (
+        _reconciliation_summary(
+            reconciliation_path,
+            deployment=deployment,
+            browser=browser,
+            expected_operations=expected_operations,
+            run_id=run_id,
+            run_attempt=run_attempt,
+            database_evidence=database_evidence,
+        )
+        if reconciliation_path is not None
+        else None
+    )
+    database_path = _optional_nonempty_file(database_evidence)
+    database = (
+        _database_summary(database_path, deployment)
+        if database_path is not None
+        else None
+    )
+    demo_path = _optional_nonempty_file(demo_evidence)
+    demo = (
+        _demo_summary(
+            demo_path,
+            deployment=deployment,
+            run_id=run_id,
+            run_attempt=run_attempt,
+        )
+        if demo_path is not None
+        else None
+    )
+    if browser_outcome == "success":
+        if demo is None:
+            raise ArtifactManifestError(
+                "successful browser outcome requires provider-bound demo evidence"
+            )
+        if database is None:
+            raise ArtifactManifestError(
+                "successful browser outcome requires database evidence"
+            )
+        if demo["project_ref"] != database["project_ref"]:
+            raise ArtifactManifestError(
+                "demo and database evidence use different staging projects"
+            )
+        browser_by_operation = {row["operation_id"]: row for row in browser}
+        if (
+            set(database["resources"]) != set(expected_operations)
+            or database["organization_id"]
+            not in {row["organization_id"] for row in browser}
+            or len({row["organization_id"] for row in browser}) != 1
+            or database["denial_organization_id"] == database["organization_id"]
+        ):
+            raise ArtifactManifestError(
+                "database evidence differs from the exact browser operation set"
+            )
+        for operation_id, resource in database["resources"].items():
+            browser_row = browser_by_operation[operation_id]
+            if (
+                resource["command_operation"] != expected_operations[operation_id]
+                or resource["command_request_id"]
+                != browser_row["command_request_id"]
+                or resource["resource_id"] != browser_row["resource_id"]
+                or resource["cross_tenant_denied"] is not True
+            ):
+                raise ArtifactManifestError(
+                    f"database evidence drifted for {operation_id}"
+                )
     return {
         "schema": "aasopharma.live18.upload-manifest.v1",
         "run": {"id": run_id, "attempt": run_attempt, "browser_outcome": browser_outcome},
-        "deployment": _deployment_summary(deployed_sha),
+        "deployment": deployment,
         "browser": browser,
         "browser_failures": browser_failures,
-        "database": (
-            _database_summary(database_path)
-            if (database_path := _optional_nonempty_file(database_evidence)) is not None
-            else None
-        ),
-        "demo": _hashed_optional(demo_evidence, "provision-demo"),
+        "database": database,
+        "demo": demo,
+        "reconciliation": reconciliation,
     }
 
 
@@ -384,6 +694,10 @@ def main() -> None:
     parser.add_argument("--demo-evidence", type=Path)
     parser.add_argument("--browser-outcome", required=True)
     parser.add_argument("--screenshot-dir", required=True, type=Path)
+    parser.add_argument("--reconciliation-evidence", type=Path)
+    parser.add_argument(
+        "--operation-matrix", type=Path, default=DEFAULT_OPERATION_MATRIX
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     manifest = build_manifest(
@@ -395,6 +709,8 @@ def main() -> None:
         run_id=os.getenv("GITHUB_RUN_ID", "local"),
         run_attempt=os.getenv("GITHUB_RUN_ATTEMPT", "local"),
         screenshot_dir=args.screenshot_dir,
+        reconciliation_evidence=args.reconciliation_evidence,
+        operation_matrix=args.operation_matrix,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

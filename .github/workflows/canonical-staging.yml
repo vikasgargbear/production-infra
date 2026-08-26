@@ -1391,6 +1391,19 @@ jobs:
           fi
           trap - EXIT
 
+      - name: Publish exact-run Render demo receipt
+        if: inputs.provision_demo_data == true && inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/build_live18_render_demo_receipt.py \
+            --summary staging-evidence/canonical-demo-summary.json \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --commit-sha "$GITHUB_SHA" \
+            --deployed-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output staging-evidence/live18-render-demo-receipt.json
+
       - name: Exercise hosted OAuth and MCP against the provisioned demo
         if: inputs.provision_demo_data == true && inputs.deploy_render_pilot == true
         env:
