@@ -7,7 +7,7 @@ import useEscapeKey from '../../../../hooks/useEscapeKey';
 import { formatExactCurrency } from '../../../../utils/exactDecimal';
 import {
     extractDocumentDetail,
-    projectCanonicalImportLines,
+    projectCanonicalSalesOrderDispatchLines,
 } from '../../utils/documentImport';
 import type {
     ChallanItem,
@@ -25,6 +25,7 @@ interface ApprovedOrderSummary {
 }
 
 interface ApprovedOrderDetail extends ApprovedOrderSummary {
+    dispatch_context_date: string;
     items: unknown[];
 }
 
@@ -32,6 +33,7 @@ interface ImportFromInvoiceModalProps {
     isOpen: boolean;
     onClose: () => void;
     onImport: (data: ImportData) => void;
+    dispatchDate: string;
 }
 
 /**
@@ -39,7 +41,12 @@ interface ImportFromInvoiceModalProps {
  * Invoice-to-dispatch is deliberately not offered because it has no supported
  * lineage in the canonical dispatch command.
  */
-const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen, onClose, onImport }) => {
+const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({
+    isOpen,
+    onClose,
+    onImport,
+    dispatchDate,
+}) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<ApprovedOrderSummary[]>([]);
     const [selectedOrder, setSelectedOrder] = useState<ApprovedOrderSummary | null>(null);
@@ -77,10 +84,14 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
 
     const handleImport = async () => {
         if (!selectedOrder) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dispatchDate)) {
+            toast.error('Select a valid dispatch date before importing an approved order.');
+            return;
+        }
 
         setImporting(true);
         try {
-            const detailResponse = await ordersApi.getById(selectedOrder.order_id);
+            const detailResponse = await ordersApi.getById(selectedOrder.order_id, dispatchDate);
             const sourceOrder = extractDocumentDetail(
                 detailResponse,
                 ['order', 'sales_order'],
@@ -89,20 +100,18 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 || !sourceOrder.order_number
                 || !sourceOrder.customer_id
                 || !sourceOrder.customer_name
-                || sourceOrder.order_status !== 'approved') {
+                || sourceOrder.order_status !== 'approved'
+                || sourceOrder.dispatch_context_date !== dispatchDate) {
                 throw new Error('The canonical order detail is missing its approved order or customer identity.');
             }
-            const importableItems = projectCanonicalImportLines(
-                sourceOrder.items,
-                { requireBatch: true },
-            );
+            const importableItems = projectCanonicalSalesOrderDispatchLines(sourceOrder.items);
             const challanItems = importableItems.map((item, index) => {
                 if (!item.source_line_id) {
                     throw new Error(`Order line ${index + 1} is missing its canonical sales-order line identity.`);
                 }
                 return {
                     ...item,
-                    id: String(item.source_line_id),
+                    id: `${String(item.source_line_id)}:${String(item.batch_id)}`,
                     source_order_line_id: String(item.source_line_id),
                 };
             }) as unknown as ChallanItem[];
@@ -123,7 +132,6 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
             onImport(importData);
             onClose();
         } catch (error) {
-            console.error('[ChallanOrderImport] Failed to load canonical order details:', error);
             toast.error(error instanceof Error
                 ? error.message
                 : 'Unable to load the approved order. Nothing was imported.');

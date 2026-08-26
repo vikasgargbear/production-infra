@@ -129,19 +129,48 @@ test.describe('live desktop sales-chain API acceptance', () => {
       }] }] });
     const invoiceId = uuid(invoiceLife.executed.resource_id, 'invoice resource');
     const invoice = await call(page, api, 'GET', `/canonical/sales-invoices/${invoiceId}/posting-readback`);
-    expect(exact(invoice.invoice_lines[0].billed_quantity, 'invoice billed')).toBe(line.billed_quantity);
-    expect(exact(invoice.invoice_lines[0].free_quantity, 'invoice free')).toBe(line.free_quantity);
+    const invoiceLine = invoice.invoice_lines[0];
+    uuid(invoiceLine.invoice_line_id, 'invoice line');
+    expect(uuid(invoiceLine.product_id, 'invoice product')).toBe(f.product_id);
+    expect(exact(invoiceLine.billed_quantity, 'invoice billed')).toBe(line.billed_quantity);
+    expect(exact(invoiceLine.free_quantity, 'invoice free')).toBe(line.free_quantity);
+    expect(exact(invoiceLine.base_billed_quantity, 'invoice base billed'))
+      .toBe(exact(allocation.base_billed_quantity, 'dispatch allocation base billed'));
+    expect(exact(invoiceLine.base_free_quantity, 'invoice base free'))
+      .toBe(exact(allocation.base_free_quantity, 'dispatch allocation base free'));
     for (const name of ['taxable_amount','cgst_amount','sgst_amount','igst_amount','cess_amount','invoice_total',
       'tax_taxable_amount','tax_cgst_amount','tax_sgst_amount','tax_igst_amount','tax_cess_amount','tax_payable_amount',
-      'journal_debit_total','journal_credit_total','receivable_principal','receivable_outstanding','inventory_value']) {
+      'receivable_principal','receivable_outstanding','inventory_base_quantity']) {
       exact(invoice[name], `invoice ${name}`);
     }
-    expect(invoice.journal_debit_total).toBe(invoice.journal_credit_total);
     expect(invoice.receivable_principal).toBe(invoice.invoice_total);
     expect(invoice.tax_payable_amount).toBe(invoice.invoice_total);
-    uuid(invoice.tax_document_id, 'tax document'); uuid(invoice.accounting_event_id, 'accounting event');
-    uuid(invoice.journal_entry_id, 'journal entry'); uuid(invoice.open_item_id, 'receivable open item');
-    uuid(invoice.inventory_document_id, 'inventory document');
+    for (const sensitive of ['accounting_event_id', 'journal_entry_id', 'journal_debit_total',
+      'journal_credit_total', 'journal_lines', 'inventory_value']) {
+      expect(invoice).not.toHaveProperty(sensitive);
+    }
+    uuid(invoice.tax_document_id, 'tax document');
+    uuid(invoice.open_item_id, 'receivable open item');
+    expect(invoice.inventory_fulfillment).toBe('dispatch_issue');
+    expect(invoice.invoice_inventory_document_id).toBeNull();
+    expect(Array.isArray(invoice.inventory_evidence)).toBe(true);
+    expect(invoice.inventory_evidence).toHaveLength(1);
+    for (const [index, evidence] of invoice.inventory_evidence.entries()) {
+      expect(evidence).not.toHaveProperty('ledger_value');
+      expect(uuid(evidence.invoice_line_id, `inventory invoice line ${index + 1}`)).toBe(invoiceLine.invoice_line_id);
+      expect(evidence.source_kind).toBe('dispatch_issue');
+      expect(uuid(evidence.source_document_id, `inventory source document ${index + 1}`)).toBe(dispatchId);
+      expect(uuid(evidence.source_line_id, `inventory source line ${index + 1}`)).toBe(allocation.dispatch_line_id);
+      uuid(evidence.invoice_dispatch_allocation_id, `invoice dispatch allocation ${index + 1}`);
+      uuid(evidence.inventory_document_id, `inventory document ${index + 1}`);
+      uuid(evidence.inventory_document_line_id, `inventory document line ${index + 1}`);
+      uuid(evidence.ledger_entry_id, `inventory ledger entry ${index + 1}`);
+      exact(evidence.ledger_base_quantity, `inventory ledger quantity ${index + 1}`);
+      expect(exact(evidence.allocated_base_billed_quantity, `allocated base billed ${index + 1}`))
+        .toBe(invoiceLine.base_billed_quantity);
+      expect(exact(evidence.allocated_base_free_quantity, `allocated base free ${index + 1}`))
+        .toBe(invoiceLine.base_free_quantity);
+    }
     const receivables = await call(page, api, 'GET', `/payment-allocation/unpaid-invoices?customer_id=${f.customer_account_id}`);
     expect(JSON.stringify(receivables)).toContain(invoiceId);
     await testInfo.attach('sales-chain-created-ids-and-readback.json', { contentType: 'application/json', body: JSON.stringify({

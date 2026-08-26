@@ -20,6 +20,18 @@ export type FreeSupplyTaxTreatment =
     | 'included_at_unit_rate';
 export type AllocationSourceKind = 'direct_issue' | 'dispatch_allocation';
 
+export interface ChallanEligibleBatch {
+    batch_id: string;
+    batch_number: string;
+    expiry_date: string;
+    location_id: string;
+    location_name: string;
+    mrp: string;
+    available_quantity: string;
+    available_base_quantity: string;
+    fefo_priority: number;
+}
+
 // ==================== CUSTOMER ====================
 
 /** Customer details for challan */
@@ -46,6 +58,9 @@ export interface ChallanItem {
     location_id?: string;
     uom_conversion_id?: string;
     source_order_line_id?: string;
+    eligible_batches?: ChallanEligibleBatch[];
+    base_billed_quantity?: string;
+    base_free_quantity?: string;
     quantity: string | number;
     free_quantity?: string | number;
     unit?: string;
@@ -174,7 +189,6 @@ export interface CreatedChallanData {
     customer_details?: CustomerDetails;
     inventory_document_id: string;
     inventory_base_quantity: string;
-    inventory_value: string;
     lines: unknown[];
 }
 

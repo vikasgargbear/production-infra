@@ -137,7 +137,7 @@ export const invoicesApi = {
         };
     },
 
-    /** Strict posted readback with invoice, tax, journal, receivable and stock evidence. */
+    /** Browser-safe posted readback with invoice, tax, receivable and stock-quantity lineage. */
     getCanonicalPostingReadback: (id: string) =>
         apiHelpers.get(`/canonical/sales-invoices/${id}/posting-readback`),
 

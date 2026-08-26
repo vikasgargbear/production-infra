@@ -39,9 +39,12 @@ def _matching_projection(operation: str):
     database: dict = {}
     for index, rule in enumerate(FIELDS_BY_OPERATION[operation], start=1):
         value = str(index) if rule.absolute_database_value else f"value-{index}"
-        if any(token in rule.rest_key for token in ("amount", "quantity", "total", "value")):
+        if rule.rest_key is not None and any(
+            token in rule.rest_key for token in ("amount", "quantity", "total", "value")
+        ):
             value = str(index)
-        rest[rule.rest_key] = value
+        if rule.rest_key is not None:
+            rest[rule.rest_key] = value
         mcp[rule.mcp_key] = value
         database_value = f"-{value}" if rule.absolute_database_value else value
         _assign_path(database, rule.database_path, database_value)
@@ -77,4 +80,3 @@ def test_missing_database_effect_fails_closed() -> None:
         assert_canonical_projection_consistency(
             "sales.dispatch", rest=rest, mcp=mcp, database=database
         )
-

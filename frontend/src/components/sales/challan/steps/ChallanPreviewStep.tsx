@@ -180,8 +180,10 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                             setShowSuccessModal(false);
                             onClose?.();
                         },
-                        documentType: "Delivery Challan",
+                        title: "Challan Created Successfully!",
+                        documentType: "challan",
                         documentNumber: createdChallanData.challan_number,
+                        documentId: createdChallanData.challan_id,
                         documentData: createdChallanData as any,
                         onPrint: printChallan,
                         onThermalPrint: thermalPrintChallan,

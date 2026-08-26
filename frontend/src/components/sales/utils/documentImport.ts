@@ -7,7 +7,10 @@ import {
     exactDecimalUnits,
     normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
-import type { CanonicalExecutedBatchAllocation } from '../../../services/api/modules/sales/canonicalSalesDocuments.types';
+import type {
+    CanonicalExecutedBatchAllocation,
+    CanonicalSalesOrderEligibleBatch,
+} from '../../../services/api/modules/sales/canonicalSalesDocuments.types';
 
 export function extractDocumentCollection(
     response: unknown,
@@ -81,6 +84,7 @@ export interface CanonicalImportLine {
     location_id?: string;
     uom_conversion_id?: string;
     available_quantity?: string;
+    eligible_batches?: CanonicalSalesOrderEligibleBatch[];
     base_billed_quantity?: string;
     base_free_quantity?: string;
     source_billed_quantity?: string;
@@ -477,4 +481,165 @@ export function projectCanonicalImportLines(
         });
     });
     return projected;
+}
+
+/**
+ * Project the server-resolved sales-order dispatch context into one editable
+ * row per default batch allocation. The server remains authoritative for the
+ * selected saleable location, FEFO order, availability and UOM conversion.
+ */
+export function projectCanonicalSalesOrderDispatchLines(value: unknown): CanonicalImportLine[] {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw new Error('The selected sales order has no dispatchable line items.');
+    }
+
+    return value.flatMap((raw, lineIndex) => {
+        const item = (raw || {}) as Record<string, unknown>;
+        const sourceLineId = String(item.id ?? '').trim();
+        const locationId = String(item.location_id ?? '').trim();
+        const eligibleRaw = item.eligible_batches;
+        const allocationsRaw = item.default_batch_allocations;
+        if (!sourceLineId || !locationId) {
+            throw new Error(`Order line ${lineIndex + 1} is missing its canonical line or location identity.`);
+        }
+        if (!Array.isArray(eligibleRaw) || eligibleRaw.length === 0
+            || !Array.isArray(allocationsRaw) || allocationsRaw.length === 0) {
+            throw new Error(`Order line ${lineIndex + 1} has no canonical dispatch allocation context.`);
+        }
+
+        const baseLine = projectCanonicalImportLines([item], { requireBatch: false })[0];
+        const eligibleBatches = eligibleRaw.map((rawBatch, batchIndex) => {
+            const batch = (rawBatch || {}) as Record<string, unknown>;
+            const batchId = String(batch.batch_id ?? '').trim();
+            const batchNumber = String(batch.batch_number ?? '').trim();
+            const batchLocationId = String(batch.location_id ?? '').trim();
+            const expiryDate = String(batch.expiry_date ?? '').trim();
+            const fefoPriority = batch.fefo_priority;
+            if (!batchId || !batchNumber || !expiryDate || batchLocationId !== locationId
+                || fefoPriority !== batchIndex + 1) {
+                throw new Error(`Order line ${lineIndex + 1} has an invalid canonical FEFO batch at position ${batchIndex + 1}.`);
+            }
+            const availableQuantity = exactRequired(
+                batch.available_quantity,
+                `Order line ${lineIndex + 1} batch ${batchIndex + 1} available quantity`,
+                6,
+            );
+            const availableBaseQuantity = exactRequired(
+                batch.available_base_quantity,
+                `Order line ${lineIndex + 1} batch ${batchIndex + 1} available base quantity`,
+                6,
+            );
+            if ([availableQuantity, availableBaseQuantity].some((quantity, index) =>
+                exactDecimalUnits(quantity, `Order line ${lineIndex + 1} batch availability ${index + 1}`, { scale: 6 }) <= 0n)) {
+                throw new Error(`Order line ${lineIndex + 1} has a non-positive canonical batch availability.`);
+            }
+            return {
+                batch_id: batchId,
+                batch_number: batchNumber,
+                expiry_date: expiryDate,
+                location_id: batchLocationId,
+                location_name: String(batch.location_name ?? '').trim(),
+                mrp: exactRequired(batch.mrp, `Order line ${lineIndex + 1} batch ${batchIndex + 1} MRP`, 4),
+                available_quantity: availableQuantity,
+                available_base_quantity: availableBaseQuantity,
+                fefo_priority: fefoPriority,
+            } satisfies CanonicalSalesOrderEligibleBatch;
+        });
+        const eligibleById = new Map(eligibleBatches.map(batch => [batch.batch_id, batch]));
+        if (eligibleById.size !== eligibleBatches.length) {
+            throw new Error(`Order line ${lineIndex + 1} has duplicate canonical eligible batches.`);
+        }
+        const reportedAvailability = exactRequired(
+            item.available_quantity,
+            `Order line ${lineIndex + 1} available quantity`,
+            6,
+        );
+        if (compareExactDecimals(
+            addExactDecimals(
+                eligibleBatches.map(batch => batch.available_quantity),
+                `Order line ${lineIndex + 1} eligible availability`,
+                { scale: 6 },
+            ),
+            reportedAvailability,
+            `Order line ${lineIndex + 1} availability reconciliation`,
+            { scale: 6 },
+        ) !== 0) {
+            throw new Error(`Order line ${lineIndex + 1} eligible batch availability does not reconcile.`);
+        }
+
+        const seenAllocations = new Set<string>();
+        const projected = allocationsRaw.map((rawAllocation, allocationIndex) => {
+            const allocation = (rawAllocation || {}) as Record<string, unknown>;
+            const batchId = String(allocation.batch_id ?? '').trim();
+            const candidate = eligibleById.get(batchId);
+            const billed = exactRequired(
+                allocation.billed_quantity,
+                `Order line ${lineIndex + 1} allocation ${allocationIndex + 1} billed quantity`,
+                6,
+            );
+            const free = exactRequired(
+                allocation.free_quantity,
+                `Order line ${lineIndex + 1} allocation ${allocationIndex + 1} free quantity`,
+                6,
+            );
+            const baseBilled = exactRequired(
+                allocation.base_billed_quantity,
+                `Order line ${lineIndex + 1} allocation ${allocationIndex + 1} base billed quantity`,
+                6,
+            );
+            const baseFree = exactRequired(
+                allocation.base_free_quantity,
+                `Order line ${lineIndex + 1} allocation ${allocationIndex + 1} base free quantity`,
+                6,
+            );
+            const total = addExactDecimals([billed, free], `Order line ${lineIndex + 1} allocation total`, { scale: 6 });
+            const baseTotal = addExactDecimals([baseBilled, baseFree], `Order line ${lineIndex + 1} allocation base total`, { scale: 6 });
+            if (!candidate || seenAllocations.has(batchId)
+                || String(allocation.location_id ?? '').trim() !== locationId
+                || String(allocation.batch_number ?? '').trim() !== candidate.batch_number
+                || String(allocation.expiry_date ?? '').trim() !== candidate.expiry_date
+                || exactDecimalUnits(total, `Order line ${lineIndex + 1} allocation total`, { scale: 6 }) <= 0n
+                || compareExactDecimals(total, candidate.available_quantity, `Order line ${lineIndex + 1} allocation availability`, { scale: 6 }) > 0
+                || exactDecimalUnits(baseTotal, `Order line ${lineIndex + 1} allocation base total`, { scale: 6 }) <= 0n
+                || compareExactDecimals(baseTotal, candidate.available_base_quantity, `Order line ${lineIndex + 1} allocation base availability`, { scale: 6 }) > 0) {
+                throw new Error(`Order line ${lineIndex + 1} has an invalid canonical default batch allocation.`);
+            }
+            seenAllocations.add(batchId);
+            return {
+                ...baseLine,
+                source_line_id: sourceLineId,
+                batch_id: batchId,
+                batch_number: candidate.batch_number,
+                expiry_date: candidate.expiry_date,
+                quantity: billed,
+                free_quantity: free,
+                base_billed_quantity: baseBilled,
+                base_free_quantity: baseFree,
+                mrp: candidate.mrp,
+                eligible_batches: eligibleBatches,
+            };
+        });
+
+        const expectedBilled = exactRequired(item.quantity, `Order line ${lineIndex + 1} billed quantity`, 6);
+        const expectedFree = exactRequired(item.free_quantity, `Order line ${lineIndex + 1} free quantity`, 6);
+        if (compareExactDecimals(
+            addExactDecimals(projected.map(line => line.quantity), `Order line ${lineIndex + 1} billed allocation total`, { scale: 6 }),
+            expectedBilled,
+            `Order line ${lineIndex + 1} billed allocation reconciliation`,
+            { scale: 6 },
+        ) !== 0 || compareExactDecimals(
+            addExactDecimals(projected.map(line => line.free_quantity), `Order line ${lineIndex + 1} free allocation total`, { scale: 6 }),
+            expectedFree,
+            `Order line ${lineIndex + 1} free allocation reconciliation`,
+            { scale: 6 },
+        ) !== 0) {
+            throw new Error(`Order line ${lineIndex + 1} default batch allocations do not reconcile its quantities.`);
+        }
+        const eligibleOrder = new Map(eligibleBatches.map((batch, index) => [batch.batch_id, index]));
+        if (projected.some((line, index) => index > 0
+            && eligibleOrder.get(String(projected[index - 1].batch_id))! > eligibleOrder.get(String(line.batch_id))!)) {
+            throw new Error(`Order line ${lineIndex + 1} default batches do not follow canonical FEFO order.`);
+        }
+        return projected;
+    });
 }

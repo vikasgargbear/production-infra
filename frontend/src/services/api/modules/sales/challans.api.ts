@@ -49,7 +49,6 @@ export interface CanonicalSalesDispatchReadbackLine {
     inventory_document_line_id: string;
     ledger_entry_id: string;
     ledger_base_quantity: string;
-    ledger_value: string;
 }
 
 export interface CanonicalSalesDispatchReadback {
@@ -60,7 +59,6 @@ export interface CanonicalSalesDispatchReadback {
     customer_name: string;
     inventory_document_id: string;
     inventory_base_quantity: string;
-    inventory_value: string;
     lines: CanonicalSalesDispatchReadbackLine[];
 }
 
@@ -107,27 +105,15 @@ export const normalizeCanonicalSalesDispatchReadback = (value: unknown): Canonic
             inventory_document_line_id: dispatchUuid(line.inventory_document_line_id, 'Inventory document line id'),
             ledger_entry_id: dispatchUuid(line.ledger_entry_id, 'Stock ledger entry id'),
             ledger_base_quantity: quantity('ledger_base_quantity'),
-            ledger_value: normalizeAuthoritativeDecimal(
-                line.ledger_value, `Posted dispatch line ${index + 1} ledger value`,
-                { scale: 2, maximumWholeDigits: 20 },
-            ),
         };
     });
     const inventoryBaseQuantity = normalizeAuthoritativeDecimal(
         source.inventory_base_quantity, 'Dispatch inventory base quantity',
         { scale: 6, maximumWholeDigits: 14 },
     );
-    const inventoryValue = normalizeAuthoritativeDecimal(
-        source.inventory_value, 'Dispatch inventory value',
-        { scale: 2, maximumWholeDigits: 20 },
-    );
     const lineBaseQuantity = addExactDecimals(
         lines.map(line => line.ledger_base_quantity), 'Dispatch line base quantity',
         { scale: 6, maximumWholeDigits: 14 },
-    );
-    const lineValue = addExactDecimals(
-        lines.map(line => line.ledger_value), 'Dispatch line inventory value',
-        { scale: 2, maximumWholeDigits: 20 },
     );
     for (const [index, line] of lines.entries()) {
         const expectedBase = addExactDecimals(
@@ -138,9 +124,8 @@ export const normalizeCanonicalSalesDispatchReadback = (value: unknown): Canonic
             throw new Error(`Posted dispatch line ${index + 1} does not reconcile to its stock ledger quantity.`);
         }
     }
-    if (compareExactDecimals(lineBaseQuantity, inventoryBaseQuantity, 'Dispatch base quantity reconciliation', { scale: 6 }) !== 0
-        || compareExactDecimals(lineValue, inventoryValue, 'Dispatch value reconciliation', { scale: 2 }) !== 0) {
-        throw new Error('Posted dispatch lines do not reconcile to the inventory document.');
+    if (compareExactDecimals(lineBaseQuantity, inventoryBaseQuantity, 'Dispatch base quantity reconciliation', { scale: 6 }) !== 0) {
+        throw new Error('Posted dispatch line quantities do not reconcile to the inventory document.');
     }
     return {
         dispatch_id: dispatchUuid(source.dispatch_id, 'Dispatch id'),
@@ -150,7 +135,6 @@ export const normalizeCanonicalSalesDispatchReadback = (value: unknown): Canonic
         customer_name: dispatchString(source.customer_name, 'Dispatch customer name'),
         inventory_document_id: dispatchUuid(source.inventory_document_id, 'Inventory document id'),
         inventory_base_quantity: inventoryBaseQuantity,
-        inventory_value: inventoryValue,
         lines,
     };
 };

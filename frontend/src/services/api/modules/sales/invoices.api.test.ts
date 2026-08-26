@@ -54,7 +54,7 @@ describe('canonical invoice web transport', () => {
         get.mockResolvedValue({ data: {} });
 
         invoicesApi.getById('invoice-uuid');
-        ordersApi.getById('order-uuid');
+        ordersApi.getById('order-uuid', '2026-08-26');
         challansApi.getById('challan-uuid');
 
         expect(get.mock.calls.map(call => call[0])).toEqual([
@@ -62,5 +62,6 @@ describe('canonical invoice web transport', () => {
             '/canonical/sales-orders/order-uuid/import-detail',
             '/canonical/challans/challan-uuid/import-detail',
         ]);
+        expect(get.mock.calls[1][1]).toEqual({ params: { dispatch_date: '2026-08-26' } });
     });
 });

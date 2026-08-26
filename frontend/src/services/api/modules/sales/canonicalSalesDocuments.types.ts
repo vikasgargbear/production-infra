@@ -94,10 +94,35 @@ export interface CanonicalSalesOrderImportLine extends CanonicalSalesDocumentLin
   branch_id: string;
   location_id: string;
   uom_conversion_id: string;
-  mrp: ExactDecimalString;
+  mrp: ExactDecimalString | null;
   available_quantity: ExactDecimalString;
+  batch_id: string | null;
+  batch_number: string | null;
+  eligible_batches: CanonicalSalesOrderEligibleBatch[];
+  default_batch_allocations: CanonicalSalesOrderDefaultBatchAllocation[];
+}
+
+export interface CanonicalSalesOrderEligibleBatch {
   batch_id: string;
   batch_number: string;
+  expiry_date: string;
+  location_id: string;
+  location_name: string;
+  mrp: ExactDecimalString;
+  available_quantity: ExactDecimalString;
+  available_base_quantity: ExactDecimalString;
+  fefo_priority: number;
+}
+
+export interface CanonicalSalesOrderDefaultBatchAllocation {
+  batch_id: string;
+  batch_number: string;
+  expiry_date: string;
+  location_id: string;
+  billed_quantity: ExactDecimalString;
+  free_quantity: ExactDecimalString;
+  base_billed_quantity: ExactDecimalString;
+  base_free_quantity: ExactDecimalString;
 }
 
 export interface CanonicalSalesOrderImportDetail {
@@ -105,6 +130,7 @@ export interface CanonicalSalesOrderImportDetail {
   id: string;
   order_number: string;
   order_date: string;
+  dispatch_context_date: string;
   delivery_date: string | null;
   order_status: 'approved';
   status: 'approved';

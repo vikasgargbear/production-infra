@@ -72,7 +72,6 @@ class CanonicalSalesDispatchLineReadback(BaseModel):
     inventory_document_line_id: UUID
     ledger_entry_id: UUID
     ledger_base_quantity: Quantity
-    ledger_value: Money
 
 
 class CanonicalSalesDispatchReadback(BaseModel):
@@ -84,23 +83,40 @@ class CanonicalSalesDispatchReadback(BaseModel):
     customer_name: str
     inventory_document_id: UUID
     inventory_base_quantity: Quantity
-    inventory_value: Money
     lines: list[CanonicalSalesDispatchLineReadback] = Field(min_length=1)
 
     @model_validator(mode="after")
     def reconcile(self):
         base_total = Decimal("0")
-        value_total = Decimal("0")
         for line in self.lines:
             expected = Decimal(line.base_billed_quantity) + Decimal(line.base_free_quantity)
             if Decimal(line.ledger_base_quantity) != expected:
                 raise ValueError("sales-dispatch ledger quantity does not reconcile to billed and free base quantities")
             base_total += Decimal(line.ledger_base_quantity)
-            value_total += Decimal(line.ledger_value)
         if base_total != Decimal(self.inventory_base_quantity):
             raise ValueError("sales-dispatch inventory quantity does not reconcile to its ledger lines")
+        return self
+
+
+class CanonicalSalesDispatchValuationLineReadback(
+    CanonicalSalesDispatchLineReadback
+):
+    ledger_value: Money
+
+
+class CanonicalSalesDispatchValuationReadback(CanonicalSalesDispatchReadback):
+    inventory_value: Money
+    lines: list[CanonicalSalesDispatchValuationLineReadback] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reconcile_valuation(self):
+        value_total = sum(
+            (Decimal(line.ledger_value) for line in self.lines), Decimal("0")
+        )
         if value_total != Decimal(self.inventory_value):
-            raise ValueError("sales-dispatch inventory value does not reconcile to its ledger lines")
+            raise ValueError(
+                "sales-dispatch inventory value does not reconcile to its ledger lines"
+            )
         return self
 
 
@@ -145,8 +161,9 @@ def sales_order_acceptance_readback(order_id: UUID, user: dict = SALES_USER, db:
     return rows[0]
 
 
-@router.get("/canonical/sales-dispatches/{dispatch_id}/acceptance-readback", response_model=CanonicalSalesDispatchReadback)
-def sales_dispatch_acceptance_readback(dispatch_id: UUID, user: dict = SALES_USER, db: Session = Depends(get_db)):
+def _sales_dispatch_valuation_acceptance_readback(
+    dispatch_id: UUID, user: dict, db: Session,
+) -> CanonicalSalesDispatchValuationReadback:
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT dispatch.id AS dispatch_id, dispatch.dispatch_number AS challan_number,
@@ -186,7 +203,22 @@ def sales_dispatch_acceptance_readback(dispatch_id: UUID, user: dict = SALES_USE
     """, {"org_id": org_id, "dispatch_id": dispatch_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Posted canonical sales dispatch readback not found")
-    return rows[0]
+    return CanonicalSalesDispatchValuationReadback.model_validate(rows[0])
+
+
+@router.get(
+    "/canonical/sales-dispatches/{dispatch_id}/acceptance-readback",
+    response_model=CanonicalSalesDispatchReadback,
+)
+def sales_dispatch_acceptance_readback(
+    dispatch_id: UUID, user: dict = SALES_USER, db: Session = Depends(get_db),
+) -> CanonicalSalesDispatchReadback:
+    evidence = _sales_dispatch_valuation_acceptance_readback(dispatch_id, user, db)
+    public = evidence.model_dump(exclude={
+        "inventory_value": True,
+        "lines": {"__all__": {"ledger_value"}},
+    })
+    return CanonicalSalesDispatchReadback.model_validate(public)
 
 
 class SalesInvoiceJournalLine(BaseModel):
@@ -242,6 +274,9 @@ class SalesInvoiceInventoryEvidence(BaseModel):
     allocated_base_billed_quantity: Quantity
     allocated_base_free_quantity: Quantity
     ledger_base_quantity: Quantity
+
+
+class SalesInvoiceValuationEvidence(SalesInvoiceInventoryEvidence):
     ledger_value: Money
 
 
@@ -265,28 +300,18 @@ class CanonicalSalesInvoicePostingReadback(BaseModel):
     tax_igst_amount: Money
     tax_cess_amount: Money
     tax_payable_amount: Money
-    accounting_event_id: UUID
-    journal_entry_id: UUID
-    journal_debit_total: Money
-    journal_credit_total: Money
-    journal_lines: list[SalesInvoiceJournalLine]
     open_item_id: UUID
     receivable_principal: Money
     receivable_outstanding: Money
     inventory_fulfillment: Literal["direct_invoice_issue", "dispatch_issue", "mixed"]
     invoice_inventory_document_id: Optional[UUID]
     inventory_base_quantity: Quantity
-    inventory_value: Money
     inventory_evidence: list[SalesInvoiceInventoryEvidence] = Field(min_length=1)
 
     @model_validator(mode="after")
     def reconcile(self):
-        debit = sum((Decimal(line.transaction_debit) for line in self.journal_lines), Decimal("0"))
-        credit = sum((Decimal(line.transaction_credit) for line in self.journal_lines), Decimal("0"))
-        if not self.journal_lines or not self.invoice_lines or debit != credit:
-            raise ValueError("sales-invoice journal lines are not balanced")
-        if debit != Decimal(self.journal_debit_total) or credit != Decimal(self.journal_credit_total):
-            raise ValueError("sales-invoice journal header does not reconcile to its lines")
+        if not self.invoice_lines:
+            raise ValueError("sales-invoice readback requires invoice lines")
         if Decimal(self.receivable_principal) != Decimal(self.invoice_total):
             raise ValueError("sales-invoice receivable does not reconcile to invoice total")
         outstanding = Decimal(self.receivable_outstanding)
@@ -361,20 +386,48 @@ class CanonicalSalesInvoicePostingReadback(BaseModel):
         unique_ledger = {item.ledger_entry_id: item for item in self.inventory_evidence}
         if sum((Decimal(item.ledger_base_quantity) for item in unique_ledger.values()), Decimal("0")) != Decimal(self.inventory_base_quantity):
             raise ValueError("sales-invoice source inventory quantity does not reconcile")
-        if sum((Decimal(item.ledger_value) for item in unique_ledger.values()), Decimal("0")) != Decimal(self.inventory_value):
+        return self
+
+
+class CanonicalSalesInvoicePostingEvidence(CanonicalSalesInvoicePostingReadback):
+    accounting_event_id: UUID
+    journal_entry_id: UUID
+    journal_debit_total: Money
+    journal_credit_total: Money
+    journal_lines: list[SalesInvoiceJournalLine] = Field(min_length=1)
+    inventory_value: Money
+    inventory_evidence: list[SalesInvoiceValuationEvidence] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reconcile_accounting_and_valuation(self):
+        debit = sum(
+            (Decimal(line.transaction_debit) for line in self.journal_lines), Decimal("0")
+        )
+        credit = sum(
+            (Decimal(line.transaction_credit) for line in self.journal_lines), Decimal("0")
+        )
+        if debit != credit:
+            raise ValueError("sales-invoice journal lines are not balanced")
+        if (
+            debit != Decimal(self.journal_debit_total)
+            or credit != Decimal(self.journal_credit_total)
+        ):
+            raise ValueError(
+                "sales-invoice journal header does not reconcile to its lines"
+            )
+        unique_ledger = {item.ledger_entry_id: item for item in self.inventory_evidence}
+        if sum(
+            (Decimal(item.ledger_value) for item in unique_ledger.values()), Decimal("0")
+        ) != Decimal(self.inventory_value):
             raise ValueError("sales-invoice source inventory value does not reconcile")
         return self
 
 
-@router.get(
-    "/canonical/sales-invoices/{invoice_id}/posting-readback",
-    response_model=CanonicalSalesInvoicePostingReadback,
-)
-def posted_sales_invoice_readback(
+def _posted_sales_invoice_acceptance_evidence(
     invoice_id: UUID,
-    user: dict = SALES_USER,
-    db: Session = Depends(get_db),
-):
+    user: dict,
+    db: Session,
+) -> CanonicalSalesInvoicePostingEvidence:
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT invoice.id AS sales_invoice_id, invoice.invoice_number, invoice.status,
@@ -597,4 +650,26 @@ def posted_sales_invoice_readback(
     """, {"org_id": org_id, "invoice_id": invoice_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Posted canonical sales-invoice companions not found")
-    return rows[0]
+    return CanonicalSalesInvoicePostingEvidence.model_validate(rows[0])
+
+
+@router.get(
+    "/canonical/sales-invoices/{invoice_id}/posting-readback",
+    response_model=CanonicalSalesInvoicePostingReadback,
+)
+def posted_sales_invoice_readback(
+    invoice_id: UUID,
+    user: dict = SALES_USER,
+    db: Session = Depends(get_db),
+) -> CanonicalSalesInvoicePostingReadback:
+    evidence = _posted_sales_invoice_acceptance_evidence(invoice_id, user, db)
+    public = evidence.model_dump(exclude={
+        "accounting_event_id": True,
+        "journal_entry_id": True,
+        "journal_debit_total": True,
+        "journal_credit_total": True,
+        "journal_lines": True,
+        "inventory_value": True,
+        "inventory_evidence": {"__all__": {"ledger_value"}},
+    })
+    return CanonicalSalesInvoicePostingReadback.model_validate(public)

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from typing import Annotated, Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
@@ -2479,6 +2479,47 @@ class CanonicalInvoiceDetailItem(BaseModel):
         return self
 
 
+class CanonicalSalesOrderEligibleBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: UUID
+    batch_number: str
+    expiry_date: date
+    location_id: UUID
+    location_name: str
+    mrp: ExactRate
+    available_quantity: ExactQuantity
+    available_base_quantity: ExactQuantity
+    fefo_priority: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_positive_stock(self):
+        if self.available_quantity <= 0 or self.available_base_quantity <= 0:
+            raise ValueError("eligible dispatch batch must have positive stock")
+        return self
+
+
+class CanonicalSalesOrderDefaultBatchAllocation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: UUID
+    batch_number: str
+    expiry_date: date
+    location_id: UUID
+    billed_quantity: ExactQuantity
+    free_quantity: ExactQuantity
+    base_billed_quantity: ExactQuantity
+    base_free_quantity: ExactQuantity
+
+    @model_validator(mode="after")
+    def validate_positive_quantity(self):
+        if self.billed_quantity + self.free_quantity <= 0:
+            raise ValueError("default dispatch allocation requires a positive quantity")
+        if self.base_billed_quantity + self.base_free_quantity <= 0:
+            raise ValueError("default dispatch allocation requires a positive base quantity")
+        return self
+
+
 class CanonicalSalesOrderImportItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2507,11 +2548,13 @@ class CanonicalSalesOrderImportItem(BaseModel):
     sgst_amount: ExactMoney
     igst_amount: ExactMoney
     line_total: ExactMoney
-    batch_id: UUID
-    batch_number: str
+    batch_id: Optional[UUID]
+    batch_number: Optional[str]
     expiry_date: Optional[date]
-    mrp: ExactRate
+    mrp: Optional[ExactRate]
     available_quantity: ExactQuantity
+    eligible_batches: list[CanonicalSalesOrderEligibleBatch]
+    default_batch_allocations: list[CanonicalSalesOrderDefaultBatchAllocation]
 
     @model_validator(mode="after")
     def validate_quantity(self):
@@ -2520,7 +2563,60 @@ class CanonicalSalesOrderImportItem(BaseModel):
         if self.quantity + self.free_quantity <= 0:
             raise ValueError("order import line requires a positive quantity")
         if self.available_quantity < self.quantity + self.free_quantity:
-            raise ValueError("order import reservation does not cover its quantity")
+            raise ValueError("order import stock does not cover its quantity")
+        if not self.eligible_batches or not self.default_batch_allocations:
+            raise ValueError("order import requires eligible stock and default allocations")
+        eligible = {value.batch_id: value for value in self.eligible_batches}
+        if len(eligible) != len(self.eligible_batches):
+            raise ValueError("order import eligible batches must be unique")
+        if any(value.location_id != self.location_id for value in self.eligible_batches):
+            raise ValueError("order import eligible batches must use its selected location")
+        if any(value.location_id != self.location_id for value in self.default_batch_allocations):
+            raise ValueError("order import default allocations must use its selected location")
+        if any(value.batch_id not in eligible for value in self.default_batch_allocations):
+            raise ValueError("order import default allocation is not an eligible batch")
+        if [value.fefo_priority for value in self.eligible_batches] != list(
+            range(1, len(self.eligible_batches) + 1)
+        ):
+            raise ValueError("order import eligible batch FEFO priorities are incomplete")
+        allocation_ids = [value.batch_id for value in self.default_batch_allocations]
+        if len(allocation_ids) != len(set(allocation_ids)):
+            raise ValueError("order import default allocations must use unique batches")
+        eligible_order = {value.batch_id: index for index, value in enumerate(self.eligible_batches)}
+        if allocation_ids != sorted(allocation_ids, key=eligible_order.__getitem__):
+            raise ValueError("order import default allocations must follow eligible FEFO order")
+        for allocation in self.default_batch_allocations:
+            batch = eligible[allocation.batch_id]
+            if (
+                allocation.billed_quantity + allocation.free_quantity
+                > batch.available_quantity
+                or allocation.base_billed_quantity + allocation.base_free_quantity
+                > batch.available_base_quantity
+            ):
+                raise ValueError("order import default allocation exceeds eligible stock")
+        if self.available_quantity != sum(
+            (value.available_quantity for value in self.eligible_batches),
+            Decimal("0"),
+        ):
+            raise ValueError("order import available quantity does not reconcile eligible stock")
+        if sum(
+            (value.billed_quantity for value in self.default_batch_allocations),
+            Decimal("0"),
+        ) != self.quantity or sum(
+            (value.free_quantity for value in self.default_batch_allocations),
+            Decimal("0"),
+        ) != self.free_quantity:
+            raise ValueError("order import default allocations do not reconcile quantities")
+        if len(self.default_batch_allocations) == 1:
+            allocation = self.default_batch_allocations[0]
+            if (
+                self.batch_id != allocation.batch_id
+                or self.batch_number != allocation.batch_number
+                or self.expiry_date != allocation.expiry_date
+            ):
+                raise ValueError("order import scalar batch fields do not match its default")
+        elif self.batch_id is not None or self.batch_number is not None or self.expiry_date is not None:
+            raise ValueError("multi-batch order import cannot expose a scalar batch identity")
         return self
 
 
@@ -2617,6 +2713,7 @@ class CanonicalSalesOrderImportDetail(BaseModel):
     id: UUID
     order_number: str
     order_date: date
+    dispatch_context_date: date
     delivery_date: Optional[date]
     order_status: Literal["approved"]
     status: Literal["approved"]
@@ -3067,6 +3164,280 @@ def canonical_invoice_compatibility_detail(
     return _canonical_invoice_detail(db, _activate(db, user), invoice_id)
 
 
+_QUANTITY_QUANTUM = Decimal("0.000001")
+_RATE_QUANTUM = Decimal("0.0001")
+_MONEY_QUANTUM = Decimal("0.01")
+
+
+def _dispatch_entered_availability(base_quantity: Decimal, factor: Decimal) -> Decimal:
+    """Return a six-decimal entered-UOM quantity that never exceeds base stock."""
+    return (base_quantity / factor).quantize(_QUANTITY_QUANTUM, rounding=ROUND_DOWN)
+
+
+def _location_supports_value_backed_fefo(
+    candidates: list[dict], required: Decimal, *,
+    availability_field: str = "available_quantity",
+) -> bool:
+    remaining = required
+    expiry_dates = sorted({candidate["expiry_date"] for candidate in candidates})
+    for expiry_date in expiry_dates:
+        expiry_candidates = [
+            candidate for candidate in candidates
+            if candidate["expiry_date"] == expiry_date
+        ]
+        expiry_available = sum(
+            (candidate[availability_field] for candidate in expiry_candidates),
+            Decimal("0"),
+        )
+        expected = min(remaining, expiry_available)
+        value_backed_available = sum(
+            (
+                candidate[availability_field] for candidate in expiry_candidates
+                if candidate["is_value_backed"]
+            ),
+            Decimal("0"),
+        )
+        if expected > value_backed_available:
+            return False
+        remaining -= expected
+        if remaining == 0:
+            return True
+    return False
+
+
+def _build_sales_order_dispatch_context(line_rows: list[dict]) -> list[dict]:
+    """Choose one saleable location and build deterministic, advisory FEFO defaults.
+
+    The command prepare resolver remains authoritative and re-locks every source row.
+    This read projection intentionally uses no reservations or client-supplied stock.
+    """
+    prepared: list[tuple[dict, Decimal, Decimal, list[dict]]] = []
+    eligible_location_sets: list[set[UUID]] = []
+
+    for row in line_rows:
+        candidate_count = int(row.get("uom_candidate_count") or 0)
+        factor = Decimal(str(row.get("uom_conversion_factor") or 0))
+        if candidate_count != 1 or row.get("uom_conversion_id") is None or factor <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Sales-order dispatch context requires one unambiguous active "
+                    "UOM conversion per product line"
+                ),
+            )
+        billed = Decimal(str(row["quantity"]))
+        free = Decimal(str(row["free_quantity"]))
+        dispatched_billed = Decimal(str(row.get("dispatched_billed_quantity") or 0))
+        dispatched_free = Decimal(str(row.get("dispatched_free_quantity") or 0))
+        if dispatched_billed > billed or dispatched_free > free:
+            raise HTTPException(
+                status_code=409,
+                detail="Existing dispatch quantities exceed the approved sales-order ceiling",
+            )
+        billed -= dispatched_billed
+        free -= dispatched_free
+        required = billed + free
+        if required == 0:
+            continue
+        raw_candidates = row.get("eligible_batches") or []
+        candidates: list[dict] = []
+        candidates_by_location: dict[UUID, list[dict]] = {}
+        for raw in raw_candidates:
+            candidate = dict(raw)
+            location_id = UUID(str(candidate["location_id"]))
+            base_available = Decimal(str(candidate["available_base_quantity"]))
+            entered_available = _dispatch_entered_availability(base_available, factor)
+            if entered_available <= 0:
+                continue
+            candidate["location_id"] = location_id
+            candidate["batch_id"] = UUID(str(candidate["batch_id"]))
+            candidate["available_base_quantity"] = base_available
+            candidate["available_quantity"] = entered_available
+            candidate["inventory_value"] = Decimal(str(candidate["inventory_value"]))
+            candidate["average_unit_cost"] = Decimal(str(candidate["average_unit_cost"]))
+            candidate["mrp"] = Decimal(str(candidate["mrp"]))
+            candidate["is_value_backed"] = (
+                candidate["inventory_value"] > 0
+                and candidate["average_unit_cost"] > 0
+            )
+            candidates.append(candidate)
+            candidates_by_location.setdefault(location_id, []).append(candidate)
+
+        required_base = ((billed + free) * factor).quantize(_QUANTITY_QUANTUM)
+        locations = {
+            location_id for location_id, location_candidates in candidates_by_location.items()
+            if _location_supports_value_backed_fefo(
+                location_candidates, required_base,
+                availability_field="available_base_quantity",
+            )
+        }
+        eligible_location_sets.append(locations)
+        prepared.append((dict(row), billed, free, candidates))
+
+    common_locations = set.intersection(*eligible_location_sets) if eligible_location_sets else set()
+    if not prepared:
+        raise HTTPException(
+            status_code=409,
+            detail="The approved sales order is already fully dispatched",
+        )
+    for location_id in tuple(common_locations):
+        required_by_product: dict[UUID, Decimal] = {}
+        candidates_by_product: dict[UUID, list[dict]] = {}
+        for row, billed, free, candidates in prepared:
+            product_id = UUID(str(row["product_id"]))
+            factor = Decimal(str(row["uom_conversion_factor"]))
+            required_by_product[product_id] = (
+                required_by_product.get(product_id, Decimal("0"))
+                + ((billed + free) * factor).quantize(_QUANTITY_QUANTUM)
+            )
+            candidates_by_product.setdefault(product_id, [
+                candidate for candidate in candidates
+                if candidate["location_id"] == location_id
+            ])
+        if any(
+            not _location_supports_value_backed_fefo(
+                candidates_by_product[product_id], required,
+                availability_field="available_base_quantity",
+            )
+            for product_id, required in required_by_product.items()
+        ):
+            common_locations.remove(location_id)
+    if not common_locations:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No single saleable location has sufficient released, unexpired, "
+                "value-backed FEFO stock for every sales-order line"
+            ),
+        )
+    selected_location_id = min(common_locations, key=str)
+
+    items: list[dict] = []
+    stock_remaining_base: dict[tuple[UUID, UUID], Decimal] = {}
+    stock_remaining_value: dict[tuple[UUID, UUID], Decimal] = {}
+    for row, billed, free, candidates in prepared:
+        factor = Decimal(str(row["uom_conversion_factor"]))
+        product_id = UUID(str(row["product_id"]))
+        location_candidates = sorted(
+            (
+                candidate for candidate in candidates
+                if candidate["location_id"] == selected_location_id
+                and candidate["is_value_backed"]
+            ),
+            key=lambda candidate: (
+                candidate["expiry_date"], candidate["batch_number"],
+                str(candidate["batch_id"]),
+            ),
+        )
+        for candidate in location_candidates:
+            key = (product_id, candidate["batch_id"])
+            stock_remaining_base.setdefault(key, candidate["available_base_quantity"])
+            stock_remaining_value.setdefault(key, candidate["inventory_value"])
+        remaining_billed = billed
+        remaining_free = free
+        default_allocations: list[dict] = []
+        eligible_batches: list[dict] = []
+        for candidate in location_candidates:
+            stock_key = (product_id, candidate["batch_id"])
+            available_base = stock_remaining_base[stock_key]
+            available = _dispatch_entered_availability(available_base, factor)
+            if available <= 0:
+                continue
+            eligible_batches.append({
+                **{
+                    key: value for key, value in candidate.items()
+                    if key not in {
+                        "is_value_backed", "inventory_value", "average_unit_cost",
+                    }
+                },
+                "available_quantity": available,
+                "available_base_quantity": available_base,
+                "fefo_priority": len(eligible_batches) + 1,
+            })
+            allocated_billed = min(remaining_billed, available)
+            remaining_billed -= allocated_billed
+            available -= allocated_billed
+            allocated_free = min(remaining_free, available)
+            remaining_free -= allocated_free
+            if allocated_billed + allocated_free <= 0:
+                continue
+            issued_base = ((allocated_billed + allocated_free) * factor).quantize(
+                _QUANTITY_QUANTUM
+            )
+            current_value = stock_remaining_value[stock_key]
+            if issued_base == available_base:
+                estimated_issue_value = current_value
+            else:
+                current_unit_cost = (current_value / available_base).quantize(
+                    _RATE_QUANTUM, rounding=ROUND_HALF_UP,
+                )
+                estimated_issue_value = (issued_base * current_unit_cost).quantize(
+                    _MONEY_QUANTUM, rounding=ROUND_HALF_UP,
+                )
+            if estimated_issue_value <= 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "The deterministic FEFO allocation has no positive inventory "
+                        "value at accounting precision"
+                    ),
+                )
+            stock_remaining_base[stock_key] -= issued_base
+            stock_remaining_value[stock_key] -= estimated_issue_value
+            default_allocations.append({
+                "batch_id": candidate["batch_id"],
+                "batch_number": candidate["batch_number"],
+                "expiry_date": candidate["expiry_date"],
+                "location_id": selected_location_id,
+                "billed_quantity": allocated_billed,
+                "free_quantity": allocated_free,
+                "base_billed_quantity": (allocated_billed * factor).quantize(
+                    _QUANTITY_QUANTUM
+                ),
+                "base_free_quantity": (allocated_free * factor).quantize(
+                    _QUANTITY_QUANTUM
+                ),
+            })
+        if remaining_billed != 0 or remaining_free != 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Sales-order dispatch context stock allocation is incomplete",
+            )
+
+        scalar = default_allocations[0] if len(default_allocations) == 1 else None
+        scalar_candidate = next(
+            (
+                candidate for candidate in eligible_batches
+                if scalar is not None and candidate["batch_id"] == scalar["batch_id"]
+            ),
+            None,
+        )
+        item = {
+            key: value for key, value in row.items() if key not in {
+                "line_number", "uom_candidate_count", "uom_conversion_factor",
+                "dispatched_billed_quantity", "dispatched_free_quantity",
+                "eligible_batches",
+            }
+        }
+        item.update({
+            "quantity": billed,
+            "free_quantity": free,
+            "location_id": selected_location_id,
+            "batch_id": scalar["batch_id"] if scalar else None,
+            "batch_number": scalar["batch_number"] if scalar else None,
+            "expiry_date": scalar["expiry_date"] if scalar else None,
+            "mrp": scalar_candidate["mrp"] if scalar_candidate else None,
+            "available_quantity": sum(
+                (candidate["available_quantity"] for candidate in eligible_batches),
+                Decimal("0"),
+            ),
+            "eligible_batches": eligible_batches,
+            "default_batch_allocations": default_allocations,
+        })
+        items.append(item)
+    return items
+
+
 @router.get(
     "/sales-orders/{order_id:uuid}",
     response_model=CanonicalSalesOrderImportDetail,
@@ -3079,6 +3450,7 @@ def canonical_invoice_compatibility_detail(
 )
 def canonical_sales_order_compatibility_detail(
     order_id: UUID,
+    dispatch_date: Optional[date] = None,
     user: dict = SALES_USER,
     db: Session = Depends(get_db),
 ):
@@ -3087,6 +3459,8 @@ def canonical_sales_order_compatibility_detail(
     rows = _rows(db, """
         SELECT document.id AS order_id, document.id,
                document.order_number, document.order_date,
+               COALESCE(:dispatch_date, (transaction_timestamp()
+                   AT TIME ZONE organization.timezone)::date) AS dispatch_context_date,
                document.requested_delivery_date AS delivery_date,
                document.status AS order_status, document.status,
                document.customer_account_id AS customer_id,
@@ -3100,15 +3474,15 @@ def canonical_sales_order_compatibility_detail(
                shipping.city AS shipping_city, shipping.state_code AS shipping_state,
                shipping.postal_code AS shipping_pincode,
                to_char(document.grand_total, 'FM999999999999999990.00') AS total_amount,
-               COALESCE(lines.items, '[]'::jsonb) AS items,
                (SELECT count(*)
                   FROM sales.order_lines source_line
                  WHERE source_line.org_id=document.org_id
                    AND source_line.order_id=document.id
                    AND source_line.line_kind='product') AS source_item_count,
-               COALESCE(lines.importable_item_count, 0) AS importable_item_count,
                document.created_at, document.updated_at
           FROM sales.orders document
+          JOIN core.organizations organization
+            ON organization.id=document.org_id AND organization.status='active'
           JOIN parties.customer_accounts account
             ON account.org_id=document.org_id AND account.id=document.customer_account_id
           JOIN parties.parties party
@@ -3130,103 +3504,8 @@ def canonical_sales_order_compatibility_detail(
                  AND registration_type='GSTIN' AND status='active'
                ORDER BY verified_at DESC NULLS LAST, id LIMIT 1
           ) tax ON true
-          LEFT JOIN LATERAL (
-              SELECT jsonb_agg(jsonb_build_object(
-                         'id', line.id, 'source_document_kind', 'sales_order',
-                         'product_id', line.product_id,
-                         'product_name', product.name, 'product_code', product.sku,
-                         'hsn_code', product.hsn_code, 'branch_id', document.branch_id,
-                         'location_id', reservation.location_id,
-                         'uom_conversion_id', conversion.id,
-                         'uom_code', line.uom_code,
-                         'unit', line.uom_code, 'quantity',
-                             to_char(line.billed_quantity, 'FM999999999999999990.000000'),
-                         'free_quantity',
-                             to_char(line.free_quantity, 'FM999999999999999990.000000'),
-                         'free_supply_tax_treatment', line.free_supply_tax_treatment,
-                         'unit_price',
-                             to_char(line.quoted_unit_rate, 'FM999999999999999990.0000'),
-                         'discount_percent', to_char(CASE
-                             WHEN line.line_discount_kind='percent'
-                             THEN line.line_discount_value ELSE 0 END,
-                             'FM999999999999999990.000000'),
-                         'tax_rate', to_char(
-                             line.cgst_rate + line.sgst_rate + line.igst_rate,
-                             'FM999999999999999990.000000'),
-                         'gst_percent', to_char(
-                             line.cgst_rate + line.sgst_rate + line.igst_rate,
-                             'FM999999999999999990.000000'),
-                         'taxable_amount',
-                             to_char(line.gst_taxable_value, 'FM999999999999999990.00'),
-                         'cgst_amount',
-                             to_char(line.cgst_amount, 'FM999999999999999990.00'),
-                         'sgst_amount',
-                             to_char(line.sgst_amount, 'FM999999999999999990.00'),
-                         'igst_amount',
-                             to_char(line.igst_amount, 'FM999999999999999990.00'),
-                         'line_total',
-                             to_char(line.line_total, 'FM999999999999999990.00'),
-                         'batch_id', reservation.batch_id,
-                         'batch_number', reservation.batch_number,
-                         'expiry_date', reservation.expiry_date,
-                         'mrp', to_char(
-                             reservation.mrp, 'FM999999999999999990.0000'),
-                         'available_quantity', to_char(
-                             reservation.available_quantity,
-                             'FM999999999999999990.000000')
-                     ) ORDER BY line.line_number) AS items,
-                     count(*)::integer AS importable_item_count
-                FROM sales.order_lines line
-                JOIN catalog.products product
-                  ON product.org_id=line.org_id AND product.id=line.product_id
-                JOIN LATERAL (
-                    SELECT candidate.id
-                      FROM (
-                            SELECT candidate_conversion.id,
-                                   count(*) OVER () AS candidate_count
-                              FROM catalog.uom_conversions candidate_conversion
-                             WHERE candidate_conversion.org_id=line.org_id
-                               AND candidate_conversion.product_id=line.product_id
-                               AND candidate_conversion.from_uom_code=line.uom_code
-                               AND candidate_conversion.to_uom_code=product.base_uom_code
-                               AND candidate_conversion.multiplier=line.uom_conversion_factor
-                               AND candidate_conversion.status='active'
-                               AND candidate_conversion.valid_from<=document.order_date
-                               AND (candidate_conversion.valid_until IS NULL
-                                    OR candidate_conversion.valid_until>=document.order_date)
-                           ) candidate
-                     WHERE candidate.candidate_count=1
-                ) conversion ON true
-                JOIN LATERAL (
-                    SELECT candidate.batch_id, candidate.batch_number,
-                           candidate.expiry_date, candidate.mrp,
-                           candidate.location_id,
-                           pg_catalog.round(
-                               candidate.quantity
-                               / NULLIF(line.uom_conversion_factor, 0), 6
-                           )
-                               AS available_quantity
-                      FROM (
-                            SELECT held.batch_id, batch.batch_number,
-                                   batch.expires_on AS expiry_date, batch.mrp,
-                                   held.location_id, held.quantity,
-                                   count(*) OVER () AS candidate_count
-                              FROM inventory.reservations held
-                              JOIN inventory.batches batch
-                                ON batch.org_id=held.org_id AND batch.id=held.batch_id
-                             WHERE held.org_id=line.org_id
-                               AND held.order_line_id=line.id
-                               AND held.branch_id=document.branch_id
-                               AND held.status='active'
-                               AND held.expires_at>transaction_timestamp()
-                           ) candidate
-                     WHERE candidate.candidate_count=1
-                ) reservation ON true
-               WHERE line.org_id=document.org_id AND line.order_id=document.id
-                 AND line.line_kind='product' AND line.product_id IS NOT NULL
-          ) lines ON true
          WHERE document.org_id=:org_id AND document.id=:order_id
-    """, {"org_id": org_id, "order_id": order_id})
+    """, {"org_id": org_id, "order_id": order_id, "dispatch_date": dispatch_date})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Sales order not found")
     result = rows[0]
@@ -3235,18 +3514,109 @@ def canonical_sales_order_compatibility_detail(
             status_code=409,
             detail="Only an approved, unfulfilled sales order can be imported",
         )
-    if (
-        int(result["source_item_count"]) <= 0
-        or int(result["source_item_count"]) != int(result["importable_item_count"])
-    ):
+    if result["dispatch_context_date"] < result["order_date"]:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Sales-order import requires exactly one active canonical batch "
-                "reservation and one unambiguous UOM conversion per product line; "
-                "multi-reservation orders are not available yet"
-            ),
+            detail="Dispatch context date cannot precede the approved sales order",
         )
+    line_rows = _rows(db, """
+        SELECT line.id, 'sales_order'::text AS source_document_kind,
+               line.line_number, line.product_id,
+               product.name AS product_name, product.sku AS product_code,
+               product.hsn_code, document.branch_id,
+               conversion.uom_conversion_id, conversion.candidate_count AS uom_candidate_count,
+               line.uom_code, line.uom_code AS unit,
+               line.uom_conversion_factor,
+               line.billed_quantity AS quantity, line.free_quantity,
+               line.free_supply_tax_treatment,
+               line.quoted_unit_rate AS unit_price,
+               CASE WHEN line.line_discount_kind='percent'
+                    THEN line.line_discount_value ELSE 0 END AS discount_percent,
+               line.cgst_rate + line.sgst_rate + line.igst_rate AS tax_rate,
+               line.cgst_rate + line.sgst_rate + line.igst_rate AS gst_percent,
+               line.gst_taxable_value AS taxable_amount,
+               line.cgst_amount, line.sgst_amount, line.igst_amount, line.line_total,
+               COALESCE(dispatched.billed_quantity, 0) AS dispatched_billed_quantity,
+               COALESCE(dispatched.free_quantity, 0) AS dispatched_free_quantity,
+               COALESCE(stock.eligible_batches, '[]'::jsonb) AS eligible_batches
+          FROM sales.orders document
+          JOIN core.organizations organization
+            ON organization.id=document.org_id AND organization.status='active'
+          JOIN sales.order_lines line
+            ON line.org_id=document.org_id AND line.order_id=document.id
+           AND line.line_kind='product' AND line.product_id IS NOT NULL
+          JOIN catalog.products product
+            ON product.org_id=line.org_id AND product.id=line.product_id
+          LEFT JOIN LATERAL (
+              SELECT CASE WHEN count(*)=1
+                          THEN (array_agg(candidate.id ORDER BY candidate.id))[1]
+                     END AS uom_conversion_id,
+                     count(*)::integer AS candidate_count
+                FROM catalog.uom_conversions candidate
+               WHERE candidate.org_id=line.org_id
+                 AND candidate.product_id=line.product_id
+                 AND candidate.from_uom_code=line.uom_code
+                 AND candidate.to_uom_code=product.base_uom_code
+                 AND candidate.multiplier=line.uom_conversion_factor
+                 AND candidate.status='active'
+                 AND candidate.valid_from<=document.order_date
+                 AND (candidate.valid_until IS NULL
+                      OR candidate.valid_until>=document.order_date)
+          ) conversion ON true
+          LEFT JOIN LATERAL (
+              SELECT sum(candidate_line.billed_quantity) AS billed_quantity,
+                     sum(candidate_line.free_quantity) AS free_quantity
+                FROM sales.dispatch_lines candidate_line
+                JOIN sales.dispatches candidate_dispatch
+                  ON candidate_dispatch.org_id=candidate_line.org_id
+                 AND candidate_dispatch.id=candidate_line.dispatch_id
+                 AND candidate_dispatch.status<>'cancelled'
+               WHERE candidate_line.org_id=line.org_id
+                 AND candidate_line.order_line_id=line.id
+          ) dispatched ON true
+          LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                         'batch_id', batch.id,
+                         'batch_number', batch.batch_number,
+                         'expiry_date', batch.expires_on,
+                         'location_id', balance.location_id,
+                         'location_name', location.name,
+                         'mrp', batch.mrp,
+                         'available_base_quantity', balance.on_hand_quantity,
+                         'inventory_value', balance.inventory_value,
+                         'average_unit_cost', balance.average_unit_cost
+                     ) ORDER BY batch.expires_on, batch.batch_number, batch.id) AS eligible_batches
+                FROM inventory.stock_balances balance
+                JOIN inventory.batches batch
+                  ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
+                 AND batch.product_id=balance.product_id
+                 AND batch.lot_kind='manufacturer_batch'
+                 AND batch.status='released' AND batch.released_at IS NOT NULL
+                 AND batch.expires_on IS NOT NULL
+                 AND batch.expires_on>CAST(:dispatch_date AS date)
+                JOIN inventory.locations location
+                  ON location.org_id=balance.org_id AND location.id=balance.location_id
+                 AND location.branch_id=document.branch_id
+                 AND location.status='active' AND location.allows_sale
+               WHERE balance.org_id=line.org_id
+                 AND balance.branch_id=document.branch_id
+                 AND balance.product_id=line.product_id
+                 AND balance.on_hand_quantity>0
+          ) stock ON true
+         WHERE document.org_id=:org_id AND document.id=:order_id
+         ORDER BY line.line_number, line.id
+    """, {
+        "org_id": org_id, "order_id": order_id,
+        "dispatch_date": result["dispatch_context_date"],
+    })
+    if int(result["source_item_count"]) <= 0 or len(line_rows) != int(result["source_item_count"]):
+        raise HTTPException(
+            status_code=409,
+            detail="Sales-order dispatch context requires product-only canonical lines",
+        )
+    result["items"] = _build_sales_order_dispatch_context(line_rows)
+    result["source_item_count"] = len(result["items"])
+    result["importable_item_count"] = len(result["items"])
     return result
 
 

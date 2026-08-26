@@ -20,6 +20,7 @@ import {
   assertSessionIsolation, loginAndCaptureSession, sessionIdentityFromToken,
 } from '../support/live18/session';
 import { runUiStep } from '../support/live18/uiDriver';
+import { waitForCapturedResponses } from '../../src/testing/live18ResponseSynchronization';
 
 const requiredLiveRun = process.env.LIVE18_REQUIRED === 'true';
 const matrix = loadReadyOperationMatrix();
@@ -284,7 +285,12 @@ async function runOperation(
         prePrepareRuntime, `${contract.id}.prepare_steps`, progress,
       );
       beginStage(progress, 'prepare_assertion');
-      await Promise.all([...pending]);
+      await waitForCapturedResponses(
+        captured,
+        pending,
+        item => item.method === 'POST' && item.path === preparePath,
+        { message: `${contract.id} visible prepare did not yield an HTTP response` },
+      );
       const prepared = captured.filter(item => item.method === 'POST' && item.path === preparePath
         && item.status >= 200 && item.status < 300);
       expect(prepared, `${contract.id} must prepare exactly once through its visible UI`).toHaveLength(1);
@@ -332,7 +338,17 @@ async function runOperation(
         commandRuntime, `${contract.id}.approval_steps`, progress,
       );
       beginStage(progress, 'approval_assertion');
-      await Promise.all([...pending]);
+      if (operationFixture.lifecycle_mode === 'split') {
+        await waitForCapturedResponses(
+          captured,
+          pending,
+          item => item.method === 'POST'
+            && item.path === `/api/web/actions/commands/${commandId}/approve`,
+          { message: `${contract.id} visible approval did not yield an HTTP response` },
+        );
+      } else {
+        await Promise.all([...pending]);
+      }
       const approvalsBeforeExecute = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/approve`);
       if (operationFixture.lifecycle_mode === 'split') {
@@ -356,7 +372,20 @@ async function runOperation(
         commandRuntime, `${contract.id}.execute_steps`, progress,
       );
       beginStage(progress, 'execute_assertion');
-      await Promise.all([...pending]);
+      await waitForCapturedResponses(
+        captured,
+        pending,
+        item => item.method === 'POST'
+          && item.path === `/api/web/actions/commands/${commandId}/approve`,
+        { message: `${contract.id} visible confirmation did not yield an approval response` },
+      );
+      await waitForCapturedResponses(
+        captured,
+        pending,
+        item => item.method === 'POST'
+          && item.path === `/api/web/actions/commands/${commandId}/execute`,
+        { message: `${contract.id} visible confirmation did not yield an execute response` },
+      );
       const approvals = captured.filter(item => item.method === 'POST'
         && item.path === `/api/web/actions/commands/${commandId}/approve`);
       expect(approvals).toHaveLength(1);

@@ -46,8 +46,8 @@ from ..canonical_return_reads import (
     sales_return_readback as canonical_sales_return_readback,
 )
 from ..canonical_sales_chain_reads import (
-    CanonicalSalesDispatchReadback,
-    sales_dispatch_acceptance_readback,
+    CanonicalSalesDispatchValuationReadback,
+    _sales_dispatch_valuation_acceptance_readback,
 )
 from ..canonical_supplier_advance_reads import (
     PostedSupplierAdvanceResponse,
@@ -737,21 +737,21 @@ def _succeeded_resource(
 
 @router.get(
     "/commands/{command_request_id}/sales-dispatch-readback",
-    response_model=CanonicalSalesDispatchReadback,
+    response_model=CanonicalSalesDispatchValuationReadback,
 )
 def sales_dispatch_readback(
     command_request_id: UUID,
     context: ActionContext = Depends(get_action_context),
     service: OperatorActionService = Depends(get_operator_action_service),
     db: Session = Depends(get_db),
-) -> CanonicalSalesDispatchReadback:
+) -> CanonicalSalesDispatchValuationReadback:
     dispatch_id = _succeeded_resource(
         command_request_id=command_request_id,
         context=context,
         service=service,
         contract=CORE_READBACK_CONTRACTS["sales_dispatch"],
     )
-    return sales_dispatch_acceptance_readback(
+    return _sales_dispatch_valuation_acceptance_readback(
         dispatch_id=dispatch_id,
         user=_projection_user(context),
         db=db,

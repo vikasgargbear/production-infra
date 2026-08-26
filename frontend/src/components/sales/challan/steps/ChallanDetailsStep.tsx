@@ -12,6 +12,10 @@ import type {
     Employee,
     ImportData,
 } from '../types/challanTypes';
+import {
+    applyDispatchBatchChoice,
+    eligibleDispatchBatchChoices,
+} from '../utils/dispatchBatchChoice';
 
 interface ChallanDetailsStepProps {
     challan: Challan;
@@ -62,6 +66,13 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
         && challan.items.length > 0,
     );
 
+    const selectBatch = (itemId: string | number, batchId: string) => {
+        setChallan(previous => ({
+            ...previous,
+            items: applyDispatchBatchChoice(previous.items, itemId, batchId),
+        }));
+    };
+
     return (
         <div className="h-full bg-gray-50">
             <div className="flex h-full flex-col">
@@ -87,6 +98,9 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                 onChange={(value: string) => setChallan(previous => ({
                                     ...previous,
                                     challan_date: value,
+                                    source_order_id: undefined,
+                                    reference_doc: '',
+                                    items: [],
                                 }))}
                                 size="sm"
                                 required
@@ -119,6 +133,10 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                     <div className="mt-1 break-all text-xs text-blue-700">{challan.source_order_id}</div>
                                 </div>
 
+                                <p className="mb-2 text-sm text-gray-600">
+                                    FEFO batches are selected by default. If needed, choose another sufficiently stocked batch with the same expiry date.
+                                </p>
+
                                 <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
                                     <table className="w-full">
                                         <thead className="bg-gray-50">
@@ -131,20 +149,43 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {challan.items.map(item => (
-                                                <tr key={String(item.source_order_line_id)} className="border-t border-gray-200">
-                                                    <td className="px-3 py-3 text-sm">
-                                                        <div className="flex items-center gap-2 font-medium">
-                                                            <Package className="h-4 w-4 text-gray-400" />
-                                                            {item.product_name}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-3 py-3 text-sm">{item.batch_number}</td>
-                                                    <td className="px-3 py-3 text-right text-sm">{item.quantity}</td>
-                                                    <td className="px-3 py-3 text-right text-sm">{item.free_quantity}</td>
-                                                    <td className="px-3 py-3 text-sm">{item.uom_code || item.unit}</td>
-                                                </tr>
-                                            ))}
+                                            {challan.items.map((item, itemIndex) => {
+                                                const choices = eligibleDispatchBatchChoices(item, challan.items);
+                                                return (
+                                                    <tr key={String(item.id)} className="border-t border-gray-200">
+                                                        <td className="px-3 py-3 text-sm">
+                                                            <div className="flex items-center gap-2 font-medium">
+                                                                <Package className="h-4 w-4 text-gray-400" />
+                                                                {item.product_name}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-3 text-sm">
+                                                            {choices.length > 1 ? (
+                                                                <select
+                                                                    aria-label={`Batch for ${item.product_name}, allocation ${itemIndex + 1}`}
+                                                                    value={String(item.batch_id)}
+                                                                    onChange={event => selectBatch(item.id, event.target.value)}
+                                                                    className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 py-2"
+                                                                >
+                                                                    {choices.map(candidate => (
+                                                                        <option key={candidate.batch_id} value={candidate.batch_id}>
+                                                                            {candidate.batch_number} · expires {candidate.expiry_date} · {candidate.available_quantity} available
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : (
+                                                                <div>
+                                                                    <div>{item.batch_number}</div>
+                                                                    <div className="text-xs text-gray-500">FEFO · expires {item.expiry_date}</div>
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-3 py-3 text-right text-sm">{item.quantity}</td>
+                                                        <td className="px-3 py-3 text-right text-sm">{item.free_quantity}</td>
+                                                        <td className="px-3 py-3 text-sm">{item.uom_code || item.unit}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -169,6 +210,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                     isOpen
                     onClose={() => setShowImportModal(false)}
                     onImport={handleImport}
+                    dispatchDate={challan.challan_date}
                 />
             )}
         </div>

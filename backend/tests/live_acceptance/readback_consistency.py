@@ -10,7 +10,7 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class ProjectionField:
-    rest_key: str
+    rest_key: str | None
     mcp_key: str
     database_path: str
     absolute_database_value: bool = False
@@ -32,7 +32,7 @@ FIELDS_BY_OPERATION: dict[str, tuple[ProjectionField, ...]] = {
             "inventory_base_quantity", "inventory_base_quantity",
             "stock.quantity_delta", True,
         ),
-        ProjectionField("inventory_value", "inventory_value", "stock.value_delta", True),
+        ProjectionField(None, "inventory_value", "stock.value_delta", True),
         ProjectionField("status", "status", "header.status"),
     ),
     "procurement.purchase_order": (
@@ -181,26 +181,29 @@ def assert_canonical_projection_consistency(
     mcp: dict[str, Any],
     database: dict[str, Any],
 ) -> None:
-    """Require reviewed identity/business fields to agree across all authorities."""
+    """Reconcile public fields across REST/MCP/DB and privileged fields across MCP/DB."""
 
     rules = FIELDS_BY_OPERATION.get(operation)
     if not rules:
         raise AssertionError(f"{operation} has no reviewed cross-authority projection")
     for rule in rules:
-        rest_value = _find(rest, rule.rest_key)
         mcp_value = _find(mcp, rule.mcp_key)
-        if rest_value is None:
-            raise AssertionError(f"REST readback omitted {operation}.{rule.rest_key}")
         if mcp_value is None:
             raise AssertionError(f"MCP readback omitted {operation}.{rule.mcp_key}")
         database_value = _path(database, rule.database_path)
         if rule.absolute_database_value:
             database_value = abs(Decimal(str(database_value)))
-        expected = _canonical(rest_value)
-        assert _canonical(mcp_value) == expected, (
-            f"{operation}.{rule.rest_key} differs between REST and MCP"
-        )
+        expected = _canonical(mcp_value)
+        if rule.rest_key is not None:
+            rest_value = _find(rest, rule.rest_key)
+            if rest_value is None:
+                raise AssertionError(
+                    f"REST readback omitted {operation}.{rule.rest_key}"
+                )
+            expected = _canonical(rest_value)
+            assert _canonical(mcp_value) == expected, (
+                f"{operation}.{rule.rest_key} differs between REST and MCP"
+            )
         assert _canonical(database_value) == expected, (
-            f"{operation}.{rule.rest_key} differs between REST and PostgreSQL"
+            f"{operation}.{rule.mcp_key} differs between MCP and PostgreSQL"
         )
-

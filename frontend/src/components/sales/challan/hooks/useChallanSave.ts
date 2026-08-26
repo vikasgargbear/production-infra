@@ -87,7 +87,6 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
                 customer_details: selectedCustomer,
                 inventory_document_id: detail.inventory_document_id,
                 inventory_base_quantity: detail.inventory_base_quantity,
-                inventory_value: detail.inventory_value,
                 lines: detail.lines,
             });
             setShowSuccessModal(true);

@@ -45,11 +45,11 @@ describe('canonical desktop sales business-fact boundaries', () => {
     expect(dispatchPreview).not.toMatch(/AASO PHARM|Maharashtra|08AAX/);
   });
 
-  it('keeps dispatch posted readback on inventory evidence rather than a nonexistent total', () => {
+  it('keeps dispatch posted readback on quantity and lineage evidence rather than values or a nonexistent total', () => {
     const save = source('challan/hooks/useChallanSave.ts');
     expect(save).toContain('detail.inventory_base_quantity');
-    expect(save).toContain('detail.inventory_value');
     expect(save).toContain('detail.lines');
+    expect(save).not.toContain('detail.inventory_value');
     expect(save).not.toContain('detail.total_amount');
     expect(save).not.toContain('detail.items ?? challan.items');
   });

@@ -36,7 +36,7 @@ describe('reviewed canonical sales-document lifecycles', () => {
             dispatch_id: '10000000-0000-4000-8000-000000000003', challan_number: 'DC-1',
             customer_name: 'Customer', status: 'posted',
             inventory_document_id: '10000000-0000-4000-8000-000000000004',
-            inventory_base_quantity: '3.000000', inventory_value: '168.00', lines: [],
+            inventory_base_quantity: '3.000000', lines: [],
         } });
     });
 
@@ -81,7 +81,6 @@ describe('reviewed canonical sales-document lifecycles', () => {
         expect(props.setShowSuccessModal).toHaveBeenCalledWith(true);
         expect(props.setCreatedChallanData).toHaveBeenCalledWith(expect.objectContaining({
             inventory_base_quantity: '3.000000',
-            inventory_value: '168.00',
         }));
     });
 });

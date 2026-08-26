@@ -44,7 +44,7 @@ def _context(command_request_id):
 CASES = (
     (
         mcp_actions.sales_dispatch_readback,
-        "sales_dispatch_acceptance_readback",
+        "_sales_dispatch_valuation_acceptance_readback",
         "dispatch_id",
         "sales.dispatch.prepare",
         "sales.dispatch.post",
@@ -255,7 +255,7 @@ def test_internal_routes_publish_the_existing_canonical_response_models():
         if isinstance(route, APIRoute)
     }
     expected = {
-        "sales-dispatch": mcp_actions.CanonicalSalesDispatchReadback,
+        "sales-dispatch": mcp_actions.CanonicalSalesDispatchValuationReadback,
         "sales-return": mcp_actions.PostedReturnReadback,
         "purchase-return": mcp_actions.PostedReturnReadback,
         "customer-receipt": mcp_actions.CanonicalCustomerReceiptReadback,

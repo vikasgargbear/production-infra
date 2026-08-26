@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -46,6 +46,47 @@ CRITICAL_UI_READS = {
     "/api/dashboard/stats",
     "/api/settings/features",
 }
+
+
+def _order_stock_candidate(
+    *,
+    batch_id=None,
+    location_id=None,
+    batch_number="B-1",
+    expiry_date=date(2027, 8, 25),
+    base_quantity="10.000000",
+    location_name="Main",
+):
+    return {
+        "batch_id": batch_id or uuid4(),
+        "batch_number": batch_number,
+        "expiry_date": expiry_date,
+        "location_id": location_id or uuid4(),
+        "location_name": location_name,
+        "mrp": "150.0000",
+        "available_base_quantity": base_quantity,
+        "inventory_value": "100.00",
+        "average_unit_cost": "10.0000",
+    }
+
+
+def _order_dispatch_line(*, candidates=None, quantity="1.250000", free="0.250000"):
+    return {
+        "id": uuid4(), "source_document_kind": "sales_order", "line_number": 1,
+        "product_id": uuid4(), "product_name": "Carton", "product_code": "BOX",
+        "hsn_code": "481910", "branch_id": uuid4(),
+        "uom_conversion_id": uuid4(), "uom_candidate_count": 1,
+        "uom_code": "EA", "unit": "EA", "uom_conversion_factor": "1.000000",
+        "quantity": quantity, "free_quantity": free,
+        "free_supply_tax_treatment": "included_at_unit_rate",
+        "unit_price": "100.0000", "discount_percent": "0.000000",
+        "tax_rate": "12.000000", "gst_percent": "12.000000",
+        "taxable_amount": "150.00", "cgst_amount": "9.00",
+        "sgst_amount": "9.00", "igst_amount": "0.00", "line_total": "168.00",
+        "dispatched_billed_quantity": "0.000000",
+        "dispatched_free_quantity": "0.000000",
+        "eligible_batches": candidates or [_order_stock_candidate()],
+    }
 
 
 def test_business_context_uses_server_clock_in_organization_timezone(monkeypatch) -> None:
@@ -103,8 +144,8 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
 
 def test_sales_order_import_projects_its_true_source_kind() -> None:
     source = inspect.getsource(canonical_erp_reads.canonical_sales_order_compatibility_detail)
-    assert "'source_document_kind', 'sales_order'" in source
-    assert "'source_document_kind', 'delivery_challan'" not in source
+    assert "'sales_order'::text AS source_document_kind" in source
+    assert "'delivery_challan'::text AS source_document_kind" not in source
 
 
 def test_canonical_routes_precede_legacy_compatibility_routes() -> None:
@@ -192,10 +233,12 @@ def test_uuid_sales_document_detail_reads_include_importable_lines(monkeypatch) 
         captured.append((sql, params))
         if "FROM sales.invoices invoice" in sql:
             return [{"invoice_id": invoice_id, "items": [{"product_id": uuid4()}]}]
+        if "JOIN sales.order_lines line" in sql:
+            return [_order_dispatch_line()]
         return [{
             "order_id": order_id, "status": "approved",
-            "source_item_count": 1, "importable_item_count": 1,
-            "items": [{"product_id": uuid4()}],
+            "source_item_count": 1, "order_date": date(2026, 8, 25),
+            "dispatch_context_date": date(2026, 8, 25),
         }]
 
     monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
@@ -209,20 +252,22 @@ def test_uuid_sales_document_detail_reads_include_importable_lines(monkeypatch) 
     assert invoice["invoice_id"] == invoice_id
     assert order["order_id"] == order_id
     assert captured[0][1] == {"org_id": org_id, "invoice_id": invoice_id}
-    assert captured[1][1] == {"org_id": org_id, "order_id": order_id}
+    assert captured[1][1] == {
+        "org_id": org_id, "order_id": order_id, "dispatch_date": None,
+    }
+    assert captured[2][1] == {
+        "org_id": org_id, "order_id": order_id,
+        "dispatch_date": date(2026, 8, 25),
+    }
     assert "FROM sales.invoice_lines line" in captured[0][0]
     assert "invoice_dispatch_allocations" in captured[0][0]
     assert "line.line_discount_kind='percent'" in captured[0][0]
-    assert "FROM sales.order_lines line" in captured[1][0]
+    assert "JOIN sales.order_lines line" in captured[2][0]
     assert "registration_type='GSTIN'" in captured[1][0]
-    assert "line.line_discount_kind='percent'" in captured[1][0]
-    for sql, _params in captured:
-        assert "'product_name', product.name" in sql
-        assert "to_char(line.billed_quantity" in sql
-        assert "to_char(line.quoted_unit_rate" in sql
-        assert "FM999999999999999990.000000" in sql
-        assert "FM999999999999999990.0000" in sql
-        assert "FM999999999999999990.00" in sql
+    assert "line.line_discount_kind='percent'" in captured[2][0]
+    assert "product.name AS product_name" in captured[2][0]
+    assert "line.billed_quantity AS quantity" in captured[2][0]
+    assert "line.quoted_unit_rate AS unit_price" in captured[2][0]
 
 
 def test_order_and_challan_import_details_include_canonical_batch_allocations(monkeypatch) -> None:
@@ -240,10 +285,12 @@ def test_order_and_challan_import_details_include_canonical_batch_allocations(mo
                 "source_item_count": 1, "importable_item_count": 1,
                 "items": [{"batch_id": uuid4()}],
             }]
+        if "JOIN sales.order_lines line" in sql:
+            return [_order_dispatch_line()]
         return [{
             "order_id": order_id, "status": "approved",
-            "source_item_count": 1, "importable_item_count": 1,
-            "items": [{"batch_id": uuid4()}],
+            "source_item_count": 1, "order_date": date(2026, 8, 25),
+            "dispatch_context_date": date(2026, 8, 25),
         }]
 
     monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
@@ -254,12 +301,22 @@ def test_order_and_challan_import_details_include_canonical_batch_allocations(mo
         challan_id=challan_id, user={}, db=object(),
     )
 
-    order_sql, order_params = captured[0]
-    challan_sql, challan_params = captured[1]
-    assert "inventory.reservations held" in order_sql
-    assert "held.status='active'" in order_sql
-    assert "'batch_number', reservation.batch_number" in order_sql
-    assert order_params == {"org_id": org_id, "order_id": order_id}
+    order_sql, order_params = captured[1]
+    challan_sql, challan_params = captured[2]
+    assert "inventory.reservations" not in order_sql
+    assert "inventory.stock_balances balance" in order_sql
+    assert "'inventory_value', balance.inventory_value" in order_sql
+    assert "'average_unit_cost', balance.average_unit_cost" in order_sql
+    helper_source = inspect.getsource(
+        canonical_erp_reads._build_sales_order_dispatch_context
+    )
+    assert 'candidate["inventory_value"] > 0' in helper_source
+    assert 'candidate["average_unit_cost"] > 0' in helper_source
+    assert "'batch_number', batch.batch_number" in order_sql
+    assert order_params == {
+        "org_id": org_id, "order_id": order_id,
+        "dispatch_date": date(2026, 8, 25),
+    }
     assert "FROM sales.dispatch_lines line" in challan_sql
     assert "JOIN inventory.batches batch" in challan_sql
     assert "'batch_number', batch.batch_number" in challan_sql
@@ -284,11 +341,12 @@ def test_order_and_challan_import_routes_publish_strict_authoritative_contracts(
         canonical_erp_reads.canonical_sales_order_compatibility_detail
     )
     for evidence in (
-        "'free_supply_tax_treatment', line.free_supply_tax_treatment",
-        "'branch_id', document.branch_id",
-        "'location_id', reservation.location_id",
-        "'uom_conversion_id', conversion.id",
-        "candidate.candidate_count=1",
+        "line.free_supply_tax_treatment",
+        "document.branch_id",
+        "conversion.uom_conversion_id",
+        "conversion.candidate_count AS uom_candidate_count",
+        "'inventory_value', balance.inventory_value",
+        "'average_unit_cost', balance.average_unit_cost",
         "source_item_count",
         "importable_item_count",
     ):
@@ -314,6 +372,35 @@ def test_order_and_challan_import_routes_publish_strict_authoritative_contracts(
         assert evidence in challan_source
 
 
+def test_sales_order_dispatch_context_binds_requested_date_to_batch_eligibility(
+    monkeypatch,
+) -> None:
+    org_id, order_id = uuid4(), uuid4()
+    requested_date = date(2026, 9, 15)
+    captured = []
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda *_args: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured.append((sql, params))
+        if "JOIN sales.order_lines line" in sql:
+            return [_order_dispatch_line()]
+        return [{
+            "order_id": order_id, "status": "approved", "source_item_count": 1,
+            "order_date": date(2026, 9, 1),
+            "dispatch_context_date": requested_date,
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.canonical_sales_order_compatibility_detail(
+        order_id=order_id, dispatch_date=requested_date, user={}, db=object(),
+    )
+
+    assert result["dispatch_context_date"] == requested_date
+    assert captured[0][1]["dispatch_date"] == requested_date
+    assert captured[1][1]["dispatch_date"] == requested_date
+    assert "batch.expires_on>CAST(:dispatch_date AS date)" in captured[1][0]
+
+
 def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -> None:
     schema = app.openapi()
     components = schema["components"]["schemas"]
@@ -335,8 +422,15 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
             "quantity": 6, "free_quantity": 6, "unit_price": 4,
             "discount_percent": 6, "tax_rate": 6, "gst_percent": 6,
             "taxable_amount": 2, "cgst_amount": 2, "sgst_amount": 2,
-            "igst_amount": 2, "line_total": 2, "mrp": 4,
-            "available_quantity": 6,
+            "igst_amount": 2, "line_total": 2, "available_quantity": 6,
+        },
+        "CanonicalSalesOrderEligibleBatch": {
+            "mrp": 4, "available_quantity": 6,
+            "available_base_quantity": 6,
+        },
+        "CanonicalSalesOrderDefaultBatchAllocation": {
+            "billed_quantity": 6, "free_quantity": 6,
+            "base_billed_quantity": 6, "base_free_quantity": 6,
         },
         "CanonicalDispatchImportAllocation": {
             "base_quantity": 6, "base_billed_quantity": 6,
@@ -363,6 +457,13 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
             assert properties[field]["type"] == "string"
             assert "anyOf" not in properties[field]
             assert properties[field]["pattern"].endswith(rf"\.[0-9]{{{scale}}}$")
+
+    assert {
+        "inventory_value", "average_unit_cost",
+    }.isdisjoint(components["CanonicalSalesOrderEligibleBatch"]["properties"])
+    assert "estimated_issue_value" not in components[
+        "CanonicalSalesOrderDefaultBatchAllocation"
+    ]["properties"]
 
     route_models = {
         "/api/canonical/invoices/{invoice_id}": (
@@ -419,12 +520,29 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
         "taxable_amount": "150.00", "cgst_amount": "9.00",
         "sgst_amount": "9.00", "igst_amount": "0.00",
         "line_total": "168.00",
-        "batch_id": ids["batch"], "batch_number": "B-1", "expiry_date": None,
+        "batch_id": ids["batch"], "batch_number": "B-1",
+        "expiry_date": date(2027, 8, 25),
         "mrp": "150.0000", "available_quantity": "1.500000",
+        "eligible_batches": [{
+            "batch_id": ids["batch"], "batch_number": "B-1",
+            "expiry_date": date(2027, 8, 25), "location_id": ids["location"],
+            "location_name": "Main", "mrp": "150.0000",
+            "available_quantity": "1.500000",
+            "available_base_quantity": "1.500000",
+            "fefo_priority": 1,
+        }],
+        "default_batch_allocations": [{
+            "batch_id": ids["batch"], "batch_number": "B-1",
+            "expiry_date": date(2027, 8, 25), "location_id": ids["location"],
+            "billed_quantity": "1.250000", "free_quantity": "0.250000",
+            "base_billed_quantity": "1.250000",
+            "base_free_quantity": "0.250000",
+        }],
     }
     order = {
         "order_id": ids["order"], "id": ids["order"], "order_number": "SO-1",
-        "order_date": date(2026, 8, 25), "delivery_date": None,
+        "order_date": date(2026, 8, 25),
+        "dispatch_context_date": date(2026, 8, 25), "delivery_date": None,
         "order_status": "approved", "status": "approved",
         "customer_id": ids["customer"], "customer_name": "Customer",
         "customer_phone": None, "customer_email": None, "customer_gst_number": None,
@@ -466,6 +584,7 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
     challan_item = {
         **{key: value for key, value in order_item.items() if key not in {
             "location_id", "available_quantity", "source_document_kind",
+            "eligible_batches", "default_batch_allocations",
         }},
         "id": ids["dispatch_line"],
         "source_document_kind": "delivery_challan",
@@ -496,6 +615,235 @@ def test_import_response_models_fail_closed_on_cardinality_lineage_and_extra_fie
             **challan,
             "items": [{**challan_item, "quantity": 1}],
         })
+
+
+def test_sales_order_dispatch_context_allocates_exact_remaining_billed_and_free_fefo() -> None:
+    location_id = uuid4()
+    early = _order_stock_candidate(
+        location_id=location_id, batch_number="EARLY",
+        expiry_date=date(2027, 1, 1), base_quantity="4.000000",
+    )
+    late = _order_stock_candidate(
+        location_id=location_id, batch_number="LATE",
+        expiry_date=date(2027, 2, 1), base_quantity="10.000000",
+    )
+    line = _order_dispatch_line(
+        candidates=[late, early], quantity="8.000000", free="2.000000",
+    )
+    line["dispatched_billed_quantity"] = "3.000000"
+    line["dispatched_free_quantity"] = "1.000000"
+
+    result = canonical_erp_reads._build_sales_order_dispatch_context([line])
+    item = canonical_erp_reads.CanonicalSalesOrderImportItem.model_validate(result[0])
+
+    assert item.quantity == Decimal("5.000000")
+    assert item.free_quantity == Decimal("1.000000")
+    assert [batch.batch_number for batch in item.eligible_batches] == ["EARLY", "LATE"]
+    assert [allocation.model_dump() for allocation in item.default_batch_allocations] == [
+        {
+            "batch_id": UUID(str(early["batch_id"])), "batch_number": "EARLY",
+            "expiry_date": date(2027, 1, 1), "location_id": location_id,
+            "billed_quantity": Decimal("4.000000"),
+            "free_quantity": Decimal("0.000000"),
+            "base_billed_quantity": Decimal("4.000000"),
+            "base_free_quantity": Decimal("0.000000"),
+        },
+        {
+            "batch_id": UUID(str(late["batch_id"])), "batch_number": "LATE",
+            "expiry_date": date(2027, 2, 1), "location_id": location_id,
+            "billed_quantity": Decimal("1.000000"),
+            "free_quantity": Decimal("1.000000"),
+            "base_billed_quantity": Decimal("1.000000"),
+            "base_free_quantity": Decimal("1.000000"),
+        },
+    ]
+    assert item.batch_id is None
+    assert item.batch_number is None
+
+
+def test_sales_order_dispatch_context_chooses_one_common_location() -> None:
+    location_a, location_b = uuid4(), uuid4()
+    first = _order_dispatch_line(candidates=[
+        _order_stock_candidate(location_id=location_a, location_name="Alpha"),
+        _order_stock_candidate(location_id=location_b, location_name="Beta"),
+    ])
+    second = _order_dispatch_line(candidates=[
+        _order_stock_candidate(location_id=location_b, location_name="Beta"),
+    ])
+
+    result = canonical_erp_reads._build_sales_order_dispatch_context([first, second])
+
+    assert {item["location_id"] for item in result} == {location_b}
+    assert all(
+        allocation["location_id"] == location_b
+        for item in result for allocation in item["default_batch_allocations"]
+    )
+
+
+def test_sales_order_dispatch_context_fails_closed_on_insufficient_or_ambiguous_stock() -> None:
+    insufficient = _order_dispatch_line(candidates=[
+        _order_stock_candidate(base_quantity="1.000000"),
+    ])
+    with pytest.raises(HTTPException) as stock_error:
+        canonical_erp_reads._build_sales_order_dispatch_context([insufficient])
+    assert stock_error.value.status_code == 409
+    assert "sufficient" in stock_error.value.detail
+
+    ambiguous_uom = _order_dispatch_line()
+    ambiguous_uom["uom_candidate_count"] = 2
+    with pytest.raises(HTTPException) as uom_error:
+        canonical_erp_reads._build_sales_order_dispatch_context([ambiguous_uom])
+    assert uom_error.value.status_code == 409
+    assert "unambiguous" in uom_error.value.detail
+
+
+def test_sales_order_dispatch_context_does_not_skip_zero_value_earlier_fefo_stock() -> None:
+    location_id = uuid4()
+    zero_value = _order_stock_candidate(
+        location_id=location_id, expiry_date=date(2026, 9, 1),
+        base_quantity="5.000000",
+    )
+    zero_value.update(inventory_value="0.00", average_unit_cost="0.0000")
+    value_backed = _order_stock_candidate(
+        location_id=location_id, expiry_date=date(2026, 10, 1),
+        base_quantity="10.000000",
+    )
+    line = _order_dispatch_line(
+        candidates=[zero_value, value_backed], quantity="2.000000", free="0.000000",
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        canonical_erp_reads._build_sales_order_dispatch_context([line])
+
+    assert blocked.value.status_code == 409
+    assert "value-backed" in blocked.value.detail
+
+
+def test_sales_order_dispatch_context_rejects_zero_value_at_accounting_precision() -> None:
+    candidate = _order_stock_candidate(base_quantity="100.000000")
+    candidate.update(inventory_value="0.01", average_unit_cost="0.0001")
+    line = _order_dispatch_line(
+        candidates=[candidate], quantity="1.000000", free="0.000000",
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        canonical_erp_reads._build_sales_order_dispatch_context([line])
+
+    assert blocked.value.status_code == 409
+    assert "accounting precision" in blocked.value.detail
+
+
+def test_sales_order_dispatch_context_aggregates_shared_product_stock() -> None:
+    location_id, product_id = uuid4(), uuid4()
+    candidate = _order_stock_candidate(
+        location_id=location_id, base_quantity="2.000000",
+    )
+    first = _order_dispatch_line(
+        candidates=[candidate], quantity="1.250000", free="0.000000",
+    )
+    second = _order_dispatch_line(
+        candidates=[candidate], quantity="1.250000", free="0.000000",
+    )
+    first["product_id"] = product_id
+    second["product_id"] = product_id
+
+    with pytest.raises(HTTPException) as blocked:
+        canonical_erp_reads._build_sales_order_dispatch_context([first, second])
+    assert "sufficient" in blocked.value.detail
+
+
+def test_sales_order_dispatch_context_depletes_shared_product_stock_once() -> None:
+    location_id, product_id = uuid4(), uuid4()
+    candidate = _order_stock_candidate(
+        location_id=location_id, base_quantity="3.000000",
+    )
+    first = _order_dispatch_line(
+        candidates=[candidate], quantity="1.000000", free="0.000000",
+    )
+    second = _order_dispatch_line(
+        candidates=[candidate], quantity="1.000000", free="0.000000",
+    )
+    first["product_id"] = product_id
+    second["product_id"] = product_id
+
+    result = canonical_erp_reads._build_sales_order_dispatch_context([first, second])
+
+    assert result[0]["available_quantity"] == Decimal("3.000000")
+    assert result[1]["available_quantity"] == Decimal("2.000000")
+    for item in result:
+        assert "estimated_issue_value" not in item["default_batch_allocations"][0]
+        assert all(
+            "inventory_value" not in batch and "average_unit_cost" not in batch
+            for batch in item["eligible_batches"]
+        )
+
+
+def test_sales_order_dispatch_context_skips_fulfilled_lines_and_rejects_fulfilled_order() -> None:
+    fulfilled = _order_dispatch_line(quantity="1.000000", free="0.500000")
+    fulfilled["dispatched_billed_quantity"] = "1.000000"
+    fulfilled["dispatched_free_quantity"] = "0.500000"
+    remaining = _order_dispatch_line(quantity="2.000000", free="0.000000")
+
+    result = canonical_erp_reads._build_sales_order_dispatch_context([fulfilled, remaining])
+    assert [item["id"] for item in result] == [remaining["id"]]
+
+    with pytest.raises(HTTPException) as blocked:
+        canonical_erp_reads._build_sales_order_dispatch_context([fulfilled])
+    assert "fully dispatched" in blocked.value.detail
+
+
+def test_sales_order_dispatch_context_rejects_prior_dispatch_over_ceiling() -> None:
+    line = _order_dispatch_line(quantity="1.000000", free="0.000000")
+    line["dispatched_billed_quantity"] = "1.000001"
+
+    with pytest.raises(HTTPException) as blocked:
+        canonical_erp_reads._build_sales_order_dispatch_context([line])
+
+    assert blocked.value.status_code == 409
+    assert "exceed" in blocked.value.detail
+
+
+def test_sales_order_dispatch_context_location_default_is_uuid_stable() -> None:
+    lower_id, higher_id = UUID(int=1), UUID(int=2)
+    line = _order_dispatch_line(candidates=[
+        _order_stock_candidate(
+            location_id=lower_id, location_name="Zulu",
+        ),
+        _order_stock_candidate(
+            location_id=higher_id, location_name="Alpha",
+        ),
+    ])
+
+    result = canonical_erp_reads._build_sales_order_dispatch_context([line])
+
+    assert result[0]["location_id"] == lower_id
+    assert result[0]["eligible_batches"][0]["location_name"] == "Zulu"
+
+
+def test_sales_order_dispatch_context_handles_uom_factor_and_same_expiry_value_choice() -> None:
+    location_id, expiry = uuid4(), date(2027, 1, 1)
+    zero_value = _order_stock_candidate(
+        location_id=location_id, expiry_date=expiry, base_quantity="5.000000",
+    )
+    zero_value.update(inventory_value="0.00", average_unit_cost="0.0000")
+    value_backed = _order_stock_candidate(
+        location_id=location_id, expiry_date=expiry, base_quantity="10.000000",
+    )
+    line = _order_dispatch_line(
+        candidates=[zero_value, value_backed], quantity="3.000000", free="1.000000",
+    )
+    line["uom_conversion_factor"] = "2.000000"
+
+    result = canonical_erp_reads._build_sales_order_dispatch_context([line])
+    allocation = result[0]["default_batch_allocations"][0]
+
+    assert [batch["batch_id"] for batch in result[0]["eligible_batches"]] == [
+        UUID(str(value_backed["batch_id"])),
+    ]
+    assert allocation["billed_quantity"] == Decimal("3.000000")
+    assert allocation["free_quantity"] == Decimal("1.000000")
+    assert allocation["base_billed_quantity"] == Decimal("6.000000")
+    assert allocation["base_free_quantity"] == Decimal("2.000000")
 
 
 @pytest.mark.parametrize("source,status", [

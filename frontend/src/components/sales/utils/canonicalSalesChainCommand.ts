@@ -1,8 +1,13 @@
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import type { Order } from '../../../types/models';
 import type { Challan } from '../challan/types/challanTypes';
-import { exactDecimalUnits, normalizeExactDecimal } from '../../../utils/exactDecimal';
+import {
+    addExactDecimals,
+    exactDecimalUnits,
+    normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
 import type { CanonicalDocumentPolicy } from '../../../services/api/modules/org/canonicalBusinessContext.api';
+import { eligibleDispatchBatchChoices } from '../challan/utils/dispatchBatchChoice';
 
 function uuid(value: unknown, label: string): string {
     const result = String(value ?? '').trim();
@@ -120,28 +125,87 @@ export function buildCanonicalSalesDispatchCommand(
     if (!challan.items.length) throw new Error('Import an approved sales order before preparing the dispatch');
     const branchId = uuid(challan.items[0].branch_id, 'Dispatch branch');
     const fromLocationId = uuid(challan.items[0].location_id, 'Dispatch stock location');
+    const groupedLines = new Map<string, {
+        productId: string;
+        uomConversionId: string;
+        billed: string[];
+        free: string[];
+        batchIds: Set<string>;
+        batchAllocations: Array<Record<string, string>>;
+    }>();
+    challan.items.forEach((item, index) => {
+        if (uuid(item.branch_id, `Item ${index + 1} branch`) !== branchId
+            || uuid(item.location_id, `Item ${index + 1} location`) !== fromLocationId) {
+            throw new Error('All dispatch allocations must use one branch and stock location');
+        }
+        const sourceLineId = uuid(item.source_order_line_id, `Item ${index + 1} sales-order line`);
+        const productId = uuid(item.product_id, `Item ${index + 1} product`);
+        const uomConversionId = uuid(item.uom_conversion_id, `Item ${index + 1} UOM`);
+        const batchId = uuid(item.batch_id, `Item ${index + 1} batch`);
+        if (!eligibleDispatchBatchChoices(item, challan.items)
+            .some(candidate => candidate.batch_id === batchId)) {
+            throw new Error(`Item ${index + 1} batch no longer preserves canonical FEFO and availability`);
+        }
+        const billed = decimal(item.quantity, `Item ${index + 1} billed quantity`, 6);
+        const free = decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6);
+        if (exactDecimalUnits(
+            addExactDecimals([billed, free], `Item ${index + 1} allocation quantity`, { scale: 6 }),
+            `Item ${index + 1} allocation quantity`,
+            { scale: 6 },
+        ) <= 0n) {
+            throw new Error(`Item ${index + 1} batch allocation must be greater than zero`);
+        }
+        const existing = groupedLines.get(sourceLineId);
+        if (existing) {
+            if (existing.productId !== productId || existing.uomConversionId !== uomConversionId) {
+                throw new Error('Dispatch allocation rows for one sales-order line have contradictory product or UOM identities');
+            }
+            if (existing.batchIds.has(batchId)) {
+                throw new Error('A dispatch line cannot allocate the same batch more than once');
+            }
+            existing.billed.push(billed);
+            existing.free.push(free);
+            existing.batchIds.add(batchId);
+            existing.batchAllocations.push({
+                batch_id: batchId,
+                billed_quantity: billed,
+                free_quantity: free,
+            });
+            return;
+        }
+        groupedLines.set(sourceLineId, {
+            productId,
+            uomConversionId,
+            billed: [billed],
+            free: [free],
+            batchIds: new Set([batchId]),
+            batchAllocations: [{
+                batch_id: batchId,
+                billed_quantity: billed,
+                free_quantity: free,
+            }],
+        });
+    });
     return {
         idempotency_key: idempotencyKey,
         branch_id: branchId,
         dispatch_date: challan.challan_date,
         sales_order_id: salesOrderId,
         from_location_id: fromLocationId,
-        lines: challan.items.map((item, index) => {
-            if (uuid(item.branch_id, `Item ${index + 1} branch`) !== branchId
-                || uuid(item.location_id, `Item ${index + 1} location`) !== fromLocationId) {
-                throw new Error('All dispatch allocations must use one branch and stock location');
-            }
-            return {
-                sales_order_line_id: uuid(item.source_order_line_id, `Item ${index + 1} sales-order line`),
-                billed_quantity: decimal(item.quantity, `Item ${index + 1} billed quantity`, 6, true),
-                free_quantity: decimal(item.free_quantity, `Item ${index + 1} free quantity`, 6),
-                batch_allocations: [{
-                    batch_id: uuid(item.batch_id, `Item ${index + 1} batch`),
-                    billed_quantity: decimal(item.quantity, `Item ${index + 1} batch billed quantity`, 6, true),
-                    free_quantity: decimal(item.free_quantity, `Item ${index + 1} batch free quantity`, 6),
-                }],
-            };
-        }),
+        lines: Array.from(groupedLines, ([salesOrderLineId, line], index) => ({
+            sales_order_line_id: salesOrderLineId,
+            billed_quantity: addExactDecimals(
+                line.billed,
+                `Dispatch line ${index + 1} billed quantity`,
+                { scale: 6 },
+            ),
+            free_quantity: addExactDecimals(
+                line.free,
+                `Dispatch line ${index + 1} free quantity`,
+                { scale: 6 },
+            ),
+            batch_allocations: line.batchAllocations,
+        })),
         logistics: {
             transport_mode: policy.default_transport_mode,
             distance_km: decimal(challan.distance_km, 'Dispatch transport distance', 2),
