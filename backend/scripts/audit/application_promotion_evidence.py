@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import inspect
@@ -51,6 +51,33 @@ RENDER_SERVICE_ROLES = {
 }
 RAILWAY_SERVICE_NAMES = {"api", "frontend", "mcp"}
 DEPLOYMENT_PROVIDERS = {"render", "railway"}
+RESET_ONLY_ROLLBACK_ACTIONS = (
+    "close_write_fence",
+    "suspend_application_services",
+    "reset_canonical_staging",
+    "migrate_reviewed_sha",
+    "rotate_runtime_credentials",
+    "deploy_reviewed_sha",
+    "verify_before_reopening_writes",
+)
+RESET_ONLY_VERIFICATION_ACTIONS = (
+    "verify_exact_sha",
+    "verify_schema_head",
+    "verify_runtime_role",
+    "verify_tenant_isolation",
+    "verify_health_readiness",
+    "verify_no_retired_dependencies",
+)
+RETIRED_PROJECT_DECOMMISSION_ACTIONS = (
+    "pause_retired_project",
+    "capture_pause_receipt",
+    "wait_rollback_window",
+    "verify_no_retired_traffic",
+    "verify_canonical_acceptance",
+    "obtain_irreversible_action_approval",
+    "delete_retired_project",
+    "capture_deletion_receipt",
+)
 UUID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.IGNORECASE,
@@ -346,6 +373,192 @@ def _artifact(
     }
 
 
+def _executable_steps(
+    value: Any,
+    *,
+    label: str,
+    required_actions: tuple[str, ...],
+) -> list[Mapping[str, Any]]:
+    """Validate an ordered, executable, and outcome-bound operator procedure."""
+    if not isinstance(value, list) or not value:
+        raise EvidenceError(f"{label} requires reviewed executable steps")
+    if len(value) != len(required_actions):
+        raise EvidenceError(
+            f"{label} must define exactly the required ordered actions"
+        )
+    actions: list[str] = []
+    for index, step in enumerate(value, start=1):
+        if not isinstance(step, dict):
+            raise EvidenceError(f"{label} step {index} must be an object")
+        if step.get("order") != index:
+            raise EvidenceError(f"{label} step {index} has an invalid order")
+        action = step.get("action")
+        if not isinstance(action, str) or not action.strip():
+            raise EvidenceError(f"{label} step {index} requires an action")
+        actions.append(action)
+        for field in ("tool", "command", "expected_result"):
+            field_value = step.get(field)
+            if not isinstance(field_value, str) or not field_value.strip():
+                raise EvidenceError(
+                    f"{label} step {index} requires a nonempty {field}"
+                )
+    if tuple(actions) != required_actions:
+        raise EvidenceError(
+            f"{label} actions must be ordered as: {', '.join(required_actions)}"
+        )
+    return value
+
+
+def _nonempty_string_list(value: Any, label: str) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+    ):
+        raise EvidenceError(f"{label} must contain nonempty strings")
+    return value
+
+
+def _validate_reset_only_rollback_plan(
+    value: Mapping[str, Any], binding: Mapping[str, Any]
+) -> None:
+    required = {
+        "plan_contract_version": "reset-only-v1",
+        "strategy": "fail_closed_reset_redeploy",
+        "scope_project_ref": CANONICAL_STAGING_PROJECT_REF,
+        "data_preservation_required": False,
+        "retained_backup_required": False,
+        "legacy_fallback_prohibited": True,
+    }
+    if any(value.get(key) != expected for key, expected in required.items()):
+        raise EvidenceError(
+            "rollback plan must be reset-only canonical staging recovery with "
+            "no retained backup or legacy fallback"
+        )
+    if binding.get("project_ref") != CANONICAL_STAGING_PROJECT_REF:
+        raise EvidenceError("rollback plan binding is not canonical staging")
+    if not isinstance(value.get("owner"), str) or not value["owner"].strip():
+        raise EvidenceError("rollback plan requires an accountable owner")
+    _nonempty_string_list(
+        value.get("trigger_conditions"), "rollback plan trigger_conditions"
+    )
+    recovery_minutes = value.get("max_recovery_minutes")
+    if (
+        not isinstance(recovery_minutes, int)
+        or isinstance(recovery_minutes, bool)
+        or recovery_minutes <= 0
+    ):
+        raise EvidenceError("rollback plan requires a positive recovery-time bound")
+    prohibited = {"backup_artifact", "backup_identity", "restore_target"}
+    if prohibited.intersection(value):
+        raise EvidenceError(
+            "reset-only rollback plan must not reference a retained backup"
+        )
+    _executable_steps(
+        value.get("steps"),
+        label="rollback plan",
+        required_actions=RESET_ONLY_ROLLBACK_ACTIONS,
+    )
+    _executable_steps(
+        value.get("verification_steps"),
+        label="rollback verification",
+        required_actions=RESET_ONLY_VERIFICATION_ACTIONS,
+    )
+
+
+def _validate_decommission_plan(value: Mapping[str, Any]) -> None:
+    required = {
+        "plan_contract_version": "pause-duration-v1",
+        "retired_project_ref": RETIRED_SOURCE_PROJECT_REF,
+        "data_retention_disposition": "discard_disposable_retired_project_data",
+        "data_preservation_required": False,
+        "final_backup_required": False,
+        "pause_receipt_required": True,
+        "rollback_window_anchor": "retired_project_pause_receipt.paused_at",
+        "absolute_deletion_time_source": (
+            "retired_project_pause_receipt.rollback_window_ends_at"
+        ),
+        "irreversible_action_approval_required": True,
+        "deletion_receipt_required": True,
+    }
+    if any(value.get(key) != expected for key, expected in required.items()):
+        raise EvidenceError(
+            "decommission plan must use the reviewed disposable-data pause-duration contract"
+        )
+    if "rollback_window_ends_at" in value:
+        raise EvidenceError(
+            "decommission plan must not precompute an absolute rollback-window timestamp"
+        )
+    duration = value.get("rollback_window_duration_hours")
+    if not isinstance(duration, int) or isinstance(duration, bool) or duration <= 0:
+        raise EvidenceError(
+            "decommission plan requires a positive rollback-window duration"
+        )
+    if not isinstance(value.get("owner"), str) or not value["owner"].strip():
+        raise EvidenceError("decommission plan requires an accountable owner")
+    _nonempty_string_list(
+        value.get("prerequisites"), "decommission plan prerequisites"
+    )
+    _executable_steps(
+        value.get("steps"),
+        label="decommission plan",
+        required_actions=RETIRED_PROJECT_DECOMMISSION_ACTIONS,
+    )
+
+
+def build_retired_project_pause_receipt(
+    *,
+    reviewed_plan: Mapping[str, Any],
+    paused_at: str,
+    pause_execution_reference: str,
+    pause_evidence_sha256: str,
+) -> dict[str, Any]:
+    """Derive the deletion deadline from a real pause execution, never a plan."""
+    payload = reviewed_plan.get("payload")
+    binding = reviewed_plan.get("binding")
+    if (
+        reviewed_plan.get("schema_version") != SCHEMA_VERSION
+        or reviewed_plan.get("evidence_kind")
+        != "retired_project_decommission_plan"
+        or not isinstance(payload, dict)
+        or payload.get("state") != "reviewed"
+        or not isinstance(binding, dict)
+    ):
+        raise EvidenceError("pause receipt requires a reviewed decommission artifact")
+    if binding.get("project_ref") != CANONICAL_STAGING_PROJECT_REF:
+        raise EvidenceError("pause receipt plan is not bound to canonical staging")
+    _exact_sha(binding.get("git_commit"), "pause receipt plan git_commit")
+    _validate_decommission_plan(payload)
+    paused_text = _timestamp(paused_at, "pause receipt paused_at")
+    paused = datetime.fromisoformat(paused_text.replace("Z", "+00:00"))
+    duration = payload["rollback_window_duration_hours"]
+    ends_at = (paused + timedelta(hours=duration)).astimezone(timezone.utc)
+    if (
+        not isinstance(pause_execution_reference, str)
+        or not pause_execution_reference.strip()
+    ):
+        raise EvidenceError("pause receipt requires an immutable execution reference")
+    if SHA256.fullmatch(pause_evidence_sha256) is None:
+        raise EvidenceError("pause receipt requires the raw pause evidence SHA-256")
+    return _artifact(
+        "retired_project_pause_receipt",
+        binding,
+        {
+            "retired_project_ref": RETIRED_SOURCE_PROJECT_REF,
+            "reviewed_plan_sha256": hashlib.sha256(
+                _json_bytes(reviewed_plan)
+            ).hexdigest(),
+            "pause_execution_reference": pause_execution_reference,
+            "pause_evidence_sha256": pause_evidence_sha256,
+            "paused_at": paused.astimezone(timezone.utc).isoformat(),
+            "rollback_window_duration_hours": duration,
+            "rollback_window_ends_at": ends_at.isoformat(),
+            "deletion_permitted": False,
+            "irreversible_action_approval_recorded": False,
+        },
+    )
+
+
 def wrap_reviewed_input(
     *,
     kind: str,
@@ -425,30 +638,9 @@ def wrap_reviewed_input(
         )
         payload_reset_attestation = reset_attestation
     elif kind == "rollback_plan":
-        if not isinstance(value.get("steps"), list) or not value["steps"]:
-            raise EvidenceError("rollback plan requires reviewed executable steps")
-        if not isinstance(value.get("owner"), str) or not value["owner"].strip():
-            raise EvidenceError("rollback plan requires an accountable owner")
-        if not isinstance(value.get("trigger_conditions"), list) or not value["trigger_conditions"]:
-            raise EvidenceError("rollback plan requires explicit trigger conditions")
-        if not isinstance(value.get("verification_queries"), list) or not value["verification_queries"]:
-            raise EvidenceError("rollback plan requires post-restore verification queries")
-        if not isinstance(value.get("max_recovery_minutes"), int) or value["max_recovery_minutes"] <= 0:
-            raise EvidenceError("rollback plan requires a positive recovery-time bound")
+        _validate_reset_only_rollback_plan(value, binding)
     elif kind == "retired_project_decommission_plan":
-        if value.get("retired_project_ref") != RETIRED_SOURCE_PROJECT_REF:
-            raise EvidenceError("decommission plan must explicitly identify the retired project")
-        if not isinstance(value.get("steps"), list) or not value["steps"]:
-            raise EvidenceError("decommission plan requires reviewed executable steps")
-        if not isinstance(value.get("owner"), str) or not value["owner"].strip():
-            raise EvidenceError("decommission plan requires an accountable owner")
-        if not isinstance(value.get("prerequisites"), list) or not value["prerequisites"]:
-            raise EvidenceError("decommission plan requires explicit prerequisites")
-        if value.get("final_backup_required") is not True:
-            raise EvidenceError("decommission plan must require a final retained backup")
-        _timestamp(value.get("rollback_window_ends_at"), "decommission.rollback_window_ends_at")
-        if not isinstance(value.get("retention_approval_reference"), str) or not value["retention_approval_reference"].strip():
-            raise EvidenceError("decommission plan requires retention approval")
+        _validate_decommission_plan(value)
     else:
         raise EvidenceError(f"unsupported reviewed evidence kind: {kind}")
     payload = dict(value)
@@ -1495,17 +1687,12 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
     rollback_payload = rollback.get("payload", {})
     if rollback.get("evidence_kind") != "rollback_plan" or rollback_payload.get("state") != "reviewed" or not rollback_payload.get("steps"):
         raise EvidenceError("reviewed rollback plan is missing")
-    if not rollback_payload.get("owner") or not rollback_payload.get("trigger_conditions") or not rollback_payload.get("verification_queries") or not isinstance(rollback_payload.get("max_recovery_minutes"), int) or rollback_payload["max_recovery_minutes"] <= 0:
-        raise EvidenceError("reviewed rollback plan lacks owner, triggers, queries, or recovery bound")
+    _validate_reset_only_rollback_plan(rollback_payload, rollback.get("binding", {}))
     decommission = artifacts["decommission"]
     decommission_payload = decommission.get("payload", {})
     if decommission.get("evidence_kind") != "retired_project_decommission_plan" or decommission_payload.get("state") != "reviewed":
         raise EvidenceError("reviewed retired-project decommission plan is missing")
-    if decommission_payload.get("retired_project_ref") != RETIRED_SOURCE_PROJECT_REF or not decommission_payload.get("steps"):
-        raise EvidenceError("decommission plan does not explicitly scope the retired project")
-    if not decommission_payload.get("owner") or not decommission_payload.get("prerequisites") or decommission_payload.get("final_backup_required") is not True or not decommission_payload.get("retention_approval_reference"):
-        raise EvidenceError("decommission plan lacks owner, prerequisites, final backup, or retention approval")
-    _timestamp(decommission_payload.get("rollback_window_ends_at"), "decommission.rollback_window_ends_at")
+    _validate_decommission_plan(decommission_payload)
 
 
 def validate_manifest_artifacts(root: Path, manifest: Mapping[str, Any]) -> list[str]:
@@ -1630,6 +1817,12 @@ def main() -> int:
     )
     wrap.add_argument("--input", required=True)
     wrap.add_argument("--repo-root", default=str(REPOSITORY_ROOT))
+    pause = subparsers.add_parser("retired-project-pause-receipt")
+    pause.add_argument("--reviewed-plan", required=True)
+    pause.add_argument("--paused-at", required=True)
+    pause.add_argument("--pause-execution-reference", required=True)
+    pause.add_argument("--pause-evidence-sha256", required=True)
+    pause.add_argument("--output", required=True)
     assemble = bound("assemble")
     assemble.add_argument("--repo-root", default=str(REPOSITORY_ROOT))
     assemble.add_argument("--source-disposition", required=True)
@@ -1667,6 +1860,16 @@ def main() -> int:
             if errors:
                 raise EvidenceError("; ".join(errors))
             print(f"validated exact-SHA promotion manifest {args.manifest}")
+            return 0
+        if args.command == "retired-project-pause-receipt":
+            value = build_retired_project_pause_receipt(
+                reviewed_plan=_load_json(Path(args.reviewed_plan)),
+                paused_at=args.paused_at,
+                pause_execution_reference=args.pause_execution_reference,
+                pause_evidence_sha256=args.pause_evidence_sha256,
+            )
+            _write_json(Path(args.output), value)
+            print(f"wrote retired-project pause receipt to {args.output}")
             return 0
         binding = _binding_from_args(args)
         if args.command == "route-graph":

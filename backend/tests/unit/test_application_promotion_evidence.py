@@ -12,6 +12,58 @@ from scripts.audit import application_promotion_evidence as evidence
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _steps(actions: tuple[str, ...]) -> list[dict]:
+    return [
+        {
+            "order": index,
+            "action": action,
+            "tool": "reviewed-operator-tool",
+            "command": f"run {action}",
+            "expected_result": f"{action} completes with recorded evidence",
+        }
+        for index, action in enumerate(actions, 1)
+    ]
+
+
+def _rollback_payload() -> dict:
+    return {
+        "state": "reviewed",
+        "plan_contract_version": "reset-only-v1",
+        "owner": "release-owner",
+        "strategy": "fail_closed_reset_redeploy",
+        "scope_project_ref": evidence.CANONICAL_STAGING_PROJECT_REF,
+        "data_preservation_required": False,
+        "retained_backup_required": False,
+        "legacy_fallback_prohibited": True,
+        "trigger_conditions": ["readiness probe fails"],
+        "max_recovery_minutes": 30,
+        "steps": _steps(evidence.RESET_ONLY_ROLLBACK_ACTIONS),
+        "verification_steps": _steps(evidence.RESET_ONLY_VERIFICATION_ACTIONS),
+    }
+
+
+def _decommission_payload() -> dict:
+    return {
+        "state": "reviewed",
+        "plan_contract_version": "pause-duration-v1",
+        "retired_project_ref": evidence.RETIRED_SOURCE_PROJECT_REF,
+        "owner": "data-owner",
+        "prerequisites": ["canonical exact-SHA acceptance is complete"],
+        "data_retention_disposition": "discard_disposable_retired_project_data",
+        "data_preservation_required": False,
+        "final_backup_required": False,
+        "pause_receipt_required": True,
+        "rollback_window_duration_hours": 168,
+        "rollback_window_anchor": "retired_project_pause_receipt.paused_at",
+        "absolute_deletion_time_source": (
+            "retired_project_pause_receipt.rollback_window_ends_at"
+        ),
+        "irreversible_action_approval_required": True,
+        "deletion_receipt_required": True,
+        "steps": _steps(evidence.RETIRED_PROJECT_DECOMMISSION_ACTIONS),
+    }
+
+
 def _render(git_commit: str) -> dict:
     return {
         "provider": "render",
@@ -300,23 +352,10 @@ def _bundle(tmp_path: Path):
             ),
         ),
         "rollback": _write(tmp_path / "evidence/rollback.json", _artifact(
-            "rollback_plan", binding, {
-                "state": "reviewed", "owner": "release-owner",
-                "trigger_conditions": ["readiness probe fails"],
-                "verification_queries": ["SELECT version_num FROM public.alembic_version"],
-                "max_recovery_minutes": 30, "steps": ["restore"],
-            },
+            "rollback_plan", binding, _rollback_payload(),
         )),
         "decommission": _write(tmp_path / "evidence/decommission.json", _artifact(
-            "retired_project_decommission_plan", binding, {
-                "state": "reviewed",
-                "retired_project_ref": evidence.RETIRED_SOURCE_PROJECT_REF,
-                "owner": "data-owner", "prerequisites": ["rollback window elapsed"],
-                "final_backup_required": True,
-                "rollback_window_ends_at": "2026-09-25T12:00:00+00:00",
-                "retention_approval_reference": "RETENTION-123",
-                "steps": ["decommission after rollback window"],
-            },
+            "retired_project_decommission_plan", binding, _decommission_payload(),
         )),
     }
     return git_commit, binding, paths
@@ -856,6 +895,124 @@ def test_draft_operator_inputs_fail_closed(tmp_path: Path):
             kind="rollback_plan", input_path=draft, binding=binding
         )
 
+
+def test_reset_only_rollback_and_duration_decommission_inputs_are_reviewable(
+    tmp_path: Path,
+):
+    binding = _binding("a" * 40)
+    rollback = _rollback_payload()
+    rollback.update({
+        "reviewer": "release-reviewer",
+        "reviewed_at": "2026-08-26T10:00:00+00:00",
+    })
+    rollback_path = _write(tmp_path / "rollback.json", rollback)
+    wrapped_rollback = evidence.wrap_reviewed_input(
+        kind="rollback_plan", input_path=rollback_path, binding=binding
+    )
+    assert wrapped_rollback["payload"]["retained_backup_required"] is False
+
+    decommission = _decommission_payload()
+    decommission.update({
+        "reviewer": "release-reviewer",
+        "reviewed_at": "2026-08-26T10:00:00+00:00",
+    })
+    decommission_path = _write(tmp_path / "decommission.json", decommission)
+    wrapped_decommission = evidence.wrap_reviewed_input(
+        kind="retired_project_decommission_plan",
+        input_path=decommission_path,
+        binding=binding,
+    )
+    assert wrapped_decommission["payload"]["rollback_window_duration_hours"] == 168
+    assert "rollback_window_ends_at" not in wrapped_decommission["payload"]
+
+
+def test_reset_only_rollback_rejects_retained_backup_and_incomplete_procedure(
+    tmp_path: Path,
+):
+    binding = _binding("a" * 40)
+    value = _rollback_payload()
+    value.update({
+        "reviewer": "release-reviewer",
+        "reviewed_at": "2026-08-26T10:00:00+00:00",
+        "retained_backup_required": True,
+    })
+    path = _write(tmp_path / "rollback.json", value)
+    with pytest.raises(evidence.EvidenceError, match="no retained backup"):
+        evidence.wrap_reviewed_input(
+            kind="rollback_plan", input_path=path, binding=binding
+        )
+
+    value["retained_backup_required"] = False
+    value["steps"] = value["steps"][:-1]
+    _write(path, value)
+    with pytest.raises(evidence.EvidenceError, match="exactly the required ordered"):
+        evidence.wrap_reviewed_input(
+            kind="rollback_plan", input_path=path, binding=binding
+        )
+
+
+def test_decommission_plan_rejects_precomputed_deadline_and_fake_backup(
+    tmp_path: Path,
+):
+    binding = _binding("a" * 40)
+    value = _decommission_payload()
+    value.update({
+        "reviewer": "release-reviewer",
+        "reviewed_at": "2026-08-26T10:00:00+00:00",
+        "rollback_window_ends_at": "2026-09-02T10:00:00+00:00",
+    })
+    path = _write(tmp_path / "decommission.json", value)
+    with pytest.raises(evidence.EvidenceError, match="must not precompute"):
+        evidence.wrap_reviewed_input(
+            kind="retired_project_decommission_plan",
+            input_path=path,
+            binding=binding,
+        )
+
+    del value["rollback_window_ends_at"]
+    value["final_backup_required"] = True
+    _write(path, value)
+    with pytest.raises(evidence.EvidenceError, match="pause-duration contract"):
+        evidence.wrap_reviewed_input(
+            kind="retired_project_decommission_plan",
+            input_path=path,
+            binding=binding,
+        )
+
+
+def test_pause_receipt_derives_absolute_deadline_from_actual_pause(tmp_path: Path):
+    binding = _binding("a" * 40)
+    value = _decommission_payload()
+    value.update({
+        "reviewer": "release-reviewer",
+        "reviewed_at": "2026-08-26T10:00:00+00:00",
+    })
+    path = _write(tmp_path / "decommission.json", value)
+    reviewed_plan = evidence.wrap_reviewed_input(
+        kind="retired_project_decommission_plan",
+        input_path=path,
+        binding=binding,
+    )
+    receipt = evidence.build_retired_project_pause_receipt(
+        reviewed_plan=reviewed_plan,
+        paused_at="2026-08-26T18:30:00+05:30",
+        pause_execution_reference="provider-operation-123",
+        pause_evidence_sha256="d" * 64,
+    )
+    assert receipt["payload"]["paused_at"] == "2026-08-26T13:00:00+00:00"
+    assert receipt["payload"]["rollback_window_ends_at"] == (
+        "2026-09-02T13:00:00+00:00"
+    )
+    assert receipt["payload"]["deletion_permitted"] is False
+    assert receipt["payload"]["irreversible_action_approval_recorded"] is False
+
+    with pytest.raises(evidence.EvidenceError, match="pause evidence SHA-256"):
+        evidence.build_retired_project_pause_receipt(
+            reviewed_plan=reviewed_plan,
+            paused_at="2026-08-26T18:30:00+05:30",
+            pause_execution_reference="provider-operation-123",
+            pause_evidence_sha256="not-a-hash",
+        )
 
 def test_workflow_is_read_only_and_never_changes_readiness():
     workflow = (

@@ -9,6 +9,60 @@ from scripts.audit import canonical_promotion_readiness as readiness
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _steps(actions: tuple[str, ...]) -> list[dict]:
+    return [
+        {
+            "order": index,
+            "action": action,
+            "tool": "reviewed-operator-tool",
+            "command": f"run {action}",
+            "expected_result": f"{action} completes with recorded evidence",
+        }
+        for index, action in enumerate(actions, 1)
+    ]
+
+
+def _rollback_payload() -> dict:
+    return {
+        "state": "reviewed",
+        "plan_contract_version": "reset-only-v1",
+        "owner": "release-owner",
+        "strategy": "fail_closed_reset_redeploy",
+        "scope_project_ref": promotion_evidence.CANONICAL_STAGING_PROJECT_REF,
+        "data_preservation_required": False,
+        "retained_backup_required": False,
+        "legacy_fallback_prohibited": True,
+        "trigger_conditions": ["readiness fails"],
+        "max_recovery_minutes": 30,
+        "steps": _steps(promotion_evidence.RESET_ONLY_ROLLBACK_ACTIONS),
+        "verification_steps": _steps(
+            promotion_evidence.RESET_ONLY_VERIFICATION_ACTIONS
+        ),
+    }
+
+
+def _decommission_payload() -> dict:
+    return {
+        "state": "reviewed",
+        "plan_contract_version": "pause-duration-v1",
+        "retired_project_ref": promotion_evidence.RETIRED_SOURCE_PROJECT_REF,
+        "owner": "data-owner",
+        "prerequisites": ["canonical exact-SHA acceptance is complete"],
+        "data_retention_disposition": "discard_disposable_retired_project_data",
+        "data_preservation_required": False,
+        "final_backup_required": False,
+        "pause_receipt_required": True,
+        "rollback_window_duration_hours": 168,
+        "rollback_window_anchor": "retired_project_pause_receipt.paused_at",
+        "absolute_deletion_time_source": (
+            "retired_project_pause_receipt.rollback_window_ends_at"
+        ),
+        "irreversible_action_approval_required": True,
+        "deletion_receipt_required": True,
+        "steps": _steps(promotion_evidence.RETIRED_PROJECT_DECOMMISSION_ACTIONS),
+    }
+
+
 def _write_json(root: Path, relative_path: str, value: dict) -> None:
     path = root / relative_path
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -175,22 +229,10 @@ def _fixture_root(
             "operation_count": 18,
             "operation_ids": [f"operation-{index}" for index in range(18)],
         }),
-        "rollback.json": artifact("rollback_plan", {
-            "state": "reviewed", "owner": "release-owner",
-            "trigger_conditions": ["readiness fails"],
-            "verification_queries": ["SELECT version_num FROM public.alembic_version"],
-            "max_recovery_minutes": 30,
-            "steps": ["stop promotion and restore backup"],
-        }),
-        "decommission.json": artifact("retired_project_decommission_plan", {
-            "state": "reviewed",
-            "retired_project_ref": promotion_evidence.RETIRED_SOURCE_PROJECT_REF,
-            "owner": "data-owner", "prerequisites": ["rollback window elapsed"],
-            "final_backup_required": True,
-            "rollback_window_ends_at": "2026-09-25T12:00:00+00:00",
-            "retention_approval_reference": "RETENTION-123",
-            "steps": ["decommission only after the reviewed rollback window"],
-        }),
+        "rollback.json": artifact("rollback_plan", _rollback_payload()),
+        "decommission.json": artifact(
+            "retired_project_decommission_plan", _decommission_payload()
+        ),
     }
     artifact_hashes = {}
     for name, value in artifact_values.items():
