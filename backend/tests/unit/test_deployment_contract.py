@@ -426,6 +426,7 @@ def test_render_pilot_diagnostics_emit_only_allowlisted_deploy_metadata():
 
 def test_free_staging_retries_only_transient_pooler_baseline_failures():
     workflow = _read(".github/workflows/canonical-staging.yml")
+    pooler_verifier = _read("backend/scripts/verify_staging_pooler_roles.py")
 
     assert "/config/database/pooler" in workflow
     assert "/database/query/read-only" in workflow
@@ -442,10 +443,14 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
-    assert workflow.count("connect_timeout=15") == 7
+    assert workflow.count("connect_timeout=15") + pooler_verifier.count(
+        "connect_timeout=15"
+    ) == 7
     assert "application_name=canonical_staging_ci" in workflow
-    assert "application_name=canonical_staging_verify" in workflow
-    assert workflow.count("gssencmode=disable") >= 2
+    assert "application_name=canonical_staging_verify" in pooler_verifier
+    assert workflow.count("gssencmode=disable") + pooler_verifier.count(
+        "gssencmode=disable"
+    ) >= 2
     assert "for attempt in $(seq 1 3)" in workflow
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
@@ -479,7 +484,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "run: sleep 125" in workflow
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
-    assert "def verify_role(role, password, port)" in workflow
+    assert "python3 backend/scripts/verify_staging_pooler_roles.py" in workflow
     assert "ROLE_POSTURE_QUERY" in workflow
     assert "role.rolpassword IS NOT NULL AS password_present" in workflow
     assert "password_unexpired" in workflow
@@ -487,14 +492,25 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "/network-bans/retrieve" in workflow
     assert "--request POST" in workflow
     assert "Canonical staging network-ban count" in workflow
-    assert 'canary_role = "erp_runtime"' in workflow
-    assert "verify_role_with_retry(canary_role, canary_password, session_port)" in workflow
-    assert "verify_role_with_retry(canary_role, canary_password, transaction_port)" in workflow
-    assert "for role, password in expected_roles.items()" in workflow
-    assert "for attempt in range(1, 3):" in workflow
-    assert "if attempt < 2:" in workflow
-    assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
-    assert "Transaction pooler selected after session-mode canary failed" in workflow
+    assert "def verify_role_set_once(" in pooler_verifier
+    assert "def verify_role_set_with_retry(" in pooler_verifier
+    assert "for role, password in roles.items():" in pooler_verifier
+    assert "verify_set(" in pooler_verifier
+    assert "port=session_port" in pooler_verifier
+    assert "if not session_failure.transient:" in pooler_verifier
+    assert "port=transaction_port" in pooler_verifier
+    assert "A partial session-mode pass grants no authority to mix pooler modes" in pooler_verifier
+    assert "range(1, MAX_ATTEMPTS + 1)" in pooler_verifier
+    assert "if not failure.transient or attempt == MAX_ATTEMPTS:" in pooler_verifier
+    assert "Require one complete role cohort to pass" in pooler_verifier
+    assert "password authentication failed" not in pooler_verifier
+    assert "connect_timeout=5" in pooler_verifier
+    assert "str(error)" in pooler_verifier
+    role_verification = workflow.split(
+        "Verify baseline topology and isolated role posture", 1
+    )[1].split("Diagnose bounded Supavisor role verification failure", 1)[0]
+    assert "str(error)" not in role_verification
+    assert "message = str(last_error)" not in role_verification
     assert "Diagnose bounded Supavisor role verification failure" in workflow
     assert "/analytics/endpoints/logs" in workflow
     assert "source = 'supavisor_logs'" in workflow
@@ -840,8 +856,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "CANONICAL_DEMO_API_URL=http://127.0.0.1:8090" in workflow
     assert "PYTHONPATH=backend PORT=8090 python3 -m uvicorn" in workflow
     assert "for attempt in 1 2 3 4 5" in workflow
-    assert "def verify_role_with_retry(role, password, port):" in workflow
-    assert "for attempt in range(1, 3):" in workflow
+    assert "python3 backend/scripts/verify_staging_pooler_roles.py" in workflow
     assert "Canonical CI API traceback" not in workflow
     assert "Canonical CI API runtime diagnostic" not in workflow
     assert 'safe_ci_log_summary.py --label runtime "$api_log"' in workflow
