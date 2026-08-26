@@ -5,6 +5,13 @@
 -- through SECURITY DEFINER functions owned by the NOLOGIN/BYPASSRLS migration
 -- authority, so forcing RLS does not change their execution posture.
 
+-- Supabase runs Alembic through its managed postgres login. The deployment
+-- workflow grants that login SET-only membership in the reviewed NOLOGIN
+-- migration authority for the duration of the migration, then revokes it.
+-- Assume the table-owning role explicitly so ALTER TABLE has identical
+-- ownership semantics in disposable PostgreSQL and canonical staging.
+SET LOCAL ROLE erp_migration_owner;
+
 ALTER TABLE tax.input_credit_lots FORCE ROW LEVEL SECURITY;
 ALTER TABLE tax.input_credit_reversal_events FORCE ROW LEVEL SECURITY;
 ALTER TABLE tax.input_credit_applications FORCE ROW LEVEL SECURITY;
@@ -64,3 +71,5 @@ BEGIN
   END IF;
 END
 $migration$;
+
+RESET ROLE;

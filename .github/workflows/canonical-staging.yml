@@ -450,10 +450,9 @@ jobs:
                 alembic -c alembic.ini upgrade head
               ) >"$log_file" 2>&1; then
                 baseline_applied=true
-                cat "$log_file"
+                echo "Canonical Alembic migration reached the reviewed head"
                 break
               fi
-              cat "$log_file"
               if ! grep -Eqi \
                 'OperationalError|econnrefused|connection refused|server closed the connection unexpectedly|server didn.t return client encoding|EAUTHQUERY|auth_query secret check timed out|canceling statement due to (lock|statement) timeout' \
                 "$log_file"; then
@@ -474,11 +473,26 @@ jobs:
           if [ "$baseline_applied" != true ]; then
             python3 - "$log_file" <<'PY'
           import pathlib
+          import re
           import sys
 
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
-          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Canonical free staging migration failure::{text}")
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          classes = (
+              ("insufficient_privilege", r"InsufficientPrivilege|permission denied|must be owner"),
+              ("lock_timeout", r"canceling statement due to lock timeout"),
+              ("statement_timeout", r"canceling statement due to statement timeout"),
+              ("connection_unavailable", r"OperationalError|econnrefused|connection refused|server closed the connection unexpectedly"),
+              ("pooler_auth_unavailable", r"EAUTHQUERY|auth_query secret check timed out"),
+              ("migration_contract_failure", r"CanonicalBaselineError|hash mismatch|requires an online reviewed principal"),
+          )
+          failure_class = next(
+              (name for name, pattern in classes if re.search(pattern, text, re.IGNORECASE)),
+              "unclassified_migration_failure",
+          )
+          print(
+              "::error title=Canonical free staging migration failure::"
+              f"class={failure_class}; raw migration output retained only inside the job"
+          )
           PY
             exit 1
           fi

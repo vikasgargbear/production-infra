@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260826_0024_force_input_credit_rls.sql"
 )
-EXPECTED_SQL_SHA256 = "3f43978d5e44065dde9487c5a875ea29c92810155cde7e80220073e57a2d89c2"
+EXPECTED_SQL_SHA256 = "32f8428d7bd36323d749274dba41fdfad6799fb6cdf010eb5add868638c82d9e"
 
 
 def _reviewed_sql() -> str:
