@@ -538,7 +538,19 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "rolsuper OR rolcreaterole OR rolbypassrls" in baseline_query
     assert "NOT rolcanlogin" not in baseline_query
     assert "Run canonical rollback fixtures on live free staging" in workflow
-    assert 're.findall(r"(?m)^canonical demo provisioning failed:.*$", raw)' in workflow
+    assert (
+        're.findall(r"(?m)^canonical demo provisioning failed: (\\{.*\\})$", raw)'
+        in workflow
+    )
+    assert 'detail = "canonical demo failure summary unavailable"' in workflow
+    assert "raw[-2800:]" not in workflow
+    assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 2
+    assert '--label readiness "$api_log"' in workflow
+    assert '--label runtime "$api_log"' in workflow
+    assert 'tail -c 3500 "$api_log"' not in workflow
+    assert "Canonical CI API traceback" not in workflow
+    assert 're.sub(r"Bearer\\s+\\S+"' not in workflow
     assert "PGCONNECT_TIMEOUT=15" in workflow
     assert "statement_timeout=120000" in workflow
     assert "lock_timeout=15000" in workflow
@@ -759,7 +771,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "balance.moving_weighted_average" not in provisioner
     assert "item.original_amount" not in provisioner
     assert "item.outstanding_amount" not in provisioner
-    assert "COMMAND_ADAPTER_UNAVAILABLE" not in provisioner
+    operational_provisioner = provisioner.split("_SAFE_FAILURE_ERROR_CODES", 1)[0]
+    assert "COMMAND_ADAPTER_UNAVAILABLE" not in operational_provisioner
     assert '"unavailable_operation_count": 0' in provisioner
     assert 'response.status_code != 503' not in provisioner
     cross_table = provisioner.split("def reconcile_cross_table_invariants", 1)[1].split(
@@ -818,8 +831,10 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "for attempt in 1 2 3 4 5" in workflow
     assert "def verify_role_with_retry(role, password, port):" in workflow
     assert "for attempt in range(1, 3):" in workflow
-    assert "Canonical CI API traceback" in workflow
-    assert "postgresql://<redacted>@" in workflow
+    assert "Canonical CI API traceback" not in workflow
+    assert "Canonical CI API runtime diagnostic" not in workflow
+    assert 'safe_ci_log_summary.py --label runtime "$api_log"' in workflow
+    assert "postgresql://<redacted>@" not in workflow
 
 
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():

@@ -5650,9 +5650,104 @@ def main() -> int:
     return 0
 
 
+_SAFE_FAILURE_ERROR_CODES = frozenset({
+    "AUTH_REQUIRED", "SCOPE_DENIED", "BRANCH_DENIED", "AMBIGUOUS_REFERENCE",
+    "VALIDATION_FAILED", "STALE_VERSION", "PREVIEW_EXPIRED", "PREVIEW_CHANGED",
+    "APPROVAL_REQUIRED", "IDEMPOTENCY_CONFLICT", "PERIOD_CLOSED",
+    "INSUFFICIENT_STOCK", "BATCH_BLOCKED", "POLICY_BLOCKED",
+})
+_SAFE_FAILURE_OPERATIONS = frozenset(
+    operation for operation, _approval_policy in PREPARE_CAPABILITIES
+) | frozenset({
+    "automation.command.approve",
+    "automation.command.execute",
+    "automation.command.review",
+})
+_SAFE_FAILURE_REASONS = frozenset({
+    "CALCULATOR_DATABASE_UNAVAILABLE",
+    "CANONICAL_BASELINE_UNVERIFIED",
+    "CANONICAL_DATABASE_POLICY_REJECTED",
+    "COMMAND_ADAPTER_UNAVAILABLE",
+    "FEFO_ALLOCATION_REQUIRED",
+    "INSUFFICIENT_LOCKED_STOCK",
+    "INVALID_CANONICAL_PREVIEW_HASH",
+    "RUNTIME_DATABASE_PRINCIPAL_INVALID",
+    "RUNTIME_DATABASE_UNAVAILABLE",
+})
+_SAFE_FAILURE_SQLSTATES = frozenset({
+    "0A000", "21000", "22023", "22P02", "23502", "23503", "23505",
+    "23514", "40001", "42501", "55000", "P0002",
+})
+
+
+def safe_failure_summary(exc: BaseException) -> dict[str, str]:
+    """Return bounded diagnostic facts without echoing exception payloads.
+
+    Hosted errors can contain authorization headers, connection URLs, or full
+    business request bodies.  CI needs a stable fingerprint and allowlisted
+    failure codes, not the original exception text.
+    """
+
+    raw = str(exc)[:65536]
+    summary = {
+        "exception_type": type(exc).__name__[:64],
+        "fingerprint_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+    }
+    decoder = json.JSONDecoder()
+    candidates: list[object] = []
+    for attempt, match in enumerate(re.finditer(r"\{", raw)):
+        if attempt >= 64:
+            break
+        try:
+            value, _ = decoder.raw_decode(raw[match.start():])
+        except (json.JSONDecodeError, RecursionError, ValueError):
+            continue
+        candidates.append(value)
+
+    def collect(value: object) -> None:
+        stack: list[tuple[object, int]] = [(value, 0)]
+        visited = 0
+        while stack and visited < 256:
+            current, depth = stack.pop()
+            visited += 1
+            if depth > 12:
+                continue
+            if isinstance(current, dict):
+                for index, (key, child) in enumerate(current.items()):
+                    if index >= 64:
+                        break
+                    rendered = str(child).strip() if isinstance(child, (str, int)) else ""
+                    if key == "error_code" and rendered in _SAFE_FAILURE_ERROR_CODES:
+                        summary.setdefault(key, rendered)
+                    elif key == "operation" and rendered in _SAFE_FAILURE_OPERATIONS:
+                        summary.setdefault(key, rendered)
+                    elif key == "reason" and rendered in _SAFE_FAILURE_REASONS:
+                        summary.setdefault(key, rendered)
+                    elif key == "sqlstate" and rendered in _SAFE_FAILURE_SQLSTATES:
+                        summary.setdefault(key, rendered)
+                    elif key == "status_code" and rendered in {
+                        "400", "401", "403", "404", "409", "422", "429", "500", "503",
+                    }:
+                        summary.setdefault(key, rendered)
+                    if isinstance(child, (dict, list)):
+                        stack.append((child, depth + 1))
+            elif isinstance(current, list):
+                for child in reversed(current[:32]):
+                    if isinstance(child, (dict, list)):
+                        stack.append((child, depth + 1))
+
+    for candidate in candidates[-8:]:
+        collect(candidate)
+    return summary
+
+
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
-        print(f"canonical demo provisioning failed: {exc}", file=sys.stderr)
-        raise
+        print(
+            "canonical demo provisioning failed: "
+            + json.dumps(safe_failure_summary(exc), sort_keys=True),
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None

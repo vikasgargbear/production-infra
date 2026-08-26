@@ -1251,8 +1251,7 @@ jobs:
             sleep 3
           done
           if [ "$api_ready" != true ]; then
-            detail=$(tail -c 3500 "$api_log" | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
-            echo "::error title=Canonical CI API failed readiness::$detail"
+            python3 backend/scripts/safe_ci_log_summary.py --label readiness "$api_log"
             exit 1
           fi
 
@@ -1262,31 +1261,75 @@ jobs:
             | tee "$demo_log"; then
             python3 - "$demo_log" <<'PY'
           import pathlib
+          import json
           import re
           import sys
 
           raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
-          headlines = re.findall(r"(?m)^canonical demo provisioning failed:.*$", raw)
-          detail = ((headlines[-1] + "\n") if headlines else "") + raw[-2800:]
+          headlines = re.findall(r"(?m)^canonical demo provisioning failed: (\{.*\})$", raw)
+          detail = "canonical demo failure summary unavailable"
+          if headlines:
+              try:
+                  candidate = json.loads(headlines[-1])
+                  allowed_error_codes = {
+                      "AUTH_REQUIRED", "SCOPE_DENIED", "BRANCH_DENIED", "AMBIGUOUS_REFERENCE",
+                      "VALIDATION_FAILED", "STALE_VERSION", "PREVIEW_EXPIRED", "PREVIEW_CHANGED",
+                      "APPROVAL_REQUIRED", "IDEMPOTENCY_CONFLICT", "PERIOD_CLOSED",
+                      "INSUFFICIENT_STOCK", "BATCH_BLOCKED", "POLICY_BLOCKED",
+                  }
+                  allowed_operations = {
+                      "sales.order.prepare", "sales.dispatch.prepare", "sales.invoice.prepare",
+                      "sales.return.prepare", "procurement.purchase_order.prepare",
+                      "procurement.goods_receipt.prepare", "procurement.supplier_invoice.prepare",
+                      "procurement.purchase_return.prepare", "finance.customer_receipt.prepare",
+                      "finance.supplier_advance.prepare", "finance.supplier_payment.prepare",
+                      "finance.adjustment_note.prepare", "inventory.adjustment.prepare",
+                      "inventory.transfer.prepare", "inventory.destruction.prepare",
+                      "automation.command.approve", "automation.command.execute",
+                      "automation.command.review",
+                  }
+                  allowed_reasons = {
+                      "CALCULATOR_DATABASE_UNAVAILABLE", "CANONICAL_BASELINE_UNVERIFIED",
+                      "CANONICAL_DATABASE_POLICY_REJECTED", "COMMAND_ADAPTER_UNAVAILABLE",
+                      "FEFO_ALLOCATION_REQUIRED", "INSUFFICIENT_LOCKED_STOCK",
+                      "INVALID_CANONICAL_PREVIEW_HASH", "RUNTIME_DATABASE_PRINCIPAL_INVALID",
+                      "RUNTIME_DATABASE_UNAVAILABLE",
+                  }
+                  allowed_sqlstates = {
+                      "0A000", "21000", "22023", "22P02", "23502", "23503",
+                      "23505", "23514", "40001", "42501", "55000", "P0002",
+                  }
+                  allowed_status_codes = {"400", "401", "403", "404", "409", "422", "429", "500", "503"}
+                  expected_keys = {"exception_type", "fingerprint_sha256"}
+                  field_sets = {
+                      "error_code": allowed_error_codes,
+                      "operation": allowed_operations,
+                      "reason": allowed_reasons,
+                      "sqlstate": allowed_sqlstates,
+                      "status_code": allowed_status_codes,
+                  }
+                  values_are_safe = (
+                      set(candidate).issubset(expected_keys | set(field_sets))
+                      and all(
+                          key in expected_keys
+                          or (isinstance(value, str) and value in field_sets[key])
+                          for key, value in candidate.items()
+                      )
+                  )
+                  if (
+                      values_are_safe
+                      and re.fullmatch(r"[0-9a-f]{64}", candidate.get("fingerprint_sha256", ""))
+                      and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", candidate.get("exception_type", ""))
+                  ):
+                      detail = "canonical demo provisioning failed: " + json.dumps(
+                          candidate, sort_keys=True, separators=(",", ":")
+                      )
+              except (json.JSONDecodeError, RecursionError, TypeError, ValueError):
+                  pass
           detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Canonical demo provisioning failed::{detail}")
           PY
-            python3 - "$api_log" <<'PY'
-          import pathlib
-          import re
-          import sys
-
-          raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
-          detail = re.sub(
-              r"postgres(?:ql)?(?:\+psycopg2)?://[^@\s]+@",
-              "postgresql://<redacted>@",
-              raw,
-              flags=re.IGNORECASE,
-          )
-          detail = re.sub(r"Bearer\s+\S+", "Bearer <redacted>", detail)
-          detail = detail[-3500:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Canonical CI API traceback::{detail}")
-          PY
+            python3 backend/scripts/safe_ci_log_summary.py --label runtime "$api_log"
             exit 1
           fi
           cleanup_demo_api
