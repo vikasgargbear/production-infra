@@ -1,5 +1,11 @@
 """Reuse the reviewed canonical live transport/database fixtures."""
 
+from __future__ import annotations
+
+import os
+
+import pytest
+
 from tests.live_canonical.conftest import (  # noqa: F401
     canonical_live_config,
     db_query,
@@ -7,3 +13,31 @@ from tests.live_canonical.conftest import (  # noqa: F401
     mcp_client,
     reconciler,
 )
+
+from .contract import load_ready_operation_matrix
+from .direct_database_evidence import DirectDatabaseEvidenceRecorder
+
+
+@pytest.fixture(scope="session")
+def direct_database_evidence_recorder(request):
+    """Write direct DB evidence only after every exact Live18 case records."""
+
+    expected_commands = {
+        contract.id: str(contract.command_operation)
+        for contract in load_ready_operation_matrix()
+    }
+    recorder = DirectDatabaseEvidenceRecorder.from_environment(expected_commands)
+    if recorder is None:
+        yield None
+        return
+
+    config = request.getfixturevalue("canonical_live_config")
+    query = request.getfixturevalue("db_query")
+    yield recorder
+    recorder.finalize(
+        organization_id=str(config.test_org_id),
+        denial_organization_id=str(config.denial_org_id),
+        expected_sha=os.environ.get("LIVE18_EXPECTED_DEPLOYED_SHA", "").strip().lower(),
+        project_ref=config.project_ref,
+        query=query,
+    )

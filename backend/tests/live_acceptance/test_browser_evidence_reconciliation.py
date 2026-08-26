@@ -205,6 +205,7 @@ def _assert_mcp_identity(
 def test_browser_resource_reconciles_through_mcp_and_postgresql(
     contract,
     canonical_live_config,
+    direct_database_evidence_recorder,
     mcp_client,
     request,
 ) -> None:
@@ -293,3 +294,12 @@ def test_browser_resource_reconciles_through_mcp_and_postgresql(
         mcp=declared_readback,
         database=database,
     )
+    if direct_database_evidence_recorder is not None:
+        assert captured is None, "direct evidence cannot reuse captured Railway evidence"
+        direct_database_evidence_recorder.record(
+            operation_id=contract.id,
+            command_operation=contract.command_operation,
+            command_request_id=command_id,
+            resource_id=resource_id,
+            database=database,
+        )
