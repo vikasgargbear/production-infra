@@ -216,8 +216,7 @@ def _canonical_purchase_order_detail(
                line.line_kind, line.product_id, product.name AS product_name,
                product.sku AS product_code, product.hsn_code,
                line.charge_code, line.uom_code,
-               NULLIF(requested.payload->>'uom_conversion_id','')::uuid
-                 AS uom_conversion_id,
+               requested.uom_conversion_id,
                line.billed_quantity, line.free_quantity,
                line.free_supply_tax_treatment, line.quoted_unit_rate,
                line.price_basis, line.gross_amount, line.line_discount_amount,
@@ -229,28 +228,9 @@ def _canonical_purchase_order_detail(
           FROM procurement.purchase_order_lines line
           LEFT JOIN catalog.products product
             ON product.org_id=line.org_id AND product.id=line.product_id
-          JOIN automation.command_requests command
-            ON command.org_id=line.org_id
-           AND command.target_resource_type='purchase_order'
-           AND command.target_resource_id=line.purchase_order_id
-           AND command.result_resource_type='purchase_order'
-           AND command.result_resource_id=line.purchase_order_id
-           AND command.capability_code='procurement.purchase_order.prepare'
-           AND command.operation='procurement.purchase_order.approve'
-           AND command.status='succeeded'
-          LEFT JOIN LATERAL (
-            SELECT payload
-              FROM pg_catalog.jsonb_array_elements(
-                CASE WHEN line.line_kind='product'
-                  THEN pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb->'lines'
-                  ELSE COALESCE(
-                    pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb->'charge_lines',
-                    '[]'::jsonb
-                  )
-                END
-              ) payload
-             WHERE payload->>'line_id'=line.id::text
-          ) requested ON true
+          JOIN LATERAL erp_automation_reads.purchase_order_uom_provenance(
+               line.org_id, line.purchase_order_id
+          ) requested ON requested.purchase_order_line_id=line.id
          WHERE line.org_id=:org_id AND line.purchase_order_id=:purchase_order_id
          ORDER BY line.line_number, line.id
         """,

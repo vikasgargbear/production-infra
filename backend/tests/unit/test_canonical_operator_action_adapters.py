@@ -33,6 +33,12 @@ from app.infrastructure.operator_actions.sales_order import commercial_calculati
 from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS
 
 
+PROJECTION_SQL = (
+    Path(__file__).parents[3]
+    / "backend/alembic/sql/20260826_0025_typed_command_read_projections.sql"
+).read_text(encoding="utf-8")
+
+
 class FakeResult:
     def __init__(self, rows=()):
         self._rows = list(rows)
@@ -101,6 +107,17 @@ class FakeSession:
             return FakeResult(rows)
         if "JOIN automation.command_approvals AS approval" in sql:
             return FakeResult(() if self.approval_row is None else (self.approval_row,))
+        if "erp_automation_reads.approval_result" in sql:
+            return FakeResult(() if self.approval_row is None else (self.approval_row,))
+        if any(
+            projection in sql
+            for projection in (
+                "erp_automation_reads.requester_command_status",
+                "erp_automation_reads.reviewable_command",
+                "erp_automation_reads.lock_requester_command",
+            )
+        ):
+            return FakeResult(() if self.command_row is None else (self.command_row,))
         if "FROM automation.command_requests AS request" in sql:
             return FakeResult(() if self.command_row is None else (self.command_row,))
         if "FROM core.audit_events" in sql:
@@ -3596,9 +3613,9 @@ def test_status_reauthorizes_and_reads_canonical_evidence_in_one_transaction():
     assert "automation.agent_grant_capabilities" in sql
     assert "core.access_grants" in sql
     assert "access_grant.valid_from_at" in sql
-    assert "automation.command_requests" in sql
+    assert "erp_automation_reads.requester_command_status" in sql
+    assert "FROM automation.command_requests AS request" in PROJECTION_SQL
     assert "core.audit_events" in sql
-    assert "FOR SHARE OF request" in sql
     assert "legacy" not in sql.lower()
 
     status_parameters = session.executions[3][1]
@@ -3680,7 +3697,8 @@ def test_approval_calls_only_reviewed_command_in_one_transaction():
     sql = "\n".join(statement for statement, _ in session.executions)
     assert "erp_automation_commands.approve_operator_command" in sql
     assert "INSERT INTO automation.command_approvals" not in sql
-    assert "FOR SHARE OF request" in sql
+    assert "erp_automation_reads.approval_deadline" in sql
+    assert "FOR SHARE OF request" in PROJECTION_SQL
     assert "FOR SHARE OF request, approval" not in sql
     approve_parameters = session.executions[4][1]
     assert approve_parameters["org_id"] == context.organization_id
@@ -3790,7 +3808,8 @@ def test_execute_locks_exact_preview_and_calls_only_closed_dispatcher():
     assert result.idempotency_replayed is False
     assert session.transaction_entries == session.transaction_exits == 1
     sql = "\n".join(statement for statement, _ in session.executions)
-    assert "FOR UPDATE" in sql
+    assert "erp_automation_reads.lock_requester_command" in sql
+    assert "FOR UPDATE OF request" in PROJECTION_SQL
     assert "erp_automation_commands.execute_approved_command" in sql
     assert "INSERT INTO" not in sql
     assert "UPDATE automation.command_requests" not in sql
@@ -3908,7 +3927,8 @@ def test_reviewer_reads_exact_preview_without_requester_grant_ownership():
         if "request.preview_bytes" in sql
     )
     assert "request.agent_grant_id" not in review_sql
-    assert "request.requested_by_membership_id<>:membership_id" in review_sql
+    assert "erp_automation_reads.reviewable_command" in review_sql
+    assert "request.requested_by_membership_id <> actor_id" in PROJECTION_SQL
     assert params["org_id"] == context.organization_id
     assert params["branch_ids"] == [branch_id]
 

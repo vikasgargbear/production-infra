@@ -1241,16 +1241,12 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
     assert "executed.billed_quantity" in source
     assert "executed.free_quantity" in source
     assert source.count("FM999999999999999990.000000") >= 10
-    assert "command.status='succeeded'" in source
-    assert "command.result_resource_id=invoice.id" in source
-    assert "command.request_hash=extensions.digest(" not in source
-    assert "command.request_hash=pg_catalog.sha256(" in source
-    assert "count(*)::integer AS command_evidence_count" in source
-    assert "CASE WHEN count(*)=1 THEN" in source
+    assert "sales_invoice_direct_issue_provenance" in source
+    assert "requested_allocation.command_request_id" in source
     assert "LEFT JOIN LATERAL" in source
     assert "HAVING count(*)=1" not in source
     assert "evidence_match_count" in source
-    assert "candidate.value->>'inventory_line_id'" in source
+    assert "requested_allocation.inventory_document_line_id=inventory_line.id" in source
     assert "executed.entered_quantity" in source
     assert "inventory_document.document_type='sales_issue'" in source
     assert "inventory_document.status='posted'" in source
@@ -1291,9 +1287,14 @@ def test_invoice_detail_relies_on_immutable_canonical_command_hash_evidence() ->
     canonical_sql = (
         Path(__file__).parents[2] / "alembic/sql/20260820_0001_canonical_v1.sql"
     ).read_text(encoding="utf-8")
+    projection_sql = (
+        Path(__file__).parents[2]
+        / "alembic/sql/20260826_0025_typed_command_read_projections.sql"
+    ).read_text(encoding="utf-8")
 
     assert "extensions.digest" not in detail_source
-    assert "command.request_hash=pg_catalog.sha256(" in detail_source
+    assert "sales_invoice_direct_issue_provenance" in detail_source
+    assert "request.request_hash = pg_catalog.sha256(request.request_bytes)" in projection_sql
     assert (
         "NEW.request_hash IS DISTINCT FROM extensions.digest(NEW.request_bytes,'sha256')"
         in canonical_sql
@@ -1761,7 +1762,7 @@ def test_gstr3b_and_dashboard_itc_require_eligible_lines_and_parsed_gstr2b() -> 
         assert "portal_document.portal_document_type='gstr2b'" in source
         assert "portal_document.status='parsed'" in source
         assert "portal_document.parsed_at IS NOT NULL" in source
-        assert "command.status='succeeded'" in source
+        assert "supplier_invoice_portal_provenance" in source
         assert "AND EXISTS (" in source
         assert "Eligible purchase adjustments require canonical GSTR-2B ITC projection" in source
     assert "return_period.period_start>=:date_from" in gstr3b
@@ -1778,7 +1779,7 @@ def test_gstr3b_query_excludes_ineligible_or_unattested_supplier_tax(
 
     assert itc_eligibility != "eligible"
     assert "line.itc_eligibility='eligible'" in source
-    assert "command.status='succeeded'" in source
+    assert "supplier_invoice_portal_provenance" in source
     assert "portal_document.portal_document_type='gstr2b'" in source
     assert "portal_document.status='parsed'" in source
 

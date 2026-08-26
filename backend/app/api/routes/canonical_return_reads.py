@@ -1370,31 +1370,15 @@ def _return_command_summary(value: dict[str, Any]) -> ReturnCommandSummary:
     )
 
 
-_RETURN_COMMAND_SELECT = """
+_RETURN_COMMAND_COLUMNS = """
     SELECT command.id, command.operation, command.capability_code,
            command.status, command.branch_id,
            command.requested_by_membership_id,
-           COALESCE(NULLIF(user_row.display_name,''), 'ERP member') AS requester_name,
+           command.requester_name,
            command.created_at, command.expires_at, command.completed_at,
            command.result_resource_type, command.result_resource_id,
            command.failure_code, command.failure_message,
-           command.preview_hash,
-           convert_from(command.preview_bytes,'UTF8')::jsonb AS preview,
-           approval.approved_at
-      FROM automation.command_requests command
-      JOIN core.memberships requester
-        ON requester.org_id=command.org_id
-       AND requester.id=command.requested_by_membership_id
-      JOIN core.users user_row ON user_row.id=requester.user_id
-      LEFT JOIN LATERAL (
-          SELECT max(decided_at) AS approved_at
-            FROM automation.command_approvals
-           WHERE org_id=command.org_id
-             AND command_request_id=command.id
-             AND decision='approved'
-             AND preview_hash=command.preview_hash
-             AND aggregate_version_hash=command.aggregate_version_hash
-      ) approval ON true
+           command.preview_hash, command.preview, command.approved_at
 """
 
 
@@ -1410,57 +1394,11 @@ def return_approval_inbox(
     org_id, membership_id = _signed_membership(db, user)
     rows = _rows(
         db,
-        _RETURN_COMMAND_SELECT
+        _RETURN_COMMAND_COLUMNS
         + """
-         WHERE command.org_id=:org_id
-           AND command.capability_code IN (
-                'sales.return.prepare',
-                'procurement.purchase_return.prepare'
-           )
-           AND command.approval_policy='separate_approver'
-           AND command.status IN ('prepared','pending_approval')
-           AND command.expires_at>transaction_timestamp()
-           AND command.requested_by_membership_id<>:membership_id
-           AND 1=(
-               SELECT count(*)
-                 FROM automation.agent_grants reviewer_grant
-                 JOIN automation.agent_grant_capabilities reviewer_capability
-                   ON reviewer_capability.org_id=reviewer_grant.org_id
-                  AND reviewer_capability.agent_grant_id=reviewer_grant.id
-                WHERE reviewer_grant.org_id=command.org_id
-                  AND reviewer_grant.client_id=:client_id
-                  AND reviewer_grant.subject_membership_id=:membership_id
-                  AND reviewer_grant.consented_by_membership_id=:membership_id
-                  AND reviewer_grant.status='active'
-                  AND reviewer_grant.expires_at>transaction_timestamp()
-                  AND reviewer_capability.capability_code='automation.command.approve'
-                  AND reviewer_capability.status='active'
-                  AND (reviewer_grant.branch_id IS NULL
-                       OR reviewer_grant.branch_id=command.branch_id)
-           )
-           AND EXISTS (
-               SELECT 1
-                 FROM core.access_grants access_grant
-                 JOIN core.roles role
-                   ON role.org_id=access_grant.org_id
-                  AND role.id=access_grant.role_id
-                 JOIN core.role_permissions role_permission
-                   ON role_permission.org_id=role.org_id
-                  AND role_permission.role_id=role.id
-                 JOIN core.permissions permission
-                   ON permission.code=role_permission.permission_code
-                WHERE access_grant.org_id=command.org_id
-                  AND access_grant.membership_id=:membership_id
-                  AND access_grant.status='active'
-                  AND access_grant.scope_kind='organization'
-                  AND access_grant.branch_id IS NULL
-                  AND access_grant.valid_from_at<=transaction_timestamp()
-                  AND (access_grant.expires_at IS NULL
-                       OR access_grant.expires_at>transaction_timestamp())
-                  AND role.status='active'
-                  AND permission.code='automation.command.approve'
-                  AND permission.status='active'
-           )
+           FROM erp_automation_reads.reviewable_return_commands(
+                :org_id, :client_id
+           ) command
          ORDER BY command.created_at, command.id
          LIMIT 100
         """,
@@ -1483,15 +1421,9 @@ def return_requester_inbox(
     org_id, membership_id = _signed_membership(db, user)
     rows = _rows(
         db,
-        _RETURN_COMMAND_SELECT
+        _RETURN_COMMAND_COLUMNS
         + """
-         WHERE command.org_id=:org_id
-           AND command.requested_by_membership_id=:membership_id
-           AND command.capability_code IN (
-                'sales.return.prepare',
-                'procurement.purchase_return.prepare'
-           )
-           AND command.approval_policy='separate_approver'
+           FROM erp_automation_reads.requester_return_commands(:org_id) command
          ORDER BY command.created_at DESC, command.id DESC
          LIMIT 100
         """,
@@ -1512,17 +1444,10 @@ def requester_return_command(
     org_id, membership_id = _signed_membership(db, user)
     row = _one(
         db,
-        _RETURN_COMMAND_SELECT
+        _RETURN_COMMAND_COLUMNS
         + """
-         WHERE command.org_id=:org_id
-           AND command.id=:command_request_id
-           AND command.requested_by_membership_id=:membership_id
-           AND command.capability_code IN (
-                'sales.return.prepare',
-                'procurement.purchase_return.prepare'
-           )
-           AND command.approval_policy='separate_approver'
-         FOR SHARE OF command
+           FROM erp_automation_reads.requester_return_commands(:org_id) command
+          WHERE command.id=:command_request_id
         """,
         {
             "org_id": org_id,
@@ -1556,25 +1481,19 @@ def return_command_review(
     )
     row = db.execute(
         text(
-            _RETURN_COMMAND_SELECT
+            _RETURN_COMMAND_COLUMNS
             + """
-             WHERE command.org_id=:org_id
-               AND command.id=:command_request_id
-               AND command.capability_code IN (
-                    'sales.return.prepare',
-                    'procurement.purchase_return.prepare'
-               )
-               AND command.approval_policy='separate_approver'
-               AND command.status IN ('prepared','pending_approval')
-               AND command.expires_at>transaction_timestamp()
-               AND command.requested_by_membership_id<>:membership_id
-             FOR SHARE OF command
+               FROM erp_automation_reads.reviewable_return_commands(
+                    :org_id, :client_id
+               ) command
+              WHERE command.id=:command_request_id
             """
         ),
         {
             "org_id": context.organization_id,
             "command_request_id": command_request_id,
             "membership_id": context.membership_id,
+            "client_id": WEB_CLIENT_ID,
         },
     ).first()
     if row is None:

@@ -211,21 +211,9 @@ _COMMAND_STATUS_SQL = text(
            request.result_resource_type, request.result_resource_id,
            request.failure_code, request.failure_message,
            approval.approved_at
-      FROM automation.command_requests AS request
-      LEFT JOIN LATERAL (
-          SELECT max(decided_at) AS approved_at
-            FROM automation.command_approvals
-           WHERE org_id=request.org_id
-             AND command_request_id=request.id
-             AND decision='approved'
-             AND preview_hash=request.preview_hash
-             AND aggregate_version_hash=request.aggregate_version_hash
-      ) AS approval ON true
-     WHERE request.org_id=:org_id
-       AND request.id=:command_request_id
-       AND request.agent_grant_id=:agent_grant_id
-       AND request.requested_by_membership_id=:membership_id
-     FOR SHARE OF request
+      FROM erp_automation_reads.requester_command_status(
+           :org_id, :command_request_id, :agent_grant_id, :membership_id
+      ) AS request
     """
 )
 
@@ -236,23 +224,13 @@ _COMMAND_REVIEW_SQL = text(
            request.destination_branch_id, request.target_resource_type,
            request.target_resource_id, request.target_row_version,
            request.serializer_version, request.preview_media_type,
-           request.request_bytes, request.preview_bytes,
+           request.preview_bytes,
            request.preview_hash, request.request_hash,
            request.aggregate_version_hash, request.approval_policy,
            request.required_approval_count, request.expires_at
-      FROM automation.command_requests AS request
-     WHERE request.org_id=:org_id
-       AND request.id=:command_request_id
-       AND request.status IN ('prepared','pending_approval')
-       AND request.expires_at>transaction_timestamp()
-       AND (request.approval_policy='actor_confirmation'
-            OR request.requested_by_membership_id<>:membership_id)
-       AND (:organization_scope
-            OR (request.branch_id IS NULL
-                OR request.branch_id=ANY(CAST(:branch_ids AS uuid[])))
-            AND (request.destination_branch_id IS NULL
-                 OR request.destination_branch_id=ANY(CAST(:branch_ids AS uuid[]))))
-     FOR SHARE OF request
+      FROM erp_automation_reads.reviewable_command(
+           :org_id, :command_request_id, :agent_grant_id, :client_id
+      ) AS request
     """
 )
 
@@ -289,31 +267,26 @@ _APPROVE_COMMAND_SQL = text(
     SELECT erp_automation_commands.approve_operator_command(
         :org_id, :command_request_id, :approval_id, :preview_hash,
         :idempotency_key_hash,
-        LEAST(
-            (SELECT expires_at FROM automation.command_requests
-              WHERE org_id=:org_id AND id=:command_request_id),
-            transaction_timestamp() + interval '15 minutes'
-        )
+        deadline.valid_until_at
     ) AS command_request_id
+      FROM (
+          SELECT erp_automation_reads.approval_deadline(
+              :org_id, :command_request_id, :agent_grant_id, :client_id,
+              :idempotency_key_hash
+          ) AS valid_until_at
+      ) AS deadline
+     WHERE deadline.valid_until_at IS NOT NULL
     """
 )
 
 _APPROVAL_RESULT_SQL = text(
     """
-    SELECT request.operation, request.status, request.preview_hash,
-           request.result_resource_type, request.result_resource_id,
-           approval.id AS approval_id, approval.decided_at
-      FROM automation.command_requests AS request
-      JOIN automation.command_approvals AS approval
-        ON approval.org_id=request.org_id
-       AND approval.command_request_id=request.id
-     WHERE request.org_id=:org_id
-       AND request.id=:command_request_id
-       AND approval.approver_membership_id=:membership_id
-       AND approval.idempotency_key_hash=:idempotency_key_hash
-       AND approval.decision='approved'
-       AND approval.preview_hash=request.preview_hash
-     FOR SHARE OF request
+    SELECT result.operation, result.status, result.preview_hash,
+           result.result_resource_type, result.result_resource_id,
+           result.approval_id, result.decided_at
+      FROM erp_automation_reads.approval_result(
+           :org_id, :command_request_id, :idempotency_key_hash
+      ) AS result
     """
 )
 
@@ -322,12 +295,9 @@ _EXECUTION_SNAPSHOT_SQL = text(
     SELECT request.operation, request.status, request.preview_hash,
            request.result_resource_type, request.result_resource_id,
            request.completed_at
-      FROM automation.command_requests AS request
-     WHERE request.org_id=:org_id
-       AND request.id=:command_request_id
-       AND request.agent_grant_id=:agent_grant_id
-       AND request.requested_by_membership_id=:membership_id
-     FOR UPDATE
+      FROM erp_automation_reads.lock_requester_command(
+           :org_id, :command_request_id, :agent_grant_id, :membership_id
+      ) AS request
     """
 )
 
@@ -4001,8 +3971,17 @@ class SqlAlchemyOperatorActionService:
                     "preview_hash": preview_hash_bytes,
                     "idempotency_key_hash": key_hash,
                     "membership_id": context.membership_id,
+                    "agent_grant_id": context.agent_grant_id,
+                    "client_id": context.client_id,
                 }
-                session.execute(_APPROVE_COMMAND_SQL, params)
+                approval_call = _mapping_rows(
+                    session.execute(_APPROVE_COMMAND_SQL, params)
+                )
+                if len(approval_call) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.SCOPE_DENIED,
+                        "Canonical command is unavailable to this approver",
+                    )
                 rows = _mapping_rows(session.execute(_APPROVAL_RESULT_SQL, params))
                 if len(rows) != 1:
                     raise OperatorActionError(
@@ -4209,6 +4188,8 @@ class SqlAlchemyOperatorActionService:
                             "org_id": context.organization_id,
                             "command_request_id": command_request_id,
                             "membership_id": context.membership_id,
+                            "agent_grant_id": context.agent_grant_id,
+                            "client_id": context.client_id,
                             "organization_scope": context.organization_scope,
                             "branch_ids": list(context.branch_ids),
                         },
@@ -4225,13 +4206,6 @@ class SqlAlchemyOperatorActionService:
                     raise OperatorActionError(
                         ActionErrorCode.POLICY_BLOCKED,
                         "Canonical command adapter is not available for review",
-                    )
-                request_bytes = bytes(row["request_bytes"])
-                request_hash = "sha256:" + hashlib.sha256(request_bytes).hexdigest()
-                if request_hash != _hash_string(row["request_hash"]):
-                    raise OperatorActionError(
-                        ActionErrorCode.PREVIEW_CHANGED,
-                        "Prepared command request bytes no longer match their hash",
                     )
                 preview_bytes = bytes(row["preview_bytes"])
                 preview_hash = "sha256:" + hashlib.sha256(preview_bytes).hexdigest()
@@ -4280,7 +4254,7 @@ class SqlAlchemyOperatorActionService:
                     preview_media_type=row["preview_media_type"],
                     preview_canonical_json=preview_canonical_json,
                     preview_hash=preview_hash,
-                    request_hash=request_hash,
+                    request_hash=_hash_string(row["request_hash"]),
                     aggregate_version_hash=_hash_string(row["aggregate_version_hash"]),
                     approval_policy=row["approval_policy"],
                     required_approval_count=row["required_approval_count"],

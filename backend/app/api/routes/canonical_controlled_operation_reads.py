@@ -591,13 +591,12 @@ def inventory_destruction_context(
                AND attachment.retention_until IS NOT NULL
                AND attachment.retention_until>=:business_date
                AND attachment.sha256 IS NOT NULL
-               AND NOT EXISTS (
-                 SELECT 1 FROM automation.command_requests command
-                  WHERE command.org_id=attachment.org_id
-                    AND command.capability_code='inventory.destruction.prepare'
-                    AND command.status NOT IN ('failed','expired','cancelled')
-                    AND convert_from(command.request_bytes,'UTF8')::jsonb
-                          ->>'certificate_attachment_id'=attachment.id::text)
+               AND NOT erp_automation_reads.active_command_evidence_in_use(
+                   attachment.org_id,
+                   'inventory.destruction.prepare',
+                   'certificate_attachment_id',
+                   attachment.id
+               )
              ORDER BY attachment.verified_at DESC, attachment.id
         """,
         {

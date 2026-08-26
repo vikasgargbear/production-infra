@@ -82,7 +82,7 @@ def test_cycle_count_eligibility_returns_only_server_owned_facts(monkeypatch):
     assert response.uom_conversions[0].uom_conversion_id == conversion_id
     assert response.evidence[0].evidence_attachment_id == evidence_id
     assert "conversion.from_uom_code<>conversion.to_uom_code" in db.calls[0][0]
-    assert "prior.status NOT IN ('failed','expired','cancelled')" in db.calls[1][0]
+    assert "erp_automation_reads.active_command_evidence_in_use" in db.calls[1][0]
 
 
 def test_cycle_count_eligibility_fails_closed_without_evidence(monkeypatch):

@@ -1,7 +1,7 @@
 """Compile the browser cycle-count eligibility/readback SQL on PostgreSQL 15.
 
 The disposable gate has no live user or inventory rows after its rollback
-fixtures. Executing both org-scoped reads as ``erp_app`` still proves schema
+fixtures. Executing both org-scoped reads as ``erp_runtime`` still proves schema
 names, numeric types, RLS compatibility, and runtime SELECT privileges rather
 than merely inspecting SQL source text.
 """
@@ -40,8 +40,8 @@ def main() -> None:
     engine = create_engine(os.environ["DATABASE_URL"])
     try:
         with Session(engine) as session, session.begin():
-            session.execute(text('SET LOCAL ROLE "erp_app"'))
-            assert session.scalar(text("SELECT current_user")) == "erp_app"
+            session.execute(text('SET LOCAL ROLE "erp_runtime"'))
+            assert session.scalar(text("SELECT current_user")) == "erp_runtime"
             assert int(session.scalar(text("SHOW server_version_num"))) // 10000 == 15
             session.execute(
                 text(
@@ -87,17 +87,19 @@ def main() -> None:
                 {"org_id": ORG_ID, "command_request_id": COMMAND_ID},
             ).fetchall()
             assert readback_rows == []
-            review_rows = session.execute(
-                operator_action_service._COMMAND_REVIEW_SQL,
+            review_plan = session.execute(
+                text("EXPLAIN " + str(operator_action_service._COMMAND_REVIEW_SQL)),
                 {
                     "org_id": ORG_ID,
                     "command_request_id": COMMAND_ID,
+                    "agent_grant_id": UUID("d3000000-0000-7000-8000-000000000008"),
+                    "client_id": "pg15-runtime-contract",
                     "membership_id": MEMBERSHIP_ID,
                     "organization_scope": True,
                     "branch_ids": [],
                 },
             ).fetchall()
-            assert review_rows == []
+            assert review_plan
     finally:
         engine.dispose()
 

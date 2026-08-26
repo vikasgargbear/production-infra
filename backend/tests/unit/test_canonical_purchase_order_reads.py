@@ -136,6 +136,7 @@ def test_purchase_order_query_projects_all_reconciliation_fields(monkeypatch):
     assert result.purchase_order_number == "PO-1"
     assert "purchase.net_value_total" in captured[0][0]
     assert "line.document_discount_amount" in captured[1][0]
-    assert "automation.command_requests command" in captured[1][0]
-    assert "uom_conversion_id" in captured[1][0]
+    assert "purchase_order_uom_provenance" in captured[1][0]
+    assert "requested.uom_conversion_id" in captured[1][0]
+    assert "request_bytes" not in captured[1][0]
     assert captured[0][1]["purchase_order_id"] == document["purchase_order_id"]

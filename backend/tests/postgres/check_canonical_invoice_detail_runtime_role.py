@@ -25,7 +25,7 @@ def _mcp_direct_issue_sql() -> str:
         for value in mcp_canonical_resolution_reads.canonical_sales_invoice_get
         .__code__.co_consts
         if isinstance(value, str)
-        and "command.request_hash=pg_catalog.sha256(" in value
+        and "sales_invoice_direct_issue_provenance" in value
     )
 
 

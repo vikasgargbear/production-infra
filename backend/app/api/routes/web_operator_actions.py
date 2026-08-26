@@ -621,13 +621,11 @@ def inventory_adjustment_eligibility(
                AND attachment.retention_until IS NOT NULL
                AND attachment.retention_until>=:adjustment_date
                AND attachment.sha256 IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM automation.command_requests AS prior
-                    WHERE prior.org_id=attachment.org_id
-                      AND prior.capability_code='inventory.adjustment.prepare'
-                      AND prior.status NOT IN ('failed','expired','cancelled')
-                      AND convert_from(prior.request_bytes,'UTF8')::jsonb
-                          ->>'evidence_attachment_id'=attachment.id::text
+               AND NOT erp_automation_reads.active_command_evidence_in_use(
+                   attachment.org_id,
+                   'inventory.adjustment.prepare',
+                   'evidence_attachment_id',
+                   attachment.id
                )
              ORDER BY attachment.verified_at DESC, attachment.id
             """
@@ -1017,21 +1015,24 @@ def expense_claim_review(
             """
             SELECT command.id,command.operation,command.expires_at,command.preview_hash,
                    convert_from(command.preview_bytes,'UTF8')::jsonb AS preview
-              FROM automation.command_requests command
-             WHERE command.org_id=:org_id AND command.id=:command_request_id
+              FROM erp_automation_reads.reviewable_command(
+                   :org_id, :command_request_id, :agent_grant_id, :client_id
+              ) command
+             WHERE command.id=:command_request_id
                AND command.capability_code='finance.expense_claim.prepare'
                AND command.operation='finance.expense_claim.post'
                AND command.approval_policy='separate_approver'
                AND command.status IN ('prepared','pending_approval','approved')
                AND command.expires_at>transaction_timestamp()
                AND command.requested_by_membership_id<>:membership_id
-             FOR SHARE
             """
         ),
         {
             "org_id": context.organization_id,
             "command_request_id": command_request_id,
             "membership_id": context.membership_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
         },
     ).first()
     if row is None:

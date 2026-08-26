@@ -1771,13 +1771,12 @@ def gst_dashboard(
                    )
                    AND EXISTS (
                        SELECT 1
-                         FROM automation.command_requests command
+                         FROM erp_automation_reads.supplier_invoice_portal_provenance(
+                              invoice.org_id, invoice.id
+                         ) command
                          JOIN tax.portal_document_lines portal_line
-                           ON portal_line.org_id=command.org_id
-                          AND portal_line.id=NULLIF(
-                              pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
-                              ->>'portal_document_line_id',''
-                          )::uuid
+                           ON portal_line.org_id=invoice.org_id
+                          AND portal_line.id=command.portal_document_line_id
                           AND portal_line.document_type='invoice'
                          JOIN tax.portal_documents portal_document
                            ON portal_document.org_id=portal_line.org_id
@@ -1789,15 +1788,7 @@ def gst_dashboard(
                            ON return_period.org_id=portal_document.org_id
                           AND return_period.id=portal_document.return_period_id
                           AND return_period.registration_id=portal_document.registration_id
-                        WHERE command.org_id=invoice.org_id
-                          AND command.target_resource_type='supplier_invoice'
-                          AND command.target_resource_id=invoice.id
-                          AND command.result_resource_type='supplier_invoice'
-                          AND command.result_resource_id=invoice.id
-                          AND command.capability_code='procurement.supplier_invoice.prepare'
-                          AND command.operation='procurement.supplier_invoice.post'
-                          AND command.status='succeeded'
-                          AND return_period.period_start>=period.date_from
+                        WHERE return_period.period_start>=period.date_from
                           AND return_period.period_end<=period.date_to
                    )
           ) purchases
@@ -2041,13 +2032,12 @@ def canonical_gstr3b_report(
                  )
                  AND EXISTS (
                      SELECT 1
-                       FROM automation.command_requests command
+                       FROM erp_automation_reads.supplier_invoice_portal_provenance(
+                            invoice.org_id, invoice.id
+                       ) command
                        JOIN tax.portal_document_lines portal_line
-                         ON portal_line.org_id=command.org_id
-                        AND portal_line.id=NULLIF(
-                            pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
-                            ->>'portal_document_line_id',''
-                        )::uuid
+                         ON portal_line.org_id=invoice.org_id
+                        AND portal_line.id=command.portal_document_line_id
                         AND portal_line.document_type='invoice'
                        JOIN tax.portal_documents portal_document
                          ON portal_document.org_id=portal_line.org_id
@@ -2059,15 +2049,7 @@ def canonical_gstr3b_report(
                          ON return_period.org_id=portal_document.org_id
                         AND return_period.id=portal_document.return_period_id
                         AND return_period.registration_id=portal_document.registration_id
-                      WHERE command.org_id=invoice.org_id
-                        AND command.target_resource_type='supplier_invoice'
-                        AND command.target_resource_id=invoice.id
-                        AND command.result_resource_type='supplier_invoice'
-                        AND command.result_resource_id=invoice.id
-                        AND command.capability_code='procurement.supplier_invoice.prepare'
-                        AND command.operation='procurement.supplier_invoice.post'
-                        AND command.status='succeeded'
-                        AND return_period.period_start>=:date_from
+                      WHERE return_period.period_start>=:date_from
                         AND return_period.period_end<=:date_to
                  )
           ) input
@@ -2965,16 +2947,16 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                           SELECT 'direct_issue'::text AS source_kind,
                                  inventory_line.id AS allocation_id,
                                  line.id AS invoice_line_id,
-                                 (requested_line.request_line->>'line_id')::uuid
+                                 requested_allocation.invoice_line_id
                                    AS source_line_id,
-                                 command_evidence.command_request_id,
-                                 command_evidence.command_evidence_count,
-                                 requested_line.request_line_count,
-                                 pg_catalog.jsonb_array_length(COALESCE(
-                                   requested_line.request_line->'batch_allocations',
-                                   '[]'::jsonb
-                                 )) AS evidenced_allocation_count,
-                                 requested_allocation.evidence_match_count,
+                                 requested_allocation.command_request_id,
+                                 CASE WHEN requested_allocation.command_request_id IS NULL
+                                   THEN 0 ELSE 1 END AS command_evidence_count,
+                                 CASE WHEN requested_allocation.command_request_id IS NULL
+                                   THEN 0 ELSE 1 END AS request_line_count,
+                                 requested_allocation.evidenced_allocation_count,
+                                 CASE WHEN requested_allocation.command_request_id IS NULL
+                                   THEN 0 ELSE 1 END AS evidence_match_count,
                                  inventory_line.inventory_document_id,
                                  inventory_line.id AS inventory_document_line_id,
                                  NULL::uuid AS invoice_dispatch_allocation_id,
@@ -2987,21 +2969,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                                  inventory_line.base_quantity,
                                  inventory_line.entered_quantity,
                                  pg_catalog.round(
-                                   (requested_allocation.request_allocation
-                                      ->>'billed_quantity')::numeric
+                                   requested_allocation.billed_quantity
                                      * line.uom_conversion_factor, 6
                                  ) AS base_billed_quantity,
                                  pg_catalog.round(
-                                   (requested_allocation.request_allocation
-                                      ->>'free_quantity')::numeric
+                                   requested_allocation.free_quantity
                                      * line.uom_conversion_factor, 6
                                  ) AS base_free_quantity,
-                                 (requested_allocation.request_allocation
-                                    ->>'billed_quantity')::numeric
-                                   AS billed_quantity,
-                                 (requested_allocation.request_allocation
-                                    ->>'free_quantity')::numeric
-                                   AS free_quantity
+                                 requested_allocation.billed_quantity,
+                                 requested_allocation.free_quantity
                             FROM inventory.inventory_document_lines inventory_line
                             JOIN inventory.inventory_documents inventory_document
                              ON inventory_document.org_id=inventory_line.org_id
@@ -3013,57 +2989,12 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                             JOIN inventory.batches batch
                               ON batch.org_id=inventory_line.org_id
                              AND batch.id=inventory_line.batch_id
-                            LEFT JOIN LATERAL (
-                                SELECT count(*)::integer AS command_evidence_count,
-                                       CASE WHEN count(*)=1 THEN
-                                         (array_agg(command.id ORDER BY command.id))[1]
-                                       END AS command_request_id,
-                                       CASE WHEN count(*)=1 THEN (array_agg(
-                                         pg_catalog.convert_from(
-                                           command.request_bytes, 'UTF8'
-                                         )::jsonb ORDER BY command.id
-                                       ))[1] END AS request_document
-                                  FROM automation.command_requests command
-                                 WHERE command.org_id=invoice.org_id
-                                   AND command.branch_id=invoice.branch_id
-                                   AND command.capability_code='sales.invoice.prepare'
-                                   AND command.operation='sales.invoice.post'
-                                   AND command.target_resource_type='sales_invoice'
-                                   AND command.target_resource_id=invoice.id
-                                   AND command.status='succeeded'
-                                   AND command.result_resource_type='sales_invoice'
-                                   AND command.result_resource_id=invoice.id
-                                   AND command.response_status=200
-                                   AND command.request_hash=pg_catalog.sha256(
-                                       command.request_bytes
-                                   )
-                            ) command_evidence ON true
-                            LEFT JOIN LATERAL (
-                                SELECT count(*)::integer AS request_line_count,
-                                       CASE WHEN count(*)=1 THEN
-                                         (array_agg(candidate.value))[1]
-                                       END AS request_line
-                                  FROM pg_catalog.jsonb_array_elements(COALESCE(
-                                    command_evidence.request_document->'lines',
-                                    '[]'::jsonb
-                                  )) candidate(value)
-                                 WHERE candidate.value->>'line_id'=line.id::text
-                                   AND candidate.value->>'fulfillment_source'='direct_issue'
-                            ) requested_line ON true
-                            LEFT JOIN LATERAL (
-                                SELECT count(*)::integer AS evidence_match_count,
-                                       CASE WHEN count(*)=1 THEN
-                                         (array_agg(candidate.value))[1]
-                                       END AS request_allocation
-                                  FROM pg_catalog.jsonb_array_elements(COALESCE(
-                                    requested_line.request_line->'batch_allocations',
-                                    '[]'::jsonb
-                                  )) candidate(value)
-                                 WHERE candidate.value->>'inventory_line_id'
-                                         =inventory_line.id::text
-                                   AND candidate.value->>'batch_id'
-                                         =inventory_line.batch_id::text
-                            ) requested_allocation ON true
+                            LEFT JOIN LATERAL erp_automation_reads.sales_invoice_direct_issue_provenance(
+                                 invoice.org_id, invoice.branch_id, invoice.id
+                            ) requested_allocation
+                              ON requested_allocation.invoice_line_id=line.id
+                             AND requested_allocation.inventory_document_line_id=inventory_line.id
+                             AND requested_allocation.batch_id=inventory_line.batch_id
                            WHERE inventory_line.org_id=line.org_id
                              AND inventory_line.sales_invoice_line_id=line.id
                           UNION ALL

@@ -708,8 +708,7 @@ def posted_supplier_invoice(
                invoice.gst_taxable_total, invoice.cgst_total, invoice.sgst_total,
                invoice.igst_total, invoice.cess_total, invoice.rounding_adjustment,
                invoice.grand_total, tax_document.id AS tax_document_id,
-               NULLIF(pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
-                 ->>'portal_document_line_id','')::uuid AS portal_document_line_id,
+               command.portal_document_line_id,
                tax_document.gst_taxable_value AS tax_document_taxable_total,
                tax_document.cgst_amount AS tax_document_cgst_total,
                tax_document.sgst_amount AS tax_document_sgst_total,
@@ -737,19 +736,12 @@ def posted_supplier_invoice(
             ON tax_document.org_id=invoice.org_id AND tax_document.supplier_invoice_id=invoice.id
            AND tax_document.document_class='supplier_invoice'
            AND tax_document.document_effect='original'
-          JOIN automation.command_requests command
-            ON command.org_id=invoice.org_id
-           AND command.target_resource_type='supplier_invoice'
-           AND command.target_resource_id=invoice.id
-           AND command.result_resource_type='supplier_invoice'
-           AND command.result_resource_id=invoice.id
-           AND command.capability_code='procurement.supplier_invoice.prepare'
-           AND command.operation='procurement.supplier_invoice.post'
-           AND command.status='succeeded'
+          JOIN LATERAL erp_automation_reads.supplier_invoice_portal_provenance(
+               invoice.org_id, invoice.id
+          ) command ON true
           JOIN tax.portal_document_lines portal_line
-            ON portal_line.org_id=command.org_id
-           AND portal_line.id=NULLIF(pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
-                 ->>'portal_document_line_id','')::uuid
+            ON portal_line.org_id=invoice.org_id
+           AND portal_line.id=command.portal_document_line_id
            AND portal_line.document_type='invoice'
           JOIN finance.accounting_events event
             ON event.org_id=invoice.org_id AND event.supplier_invoice_id=invoice.id

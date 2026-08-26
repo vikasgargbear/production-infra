@@ -377,6 +377,7 @@ def test_detail_query_reads_command_portal_evidence_not_a_legacy_link(monkeypatc
         db=object(),
     )
     assert result.grand_total == Decimal("112.00")
-    assert "automation.command_requests command" in captured[0]
-    assert "portal_document_line_id" in captured[0]
+    assert "supplier_invoice_portal_provenance" in captured[0]
+    assert "command.portal_document_line_id" in captured[0]
+    assert "request_bytes" not in captured[0]
     assert "inventory.inventory_documents" in "\n".join(captured)

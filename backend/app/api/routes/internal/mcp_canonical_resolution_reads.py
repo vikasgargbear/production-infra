@@ -28,6 +28,9 @@ from .mcp_canonical_reads import (
 )
 
 
+CANONICAL_SCHEMA_CATALOGS = True
+
+
 router = APIRouter(
     prefix="/internal/mcp/resolution",
     tags=["Internal MCP"],
@@ -752,36 +755,13 @@ def canonical_sales_order_get(
             SELECT document.id AS sales_order_id, document.branch_id,
                    document.customer_account_id,
                    document.shipping_address_id AS delivery_address_id,
-                   (command.request_document->>'delivery_address_row_version')::bigint
-                     AS delivery_address_row_version,
+                   command.delivery_address_row_version,
                    order_number, fiscal_year, order_date, status, currency_code,
                    grand_total, calculation_ruleset_version, row_version
               FROM sales.orders document
-              JOIN LATERAL (
-                  SELECT evidence.request_document
-                    FROM automation.command_requests request
-                    CROSS JOIN LATERAL (
-                      SELECT pg_catalog.convert_from(
-                        request.request_bytes,'UTF8'
-                      )::jsonb AS request_document
-                    ) evidence
-                   WHERE request.org_id=document.org_id
-                     AND request.branch_id=document.branch_id
-                     AND request.target_resource_type='sales_order'
-                     AND request.target_resource_id=document.id
-                     AND request.capability_code='sales.order.prepare'
-                     AND request.operation='sales.order.approve'
-                     AND request.status='succeeded'
-                     AND request.result_resource_type='sales_order'
-                     AND request.result_resource_id=document.id
-                     AND request.response_status=200
-                     AND request.request_hash=pg_catalog.sha256(request.request_bytes)
-                     AND evidence.request_document->>'delivery_address_id'=
-                           document.shipping_address_id::text
-                     AND evidence.request_document->>'delivery_address_row_version'
-                           ~ '^[1-9][0-9]{0,18}$'
-                   ORDER BY request.completed_at DESC,request.id DESC LIMIT 1
-              ) command ON true
+              JOIN LATERAL erp_automation_reads.sales_order_address_provenance(
+                   document.org_id, document.branch_id, document.id
+              ) command ON command.delivery_address_id=document.shipping_address_id
              WHERE document.org_id=:org_id AND document.branch_id=:branch_id
                AND document.status<>'cancelled'
                AND ((CAST(:document_id AS uuid) IS NOT NULL
@@ -863,39 +843,15 @@ def canonical_sales_invoice_get(
             """
             SELECT document.id AS sales_invoice_id, document.branch_id,
                    document.customer_account_id,
-                   (command.request_document->>'delivery_address_id')::uuid
-                     AS delivery_address_id,
-                   (command.request_document->>'delivery_address_row_version')::bigint
-                     AS delivery_address_row_version,
+                   command.delivery_address_id,
+                   command.delivery_address_row_version,
                    seller_tax_registration_id, customer_tax_registration_id,
                    invoice_number, fiscal_year, invoice_date, due_date, invoice_type,
                    supply_type, place_of_supply_state_code, currency_code, grand_total,
                    calculation_ruleset_version, posted_at, row_version
               FROM sales.invoices document
-              JOIN LATERAL (
-                  SELECT evidence.request_document
-                    FROM automation.command_requests request
-                    CROSS JOIN LATERAL (
-                      SELECT pg_catalog.convert_from(
-                        request.request_bytes,'UTF8'
-                      )::jsonb AS request_document
-                    ) evidence
-                   WHERE request.org_id=document.org_id
-                     AND request.branch_id=document.branch_id
-                     AND request.target_resource_type='sales_invoice'
-                     AND request.target_resource_id=document.id
-                     AND request.capability_code='sales.invoice.prepare'
-                     AND request.operation='sales.invoice.post'
-                     AND request.status='succeeded'
-                     AND request.result_resource_type='sales_invoice'
-                     AND request.result_resource_id=document.id
-                     AND request.response_status=200
-                     AND request.request_hash=pg_catalog.sha256(request.request_bytes)
-                     AND evidence.request_document->>'delivery_address_id'
-                           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-                     AND evidence.request_document->>'delivery_address_row_version'
-                           ~ '^[1-9][0-9]{0,18}$'
-                   ORDER BY request.completed_at DESC,request.id DESC LIMIT 1
+              JOIN LATERAL erp_automation_reads.sales_invoice_address_provenance(
+                   document.org_id, document.branch_id, document.id
               ) command ON true
              WHERE document.org_id=:org_id AND document.branch_id=:branch_id
                AND document.status='posted'
@@ -1044,30 +1000,27 @@ def canonical_sales_invoice_get(
         text(
             """
             SELECT invoice_line.id AS invoice_line_id,
-                   (requested_line.request_line->>'line_id')::uuid AS source_line_id,
-                   command_evidence.command_request_id,
-                   command_evidence.command_evidence_count,
-                   requested_line.request_line_count,
-                   pg_catalog.jsonb_array_length(COALESCE(
-                     requested_line.request_line->'batch_allocations', '[]'::jsonb
-                   )) AS evidenced_allocation_count,
-                   requested_allocation.evidence_match_count,
+                   requested_allocation.invoice_line_id AS source_line_id,
+                   requested_allocation.command_request_id,
+                   CASE WHEN requested_allocation.command_request_id IS NULL
+                     THEN 0 ELSE 1 END AS command_evidence_count,
+                   CASE WHEN requested_allocation.command_request_id IS NULL
+                     THEN 0 ELSE 1 END AS request_line_count,
+                   requested_allocation.evidenced_allocation_count,
+                   CASE WHEN requested_allocation.command_request_id IS NULL
+                     THEN 0 ELSE 1 END AS evidence_match_count,
                    inventory_document.id AS inventory_document_id,
                    inventory_line.id AS inventory_document_line_id,
                    inventory_line.batch_id, batch.batch_number, batch.expires_on,
                    inventory_line.from_location_id, inventory_line.uom_code,
                    inventory_line.base_quantity,
                    inventory_line.entered_quantity,
-                   pg_catalog.round((requested_allocation.request_allocation
-                         ->>'billed_quantity')::numeric
+                   pg_catalog.round(requested_allocation.billed_quantity
                          *invoice_line.uom_conversion_factor, 6) AS base_billed_quantity,
-                   pg_catalog.round((requested_allocation.request_allocation
-                         ->>'free_quantity')::numeric
+                   pg_catalog.round(requested_allocation.free_quantity
                          *invoice_line.uom_conversion_factor, 6) AS base_free_quantity,
-                   (requested_allocation.request_allocation->>'billed_quantity')::numeric
-                     AS billed_quantity,
-                   (requested_allocation.request_allocation->>'free_quantity')::numeric
-                     AS free_quantity,
+                   requested_allocation.billed_quantity,
+                   requested_allocation.free_quantity,
                    inventory_line.unit_cost,
                    inventory_line.extended_cost
               FROM sales.invoice_lines AS invoice_line
@@ -1084,52 +1037,12 @@ def canonical_sales_invoice_get(
               JOIN inventory.batches AS batch
                 ON batch.org_id=inventory_line.org_id
                AND batch.id=inventory_line.batch_id
-              LEFT JOIN LATERAL (
-                  SELECT count(*)::integer AS command_evidence_count,
-                         CASE WHEN count(*)=1 THEN
-                           (array_agg(command.id ORDER BY command.id))[1]
-                         END AS command_request_id,
-                         CASE WHEN count(*)=1 THEN (array_agg(
-                           pg_catalog.convert_from(command.request_bytes, 'UTF8')::jsonb
-                           ORDER BY command.id
-                         ))[1] END AS request_document
-                    FROM automation.command_requests AS command
-                   WHERE command.org_id=invoice_line.org_id
-                     AND command.branch_id=:branch_id
-                     AND command.capability_code='sales.invoice.prepare'
-                     AND command.operation='sales.invoice.post'
-                     AND command.target_resource_type='sales_invoice'
-                     AND command.target_resource_id=invoice_line.invoice_id
-                     AND command.status='succeeded'
-                     AND command.result_resource_type='sales_invoice'
-                     AND command.result_resource_id=invoice_line.invoice_id
-                     AND command.response_status=200
-                     AND command.request_hash=pg_catalog.sha256(
-                         command.request_bytes
-                     )
-              ) AS command_evidence ON true
-              LEFT JOIN LATERAL (
-                  SELECT count(*)::integer AS request_line_count,
-                         CASE WHEN count(*)=1 THEN
-                           (array_agg(candidate.value))[1]
-                         END AS request_line
-                    FROM pg_catalog.jsonb_array_elements(COALESCE(
-                      command_evidence.request_document->'lines', '[]'::jsonb
-                    )) candidate(value)
-                   WHERE candidate.value->>'line_id'=invoice_line.id::text
-                     AND candidate.value->>'fulfillment_source'='direct_issue'
-              ) requested_line ON true
-              LEFT JOIN LATERAL (
-                  SELECT count(*)::integer AS evidence_match_count,
-                         CASE WHEN count(*)=1 THEN
-                           (array_agg(candidate.value))[1]
-                         END AS request_allocation
-                    FROM pg_catalog.jsonb_array_elements(COALESCE(
-                      requested_line.request_line->'batch_allocations', '[]'::jsonb
-                    )) candidate(value)
-                   WHERE candidate.value->>'inventory_line_id'=inventory_line.id::text
-                     AND candidate.value->>'batch_id'=inventory_line.batch_id::text
-              ) requested_allocation ON true
+              LEFT JOIN LATERAL erp_automation_reads.sales_invoice_direct_issue_provenance(
+                   invoice_line.org_id, :branch_id, invoice_line.invoice_id
+              ) requested_allocation
+                ON requested_allocation.invoice_line_id=invoice_line.id
+               AND requested_allocation.inventory_document_line_id=inventory_line.id
+               AND requested_allocation.batch_id=inventory_line.batch_id
              WHERE invoice_line.org_id=:org_id
                AND invoice_line.invoice_id=:document_id
              ORDER BY invoice_line.line_number, inventory_line.line_number,

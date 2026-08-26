@@ -524,11 +524,11 @@ def _posted_sales_invoice_acceptance_evidence(
                          inventory_line.id AS inventory_document_line_id,
                          ledger.id AS ledger_entry_id,
                          round(
-                           (requested_allocation.value->>'billed_quantity')::numeric
+                           requested_allocation.billed_quantity
                              * line.uom_conversion_factor, 6
                          ) AS allocated_base_billed_quantity,
                          round(
-                           (requested_allocation.value->>'free_quantity')::numeric
+                           requested_allocation.free_quantity
                              * line.uom_conversion_factor, 6
                          ) AS allocated_base_free_quantity,
                          abs(ledger.quantity_delta) AS ledger_base_quantity,
@@ -544,45 +544,12 @@ def _posted_sales_invoice_acceptance_evidence(
                       ON ledger.org_id=inventory_line.org_id
                      AND ledger.inventory_document_line_id=inventory_line.id
                      AND ledger.entry_kind='issue'
-                    JOIN LATERAL (
-                        SELECT count(*)::integer AS evidence_count,
-                               CASE WHEN count(*)=1 THEN (array_agg(
-                                 pg_catalog.convert_from(command.request_bytes, 'UTF8')::jsonb
-                                 ORDER BY command.id
-                               ))[1] END AS value
-                          FROM automation.command_requests command
-                         WHERE command.org_id=invoice.org_id
-                           AND command.branch_id=invoice.branch_id
-                           AND command.capability_code='sales.invoice.prepare'
-                           AND command.operation='sales.invoice.post'
-                           AND command.target_resource_type='sales_invoice'
-                           AND command.target_resource_id=invoice.id
-                           AND command.status='succeeded'
-                           AND command.result_resource_type='sales_invoice'
-                           AND command.result_resource_id=invoice.id
-                           AND command.response_status=200
-                           AND command.request_hash=pg_catalog.sha256(command.request_bytes)
-                    ) command_evidence ON command_evidence.evidence_count=1
-                    JOIN LATERAL (
-                        SELECT count(*)::integer AS evidence_count,
-                               CASE WHEN count(*)=1 THEN (array_agg(requested.value))[1]
-                               END AS value
-                          FROM pg_catalog.jsonb_array_elements(
-                            COALESCE(command_evidence.value->'lines', '[]'::jsonb)
-                          ) requested(value)
-                         WHERE requested.value->>'line_id'=line.id::text
-                           AND requested.value->>'fulfillment_source'='direct_issue'
-                    ) requested_line ON requested_line.evidence_count=1
-                    JOIN LATERAL (
-                        SELECT count(*)::integer AS evidence_count,
-                               CASE WHEN count(*)=1 THEN (array_agg(requested.value))[1]
-                               END AS value
-                          FROM pg_catalog.jsonb_array_elements(
-                            COALESCE(requested_line.value->'batch_allocations', '[]'::jsonb)
-                          ) requested(value)
-                         WHERE requested.value->>'inventory_line_id'=inventory_line.id::text
-                           AND requested.value->>'batch_id'=inventory_line.batch_id::text
-                    ) requested_allocation ON requested_allocation.evidence_count=1
+                    JOIN LATERAL erp_automation_reads.sales_invoice_direct_issue_provenance(
+                         invoice.org_id, invoice.branch_id, invoice.id
+                    ) requested_allocation
+                      ON requested_allocation.invoice_line_id=line.id
+                     AND requested_allocation.inventory_document_line_id=inventory_line.id
+                     AND requested_allocation.batch_id=inventory_line.batch_id
                    WHERE line.org_id=invoice.org_id AND line.invoice_id=invoice.id
                      AND line.line_kind='product' AND line.product_id IS NOT NULL
                   UNION ALL

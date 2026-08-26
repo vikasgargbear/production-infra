@@ -22,6 +22,12 @@ from app.api.routes.canonical_return_reads import (
 )
 
 
+PROJECTION_SQL = (
+    Path(__file__).parents[2]
+    / "alembic/sql/20260826_0025_typed_command_read_projections.sql"
+).read_text(encoding="utf-8")
+
+
 def uid(index: int) -> UUID:
     return UUID(f"d3000000-0000-7000-8000-{index:012d}")
 
@@ -367,8 +373,9 @@ def test_return_http_contract_exposes_source_review_and_posted_readback():
 def test_independent_return_review_and_web_context_forbid_self_approval():
     review = inspect.getsource(canonical_return_reads.return_command_review)
     context = inspect.getsource(web_operator_actions._resolve_context)
-    assert "requested_by_membership_id<>:membership_id" in review
-    assert "approval_policy='separate_approver'" in review
+    assert "reviewable_return_commands" in review
+    assert "request.requested_by_membership_id\n                      <> erp_security.current_membership_id()" in PROJECTION_SQL
+    assert "request.approval_policy = 'separate_approver'" in PROJECTION_SQL
     assert "operation_key == \"automation.command.approve\"" in context
     assert "command.requested_by_membership_id<>membership.id" in context
     invariant = (
@@ -381,21 +388,20 @@ def test_independent_return_review_and_web_context_forbid_self_approval():
 
 def test_approval_inbox_denies_self_cross_org_and_cross_branch_visibility():
     source = inspect.getsource(canonical_return_reads.return_approval_inbox)
-    assert "command.org_id=:org_id" in source
-    assert "command.requested_by_membership_id<>:membership_id" in source
-    assert "reviewer_grant.subject_membership_id=:membership_id" in source
-    assert "reviewer_grant.branch_id=command.branch_id" in source
-    assert "SELECT count(*)" in source
-    assert "access_grant.scope_kind='organization'" in source
-    assert "permission.code='automation.command.approve'" in source
+    assert "reviewable_return_commands" in source
+    assert "organization_id = erp_security.current_org_id()" in PROJECTION_SQL
+    assert "reviewer_grant.subject_membership_id = erp_security.current_membership_id()" in PROJECTION_SQL
+    assert "reviewer_grant.branch_id = command.branch_id" in PROJECTION_SQL
+    assert "SELECT count(*)" in PROJECTION_SQL
+    assert "erp_security.has_permission(" in PROJECTION_SQL
+    assert "'automation.command.approve', NULL::uuid" in PROJECTION_SQL
 
 
 def test_reviewer_detail_excludes_approved_expired_and_rejected_commands():
     source = inspect.getsource(canonical_return_reads.return_command_review)
-    assert "command.status IN ('prepared','pending_approval')" in source
-    assert "command.expires_at>transaction_timestamp()" in source
-    assert "'approved'" not in source.split("command.status IN", 1)[1].split(")", 1)[0]
-    assert "'rejected'" not in source
+    assert "reviewable_return_commands" in source
+    assert "request.status IN ('prepared', 'pending_approval')" in PROJECTION_SQL
+    assert "request.expires_at > pg_catalog.transaction_timestamp()" in PROJECTION_SQL
 
 
 def test_requester_effective_status_surfaces_expiry_without_mutating_command():
@@ -412,8 +418,8 @@ def test_requester_effective_status_surfaces_expiry_without_mutating_command():
 
 def test_requester_command_query_is_tenant_and_requester_bound():
     source = inspect.getsource(canonical_return_reads.requester_return_command)
-    assert "command.org_id=:org_id" in source
-    assert "command.requested_by_membership_id=:membership_id" in source
+    assert "requester_return_commands(:org_id)" in source
+    assert "request.requested_by_membership_id = requester_membership_filter" in PROJECTION_SQL
     assert "command.id=:command_request_id" in source
 
 

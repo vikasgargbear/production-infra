@@ -191,14 +191,12 @@ def test_posting_readback_direct_batch_split_comes_from_succeeded_command_eviden
     reads.posted_sales_invoice_readback(invoice_id, {"org_id": str(org_id)}, object())
 
     sql = captured["sql"]
-    assert "command.capability_code='sales.invoice.prepare'" in sql
-    assert "command.status='succeeded'" in sql
-    assert "command.request_hash=pg_catalog.sha256(command.request_bytes)" in sql
-    assert sql.count("evidence_count=1") == 3
-    assert "requested.value->>'inventory_line_id'=inventory_line.id::text" in sql
-    assert "requested.value->>'batch_id'=inventory_line.batch_id::text" in sql
-    assert "requested_allocation.value->>'billed_quantity'" in sql
-    assert "requested_allocation.value->>'free_quantity'" in sql
+    assert "sales_invoice_direct_issue_provenance" in sql
+    assert "requested_allocation.inventory_document_line_id=inventory_line.id" in sql
+    assert "requested_allocation.batch_id=inventory_line.batch_id" in sql
+    assert "requested_allocation.billed_quantity" in sql
+    assert "requested_allocation.free_quantity" in sql
+    assert "request_bytes" not in sql
 
 
 def test_posting_readback_reconciles_charge_lines_and_rounding_without_inventory_lineage():

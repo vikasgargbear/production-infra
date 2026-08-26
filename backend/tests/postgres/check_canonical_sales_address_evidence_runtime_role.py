@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from uuid import UUID
 
 from sqlalchemy import create_engine, text
@@ -34,6 +35,14 @@ OTHER_ORDER = UUID("f0250000-0000-7000-8000-000000000015")
 OTHER_INVOICE = UUID("f0250000-0000-7000-8000-000000000016")
 ORDER_COMMAND = UUID("f0250000-0000-7000-8000-000000000017")
 INVOICE_COMMAND = UUID("f0250000-0000-7000-8000-000000000018")
+INVOICE_LINE = UUID("f0250000-0000-7000-8000-000000000019")
+INVENTORY_LINE = UUID("f0250000-0000-7000-8000-000000000020")
+OTHER_INVENTORY_LINE = UUID("f0250000-0000-7000-8000-000000000021")
+BATCH = UUID("f0250000-0000-7000-8000-000000000022")
+DUPLICATE_COMMAND = UUID("f0250000-0000-7000-8000-000000000023")
+DUPLICATE_LINE_INVOICE = UUID("f0250000-0000-7000-8000-000000000024")
+DUPLICATE_COMMAND_INVOICE = UUID("f0250000-0000-7000-8000-000000000025")
+SECOND_DUPLICATE_COMMAND = UUID("f0250000-0000-7000-8000-000000000026")
 
 
 def _context(operation: str) -> CanonicalDelegation:
@@ -140,14 +149,34 @@ def _seed(session: Session) -> None:
     for command_id, resource_id, capability, operation, resource_type in (
         (ORDER_COMMAND, ORDER, "sales.order.prepare", "sales.order.approve", "sales_order"),
         (INVOICE_COMMAND, INVOICE, "sales.invoice.prepare", "sales.invoice.post", "sales_invoice"),
+        (
+            DUPLICATE_COMMAND,
+            DUPLICATE_LINE_INVOICE,
+            "sales.invoice.prepare",
+            "sales.invoice.post",
+            "sales_invoice",
+        ),
+        (
+            UUID("f0250000-0000-7000-8000-000000000027"),
+            DUPLICATE_COMMAND_INVOICE,
+            "sales.invoice.prepare",
+            "sales.invoice.post",
+            "sales_invoice",
+        ),
+        (
+            SECOND_DUPLICATE_COMMAND,
+            DUPLICATE_COMMAND_INVOICE,
+            "sales.invoice.prepare",
+            "sales.invoice.post",
+            "sales_invoice",
+        ),
     ):
         session.execute(
             text(
                 """
                 WITH evidence AS (
-                  SELECT pg_catalog.convert_to(pg_catalog.jsonb_build_object(
-                    'delivery_address_id',CAST(:address AS text),
-                    'delivery_address_row_version','7')::text,'UTF8') AS request_bytes,
+                  SELECT pg_catalog.convert_to(CAST(:document AS jsonb)::text,'UTF8')
+                           AS request_bytes,
                     pg_catalog.convert_to('{}','UTF8') AS response_bytes
                 )
                 INSERT INTO automation.command_requests(
@@ -161,7 +190,7 @@ def _seed(session: Session) -> None:
                   result_resource_id,response_status,response_media_type,response_bytes,response_hash)
                 SELECT :org,:command,:agent_grant,:member,:capability,:operation,'write',
                        :branch,0,'INR',:resource_type,:resource,1,'test-v1',
-                       decode(repeat('25',32),'hex'),'application/json',request_bytes,
+                       :idempotency_key_hash,'application/json',request_bytes,
                        pg_catalog.sha256(request_bytes),'application/json',response_bytes,
                        pg_catalog.sha256(response_bytes),decode(repeat('26',32),'hex'),
                        'consequential_write','actor_confirmation',1,'succeeded',
@@ -176,7 +205,39 @@ def _seed(session: Session) -> None:
                 "member": MEMBERSHIP, "capability": capability,
                 "operation": operation, "branch": BRANCH,
                 "resource_type": resource_type, "resource": resource_id,
-                "address": ADDRESS,
+                "idempotency_key_hash": command_id.bytes * 2,
+                "document": json.dumps(
+                    {
+                        "delivery_address_id": str(ADDRESS),
+                        "delivery_address_row_version": "7",
+                        "lines": [
+                            {
+                                "line_id": str(INVOICE_LINE),
+                                "fulfillment_source": "direct_issue",
+                                "batch_allocations": [
+                                    {
+                                        "inventory_line_id": str(inventory_line),
+                                        "batch_id": str(BATCH),
+                                        "billed_quantity": "1.000000",
+                                        "free_quantity": "0",
+                                    }
+                                ],
+                            }
+                            for inventory_line in (
+                                (INVENTORY_LINE, OTHER_INVENTORY_LINE)
+                                if resource_id == DUPLICATE_LINE_INVOICE
+                                else (INVENTORY_LINE,)
+                            )
+                        ],
+                    }
+                    if resource_type == "sales_invoice"
+                    else {
+                        "delivery_address_id": str(ADDRESS),
+                        "delivery_address_row_version": "7",
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
             },
         )
     session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
@@ -211,6 +272,49 @@ def main() -> None:
                 assert invoice is not None
                 assert invoice.delivery_address_id == ADDRESS
                 assert invoice.delivery_address_row_version == 7
+
+                direct_issue_sql = text(
+                    """
+                    SELECT command_request_id, invoice_line_id,
+                           inventory_document_line_id, batch_id,
+                           billed_quantity, free_quantity,
+                           evidenced_allocation_count
+                      FROM erp_automation_reads.sales_invoice_direct_issue_provenance(
+                           :org_id, :branch_id, :invoice_id)
+                    """
+                )
+                direct_issue = session.execute(
+                    direct_issue_sql,
+                    {"org_id": ORG, "branch_id": BRANCH, "invoice_id": INVOICE},
+                ).one()
+                assert tuple(direct_issue[:4]) == (
+                    INVOICE_COMMAND, INVOICE_LINE, INVENTORY_LINE, BATCH
+                )
+                assert tuple(str(value) for value in direct_issue[4:6]) == (
+                    "1.000000", "0.000000"
+                )
+                assert direct_issue.evidenced_allocation_count == 1
+                assert session.execute(
+                    direct_issue_sql,
+                    {"org_id": OTHER_ORG, "branch_id": BRANCH, "invoice_id": INVOICE},
+                ).fetchall() == []
+
+                assert session.execute(
+                    direct_issue_sql,
+                    {
+                        "org_id": ORG,
+                        "branch_id": BRANCH,
+                        "invoice_id": DUPLICATE_LINE_INVOICE,
+                    },
+                ).fetchall() == []
+                assert session.execute(
+                    direct_issue_sql,
+                    {
+                        "org_id": ORG,
+                        "branch_id": BRANCH,
+                        "invoice_id": DUPLICATE_COMMAND_INVOICE,
+                    },
+                ).fetchall() == []
 
                 assert canonical_sales_order_get(
                     OTHER_ORDER, None, None, _context("sales.orders.get"), session

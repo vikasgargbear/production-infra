@@ -170,15 +170,21 @@ def test_sales_document_address_evidence_uses_hashed_immutable_request_bytes() -
     source = (
         ROOT / "backend/app/api/routes/internal/mcp_canonical_resolution_reads.py"
     ).read_text(encoding="utf-8")
+    projection = (
+        ROOT / "backend/alembic/sql/20260826_0025_typed_command_read_projections.sql"
+    ).read_text(encoding="utf-8")
 
     assert "resolved_bytes" not in source
-    assert source.count("request.request_hash=pg_catalog.sha256(request.request_bytes)") == 2
-    assert source.count("request.request_bytes,'UTF8'") == 2
-    assert source.count("request_document->>'delivery_address_id'") == 3
-    assert source.count("request_document->>'delivery_address_row_version'") == 4
-    assert "document.shipping_address_id::text" in source
-    assert "request.operation='sales.order.approve'" in source
-    assert "request.operation='sales.invoice.post'" in source
+    assert "automation.command_requests" not in source
+    assert "sales_order_address_provenance" in source
+    assert "sales_invoice_address_provenance" in source
+    assert projection.count(
+        "request.request_hash = pg_catalog.sha256(request.request_bytes)"
+    ) >= 6
+    assert "evidence.document->>'delivery_address_id'" in projection
+    assert "sales_order.shipping_address_id::text" in projection
+    assert "request.operation = 'sales.order.approve'" in projection
+    assert "request.operation = 'sales.invoice.post'" in projection
 
 
 def test_customer_search_signals_ambiguous_exact_matches_without_guessing():
@@ -501,14 +507,10 @@ def test_sales_invoice_resolution_projects_authoritative_direct_issue_allocation
     assert "inventory_document.sales_invoice_id=invoice_line.invoice_id" in sql
     assert "inventory_document.document_type='sales_issue'" in sql
     assert "inventory_document.status='posted'" in sql
-    assert "command.status='succeeded'" in sql
-    assert "command.request_hash=extensions.digest(" not in sql
-    assert "command.request_hash=pg_catalog.sha256(" in sql
-    assert "count(*)::integer AS command_evidence_count" in sql
-    assert "CASE WHEN count(*)=1 THEN" in sql
+    assert "sales_invoice_direct_issue_provenance" in sql
+    assert "requested_allocation.inventory_document_line_id=inventory_line.id" in sql
+    assert "requested_allocation.batch_id=inventory_line.batch_id" in sql
     assert "LEFT JOIN LATERAL" in sql
-    assert "HAVING count(*)=1" not in sql
-    assert "candidate.value->>'inventory_line_id'" in sql
 
 
 def test_sales_invoice_resolution_fails_closed_on_evidence_and_identity_drift():
